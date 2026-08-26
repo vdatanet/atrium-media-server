@@ -272,7 +272,7 @@ media generated at build time. No copyrighted media, ever.
 |---|---|---|---|
 | OQ-1 | The exact extension lists the reference honours | Nothing; conservative union until then | `tools/probe_library_extensions.py` |
 | OQ-2 | Case sensitivity of path normalisation for identity | The identity rule of §3.6; permanent per library | A decision plus a recorded per-library setting |
-| OQ-3 | The reference's sort-name normalisation, especially articles by language | Ordering parity in 005 | `tools/probe_sort_names.py` — highest-value probe here |
+| OQ-3 | The reference's sort-name normalisation, especially articles by language | Ordering parity in 005 | **`tools/probe_sort_names.py` — written, awaiting a run** |
 | OQ-4 | Does the reference merge a folder-per-film layout when the folder and file names disagree? | An edge in §3.3 | Fixture comparison via the differential harness |
 | OQ-5 | What the reference does with a file whose embedded tags contradict its path | §3.5 precedence | `tools/probe_music_precedence.py` |
 

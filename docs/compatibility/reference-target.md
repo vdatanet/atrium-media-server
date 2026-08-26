@@ -51,20 +51,24 @@ start out substantive rather than speculative. But nobody can re-run them from h
 each one a **standing debt**: it is discharged by writing the probe script under `tools/` that
 reproduces the measurement, at which point the citation becomes a plain `[probe: …]`.
 
-| Claim | Cited at | Discharged by |
-|---|---|---|
-| The four accepted authentication mechanisms | 2026-06-13 | `tools/probe_auth_mechanisms.py` (feature 002) |
-| Item ids are 32 lowercase hex, stable across rescans | 2026-06-13 | `tools/probe_item_ids.py` (feature 003) |
-| `UserData` is returned without `Fields` | 2026-06-13 | `tools/probe_item_fields.py` (feature 005) |
-| Item-level `Container` is a demuxer list | 2026-06-13 | `tools/probe_media_sources.py` (feature 008) |
-| `StartIndex` present in list envelopes | 2026-06-13 | `tools/probe_query_envelope.py` (feature 005) |
-| `/Users/Public` may return `[]` | 2026-06-13 | `tools/probe_auth_mechanisms.py` (feature 002) |
-| The `SortBy` vocabulary | 2026-06-13 | `tools/probe_sort_vocabulary.py` (feature 005) |
-| Dates carry seven fractional digits | 2026-06-19 | `tools/probe_wire_format.py` (feature 001) |
-| `/Sessions/Playing/Progress` needs no `MediaSourceId` | 2026-06-13 | `tools/probe_playstate.py` (feature 007) |
-| PCM/WAV transcoding returns 500 | 2026-08-03 | Out of v1 scope; re-measure when transcoding lands |
-| `LocalAddress` gets an HTTPS override | 2026-08-14 | `tools/probe_local_address.py` (feature 001) |
-| `TotalRecordCount` is 0 without `limit` | 2026-08-05 | `tools/probe_by_name_counts.py` (feature 005) |
+| Claim | Cited at | Discharged by | Script |
+|---|---|---|---|
+| The four accepted authentication mechanisms | 2026-06-13 | `tools/probe_auth_mechanisms.py` (feature 002) | not written |
+| Item ids are 32 lowercase hex, stable across rescans | 2026-06-13 | `tools/probe_item_ids.py` (feature 003) | not written |
+| `UserData` is returned without `Fields` | 2026-06-13 | `tools/probe_item_fields.py` (feature 005) | not written |
+| Item-level `Container` is a demuxer list | 2026-06-13 | `tools/probe_media_sources.py` (feature 008) | not written |
+| `StartIndex` present in list envelopes | 2026-06-13 | `tools/probe_query_envelope.py` (feature 005) | **written, not yet run** |
+| `/Users/Public` may return `[]` | 2026-06-13 | `tools/probe_auth_mechanisms.py` (feature 002) | not written |
+| The `SortBy` vocabulary | 2026-06-13 | `tools/probe_sort_vocabulary.py` (feature 005) | not written |
+| Dates carry seven fractional digits | 2026-06-19 | `tools/probe_wire_format.py` (feature 001) | not written |
+| `/Sessions/Playing/Progress` needs no `MediaSourceId` | 2026-06-13 | `tools/probe_playstate.py` (feature 007) | **written, not yet run** |
+| PCM/WAV transcoding returns 500 | 2026-08-03 | Out of v1 scope; re-measure when transcoding lands | n/a |
+| `LocalAddress` gets an HTTPS override | 2026-08-14 | `tools/probe_local_address.py` (feature 001) | not written |
+| `TotalRecordCount` is 0 without `limit` | 2026-08-05 | `tools/probe_by_name_counts.py` (feature 005) | not written |
+
+**Written is not discharged.** A script that exists but has never been pointed at a server has
+proved nothing; the citation changes from `prior-probe` to `probe` only when it has been run and
+its finding recorded.
 
 A claim that fails to reproduce when its probe is finally written is not quietly dropped: it goes
 into [behaviours.md](behaviours.md) as a behaviour that *changed*, with both dates.
