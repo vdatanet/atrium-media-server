@@ -145,7 +145,7 @@ Given a media source and a device profile, exactly one outcome:
    codec, it only fixes the wrapper.
 3. **Not playable** — say so, in the body, with the reason.
 
-**Two rules that prevent the classic failures:**
+**Three rules that prevent the classic failures:**
 
 - **A profile that says nothing means "anything".** An empty or absent `DeviceProfile` is not a
   profile that permits nothing; it is a client that has not told us, and the answer is direct play.
@@ -154,6 +154,13 @@ Given a media source and a device profile, exactly one outcome:
 - **Never claim a capability that is not there.** `SupportsTranscoding` is `false` in v1, always.
   Advertising it and then failing at delivery time turns a clear "cannot play this" into a spinner
   that never resolves.
+- **Never remove what the client said it can handle.** A stream copy alters the container, not the
+  content. Where a profile declares support for a metadata format — a dynamic HDR variant, a
+  coexistence range type — that declaration is honoured, and nothing is filtered out of the
+  bitstream on the client's behalf. Stripping metadata a client explicitly asked for is how the
+  reference breaks Dolby Vision playback on one whole client platform
+  ([behaviours §3.4](../../docs/compatibility/behaviours.md#34-hdr10-metadata-stripped-from-clients-that-asked-for-it--class-b-no-compensation)),
+  and it is a defect Atrium would have to write on purpose in order to have.
 
 ### 3.4 Delivery: the rules that apply to every route
 
@@ -174,7 +181,7 @@ output whenever it can be computed or the output is produced to a seekable locat
 > and remuxing routes answer chunked, with no size and no range support. That single gap is why
 > every client that casts to a DLNA renderer has to run a local proxy: a renderer will not touch a
 > stream whose size it does not know. Recorded in
-> [behaviours §3.3](../../docs/compatibility/behaviours.md#33-transcoding-responses-carry-no-content-length-or-accept-ranges).
+> [behaviours §3.3](../../docs/compatibility/behaviours.md#33-transcoding-responses-carry-no-content-length-or-accept-ranges--class-c).
 > A client cannot branch on a response being *more* correct, so Principle I is not violated.
 
 **`static=true`** requests the original bytes with no processing. Honoured exactly: if the source
@@ -211,7 +218,7 @@ decision.
 > header. `[prior-probe: Jellyfin 10.11.11, 2026-08-03; upstream jellyfin/jellyfin#17537, merged to
 > master, not in any 10.11.x]` Producing PCM requires re-encoding, so it is outside v1's scope. When
 > transcoding lands, Atrium serves valid WAV with a real header and a real length — recorded in
-> [behaviours §3.2](../../docs/compatibility/behaviours.md#32-pcmwav-transcoding-returns-500) so the
+> [behaviours §3.2](../../docs/compatibility/behaviours.md#32-pcmwav-output--one-bug-two-symptoms-two-classes) so the
 > intent is not lost.
 
 ### 3.6 Video delivery

@@ -113,12 +113,23 @@ never carry over the implementation.
 Jellyfin has behaviours that are defects. Some of them clients have already worked around, and a
 "correct" server breaks those workarounds.
 
-When Atrium meets one, the choice is made explicitly and recorded in
-`docs/compatibility/behaviours.md` with three fields: **what Jellyfin does**, **whether any known
-client depends on it**, and **what Atrium does**.
+When Atrium meets one, the choice is made by the procedure in `docs/compatibility/behaviours.md`
+§3.0 and recorded there with three fields: **what Jellyfin does**, **whether any known client
+depends on it**, and **what Atrium does**.
 
-The default is: **replicate the defect**, because Principle I outranks correctness. Diverging
-requires a written argument that no client can observe the difference.
+The procedure exists because "replicate unless you have a good argument" is a preference with a
+disclaimer, not a rule. It turns on one question — *can a client have built something that being
+correct would break?* — and it has produced opposite answers for two symptoms of a single upstream
+bug, which is the clearest evidence that per-endpoint intuition is not good enough.
+
+The default remains **replicate the defect**, because Principle I outranks correctness. Diverging
+requires a written argument that no client can observe the difference, or that no client could have
+worked around it in the first place.
+
+**Forbidden, in addition to the above:**
+- Treating a closed upstream pull request as a ruling on the behaviour. A PR can be closed for
+  scope, process or bandwidth; none of those is a judgement.
+- Deferring a decision on the grounds that upstream might fix it. Upstream is not a dependency.
 
 **Forbidden:**
 - Silently fixing a Jellyfin bug because it was obviously wrong.

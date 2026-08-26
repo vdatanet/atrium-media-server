@@ -68,6 +68,24 @@ idea that creates a delta goes in
 | Know how a behaviour gets proven | [docs/compatibility/conformance.md](docs/compatibility/conformance.md) |
 | Know what comes next | [docs/roadmap.md](docs/roadmap.md) |
 
+## Contributing a fix upstream
+
+Sometimes the right response to a reference defect is to fix it in the reference. Two things make
+that harder than it looks, and both are worth knowing before starting:
+
+- **Jellyfin does not accept contributions authored with AI assistance**, and every commit in this
+  repository carries a `Co-Authored-By` trailer. An upstream patch has to be a separate,
+  hand-authored artefact — not a cherry-pick from here.
+- **An issue is often the better artefact anyway.** A hand-written issue describing the behaviour,
+  proposing no code, gets the defect judged on its merits. That judgement is what
+  [behaviours §3.0.1](docs/compatibility/behaviours.md#301-the-tie-breaks) tie-break 2 needs, and a
+  closed pull request does not supply it.
+
+Either way, **upstream is not a dependency**. A defect is decided here, on the evidence available
+here, using the procedure in
+[behaviours §3.0](docs/compatibility/behaviours.md#30-how-the-decision-is-made). Waiting for
+upstream is not a plan.
+
 ## Reference material
 
 Not vendored — fetched into a git-ignored `reference/` directory:
