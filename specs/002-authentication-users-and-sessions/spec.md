@@ -205,8 +205,8 @@ Returned by §3.3, §3.4, §3.6 and §3.7.
 
 `[spec: UserDto]`
 
-**Policy in v1.** The reference carries about forty policy flags. v1 stores and returns the whole
-set so clients see the shape they expect, but **honours only these**:
+**Policy in v1.** The reference sends **42** policy properties. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` v1 stores and returns the
+whole set so clients see the shape they expect, but **honours eleven of them**:
 
 | Flag | Effect |
 |---|---|
@@ -216,10 +216,10 @@ set so clients see the shape they expect, but **honours only these**:
 | `EnableAllFolders`, `EnabledFolders` | Which libraries the user sees |
 | `EnableMediaPlayback` | Whether delivery routes answer |
 | `EnableContentDeletion`, `EnableContentDeletionFromFolders` | Whether deletion is permitted |
-| `LoginAttemptsBeforeLockout`, `InvalidLoginAttemptCount` | §3.3 |
-| `MaxActiveSessions` | Cap on concurrent sessions; `0` means unlimited |
+| `LoginAttemptsBeforeLockout`, `InvalidLoginAttemptCount` | §3.3. The reference sends **-1** for the first, which is a sentinel and not a count `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` — see §7 OQ-6 |
+| `MaxActiveSessions` | Cap on concurrent sessions; `0` means unlimited, and `0` is what the reference sends `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` |
 
-The rest are stored and echoed unchanged. **This is a known, bounded gap**, not an oversight: a
+**The other 31 are stored and echoed unchanged.** **This is a known, bounded gap**, not an oversight: a
 flag returned but unenforced is a delta a client could observe by testing the restriction. It is
 accepted for v1 because the unenforced flags all gate features v1 does not have (Live TV, sync,
 transcoding limits, remote control) — enforcing "you may not transcode" on a server that never
@@ -231,7 +231,9 @@ transcodes is not observable. Any flag whose feature arrives must be enforced in
 
 Replaces the authenticated user's configuration: audio and subtitle language preferences, subtitle
 mode, whether missing episodes are displayed, view ordering and exclusions, next-episode autoplay.
-`[spec: UserConfiguration]`
+`[spec: UserConfiguration]` The reference sends **16** properties in all, the rest being cast
+receiver, local-password, remembered track selections, played-item hiding, collection view and
+folder grouping. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
 
 `204` on success. `401` unauthenticated. Unknown properties are ignored, not rejected.
 
@@ -337,6 +339,7 @@ gap: a client that saw `true` would offer the user a remote-control UI that does
 |---|---|---|---|
 | OQ-2 | The reference's token inactivity window, and whether it is observable | The expiry row of §3.8. v1 defaults to no inactivity expiry | A probe holding a token idle |
 | OQ-4 | Are `HasConfiguredPassword` and `HasConfiguredEasyPassword` read by any client? | Nothing; honest values are sent | Differential harness (010) |
+| OQ-6 | What `LoginAttemptsBeforeLockout = -1` means. It is what the reference sends, so it is what most accounts carry, and it is a sentinel rather than a threshold | §3.3's lockout rule, which reads it as a count | A probe against a throwaway account, alongside OQ-5 |
 | OQ-5 | The three refusals a probe will not send at a real installation: an enabled account given a **wrong password**, an account **locked out** by failed attempts, and a **live token whose user was disabled** after it was issued | The assumed rows of §3.3, and the `403` v1 answers a locked-out account with | `tools/probe_auth_mechanisms.py` against a **throwaway enabled** account somebody is willing to lock |
 
 **Why OQ-5 is not simply measured.** Each of the three needs a real account to fail against, and
