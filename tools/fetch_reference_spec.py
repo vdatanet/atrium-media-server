@@ -94,7 +94,10 @@ def main() -> int:
     if not args.raw:
         headers = strip_allow_empty_value_in_headers(spec)
         profiles = collapse_profile_content_types(spec)
-        print(f"  removed {headers} allowEmptyValue, {profiles} profile content types", file=sys.stderr)
+        print(
+            f"  removed {headers} allowEmptyValue, {profiles} profile content types",
+            file=sys.stderr,
+        )
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(spec, indent=2) + "\n", encoding="utf-8")
