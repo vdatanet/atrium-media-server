@@ -1,7 +1,7 @@
 ---
 feature: 001-server-identity-and-discovery
 title: Server identity and discovery
-status: Accepted
+status: Implemented
 created: 2026-08-26
 updated: 2026-08-26
 accepted: 2026-08-26
@@ -51,17 +51,24 @@ These are stated once here and inherited by every later specification. They come
 [behaviours.md §1](../../docs/compatibility/behaviours.md#1-wire-format).
 
 1. **Property names are PascalCase.** Non-negotiable, project-wide.
-2. **Content type is `application/json`.** The reference additionally accepts requests specifying
+2. **Content type is `application/json`.** The server additionally accepts requests specifying
    `application/json; profile="PascalCase"` or `profile="CamelCase"`. Those are three names for
    **two** behaviours, not three names for one: the plain type and the PascalCase profile answer
-   identically, the CamelCase profile answers with camelCase property names at every depth, and the
-   response's content type echoes the profile that matched.
+   identically, the CamelCase profile answers with camelCase property names **at every depth**, and
+   the response's content type echoes the profile that matched, before the charset.
    `[probe: tools/probe_content_type_profiles.py, Jellyfin 10.11.11, 2026-08-26]`
 
-   **v1 answers every request in PascalCase**, including one asking for the CamelCase profile. That
-   is a delta a client can observe, bounded and recorded as a gap in
-   [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) with the argument
-   for why it is survivable, and closed by the task that implements the profile.
+   Three details decide whether a reimplementation is right, and none are in the reference's
+   published contract:
+
+   - the profile is matched leniently on the media type's parameter — unquoted and in any casing —
+     but **a charset parameter beside it stops the match**, and an unknown profile falls back;
+   - ranking is ordinary content negotiation: equal quality keeps the client's order;
+   - **dictionary keys are never converted.** Only property names are, which is why the conversion
+     happens where a field is still a field.
+
+   The conversion itself is the reference's own naming policy rather than "lower the first letter":
+   a leading run of capitals lowers all but the last of them, so `UICulture` becomes `uiCulture`.
 3. **Absent optional values are omitted or null exactly as the reference server does**, verified per
    field rather than by rule.
 4. **Identifiers are 32 lowercase hexadecimal characters**, no dashes.
@@ -278,9 +285,9 @@ Everything else in these responses is derived at request time.
 8. With no published URL, two requests from two different networks receive two different
    `LocalAddress` values, each on the requester's network.
 9. Requests sent with `Accept: application/json` and with `application/json; profile="PascalCase"`
-   receive byte-identical bodies. A request sent with `profile="CamelCase"` receives that same
-   PascalCase body, where the reference answers in camelCase — the recorded gap of §3.0 rule 2,
-   asserted so that the day it closes, the test says so.
+   receive byte-identical bodies. A request sent with `profile="CamelCase"` receives the same
+   values under camelCase property names, and every response says in its own content type which of
+   the two it used.
 10. No response in this feature contains a property name that is not PascalCase.
 11. A path spelled in any casing, with or without one trailing slash, reaches the same route and
     returns the same bytes; two trailing slashes do not. A path matching no route and a method a

@@ -112,7 +112,7 @@ say how it will be proven is not finished.
 
 | # | Feature | spec | plan | tasks |
 |---|---|---|---|---|
-| [001](001-server-identity-and-discovery/) | Server identity and discovery | **Accepted** | **Accepted** | Draft |
+| [001](001-server-identity-and-discovery/) | Server identity and discovery | **Implemented** | **Implemented** | **Implemented** |
 | [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | **Accepted** | **Accepted** | Draft |
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Accepted** | **Accepted** | Draft |
 | [004](004-metadata-resolution/) | Metadata resolution | Draft | — | — |
@@ -123,8 +123,8 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001, 002 and 003 are specified, planned and broken into tasks.** That is the whole dependency
-root of v1: everything else needs at least one of them. The other seven specs remain drafts — no
+**001 is implemented; 002 and 003 are specified, planned and broken into tasks.** That is the whole
+dependency root of v1: everything else needs at least one of them. The other seven specs remain drafts — no
 plan may start until its spec is accepted, and no code until its plan is. The open questions across
 the ten are the review agenda.
 

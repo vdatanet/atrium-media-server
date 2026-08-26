@@ -169,10 +169,9 @@ async def test_system_info_claims_no_capability_it_lacks(
 #
 # There was a test here asserting that the three declared content types produce identical bodies.
 # It passed, and it was asking the wrong server: Atrium's three answers did agree with each other,
-# and the reference's do not. `profile="CamelCase"` really is camelCase there
-# (docs/compatibility/behaviours.md section 1.13), so AC-9 is now two assertions - the bytes match
-# the golden, and the gap is pinned until 001 T19 closes it - and both live beside the golden file
-# they compare against.
+# and the reference's do not. `profile="CamelCase"` really is camelCase
+# (docs/compatibility/behaviours.md section 1.13), so AC-9 is now **two goldens** - two
+# serialisations of the same values - and they live beside the files they compare against.
 # --------------------------------------------------------------------------------------------
 
 

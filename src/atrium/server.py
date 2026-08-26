@@ -32,6 +32,7 @@ from atrium import REFERENCE_VERSION, __version__
 from atrium.api import system
 from atrium.compat.errors import EXCEPTION_HANDLERS
 from atrium.compat.middleware import ResponseHeadersMiddleware
+from atrium.compat.profiles import ContentProfileMiddleware
 from atrium.compat.responses import AtriumJSONResponse
 from atrium.compat.routing import RelaxedPathMiddleware, RouteTable
 from atrium.config.paths import ConfigurationError, DataPaths, resolve_data_dir
@@ -90,9 +91,11 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     routes = RouteTable.from_routers(ROUTERS)
 
     # Innermost, so it sits directly in front of the router and nothing else sees the rewrite.
-    # Then the gate, then the headers - the last added is the outermost, which is what puts
-    # `Server` and `X-Response-Time-ms` on a 503 served while starting.
+    # Then the profile, which every serialiser downstream reads; then the gate; then the headers -
+    # the last added is the outermost, which is what puts `Server` and `X-Response-Time-ms` on a
+    # 503 served while starting.
     app.add_middleware(RelaxedPathMiddleware, table=routes)
+    app.add_middleware(ContentProfileMiddleware)
     app.add_middleware(ReadinessMiddleware, readiness=readiness)
     app.add_middleware(ResponseHeadersMiddleware)
 

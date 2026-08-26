@@ -405,14 +405,16 @@ did: all three point at the same schema. Both projects read the schema and infer
 But a client that did send it and got PascalCase would not get a degraded response; it would get an
 **empty object** out of its decoder, which is the failure mode of §1.1 exactly.
 
-**Atrium does:** answer everything in PascalCase for now, including a request that asked for the
-CamelCase profile. This is the worst shape of divergence by
-[§3.0.3](#303-the-shape-of-a-safe-divergence) — a value a client already reads — and it is
-accepted as a **gap** rather than a decision: §5 carries it, with the task that closes it. The
-reason it is not closed in the same change that found it is that doing it correctly means the
-serialisation profile has to reach the model layer, where the dictionary rule can be honoured;
-a conversion applied to the finished bytes would rename `ProviderIds`' keys and be wrong the first
-time feature 005 returns one.
+**Atrium does:** the same, all of it — the lenient match, the charset that stops it, the ranking,
+the echo, and the conversion at every depth with dictionary keys untouched. The conversion is
+applied by the response models themselves rather than to the finished body, because that is the
+only place a property name can still be told apart from a dictionary key; a conversion applied to
+the bytes would rename `ProviderIds`' keys and be wrong the first time feature 005 returns one.
+
+The rule was verified rather than reasoned: **293 property names were read from nine endpoints
+under both profiles, and all 281 conversions agreed** with the implementation — the eight names
+left alone being exactly the dictionary keys.
+`[probe: tools/probe_content_type_profiles.py, Jellyfin 10.11.11, 2026-08-26]`
 
 > **This is what reading a schema instead of a server costs.** The claim it replaces —
 > "answers all three identically" — carried a `[spec: …]` citation, was true of the *schema*, and
@@ -751,7 +753,6 @@ undocumented bug.
 | **Image decoration parameters ignored** ([006 §3.2](../../specs/006-images/spec.md)) | `percentPlayed`, `blur`, `foregroundLayer` have no effect | Implement if the differential shows a client sending them |
 | **No transcoding** ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)) | "Cannot play this" where the reference would transcode | Out of v1 by decision, not by accident. A v2 candidate |
 | **`Path`-derived identifiers differ from the reference's** ([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters)) | Nothing — ids are opaque | Not a gap to close; a deliberate design choice |
-| **The `CamelCase` content-type profile is not implemented** ([§1.13](#113-the-camelcase-profile-really-is-camelcase)) | A client that asks for camelCase is answered in PascalCase, and its decoder sees an empty object | [001 T19](../../specs/001-server-identity-and-discovery/tasks.md), which puts the profile in the serialisation layer where dictionary keys can be spared. Until then a conformance test asserts the gap, so closing it cannot go unnoticed |
 
 The difference between this section and §4 is intent. §4 says *we thought about it and chose
 differently*. This section says *we have not done it yet, and here is how we will know when it
