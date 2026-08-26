@@ -12,7 +12,8 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Implementing feature 001.** The specification phase is over for the dependency root: 001, 002 and
+**Feature 001 is implemented. Feature 002 is next**, and its task list passed its gate on
+2026-08-26, so code may start. The specification phase is over for the dependency root: 001, 002 and
 003 are specified, planned and broken into tasks; the other seven features are specified only.
 
 **The state is in the files, not here**, so it cannot go stale:
