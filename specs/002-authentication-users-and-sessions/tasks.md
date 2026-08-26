@@ -412,9 +412,9 @@ to invent.
 The tests are two tables, and each row carries the status the reference answered. A change that
 made this parser kinder than the reference fails there rather than in somebody's client.
 
-## T8 — `users/sessions.py`: the registry
+## T8 — `users/sessions.py`: the registry  ✅
 
-- [ ] **Changes:** `SessionRegistry` with in-memory activity, a 30-second flush, flush on clean
+- [x] **Changes:** `SessionRegistry` with in-memory activity, a 30-second flush, flush on clean
   shutdown, LRU eviction at `max_active_sessions`, and replace-on-reauthentication in one
   transaction.
 - **Depends on:** T5
@@ -429,6 +429,39 @@ made this parser kinder than the reference fails there rather than in somebody's
   dependency runs this way round in the plan too — [§6.2](plan.md#62-authentication-and-the-timing-guarantee)
   ends at "create the session", and [§6.6](plan.md#66-session-lifecycle) is what that means.
 - **Plan reference:** §6.5, §6.6
+
+### Done — 2026-08-26
+
+**"No window in which both work" needed a seam to be testable at all.** Asserting it *after* the
+fact proves nothing: two statements in two transactions look identical from outside once both have
+finished, and the window they leave only appears under load in somebody else's logs. So the work
+lives in `establish_in`, which runs inside a transaction the caller owns, and the test opens a
+**second connection while the first is still open** — the old token works and the new one does not
+exist, then the swap commits and it is the other way round. There is no third state to observe.
+
+**Eviction has to take the tokens with it, and that is a decision rather than a reading.** A
+session removed from `/Sessions` whose token still worked would reappear on that device's next
+request — a gap in a list, not an eviction. The reference's behaviour here is not measured;
+[plan §6.6](plan.md#66-session-lifecycle) now records that the two halves must agree, because a
+server whose session list and whose credentials disagree is answering two different questions about
+the same device.
+
+**A flush takes its entries before writing them, not after.** Clearing afterwards would erase a
+`touch` that arrived mid-flush — a lost timestamp for the busiest sessions, which are exactly the
+ones whose timestamps matter. And a flush that fails puts its entries back rather than dropping
+them, so a database that is briefly unavailable costs a delay instead of a gap. Both are tests.
+
+**`/Sessions` has to read through the registry.** Reporting the flushed value would tell a client
+that the session it is using right now was last active half a minute ago. `activity()` exists for
+T12 to overlay, and the plan says so.
+
+**The clean-shutdown flush is separate from the crash bound.** Losing thirty seconds to a crash is
+the cost this design accepts; losing them to an orderly stop is just not writing something there
+was every opportunity to write. The lifespan cancels the background task, awaits it, and flushes —
+and swallows a database error there rather than turning a shutdown into a traceback.
+
+The bound itself is now a test rather than a sentence: after a simulated crash the session row, its
+token and every user record are intact, and only the timestamp is stale.
 
 ## T9 — `users/service.py`: authenticate
 
