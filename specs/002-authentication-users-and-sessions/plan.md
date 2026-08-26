@@ -1,11 +1,12 @@
 ---
 feature: 002-authentication-users-and-sessions
 title: Authentication, users and sessions — implementation plan
-status: Draft
+status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
 spec_status_required: Accepted
 spec_status_actual: Accepted
+accepted: 2026-08-26
 ---
 
 # 002 — Implementation plan

@@ -1,11 +1,12 @@
 ---
 feature: 003-library-configuration-and-scanning
 title: Library configuration and scanning — implementation plan
-status: Draft
+status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
 spec_status_required: Accepted
 spec_status_actual: Accepted
+accepted: 2026-08-26
 ---
 
 # 003 — Implementation plan
