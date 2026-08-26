@@ -110,7 +110,7 @@ library is configured.
 
 | Condition | Status |
 |---|---|
-| Server still starting | `503` with a `Retry-After` header |
+| Server still starting | `503`; see §3.5 |
 
 ### 3.2 `GET /System/Info` — `GetSystemInfo`
 
@@ -190,6 +190,31 @@ break. `[prior-probe: Jellyfin 10.11.11, 2026-08-14]`
 as a deliberate divergence in
 [behaviours.md §4.2](../../docs/compatibility/behaviours.md#42-localaddress-does-not-get-an-https-override).
 
+### 3.5 What the server says while it is starting
+
+Not an error path of one endpoint but a property of the whole server: **every one of the
+reference's 395 operations declares a `503`**, so nothing is exempt — not even a liveness probe.
+`[spec: every operation's 503 response in the pinned 10.11.10 document]`
+
+**Response — 503**
+
+| Part | Value |
+|---|---|
+| `Retry-After` | Full seconds, as an integer. Not an HTTP-date |
+| `Message` | A short plain-text reason |
+| Body | `text/html` — **not** JSON |
+
+`Retry-After` is what separates "starting" from "broken" for a client. Without it a `503` is
+indistinguishable from a server that is down, and a client that cannot tell will either give up or
+hammer.
+
+The same response serves a deliberate withdrawal from service — a long rebuild, say — with a
+different message and a longer hint, without stopping the process.
+
+> The `503` responses are also where the reference's OpenAPI document declares `allowEmptyValue`
+> on header objects, which is invalid there and makes strict parsers reject the whole document. See
+> [reference-target.md §2](../../docs/compatibility/reference-target.md#2-sources-of-truth-in-precedence-order).
+
 ## 4. Data the feature owns
 
 Observable, and surviving restart:
@@ -240,8 +265,14 @@ because it is the first one with a response model to sweep.
 | # | Question | Blocks | Resolved by |
 |---|---|---|---|
 | OQ-1 | Does any real client branch on `SupportsLibraryMonitor` or `WebSocketPortNumber`? | Nothing. Honest values are sent either way | Differential harness (010), or surveying additional clients |
-| OQ-2 | Does the reference emit `503` with `Retry-After` while starting, or refuse the connection? | The error row in §3.1 | A probe against a server during startup |
 | OQ-3 | Is `StartupWizardCompleted` meaningful for Atrium, which has no wizard? | Nothing; `true` after first configuration | A decision in 002, where user creation happens |
+| OQ-4 | Whether a running reference actually emits both headers, or only declares them | Nothing; both are sent | `tools/probe_startup.py`, which has to catch a server mid-start |
+
+### Resolved
+
+| # | Question | Answer | Resolved by |
+|---|---|---|---|
+| OQ-2 | Does the reference emit `503` with `Retry-After` while starting? | **Yes, and it is server-wide** — all 395 operations declare it, with `Retry-After` **and** a `Message` header, and a `text/html` body. §3.5 records it; §3.1's one-line error row was incomplete | The pinned document, 2026-08-26 |
 
 ## 8. References
 
