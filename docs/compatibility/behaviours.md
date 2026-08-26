@@ -185,8 +185,85 @@ query forms are the only practical option.
 `Random`, `AlbumArtist`, `Artist` — a superset of Emby's.
 `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
 
-**Atrium does:** the same set, and `SortName` sorting must reproduce Jellyfin's normalisation
-(leading articles, diacritics, numeric prefixes) — specified in the item-query feature, not here.
+**Atrium does:** the same set. How `SortName` itself is derived is §2.6.
+
+### 2.6 `SortName` has two derivations, and three types use the second
+
+**Jellyfin does:** derives a sort name in one of two entirely different ways depending on the item
+type. `[probe: tools/probe_sort_names.py, Jellyfin 10.11.11, 2026-08-26]`
+
+For movies, series, albums, artists and playlists: trim and lowercase, strip configured articles
+at the start, in the middle and at the end, remove one configured character set, replace another
+with spaces, **left-pad every digit run to ten characters**, then fold diacritics. Nothing trims or
+collapses the whitespace this leaves behind, so `Rock & Roll` becomes `rock  roll` with two spaces
+and `S.W.A.T.` becomes `s w a t ` with a trailing one.
+
+For `Audio`, `Episode` and `Season`: a zero-padded numeric prefix followed by the **raw** name,
+with none of the above applied. Audio pads disc and track to four; Episode pads season to
+**three** and episode to **four**; Season is the number alone.
+`[source: Audio.cs:94-98, Episode.cs:238-242, Season.cs:149-152 @ v10.11.11]`
+
+**Depends on it:** every ordered list a client draws. This is not a field a client reads and
+compares — it is the order items arrive in, which no client can correct and most will not even
+recognise as wrong.
+
+**Atrium does:** both, exactly, including the whitespace artefacts. Full specification in
+[003 §3.7](../../specs/003-library-configuration-and-scanning/spec.md).
+
+Two temptations to name, because both are what a careful implementer would otherwise do:
+
+1. **Tidying the whitespace.** Collapsing `rock  roll` to `rock roll` changes the ordering of every
+   name containing a removed character, quietly, and only for some names.
+2. **Using one sort-name function for everything.** Applying the base rule to audio makes `The
+   Song` sort under `s` instead of `T` and reorders every album in the library.
+
+### 2.7 Playlists hold each item at most once
+
+**Jellyfin does:** de-duplicates in two stages — dropping items already in the playlist, then
+dropping repeats within the incoming batch. Measured on both code paths: creating a playlist with
+the same id twice yields one entry, and adding an id already present yields zero new entries.
+`[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-26]`
+`[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:222-225 @ v10.11.11]`
+
+**Depends on it:** a client adding a track already present sees the count stay the same. It is not
+told anything — the request succeeds.
+
+**Atrium does:** the same. The argument for allowing duplicates is real — a set list may want the
+same track twice — and it loses to Principle I.
+
+**Entry identity survives this.** A row is still addressed by its own `PlaylistItemId`, not by the
+item's `Id`; uniqueness of items does not make the two the same thing.
+
+### 2.8 `Move`'s `newIndex` is the entry's position after the move
+
+**Jellyfin does:** removes the entry, then inserts it so it ends up at exactly `newIndex` in the
+resulting list. On `[A B C D E]`, moving index 0 to index 3 gives `B C D A E`, not `B C A D E`.
+`[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-26]`
+
+**Depends on it:** every drag-and-drop reorder. Upward moves are identical under either reading,
+so a client built against the wrong one works until a user drags something **down**.
+
+**Atrium does:** the same. This project's specification asserted the opposite until it was
+measured — which is the whole reason the probe was written before the code.
+
+### 2.9 A stop report resolves through six branches, not two thresholds
+
+**Jellyfin does:** decides between *discard the position*, *mark played* and *keep it resumable*
+through an ordered rule. A stop with no position counts as played to the end; an unknown runtime
+counts as played; below 5% of runtime the position is discarded; above 90%, or within one second of
+the end, it is played; an item whose **runtime** is under 300 seconds is played rather than
+resumable; otherwise the position is kept. The percentage comparisons are strict at both ends.
+`[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-26]`
+`[source: Emby.Server.Implementations/Library/UserDataManager.cs:296-352 @ v10.11.11]`
+
+**Depends on it:** what appears in "continue watching", which is the most-used row in most clients.
+
+**Atrium does:** the same, with the same defaults. Full rule in
+[007 §3.7](../../specs/007-user-data-and-playstate/spec.md).
+
+The branch most easily missed is the 300-second one: it is a floor on the **item's runtime**, not
+on the position. A short clip stopped in the middle is *played*, not resumable. Reading it as a
+position floor produces a server that keeps resume points for every short item.
 
 ---
 

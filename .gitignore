@@ -1,3 +1,9 @@
+# Local credentials for the probe scripts. The template is .env.example, which is committed;
+# the file it produces never is. See tools/README.md.
+.env
+.env.*
+!.env.example
+
 # Reference material fetched at development time, never vendored.
 # See docs/compatibility/reference-target.md and docs/decisions/0005-licence.md.
 /reference/

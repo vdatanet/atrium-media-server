@@ -60,6 +60,19 @@ REMOVE_CHARS = [",", "&", "-", "{", "}", "'"]
 REPLACE_CHARS = [".", "+", "%"]
 DIGIT_PAD = 10
 
+# Audio, Episode and Season override CreateSortName entirely: they build a numeric prefix and
+# append the RAW name - no lowercasing, no article removal, no diacritic folding, no digit
+# padding. The widths are not uniform, and the asymmetry is theirs, not a transcription error:
+# an episode's season is three digits and its episode number four.
+# [source: MediaBrowser.Controller/Entities/Audio/Audio.cs:94-98,
+#          MediaBrowser.Controller/Entities/TV/Episode.cs:238-242,
+#          MediaBrowser.Controller/Entities/TV/Season.cs:149-152 @ v10.11.11]
+OVERRIDES = {
+    "Audio":   (4, 4, " - "),    # disc, track
+    "Episode": (3, 4, " - "),    # season, episode
+    "Season":  (4, None, ""),    # season only, no name appended
+}
+
 
 def derive(name: str) -> str:
     """Reimplementation of the reference's derivation, from its source, not from its code."""
@@ -92,6 +105,49 @@ def derive(name: str) -> str:
     return "".join(
         c for c in unicodedata.normalize("NFD", sortable) if unicodedata.category(c) != "Mn"
     )
+
+
+def derive_override(item: dict) -> str | None:
+    """Predict SortName for the three types that override the base derivation."""
+    widths = OVERRIDES.get(item.get("Type"))
+    if widths is None:
+        return None
+    parent_width, index_width, sep = widths
+    parent, index = item.get("ParentIndexNumber"), item.get("IndexNumber")
+
+    if index_width is None:                       # Season: the number alone, or the name
+        return f"{parent:0{parent_width}d}" if index is not None else item.get("Name", "")
+
+    prefix = f"{parent:0{parent_width}d}{sep}" if parent is not None else ""
+    prefix += f"{index:0{index_width}d}{sep}" if index is not None else ""
+    return prefix + item.get("Name", "")
+
+
+def check_overrides(server: Server, probe: Probe) -> None:
+    """Read-only: compare real items of the three overriding types against the source formulas."""
+    for item_type in OVERRIDES:
+        index_field = "IndexNumber" if item_type != "Season" else "IndexNumber"
+        found = server.get(
+            "/Items", Recursive="true", IncludeItemTypes=item_type, Fields="SortName",
+            Limit=25, SortBy="SortName", UserId=server.user_id,
+        )
+        items = found.get("Items", [])
+        if not items:
+            probe.observe(f"{item_type} override", "no items in this library")
+            continue
+
+        # Season's formula uses IndexNumber, not ParentIndexNumber.
+        agree = 0
+        for item in items:
+            if item_type == "Season":
+                item = {**item, "ParentIndexNumber": item.get(index_field)}
+            if item.get("SortName") == derive_override(item):
+                agree += 1
+        probe.observe(
+            f"{item_type} override",
+            f"{agree}/{len(items)} match the source formula"
+            + ("" if agree == len(items) else "   <-- some may carry a forced sort name"),
+        )
 
 
 def create_playlist(server: Server, name: str, fallback_item: str | None) -> str:
@@ -165,9 +221,17 @@ def run(server: Server) -> Probe:
                 + ", ".join(stranded)
             )
 
+    try:
+        check_overrides(server, probe)
+    except ProbeError as exc:
+        probe.observe("overrides", f"could not be read - {exc}")
+
     probe.note(
-        "What is measured is the base derivation shared by Movies, Series, Albums, Artists and "
-        "Playlists. Audio, Episode and Season override it and are not covered here."
+        "The crafted cases measure the base derivation, shared by Movies, Series, Albums, "
+        "Artists and Playlists. The override rows below them are read-only checks against real "
+        "items of the three types that replace it entirely. A row short of full agreement is not "
+        "necessarily a mismatch: an item whose metadata carries an explicit sort title takes that "
+        "instead, and the API does not say which items those are."
     )
     probe.note(
         "SortName is predicted from the Name the server echoes back, not from the name that was "

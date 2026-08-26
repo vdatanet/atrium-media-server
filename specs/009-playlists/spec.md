@@ -45,13 +45,15 @@ else it writes is per-user state.
 ### 3.1 Entries are not items
 
 The distinction that governs this whole feature: **a playlist contains entries, and an entry
-references an item.**
-
-The same track can appear three times in one playlist. Each occurrence is a distinct entry with its
-own identifier, and reordering or removing "the second one" is only expressible if entries are
-addressable.
+references an item.** An entry has its own identifier, and it is not the item's.
 
 Entries surface as `PlaylistItemId` on each item returned by `GET /Playlists/{playlistId}/Items`.
+
+> **This section said something different until it was measured.** It claimed the same track could
+> appear several times, each occurrence a distinct entry, and that entry identity existed to
+> disambiguate them. **The reference de-duplicates**: an item appears at most once in a playlist
+> (§3.4). Entry identity is real and load-bearing anyway — it is how `Move` and `Remove` address a
+> row — but the reason given for it was wrong. `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-26]`
 
 > **In `POST /Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}` and in
 > `DELETE /Playlists/{playlistId}/Items`, the identifier is the *entry* id, not the media item id.**
@@ -93,9 +95,18 @@ Accepts `startIndex`, `limit`, `fields`, `userId`. `404` for unknown or invisibl
 
 Appends items, identified by media item id, to the end. `204`.
 
-**Duplicates are allowed.** Adding a track already present adds a second entry. A user building a
-DJ set puts the same track in twice on purpose, and de-duplicating silently is a server deciding
-something that is not its decision.
+**Duplicates are silently dropped.** Adding an item already in the playlist adds nothing, and a
+single request naming the same item twice adds it once. The reference de-duplicates in two stages —
+against the existing entries, then within the incoming batch — and it is deliberate rather than an
+accident of implementation. `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:222-225 @ v10.11.11]`
+
+Measured on both paths, because they are separate code paths: creating a playlist with the same id
+twice yields one entry, and adding an id already present yields zero new entries. `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-26]`
+
+Atrium does the same. The argument for allowing duplicates — a user building a set list wants the
+same track twice — is a real one, and it loses to Principle I: a client that adds a track and sees
+the count stay the same is observing the reference's behaviour, and a server that grew a second row
+instead would be the one behaving strangely.
 
 **Adding a container adds its children, in order** — adding an album adds its tracks. This is what
 a client's "add album to playlist" does.
@@ -118,10 +129,25 @@ index. `204`.
 | Moving to its current index | `204`, nothing changes |
 | Entry id not in the playlist | `404` |
 
-**Indices are zero-based and refer to the state *before* the move.** A client that computes "move
-item from 5 to 2" from a list it is displaying must get what it drew. Interpreting the target index
-post-removal shifts every downward move by one — an off-by-one that looks like a rendering glitch
-and is very hard for a client author to attribute to the server.
+**Indices are zero-based and name the entry's position in the list _after_ the move.** The entry is
+removed first, then inserted so that it ends up at exactly `newIndex` in the resulting list.
+
+Measured with the only case that distinguishes the two readings — a downward move, index 0 to
+index 3 on `[A B C D E]`:
+
+| Reading | Result |
+|---|---|
+| **Post-removal / final index** — what the reference does | `B C D A E` |
+| Pre-removal — insert before whatever was at index 3 | `B C A D E` |
+
+`[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-26]`
+
+Upward moves are identical under both readings, which is why a client author can build against the
+wrong one and not notice until a user drags something down. This specification asserted the wrong
+reading until it was measured; the probe existed precisely because getting it wrong is invisible
+until it is expensive.
+
+Entry identifiers survive a move: the row keeps its `PlaylistItemId`.
 
 ### 3.6 Deleting a playlist
 
@@ -181,12 +207,15 @@ the only thing whose loss is unrecoverable, and the plan has to treat them accor
 2. Creating with an empty `Name` answers `400`; creating with a mix of valid and unknown ids
    succeeds with the valid ones.
 3. Every item from `GET /Playlists/{id}/Items` carries a `PlaylistItemId`.
-4. Adding the same track twice yields two entries with **different** `PlaylistItemId`s.
-5. Removing one of two duplicate entries by entry id removes exactly that one.
+4. Adding an item already in the playlist adds nothing, and one request naming it twice adds it
+   once — on both the creation and the addition paths.
+5. Every entry carries a `PlaylistItemId` distinct from its item's `Id`, and removing by entry id
+   removes exactly that row.
 6. Adding an album adds its tracks in track order.
 7. Default order is playlist order, not `SortName`; passing `sortBy` overrides it.
-8. Moving an entry from index 5 to index 2 produces the order a client drawing the pre-move list
-   would expect.
+8. Moving an entry from index 0 to index 3 on a five-entry playlist produces `B C D A E` — the
+   entry ends up **at** `newIndex` in the resulting list — and every entry keeps its
+   `PlaylistItemId`.
 9. `newIndex` beyond the end clamps; negative answers `400`.
 10. Removing an entry id that is not present answers `204`.
 11. `DELETE /Items/{id}` on a playlist deletes it; on a movie it answers `403` and the file remains
@@ -215,11 +244,17 @@ catches all of them.
 
 | # | Question | Blocks | Resolved by |
 |---|---|---|---|
-| OQ-1 | Does the reference interpret `newIndex` pre- or post-removal? | AC-8, the highest-risk parity claim here | **`tools/probe_playlist_move.py` — written, awaiting a run** |
-| OQ-2 | Does the reference de-duplicate on add? §3.4 assumes not | AC-4 | `tools/probe_playlists.py` |
 | OQ-3 | Does adding a container expand it, or add the container itself? | AC-6 | `tools/probe_playlists.py` |
 | OQ-4 | What the reference does with entries the reader cannot see | AC-13 | Fixture comparison via the differential harness |
 | OQ-5 | Whether any client relies on `DELETE /Items/{itemId}` deleting media | The scope of the §3.6 divergence | Survey of client code plus differential |
+| OQ-6 | Whether `newIndex` beyond the end clamps or errors, and what a negative index does | The boundary rows of §3.5 | Extend `tools/probe_playlist_move.py` |
+
+### Resolved
+
+| # | Question | Answer | Resolved by |
+|---|---|---|---|
+| OQ-1 | Does the reference interpret `newIndex` pre- or post-removal? | **Post-removal.** The entry ends up at `newIndex` in the resulting list. §3.5 and AC-8 said the opposite and are corrected | `tools/probe_playlist_move.py`, 2026-08-26 |
+| OQ-2 | Does the reference de-duplicate on add? | **Yes, and on create too** — two stages, deliberate. §3.1 and §3.4 are corrected | `tools/probe_playlist_move.py`, 2026-08-26 |
 
 ## 8. References
 

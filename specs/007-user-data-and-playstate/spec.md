@@ -159,22 +159,49 @@ against the Jellyfin dialect. `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
 4. **`Failed: true` records no position and no play count.** A playback that never started is not
    progress.
 
-### 3.7 The completion threshold
+### 3.7 What a stop report does to the position
 
-When a `Stopped` report arrives near the end, the item becomes **played** rather than resumable,
-and the position is reset.
+Not two thresholds — **one ordered rule with six branches**, measured and then read from the
+reference's source to learn its shape. `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-26]` `[source: Emby.Server.Implementations/Library/UserDataManager.cs:296-352 @ v10.11.11]`
 
-Two rules, both needed:
+Given a stopped report carrying position `P` against an item of runtime `R`:
 
-- Past a **percentage** of the runtime, treat as complete — the user watched it.
-- Below a **minimum** position, discard the position entirely — thirty seconds into a film is not a
-  resume point, it is a mis-click, and it should not fill "continue watching" with noise.
+| # | Condition | Outcome |
+|---|---|---|
+| 1 | No position reported at all | `P` becomes `R` — a stop with no position means *played to the end* |
+| 2 | `R` unknown | Marked **played**, no position kept |
+| 3 | `P/R < MinResumePct` | Position **discarded**. Not played |
+| 4 | `P/R > MaxResumePct`, **or** `P` within one second of `R` | Position discarded, marked **played** |
+| 5 | Otherwise, but `R` shorter than `MinResumeDurationSeconds` | Position discarded, marked **played** |
+| 6 | Otherwise | Position **kept**. The item is resumable |
 
-An item marked complete this way is excluded from `/UserItems/Resume` (005 §3.7).
+Defaults, and Atrium adopts them: `MinResumePct` **5**, `MaxResumePct` **90**,
+`MinResumeDurationSeconds` **300**. Measured against a live reference at 90.2% and 5.1% on a
+96-minute item, with a bisection precision of 0.5% — consistent with 90 and 5.
 
-> ⚠️ **OQ-2.** The reference's exact thresholds. They are directly observable — an item that
-> reappears in "continue watching" when it should not, or vanishes when it should not — so this is
-> a probe worth doing before the feature is called done.
+Four details that a rule written from intuition gets wrong, and each is observable:
+
+**The comparisons are strict.** Exactly at the floor the position is kept; exactly at the ceiling
+it is kept. Only *below* the floor and *above* the ceiling do the branches fire.
+
+**Row 5 is about the item's runtime, not the position.** A clip shorter than five minutes that is
+stopped in the middle is marked **played**, not resumable — the reference decides that something
+that short has no meaningful resume point. This is a different rule from row 3, which is a floor on
+*progress*, and conflating the two produces a server that keeps resume positions for every short
+item.
+
+**Row 4's second clause is not redundant.** For a long item, 90% can still be minutes from the end;
+stopping in the final second is completion regardless of percentage.
+
+**Row 1 matters more than it looks.** Clients send a stop with no position when playback ends
+naturally. Treating that as position zero would leave every finished item unplayed and at the
+start.
+
+Books and audiobooks follow a different, minute-based rule in the reference — an absolute floor in
+minutes and a *remaining time* ceiling. Out of v1's media scope, recorded so that a later feature
+does not apply the percentage rule to them by default.
+
+An item marked played this way is excluded from `/UserItems/Resume` (005 §3.7).
 
 ## 4. Data the feature owns
 
@@ -199,13 +226,14 @@ because the alternative is a user losing their library's history to a temporaril
    rescanning with a new episode added, and removing an episode.
 7. Two users' state on the same item is fully independent.
 8. All three reporting endpoints answer `204`.
-9. `Progress` without `MediaSourceId` is accepted.
+9. `Progress` without `MediaSourceId` is accepted — verified against a live reference. `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-26]`
 10. A progress report with a position **older** than the stored one does not rewind it.
 11. A report for an unknown item answers `204`.
-12. A `Stopped` past the completion threshold marks played and clears the position; the item leaves
-    `/UserItems/Resume`.
-13. A `Stopped` below the minimum position stores no position; the item never enters
-    `/UserItems/Resume`.
+12. Each of the six branches of §3.7 is exercised: no position; unknown runtime; below the floor;
+    above the ceiling; within one second of the end; a short item stopped mid-way; and the
+    resumable case.
+13. The floor and ceiling comparisons are strict — a stop at exactly 5% keeps its position and a
+    stop at exactly 90% keeps its position.
 14. `Failed: true` records neither position nor play count.
 15. Progress reports with no `Stopped` leave the last position intact after the session is reaped.
 16. Deleting an item's file and rescanning preserves its user data; restoring the file restores the
@@ -227,10 +255,16 @@ because the alternative is a user losing their library's history to a temporaril
 | # | Question | Blocks | Resolved by |
 |---|---|---|---|
 | OQ-1 | Does any client parse `UserData.Key`, or is it opaque? | §3.2's freedom to derive it | Survey of client code, plus differential |
-| OQ-2 | The reference's completion percentage and minimum-position thresholds | AC-12, AC-13 | **`tools/probe_playstate.py` — written, awaiting a run** |
 | OQ-3 | Does the reference cascade a container mark to children, or only report aggregates? | AC-5, which may be a divergence | `tools/probe_playstate.py` |
 | OQ-4 | How long the reference waits before reaping a silent session | AC-15 | A probe that starts playback and stops reporting |
 | OQ-5 | Does the reference count a play at start, at stop, or at the threshold? | `PlayCount` parity | `tools/probe_playstate.py` |
+| OQ-6 | Whether row 5 fires as the source reads — a short item stopped mid-way marked played | Branch 5 of §3.7, source-derived but not yet measured | Extend `tools/probe_playstate.py` with a short item |
+
+### Resolved
+
+| # | Question | Answer | Resolved by |
+|---|---|---|---|
+| OQ-2 | The reference's completion percentage and minimum-position thresholds | **90% ceiling, 5% floor, 300s minimum item runtime — and the rule has six branches, not two.** §3.7 rewritten | `tools/probe_playstate.py`, 2026-08-26 |
 
 ## 8. References
 

@@ -77,25 +77,45 @@ def run(server: Server) -> Probe:
 
     created: list[str] = []
     try:
-        # -- the premise: entries are addressable, duplicates are distinct --------------------
+        # -- the premise: are entries addressable, and are duplicates distinct? -----------
+        # Creation and addition are separate code paths upstream, so they are probed separately:
+        # a server that de-duplicates one may not de-duplicate the other, and the difference
+        # decides whether a playlist can hold the same track twice at all.
         dup = server.post("/Playlists", body={
             "Name": DUP_NAME, "Ids": [items[0]["Id"], items[0]["Id"]], "UserId": server.user_id,
         })["Id"]
         created.append(dup)
-        dup_entries = entries(server, dup)
-        distinct = len({entry_id for entry_id, _ in dup_entries})
+        on_create = entries(server, dup)
         probe.observe(
-            "duplicate premise",
-            f"added one item twice -> {len(dup_entries)} entries, {distinct} distinct entry id(s)",
+            "duplicate on create",
+            f"POST /Playlists with the same id twice -> {len(on_create)} entry/entries"
+            + ("   <-- de-duplicated" if len(on_create) < 2 else ""),
         )
-        if len(dup_entries) == 2 and distinct == 2:
-            server.delete(f"/Playlists/{dup}/Items", EntryIds=dup_entries[0][0])
+
+        server.post(f"/Playlists/{dup}/Items", Ids=items[0]["Id"], UserId=server.user_id)
+        on_add = entries(server, dup)
+        added = len(on_add) - len(on_create)
+        probe.observe(
+            "duplicate on add",
+            f"POST .../Items with an id already present -> {added} new entry/entries"
+            + ("   <-- de-duplicated" if added == 0 else ""),
+        )
+
+        distinct = len({entry_id for entry_id, _ in on_add})
+        probe.observe("distinct entry ids", f"{distinct} across {len(on_add)} entry/entries")
+
+        if len(on_add) >= 2 and distinct == len(on_add):
+            server.delete(f"/Playlists/{dup}/Items", EntryIds=on_add[0][0])
             left = entries(server, dup)
+            kept_right = len(left) == len(on_add) - 1 and all(
+                e != on_add[0][0] for e, _ in left
+            )
             probe.observe(
                 "remove one by entry id",
-                f"{len(left)} entry left, "
-                + ("the other one" if left and left[0][0] == dup_entries[1][0] else "THE WRONG ONE"),
+                f"{len(left)} left, {'the right one' if kept_right else 'THE WRONG ONE'}",
             )
+        else:
+            probe.observe("remove one by entry id", "not testable - no duplicate survived")
 
         # -- the question --------------------------------------------------------------------
         playlist = server.post("/Playlists", body={
@@ -132,6 +152,12 @@ def run(server: Server) -> Probe:
     probe.note(
         f"The moved entry is {by_name.get(moved_name, 'A')}. Both readings agree on upward moves, "
         "so only this downward case distinguishes them."
+    )
+    probe.note(
+        "The duplicate rows above are the premise the move question rests on: reordering or "
+        "removing 'the second one' is only expressible if entries are addressable independently "
+        "of the items they reference. Creation and addition are probed separately because they "
+        "are separate code paths upstream."
     )
 
     if order == "B C A D E":
