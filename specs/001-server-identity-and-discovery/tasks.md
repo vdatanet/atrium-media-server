@@ -252,12 +252,42 @@ serialise in the reference's format, nullable unions included — which is most 
 Both halves of `compat/` now have a sweep. The plan's wording for both was refined by measuring
 rather than by reasoning, which is the same method the probes used on the reference.
 
-## T8 — `config/`: paths and operator configuration
+## T8 — `config/`: paths and operator configuration  ✅
 
-- [ ] **Changes:** `config/paths.py` with the data-directory layout; `config/settings.py` loading `config.toml` with defaults for `server_name`, bind address and port, `published_url`, `use_request_host`.
+- [x] **Changes:** `config/paths.py` with the data-directory layout; `config/settings.py` loading `config.toml` with defaults for `server_name`, bind address and port, `published_url`, `use_request_host`.
 - **Depends on:** T1
 - **Verified by:** missing file → defaults plus one log line; malformed file → **refuses to start**, naming file, line and key; unwritable data directory → refuses to start. Each is a test, because each is a failure mode an operator will actually hit.
 - **Plan reference:** §4, §7
+
+### Done — 2026-08-26
+
+**`extra="forbid"` does more work here than the validation it looks like.** A typo in a key —
+`use_request_hosts` for `use_request_host` — would otherwise be accepted and ignored. The operator's
+setting does nothing, the server looks healthy, and the only symptom is a wrong address in a
+response nobody thinks to read. That is a support ticket nobody can diagnose, and it is now a
+startup refusal naming the key. Tested at both levels of the file.
+
+**Writability is proven by writing, not by reading permission bits.** Bits are one of the ways a
+directory can be unwritable; the others — a read-only mount, a full disk, a container's user
+mapping — are the ones an operator actually hits and a bit-check misses. `prepare()` writes a probe
+file and removes it, and a test asserts nothing is left behind.
+
+**The refusal message says what is at stake**, not just what failed: without somewhere to keep
+state, the server would generate a new identity on every run and every client would re-authenticate
+every time. An operator who reads "not writable" may shrug; one who reads the consequence will not.
+
+**`data_dir` cannot come from the config file**, since the file lives inside it. Command line, then
+`ATRIUM_DATA_DIR`, then `$XDG_DATA_HOME/atrium`. The precedence is tested rather than described.
+
+**The default port is 8096**, the reference's. Not a protocol requirement — but following the
+convention costs nothing and saves every client a manual step. Running both on one host means
+changing one of them, which is the operator's business and is what `config.toml` is for.
+
+Two small correctness notes. `Settings` is a plain `BaseModel` and deliberately **not** an
+`AtriumModel`: it is not a wire type, and inheriting would PascalCase an operator's TOML keys and
+put it in front of the conformance sweeps. And the permission test's skip conditions avoid
+referencing `os.geteuid` directly, because `skipif` expressions are evaluated at collection time on
+every platform and it does not exist on Windows.
 
 ## T9 — `config/state.py`: server identity
 
