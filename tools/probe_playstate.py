@@ -53,8 +53,12 @@ def find_item(server: Server) -> dict:
     """A long item with no user data, so the probe is both meaningful and exactly reversible."""
     for item_type in ("Movie", "Episode", "Audio"):
         found = server.get(
-            "/Items", Recursive="true", IncludeItemTypes=item_type,
-            Limit=100, SortBy="Random", UserId=server.user_id,
+            "/Items",
+            Recursive="true",
+            IncludeItemTypes=item_type,
+            Limit=100,
+            SortBy="Random",
+            UserId=server.user_id,
         )
         for item in found.get("Items", []):
             runtime = item.get("RunTimeTicks") or 0
@@ -81,13 +85,23 @@ class Trials:
         self.count += 1
         position = int(self.runtime * pct / 100)
         self.reset()
-        self.server.post("/Sessions/Playing", body={
-            "ItemId": self.item_id, "PositionTicks": 0, "PlayMethod": "DirectPlay",
-            "CanSeek": True, "IsPaused": False,
-        })
-        self.server.post("/Sessions/Playing/Stopped", body={
-            "ItemId": self.item_id, "PositionTicks": position,
-        })
+        self.server.post(
+            "/Sessions/Playing",
+            body={
+                "ItemId": self.item_id,
+                "PositionTicks": 0,
+                "PlayMethod": "DirectPlay",
+                "CanSeek": True,
+                "IsPaused": False,
+            },
+        )
+        self.server.post(
+            "/Sessions/Playing/Stopped",
+            body={
+                "ItemId": self.item_id,
+                "PositionTicks": position,
+            },
+        )
         item = self.server.get(f"/Items/{self.item_id}", UserId=self.server.user_id)
         return item.get("UserData") or {}
 
@@ -123,9 +137,14 @@ def run(server: Server) -> Probe:
     try:
         # -- does Progress need MediaSourceId? --------------------------------------------------
         try:
-            server.post("/Sessions/Playing/Progress", body={
-                "ItemId": item["Id"], "PositionTicks": int(runtime * 0.2), "IsPaused": False,
-            })
+            server.post(
+                "/Sessions/Playing/Progress",
+                body={
+                    "ItemId": item["Id"],
+                    "PositionTicks": int(runtime * 0.2),
+                    "IsPaused": False,
+                },
+            )
             probe.observe("Progress without MediaSourceId", "accepted")
         except ProbeError as exc:
             probe.observe("Progress without MediaSourceId", f"REJECTED - {exc}")
@@ -138,7 +157,9 @@ def run(server: Server) -> Probe:
                 "upper threshold to find by this method"
             )
         if trials.stop_at(1).get("Played") is True:
-            raise ProbeError("stopping at 1% marked the item played; the search assumes it does not")
+            raise ProbeError(
+                "stopping at 1% marked the item played; the search assumes it does not"
+            )
 
         upper = boundary(1, 99, lambda pct: trials.stop_at(pct).get("Played") is True)
         probe.observe("upper threshold", f"{upper:.1f}% of runtime  ({upper * seconds / 100:.0f}s)")
@@ -152,7 +173,8 @@ def run(server: Server) -> Probe:
             lower = None
         else:
             lower = boundary(
-                0, ceiling,
+                0,
+                ceiling,
                 lambda pct: trials.stop_at(pct).get("PlaybackPositionTicks", 0) > 0,
             )
             probe.observe(

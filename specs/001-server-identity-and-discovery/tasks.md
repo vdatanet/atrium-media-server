@@ -26,13 +26,42 @@ Every command below is run through `uv`, per
 
 ---
 
-## T1 — Project skeleton
+## T1 — Project skeleton  ✅
 
-- [ ] **Changes:** `pyproject.toml` (name, `requires-python = ">=3.12"`, `license = "GPL-3.0-or-later"`, dependencies, ruff/mypy/pytest configuration), `src/atrium/__init__.py` carrying `__version__`, empty package directories per [plan §3](plan.md#3-modules), `tests/` root.
+- [x] **Changes:** `pyproject.toml` (name, `requires-python = ">=3.12"`, `license = "GPL-3.0-or-later"`, dependencies, ruff/mypy/pytest configuration), `src/atrium/__init__.py` carrying `__version__`, empty package directories per [plan §3](plan.md#3-modules), `tests/` root.
 - **Depends on:** —
 - **Verified by:** `uv sync` resolves; `uv run ruff check .` and `uv run mypy src` pass on an empty tree; `uv run pytest` exits 0 collecting nothing.
 - **Also:** every file carries `# SPDX-License-Identifier: GPL-3.0-or-later` from this commit, not retrofitted ([ADR-0005](../../docs/decisions/0005-licence.md)).
 - **Plan reference:** §2, §3
+
+### Done — 2026-08-26
+
+Three notes, because each is a decision the task statement did not settle.
+
+**The console entry point is deferred to T15.** `pyproject.toml` was to declare
+`atrium = "atrium.server:main"`, and `server.py` is T15's. Declaring an entry point to a module
+that does not exist fails the build, and a broken one is worse than none.
+
+**Dependencies are 001's only** — `fastapi` and `uvicorn`. SQLAlchemy, Alembic and `argon2-cffi`
+are decided but unused until 002 and 003, and a dependency set that lists what the roadmap intends
+rather than what the code imports stops being reviewable. Each feature adds its own.
+
+**The security lint rules went in now.** `flake8-bandit` (`S`) was enabled at the skeleton because
+its noise on the existing tree was **three findings**, all in `tools/`, all explicable in a line.
+Enabled later it would have been a backlog. The two `S105` hits are variable *names*
+(`ENV_PASSWORD = "JELLYFIN_PASSWORD"`); the `S310` is an operator-supplied URL, which is the
+probes' entire purpose.
+
+**The linter earned its place on the first run.** `RUF034` caught a real defect in
+`probe_sort_names.py` — `"IndexNumber" if item_type != "Season" else "IndexNumber"`, a ternary
+whose branches were identical. The surrounding logic was right, so the probe's published findings
+stand, but the dead condition would have misled the next reader about what varies by type.
+
+**Markdown is excluded from the formatter.** `ruff format .` reformatted the fenced Python blocks
+inside `plan.md` on its first run — silently rewriting reviewed prose, where the aligned comment
+columns are a deliberate readability choice rather than un-formatted code. `extend-exclude`
+keeps the formatter about code. A tool that edits documentation as a side effect of a lint task is
+a tool nobody will trust to run unattended.
 
 ## T2 — `compat/model.py`: the base every response inherits
 

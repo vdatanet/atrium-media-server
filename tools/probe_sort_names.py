@@ -68,9 +68,9 @@ DIGIT_PAD = 10
 #          MediaBrowser.Controller/Entities/TV/Episode.cs:238-242,
 #          MediaBrowser.Controller/Entities/TV/Season.cs:149-152 @ v10.11.11]
 OVERRIDES = {
-    "Audio":   (4, 4, " - "),    # disc, track
-    "Episode": (3, 4, " - "),    # season, episode
-    "Season":  (4, None, ""),    # season only, no name appended
+    "Audio": (4, 4, " - "),  # disc, track
+    "Episode": (3, 4, " - "),  # season, episode
+    "Season": (4, None, ""),  # season only, no name appended
 }
 
 
@@ -80,7 +80,7 @@ def derive(name: str) -> str:
 
     for word in REMOVE_WORDS:
         if sortable.startswith(word + " "):
-            sortable = sortable[len(word) + 1:]
+            sortable = sortable[len(word) + 1 :]
         sortable = sortable.replace(f" {word} ", " ")
         if sortable.endswith(" " + word):
             sortable = sortable[: -(len(word) + 1)]
@@ -115,7 +115,7 @@ def derive_override(item: dict) -> str | None:
     parent_width, index_width, sep = widths
     parent, index = item.get("ParentIndexNumber"), item.get("IndexNumber")
 
-    if index_width is None:                       # Season: the number alone, or the name
+    if index_width is None:  # Season: the number alone, or the name
         return f"{parent:0{parent_width}d}" if index is not None else item.get("Name", "")
 
     prefix = f"{parent:0{parent_width}d}{sep}" if parent is not None else ""
@@ -126,10 +126,14 @@ def derive_override(item: dict) -> str | None:
 def check_overrides(server: Server, probe: Probe) -> None:
     """Read-only: compare real items of the three overriding types against the source formulas."""
     for item_type in OVERRIDES:
-        index_field = "IndexNumber" if item_type != "Season" else "IndexNumber"
         found = server.get(
-            "/Items", Recursive="true", IncludeItemTypes=item_type, Fields="SortName",
-            Limit=25, SortBy="SortName", UserId=server.user_id,
+            "/Items",
+            Recursive="true",
+            IncludeItemTypes=item_type,
+            Fields="SortName",
+            Limit=25,
+            SortBy="SortName",
+            UserId=server.user_id,
         )
         items = found.get("Items", [])
         if not items:
@@ -140,7 +144,9 @@ def check_overrides(server: Server, probe: Probe) -> None:
         agree = 0
         for item in items:
             if item_type == "Season":
-                item = {**item, "ParentIndexNumber": item.get(index_field)}
+                # Season's formula reads the season number from IndexNumber, where the other two
+                # read a disc or season from ParentIndexNumber. Normalise so one function serves.
+                item = {**item, "ParentIndexNumber": item.get("IndexNumber")}
             if item.get("SortName") == derive_override(item):
                 agree += 1
         probe.observe(
@@ -174,8 +180,9 @@ def run(server: Server) -> Probe:
         ),
     )
 
-    seed = server.get("/Items", Recursive="true", IncludeItemTypes="Audio", Limit=1,
-                      UserId=server.user_id)
+    seed = server.get(
+        "/Items", Recursive="true", IncludeItemTypes="Audio", Limit=1, UserId=server.user_id
+    )
     fallback = (seed.get("Items") or [{}])[0].get("Id")
 
     created: dict[str, str] = {}

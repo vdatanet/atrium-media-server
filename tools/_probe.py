@@ -23,15 +23,16 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 ENV_FILE = ".env"
 ENV_URL = "JELLYFIN_URL"
 ENV_USERNAME = "JELLYFIN_USERNAME"
-ENV_PASSWORD = "JELLYFIN_PASSWORD"
-ENV_TOKEN = "JELLYFIN_TOKEN"
+# These are the NAMES of environment variables, not secrets.
+ENV_PASSWORD = "JELLYFIN_PASSWORD"  # noqa: S105
+ENV_TOKEN = "JELLYFIN_TOKEN"  # noqa: S105
 
 CLIENT = "atrium-probe"
 DEVICE_ID = "atrium-probe-0000"
@@ -56,7 +57,7 @@ def load_env_file(start: Path | None = None) -> Path | None:
 
     Returns the path that was read, or None. Never logs a value.
     """
-    here = (start or Path(__file__).resolve().parent)
+    here = start or Path(__file__).resolve().parent
     for directory in [here, *here.parents]:
         candidate = directory / ENV_FILE
         if not candidate.is_file():
@@ -117,7 +118,10 @@ class Server:
             data = json.dumps(body).encode("utf-8")
             headers["Content-Type"] = "application/json"
 
-        request = urllib.request.Request(url, data=data, headers=headers, method=method)
+        # S310: the URL is supplied by the operator running the probe against their own server.
+        # Restricting the scheme here would stop a probe reaching a server on a custom port or
+        # behind a proxy, which is the normal case rather than the exotic one.
+        request = urllib.request.Request(url, data=data, headers=headers, method=method)  # noqa: S310
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310
                 payload = response.read()
@@ -223,7 +227,9 @@ class Probe:
         self.matches = matches_documentation
 
     def report(self, server: Server) -> int:
-        today = date.today().isoformat()
+        # UTC rather than local: a citation carries a date that means the same thing
+        # wherever it is read. timezone.utc rather than datetime.UTC for the 3.9 floor.
+        today = datetime.now(timezone.utc).date().isoformat()
         width = max((len(label) for label, _ in self.observations), default=0)
 
         print()
@@ -269,9 +275,9 @@ class Probe:
             print(f"    {line}")
         print()
         for line in _wrap(
-            "Update that section. If this is a behaviour that changed rather than a claim that "
-            "was always wrong, record it in docs/compatibility/behaviours.md with both dates - "
-            "a claim that fails to reproduce is not deleted.",
+            "Update that section. If this is a behaviour that changed rather than a claim "
+            "that was always wrong, record it in docs/compatibility/behaviours.md with both "
+            "dates - a claim that fails to reproduce is not deleted.",
             88,
         ):
             print(f"    {line}")
@@ -302,13 +308,16 @@ def build_parser(description: str, needs_writes: bool = False) -> argparse.Argum
         description=description, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
-        "server", nargs="?",
-        help=f"Base URL of a running Jellyfin, e.g. http://host:8096. "
-             f"Defaults to ${ENV_URL}",
+        "server",
+        nargs="?",
+        help=f"Base URL of a running Jellyfin, e.g. http://host:8096. Defaults to ${ENV_URL}",
     )
-    parser.add_argument("--username", "-u", help=f"User to authenticate as. Defaults to ${ENV_USERNAME}")
     parser.add_argument(
-        "--password", "-p",
+        "--username", "-u", help=f"User to authenticate as. Defaults to ${ENV_USERNAME}"
+    )
+    parser.add_argument(
+        "--password",
+        "-p",
         help=f"Discouraged: visible in the process list. Prefer ${ENV_PASSWORD} or the prompt",
     )
     parser.add_argument(
@@ -321,7 +330,7 @@ def build_parser(description: str, needs_writes: bool = False) -> argparse.Argum
             "--allow-writes",
             action="store_true",
             help="Required: this probe cannot answer its question without writing to the server. "
-                 "It cleans up after itself, including on failure.",
+            "It cleans up after itself, including on failure.",
         )
     return parser
 

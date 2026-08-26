@@ -1,0 +1,106 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "atrium-media-server"
+description = "A media server for movies, series and music that speaks the Jellyfin API."
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+dynamic = ["version"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Video",
+]
+
+# Only what feature 001 actually uses. Later features add their own, so the dependency set
+# always says what the code needs rather than what the roadmap intends.
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28",
+    "ruff>=0.9",
+    "mypy>=1.14",
+]
+
+[tool.hatch.version]
+path = "src/atrium/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/atrium"]
+
+# --------------------------------------------------------------------------------------------
+# Lint
+# --------------------------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+src = ["src", "tests", "tools"]
+target-version = "py312"
+# Markdown is documentation, not code. Recent ruff versions will reformat fenced Python blocks
+# inside it, which silently rewrites reviewed prose - the aligned comment columns in the plans are
+# a deliberate readability choice, not un-formatted code. Keep the formatter about code.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",      # pycodestyle
+    "F",           # pyflakes
+    "I",           # import sorting
+    "N",           # pep8-naming
+    "UP",          # pyupgrade
+    "B",           # bugbear
+    "A",           # shadowed builtins
+    "C4",          # comprehensions
+    "DTZ",         # naive datetimes - this project has exactly one date format and it is aware
+    "T20",         # no print() in the package
+    "S",           # flake8-bandit - enabled at the skeleton, when the noise is three findings
+    "SIM",         # simplification
+    "PTH",         # pathlib over os.path
+    "RUF",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Probes and tools are command-line programs whose output IS the product, and they carry a Python
+# 3.9 floor (see tools/README.md) so they cannot use 3.11+ spellings the pyupgrade rules prefer.
+"tools/*" = ["T20", "UP017", "UP045", "UP007"]
+# Tests assert on values that would otherwise look like magic numbers, and asserting on a
+# hardcoded test password is the entire point of tests/security.
+"tests/*" = ["N802", "S101", "S105", "S106"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["atrium"]
+
+# --------------------------------------------------------------------------------------------
+# Types
+# --------------------------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+# Strict from the first commit, not retrofitted: on a codebase whose job is getting field types
+# exactly right, gradual typing leaves the errors that matter most unchecked. ADR-0002.
+warn_unreachable = true
+warn_no_return = true
+disallow_any_unimported = true
+
+# --------------------------------------------------------------------------------------------
+# Tests
+# --------------------------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config -q"
+asyncio_mode = "auto"
+markers = [
+    "conformance: asserts behaviour at the HTTP boundary (Principle VIII)",
+]

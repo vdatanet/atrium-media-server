@@ -35,16 +35,21 @@ DUP_NAME = "atrium probe - playlist entries"
 def entries(server: Server, playlist_id: str) -> list[tuple[str, str]]:
     """Return [(PlaylistItemId, Name), ...] in playlist order."""
     result = server.get(f"/Playlists/{playlist_id}/Items", UserId=server.user_id)
-    return [(item.get("PlaylistItemId", "?"), item.get("Name", "?"))
-            for item in result.get("Items", [])]
+    return [
+        (item.get("PlaylistItemId", "?"), item.get("Name", "?")) for item in result.get("Items", [])
+    ]
 
 
 def source_items(server: Server, count: int) -> list[dict]:
     """Five items with distinct names, so the resulting order is readable."""
     for item_type in ("Audio", "Movie", "Episode"):
         found = server.get(
-            "/Items", Recursive="true", IncludeItemTypes=item_type,
-            Limit=count * 3, SortBy="SortName", UserId=server.user_id,
+            "/Items",
+            Recursive="true",
+            IncludeItemTypes=item_type,
+            Limit=count * 3,
+            SortBy="SortName",
+            UserId=server.user_id,
         )
         seen, picked = set(), []
         for item in found.get("Items", []):
@@ -72,8 +77,9 @@ def run(server: Server) -> Probe:
     items = source_items(server, 5)
     labels = "ABCDE"
     by_name = {item["Name"]: labels[i] for i, item in enumerate(items)}
-    probe.observe("source items", ", ".join(f"{labels[i]}={x['Name'][:28]}"
-                                            for i, x in enumerate(items)))
+    probe.observe(
+        "source items", ", ".join(f"{labels[i]}={x['Name'][:28]}" for i, x in enumerate(items))
+    )
 
     created: list[str] = []
     try:
@@ -81,9 +87,14 @@ def run(server: Server) -> Probe:
         # Creation and addition are separate code paths upstream, so they are probed separately:
         # a server that de-duplicates one may not de-duplicate the other, and the difference
         # decides whether a playlist can hold the same track twice at all.
-        dup = server.post("/Playlists", body={
-            "Name": DUP_NAME, "Ids": [items[0]["Id"], items[0]["Id"]], "UserId": server.user_id,
-        })["Id"]
+        dup = server.post(
+            "/Playlists",
+            body={
+                "Name": DUP_NAME,
+                "Ids": [items[0]["Id"], items[0]["Id"]],
+                "UserId": server.user_id,
+            },
+        )["Id"]
         created.append(dup)
         on_create = entries(server, dup)
         probe.observe(
@@ -107,9 +118,7 @@ def run(server: Server) -> Probe:
         if len(on_add) >= 2 and distinct == len(on_add):
             server.delete(f"/Playlists/{dup}/Items", EntryIds=on_add[0][0])
             left = entries(server, dup)
-            kept_right = len(left) == len(on_add) - 1 and all(
-                e != on_add[0][0] for e, _ in left
-            )
+            kept_right = len(left) == len(on_add) - 1 and all(e != on_add[0][0] for e, _ in left)
             probe.observe(
                 "remove one by entry id",
                 f"{len(left)} left, {'the right one' if kept_right else 'THE WRONG ONE'}",
@@ -118,9 +127,14 @@ def run(server: Server) -> Probe:
             probe.observe("remove one by entry id", "not testable - no duplicate survived")
 
         # -- the question --------------------------------------------------------------------
-        playlist = server.post("/Playlists", body={
-            "Name": NAME, "Ids": [item["Id"] for item in items], "UserId": server.user_id,
-        })["Id"]
+        playlist = server.post(
+            "/Playlists",
+            body={
+                "Name": NAME,
+                "Ids": [item["Id"] for item in items],
+                "UserId": server.user_id,
+            },
+        )["Id"]
         created.append(playlist)
 
         before = entries(server, playlist)
