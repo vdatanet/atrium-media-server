@@ -15,15 +15,12 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from atrium.api import system
 from atrium.api.deps import require_user
-from atrium.compat.errors import EXCEPTION_HANDLERS
-from atrium.compat.middleware import ResponseHeadersMiddleware
-from atrium.compat.responses import AtriumJSONResponse
 from atrium.config.paths import DataPaths
 from atrium.config.settings import Settings, load
 from atrium.config.state import ServerState, load_or_create
 from atrium.domain.user import User
+from atrium.server import create_app
 
 #: A user the override hands back. Not a credential: nothing authenticates as this.
 TEST_USER = User(id="a" * 32, name="joan", is_administrator=True)
@@ -47,21 +44,15 @@ def server_state(paths: DataPaths) -> ServerState:
 
 
 @pytest.fixture
-def app(paths: DataPaths, settings: Settings, server_state: ServerState) -> Iterator[FastAPI]:
-    """An application with 001's routes wired.
+def app(paths: DataPaths) -> Iterator[FastAPI]:
+    """A real instance, built by the factory the server ships.
 
-    T15 replaces this body with a call to the real factory. Until then it assembles the same
-    pieces, so the tests exercise the composition rather than the routes in isolation.
+    Assembling the pieces by hand here would test a composition nobody runs. The readiness gate is
+    opened directly rather than through the lifespan, because these tests drive the application
+    through a transport that does not run one.
     """
-    built = FastAPI(
-        default_response_class=AtriumJSONResponse,
-        exception_handlers=dict(EXCEPTION_HANDLERS),
-    )
-    built.add_middleware(ResponseHeadersMiddleware)
-    built.include_router(system.router)
-    built.state.paths = paths
-    built.state.settings = settings
-    built.state.server_state = server_state
+    built = create_app(paths)
+    built.state.readiness.mark_ready()
     yield built
     built.dependency_overrides.clear()
 

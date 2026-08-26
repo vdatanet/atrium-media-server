@@ -520,12 +520,51 @@ recoverable.
 **The sweeps stopped being vacuous.** Three models, 36 fields, checked for alias and unit on every
 run — the first real work T3 and T7 have done since they were written.
 
-## T15 — `server.py`: the application factory
+## T15 — `server.py`: the application factory  ✅
 
-- [ ] **Changes:** `create_app(settings)` wiring routers, middleware and lifecycle; an entry point.
+- [x] **Changes:** `create_app(settings)` wiring routers, middleware and lifecycle; an entry point.
 - **Depends on:** T10, T11, T14
 - **Verified by:** the app starts against a temporary data directory and serves `/System/Info/Public`; two instances in one test process do not share state.
 - **Plan reference:** §3
+
+### Done — 2026-08-26
+
+**The server runs.** Started as a subprocess against a temporary directory, on a real port:
+
+```
+GET /System/Info/Public -> 200
+   Server           Atrium/0.1.0.dev0
+   X-Response-Time  24.4647
+   Content-Type     application/json; charset=utf-8
+   ProductName      'Jellyfin Server'   Version '10.11.11'
+   LocalAddress     http://127.0.0.1:59040
+GET /System/Info       -> 401 (no token), body=b''
+GET /System/Ping       -> 200 "Jellyfin Server"
+```
+
+**Middleware order was checked, not assumed.** Starlette makes the *last* middleware added the
+outermost, so response headers wrap the readiness gate — and a `503` served while starting still
+carries `Server` and `X-Response-Time-ms`, as the reference's does. A test asserts it, because the
+order is invisible from reading the two `add_middleware` lines.
+
+**The test fixtures now build a real instance through the factory.** They had been assembling the
+same pieces by hand, which tests a composition nobody runs. All 186 existing tests passed against
+the real one unchanged, which is the useful part of the answer.
+
+**No documentation routes are served.** The reference serves its OpenAPI document at
+`/api-docs/openapi.json`; that route is not in `surface.yaml` and no analysed client asks for it
+(Principle VI). The document is still *generated* — `app.openapi()` builds it — which is what
+[ADR-0002](../../docs/decisions/0002-python-and-the-runtime-stack.md) chose FastAPI for. A test
+asserts both halves.
+
+**Two process notes.** The `pyproject.toml` edit that restores the entry point deferred from T1
+**silently did nothing** the first time: `uv add` had rewritten the dependencies block and the
+replacement matched nothing. The retry asserts the edit landed, which is the only reason it was
+caught rather than shipped.
+
+And warnings are now errors in the test configuration. The first one to matter was a deprecated
+test client reaching a code path the server never uses; it is replaced by Starlette's own lifespan
+context, which is closer to what a server actually does anyway.
 
 ## T16 — Golden responses and the content-type variants
 
