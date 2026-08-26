@@ -58,6 +58,7 @@ reasoning:
 | T11 | Write one `Server` header | Three headers; two of them unknown to the project |
 | T13 | Raise a 401 | Two error shapes, split by *where* the refusal happens |
 | T14 | Serialise seven fields | Nulls are omitted globally by one setting — resolving an "UNVERIFIED" entry that was waiting for a whole harness |
+| T16 | Check in three response bodies | One of the three declared content types serialises differently. The spec, an acceptance criterion and a *passing test* all said otherwise — the test compared Atrium against itself |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
 question each, and a plain `urllib` request answers the rest.

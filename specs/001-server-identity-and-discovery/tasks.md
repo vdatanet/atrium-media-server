@@ -566,13 +566,60 @@ And warnings are now errors in the test configuration. The first one to matter w
 test client reaching a code path the server never uses; it is replaced by Starlette's own lifespan
 context, which is closer to what a server actually does anyway.
 
-## T16 — Golden responses and the content-type variants
+## T16 — Golden responses and the content-type variants  ✅
 
-- [ ] **Changes:** `tests/golden/` for all three endpoints; the harness comparing **raw bytes**; `--update-golden`.
+- [x] **Changes:** `tests/golden/` for all three endpoints; the harness comparing **raw bytes**; `--update-golden`.
 - **Depends on:** T15
 - **Verified by:** AC-1, AC-2, AC-3 and AC-6 pass against a fresh instance; **AC-9** — the same request with `Accept: application/json`, `; profile="PascalCase"` and `; profile="CamelCase"` returns three byte-identical bodies.
 - **Note:** compare bytes, not parsed objects. Casing, `null`-versus-absent and numeric type are the contract and all three vanish after parsing.
 - **Plan reference:** §8
+
+### Done — 2026-08-26
+
+**AC-9 was false, and the test that covered it was passing.** The reference does not answer the
+three declared content types identically: `profile="CamelCase"` really does emit **camelCase
+property names**, and the response's content type echoes whichever profile matched.
+[probe: tools/probe_content_type_profiles.py, Jellyfin 10.11.11, 2026-08-26]
+
+The old test asserted that Atrium's three answers agree **with each other**. They did. Nobody had
+asked the reference, and the claim it was written from carried a `[spec: …]` citation that was
+accurate about the schema and silent about the serialisation. Three content types pointing at one
+schema is exactly what a document can say and a server can contradict.
+
+The measurement is in [behaviours §1.13](../../docs/compatibility/behaviours.md), with the four
+details a reimplementation needs and none of which are in the document: the profile is matched
+leniently on the media type parameter but **not when a `charset` sits beside it**; ranking is
+ordinary `q=` negotiation; names convert at every depth while **dictionary keys do not convert at
+all**; and the conversion is .NET's policy, not "lower the first letter" — `UICulture` becomes
+`uiCulture`, measured.
+
+**Not implemented here, and that is the deliberate part.** Doing it correctly means the profile has
+to reach the serialisation layer, because only there is a property distinguishable from a
+dictionary key — by the time the body is bytes, renaming `ProviderIds`' keys would look identical
+to renaming a property. That is a change to [plan §5](plan.md#5-contracts), so it is **T19** rather
+than a paragraph in this task. The gap is recorded in
+[behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) and **pinned by a
+test that fails when T19 lands**, which is the only mechanism that makes a documented gap
+self-closing.
+
+**Both analysed clients were checked rather than assumed.** Neither sends the profile: music-client
+decodes with a PascalCase strategy of its own, and video-client deletes the `profile=` content
+types from the OpenAPI document during its build — its generated code cannot ask for one. The
+comment explaining that build step gives the same reason this repository did. Two projects, the
+same inference, from the same document.
+
+**The golden instance is pinned, not normalised.** Three values differ between two hosts running
+the same code, and each is fixed at its source: the identity comes from a `state.json` written
+before startup, `LocalAddress` from `use_request_host` so it is a function of the request, and the
+architecture from a fixed `platform.machine()`. That leaves **one** substitution, the temporary
+data directory. Pinning beats substituting because a substituted value is a value nobody is
+checking any more — `SystemArchitecture` would have been replaced by a placeholder along with the
+mapping bug that produced it, so the mapping got its own test instead.
+
+**The harness proved itself on a type change.** Turning `false` into `"false"` in a golden file
+produces a failure naming the byte offset and both spellings. Every assertion in the rest of the
+suite would have passed through it unchanged — which is the argument for comparing bytes, made
+concretely rather than as a principle.
 
 ## T17 — Route registration against `surface.yaml`
 
@@ -587,6 +634,16 @@ context, which is closer to what a server actually does anyway.
 - **Depends on:** T17
 - **Verified by:** green on the branch; **no job touches the network**, and the suite passes with no Jellyfin reachable (Principle VII).
 - **Plan reference:** §8
+
+## T19 — The `CamelCase` content-type profile
+
+- [ ] **Changes:** profile selection from the request's `Accept`, a camelCase serialisation of every response model, and the matched profile echoed in the response's content type.
+- **Depends on:** T16
+- **Verified by:** the three declared content types produce the two bodies the reference produces; a response carrying a dictionary keeps that dictionary's keys unconverted; `UICulture` serialises as `uiCulture`; and T16's pinning test — which asserts the gap — is deleted in the same change.
+- **Note:** added by T16, which measured that the three declared content types are **two**
+  behaviours rather than three names for one. Everything needed to build it is in
+  [behaviours §1.13](../../docs/compatibility/behaviours.md#113-the-camelcase-profile-really-is-camelcase): the matching rule, the ranking rule and the two conversion rules. The one design constraint is that the conversion has to happen **where a model is still a model** — dictionary keys are not converted, and finished bytes cannot tell a property from a dictionary key. That decision amends [plan §5](plan.md#5-contracts), which is why it is a task and not a paragraph in T16.
+- **Plan reference:** §5, and the amendment it makes to it
 
 ---
 

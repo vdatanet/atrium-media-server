@@ -10,10 +10,16 @@ Starlette appends `charset=utf-8` only to `text/*` media types, so its `JSONResp
 find by reading either codebase - it took looking at real traffic.
 `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
 
-The reference also declares and accepts `application/json; profile="CamelCase"` and
-`profile="PascalCase"` on requests, answering all three identically. Nothing is needed for that
-here - the profile is a request-side concern and the body is PascalCase regardless - but it is why
-this module does not try to be clever about content negotiation.
+The reference also accepts `application/json; profile="PascalCase"` and `profile="CamelCase"`, and
+those are **not** three names for one behaviour: the CamelCase profile really does answer in
+camelCase, and the response's content type echoes whichever profile matched.
+`[probe: tools/probe_content_type_profiles.py, Jellyfin 10.11.11, 2026-08-26]`
+
+This module implements neither yet. Every response is PascalCase with the content type above,
+whatever was asked for - a bounded gap recorded in docs/compatibility/behaviours.md section 5,
+pinned by a conformance test, and closed by task T19 of feature 001. It is not fixed here because
+the conversion has to happen while a response is still a model: dictionary *keys* are not
+converted, and by the time a body is bytes nothing can tell a property from a key.
 """
 
 from __future__ import annotations
