@@ -401,13 +401,44 @@ server, not Jellyfin — so this stays the one header where the honest answer co
 proxy's framing to the reference would put a false claim in the compatibility documents. It needs
 isolating before it can be written down.
 
-## T12 — `net/address.py`: `LocalAddress`
+## T12 — `net/address.py`: `LocalAddress`  ✅
 
-- [ ] **Changes:** `resolve_local_address(request, settings)`, three tiers, first match wins; loopback fallback.
+- [x] **Changes:** `resolve_local_address(request, settings)`, three tiers, first match wins; loopback fallback.
 - **Depends on:** T8
 - **Verified by:** the nine-row table of [plan §8.2](plan.md#82-localaddress) — published URL with and without a trailing slash; request-host mode on default and non-default ports, http and https; two requesters on different networks; a requester matching nothing. No test touches a real interface.
 - **Note:** the reference's HTTPS override is **not** implemented ([behaviours §4.2](../../docs/compatibility/behaviours.md#42-localaddress-does-not-get-an-https-override)). A test asserts the scheme follows what the server is reachable on, so the divergence is deliberate in code as well as in prose.
 - **Plan reference:** §6.4
+
+### Done — 2026-08-26
+
+**Tier 3 asks the operating system instead of enumerating interfaces.** The plan said "enumerate
+the server's bound addresses, pick the one on the same network as the requester". Doing that
+properly needs netmasks, which the standard library does not expose — the honest options were a
+dependency or a heuristic.
+
+Neither was necessary. Opening a UDP socket towards the peer and reading back the local address the
+kernel chose sends no packets, needs no arithmetic, and is **more** correct than matching prefixes
+by hand: it honours the real routing table. Checked against five peers before committing to it,
+including loopback and a VPN-shaped range.
+
+That also makes the behaviour the reference is *praised* for in
+[behaviours §2.3](../../docs/compatibility/behaviours.md) — a requester arriving over a VPN getting
+the VPN-side address — fall out for free, because it is the kernel's answer rather than ours.
+
+**The divergence is now structural, not documentary.** Two tests: one asserts a request arriving as
+HTTPS does not produce an `https://` answer in tier 3, and the other is a **tripwire** —
+`NetworkSettings` has no field whose name could reach the scheme. When TLS support lands, that test
+fails and forces the decision to be made deliberately rather than inherited. A divergence that only
+lives in a document is one refactor away from disappearing.
+
+**Tier 1 keeps a path.** A reverse proxy may serve Atrium under a sub-path, and `rstrip("/")` on a
+published URL must not become "take the origin". Tested.
+
+**The loopback fallback is never an empty string.** A client receiving `""` has no way to recover;
+one receiving a wrong-but-well-formed address fails visibly.
+
+The function takes the request's parts rather than a `Request`, so the table runs without a server
+and without touching a real interface. T14 supplies the adapter that pulls those parts out.
 
 ## T13 — `api/deps.py`: the authentication seam
 
