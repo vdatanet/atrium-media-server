@@ -113,8 +113,8 @@ say how it will be proven is not finished.
 | # | Feature | spec | plan | tasks |
 |---|---|---|---|---|
 | [001](001-server-identity-and-discovery/) | Server identity and discovery | **Accepted** | **Accepted** | Draft |
-| [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | Draft | — | — |
-| [003](003-library-configuration-and-scanning/) | Library configuration and scanning | Draft | — | — |
+| [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | **Accepted** | Draft | — |
+| [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Accepted** | Draft | — |
 | [004](004-metadata-resolution/) | Metadata resolution | Draft | — | — |
 | [005](005-item-query-api/) | Item query API | Draft | — | — |
 | [006](006-images/) | Images | Draft | — | — |
@@ -123,9 +123,9 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001's spec is accepted**, which is what allowed its plan to start. The other nine remain drafts:
-no plan may start until its spec is accepted, and no code until its plan is. The open questions
-across the ten are the review agenda.
+**Three specs are accepted** — 001, 002 and 003 — which is what allowed their plans to start. 001
+has its tasks too. The other seven specs remain drafts: no plan may start until its spec is
+accepted, and no code until its plan is. The open questions across the ten are the review agenda.
 
 **All four probes have been run**, on 2026-08-26 against a live Jellyfin 10.11.11. Three confirmed
 the documentation and one contradicted it:

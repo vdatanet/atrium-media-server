@@ -14,3 +14,4 @@ optional; a decision without visible alternatives is a preference.
 | [0003](0003-sqlite-as-the-default-store.md) | SQLite as the default store | Accepted |
 | [0004](0004-pin-to-jellyfin-10-11.md) | Pin the reference to Jellyfin 10.11 | Accepted |
 | [0005](0005-licence.md) | Licence — GPL-3.0-or-later | Accepted |
+| [0006](0006-password-hashing.md) | Password hashing — Argon2id | Accepted |
