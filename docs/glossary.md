@@ -101,7 +101,7 @@ differently. The project's central metric, and the target is zero (Principle I).
 
 **Non-improvement** — a change that would be genuinely better but creates a delta, and is therefore
 recorded and not done. The list is in
-[behaviours §5](compatibility/behaviours.md#5-non-improvements).
+[behaviours §6](compatibility/behaviours.md#6-non-improvements).
 
 **Provenance** — the citation attached to every compatibility claim: a probe, a source line, or the
 pinned spec. A claim without one is `⚠️ UNVERIFIED` (Principle II).
