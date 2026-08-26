@@ -117,12 +117,36 @@ has, so a stale entry cannot sit there unnoticed.
 **`compat/registry.py` walks the model registry, not the router**, so a model is checked whether or
 not a route returns it yet.
 
-## T4 — `compat/dates.py`: .NET round-trip datetimes
+## T4 — `compat/dates.py`: .NET round-trip datetimes  ✅
 
-- [ ] **Changes:** the datetime type: serialises `%Y-%m-%dT%H:%M:%S.ffffff0Z` after normalising to UTC; parses any ISO-8601, three or seven fractional digits, timezone optional and read as UTC when absent.
+- [x] **Changes:** the datetime type: serialises `%Y-%m-%dT%H:%M:%S.ffffff0Z` after normalising to UTC; parses any ISO-8601, three or seven fractional digits, timezone optional and read as UTC when absent.
 - **Depends on:** T2
 - **Verified by:** table-driven round-trip tests including a zero fraction (`.0000000Z`), a non-UTC input, a naive input, and a seven-digit input. The seventh digit is always `0` and a test says so, so nobody later "fixes" it.
 - **Plan reference:** §6.2
+
+### Done — 2026-08-26
+
+**No normaliser was needed.** The plan allowed for one, on the assumption that `fromisoformat`
+would reject seven fractional digits. Measured on the **3.12 floor** rather than on the interpreter
+that happens to be installed: it accepts seven digits, nine digits, a bare `Z`, an offset and no
+timezone at all, truncating to microseconds. Fifteen lines of defensive string surgery that the
+plan reserved space for do not exist.
+
+**Formatting is built from components, not `strftime`.** `%Y` does not zero-pad years below 1000
+consistently across platforms, and a date field is not the place to inherit a platform difference.
+A test asserts `0001-02-03`.
+
+**`when_used="json"` rather than `"always"`.** JSON is what reaches a client and must be exact; a
+Python-mode dump keeps a real `datetime` so callers can compute with it. Both halves are asserted.
+
+**The last test records what the sweep is for.** A field annotated plain `datetime` serialises in
+pydantic's own format — `+00:00`, six digits — and the test asserts that it does *not* match the
+reference. T7 is what will catch such a field; this says out loud what it is catching.
+
+**Two lint findings worth the distinction.** `UP017` applies to `src/` — 3.12 has `datetime.UTC` —
+but not to `tools/`, which keeps `timezone.utc` for its 3.9 floor and is exempted by path. And
+`DTZ001` fired on two *deliberate* naive datetimes in the tests: the naive value is the case under
+test, so each carries a `noqa` saying so rather than being "fixed" into meaninglessness.
 
 ## T5 — `compat/ticks.py`: the internal duration unit
 
