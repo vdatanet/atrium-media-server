@@ -24,6 +24,10 @@ nothing works. §2 is semantics. §3 is defects. §4 is the deliberate exception
 and `application/json; profile="PascalCase"` content types alongside plain `application/json`,
 all pointing at the same schema. `[spec: every JSON response in the 10.11.10 document]`
 
+The same schema, and **not** the same serialisation: the CamelCase profile really does emit
+camelCase. That is §1.13, and this entry is about what a client gets when it asks for nothing in
+particular — which is PascalCase.
+
 **Depends on it:** everything. A camelCase body is not a lesser response, it is an empty object to
 a client's decoder.
 
@@ -347,6 +351,66 @@ into no answer *and is itself a delta*. That argument was reasoned; this is the 
 
 **Atrium does:** the same, and counts what it ignored (010 §3.6).
 
+### 1.13 The `CamelCase` profile really is camelCase
+
+**Jellyfin does:** answer `Accept: application/json; profile="CamelCase"` with **camelCase property
+names**, and echo the matched profile in the response's content type. The other two declared types
+answer in PascalCase. `[probe: tools/probe_content_type_profiles.py, Jellyfin 10.11.11, 2026-08-26]`
+
+| Request `Accept` | Property names | Response `Content-Type` |
+|---|---|---|
+| `application/json` | PascalCase | `application/json; charset=utf-8` |
+| `application/json; profile="PascalCase"` | PascalCase | `application/json; profile="PascalCase"; charset=utf-8` |
+| `application/json; profile="CamelCase"` | **camelCase** | `application/json; profile="CamelCase"; charset=utf-8` |
+
+Three declared content types, two behaviours. The profile selects an output formatter with a
+different naming policy, and the registration comment says so in as many words — *"Allow requester
+to change between camelCase and PascalCase"*.
+`[source: Jellyfin.Server/Extensions/ApiServiceCollectionExtensions.cs:126-129,
+Jellyfin.Api/Formatters/CamelCaseJsonProfileFormatter.cs:15-18,
+src/Jellyfin.Extensions/Json/JsonDefaults.cs:21,55-58 @ v10.11.11]`
+
+Four measured details that a reimplementation needs and that reading the document does not give:
+
+- **The match is on the media type's parameter, leniently.** `profile=CamelCase` unquoted and
+  `profile="camelcase"` both match; a **charset parameter alongside it does not** — that request
+  falls back to plain `application/json`. An unknown profile falls back too.
+- **Ranking is ordinary content negotiation.** `application/json, application/json;
+  profile="CamelCase"` selects the first; with `q=` values the higher one wins.
+- **Names are converted at every depth**, and **dictionary keys are not converted at all** —
+  `ProviderIds`, `ImageTags` and `ImageBlurHashes` keep their keys, because the reference sets
+  `PropertyNamingPolicy` and never sets `DictionaryKeyPolicy`.
+- **The conversion is .NET's, not "lower the first letter".** A leading run of capitals lowers all
+  but the last of them. Over the 1043 names of the pinned document the two rules disagree exactly
+  **once** — `UICulture` becomes `uiCulture`, and lowering the first letter would give `uICulture` —
+  and that one name is the one that was measured. The other name with a leading run, `ETag`,
+  becomes `eTag` under both rules, which is why the difference is so easy to miss: a spot check
+  almost certainly lands on a name where the wrong rule is right.
+
+**Depends on it:** neither analysed client sends the profile, and both were checked rather than
+assumed. music-client decodes with a PascalCase naming strategy of its own and sets no `Accept`
+profile. video-client generates its API client from the OpenAPI document after a build step that
+**deletes the `profile=` content types** — they produced unusable generated method names — so its
+generated code cannot ask for one. That build step's comment gives the same reason this repository
+did: all three point at the same schema. Both projects read the schema and inferred the behaviour.
+
+But a client that did send it and got PascalCase would not get a degraded response; it would get an
+**empty object** out of its decoder, which is the failure mode of §1.1 exactly.
+
+**Atrium does:** answer everything in PascalCase for now, including a request that asked for the
+CamelCase profile. This is the worst shape of divergence by
+[§3.0.3](#303-the-shape-of-a-safe-divergence) — a value a client already reads — and it is
+accepted as a **gap** rather than a decision: §5 carries it, with the task that closes it. The
+reason it is not closed in the same change that found it is that doing it correctly means the
+serialisation profile has to reach the model layer, where the dictionary rule can be honoured;
+a conversion applied to the finished bytes would rename `ProviderIds`' keys and be wrong the first
+time feature 005 returns one.
+
+> **This is what reading a schema instead of a server costs.** The claim it replaces —
+> "answers all three identically" — carried a `[spec: …]` citation, was true of the *schema*, and
+> was wrong about the server. It also had a passing conformance test, which asserted that Atrium's
+> three answers agree with each other. They did. Nobody had asked the reference.
+
 ---
 
 ## 3. Defects
@@ -655,6 +719,7 @@ undocumented bug.
 | **Image decoration parameters ignored** ([006 §3.2](../../specs/006-images/spec.md)) | `percentPlayed`, `blur`, `foregroundLayer` have no effect | Implement if the differential shows a client sending them |
 | **No transcoding** ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)) | "Cannot play this" where the reference would transcode | Out of v1 by decision, not by accident. A v2 candidate |
 | **`Path`-derived identifiers differ from the reference's** ([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters)) | Nothing — ids are opaque | Not a gap to close; a deliberate design choice |
+| **The `CamelCase` content-type profile is not implemented** ([§1.13](#113-the-camelcase-profile-really-is-camelcase)) | A client that asks for camelCase is answered in PascalCase, and its decoder sees an empty object | [001 T19](../../specs/001-server-identity-and-discovery/tasks.md), which puts the profile in the serialisation layer where dictionary keys can be spared. Until then a conformance test asserts the gap, so closing it cannot go unnoticed |
 
 The difference between this section and §4 is intent. §4 says *we thought about it and chose
 differently*. This section says *we have not done it yet, and here is how we will know when it

@@ -276,7 +276,7 @@ Every acceptance criterion in spec §5 maps to a named test.
 | 5 | Route test for `401`; dependency-override test for `200`; superset assertion |
 | 6 | Exact-body test for both methods |
 | 7, 8 | `LocalAddress` table — §8.2 |
-| 9 | Three requests with the three `Accept` values, bodies compared byte-for-byte |
+| 9 | Three requests with the three `Accept` values, bodies compared byte-for-byte — two of them equal by contract, the third equal only until T19 closes the gap it pins |
 | 10 | The casing sweep — §8.3 |
 
 ### 8.1 Identity persistence

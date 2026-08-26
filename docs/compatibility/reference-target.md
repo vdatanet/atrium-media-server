@@ -36,8 +36,16 @@ The OpenAPI document is last on purpose. It is generated from the C# controllers
 **demonstrably not a complete description of behaviour**: it declares response headers with
 `allowEmptyValue`, which is invalid for a Header object and makes strict parsers reject the whole
 document; it declares every JSON response three times with `profile="CamelCase"` and
-`profile="PascalCase"` variants; and it declares `required` and `additionalProperties: false` on
-schemas that the server does not actually honour.
+`profile="PascalCase"` variants, **against the same schema, while two of the three serialise
+differently**; and it declares `required` and `additionalProperties: false` on schemas that the
+server does not actually honour.
+
+The middle one is worth dwelling on, because this repository fell for it. Three content types
+against one schema read as three names for one behaviour, and the specification said so. The
+CamelCase variant really does emit camelCase — measured, in
+[behaviours §1.13](behaviours.md#113-the-camelcase-profile-really-is-camelcase) — and no reading of
+the document could have told anyone that. The document describes *shapes*, and a serialisation is
+not a shape.
 `[spec: directly observable in the 10.11.10 document]`
 
 ### Prior measurements, and the debt they carry

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """`/System` at the HTTP boundary - the shape a client actually receives.
 
-Acceptance criteria 1, 2, 3, 5, 6 and 9 of
-specs/001-server-identity-and-discovery/spec.md live here.
+Acceptance criteria 1, 2, 3, 5 and 6 of specs/001-server-identity-and-discovery/spec.md live here.
+AC-9 moved to test_golden.py, for the reason written where it used to be.
 """
 
 from __future__ import annotations
@@ -165,24 +165,15 @@ async def test_system_info_claims_no_capability_it_lacks(
 
 
 # --------------------------------------------------------------------------------------------
-# AC-9
+# AC-9 - in test_golden.py, where the bytes are
+#
+# There was a test here asserting that the three declared content types produce identical bodies.
+# It passed, and it was asking the wrong server: Atrium's three answers did agree with each other,
+# and the reference's do not. `profile="CamelCase"` really is camelCase there
+# (docs/compatibility/behaviours.md section 1.13), so AC-9 is now two assertions - the bytes match
+# the golden, and the gap is pinned until 001 T19 closes it - and both live beside the golden file
+# they compare against.
 # --------------------------------------------------------------------------------------------
-
-
-async def test_the_profile_content_types_give_identical_bodies(client: httpx.AsyncClient) -> None:
-    """The reference declares every JSON response three times, with `profile=` variants.
-
-    All three must produce the same bytes: the body is PascalCase regardless.
-    """
-    bodies = {
-        (await client.get("/System/Info/Public", headers={"Accept": accept})).content
-        for accept in (
-            "application/json",
-            'application/json; profile="PascalCase"',
-            'application/json; profile="CamelCase"',
-        )
-    }
-    assert len(bodies) == 1
 
 
 async def test_json_carries_the_charset(client: httpx.AsyncClient) -> None:

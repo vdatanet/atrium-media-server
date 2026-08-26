@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Shared fixtures.
+"""Shared fixtures, and the one command-line option the suite adds.
 
 Every test gets a fresh instance with a temporary data directory: no shared state between tests,
 no ordering dependencies, and the whole suite runs with no network and no external service
@@ -21,6 +21,36 @@ from atrium.config.settings import Settings, load
 from atrium.config.state import ServerState, load_or_create
 from atrium.domain.user import User
 from atrium.server import create_app
+from tests.conformance.golden import REWRITTEN, UPDATE_OPTION
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        UPDATE_OPTION,
+        action="store_true",
+        default=False,
+        help="Rewrite the checked-in golden responses from what the server sent. The run reports "
+        "what it rewrote: a golden diff is a change to what clients receive, and is reviewed "
+        "as one (docs/compatibility/conformance.md, L1).",
+    )
+
+
+def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
+    """Say what was rewritten, so nobody discovers it in a diff after pushing."""
+    rewritten = terminalreporter.config.stash.get(REWRITTEN, set())
+    if not rewritten:
+        return
+    terminalreporter.write_line("")
+    terminalreporter.write_line(
+        f"{UPDATE_OPTION}: rewrote {len(rewritten)} golden response(s): "
+        f"{', '.join(sorted(rewritten))}",
+        bold=True,
+    )
+    terminalreporter.write_line(
+        "Read the diff before committing. Each of these is a statement about what a client "
+        "receives, and a change to one is a change to the contract."
+    )
+
 
 #: A user the override hands back. Not a credential: nothing authenticates as this.
 TEST_USER = User(id="a" * 32, name="joan", is_administrator=True)

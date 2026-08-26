@@ -51,9 +51,17 @@ These are stated once here and inherited by every later specification. They come
 [behaviours.md §1](../../docs/compatibility/behaviours.md#1-wire-format).
 
 1. **Property names are PascalCase.** Non-negotiable, project-wide.
-2. **Content type is `application/json`.** The server additionally accepts requests specifying
-   `application/json; profile="CamelCase"` or `profile="PascalCase"`, and answers all three
-   identically with PascalCase. `[spec: directly observable in the 10.11.10 document]`
+2. **Content type is `application/json`.** The reference additionally accepts requests specifying
+   `application/json; profile="PascalCase"` or `profile="CamelCase"`. Those are three names for
+   **two** behaviours, not three names for one: the plain type and the PascalCase profile answer
+   identically, the CamelCase profile answers with camelCase property names at every depth, and the
+   response's content type echoes the profile that matched.
+   `[probe: tools/probe_content_type_profiles.py, Jellyfin 10.11.11, 2026-08-26]`
+
+   **v1 answers every request in PascalCase**, including one asking for the CamelCase profile. That
+   is a delta a client can observe, bounded and recorded as a gap in
+   [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) with the argument
+   for why it is survivable, and closed by the task that implements the profile.
 3. **Absent optional values are omitted or null exactly as the reference server does**, verified per
    field rather than by rule.
 4. **Identifiers are 32 lowercase hexadecimal characters**, no dashes.
@@ -242,8 +250,10 @@ Everything else in these responses is derived at request time.
 7. A configured published URL is returned verbatim in `LocalAddress`, trailing slash removed.
 8. With no published URL, two requests from two different networks receive two different
    `LocalAddress` values, each on the requester's network.
-9. Requests sent with `Accept: application/json; profile="PascalCase"` and with
-   `profile="CamelCase"` receive byte-identical bodies.
+9. Requests sent with `Accept: application/json` and with `application/json; profile="PascalCase"`
+   receive byte-identical bodies. A request sent with `profile="CamelCase"` receives that same
+   PascalCase body, where the reference answers in camelCase — the recorded gap of §3.0 rule 2,
+   asserted so that the day it closes, the test says so.
 10. No response in this feature contains a property name that is not PascalCase.
 
 ## 6. Conformance
