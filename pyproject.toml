@@ -22,6 +22,7 @@ classifiers = [
 # always says what the code needs rather than what the roadmap intends.
 dependencies = [
     "fastapi>=0.115",
+    "pydantic>=2.10",
     "uvicorn[standard]>=0.34",
 ]
 

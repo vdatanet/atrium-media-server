@@ -63,20 +63,59 @@ columns are a deliberate readability choice rather than un-formatted code. `exte
 keeps the formatter about code. A tool that edits documentation as a side effect of a lint task is
 a tool nobody will trust to run unattended.
 
-## T2 — `compat/model.py`: the base every response inherits
+## T2 — `compat/model.py`: the base every response inherits  ✅
 
-- [ ] **Changes:** `AtriumModel` with the alias generator, `populate_by_name`, `extra="ignore"`; `compat/aliases.py` with the five-entry irregular table and `atrium_alias()`.
+- [x] **Changes:** `AtriumModel` with the alias generator, `populate_by_name`, `extra="ignore"`; `compat/aliases.py` with the five-entry irregular table and `atrium_alias()`.
 - **Depends on:** T1
 - **Verified by:** a unit test where a model with fields `local_address` and `is_hd` serialises to `LocalAddress` and `IsHD`, and accepts **both** spellings on input.
 - **Plan reference:** §5, §6.1
 
-## T3 — The property-name index and the alias sweep
+### Done — 2026-08-26
 
-- [ ] **Changes:** `tools/extract_property_names.py` producing `docs/compatibility/property-names.json` from the pinned OpenAPI document; the index itself, committed; `tests/conformance/test_aliases.py` walking every `AtriumModel` subclass and asserting each alias appears in the index.
+**The plan's justification for `populate_by_name` did not hold, and the gap was real.**
+[plan §5](plan.md#5-contracts) annotated it *"the reference's binder is case-insensitive on
+input"* — but `populate_by_name` accepts exactly two spellings, the field name and the alias. The
+reference is an ASP.NET Core application whose JSON binder matches **case-insensitively**, so a
+client posting `{"username": …}` where the property is declared `Username` is served by the
+reference and would have been rejected here.
+
+`AtriumModel` therefore carries a `mode="before"` validator that remaps keys case-insensitively.
+The fast path is untouched: the lookup is only built when a key does not already match something
+the model knows, which for a well-behaved client is never.
+
+**`serialize_by_alias=True` was added beyond the plan's snippet.** Without it `model_dump()` is
+correct only when the caller remembers `by_alias=True`, and the one place someone forgets is the
+one place a client sees snake_case. FastAPI passes `by_alias` on its own; nothing else does.
+
+## T3 — The property-name index and the alias sweep  ✅
+
+- [x] **Changes:** `tools/extract_property_names.py` producing `docs/compatibility/property-names.json` from the pinned OpenAPI document; the index itself, committed; `tests/conformance/test_aliases.py` walking every `AtriumModel` subclass and asserting each alias appears in the index.
 - **Depends on:** T2
 - **Verified by:** the sweep passes; renaming a field so its alias becomes `IsHd` makes it **fail**, naming the model, the field, the alias produced and the nearest real name. `uv run pytest tests/conformance/test_aliases.py` needs no network and no `reference/` directory.
 - **Note:** the flat check first — is this alias *any* name the reference uses. Per-schema strictness follows the models, per [plan §8.3](plan.md#83-the-two-cross-cutting-sweeps).
 - **Plan reference:** §6.1, §8.3
+
+### Done — 2026-08-26
+
+`docs/compatibility/property-names.json` holds **1043 names, 21 KB**, extracted from the pinned
+10.11.10 document. `--check` regenerates and diffs, naming what appeared and what vanished.
+
+**The sweep passes vacuously today, because no models exist yet** — which is exactly the state in
+which a sweep is worth nothing. So four tests assert that it *fails* on the mistakes it was written
+for, rather than passing because nothing has been built:
+
+```
+Broken.is_hd       serialises as 'IsHd' … Did you mean 'IsHD'?
+Broken.server_nane serialises as 'ServerNane' … Did you mean 'ServerName'?
+```
+
+A generated acronym, an invented field, a typo — each rejected, each naming the real spelling,
+because a bare rejection sends the reader hunting. A fourth test asserts every entry in `IRREGULAR`
+is load-bearing: the generator gets it wrong **and** the replacement is a name the reference really
+has, so a stale entry cannot sit there unnoticed.
+
+**`compat/registry.py` walks the model registry, not the router**, so a model is checked whether or
+not a route returns it yet.
 
 ## T4 — `compat/dates.py`: .NET round-trip datetimes
 
