@@ -69,6 +69,17 @@ short-circuiting the method (Principle III).
 
 ## Conventions
 
+**Python 3.9 or newer** — deliberately lower than the 3.12 the server requires
+([ADR-0002](../docs/decisions/0002-python-and-the-runtime-stack.md)). A probe is meant to be run
+against a server *before* any environment exists, often on a machine that is not a development
+box, so it has to work with the interpreter that is already there. macOS ships 3.9, and so does
+the one inside Xcode's toolchain, which is what `python3` resolves to on a Mac with Xcode
+installed and nothing else.
+
+That means `from __future__ import annotations` at the top of every probe, and no syntax newer
+than 3.9 outside annotations. It is a constraint, not an accident: verified by running the full
+CLI and every pure function under 3.9.6.
+
 **Dependency-free.** These run in CI before any environment is built, so they use only the
 standard library. `surface.yaml` is a deliberately flat subset of YAML for the same reason, and
 the probes share [`_probe.py`](_probe.py) rather than a package.

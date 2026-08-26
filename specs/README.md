@@ -112,7 +112,7 @@ say how it will be proven is not finished.
 
 | # | Feature | spec | plan | tasks |
 |---|---|---|---|---|
-| [001](001-server-identity-and-discovery/) | Server identity and discovery | Draft | — | — |
+| [001](001-server-identity-and-discovery/) | Server identity and discovery | **Accepted** | Draft | — |
 | [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | Draft | — | — |
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | Draft | — | — |
 | [004](004-metadata-resolution/) | Metadata resolution | Draft | — | — |
@@ -123,8 +123,9 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-All ten are drafts: **no plan may start until its spec is accepted**, and no code until its plan
-is. The open questions across the ten are the review agenda.
+**001's spec is accepted**, which is what allowed its plan to start. The other nine remain drafts:
+no plan may start until its spec is accepted, and no code until its plan is. The open questions
+across the ten are the review agenda.
 
 Four of them now have probe scripts waiting to be pointed at a real server — 003 OQ-3, 005 OQ-6,
 007 OQ-2 and 009 OQ-1. Running them is the cheapest work available and it changes what the specs
