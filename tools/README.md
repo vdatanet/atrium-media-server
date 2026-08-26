@@ -32,6 +32,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_sort_names.py`](probe_sort_names.py) | How does the server derive `SortName` from `Name`? | 003 OQ-3 | yes |
 | [`probe_playlist_move.py`](probe_playlist_move.py) | Does `Move`'s `newIndex` refer to the list before or after removal? | 009 OQ-1 | yes |
 | [`probe_playstate.py`](probe_playstate.py) | What does a playback-stopped report do to `UserData`? | 007 OQ-2 | yes |
+| [`probe_auth_mechanisms.py`](probe_auth_mechanisms.py) | How may a client present a token, and how is a refusal shaped? | 002 §3.1, §3.3, OQ-1, OQ-3 | no |
 
 ### Running them
 
@@ -50,7 +51,17 @@ python3 tools/probe_query_envelope.py
 python3 tools/probe_sort_names.py     --allow-writes
 python3 tools/probe_playlist_move.py  --allow-writes
 python3 tools/probe_playstate.py      --allow-writes
+python3 tools/probe_auth_mechanisms.py --disabled-user probe-disabled
 ```
+
+`probe_auth_mechanisms.py` needs one thing the others do not: **an account that is disabled on the
+reference**, because measuring how a disabled user is refused is the whole of 002 OQ-3 and there is
+no way to make one from here. Create an account nobody uses, disable it, and name it. Without it the
+probe prints every other finding and exits `2` rather than guessing which account to try — guessing
+means failed logins against somebody else's.
+
+It never tests lockout. Failing N logins on purpose would lock a real account, and the counter it
+moves is not one a probe can reset.
 
 `.env` is git-ignored and holds a real password for a real server. The template is committed; the
 file it produces never is. Leaving `JELLYFIN_PASSWORD` empty is the safer choice — the probe
@@ -89,7 +100,7 @@ data. It will not overwrite a real resume position, because it could not put one
 | Script | Purpose | Arrives with |
 |---|---|---|
 | `differential.py` | Issue the same request to Atrium and a real Jellyfin and compare field by field (L3) | Feature 010 |
-| `probe_auth_mechanisms.py`, `probe_item_ids.py`, `probe_wire_format.py`, … | The remaining prior-measurement debts in [reference-target.md](../docs/compatibility/reference-target.md) | Their owning features |
+| `probe_item_ids.py`, `probe_wire_format.py`, … | The remaining prior-measurement debts in [reference-target.md](../docs/compatibility/reference-target.md) | Their owning features |
 
 A runner that executes every probe and summarises is deliberately **not** here yet: it is part of
 the harness feature 010 specifies, and building it before that spec is accepted would be

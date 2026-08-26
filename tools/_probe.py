@@ -89,6 +89,12 @@ class Server:
         self.token: str | None = None
         self.user_id: str | None = None
         self.version = "unknown"
+        self.username_used: str | None = None
+        # Kept so a probe can authenticate again on purpose - measuring how the server refuses a
+        # request with correct credentials and a broken header needs correct credentials, and
+        # sending wrong ones would count as a failed attempt against a real account. In memory
+        # only: nothing prints it, and `Server` has no repr that could.
+        self.password_used: str | None = None
 
     # -- request plumbing --------------------------------------------------------------------
 
@@ -156,9 +162,18 @@ class Server:
         self.version = info.get("Version", "unknown")
         product = info.get("ProductName", "")
         if "jellyfin" not in product.lower():
+            # Naming what was found, not only what was missing. A server that answers this route
+            # at all is media-server-shaped, and the near miss is Emby - whose public info carries
+            # no ProductName whatsoever, so the bare `ProductName=''` reads like a broken probe
+            # rather than the right refusal. Jellyfin 10.11 answers ProductName="Jellyfin Server"
+            # and a 10.x version.
+            found = product or "no ProductName at all"
             raise ProbeError(
-                f"the server at {self.base} reports ProductName={product!r}. "
-                "The probes measure Jellyfin; pointing one at something else measures nothing."
+                f"the server at {self.base} reports {found}, ServerName="
+                f"{info.get('ServerName', '?')!r}, Version={self.version!r}. The probes measure "
+                "Jellyfin 10.11 (ADR-0004); pointing one at something else measures nothing and "
+                "would file the answer under Jellyfin's name. A 4.x version with no ProductName "
+                "is Emby, which is a different server with a different API."
             )
 
         if token:
@@ -183,6 +198,8 @@ class Server:
         )
         self.token = result["AccessToken"]
         self.user_id = result["User"]["Id"]
+        self.username_used = username
+        self.password_used = password or ""
 
 
 # --------------------------------------------------------------------------------------------
@@ -303,7 +320,11 @@ def _wrap(text: str, width: int) -> list[str]:
 # --------------------------------------------------------------------------------------------
 
 
-def build_parser(description: str, needs_writes: bool = False) -> argparse.ArgumentParser:
+def build_parser(
+    description: str,
+    needs_writes: bool = False,
+    extra_arguments: Any = None,
+) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=description, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -332,6 +353,8 @@ def build_parser(description: str, needs_writes: bool = False) -> argparse.Argum
             help="Required: this probe cannot answer its question without writing to the server. "
             "It cleans up after itself, including on failure.",
         )
+    if extra_arguments is not None:
+        extra_arguments(parser)
     return parser
 
 
@@ -355,10 +378,21 @@ def connect(args: argparse.Namespace) -> Server:
     return server
 
 
-def main(run: Any, description: str, needs_writes: bool = False) -> int:
-    """Entry point shared by every probe: parse, connect, run, report, translate errors."""
+def main(
+    run: Any,
+    description: str,
+    needs_writes: bool = False,
+    extra_arguments: Any = None,
+    with_args: bool = False,
+) -> int:
+    """Entry point shared by every probe: parse, connect, run, report, translate errors.
+
+    `extra_arguments` adds a probe's own options to the parser; `with_args` hands the parsed
+    namespace to `run` alongside the server. Both default off, so a probe that needs neither
+    stays a one-line entry point.
+    """
     env_file = load_env_file()
-    parser = build_parser(description, needs_writes=needs_writes)
+    parser = build_parser(description, needs_writes=needs_writes, extra_arguments=extra_arguments)
     args = parser.parse_args()
 
     if needs_writes and not args.allow_writes:
@@ -374,7 +408,7 @@ def main(run: Any, description: str, needs_writes: bool = False) -> int:
         server = connect(args)
         if env_file:
             print(f"credentials from {env_file}", file=sys.stderr)
-        probe = run(server)
+        probe = run(server, args) if with_args else run(server)
     except ProbeError as exc:
         print(f"cannot answer the question: {exc}", file=sys.stderr)
         return 2

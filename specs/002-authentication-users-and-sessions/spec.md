@@ -5,6 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
 accepted: 2026-08-26
+amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions
 depends_on: [001]
 ---
 
@@ -55,17 +56,28 @@ Four mechanisms, all accepted, on **every** authenticated route:
 | Query | `?ApiKey={token}` |
 | Query | `?api_key={token}` |
 
-`[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
 
 All four are required, not a choice. Clients use headers for API calls and the query forms for URLs
 handed to media players and image loaders, which do not set headers. Supporting only the headers
 breaks playback and artwork while leaving browsing intact — a failure that looks like a bug in the
 client.
 
-**Rejection is uniform:** a request to an authenticated route with no token, an unknown token, or a
-token belonging to a disabled user is `401`. A valid token whose user lacks the required permission
-is `403`. The distinction matters: clients re-authenticate on `401` and show an error on `403`, so
-returning the wrong one produces either a login loop or a dead end.
+**When a request carries two that disagree, the one that wins is measured, not chosen:** the
+`Authorization` header beats `X-Emby-Token`, and `X-Emby-Token` beats either query form. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+
+**The image and delivery route classes accept all four and require none.** On the reference an
+image and a static stream answer a request carrying no token at all, so on those two classes the
+mechanisms are accepted rather than demanded. That is a measurement about the reference, and what
+Atrium does about it belongs to the features that own those routes — see
+[behaviours §2.10](../../docs/compatibility/behaviours.md#210-the-image-and-delivery-routes-accept-a-token-and-require-none).
+
+**Rejection is not uniform, and the split is measured.** A request to an authenticated route with
+no token or an unknown token is `401` with an empty body. A valid token whose user lacks the
+required permission is `403`. **A disabled account is `403`**, not the `401` this specification
+first assumed. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` The distinction is what clients branch on — they re-authenticate on
+`401` and show an error on `403` — so a disabled account answered `401` loops a client through a
+login it can never complete, with the user's password correct every time.
 
 ### 3.2 How a client identifies itself
 
@@ -84,10 +96,11 @@ Parsing must be lenient in the ways clients are actually sloppy: any order, opti
 around `=` and after commas, values quoted or bare, and unknown components ignored rather than
 rejected.
 
-> ⚠️ **OQ-1.** Whether the reference server accepts this header on routes other than
-> authentication, and whether it treats a request differently when it carries both this header and
-> a token. Blocks nothing: Atrium accepts it anywhere and uses `DeviceId` to attribute the session
-> when present.
+**The header is accepted anywhere and authenticates nobody.** Alongside a token the request
+succeeds; carrying only this header and no token, an authenticated route answers `401` with the
+same empty body as a request carrying nothing at all. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` It identifies a client; it
+does not admit one. Atrium accepts it on any route and uses `DeviceId` to attribute the session
+when present.
 
 ### 3.3 `POST /Users/AuthenticateByName` — `AuthenticateUserByName`
 
@@ -123,21 +136,37 @@ rejected.
 
 | Condition | Status |
 |---|---|
-| Wrong username or password | `401` |
-| Disabled account, or one locked out by failed attempts | `401` — indistinguishable from wrong credentials, on purpose |
-| Missing or unparseable `X-Emby-Authorization` | `400` |
+| Unknown username | `401` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` |
+| Wrong password on an enabled account | `401` — ⚠️ **assumed**, not measured; see §7 OQ-5 |
+| **Disabled account** | **`403`** — whether the password is right or wrong `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` |
+| Locked out by failed attempts | `403` — ⚠️ the reference's answer is **not measured**; see §7 OQ-5 |
+| Missing or unparseable `X-Emby-Authorization` | `400` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` |
 | Malformed body | `400` |
 
-The `401`/`400` split is load-bearing for clients: `401` means "your credentials are wrong", any
-`4xx` other than `401` means "something else went wrong, do not tell the user their password is
-bad".
+**Every refusal measured above carries the same body**: 25 bytes of `text/plain`, with no charset
+parameter, reading `Error processing request.` This is a third refusal shape, distinct from the
+empty `401` an authenticated route sends and from the structured problem document the framework's
+own validation sends. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` A malformed body is the exception and keeps that structured
+shape, because it is rejected before the handler runs. The measured refusals are asserted by
+comparing bytes, since they share one body and only the status tells them apart —
+[behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-three-error-shapes-not-one).
+
+The split is load-bearing for clients: `401` means "your credentials are wrong, ask again", `403`
+means "this account cannot log in, stop asking", and any other `4xx` means "something else went
+wrong, do not tell the user their password is bad". Answering `401` where the reference answers
+`403` produces a login loop the user cannot escape by typing the correct password.
 
 **Behaviour beyond the response**
 
 1. A session is created for `(user, DeviceId, Client)`. Authenticating again from the **same
    `DeviceId`** replaces that session rather than accumulating one per login.
 2. Failed attempts are counted per user. After the configured threshold the account locks and
-   further attempts answer `401` regardless of credentials. A success resets the count.
+   further attempts fail regardless of credentials. A success resets the count. **The status a
+   locked-out account answers with is not measured** — measuring it means locking a real account
+   on a real server, which no probe here will do to somebody's installation (§7 OQ-5). Until it
+   is, Atrium answers `403`, on the argument that a locked account is in the same state a disabled
+   one is: further attempts cannot succeed, and telling a client to keep asking is the failure
+   mode `403` exists to prevent.
 3. Passwords are never recoverable from the server's stored state, and never appear in logs — not
    at any log level, not in a request trace, not in an error message.
 
@@ -182,7 +211,7 @@ set so clients see the shape they expect, but **honours only these**:
 | Flag | Effect |
 |---|---|
 | `IsAdministrator` | Reserved; v1 has no admin surface to gate |
-| `IsDisabled` | Authentication always fails |
+| `IsDisabled` | Authentication answers `403` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` |
 | `IsHidden` | Excluded from `/Users/Public` |
 | `EnableAllFolders`, `EnabledFolders` | Which libraries the user sees |
 | `EnableMediaPlayback` | Whether delivery routes answer |
@@ -270,10 +299,14 @@ gap: a client that saw `true` would offer the user a remote-control UI that does
 
 1. Authenticating with valid credentials answers `200` with a 32-hex `AccessToken`, a full user
    object and a session.
-2. Wrong password answers `401`; a disabled user answers `401` **indistinguishably**; a missing
-   `X-Emby-Authorization` answers `400`.
-3. All four token mechanisms of §3.1 authenticate the same request identically, on an API route, an
-   image route and a delivery route.
+2. An unknown username answers `401`; a **disabled account answers `403`**; a missing
+   `X-Emby-Authorization` answers `400`. All three carry the reference's `text/plain` body, byte
+   for byte, and are asserted as bytes rather than as status codes.
+3. All four token mechanisms of §3.1 authenticate the same request identically on an API route, and
+   the `Authorization` header wins over `X-Emby-Token`, which wins over either query form, when a
+   request carries two that disagree. On the image and delivery route classes all four are
+   **accepted and none is required**, which is what the reference does — the criterion there is
+   that presenting a token is never itself a reason to refuse.
 4. No token on an authenticated route is `401`; a valid token lacking permission is `403`.
 5. Re-authenticating from the same `DeviceId` replaces the session and invalidates the prior token.
 6. `/Users/Public` omits `Configuration` and `Policy`, excludes hidden users, and answers `200`
@@ -296,16 +329,30 @@ gap: a client that saw `true` would offer the user a remote-control UI that does
 | `POST /Users/Configuration` | **L2** | Round-trip test |
 | `GET /Sessions` | **L2** | Fixture with two sessions on two devices |
 | `POST /Sessions/Capabilities/Full` | **L1** | Shape only; its effect is asserted through `/Sessions` |
-| The four token mechanisms | **L2** | Table-driven across three route classes (AC-3) |
+| The four token mechanisms | **L2** | Table-driven across three route classes, including the precedence pairs (AC-3) |
 
 ## 7. Open questions
 
 | # | Question | Blocks | Resolved by |
 |---|---|---|---|
-| OQ-1 | Is `X-Emby-Authorization` accepted outside authentication, and does it change behaviour alongside a token? | Nothing | `tools/probe_auth_mechanisms.py` |
 | OQ-2 | The reference's token inactivity window, and whether it is observable | The expiry row of §3.8. v1 defaults to no inactivity expiry | A probe holding a token idle |
-| OQ-3 | Does the reference answer `401` or `403` for a disabled user? §3.3 assumes `401` | The uniformity claim in AC-2 | `tools/probe_auth_mechanisms.py` |
 | OQ-4 | Are `HasConfiguredPassword` and `HasConfiguredEasyPassword` read by any client? | Nothing; honest values are sent | Differential harness (010) |
+| OQ-5 | The three refusals a probe will not send at a real installation: an enabled account given a **wrong password**, an account **locked out** by failed attempts, and a **live token whose user was disabled** after it was issued | The assumed rows of §3.3, and the `403` v1 answers a locked-out account with | `tools/probe_auth_mechanisms.py` against a **throwaway enabled** account somebody is willing to lock |
+
+**Why OQ-5 is not simply measured.** Each of the three needs a real account to fail against, and
+failing against one moves a lockout counter that no probe can reset — on somebody's own server, for
+an account somebody uses. The probe measures the refusals that cost nothing (an unknown username
+cannot be locked out, and an account already disabled cannot be locked further) and declines the
+rest by design rather than by omission.
+
+### Resolved
+
+| # | Question | Answer | Resolved by |
+|---|---|---|---|
+| OQ-1 | Is `X-Emby-Authorization` accepted outside authentication, and does it change behaviour alongside a token? | **Accepted anywhere, authenticates nobody.** Alongside a token the request succeeds; alone it is the same empty `401` as no header at all. §3.2 rewritten | `tools/probe_auth_mechanisms.py`, 2026-08-26 |
+| OQ-3 | Does the reference answer `401` or `403` for a disabled user? §3.3 assumed `401` | **Contradicted: `403`**, and distinguishable from the `401` an unknown username gets — the opposite of the "indistinguishable on purpose" this specification asserted. §3.1, §3.3, §3.5 and AC-2 corrected, and the reasoning is in [behaviours §2.11](../../docs/compatibility/behaviours.md#211-a-disabled-account-is-refused-with-403-not-401) | `tools/probe_auth_mechanisms.py`, 2026-08-26 |
+| — | Which mechanism wins when a request carries two that disagree? Not asked; the plan called the order arbitrary | **`Authorization` > `X-Emby-Token` > query.** [plan §6.1](plan.md#61-token-extraction) had fixed the opposite order | `tools/probe_auth_mechanisms.py`, 2026-08-26 |
+| — | Do the image and delivery route classes require a token? Assumed yes by AC-3 | **No — both answer `200` with no token at all.** AC-3 corrected; what Atrium does about it is deferred to 006 and 008, [behaviours §2.10](../../docs/compatibility/behaviours.md#210-the-image-and-delivery-routes-accept-a-token-and-require-none) | `tools/probe_auth_mechanisms.py`, 2026-08-26 |
 
 ## 8. References
 
