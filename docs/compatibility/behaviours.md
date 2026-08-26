@@ -185,11 +185,34 @@ break when it is HTTPS. This is a genuine footgun that has cost real debugging t
 does **not** replicate the HTTPS override: `LocalAddress` reflects the scheme the server is
 actually reachable on for that network. ⚠️ **This is a deliberate divergence** — see §4.2.
 
-### 2.4 All four authentication mechanisms work
+### 2.4 All four authentication mechanisms work, and one of them wins
 
-Listed in [api-surface-v1.md §3](api-surface-v1.md#3-authentication-users-and-sessions). All four
-are accepted, on every authenticated route, including the streaming and image routes where the
-query forms are the only practical option.
+**Jellyfin does:** accept all four — listed in
+[api-surface-v1.md §3](api-surface-v1.md#3-authentication-users-and-sessions) — on an authenticated
+API route, and accept all four on the image and streaming routes too, where the query forms are the
+only practical option. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+
+When a request carries two that disagree, the order is **not** arbitrary:
+
+| Request | Answer | Which one was read |
+|---|---|---|
+| Real `X-Emby-Token`, bogus `Authorization` | `401` | `Authorization` |
+| Bogus `X-Emby-Token`, real `Authorization` | `200` | `Authorization` |
+| Real `X-Emby-Token`, bogus `?ApiKey=` | `200` | `X-Emby-Token` |
+| Bogus `X-Emby-Token`, real `?ApiKey=` | `401` | `X-Emby-Token` |
+
+So `Authorization` beats `X-Emby-Token`, and `X-Emby-Token` beats the query. The third rung —
+`Authorization` against a query parameter — is **inferred from those two and not measured**, and
+the two query spellings were never set against each other.
+
+**Depends on it:** a client holding a stale token in one place and a fresh one in another, which
+sounds contrived until you notice that clients set a header once when the connection is built and
+assemble streaming and image URLs from a template. Resolving in a different order turns a working
+request into a `401` for exactly those clients.
+
+**Atrium does:** the same order. [002 plan §6.1](../../specs/002-authentication-users-and-sessions/plan.md#61-token-extraction)
+fixed the opposite one and called it arbitrary, on the argument that it only had to be
+deterministic. It had to be deterministic **and** the reference's.
 
 ### 2.5 `SortBy` vocabulary
 
@@ -277,6 +300,57 @@ The branch most easily missed is the 300-second one: it is a floor on the **item
 on the position. A short clip stopped in the middle is *played*, not resumable. Reading it as a
 position floor produces a server that keeps resume points for every short item.
 
+### 2.10 The image and delivery routes accept a token and require none
+
+**Jellyfin does:** answer `GET /Items/{id}/Images/Primary` and
+`GET /Videos/{id}/stream?static=true` with `200` to a request carrying **no token at all**. All
+four mechanisms are accepted there; not one of them is required. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+
+**Depends on it:** yes, and in the shape that is hardest to see from inside a client. A bare URL
+handed to an image loader or an external player is exactly what these routes are for, and a client
+that has never sent a token on them is a client a server can break by starting to want one.
+
+**Atrium does:** not decided here. Those routes belong to [006](../../specs/006-images/spec.md) and
+[008](../../specs/008-playback-negotiation-and-delivery/spec.md); what 002 owns is the measurement
+and the fact that a token is *accepted*. The decision is recorded and deferred per §3.0.1
+tie-break 3 — taking it now would be taking it about code nobody writes for months, with the least
+information it will ever have.
+
+What 002 does record is the consequence, so that whoever takes it takes it knowingly: on the
+reference **an item id is a capability**, and any divergence 006 or 008 chooses is one a client can
+observe.
+
+### 2.11 A disabled account is refused with `403`, not `401`
+
+**Jellyfin does:** refuse a disabled account with `403` and an unknown username with `401`. The
+bodies are identical — `text/plain`, 25 bytes, `Error processing request.` — so the **status** is
+the whole of the difference. The disabled account answers `403` whether the password it was sent is
+right or wrong, so the refusal discloses that the account exists and is disabled, and discloses
+nothing about the password. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+
+**Depends on it:** every client, in the direction that matters most. Clients re-authenticate on
+`401` and show an error on `403`. A server answering `401` for a disabled account puts a client in
+a login loop — prompt, correct password, `401`, prompt again — with the user's credentials correct
+every single time.
+
+**Atrium does:** the same. **This overturns a decision that was deliberate rather than an
+oversight.** [002 §3.3](../../specs/002-authentication-users-and-sessions/spec.md#33-post-usersauthenticatebyname--authenticateuserbyname)
+specified `401` for a disabled account and called it indistinguishable *on purpose*, on the
+argument that disclosing account state is an enumeration risk. The risk was real and it does not
+disappear; what changed is that the reference discloses it anyway, so refusing to would be a delta
+that protects nobody — the reference is still there to be asked. The cost is bounded and now
+written down: an unauthenticated caller can tell a disabled account from a name that was never
+registered. It cannot tell a right password from a wrong one, which is the disclosure that would
+matter more.
+
+> **Three refusals remain unmeasured, and the probe declines to measure them.** An enabled account
+> sent a wrong password, an account locked out by failed attempts, and a live token whose user was
+> disabled after it was issued. Each needs a real account to fail against, and failing against one
+> moves a lockout counter no probe can reset. They are
+> [002 OQ-5](../../specs/002-authentication-users-and-sessions/spec.md#7-open-questions), to be
+> measured against a throwaway enabled account, and until then the first is an assumption rather
+> than a measurement.
+
 ### 1.9 Every response carries `X-Response-Time-ms`
 
 **Jellyfin does:** stamps every response with the time it took, in fractional milliseconds —
@@ -304,7 +378,7 @@ formatter does. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
 belongs to the thing that produced the body. Starlette appends `charset=utf-8` only to `text/*`
 media types, so its `JSONResponse` would send a bare `application/json`.
 
-### 1.11 There are two error shapes, not one
+### 1.11 There are three error shapes, not one
 
 **Jellyfin does:** answer a refusal in one of two forms, decided by **where** the refusal happened.
 `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
@@ -316,6 +390,7 @@ media types, so its `JSONResponse` would send a bare `application/json`.
 | A method the path does not have | `405`, **empty body**, no `Content-Type`, and `Allow` naming every method that path has `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-26]` |
 | An item a handler could not find | `404`, **RFC 9457 problem details** as JSON |
 | A malformed value the model binder rejected | `400`, **RFC 9457 problem details** with an `errors` map |
+| A controller that refused the request itself | `4xx`, **`text/plain`** with no `charset`, and the fixed 25-byte body `Error processing request.` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` |
 
 ```json
 {"type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
@@ -328,12 +403,19 @@ media types, so its `JSONResponse` would send a bare `application/json`.
 ```
 
 The split is not arbitrary: the empty ones are produced before the framework's controller pipeline
-runs, and the JSON ones by that pipeline.
+runs, the JSON ones by that pipeline, and the third by a controller inside it.
+
+**The same status carries different bytes depending on which layer refused.** An unauthenticated
+`GET /Users/Me` is the empty `401` in the first row; a `401` from `POST /Users/AuthenticateByName`
+for an unknown username is 25 bytes of `text/plain`. The `400` for a missing
+`X-Emby-Authorization` and the `403` for a disabled account (§2.11) are that same third shape. A
+golden response that compares bytes catches this; a test that asserts a status code does not, and
+002 has four acceptance criteria that would otherwise have been written against the status alone.
 
 **Depends on it:** a client branching on a body it expects to be JSON. FastAPI's own
 `HTTPException` sends `{"detail": "…"}`, which is neither shape.
 
-**Atrium does:** both, per refusal. `traceId` is a W3C trace-context identifier and is
+**Atrium does:** all three, per refusal. `traceId` is a W3C trace-context identifier and is
 per-request by definition, so it is compared by shape rather than by value.
 
 > **The empty shapes were documented here and not implemented, for three tasks.** Until 001 had

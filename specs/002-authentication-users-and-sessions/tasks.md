@@ -5,6 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
 accepted: 2026-08-26
+started: 2026-08-26
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -34,9 +35,9 @@ Every command below is run through `uv`, per
 
 ---
 
-## T1 — `tools/probe_auth_mechanisms.py`: measure before implementing
+## T1 — `tools/probe_auth_mechanisms.py`: measure before implementing  ✅
 
-- [ ] **Changes:** a probe answering [spec §7](spec.md#7-open-questions) OQ-1 and OQ-3 — whether
+- [x] **Changes:** a probe answering [spec §7](spec.md#7-open-questions) OQ-1 and OQ-3 — whether
   `X-Emby-Authorization` is accepted outside authentication and whether it changes anything
   alongside a token, and whether a disabled user is refused with `401` or `403`. While it has the
   server: the four mechanisms of [§3.1](spec.md#31-how-a-client-presents-a-token) on an API route,
@@ -55,6 +56,59 @@ Every command below is run through `uv`, per
   takes that account's name as an argument and exits `2` saying so rather than guessing, because
   guessing here means failed logins against a stranger's account.
 - **Plan reference:** [spec §7](spec.md#7-open-questions), [conformance L3](../../docs/compatibility/conformance.md)
+
+### Done — 2026-08-26
+
+**The first finding arrived before a single measurement did.** The `.env` pointed at a server
+answering `/System/Info/Public` with `Version 4.9.5.0` and **no `ProductName` at all** — Emby, not
+Jellyfin. The guard in `_probe.py` refused, which is exactly what it is for: measuring Emby and
+filing the answer under Jellyfin's name would have put false provenance into an accepted
+specification, and provenance is the one thing in this repository nothing else can check. Its
+message said `ProductName=''`, which reads like a broken probe rather than the right refusal, so it
+now names what it found and what a 4.x with no `ProductName` is.
+
+**OQ-3 is contradicted, and it overturns a deliberate decision.** A disabled account is refused
+with **`403`**, not `401`; an unknown username gets `401`. The specification did not merely assume
+`401` — it argued for it, calling the two indistinguishable *on purpose* so that account state is
+not disclosed. The argument was real and the reference does not make it: it discloses the state
+anyway, so refusing to disclose it protects nobody who cannot simply ask the reference. What
+settles it beyond Principle I is the client behaviour the specification itself describes two
+sections earlier: a client re-authenticates on `401`. A disabled account answered `401` puts a user
+in a login loop where the correct password fails forever. The security cost that remains is bounded
+and written down in
+[behaviours §2.11](../../docs/compatibility/behaviours.md#211-a-disabled-account-is-refused-with-403-not-401):
+a caller can tell a disabled account from a name that was never registered, and cannot tell a right
+password from a wrong one.
+
+**The probe's first run answered the wrong comparison, and the probe was the thing that showed
+it.** It measured the disabled account against *itself* — right password and wrong password, both
+`403` — and reported them indistinguishable, which is true and is not what AC-2 claims. AC-2 is
+about a disabled account being indistinguishable from **rejected credentials**, and that baseline
+was never sent. An unknown username supplies it at no risk: no account exists, so no counter moves.
+It is `401`, so the two are distinguishable, and the finding only exists because the first run's
+output was read as a result rather than as an answer.
+
+**Two findings nobody asked for.** The image and delivery route classes answer `200` **with no
+token at all**, so AC-3's premise — that all four mechanisms authenticate an image route and a
+delivery route — was asserting something about routes that authenticate nobody. And the mechanism
+that wins when a request carries two is not arbitrary: `Authorization` beats `X-Emby-Token`, which
+beats either query form. [plan §6.1](plan.md#61-token-extraction) had fixed the **opposite** order
+and defended it on the grounds that it only had to be deterministic. The premise was wrong rather
+than the reasoning: a client that sends two sends them from a header set once and a URL built from
+a template, and they disagree precisely when one is stale.
+
+**A third error shape.** Every refusal from `AuthenticateByName` — `400`, `401`, `403` — is 25 bytes
+of `text/plain` with no charset, reading `Error processing request.`
+[behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-three-error-shapes-not-one)
+said there were two. The same status carries different bytes depending on which layer refused, so
+four of this feature's acceptance criteria would have passed while sending the wrong body, had they
+been written against status codes.
+
+**Three refusals were not measured, by design.** An enabled account given a wrong password, a
+locked-out account, and a live token whose user was disabled afterwards. Each needs a real account
+to fail against and moves a counter no probe can reset, on somebody's own installation. They are
+[spec §7](spec.md#7-open-questions) OQ-5, and the row in §3.3 for a wrong password says **assumed**
+rather than carrying a citation it has not earned.
 
 ## T2 — `db/`: engine, session factory, Alembic
 
@@ -145,14 +199,14 @@ Every command below is run through `uv`, per
 
 - [ ] **Changes:** the single entry point that verifies a password, owning the lockout counter, the
   timing guarantee and session creation.
-- **Depends on:** T3, T6, T7, T8, and T1's finding on OQ-3 — or its recorded debt
+- **Depends on:** T3, T6, T7, T8. T1's findings are in: a disabled account is `403`
 - **Verified by:** correct credentials succeed; **every failure path runs the KDF** — unknown user,
   disabled user, locked-out user, wrong password — asserted by counting KDF invocations, not by
   timing; lockout after N failures; one success resets the counter.
-- **Note:** the four failures return the same `401` with the same body. A test compares the four
-  responses byte-for-byte. If T1 measures a disabled user as `403`, this is the task that changes,
-  and [spec §3.3](spec.md#33-post-usersauthenticatebyname--authenticateuserbyname) and AC-2 change
-  in the same commit.
+- **Note:** the four failures do **not** return one status — T1 measured `403` for a disabled
+  account and `401` for an unknown username — but they do return one body, 25 bytes of
+  `text/plain`. A test compares all four responses byte-for-byte, which is the only way the
+  difference is visible.
 - **Plan reference:** §5, §6.2
 
 ## T10 — `api/deps.py`: `require_user`, implemented
@@ -168,13 +222,14 @@ Every command below is run through `uv`, per
 
 - [ ] **Changes:** `POST /Users/AuthenticateByName`, `GET /Users/Public`, `GET /Users/Me`,
   `GET /Users/{userId}`, `POST /Users/Configuration`, and their models.
-- **Depends on:** T10, and T1's finding on OQ-3 — or its recorded debt
+- **Depends on:** T10
 - **Verified by:** golden responses; `/Users/Public` omits `Configuration` and `Policy` and returns
   `[]` for an all-hidden fixture; cross-user reads are `403` for an ordinary user and `200` for an
   administrator. Three criteria are asserted here because here is where a client can see them:
   **AC-8** — a configuration posted and read back over HTTP keeps every property, including ones v1
-  does not act on; **AC-2's other half** — a missing or unparseable `X-Emby-Authorization` is a
-  `400` and specifically not a `401`; **AC-5** — authenticating twice from one `DeviceId` leaves one
+  does not act on; **AC-2** — an unknown username is `401`, a disabled account is `403`, a missing
+  `X-Emby-Authorization` is `400`, and all three carry the reference's 25-byte `text/plain` body,
+  compared as bytes; **AC-5** — authenticating twice from one `DeviceId` leaves one
   session and the first token now answers `401`.
 - **Note:** `/Users/{userId}` is the project's first parameterised route. 001's route table already
   has the test that says an identifier is data and is not respelled — it is written and passing
@@ -196,9 +251,12 @@ Every command below is run through `uv`, per
 - [ ] **Changes:** `tests/conformance/test_auth_mechanisms.py`, table-driven over mechanism ×
   route class.
 - **Depends on:** T11
-- **Verified by:** **AC-3** — all four authenticate an API route identically. Image and delivery
-  routes use stub routes carrying the same dependency until 006 and 008 exist, and the stubs are
-  replaced rather than duplicated when they do.
+- **Verified by:** **AC-3** — all four authenticate an API route identically, and the four
+  precedence pairs resolve the way T1 measured them. Image and delivery routes use stub routes
+  carrying the same dependency until 006 and 008 exist, and the stubs are replaced rather than
+  duplicated when they do. The stubs assert that all four are **accepted**, not that a token is
+  required: T1 measured that the reference requires none on either class, and asserting otherwise
+  would pin a behaviour 006 and 008 have not chosen yet.
 - **Note:** supporting only the headers leaves browsing working and every poster and stream broken.
   That failure looks like a client bug, which is why it gets its own test rather than being implied.
   A stub route is served by the application, so it has to stay out of the router that 001's

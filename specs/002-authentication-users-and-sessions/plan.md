@@ -4,6 +4,7 @@ title: Authentication, users and sessions — implementation plan
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
+amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-26
@@ -144,21 +145,31 @@ without a server.
 
 ### 6.1 Token extraction
 
-Four sources, checked in this order, first hit wins: `X-Emby-Token`, `Authorization: MediaBrowser
-Token="…"`, `?ApiKey=`, `?api_key=`. Order is arbitrary and fixed only so behaviour is
-deterministic when a client sends two — which happens, because a client that sets a header and
-builds a URL from a template can send both.
+Four sources, checked in this order, first hit wins: `Authorization: MediaBrowser Token="…"`,
+`X-Emby-Token`, `?ApiKey=`, `?api_key=`.
+
+**The order is the reference's, measured, not ours.** `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` This plan first fixed the
+opposite one — `X-Emby-Token` ahead of `Authorization` — and argued that the order only had to be
+deterministic, since a client sending two identical tokens cannot tell. That argument is sound and
+the premise is wrong: a client that sends two sends them from **different places**, a header set
+once when the connection was built and a URL assembled from a template, and those two disagree
+exactly when one of them is stale. Resolving in the other order turns a request the reference
+answers `200` into a `401`, for the clients most likely to do it.
+
+`Authorization` against a query parameter is **inferred** from the two pairs that were measured
+rather than measured itself, and the two query spellings were never set against each other. Both
+gaps are cheap to close if a client is ever seen to depend on them.
 
 ### 6.2 Authentication, and the timing guarantee
 
 ```
 normalise the username
 look up the user
-if absent:            verify the password against a DUMMY Argon2id record, then fail
-if disabled:          verify anyway, then fail
-if locked out:        verify anyway, then fail
+if absent:            verify the password against a DUMMY Argon2id record, then 401
+if disabled:          verify anyway, then 403
+if locked out:        verify anyway, then 403
 verify the password
-if wrong:             increment the counter, fail
+if wrong:             increment the counter, 401
 if right:             reset the counter, rehash if parameters are stale, create the session
 ```
 
@@ -166,8 +177,16 @@ if right:             reset the counter, rehash if parameters are stale, create 
 unknown username makes the response measurably faster and turns the login endpoint into a username
 oracle. The dummy record is generated once at startup, never from a real password.
 
-All four failures return the same `401` with the same body, per
-[spec §3.3](spec.md#33-post-usersauthenticatebyname--authenticateuserbyname).
+**The four failures do not return one status.** A disabled account is `403` and an unknown
+username is `401` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` — measured, and the opposite of what this plan and the
+specification both assumed. All four carry the *same body*, so the status is the entire difference;
+[spec §3.3](spec.md#33-post-usersauthenticatebyname--authenticateuserbyname) has the table and
+[behaviours §2.11](../../docs/compatibility/behaviours.md#211-a-disabled-account-is-refused-with-403-not-401)
+has the argument.
+
+The KDF still runs on the disabled and locked-out paths even though their status already discloses
+the account's state. It costs one verify and it keeps the property true where it does matter —
+between an unknown username and a wrong password, which are the two the status cannot separate.
 
 ### 6.3 The `X-Emby-Authorization` grammar
 
@@ -213,7 +232,8 @@ spurious logouts. The registry is built so a window can be added without a migra
 |---|---|---|---|
 | Unknown username | Lookup miss | `401`, after the dummy verify | — |
 | Wrong password | Verify fails | `401`, counter incremented | Correct password resets it |
-| Disabled or locked-out user | Flag or counter | `401`, indistinguishable | Operator intervention |
+| Disabled user | Flag | **`403`**, whatever the password | Operator intervention |
+| Locked-out user | Counter | **`403`**; the reference's answer here is unmeasured, [spec §7](spec.md#7-open-questions) OQ-5 | Operator intervention, or a success after the window |
 | Missing `DeviceId` | Header parse | `400` | Client fixes its header |
 | Token unknown or expired | Lookup miss | `401` | Client re-authenticates |
 | Valid token, insufficient policy | Policy check | `403` | — |
@@ -230,8 +250,8 @@ discovered much later.
 | Spec AC | Test |
 |---|---|
 | 1 | Golden response for `AuthenticateByName`, asserting a 32-hex token |
-| 2 | Three failure paths return byte-identical `401`s; the missing-header case returns `400` |
-| 3 | The four mechanisms, table-driven, across an API route, an image route and a delivery route — the last two through stub routes until 006 and 008 exist |
+| 2 | The refusals compared as **bytes**: an unknown username is `401`, a disabled account is `403`, a missing header is `400`, and all three carry the reference's 25-byte `text/plain` body |
+| 3 | The four mechanisms, table-driven, across an API route, an image route and a delivery route — the last two through stub routes until 006 and 008 exist — plus the four precedence pairs of §6.1. The stubs assert that all four are *accepted*, not that a token is required: the reference requires none on either class |
 | 4 | `401` versus `403` matrix |
 | 5 | Re-authentication replaces the session and invalidates the prior token |
 | 6 | `/Users/Public` omits `Configuration` and `Policy`; all-hidden fixture returns `[]` |
