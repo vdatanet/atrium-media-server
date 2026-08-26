@@ -54,7 +54,7 @@ at once.
 
 **Zero delta** (Principle I). No endpoint, field, casing or unit that Jellyfin does not have. A good
 idea that creates a delta goes in
-[behaviours.md §5](docs/compatibility/behaviours.md#5-non-improvements) and is then not done.
+[behaviours.md §6](docs/compatibility/behaviours.md#6-non-improvements) and is then not done.
 
 **Dates are absolute.** `2026-08-26`, never "recently".
 

@@ -11,7 +11,7 @@ This is the registry required by Principle V. Every entry has the same three fie
 The default answer in the third field is *the same thing*. Divergence needs an argument.
 
 Entries are grouped by how deep they cut. §1 is the wire format — get one of these wrong and
-nothing works. §2 is semantics. §3 is defects. §4 is the deliberate exceptions.
+nothing works. §2 is semantics. §3 is defects. §4 is the deliberate exceptions, §5 the gaps v1 accepts, §6 the good ideas we refuse.
 
 ---
 
@@ -247,9 +247,49 @@ Humans see "Atrium" in the `Server` header, the `ServerName` field, the logs and
 See §2.3. Jellyfin's behaviour here is not a contract clients rely on; it is a source of breakage
 they work around. Atrium reports the scheme it is actually reachable on.
 
+### 4.3 `DELETE /Items/{itemId}` refuses to delete media
+
+**Jellyfin does:** deletes the item and its files, gated by the user's `EnableContentDeletion`
+policy.
+
+**Depends on it:** a client's delete button. This divergence **is** observable — a user deletes a
+film and finds it still there.
+
+**Atrium does:** permits deletion only for items whose removal takes no file off disk. Playlists
+delete; movies, episodes and tracks answer `403`.
+
+Unlike the other divergences in this document, this one is not argued from "no client can tell". It
+is argued from consequence. v1 has no trash, no undo and no confirmation flow of its own, so
+honouring the route means trusting a client's dialog with an irreversible operation on files the
+user may not have backed up. The cost of diverging is a delete button that fails on media. The cost
+of not diverging is a bug in a new server destroying somebody's library. Revisited when there is a
+trash with a retention window to delete into. Specified in
+[009 §3.6](../../specs/009-playlists/spec.md).
+
 ---
 
-## 5. Non-improvements
+## 5. Accepted gaps in v1
+
+Deltas that are **not** deliberate choices about what is right, but bounded shortfalls of a first
+version. Each is listed with the mechanism that closes it, because a gap without one is just an
+undocumented bug.
+
+| Gap | What a client sees | Closing mechanism |
+|---|---|---|
+| **Tier 3 query parameters ignored** ([005 §3.3](../../specs/005-item-query-api/spec.md)) | A filter that does not narrow — more items than asked for | The ignored-parameter report ([010 §3.6](../../specs/010-conformance-harness/spec.md)); anything real clients send gets promoted |
+| **Item fields outside the observed union omitted** ([005 §3.2](../../specs/005-item-query-api/spec.md)) | A field absent that the reference sends | The differential's key-set pass, which exists mainly for this |
+| **Policy flags stored but unenforced** ([002 §3.5](../../specs/002-authentication-users-and-sessions/spec.md)) | A restriction that does not restrict | All of them gate features v1 lacks; each is enforced in the change that adds its feature |
+| **Image decoration parameters ignored** ([006 §3.2](../../specs/006-images/spec.md)) | `percentPlayed`, `blur`, `foregroundLayer` have no effect | Implement if the differential shows a client sending them |
+| **No transcoding** ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)) | "Cannot play this" where the reference would transcode | Out of v1 by decision, not by accident. A v2 candidate |
+| **`Path`-derived identifiers differ from the reference's** ([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters)) | Nothing — ids are opaque | Not a gap to close; a deliberate design choice |
+
+The difference between this section and §4 is intent. §4 says *we thought about it and chose
+differently*. This section says *we have not done it yet, and here is how we will know when it
+matters*.
+
+---
+
+## 6. Non-improvements
 
 Principle I requires that good ideas which would create a delta get written down and then not done.
 This list exists so they stop being re-proposed.

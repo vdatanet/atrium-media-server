@@ -113,14 +113,21 @@ say how it will be proven is not finished.
 | # | Feature | spec | plan | tasks |
 |---|---|---|---|---|
 | [001](001-server-identity-and-discovery/) | Server identity and discovery | Draft | — | — |
-| 002 | Authentication, users and sessions | — | — | — |
-| 003 | Library configuration and scanning | — | — | — |
-| 004 | Metadata resolution | — | — | — |
-| 005 | Item query API | — | — | — |
-| 006 | Images | — | — | — |
-| 007 | User data and playstate | — | — | — |
-| 008 | Playback negotiation and delivery | — | — | — |
-| 009 | Playlists | — | — | — |
-| 010 | Conformance harness | — | — | — |
+| [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | Draft | — | — |
+| [003](003-library-configuration-and-scanning/) | Library configuration and scanning | Draft | — | — |
+| [004](004-metadata-resolution/) | Metadata resolution | Draft | — | — |
+| [005](005-item-query-api/) | Item query API | Draft | — | — |
+| [006](006-images/) | Images | Draft | — | — |
+| [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
+| [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
+| [009](009-playlists/) | Playlists | Draft | — | — |
+| [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
+
+All ten are drafts: **no plan may start until its spec is accepted**, and no code until its plan
+is. The open questions across the ten are the review agenda.
+
+Four of them now have probe scripts waiting to be pointed at a real server — 003 OQ-3, 005 OQ-6,
+007 OQ-2 and 009 OQ-1. Running them is the cheapest work available and it changes what the specs
+say, so it belongs before the plans, not after. See [tools/README.md](../tools/README.md#probes).
 
 The order and rationale are in [../docs/roadmap.md](../docs/roadmap.md#feature-order).

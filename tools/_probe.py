@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Shared plumbing for the probe scripts.
+
+A probe answers exactly one question about how a real Jellyfin behaves, prints its finding
+together with the citation the documentation uses, and exits non-zero when the finding
+contradicts what this repository currently claims. That last property is what makes the probes a
+regression suite for the project's *beliefs* rather than only for its code: when a server upgrade
+changes a behaviour, the probe says so instead of the documentation quietly becoming false.
+
+The convention is specified in specs/010-conformance-harness/spec.md section 3.5.
+
+Standard library only. These run before any environment is built.
+"""
+
+from __future__ import annotations
+
+import argparse
+import getpass
+import json
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import date
+from typing import Any
+
+CLIENT = "atrium-probe"
+DEVICE_ID = "atrium-probe-0000"
+VERSION = "0.1"
+
+
+class ProbeError(RuntimeError):
+    """Something made the question unanswerable. Not a finding - an inability to look."""
+
+
+# --------------------------------------------------------------------------------------------
+# HTTP
+# --------------------------------------------------------------------------------------------
+
+
+class Server:
+    """A minimal client for the subset of the API the probes need."""
+
+    def __init__(self, base_url: str, timeout: int = 30) -> None:
+        self.base = base_url.rstrip("/")
+        self.timeout = timeout
+        self.token: str | None = None
+        self.user_id: str | None = None
+        self.version = "unknown"
+
+    # -- request plumbing --------------------------------------------------------------------
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        body: Any = None,
+        extra_headers: dict[str, str] | None = None,
+        raw: bool = False,
+    ) -> Any:
+        url = self.base + path
+        if params:
+            clean = {k: v for k, v in params.items() if v is not None}
+            if clean:
+                url += "?" + urllib.parse.urlencode(clean, doseq=True)
+
+        headers = {"Accept": "application/json"}
+        if self.token:
+            headers["X-Emby-Token"] = self.token
+        if extra_headers:
+            headers.update(extra_headers)
+
+        data = None
+        if body is not None:
+            data = json.dumps(body).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+
+        request = urllib.request.Request(url, data=data, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310
+                payload = response.read()
+                if raw:
+                    return response.status, dict(response.headers), payload
+                if not payload:
+                    return None
+                return json.loads(payload)
+        except urllib.error.HTTPError as exc:
+            if raw:
+                return exc.code, dict(exc.headers), exc.read()
+            raise ProbeError(f"{method} {path} -> HTTP {exc.code}: {exc.read()[:200]!r}") from exc
+        except urllib.error.URLError as exc:
+            raise ProbeError(f"{method} {path} -> {exc.reason}") from exc
+
+    def get(self, path: str, **params: Any) -> Any:
+        return self._request("GET", path, params=params)
+
+    def get_raw(self, path: str, **params: Any) -> tuple[int, dict[str, str], bytes]:
+        return self._request("GET", path, params=params, raw=True)
+
+    def post(self, path: str, body: Any = None, **params: Any) -> Any:
+        return self._request("POST", path, params=params, body=body)
+
+    def delete(self, path: str, body: Any = None, **params: Any) -> Any:
+        return self._request("DELETE", path, params=params, body=body)
+
+    # -- connection --------------------------------------------------------------------------
+
+    def connect(self, username: str | None, password: str | None, token: str | None) -> None:
+        info = self.get("/System/Info/Public")
+        self.version = info.get("Version", "unknown")
+        product = info.get("ProductName", "")
+        if "jellyfin" not in product.lower():
+            raise ProbeError(
+                f"the server at {self.base} reports ProductName={product!r}. "
+                "The probes measure Jellyfin; pointing one at something else measures nothing."
+            )
+
+        if token:
+            self.token = token
+            me = self.get("/Users/Me")
+            self.user_id = me["Id"]
+            return
+
+        if not username:
+            raise ProbeError("no credentials: pass --username, or --token")
+
+        result = self._request(
+            "POST",
+            "/Users/AuthenticateByName",
+            body={"Username": username, "Pw": password or ""},
+            extra_headers={
+                "X-Emby-Authorization": (
+                    f'MediaBrowser Client="{CLIENT}", Device="{CLIENT}", '
+                    f'DeviceId="{DEVICE_ID}", Version="{VERSION}"'
+                )
+            },
+        )
+        self.token = result["AccessToken"]
+        self.user_id = result["User"]["Id"]
+
+
+# --------------------------------------------------------------------------------------------
+# The probe protocol
+# --------------------------------------------------------------------------------------------
+
+
+class Probe:
+    """One question, its observations, its finding, and the verdict against the documentation.
+
+    `expectation` is what this repository currently claims. Pass None when the documentation has
+    only an open question: there is then nothing to contradict, and the probe reports its finding
+    and names the section to fill in.
+    """
+
+    def __init__(
+        self,
+        script: str,
+        question: str,
+        document: str,
+        section: str,
+        expectation: str | None = None,
+    ) -> None:
+        self.script = script
+        self.question = question
+        self.document = document
+        self.section = section
+        self.expectation = expectation
+        self.observations: list[tuple[str, str]] = []
+        self.notes: list[str] = []
+        self.finding: str | None = None
+        self.matches: bool | None = None
+
+    def observe(self, label: str, value: Any) -> None:
+        self.observations.append((label, str(value)))
+
+    def note(self, text: str) -> None:
+        self.notes.append(text)
+
+    def conclude(self, finding: str, matches_documentation: bool | None = None) -> None:
+        self.finding = finding
+        self.matches = matches_documentation
+
+    def report(self, server: Server) -> int:
+        today = date.today().isoformat()
+        width = max((len(label) for label, _ in self.observations), default=0)
+
+        print()
+        print(f"{self.script} - {self.question}")
+        print()
+        print(f"  server    {server.base}")
+        print(f"  version   Jellyfin {server.version}")
+        print(f"  date      {today}")
+        print()
+        for label, value in self.observations:
+            print(f"  {label.ljust(width)}   {value}")
+        if self.notes:
+            print()
+            for note in self.notes:
+                for line in _wrap(note, 92):
+                    print(f"  {line}")
+        print()
+        for line in _wrap(f"finding: {self.finding}", 92):
+            print(f"  {line}")
+        print()
+        print(f"  [probe: tools/{self.script}, Jellyfin {server.version}, {today}]")
+        print()
+
+        if self.expectation is None:
+            for line in _wrap(
+                f"open question: {self.document} {self.section} has no claim to contradict. "
+                f"Record the finding there and change the citation from prior-probe to probe.",
+                92,
+            ):
+                print(f"  {line}")
+            print()
+            return 0
+
+        if self.matches:
+            print(f"  OK  documentation confirmed - {self.document} {self.section}")
+            print()
+            return 0
+
+        print("  CONTRADICTION")
+        for line in _wrap(f"{self.document} {self.section} claims: {self.expectation}", 88):
+            print(f"    {line}")
+        for line in _wrap(f"observed: {self.finding}", 88):
+            print(f"    {line}")
+        print()
+        for line in _wrap(
+            "Update that section. If this is a behaviour that changed rather than a claim that "
+            "was always wrong, record it in docs/compatibility/behaviours.md with both dates - "
+            "a claim that fails to reproduce is not deleted.",
+            88,
+        ):
+            print(f"    {line}")
+        print()
+        return 1
+
+
+def _wrap(text: str, width: int) -> list[str]:
+    words, lines, current = text.split(), [], ""
+    for word in words:
+        if current and len(current) + 1 + len(word) > width:
+            lines.append(current)
+            current = word
+        else:
+            current = f"{current} {word}" if current else word
+    if current:
+        lines.append(current)
+    return lines or [""]
+
+
+# --------------------------------------------------------------------------------------------
+# CLI
+# --------------------------------------------------------------------------------------------
+
+
+def build_parser(description: str, needs_writes: bool = False) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=description, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("server", help="Base URL of a running Jellyfin, e.g. http://host:8096")
+    parser.add_argument("--username", "-u", help="User to authenticate as")
+    parser.add_argument(
+        "--password", "-p",
+        help="Discouraged: visible in the process list. Prefer JELLYFIN_PASSWORD or the prompt",
+    )
+    parser.add_argument("--token", help="Existing access token, instead of username and password")
+    parser.add_argument("--timeout", type=int, default=30)
+    if needs_writes:
+        parser.add_argument(
+            "--allow-writes",
+            action="store_true",
+            help="Required: this probe cannot answer its question without writing to the server. "
+                 "It cleans up after itself, including on failure.",
+        )
+    return parser
+
+
+def connect(args: argparse.Namespace) -> Server:
+    """Build a connected Server from parsed arguments, resolving the password safely."""
+    password = args.password or os.environ.get("JELLYFIN_PASSWORD")
+    if not args.token and args.username and password is None:
+        password = getpass.getpass(f"Password for {args.username}: ")
+
+    server = Server(args.server, timeout=args.timeout)
+    server.connect(args.username, password, args.token)
+    return server
+
+
+def main(run: Any, description: str, needs_writes: bool = False) -> int:
+    """Entry point shared by every probe: parse, connect, run, report, translate errors."""
+    parser = build_parser(description, needs_writes=needs_writes)
+    args = parser.parse_args()
+
+    if needs_writes and not args.allow_writes:
+        print(
+            "This probe writes to the server to answer its question, and cannot answer it any "
+            "other way.\nIt creates only what it needs and removes it afterwards, including on "
+            "failure.\nRe-run with --allow-writes to proceed.",
+            file=sys.stderr,
+        )
+        return 2
+
+    try:
+        server = connect(args)
+        probe = run(server)
+    except ProbeError as exc:
+        print(f"cannot answer the question: {exc}", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        print("\ninterrupted", file=sys.stderr)
+        return 130
+
+    return probe.report(server)
