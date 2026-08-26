@@ -730,6 +730,13 @@ interpreter a machine already has — macOS and Xcode ship 3.9 — and on the ne
 compiled and its `--help` executed under both, which exercises the imports and the whole argument
 parser. The suite itself runs on 3.12, the floor the package declares, and on 3.14.
 
+**The first run failed, on the one thing that could not be checked locally.** Three jobs never
+started: `astral-sh/setup-uv@v10` does not resolve, because that action publishes floating major
+tags only up to `v7` and is pinned to a full version from `v8` on. The two jobs that use nothing
+beyond `checkout` passed, which is what said which half was wrong. Every action version here was
+read from the API rather than remembered — and the version that was *correct* was still
+unusable in the form everyone writes it.
+
 **And the acceptance criteria are now mapped to their tests, in a file that fails three ways.**
 The definition of done below says *by name*, which until now nobody could check without reading
 two documents side by side. `tests/conformance/test_acceptance.py` reads the criteria out of
