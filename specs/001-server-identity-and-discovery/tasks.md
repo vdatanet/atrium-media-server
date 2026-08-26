@@ -219,12 +219,38 @@ guarantee was broken.
 two separations 003 depends on: the same path as two item types is two identifiers, and the same
 path in two libraries is two identifiers.
 
-## T7 — The unit sweep
+## T7 — The unit sweep  ✅
 
-- [ ] **Changes:** `tests/conformance/test_units.py` — every field whose name ends in `Ticks` serialises as an integer; every field whose name ends in `Date` serialises with seven fractional digits and a `Z`.
+- [x] **Changes:** `tests/conformance/test_units.py` — every field whose name ends in `Ticks` serialises as an integer; every field whose name ends in `Date` serialises with seven fractional digits and a `Z`.
 - **Depends on:** T4, T5
 - **Verified by:** passes; a deliberately float-typed `*Ticks` field fails it.
 - **Plan reference:** §8.3
+
+### Done — 2026-08-26
+
+**Two of the task's own assumptions were wrong, and the sweep found them while being written.**
+
+*"A deliberately float-typed `*Ticks` field fails it."* A plain `int` field **already rejects**
+`5763.999`, because a fractional float is not an integer — so the obvious probe reports that `int`
+is safe. It is not: `int` accepts `5764.0`, the same caller with the same mistake and a rounder
+number. The probe uses a whole float, and the test says why.
+
+*"Every field whose name ends in `Date`."* The reference uses both spellings — `PremiereDate` and
+`DateCreated` — and `endswith` alone covers 13 of the 20 date fields in the pinned document. The
+rule is now start-or-end, and it stops there: "contains" would gain one real field and three false
+positives, since `ReleaseDateFormat` is an enum and `UseFileCreationTimeForDateAdded` is a boolean.
+Two tests assert those two are **not** flagged, because a sweep with false positives gets switched
+off within a week — which costs more than the field it would have caught.
+
+**Checked by behaviour, not by structure.** Each field is rebuilt into a single-field probe model
+and actually serialised, so the sweep tests what a client would receive. Inspecting metadata for a
+`PlainSerializer` would pass a field that carried the annotation and the wrong serialiser.
+
+**The type rule is primary and the name rule secondary.** Any `datetime`-mentioning annotation must
+serialise in the reference's format, nullable unions included — which is most date fields upstream.
+
+Both halves of `compat/` now have a sweep. The plan's wording for both was refined by measuring
+rather than by reasoning, which is the same method the probes used on the reference.
 
 ## T8 — `config/`: paths and operator configuration
 
