@@ -440,13 +440,45 @@ one receiving a wrong-but-well-formed address fails visibly.
 The function takes the request's parts rather than a `Request`, so the table runs without a server
 and without touching a real interface. T14 supplies the adapter that pulls those parts out.
 
-## T13 — `api/deps.py`: the authentication seam
+## T13 — `api/deps.py`: the authentication seam  ✅
 
-- [ ] **Changes:** `require_user()` with the signature 002 will keep, raising `401` unconditionally.
+- [x] **Changes:** `require_user()` with the signature 002 will keep, raising `401` unconditionally.
 - **Depends on:** T1
 - **Verified by:** a route depending on it answers `401`; a test overriding it through `app.dependency_overrides` reaches the route body.
 - **Note:** no credential of any kind ships. The `200` path is exercised by the override, per [plan §1](plan.md#1-approach).
 - **Plan reference:** §1, §5
+
+### Done — 2026-08-26
+
+**Asking what a refusal looks like before writing one found two shapes, not one.** FastAPI's
+`HTTPException` sends `{"detail": "Not authenticated"}` as JSON. The reference sends **nothing** —
+status line, `Content-Length: 0`, no `Content-Type`, no `WWW-Authenticate`. That would have been a
+difference on every gated route in the project.
+
+And the split turned out to be structural rather than per-endpoint: refusals decided **before** the
+controller pipeline are empty, while errors the pipeline produced carry **RFC 9457 problem
+details** with a `traceId`. Four cases measured, now [behaviours §1.11](../../docs/compatibility/behaviours.md).
+Only the empty shape is implemented, because only it is reachable in 001; the JSON shape belongs to
+the features that raise it and is written down so it does not have to be rediscovered.
+
+**The absent `WWW-Authenticate` is kept absent deliberately.** RFC 7235 says a 401 SHOULD carry
+one; adding `Basic` would make a browser open a credentials dialog on routes no browser was meant
+to drive. Matching the reference is the safer behaviour here, which is a pleasant change.
+
+**A fifth measurement, unasked for, confirmed a decision already taken.**
+`/Genres?SortBy=NotASortOption` answers `200` with a full result — the reference **ignores** an
+unrecognised query value rather than rejecting it. [005 §3.3](../005-item-query-api/spec.md)
+argued for exactly that behaviour from first principles; this is the evidence.
+[behaviours §1.12](../../docs/compatibility/behaviours.md).
+
+**Two modules the plan did not list.** `compat/errors.py`, because the wire shape of an error
+belongs beside the wire shape of everything else; and `domain/user.py`, because a seam needs a
+return type and 002 needs somewhere to grow one. A test asserts the signature — return type and
+parameters — so 002 changing it is a finding for this plan rather than a quiet edit.
+
+**One thing left unmeasured on purpose.** `/Items/<32 zeros>` answers `200`, not `404`: .NET treats
+an all-zero GUID as a special value. Interesting for [005 §3.5](../005-item-query-api/spec.md), and
+not chased here — it needs isolating before it can be claimed.
 
 ## T14 — `api/system.py`: the three routes
 
