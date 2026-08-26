@@ -292,6 +292,53 @@ formatter does. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
 belongs to the thing that produced the body. Starlette appends `charset=utf-8` only to `text/*`
 media types, so its `JSONResponse` would send a bare `application/json`.
 
+### 1.11 There are two error shapes, not one
+
+**Jellyfin does:** answer a refusal in one of two forms, decided by **where** the refusal happened.
+`[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+
+| Refusal | Shape |
+|---|---|
+| Unauthenticated request | `401`, **empty body**, `Content-Length: 0`, no `Content-Type`, **no `WWW-Authenticate`** |
+| Path matching no route | `404`, **empty body**, no `Content-Type` |
+| An item a handler could not find | `404`, **RFC 9457 problem details** as JSON |
+| A malformed value the model binder rejected | `400`, **RFC 9457 problem details** with an `errors` map |
+
+```json
+{"type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+ "title": "Not Found", "status": 404, "traceId": "00-b1be…-8a91…-00"}
+
+{"type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+ "title": "One or more validation errors occurred.", "status": 400,
+ "errors": {"itemId": ["The value 'not-a-guid' is not valid."]},
+ "traceId": "00-0138…-3158…-00"}
+```
+
+The split is not arbitrary: the empty ones are produced before the framework's controller pipeline
+runs, and the JSON ones by that pipeline.
+
+**Depends on it:** a client branching on a body it expects to be JSON. FastAPI's own
+`HTTPException` sends `{"detail": "…"}`, which is neither shape.
+
+**Atrium does:** both, per refusal. `traceId` is a W3C trace-context identifier and is
+per-request by definition, so it is compared by shape rather than by value.
+
+> **The absent `WWW-Authenticate` is worth keeping absent.** RFC 7235 says a 401 SHOULD carry one.
+> Adding `Basic` would make a browser open a credentials dialog on routes no browser was meant to
+> drive — so here, matching the reference is also the safer behaviour.
+
+### 1.12 An unrecognised query value is ignored, not rejected
+
+**Jellyfin does:** answer `200` with a full, unfiltered result for `/Genres?SortBy=NotASortOption`.
+`[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+
+**Depends on it:** yes, and this is the measurement behind a decision already taken.
+[005 §3.3](../../specs/005-item-query-api/spec.md) accepts a bounded delta — Tier 3 query
+parameters are ignored rather than rejected — on the argument that rejecting turns a partial answer
+into no answer *and is itself a delta*. That argument was reasoned; this is the evidence.
+
+**Atrium does:** the same, and counts what it ignored (010 §3.6).
+
 ---
 
 ## 3. Defects
