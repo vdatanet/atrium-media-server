@@ -283,14 +283,41 @@ is written through the code that stores one, and the assertion is that the plain
 nowhere in `atrium.db` **or its write-ahead log** — while the hash does, so a test that stored
 nothing cannot pass by accident.
 
-## T5 — `db/repositories.py`: the boundary
+## T5 — `db/repositories.py`: the boundary  ✅
 
-- [ ] **Changes:** user, token and session repositories returning **domain objects**, never ORM
+- [x] **Changes:** user, token and session repositories returning **domain objects**, never ORM
   rows; token hashing happens here, so no caller can store a plaintext token.
 - **Depends on:** T4
 - **Verified by:** a test asserting no SQLAlchemy type escapes the module's public functions;
   storing a token and reading it back never yields the original string.
 - **Plan reference:** §3, architecture §1
+
+### Done — 2026-08-26
+
+**"No caller can store a plaintext token" is a shape, not a rule.** There is no method that accepts
+a token to store. `issue` generates the secret, writes only its SHA-256, and hands the plaintext
+back once in an `IssuedToken` whose `repr` omits it — so a caller never holds a token this module
+has not already reduced to a hash, and there is nothing for a future caller to forget. The same
+reasoning put `password_hash` out of `User`'s `repr`: a domain object reaches a log line
+eventually, and it gets there because somebody wrote `logger.debug("%s", user)` rather than because
+they meant to.
+
+**The sweep found two things about itself before it found anything about the code.** A module's
+*imported* names are part of its surface: walking `repositories` picked up `select` and `delete`,
+and the sweep then failed on SQLAlchemy's own annotations rather than on anything this project
+wrote. And on Python 3.14 `typing.Union` **is a class**, so `isinstance(origin, type)` no longer
+separates a container from a special form, and every `X | None` in the module failed for coming
+from `typing`. Both are now handled, and the sweep carries the test that proves it still rejects a
+method returning a row — a sweep that cannot fail is decoration.
+
+**Names normalise with `casefold`, not `lower`.** A German account named `STRASSE` and one named
+`Straße` are the same login; `lower` leaves them as two accounts, one of which cannot be reached,
+and the unique index would not stop it because the two normalised forms differ. This is the sort of
+thing that is free to get right here and expensive to notice later.
+
+**Every dictionary that leaves is a copy.** `policy_extra` and `configuration` come out of the
+identity map, so handing the row's own dict to a caller would let a route edit the session's idea
+of what is in the database. Asserted, because it is invisible until it is not.
 
 ## T6 — `users/policy.py`: enforced versus echoed
 
