@@ -309,8 +309,25 @@ requesters on different networks; a requester matching nothing. Nine rows, one b
   Then, once models map cleanly onto schemas, the stronger per-schema check: is this alias a
   property of *this* schema. The second is better and the first is available immediately, so the
   first ships with 001 and the second follows the models.
-- **Unit sweep.** Every field whose name ends in `Ticks` serialises as an integer; every field whose
-  name ends in `Date` serialises with seven fractional digits and a `Z`.
+- **Unit sweep.** Fields are checked **by behaviour, not by structure**: each is rebuilt into a
+  single-field probe model and actually serialised, so the sweep tests what a client would receive
+  rather than what an annotation appears to promise.
+
+  Two rules, and the **type rule is the primary one**: any field whose annotation mentions
+  `datetime` must serialise in the reference's format, which catches a plain `datetime` wherever it
+  appears. The name rule is secondary and catches a date field typed as something else — a wire
+  name that **starts or ends with** `Date` must be date-valued.
+
+  Start *or* end, because the reference uses both spellings: `PremiereDate` and `DateCreated`.
+  Measured over the 1043 names in the pinned document, `endswith` alone covers 13 and misses 7.
+  Widening to "contains" would gain one real field and three false positives — `ReleaseDateFormat`
+  is an enum and `UseFileCreationTimeForDateAdded` is a boolean — so it stops at start-or-end. A
+  sweep with false positives gets switched off within a week, which costs more than the field it
+  would have caught.
+
+  Ticks are probed with a **whole** float. A plain `int` field already rejects `5763.999`, since a
+  fractional float is not an integer, so probing with one would report that `int` is safe. It
+  accepts `5764.0` — the same caller, the same mistake, a rounder number.
 
 Both walk the model registry rather than the router, so a model reaches CI whether or not a route
 returns it yet.
