@@ -1,0 +1,23 @@
+# Reference material fetched at development time, never vendored.
+# See docs/compatibility/reference-target.md and docs/decisions/0005-licence.md.
+/reference/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Runtime data
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
