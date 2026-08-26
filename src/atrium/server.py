@@ -41,6 +41,7 @@ from atrium.config.state import load_or_create
 from atrium.db.engine import create_database_engine, session_factory, verify_connection
 from atrium.db.schema import ensure_current
 from atrium.lifecycle import Readiness, ReadinessMiddleware
+from atrium.users import passwords as password_module
 
 logger = logging.getLogger("atrium")
 
@@ -67,6 +68,12 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     verify_connection(engine, resolved)
     ensure_current(engine, resolved)
     sessions = session_factory(engine)
+
+    # Argon2id's dummy record is hashed here, once, rather than on the first login that needs it.
+    # It is what an unknown username is verified against, and a record built lazily would make the
+    # first such login slower than every later one - which is the timing signal it exists to
+    # remove. ADR-0006, plan section 6.2.
+    passwords = password_module.build(settings.passwords)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -126,6 +133,7 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     app.state.paths = resolved
     app.state.db = engine
     app.state.sessions = sessions
+    app.state.passwords = passwords
     app.state.settings = settings
     app.state.server_state = state
     app.state.readiness = readiness

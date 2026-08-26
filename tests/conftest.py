@@ -124,12 +124,33 @@ def dispose_database_engines(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 #: A user the override hands back. Not a credential: nothing authenticates as this.
 TEST_USER = User(id="a" * 32, name="joan", is_administrator=True)
 
+#: Argon2id at its cheapest, written into every test data directory. Measured on this machine:
+#: 41 ms per hash at the shipped parameters against 0.06 ms at these, and the factory hashes the
+#: dummy record once per server it builds. plan section 8.4 - a suite that verifies dozens of
+#: passwords at 64 MiB takes minutes, and a slow suite gets run less often, which costs more
+#: security than the parameters buy.
+#:
+#: It goes in through `config.toml` rather than by patching a default, because that is the
+#: mechanism an operator has, and a test that lowers them any other way is not exercising it.
+FAST_PASSWORDS = "[passwords]\nmemory_cost = 8\ntime_cost = 1\nparallelism = 1\n"
+
+
+def data_dir(root: Path) -> DataPaths:
+    """A prepared data directory whose passwords are cheap to check.
+
+    Every test that builds a server goes through here rather than through `DataPaths` directly.
+    Nothing else is configured, so a test asserting a default still gets one - and the tests that
+    are *about* configuration build their own directories and do not use this.
+    """
+    paths = DataPaths(root)
+    paths.prepare()
+    paths.config_file.write_text(FAST_PASSWORDS, encoding="utf-8")
+    return paths
+
 
 @pytest.fixture
 def paths(tmp_path: Path) -> DataPaths:
-    prepared = DataPaths(tmp_path / "atrium")
-    prepared.prepare()
-    return prepared
+    return data_dir(tmp_path / "atrium")
 
 
 @pytest.fixture

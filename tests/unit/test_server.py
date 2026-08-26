@@ -10,14 +10,14 @@ import pytest
 from fastapi import FastAPI
 
 from atrium import REFERENCE_VERSION, __version__
-from atrium.config.paths import DataPaths
 from atrium.server import create_app, main
+from tests.conftest import data_dir
 
 
 @pytest.fixture
 def unstarted(tmp_path: Path) -> FastAPI:
     """An instance whose readiness gate has not been opened, as before startup finishes."""
-    return create_app(DataPaths(tmp_path / "atrium"))
+    return create_app(data_dir(tmp_path / "atrium"))
 
 
 # --------------------------------------------------------------------------------------------
@@ -27,7 +27,7 @@ def unstarted(tmp_path: Path) -> FastAPI:
 
 def test_it_creates_the_data_directory(tmp_path: Path) -> None:
     root = tmp_path / "somewhere-new"
-    create_app(DataPaths(root))
+    create_app(data_dir(root))
     assert (root / "cache").is_dir()
     assert (root / "state.json").is_file()
 
@@ -43,7 +43,7 @@ async def test_the_lifespan_opens_the_gate(tmp_path: Path) -> None:
     `TestClient` reaches the same place and emits a deprecation warning doing it; running the
     lifespan directly is also closer to what a server actually does.
     """
-    built = create_app(DataPaths(tmp_path / "atrium"))
+    built = create_app(data_dir(tmp_path / "atrium"))
     assert built.state.readiness.ready is False
 
     async with built.router.lifespan_context(built):
@@ -80,8 +80,8 @@ async def test_a_refusal_while_starting_still_carries_the_headers(unstarted: Fas
 
 
 def test_two_instances_have_two_identities(tmp_path: Path) -> None:
-    first = create_app(DataPaths(tmp_path / "one"))
-    second = create_app(DataPaths(tmp_path / "two"))
+    first = create_app(data_dir(tmp_path / "one"))
+    second = create_app(data_dir(tmp_path / "two"))
     assert first.state.server_state.server_id != second.state.server_state.server_id
 
 
@@ -91,14 +91,14 @@ def test_two_instances_do_not_share_readiness(tmp_path: Path) -> None:
     Without this a test suite that builds a server per test would leak the first one's readiness
     into every later one, and every gate assertion after the first would pass for free.
     """
-    first = create_app(DataPaths(tmp_path / "one"))
-    second = create_app(DataPaths(tmp_path / "two"))
+    first = create_app(data_dir(tmp_path / "one"))
+    second = create_app(data_dir(tmp_path / "two"))
     first.state.readiness.mark_ready()
     assert second.state.readiness.ready is False
 
 
 def test_the_same_directory_gives_the_same_identity(tmp_path: Path) -> None:
-    root = DataPaths(tmp_path / "shared")
+    root = data_dir(tmp_path / "shared")
     assert create_app(root).state.server_state.server_id == (
         create_app(root).state.server_state.server_id
     )
