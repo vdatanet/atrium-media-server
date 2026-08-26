@@ -24,7 +24,7 @@ not see its view.
 **By-name item** — an item that exists because metadata mentions it, not because a file does:
 `MusicArtist`, `Genre`, `Studio`, `Person`. These are served by their own endpoints (`/Artists`,
 `/Genres`, `/MusicGenres`) and share one code path upstream — which is why they share one defect
-(see [behaviours §3.1](compatibility/behaviours.md#31-totalrecordcount-is-0-on-by-name-endpoints-without-limit)).
+(see [behaviours §3.1](compatibility/behaviours.md#31-totalrecordcount-is-0-on-by-name-endpoints-without-limit--class-b)).
 
 **Fields** — a query parameter naming optional properties to include in a response, e.g.
 `Fields=MediaSources,Overview`. Absent fields are omitted, not null. Note that `UserData` is *not*

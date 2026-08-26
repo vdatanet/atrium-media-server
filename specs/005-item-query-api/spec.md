@@ -232,7 +232,7 @@ All return the envelope, and all take `parentId`, `userId`, `startIndex`, `limit
 > `[prior-probe: Jellyfin master, 2026-08-05; upstream jellyfin/jellyfin#17541]`
 >
 > **Atrium always returns the true count.** Argued and recorded in
-> [behaviours §3.1](../../docs/compatibility/behaviours.md#31-totalrecordcount-is-0-on-by-name-endpoints-without-limit):
+> [behaviours §3.1](../../docs/compatibility/behaviours.md#31-totalrecordcount-is-0-on-by-name-endpoints-without-limit--class-b):
 > no client can observe the difference in a way that changes its behaviour, and the upstream fix is
 > approved.
 

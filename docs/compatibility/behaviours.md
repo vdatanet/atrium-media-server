@@ -269,9 +269,115 @@ position floor produces a server that keeps resume points for every short item.
 
 ## 3. Defects
 
-Principle V: the default is to replicate. Each of these states what Atrium does and why.
+Principle V: the default is to replicate. Each entry states what Atrium does and why — and this
+section opens with the procedure that produces those answers, because "replicate unless you have a
+good argument" is not a procedure, it is a preference with a disclaimer.
 
-### 3.1 `TotalRecordCount` is 0 on by-name endpoints without `limit`
+### 3.0 How the decision is made
+
+One question decides it: **can a client have built something that being correct would break?**
+Principle I is about what a client can observe, not about what is correct, and this is the form
+that question takes for a defect.
+
+The table below is a fast heuristic for answering it. **Direct evidence overrides the heuristic**
+— see §3.0.1.
+
+| Class | Shape of the defect | What clients do about it | Default |
+|---|---|---|---|
+| **A** | **Fails loudly** — 5xx, reset connection, unparseable body | They cannot build *on* it, only *around* it: a fallback, or an error to the user | **Diverge — be correct** |
+| **B** | **Succeeds wrongly** — 200 with a wrong value, wrong unit, wrong content | They build *compensating* code that assumes the wrong value | **Replicate** |
+| **C** | **Omits something** — absent field, absent header | They treat it as absent, which is what it is | **Supply it**, after checking |
+
+The reasoning behind class A: nobody can depend on a failure in a way that a *success* breaks. A
+client meeting a 500 either has a fallback — which stays unused, harmlessly — or shows an error,
+which it now does not have to. A client using the failure as a capability probe gets a better
+answer from a working response than from a broken one.
+
+The reasoning behind class B is the mirror image, and it is the one that catches people out.
+**Fixing a wrong-but-usable response invalidates the workaround built on top of it.** A client that
+compensates for a wrong value by correcting it produces a doubly-corrected value once the server is
+fixed. Being right is not automatically safe.
+
+Class B has two escape hatches, and between them they are where most real cases land.
+
+**If every plausible compensation is defect-tolerant, diverge.** A client that ignores a field it
+knows to be unreliable is unaffected when the field becomes reliable. A client that *sniffs* rather
+than assumes is unaffected either way.
+
+**If no compensation is possible at all, diverge.** A class-B defect that a client cannot work
+around behaves like class A in the only respect that matters: replicating it protects nobody,
+because there is nobody to protect. §3.4 is exactly this case, and it is not rare — a defect that
+forces a client into a corner is precisely the sort that gets noticed and reported.
+
+### 3.0.0 Replication is not free, and for this project it is not the lazy option
+
+For a fork, replicating a defect means leaving code alone. **For Atrium it means writing extra code
+to reproduce a mistake**, and then a test to prove the mistake is faithfully reproduced, and then a
+comment explaining to the next reader why it is there.
+
+That cost is real and it belongs in the decision. It does not override Principle I — a client that
+would break still outranks the tidiness of our source — but where the evidence is balanced, the
+side that requires deliberately writing bug code needs the stronger argument, not the weaker one.
+
+### 3.0.1 The tie-breaks
+
+When the class does not settle it, in this order:
+
+1. **Does a known client compensate, and does the compensation break?** Answerable for the clients
+   this project can read, and for the rest it is what the differential harness is for. Absent
+   evidence, assume a compensation exists.
+2. **What is upstream's position?** Three answers, and they are not the same:
+
+   | Upstream state | What it tells us | Weight |
+   |---|---|---|
+   | **Fixed** | The behaviour is a transient, not a contract. Replicating means matching something on its way out and undoing it at the next pin bump — and any client depending on it is already broken against the next release | Toward **diverge** |
+   | **Judged and deliberately kept** | The behaviour is durable, and someone who knows the codebase decided it is right or that changing it costs too much | Toward **replicate** |
+   | **Not judged** | Nothing at all | **None** |
+
+   **"Not judged" includes a closed pull request.** A PR can be closed for scope, for process, for
+   maintainer bandwidth, or because nobody got to it — none of which is a ruling on the behaviour.
+   Reading a rejection as a verdict is the easiest mistake in this whole procedure, and §3.4 is a
+   case where it would have produced exactly the wrong answer.
+
+   [ADR-0004](../decisions/0004-pin-to-jellyfin-10-11.md) pins the contract to `10.11.x`; upstream
+   head does not define the contract, but it does define the **direction**.
+
+   ⚠️ **This tie-break must not become "wait for upstream".** This project cannot reliably move
+   upstream state — see §3.4 — so a defect that is fixable in principle may be unfixable in
+   practice, and a decision deferred on that basis is a decision never made.
+3. **Is the defect in a code path v1 has at all?** If not, the decision is recorded and deferred
+   rather than argued now. A decision made about code nobody will write for a year is a decision
+   made with the least information it will ever have.
+
+### 3.0.2 What is never acceptable
+
+- **Inventing a third behaviour.** Where the reference 500s and correctness says 200, the choice is
+  those two. A tidy `400` is worse than both: it is a delta from the reference *and* from correct.
+- **Fixing a defect because it is obviously wrong.** Obviousness is not evidence. Principle V.
+- **Replicating a defect without recording it**, so that a later contributor "fixes" it.
+- **Deciding once for a whole endpoint.** Defects are per behaviour, and one endpoint can carry two
+  that need opposite treatment — see §3.2, which is exactly that.
+- **Treating a closed pull request as a ruling.** See tie-break 2.
+
+### 3.0.3 The shape of a safe divergence
+
+Where a divergence is unavoidable, its **shape** decides how much risk it carries. Best first:
+
+1. **Gated on an explicit client declaration.** The new behaviour happens only for clients that
+   said something specific about themselves. A client that never makes that declaration cannot
+   observe any difference — the divergence is invisible to everyone who did not ask for it. §3.4 is
+   this shape, and it is why that divergence is cheap.
+2. **Strictly more correct on a path that previously failed.** Nothing to break, because nothing
+   worked. §3.2 symptom 1.
+3. **Strictly more information in a place clients read optionally.** A header that was absent, a
+   size that was unknown. §3.3.
+4. **Changing a value clients already read.** The dangerous shape. Needs evidence about
+   compensations, not reasoning about correctness. §3.2 symptom 2.
+
+Prefer 1. Where a defect can be diverged from *conditionally*, do that rather than diverging
+unconditionally, even when the unconditional version looks cleaner.
+
+### 3.1 `TotalRecordCount` is 0 on by-name endpoints without `limit` — class B
 
 **Jellyfin does:** `/Artists`, `/Artists/AlbumArtists`, `/Genres`, `/MusicGenres` and `/Studios`
 share the `GetItemValues` path, which **disables counting when the request has no `limit`**:
@@ -286,31 +392,70 @@ share the `GetItemValues` path, which **disables counting when the request has n
 **Depends on it:** no. Known clients map `Items` and ignore `TotalRecordCount` on these routes —
 precisely because it is unreliable. A client that *paginated* on it would be broken today.
 
+Class B, but through the escape hatch of §3.0: the only compensation anyone builds for an
+unreliable field is to ignore it, and ignoring a field is defect-tolerant — it does not stop
+working when the field starts being right.
+
 **Atrium does:** **diverge — always return the true count.** The argument required by Principle V:
 no client can observe the difference in a way that changes its behaviour, because a correct count
 is what a client that reads the field already expects, and the clients that ignore the field are
 unaffected. The upstream fix is approved, so replicating the defect would mean deliberately
 matching a behaviour that is on its way out.
 
-### 3.2 PCM/WAV transcoding returns 500
+### 3.2 PCM/WAV output — one bug, two symptoms, two classes
 
-**Jellyfin does:** `GET /Audio/{id}/stream.wav` with any PCM `AudioCodec` returns **500**;
-`/universal` with `Container=wav` returns **200** with `Content-Type: audio/wav` and a body with
-**no RIFF header**. Cause: one block of `EncodingHelper.GetProgressiveAudioFullCommandLine` feeds
-`-ar` from an optional `AudioBitRate` and forces the raw `-f s16le` muxer.
-`[prior-probe: Jellyfin 10.11.11, 2026-08-03; upstream
-jellyfin/jellyfin#17537, merged to master 2026-08-05, not in any 10.11.x]`
+The worked example for §3.0, and it is a good one because the naive answer — "be correct" — is
+right for one symptom and wrong for the other.
 
-**Depends on it:** no client depends on the *failure*. Clients that need sized PCM have built local
-proxies around it.
+**The cause is a single block** of `EncodingHelper.GetProgressiveAudioFullCommandLine`, which for
+any `pcm_*` encoder forced the raw muxer `-f s16le` and fed `-ar` from `AudioBitRate` — the wrong
+field, and an optional one.
+`[prior-probe: Jellyfin 10.11.11, 2026-08-03; upstream jellyfin/jellyfin#17537, merged to master
+2026-08-05, not in any 10.11.x]`
 
-**Atrium does:** **diverge — serve valid PCM/WAV** with a correct RIFF header, a real
-`Content-Length` and `Range` support. This is out of v1's transcoding scope (v1 stops at remux), so
-the divergence is deferred, but the direction is recorded now because it is one of the few places
-where Atrium can be genuinely better without a client being able to tell it is not Jellyfin — a
-working response where Jellyfin 500s is not a delta a client has to branch on.
+Two symptoms come out of it:
 
-### 3.3 Transcoding responses carry no `Content-Length` or `Accept-Ranges`
+#### Symptom 1 — `GET /Audio/{id}/stream.wav` with a PCM codec returns 500
+
+`-ar` fed from an absent `AudioBitRate` produces a malformed command line, and ffmpeg never starts.
+
+**Class A.** A client cannot build on a 500. Whatever it does today — fall back to FLAC, show an
+error — keeps working when the request succeeds instead.
+
+**Atrium: diverge. Serve valid WAV**, with a RIFF header, a real `Content-Length` and `Range`
+support.
+
+#### Symptom 2 — `GET /Audio/{id}/universal` with `Container=wav` returns headerless PCM
+
+`200`, `Content-Type: audio/wav`, and a body with no `RIFF` header, because the raw muxer was
+applied regardless of the container the client asked for.
+
+**Class B, and the trap is real.** A client compensating for this must **synthesise a RIFF header
+and prepend it** — it has no other way to make the stream playable. Send a correct header to that
+client and it produces **two**, which is corrupt audio. "Being correct" breaks it.
+
+So the class default says replicate. The tie-breaks say otherwise, and both are needed:
+
+1. **Does a known compensation break?** A workaround cannot assume which server version it is
+   talking to, so a competent one sniffs for the `RIFF` magic bytes before prepending. A sniffing
+   compensation is defect-tolerant and survives the fix. One that prepends blindly does not — and
+   that client is **already broken against upstream head**, where the fix has landed.
+2. **Is it fixed upstream?** Yes, in `master`. Replicating a headerless `audio/wav` would mean
+   deliberately emitting a malformed body to match a version that no longer emits it, and undoing
+   that at the next pin bump.
+
+**Atrium: diverge. Serve a real RIFF header** — and record that this one carries a risk symptom 1
+does not: a client that blindly prepends a header receives corrupt audio. If the differential
+harness ever finds such a client, this decision is revisited, not defended.
+
+#### Status in v1
+
+Tie-break 3 applies: producing PCM requires re-encoding, which is transcoding, which is out of v1
+([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)). **v1 serves neither
+symptom's path.** The decision is recorded now because the reasoning is fresh and the alternative
+is re-deriving it in a year with less information — not because anything is being built.
+
+### 3.3 Transcoding responses carry no `Content-Length` or `Accept-Ranges` — class C
 
 **Jellyfin does:** streams transcoded output chunked, with no size and no range support.
 
@@ -320,6 +465,53 @@ that cast run a local sizing proxy.
 **Atrium does:** **diverge for remuxed output**, where the output size is computable or the file is
 seekable: send `Content-Length` and honour `Range`. Same reasoning as §3.2 — a client cannot branch
 on a response being more correct.
+
+### 3.4 HDR10+ metadata stripped from clients that asked for it — class B, no compensation
+
+The second worked example, and it is the one where the heuristic gives the wrong answer and the
+evidence rescues it.
+
+**Jellyfin does:** during a **stream copy**, plans removal of the HDR10+ SEI from any
+`DOVIWithHDR10Plus` video stream as soon as the client's requested range types contain `DOVI` —
+without considering that the client may have declared `DOVIWithHDR10Plus` itself. The removal is
+carried out with `-bsf:v hevc_mp4toannexb,hevc_metadata=remove_hdr10plus=1`, and the rewritten
+bitstream **breaks HLS fMP4 playback on AVPlayer**.
+`[source: MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs @ v10.11.11; the removal logic
+is unchanged since jellyfin/jellyfin#13277 and still unchanged as of master post-#17571; related
+upstream issue jellyfin/jellyfin#16687]`
+
+**Class B by shape** — a `200` and a stream, not a failure.
+
+**But no compensation exists.** No device profile combination avoids the strip while keeping Dolby
+Vision remuxing, because the `dvh1` tagging in `DynamicHlsController` requires `DOVI` in the range
+type. The client is cornered: declare `DOVI` and lose HDR10+ along with playback, or do not declare
+it and lose Dolby Vision remuxing entirely. **Escape hatch 2 of §3.0 applies** — a class-B defect
+nobody can work around protects nobody when replicated.
+
+**Upstream position: not judged.** A fix was proposed and the pull request closed under the
+project's LLM/AI development policy. The automated quality gate passed; no reviewer assessed the
+behaviour. That is a process outcome, not a ruling, and tie-break 2 therefore contributes
+**nothing** — reading it as "upstream considered this and declined" would invert the decision on
+evidence that does not exist.
+
+> This is the concrete case behind the warning in §3.0.1: **this project cannot reliably move
+> upstream state.** Contributions authored with AI assistance are not accepted upstream, and every
+> commit in this repository carries a `Co-Authored-By` trailer. A defect that is fixable in
+> principle is therefore not fixable in practice by this route, and waiting for upstream is not a
+> plan. The way to obtain a judgement is an **issue describing the behaviour**, hand-authored,
+> proposing no code — a different artefact, subject to a different policy, and the one that gets
+> the defect assessed on its merits.
+
+**Atrium does: diverge, in the safest available shape.** Honour an explicit `DOVIWithHDR10Plus`
+declaration: keep the metadata for clients that made it, strip it for clients that did not, exactly
+as the reference already treats the neighbouring `DOVIWithELHDR10Plus` coexistence case. This is
+shape 1 of §3.0.3 — **a client that never declares `DOVIWithHDR10Plus` cannot observe any
+difference at all**, which is what makes the divergence cheap rather than merely justified.
+
+**In scope for v1**, unlike §3.2. Stream copy is remuxing, and remuxing is v1's ceiling
+([008 §3.3](../../specs/008-playback-negotiation-and-delivery/spec.md)). And §3.0.0 applies with
+force here: Atrium never had this defect, so replicating it would mean writing a bitstream filter
+whose only job is to remove something the client said it wanted.
 
 ---
 
