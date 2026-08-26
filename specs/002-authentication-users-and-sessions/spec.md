@@ -1,9 +1,10 @@
 ---
 feature: 002-authentication-users-and-sessions
 title: Authentication, users and sessions
-status: Draft
+status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
+accepted: 2026-08-26
 depends_on: [001]
 ---
 

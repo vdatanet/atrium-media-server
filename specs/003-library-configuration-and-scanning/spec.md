@@ -1,9 +1,10 @@
 ---
 feature: 003-library-configuration-and-scanning
 title: Library configuration and scanning
-status: Draft
+status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
+accepted: 2026-08-26
 depends_on: []
 ---
 

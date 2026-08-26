@@ -1,0 +1,321 @@
+---
+feature: 003-library-configuration-and-scanning
+title: Library configuration and scanning — implementation plan
+status: Draft
+created: 2026-08-26
+updated: 2026-08-26
+spec_status_required: Accepted
+spec_status_actual: Accepted
+---
+
+# 003 — Implementation plan
+
+> **This document describes HOW.** The spec is the authority on behaviour.
+
+## 1. Approach
+
+003 has no HTTP surface, which makes it the one feature that can be built and proven entirely
+against fixtures — and the one whose mistakes are least visible until 005 exposes them.
+
+Four decisions carry it.
+
+**Principle IV bites hardest here, and the answer is a corpus.** The reference's naming rules live
+in a large table of regular expressions. Copying it is a licence problem and a design problem at
+once, and reimplementing it from memory is guesswork. So the source of truth for naming becomes
+**a checked-in corpus of `path → expected resolution` rows** — our own artefact, written from
+observed conventions and from what the reference produces for each case. The patterns are then
+whatever makes the corpus pass. This inverts the usual relationship: the tests are the
+specification of the behaviour, and the implementation is free.
+
+**Identity is derived, and derived from a *relative* path.** The reference derives item ids from
+the absolute path, so moving a library from `/mnt/a` to `/mnt/b` — or running the same library from
+a container with a different mount point — changes every id and silently discards every client's
+favourites and resume positions. Atrium derives from the path **relative to its library root**, so
+that move costs nothing. The ids differ from the reference's either way
+([behaviours §1.4](../../docs/compatibility/behaviours.md#14-item-identifiers-are-32-lowercase-hex-characters)),
+so there is no compatibility cost to being better here.
+
+**A scan must be unable to mistake an unavailable root for an empty one.** This is the single most
+destructive thing a scanner can do, and "check the root is readable" is not enough: a network share
+can mount empty. §6.5 makes it a guard with a threshold rather than a check.
+
+**Sort names are now fully specified**, from the probe run on 2026-08-26 — two derivations, three
+item types bypassing the first
+([spec §3.7](spec.md#37-sort-names)). The plan's job is to make the whitespace artefacts survive
+contact with a tidy-minded implementer, which it does by testing for them explicitly.
+
+## 2. Inherited decisions
+
+| Decision | Source |
+|---|---|
+| Everything inherited by 001 and 002 | [001 plan §2](../001-server-identity-and-discovery/plan.md#2-inherited-decisions), [002 plan §2](../002-authentication-users-and-sessions/plan.md#2-inherited-decisions) |
+| SQLite, repositories returning domain objects | [ADR-0003](../../docs/decisions/0003-sqlite-as-the-default-store.md) |
+| Identifiers are derived, never allocated | [architecture §4](../../docs/architecture.md#4-cross-cutting-decisions) |
+| Ticks are the internal duration unit | [architecture §4](../../docs/architecture.md#4-cross-cutting-decisions) |
+| `domain/` performs no I/O | [architecture §1](../../docs/architecture.md#1-shape-of-the-system) |
+
+**Deviations:** none.
+
+## 3. Modules
+
+```
+src/atrium/
+├── domain/
+│   ├── items.py          BaseItem and its types — no I/O
+│   └── sorting.py        both sort-name derivations
+├── library/
+│   ├── config.py         library roots and collection types
+│   ├── walker.py         filesystem traversal, filtering, ignore rules
+│   ├── naming/
+│   │   ├── movies.py
+│   │   ├── series.py
+│   │   ├── music.py
+│   │   └── clean.py      title and year extraction, release-tag stripping
+│   ├── resolver.py       path -> resolved item, per collection type
+│   ├── identity.py       the derivation
+│   ├── scan.py           orchestration, change detection, the safety guard
+│   └── report.py         progress and summary
+└── db/
+    └── migrations/       revision 0002: items, libraries, user data
+```
+
+`library/naming/` is pure: paths in, structured results out, no filesystem access. That is what
+makes the corpus runnable as a plain table test with no fixtures on disk at all.
+
+## 4. Data model
+
+Revision `0002_library_and_items`.
+
+**`libraries`** — id, name, collection type, and a `case_sensitive_identity` flag frozen at
+creation (§6.3). Roots live in a child table, since a library can have several.
+
+**`items`** — the single table behind every type
+([glossary](../../docs/glossary.md)):
+
+| Column | Notes |
+|---|---|
+| `id` | Derived, 32-hex, primary key |
+| `library_id`, `parent_id` | |
+| `type` | `Movie`, `Series`, `Season`, `Episode`, `MusicArtist`, `MusicAlbum`, `Audio`, `CollectionFolder` |
+| `relative_path` | Relative to the root. Absolute paths are reconstructed, never stored |
+| `name`, `sort_name` | `sort_name` is indexed; it is the ordering key for nearly every query |
+| `index_number`, `parent_index_number` | Episode and track numbers, disc and season numbers |
+| `size`, `mtime_ns` | The change-detection signal (§6.4) |
+| `date_created`, `date_modified` | |
+| `removed_at` | Nullable. **Items are soft-deleted** (§6.6) |
+
+Indexes are chosen for the queries 005 actually issues: `(library_id, type, sort_name)`,
+`(parent_id, index_number)`, and a unique index on `id`. A column exists to serve a query pattern
+or a fact; the ones above that are pattern-driven are marked as such in the migration's docstring,
+because a later reader will otherwise try to normalise them away.
+
+**`item_user_data`** — keyed `(user_id, item_key)` where `item_key` is the derived identity, and
+**with no foreign key to `items`**. This is deliberate and it is what makes
+[spec §3.8](spec.md#38-scanning-and-change-detection)'s "user data outlives items" true rather than
+aspirational: a cascade would delete a user's history the first time a network share was slow to
+mount. 007 owns the table's contents; 003 owns the guarantee that it survives.
+
+## 5. Contracts
+
+**`library.naming`** — one function per media type, pure:
+
+```python
+def parse_movie(relative_path: str) -> MovieParse: ...
+def parse_episode(relative_path: str) -> EpisodeParse: ...
+def parse_audio(relative_path: str) -> AudioParse: ...
+```
+
+Each returns a structured result with everything the path can tell us and `None` where it cannot.
+No exceptions for unparseable input: an unrecognised name is a result with a title and nothing else,
+which is what the reference produces too.
+
+**`library.identity.derive(item_type, library_id, relative_path) -> Guid32`** — §6.3.
+
+**`domain.sorting.sort_name(item) -> str`** — dispatches on type, §6.2.
+
+**`library.scan.scan(library, mode) -> ScanReport`** — the orchestrator. The only thing in the
+feature that writes.
+
+**`MetadataSource`** — the seam for 004. 003 needs embedded tags to identify music
+([spec §3.5](spec.md#35-music)) and 004 provides them. 003 defines the protocol and ships a
+path-only implementation; 004 supplies the real one without 003 changing.
+
+## 6. Algorithms
+
+### 6.1 The naming corpus
+
+`tests/corpus/naming.yaml`: rows of `path`, `collection_type`, and the expected resolution. Several
+hundred rows, grouped by the convention they exercise, each with a one-line note saying **why** it
+is there — a row without a reason is a row nobody dares delete when it becomes wrong.
+
+The corpus covers what [spec §3.3](spec.md#33-movies) to §3.5 describe, and specifically the cases
+that break naive scanners: multi-part films, `S01E02-E03`, `Specials`, a series named `24`,
+date-based episodes, multi-disc albums, compilations, non-ASCII names, and names differing only by
+case.
+
+**Rows are added when a case is met, never removed because a pattern fails.** A failing row is
+either a bug or a corpus error, and telling them apart is the work.
+
+### 6.2 Sort names
+
+Two functions, dispatched by type, exactly as
+[spec §3.7](spec.md#37-sort-names) specifies.
+
+The base derivation runs its six steps in order. **Nothing trims or collapses whitespace**, and the
+table test asserts `Rock & Roll` → `rock␣␣roll` and `S.W.A.T.` → `s␣w␣a␣t␣` with the artefacts
+intact. Those two rows exist to fail loudly when someone tidies the function, because tidying it is
+the natural thing to do and it silently reorders every name containing a removed character.
+
+`Audio`, `Episode` and `Season` take the override: a zero-padded numeric prefix and the **raw**
+name. The widths are asymmetric — season 3, episode 4 — and a comment says so beside the constant,
+since it reads like a typo.
+
+### 6.3 Identity
+
+```python
+key = b"\0".join(x.encode("utf-8") for x in (item_type, library_id, relative_path))
+item_id = sha256(key).digest()[:16].hex()          # 32 lowercase hex
+```
+
+Separated by a NUL so no concatenation collides, truncated to 16 bytes for the 32-character shape
+clients expect. The path is normalised — separators, Unicode NFC — and lowercased when the
+library's `case_sensitive_identity` flag is unset, which is the default and matches the reference's.
+
+**The flag is frozen at library creation and cannot be changed in place**, because flipping it
+rewrites every identifier in that library. Changing it means creating a new library, and the code
+refuses the edit rather than accepting it and warning.
+
+### 6.4 Change detection
+
+The cheap signal is `(size, mtime_ns)`. Hashing every file on every scan is not viable for a library
+of any size.
+
+**mtime is not trustworthy everywhere** — some network filesystems round it, some restore it on
+copy. So: a changed `(size, mtime_ns)` always means re-examine; an unchanged pair means skip *by
+default*, and a `--deep` mode ignores the pair and re-examines everything. The default is fast, the
+escape hatch exists, and neither pretends to be the other.
+
+### 6.5 The guard against a mass delete
+
+Before any removal is applied:
+
+1. Every root must be readable and must be a directory.
+2. **A root that yields no candidate files, having previously yielded some, aborts the scan for that
+   library** and removes nothing.
+3. A scan that would remove more than a configured proportion of a library's items — default a
+   quarter — stops and reports instead, unless explicitly confirmed.
+
+Rule 2 is the one that matters. An unmounted share and an emptied directory are indistinguishable
+by a readability check, and treating the first as the second destroys a user's library state. Rule 3
+catches the slower version of the same accident: a root that is *partly* wrong.
+
+### 6.6 Soft deletion
+
+A file that disappears sets `removed_at`. The item stops appearing in queries, its user data stays
+untouched, and if the file returns the row is revived with the same id, because the id is derived
+from the path and the path has not changed.
+
+Rows are purged only by an explicit maintenance action, never by a scan.
+
+### 6.7 Scan orchestration
+
+Walk, resolve, diff, write — with **writes batched into one transaction per library**, not one per
+item. SQLite has a single writer and WAL keeps readers going; a per-item transaction would make a
+scan of a large library take orders of magnitude longer than the walk itself.
+
+Parallelism is I/O-shaped: the walk can use a thread pool, resolution is pure and parallel-safe, and
+the write is single-threaded by construction. Media probing — the genuinely slow part — is **not**
+in this feature; 008 owns it and a scan only records that it is needed.
+
+## 7. Failure handling
+
+| Failure | Detection | Response | Recovery |
+|---|---|---|---|
+| Root unreadable or not a directory | Pre-scan check | **Abort that library**, remove nothing | Operator fixes the mount |
+| Root suddenly empty | §6.5 rule 2 | **Abort that library**, remove nothing | Operator fixes the mount |
+| Removal exceeds the threshold | §6.5 rule 3 | Stop, report, require confirmation | Operator confirms or investigates |
+| Unreadable file inside a readable root | Per-file | Skip, count, report with the reason | Operator fixes permissions |
+| Unparseable name | Resolver | Item with a title and nothing else | 004 may identify it |
+| File still being written | Size changed between passes | Skip this scan, pick it up next | Automatic |
+| Two files deriving the same id | Insert conflict | **Abort**, naming both paths | A collision is a bug in §6.3, not user error |
+
+## 8. Testing strategy
+
+| Spec AC | Test |
+|---|---|
+| 1 | Fixture library scans to the expected item set for all three collection types |
+| 2, 3 | Identity stability: scan, rescan, and scan into an empty database, comparing every id |
+| 4, 5, 6, 7 | The naming corpus (§6.1) |
+| 8, 9 | Multi-disc and compilation rows in the corpus, plus a scan assertion |
+| 10 | **The root-move test** — §8.2 |
+| 11 | Delete a file, rescan, assert user data survives and the item revives on return |
+| 12 | Unreadable root removes nothing |
+| 13 | The sort-name table, including the whitespace artefacts |
+
+### 8.1 The fixture library
+
+Directory trees, `.nfo` sidecars and **synthetic media generated at build time** — a second of
+colour bars or a tone, muxed into each container the tests need. No copyrighted media, and the
+repository stays small.
+
+Generation is deterministic, so two builds produce byte-identical files and a difference in a scan
+result is a difference in the scanner.
+
+### 8.2 The root-move test
+
+Scan a library at one path; move the whole tree to another path; reconfigure the root; rescan.
+**Every identifier is unchanged, and no user data is orphaned.** This is the test that proves the
+relative-path decision of §1, and it fails loudly against an absolute-path derivation.
+
+### 8.3 The destructive-failure tests
+
+Three, and they are the ones worth writing first, because everything else fails visibly and these
+fail quietly:
+
+- A root made unreadable mid-life removes nothing.
+- A root that mounts empty removes nothing.
+- A scan that would remove a third of a library stops and reports.
+
+### 8.4 What is not tested here
+
+Media probing, codecs, durations and resolutions belong to 008. A 003 test asserting a duration
+would be asserting something this feature does not produce.
+
+## 9. Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| A scan deletes a library because a share was unmounted | **Medium** | **Catastrophic and irreversible for user data** | §6.5, three independent guards, tested at §8.3 |
+| Identifiers change on a path change | Medium | Every client's state discarded | Relative-path derivation, tested at §8.2 |
+| Someone tidies the sort-name whitespace | **High** | Silent reordering of many lists | Explicit artefact assertions in the table test |
+| The base sort rule applied to audio | High | Every album reordered | Dispatch by type, with rows for all three overriding types |
+| Corpus rows deleted to make a pattern pass | Medium | Regressions in naming | Every row carries the reason it exists |
+| mtime unreliable on a network share | Medium | Changes missed | `--deep` mode, documented rather than assumed away |
+| Per-item transactions make scans unusable | Medium | Feature unusable at real sizes | Batched writes, measured on a large synthetic tree |
+| Identity collision | Very low | Two files become one item | NUL separation; a collision aborts rather than merging |
+
+## 10. Alternatives considered
+
+**Port the reference's naming expressions.** Fastest route to parity and forbidden by Principle IV —
+they are the implementation, not the interface. The corpus gets the same behaviour with our own
+code and, unlike a copied table, it says what each rule is *for*.
+
+**Derive identity from an absolute path, matching the reference.** Would make ids match if
+everything else matched, which it will not. It buys nothing and costs every id on a remount.
+
+**Hard-delete missing items.** Simpler schema, no `removed_at`, no orphan rows — and it makes a
+temporarily unavailable file cost a user their favourites and resume position permanently.
+
+**Hash file contents for change detection.** Correct where mtime lies, and it means reading every
+byte of the library on every scan. `--deep` offers it where it is needed rather than paying for it
+always.
+
+**Watch the filesystem instead of scanning.** Lower latency, and it is a different feature with its
+own failure modes: watchers miss events under load, do not survive a restart, and behave differently
+on every platform and network filesystem. Out of v1 by
+[roadmap](../../docs/roadmap.md); a scan is the thing that must be correct first, because a watcher
+is an optimisation over a scan and never a replacement for one.
+
+**Probe media during the scan.** It is where the information is, and it would make a first scan of a
+large library take hours instead of minutes while producing nothing 003 needs. 008 probes on demand
+and caches.
