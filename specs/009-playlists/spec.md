@@ -215,7 +215,7 @@ catches all of them.
 
 | # | Question | Blocks | Resolved by |
 |---|---|---|---|
-| OQ-1 | Does the reference interpret `newIndex` pre- or post-removal? | AC-8, the highest-risk parity claim here | `tools/probe_playlist_move.py` — worth doing before implementing |
+| OQ-1 | Does the reference interpret `newIndex` pre- or post-removal? | AC-8, the highest-risk parity claim here | **`tools/probe_playlist_move.py` — written, awaiting a run** |
 | OQ-2 | Does the reference de-duplicate on add? §3.4 assumes not | AC-4 | `tools/probe_playlists.py` |
 | OQ-3 | Does adding a container expand it, or add the container itself? | AC-6 | `tools/probe_playlists.py` |
 | OQ-4 | What the reference does with entries the reader cannot see | AC-13 | Fixture comparison via the differential harness |

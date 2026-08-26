@@ -124,7 +124,10 @@ say how it will be proven is not finished.
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
 All ten are drafts: **no plan may start until its spec is accepted**, and no code until its plan
-is. The open questions across the ten are the review agenda — several are cheap probes against a
-real server, and answering those first is the highest-value work available right now.
+is. The open questions across the ten are the review agenda.
+
+Four of them now have probe scripts waiting to be pointed at a real server — 003 OQ-3, 005 OQ-6,
+007 OQ-2 and 009 OQ-1. Running them is the cheapest work available and it changes what the specs
+say, so it belongs before the plans, not after. See [tools/README.md](../tools/README.md#probes).
 
 The order and rationale are in [../docs/roadmap.md](../docs/roadmap.md#feature-order).

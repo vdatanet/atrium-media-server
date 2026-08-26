@@ -302,7 +302,7 @@ this feature means about seventy fields, the largest single surface in the proje
 | OQ-3 | The reference's tie-breaking key for each `sortBy` | Paging stability parity | `tools/probe_sort_stability.py` |
 | OQ-4 | The reference's completion threshold for `Resume` eligibility | The exclusion rule in §3.7 | `tools/probe_resume_threshold.py` |
 | OQ-5 | How the reference ranks `Similar` and `InstantMix` | Nothing; v1 diverges into determinism deliberately | Comparison, for interest rather than parity |
-| OQ-6 | Whether `/Items/Latest` really returns a bare array on a live server, or the spec is wrong | AC-1 | `tools/probe_query_envelope.py` — cheap and worth doing first |
+| OQ-6 | Whether `/Items/Latest` really returns a bare array on a live server, or the spec is wrong | AC-1 | **`tools/probe_query_envelope.py` — written, awaiting a run** |
 
 ## 8. References
 

@@ -227,7 +227,7 @@ because the alternative is a user losing their library's history to a temporaril
 | # | Question | Blocks | Resolved by |
 |---|---|---|---|
 | OQ-1 | Does any client parse `UserData.Key`, or is it opaque? | §3.2's freedom to derive it | Survey of client code, plus differential |
-| OQ-2 | The reference's completion percentage and minimum-position thresholds | AC-12, AC-13 | `tools/probe_playstate.py` |
+| OQ-2 | The reference's completion percentage and minimum-position thresholds | AC-12, AC-13 | **`tools/probe_playstate.py` — written, awaiting a run** |
 | OQ-3 | Does the reference cascade a container mark to children, or only report aggregates? | AC-5, which may be a divergence | `tools/probe_playstate.py` |
 | OQ-4 | How long the reference waits before reaping a silent session | AC-15 | A probe that starts playback and stops reporting |
 | OQ-5 | Does the reference count a play at start, at stop, or at the threshold? | `PlayCount` parity | `tools/probe_playstate.py` |
