@@ -148,12 +148,42 @@ but not to `tools/`, which keeps `timezone.utc` for its 3.9 floor and is exempte
 `DTZ001` fired on two *deliberate* naive datetimes in the tests: the naive value is the case under
 test, so each carries a `noqa` saying so rather than being "fixed" into meaninglessness.
 
-## T5 — `compat/ticks.py`: the internal duration unit
+## T5 — `compat/ticks.py`: the internal duration unit  ✅
 
-- [ ] **Changes:** the `Ticks` type and conversions to and from seconds and milliseconds, rounding rather than truncating.
+- [x] **Changes:** the `Ticks` type and conversions to and from seconds and milliseconds, rounding rather than truncating.
 - **Depends on:** T2
 - **Verified by:** conversion tests including a value that truncation would get wrong; a test that a `Ticks` field serialises as a JSON integer, never a float or string.
 - **Plan reference:** §6.3, architecture §4
+
+### Done — 2026-08-26
+
+**Conversion goes through `Decimal`, because the obvious version is wrong.** Measured rather than
+assumed:
+
+```
+float("1234.5678901") * 10_000_000  ->  12345678901.000002
+```
+
+`from_seconds` also accepts a **string** first-class, because that is how `ffprobe` reports a
+duration — turning it into a float on the way past would discard the precision the function exists
+to keep. A float argument is converted via `str`, so it does not inherit the float's own binary
+error either.
+
+**Rounding is half away from zero, not Python's.** `round(0.5)` is `0` — banker's rounding, a
+defensible rule and not the one a reader assumes. Determinism means the rule is stated and tested,
+not inherited (Principle VII), so a test asserts both that `round()` behaves that way and that this
+module does not.
+
+**A float where ticks are expected is refused, with the reason.** This is the mistake the module
+exists to prevent: a caller holding `5763.999` has seconds, and silently taking the whole part
+would be wrong by a factor of ten million — a bug that looks like a wildly incorrect duration
+rather than like a type error. `5764.0` is refused too, since it is the same mistake wearing a
+rounder number.
+
+**`from_timedelta` goes via the integer components, not `total_seconds()`**, which is a float and
+loses precision on long durations. A test uses 400 days plus one microsecond. And `to_timedelta`
+truncates the last tick digit, because a `timedelta` resolves to the microsecond — asserted, so it
+is a documented cost rather than a surprise.
 
 ## T6 — `compat/guids.py`: identifiers
 
