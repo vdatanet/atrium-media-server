@@ -185,12 +185,39 @@ loses precision on long durations. A test uses 400 days plus one microsecond. An
 truncates the last tick digit, because a `timedelta` resolves to the microsecond — asserted, so it
 is a documented cost rather than a surprise.
 
-## T6 — `compat/guids.py`: identifiers
+## T6 — `compat/guids.py`: identifiers  ✅
 
-- [ ] **Changes:** `Guid32` validated against `^[0-9a-f]{32}$`; generation from `secrets.token_hex(16)`; the deterministic derivation helper 003 will use.
+- [x] **Changes:** `Guid32` validated against `^[0-9a-f]{32}$`; generation from `secrets.token_hex(16)`; the deterministic derivation helper 003 will use.
 - **Depends on:** T2
 - **Verified by:** rejection tests for uppercase, dashes, wrong length; the derivation helper returns the same value for the same key across processes.
 - **Plan reference:** §6.3
+
+### Done — 2026-08-26
+
+**The task said "rejection tests for uppercase, dashes" and the reference accepts both.** Checked
+before implementing: routes bind .NET `Guid` parameters, which `Guid.TryParse` reads in the dashed
+form, the braced form and any casing, while output is always `ToString("N")`.
+`[source: Jellyfin.Api/Controllers/ItemsController.cs:974,
+Jellyfin.Api/Helpers/MediaInfoHelper.cs:142 @ v10.11.11]`
+
+Rejecting a dashed identifier would break a client that stored one and sent it back — so the type
+is **lenient on the way in and canonical on the way out**. What is rejected is what is not an
+identifier at all: wrong length, non-hexadecimal, empty. The task's wording was written from the
+output side; the input side needed measuring.
+
+**The rejection message says what an identifier looks like.** A pattern constraint would produce
+`String should match pattern '\A[0-9a-f]{32}\Z'`, which tells a reader what was wanted only if
+they can read a regular expression under time pressure. A test asserts the message contains
+`32 hexadecimal`, so a later refactor to a bare constraint fails.
+
+**Determinism across processes is tested in a subprocess**, not asserted twice in one. The failure
+mode it protects against — an identifier depending on per-process state such as hash randomisation
+— is invisible to a same-process comparison, so a same-process assertion would pass while the
+guarantee was broken.
+
+**Parts are NUL-joined**, so `("a", "bc")` and `("ab", "c")` cannot collide. Tested, along with the
+two separations 003 depends on: the same path as two item types is two identifiers, and the same
+path in two libraries is two identifiers.
 
 ## T7 — The unit sweep
 
