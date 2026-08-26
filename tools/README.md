@@ -28,15 +28,34 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 
 ### Running them
 
-```bash
-export JELLYFIN_PASSWORD='…'          # or omit and be prompted; --password is discouraged
-S=http://your-jellyfin:8096
+Once, to set up:
 
-python3 tools/probe_query_envelope.py $S -u username
-python3 tools/probe_sort_names.py     $S -u username --allow-writes
-python3 tools/probe_playlist_move.py  $S -u username --allow-writes
-python3 tools/probe_playstate.py      $S -u username --allow-writes
+```bash
+cp .env.example .env      # then fill it in
 ```
+
+Then:
+
+```bash
+python3 tools/probe_query_envelope.py
+python3 tools/probe_sort_names.py     --allow-writes
+python3 tools/probe_playlist_move.py  --allow-writes
+python3 tools/probe_playstate.py      --allow-writes
+```
+
+`.env` is git-ignored and holds a real password for a real server. The template is committed; the
+file it produces never is. Leaving `JELLYFIN_PASSWORD` empty is the safer choice — the probe
+prompts instead, and nothing is stored.
+
+Every value can still be given on the command line, and a real environment variable beats the
+file, so one probe can be pointed elsewhere for a single run without editing anything:
+
+```bash
+JELLYFIN_URL=http://other-server:8096 python3 tools/probe_query_envelope.py
+```
+
+The `.env` reader is fifteen lines in `_probe.py` rather than a dependency, for the same reason
+everything else here is: a probe runs before any environment is built.
 
 **Exit codes:** `0` the finding agrees with the documentation, or the documentation had an open
 question and now has an answer. `1` the finding **contradicts** the documentation — read the

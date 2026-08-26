@@ -24,7 +24,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import date
+from pathlib import Path
 from typing import Any
+
+ENV_FILE = ".env"
+ENV_URL = "JELLYFIN_URL"
+ENV_USERNAME = "JELLYFIN_USERNAME"
+ENV_PASSWORD = "JELLYFIN_PASSWORD"
+ENV_TOKEN = "JELLYFIN_TOKEN"
 
 CLIENT = "atrium-probe"
 DEVICE_ID = "atrium-probe-0000"
@@ -33,6 +40,38 @@ VERSION = "0.1"
 
 class ProbeError(RuntimeError):
     """Something made the question unanswerable. Not a finding - an inability to look."""
+
+
+# --------------------------------------------------------------------------------------------
+# Local credentials
+# --------------------------------------------------------------------------------------------
+
+
+def load_env_file(start: Path | None = None) -> Path | None:
+    """Read `.env` from the repository root into the environment, if it exists.
+
+    Fifteen lines instead of a dependency, because a probe has to run before any environment is
+    built. Real environment variables win over the file, which is what lets one probe be pointed
+    at a different server without editing anything.
+
+    Returns the path that was read, or None. Never logs a value.
+    """
+    here = (start or Path(__file__).resolve().parent)
+    for directory in [here, *here.parents]:
+        candidate = directory / ENV_FILE
+        if not candidate.is_file():
+            continue
+        for raw in candidate.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key, value = key.strip(), value.strip()
+            if value[:1] == value[-1:] and value[:1] in {"'", '"'}:
+                value = value[1:-1]
+            os.environ.setdefault(key, value)
+        return candidate
+    return None
 
 
 # --------------------------------------------------------------------------------------------
@@ -262,13 +301,20 @@ def build_parser(description: str, needs_writes: bool = False) -> argparse.Argum
     parser = argparse.ArgumentParser(
         description=description, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("server", help="Base URL of a running Jellyfin, e.g. http://host:8096")
-    parser.add_argument("--username", "-u", help="User to authenticate as")
+    parser.add_argument(
+        "server", nargs="?",
+        help=f"Base URL of a running Jellyfin, e.g. http://host:8096. "
+             f"Defaults to ${ENV_URL}",
+    )
+    parser.add_argument("--username", "-u", help=f"User to authenticate as. Defaults to ${ENV_USERNAME}")
     parser.add_argument(
         "--password", "-p",
-        help="Discouraged: visible in the process list. Prefer JELLYFIN_PASSWORD or the prompt",
+        help=f"Discouraged: visible in the process list. Prefer ${ENV_PASSWORD} or the prompt",
     )
-    parser.add_argument("--token", help="Existing access token, instead of username and password")
+    parser.add_argument(
+        "--token",
+        help=f"Existing access token, instead of username and password. Defaults to ${ENV_TOKEN}",
+    )
     parser.add_argument("--timeout", type=int, default=30)
     if needs_writes:
         parser.add_argument(
@@ -281,18 +327,28 @@ def build_parser(description: str, needs_writes: bool = False) -> argparse.Argum
 
 
 def connect(args: argparse.Namespace) -> Server:
-    """Build a connected Server from parsed arguments, resolving the password safely."""
-    password = args.password or os.environ.get("JELLYFIN_PASSWORD")
-    if not args.token and args.username and password is None:
-        password = getpass.getpass(f"Password for {args.username}: ")
+    """Build a connected Server, resolving each credential from arguments then environment."""
+    url = args.server or os.environ.get(ENV_URL)
+    if not url:
+        raise ProbeError(
+            f"no server given: pass one as an argument, or set {ENV_URL} in {ENV_FILE}. "
+            "Copy .env.example to .env to start"
+        )
 
-    server = Server(args.server, timeout=args.timeout)
-    server.connect(args.username, password, args.token)
+    username = args.username or os.environ.get(ENV_USERNAME)
+    token = args.token or os.environ.get(ENV_TOKEN)
+    password = args.password or os.environ.get(ENV_PASSWORD)
+    if not token and username and not password:
+        password = getpass.getpass(f"Password for {username}: ")
+
+    server = Server(url, timeout=args.timeout)
+    server.connect(username, password, token)
     return server
 
 
 def main(run: Any, description: str, needs_writes: bool = False) -> int:
     """Entry point shared by every probe: parse, connect, run, report, translate errors."""
+    env_file = load_env_file()
     parser = build_parser(description, needs_writes=needs_writes)
     args = parser.parse_args()
 
@@ -307,6 +363,8 @@ def main(run: Any, description: str, needs_writes: bool = False) -> int:
 
     try:
         server = connect(args)
+        if env_file:
+            print(f"credentials from {env_file}", file=sys.stderr)
         probe = run(server)
     except ProbeError as exc:
         print(f"cannot answer the question: {exc}", file=sys.stderr)
