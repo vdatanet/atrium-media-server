@@ -223,6 +223,33 @@ different message and a longer hint, without stopping the process.
 > on header objects, which is invalid there and makes strict parsers reject the whole document. See
 > [reference-target.md §2](../../docs/compatibility/reference-target.md#2-sources-of-truth-in-precedence-order).
 
+### 3.6 How a request is matched to a route
+
+Every path in this repository is written in one canonical spelling, and that is not the only
+spelling that reaches the route. Like §3.5, this is a property of the whole server rather than of
+one endpoint, and it is stated here because 001 is the feature that first has routes to match.
+`[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-26]`
+
+| A client sends | Answer |
+|---|---|
+| The canonical spelling | The route |
+| Any other casing — `/system/info/public`, `/SYSTEM/INFO/PUBLIC` | The same route, the same bytes |
+| One trailing slash | The same route, the same bytes. **Not** a redirect |
+| Two trailing slashes | `404` |
+| A path matching no route | `404`, empty body, no content type |
+| A method the path does not have | `405`, empty body, no content type, and an `Allow` header |
+
+**`Allow` lists every method the path has**, which is not the same as every method the matched
+route has: a path served by two routes — `GET` and `POST` on the same path — advertises both.
+
+**Nothing is automatic.** `HEAD` on a path that has only `GET` is a `405`, and so is `OPTIONS`.
+Answering either would be a difference on every route at once, which is the kind of default worth
+turning off deliberately rather than inheriting.
+
+Path **parameters** are values, not spellings: only the segments a route declares literally are
+matched case-insensitively, and whatever occupies a parameter reaches the handler exactly as the
+client wrote it.
+
 ## 4. Data the feature owns
 
 Observable, and surviving restart:
@@ -255,6 +282,10 @@ Everything else in these responses is derived at request time.
    PascalCase body, where the reference answers in camelCase — the recorded gap of §3.0 rule 2,
    asserted so that the day it closes, the test says so.
 10. No response in this feature contains a property name that is not PascalCase.
+11. A path spelled in any casing, with or without one trailing slash, reaches the same route and
+    returns the same bytes; two trailing slashes do not. A path matching no route and a method a
+    path does not have are both refused with an empty body, and the second carries an `Allow`
+    header naming **every** method that path has.
 
 ## 6. Conformance
 
@@ -264,6 +295,7 @@ Everything else in these responses is derived at request time.
 | `GET /System/Info` | **L2** | Golden response and the superset assertion of AC-5 |
 | `GET /System/Ping` (both methods) | **L2** | Exact-body test |
 | `LocalAddress` selection | **L2** | Table-driven test over the three tiers with synthesised requester addresses |
+| Path matching and refusals (§3.6) | **L0** | Every route registered against `surface.yaml` and none outside it; the accepted spellings; the empty `404` and `405` |
 
 The two cross-cutting sweeps described in
 [conformance.md](../../docs/compatibility/conformance.md#l1--shape) — PascalCase over every

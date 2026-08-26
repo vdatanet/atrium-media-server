@@ -621,12 +621,70 @@ produces a failure naming the byte offset and both spellings. Every assertion in
 suite would have passed through it unchanged — which is the argument for comparing bytes, made
 concretely rather than as a principle.
 
-## T17 — Route registration against `surface.yaml`
+## T17 — Route registration against `surface.yaml`  ✅
 
-- [ ] **Changes:** `tests/conformance/test_routes.py` asserting every 001 route in `surface.yaml` is registered, and that **no route exists outside the file**.
+- [x] **Changes:** `tests/conformance/test_routes.py` asserting every 001 route in `surface.yaml` is registered, and that **no route exists outside the file**.
 - **Depends on:** T15
 - **Verified by:** passes; adding an unlisted route fails it. This is the automated half of Principle VI.
 - **Plan reference:** conformance L0
+
+### Done — 2026-08-26
+
+**Asking how the reference routes a path found four differences, and the server had all four.**
+[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-26]
+
+| A client sends | Reference | Atrium was |
+|---|---|---|
+| `/system/info/public` | `200` | `404` — routing is case-sensitive |
+| `/System/Info/Public/` | `200` | `307` to the stripped path |
+| `/System/Info/Public//` | `404` | `307` **to a URL that works** |
+| `PUT /System/Ping` | `405`, `Allow: GET, POST`, empty | `405`, `Allow: POST`, `{"detail": …}` |
+| A path matching no route | `404`, empty, no content type | `{"detail": "Not Found"}` |
+
+The last row is the uncomfortable one. [behaviours §1.11](../../docs/compatibility/behaviours.md)
+has said since T13 that an unmatched path answers with an empty body, and it named
+`{"detail": "…"}` as the shape that is neither of the reference's two — and that is exactly what
+the server was sending. The module that owns refusals said so in its docstring and registered a
+handler for one exception. Nothing had noticed, because until this feature had routes there was no
+path to get wrong, and no test had ever asked for one. **A documented behaviour with no test is a
+plan.**
+
+**`Allow` was wrong in a way only a two-route path can be.** `/System/Ping` is two registrations,
+`GET` and `POST`, and the framework fills `Allow` from the *first* route whose path matched — so it
+advertised `POST` and not `GET`. A path with one method would never have shown it, and 001 has
+exactly one path with two.
+
+**The casing fix went through the routers, not through the framework's internals.** The first
+version relaxed each compiled route pattern in place: five lines, all tests green, and wrong -
+FastAPI 0.141 includes routers lazily and rebuilds the matching structures from an internal cache,
+so the mutation applied to objects nothing routes through. It failed loudly, which was luck.
+What replaced it builds a table from the routers the factory declares, using Starlette's own
+`compile_path`, and rewrites a request's path to the canonical spelling before routing. Only the
+literal segments are respelled; a path parameter reaches the handler exactly as it arrived, which
+002's `/Users/{userId}` is the first route to care about.
+
+**The registration test uses two views and asserts they agree.** The generated OpenAPI document
+knows every route the framework will route, and misses one registered with
+`include_in_schema=False`. The factory's route table knows what path matching and `Allow` are built
+from, and misses a router included without being listed. Each covers the other's blind spot, and
+both were checked by making the two disagree on purpose. That pair is also the reason none of this
+reaches into the framework to enumerate routes - it does not have to.
+
+**A tripwire, deliberately.** `IMPLEMENTED_FEATURES` is `{"001"}`, so a 002 route that ships before
+002 fails the suite even though it is in `surface.yaml`. The next feature changes that line on
+purpose.
+
+**And the surface validator's version gate had never run.** Reusing its parser in the test meant
+running the tool, and the tool passed a document it should have refused: it reads the pinned
+version out of `surface.yaml`'s `reference:` block, and the field pattern required four leading
+spaces where that block uses two. Every reference field was silently dropped, `pinned` was always
+`None`, and the check was `if pinned and …`. One character of indentation, and a gate that could
+not fail. It now also refuses a surface file whose reference block did not parse, because that is
+the failure this hid. What the working gate immediately reported is recorded in
+[reference-target §1](../../docs/compatibility/reference-target.md#1-the-pinned-version): the
+contract pins the `10.11.10` document and the reachable server serves `10.11.11`. The two agree on
+all 55 endpoints; moving the pin is a version move with its own procedure, and is not this task's
+to make.
 
 ## T18 — CI
 

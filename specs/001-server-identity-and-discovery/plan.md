@@ -83,14 +83,24 @@ src/atrium/
 │   ├── dates.py         .NET round-trip datetime
 │   ├── ticks.py         Ticks type and conversions
 │   ├── guids.py         32-hex identifier type and derivation
-│   └── middleware.py    Server header
+│   ├── registry.py      every model, for the two sweeps to walk
+│   ├── responses.py     the JSON response class and its exact content type
+│   ├── errors.py        the wire shape of a refusal
+│   ├── routing.py       how a path is matched: casing, trailing slash, Allow
+│   └── middleware.py    Server and X-Response-Time-ms headers
 ├── net/
 │   └── address.py       LocalAddress resolution
 └── api/
-    ├── router.py        assembly; one module per reference controller
     ├── deps.py          the authentication seam
     └── system.py        the three routes of this feature
 ```
+
+Four of those modules are not in the tree this plan was accepted with, and one that was is gone.
+`registry.py`, `responses.py` and `errors.py` arrived with the tasks that needed them (T7, T12,
+T13); `routing.py` arrived with T17, when the reference turned out to match paths more loosely than
+the framework does. `api/router.py` was never written: T15 put the assembly in the application
+factory, where the list of routers reads as one of the decisions the factory makes, and a module
+whose whole content is that list would have been indirection.
 
 | Module | Owns | Must not |
 |---|---|---|
@@ -278,6 +288,7 @@ Every acceptance criterion in spec §5 maps to a named test.
 | 7, 8 | `LocalAddress` table — §8.2 |
 | 9 | Three requests with the three `Accept` values, bodies compared byte-for-byte — two of them equal by contract, the third equal only until T19 closes the gap it pins |
 | 10 | The casing sweep — §8.3 |
+| 11 | The route table and the refusal shapes — §8.5 |
 
 ### 8.1 Identity persistence
 
@@ -341,7 +352,28 @@ returns it yet.
 A fresh instance per test, with a temporary data directory. No shared state between tests, no
 ordering dependencies. The whole suite runs with no network and no external service.
 
-## 9. Risks
+### 8.5 Routes, against `surface.yaml`
+
+The L0 check, and the automated half of Principle VI: every endpoint the surface file marks as this
+feature's is registered, and **no route exists outside the file**.
+
+Both halves are asserted against **two independent views** of what the application serves, because
+each has a blind spot the other covers:
+
+- **the OpenAPI document the framework generates**, which knows every route it will route — and
+  misses one registered with `include_in_schema=False`;
+- **the route table the factory builds from its own list of routers**, which is what path matching
+  and the `Allow` header are built from — and misses a router that was included without being on
+  that list.
+
+A route visible to one and not to the other is a wiring bug whichever way round it is, so their
+agreement is asserted directly. The pair is also why none of this reaches into the framework's
+internals to enumerate routes: two public views are enough, and they disagree loudly.
+
+The same file covers **what counts as "this path"** — the casings and the trailing slash of
+[spec §3.6](spec.md#36-how-a-request-is-matched-to-a-route) — and **how a path refuses**: the empty
+`404`, the empty `405`, and an `Allow` header built from every route on the path rather than from
+the first one that matched.
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|

@@ -18,6 +18,17 @@ compatible with what, exactly?*
 The reasoning for pinning, and for pinning to this particular line rather than `master`, is in
 [ADR-0004](../decisions/0004-pin-to-jellyfin-10-11.md).
 
+> **The two pins are one patch version apart, and as of 2026-08-26 the validator says so.**
+> `surface.yaml` pins the `10.11.10` document; the reachable reference server is `10.11.11` and
+> serves a `10.11.11` document, so `tools/extract_v1_surface.py` refuses it — correctly, since that
+> is not the pinned document. It had never said so before: the check compares
+> `reference.jellyfin_openapi_version`, and a parsing bug meant that block was silently dropped,
+> so the gate had never once run. The two documents agree on every one of the 55 endpoints in the
+> surface, so nothing is known to be wrong; what is open is whether the contract pin should move to
+> `10.11.11` and make both rows the same version. **That is a version move**, and §"When the
+> reference version moves" in [conformance.md](conformance.md) is its procedure — step 2 of which
+> needs the differential harness feature 010 delivers. Not decided here.
+
 `master` (the 12.0.0 line) is explicitly **not** the target. It moves, it has already changed
 behaviours that clients depend on, and no client ships against it.
 

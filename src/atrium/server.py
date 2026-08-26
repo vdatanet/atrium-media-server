@@ -33,12 +33,17 @@ from atrium.api import system
 from atrium.compat.errors import EXCEPTION_HANDLERS
 from atrium.compat.middleware import ResponseHeadersMiddleware
 from atrium.compat.responses import AtriumJSONResponse
+from atrium.compat.routing import RelaxedPathMiddleware, RouteTable
 from atrium.config.paths import ConfigurationError, DataPaths, resolve_data_dir
 from atrium.config.settings import load as load_settings
 from atrium.config.state import load_or_create
 from atrium.lifecycle import Readiness, ReadinessMiddleware
 
 logger = logging.getLogger("atrium")
+
+#: Every router this server serves, in one place. The route table is built from exactly these, so
+#: a router that is not here is not routed and not in the surface check either.
+ROUTERS = (system.router,)
 
 
 def create_app(paths: DataPaths | None = None) -> FastAPI:
@@ -79,16 +84,30 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
         redoc_url=None,
     )
 
-    # Added first, so it ends up innermost: a 503 served while starting still gets its headers.
+    # What counts as "this path": the reference matches case-insensitively and accepts one trailing
+    # slash, and Starlette does neither. Built from ROUTERS rather than read back out of the
+    # application, and it is what an Allow header is built from too. compat/routing.py.
+    routes = RouteTable.from_routers(ROUTERS)
+
+    # Innermost, so it sits directly in front of the router and nothing else sees the rewrite.
+    # Then the gate, then the headers - the last added is the outermost, which is what puts
+    # `Server` and `X-Response-Time-ms` on a 503 served while starting.
+    app.add_middleware(RelaxedPathMiddleware, table=routes)
     app.add_middleware(ReadinessMiddleware, readiness=readiness)
     app.add_middleware(ResponseHeadersMiddleware)
 
-    app.include_router(system.router)
+    for router in ROUTERS:
+        app.include_router(router)
+
+    # Starlette's own answer to an unmatched trailing slash is a 307 the reference does not send -
+    # and for a doubled slash, a 307 to a URL that works, where the reference answers 404.
+    app.router.redirect_slashes = False
 
     app.state.paths = resolved
     app.state.settings = settings
     app.state.server_state = state
     app.state.readiness = readiness
+    app.state.routes = routes
     return app
 
 
