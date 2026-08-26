@@ -74,6 +74,28 @@ class PasswordSettings(BaseModel):
     parallelism: int = Field(default=4, ge=1)
 
 
+class AuthenticationSettings(BaseModel):
+    """What the operator decides about logging in.
+
+    **`lockout_attempts` defaults to 0, which is no lockout at all**, and that is a deliberate
+    reading of an unmeasured value rather than an absence of one. The reference sends
+    `LoginAttemptsBeforeLockout = -1` for an untouched account - a sentinel, not a count (spec
+    section 7, OQ-6) - and what -1 means there has not been measured, because measuring it means
+    locking a real account on somebody's own server.
+
+    Until it is, an account whose policy carries a sentinel is not locked. The direction is chosen:
+    locking somebody out of their own server on a guess is a failure they experience and cannot
+    undo, while not locking is invisible to every client and becomes correct the moment OQ-6 is
+    answered. An operator who wants it sets a number here, and a policy carrying a positive
+    `LoginAttemptsBeforeLockout` is honoured whatever this says.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Used when a user's own policy carries a sentinel rather than a count. 0 disables lockout.
+    lockout_attempts: int = Field(default=0, ge=0)
+
+
 class Settings(BaseModel):
     """The whole of `config.toml`, plus the data directory it was found in."""
 
@@ -84,6 +106,7 @@ class Settings(BaseModel):
     server_name: str = DEFAULT_SERVER_NAME
     network: NetworkSettings = Field(default_factory=NetworkSettings)
     passwords: PasswordSettings = Field(default_factory=PasswordSettings)
+    authentication: AuthenticationSettings = Field(default_factory=AuthenticationSettings)
 
 
 def _describe(error: ValidationError, path: Path) -> str:
@@ -125,6 +148,7 @@ def load(paths: DataPaths) -> Settings:
 __all__ = [
     "DEFAULT_PORT",
     "DEFAULT_SERVER_NAME",
+    "AuthenticationSettings",
     "NetworkSettings",
     "PasswordSettings",
     "Settings",

@@ -4,7 +4,7 @@ title: Authentication, users and sessions — implementation plan
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3; by T8 - sections 6.5 and 6.6
+amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3; by T8 - sections 6.5 and 6.6; by T9 - section 7
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-26
@@ -327,6 +327,7 @@ wrote, and reading that as pending would run migrations backwards over data this
 It is the row nobody thinks of and everybody eventually reaches, so it is a row rather than a
 surprise.
 | Argon2 parameters unsupported | Verify raises | `401` plus a log line naming the user | Password reset |
+| Locked-out account whose policy carries the reference's `-1` sentinel | Counter, and no threshold to compare it to | **Not locked**, unless the operator sets `lockout_attempts` | — |
 
 **Refusing to start on a pending migration** matters more than it looks: serving requests against a
 schema the code does not expect produces corrupt data rather than an error, and the corruption is

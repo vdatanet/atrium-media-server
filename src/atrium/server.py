@@ -44,6 +44,7 @@ from atrium.db.engine import create_database_engine, session_factory, verify_con
 from atrium.db.schema import ensure_current
 from atrium.lifecycle import Readiness, ReadinessMiddleware
 from atrium.users import passwords as password_module
+from atrium.users.service import Authenticator
 from atrium.users.sessions import SessionRegistry
 
 logger = logging.getLogger("atrium")
@@ -82,6 +83,11 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     # LastActivityDate synchronously would take a SQLite write lock on every authenticated
     # request. plan section 6.5.
     registry = SessionRegistry(sessions)
+
+    # The only entry point that verifies a password. It owns the lockout counter, the timing
+    # guarantee and session creation, because splitting those across callers is how one of them
+    # gets forgotten. plan section 5.
+    authenticator = Authenticator(sessions, passwords, registry, settings.authentication)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -152,6 +158,7 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     app.state.sessions = sessions
     app.state.passwords = passwords
     app.state.registry = registry
+    app.state.authenticator = authenticator
     app.state.settings = settings
     app.state.server_state = state
     app.state.readiness = readiness

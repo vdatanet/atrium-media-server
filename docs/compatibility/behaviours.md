@@ -428,7 +428,7 @@ media types, so its `JSONResponse` would send a bare `application/json`.
 | A method the path does not have | `405`, **empty body**, no `Content-Type`, and `Allow` naming every method that path has `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-26]` |
 | An item a handler could not find | `404`, **RFC 9457 problem details** as JSON |
 | A malformed value the model binder rejected | `400`, **RFC 9457 problem details** with an `errors` map |
-| A controller that refused the request itself | `4xx`, **`text/plain`** with no `charset`, and the fixed 25-byte body `Error processing request.` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` |
+| A controller that refused the request itself | `4xx`, **`text/plain` with no `charset`**, and the fixed 25-byte body `Error processing request.` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` |
 
 ```json
 {"type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
@@ -442,6 +442,11 @@ media types, so its `JSONResponse` would send a bare `application/json`.
 
 The split is not arbitrary: the empty ones are produced before the framework's controller pipeline
 runs, the JSON ones by that pipeline, and the third by a controller inside it.
+
+**The absent `charset` on the third shape is the reference's, and it is easy to lose.** JSON
+responses carry `charset=utf-8` (§1.10) and this one does not; web frameworks append it to any
+`text/*` type unless told otherwise, so the natural way to write this handler produces
+`text/plain; charset=utf-8` and a difference on every refusal in feature 002.
 
 **The same status carries different bytes depending on which layer refused.** An unauthenticated
 `GET /Users/Me` is the empty `401` in the first row; a `401` from `POST /Users/AuthenticateByName`
