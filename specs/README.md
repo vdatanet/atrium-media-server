@@ -127,9 +127,10 @@ say how it will be proven is not finished.
 no plan may start until its spec is accepted, and no code until its plan is. The open questions
 across the ten are the review agenda.
 
-Four of them have probe scripts. **005 OQ-6 is answered** — measured 2026-08-26, documentation
-confirmed, and three response shapes recorded that the original measurement had missed. Three
-remain to run: 003 OQ-3, 007 OQ-2 and 009 OQ-1. Running them is the cheapest work available and it
+Four of them have probe scripts. **Two are answered**, both on 2026-08-26 and both confirming the
+documentation while adding what it had missed: 005 OQ-6 found three response shapes the original
+measurement had never covered, and 003 OQ-3 found that sort names have *two* derivations, with
+three item types bypassing the one the spec described. Two remain to run: 007 OQ-2 and 009 OQ-1. Running them is the cheapest work available and it
 changes what the specs say, so it belongs before the plans, not after. See
 [tools/README.md](../tools/README.md#probes).
 

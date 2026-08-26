@@ -185,8 +185,37 @@ query forms are the only practical option.
 `Random`, `AlbumArtist`, `Artist` — a superset of Emby's.
 `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
 
-**Atrium does:** the same set, and `SortName` sorting must reproduce Jellyfin's normalisation
-(leading articles, diacritics, numeric prefixes) — specified in the item-query feature, not here.
+**Atrium does:** the same set. How `SortName` itself is derived is §2.6.
+
+### 2.6 `SortName` has two derivations, and three types use the second
+
+**Jellyfin does:** derives a sort name in one of two entirely different ways depending on the item
+type. `[probe: tools/probe_sort_names.py, Jellyfin 10.11.11, 2026-08-26]`
+
+For movies, series, albums, artists and playlists: trim and lowercase, strip configured articles
+at the start, in the middle and at the end, remove one configured character set, replace another
+with spaces, **left-pad every digit run to ten characters**, then fold diacritics. Nothing trims or
+collapses the whitespace this leaves behind, so `Rock & Roll` becomes `rock  roll` with two spaces
+and `S.W.A.T.` becomes `s w a t ` with a trailing one.
+
+For `Audio`, `Episode` and `Season`: a zero-padded numeric prefix followed by the **raw** name,
+with none of the above applied. Audio pads disc and track to four; Episode pads season to
+**three** and episode to **four**; Season is the number alone.
+`[source: Audio.cs:94-98, Episode.cs:238-242, Season.cs:149-152 @ v10.11.11]`
+
+**Depends on it:** every ordered list a client draws. This is not a field a client reads and
+compares — it is the order items arrive in, which no client can correct and most will not even
+recognise as wrong.
+
+**Atrium does:** both, exactly, including the whitespace artefacts. Full specification in
+[003 §3.7](../../specs/003-library-configuration-and-scanning/spec.md).
+
+Two temptations to name, because both are what a careful implementer would otherwise do:
+
+1. **Tidying the whitespace.** Collapsing `rock  roll` to `rock roll` changes the ordering of every
+   name containing a removed character, quietly, and only for some names.
+2. **Using one sort-name function for everything.** Applying the base rule to audio makes `The
+   Song` sort under `s` instead of `T` and reorders every album in the library.
 
 ---
 

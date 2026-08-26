@@ -181,22 +181,87 @@ identifier. The reference has this problem; Atrium does not have to inherit it.
 
 ### 3.7 Sort names
 
-Every item has a sort name, derived from its display name, that decides ordering in every list
-feature 005 returns.
+Every item has a sort name that decides its position in every list feature 005 returns. Getting
+this wrong is visible on every screen a client draws, which is why it was measured before anything
+was built. `[probe: tools/probe_sort_names.py, Jellyfin 10.11.11, 2026-08-26]`
 
-| Rule | `Name` | `SortName` |
+**There is not one rule. There are two**, and the second is not a refinement of the first.
+
+#### 3.7.1 The base derivation
+
+Used by movies, series, albums, artists and playlists. Applied in this order, and the order
+matters:
+
+| # | Step |
+|---|---|
+| 1 | Trim surrounding whitespace, then lowercase |
+| 2 | Remove each configured article: from the **start** when followed by a space, from **anywhere** when surrounded by spaces, from the **end** when preceded by a space |
+| 3 | Remove each configured character outright |
+| 4 | Replace each configured character with a space |
+| 5 | Left-pad **every** run of digits with zeros to a fixed width |
+| 6 | Fold diacritics; transliterate anything still outside ASCII |
+
+Defaults for the three configured lists — articles `the a an`, removed characters `, & - { } '`,
+replaced characters `. + %`, pad width 10 — reproduce every measured case:
+
+| `Name` | `SortName` | What it shows |
 |---|---|---|
-| Leading articles are moved or dropped | `The Matrix` | `matrix` |
-| Diacritics are folded | `Amélie` | `amelie` |
-| Case is normalised | `iRobot` | `irobot` |
-| Leading numbers sort numerically, not lexically | `2 Fast 2 Furious` | sorts before `10 Things…` |
-| Punctuation is ignored | `Wall·E` | `walle` |
+| `The Matrix` | `matrix` | article at the start |
+| `Matrix The` | `matrix` | **and at the end** |
+| `Once The Time` | `once time` | **and in the middle** |
+| `A Bridge` | `bridge` | single-letter article |
+| `Amélie` | `amelie` | diacritics folded |
+| `iRobot` | `irobot` | case normalised |
+| `2 Fast 2 Furious` | `0000000002 fast 0000000002 furious` | **every** digit run, not just the leading one |
+| `10 Things` | `0000000010 things` | which is what makes 2 sort before 10 |
+| `Wall-E` | `walle` | character removed |
+| `Rock & Roll` | `rock  roll` | **two spaces** — nothing collapses them |
+| `Don't Look Up` | `dont look up` | apostrophe removed |
+| `S.W.A.T.` | `s w a t ` | **trailing space** — nothing trims it |
+| `100% Wolf` | `0000000100  wolf` | replacement and padding together |
+| `  Padded  ` | `padded` | trimmed at step 1, before anything else |
 
-An explicit `SortName` from metadata (004) overrides all of it.
+**The whitespace artefacts are part of the contract.** `rock  roll` keeps its double space and
+`s w a t ` its trailing one because steps 3 to 5 neither trim nor collapse. An implementation that
+tidied them would sort differently from the reference — quietly, and only for names containing
+those characters. This is the kind of detail that is invisible in a specification written from
+intuition and obvious in one written from a measurement.
 
-> ⚠️ **OQ-3.** The reference's article list is language-dependent and its exact behaviour is
-> unverified. Ordering differences are visible in every list a client shows, so this is the
-> highest-value single probe in the feature.
+**Numeric ordering is not numeric comparison.** It is lexical comparison over zero-padded digit
+runs, which is why the pad width is part of the contract: a different width produces a different
+ordering between names whose digit runs differ in length.
+
+The three lists are server configuration rather than protocol. Atrium exposes them with the same
+defaults and honours them the same way.
+
+#### 3.7.2 The three types that replace it
+
+`Audio`, `Episode` and `Season` **do not use §3.7.1 at all**. Each builds a numeric prefix and
+appends the **raw** name — no lowercasing, no article removal, no diacritic folding, no digit
+padding.
+
+| Type | Sort name | Example |
+|---|---|---|
+| `Audio` | disc padded to 4, `" - "`, track padded to 4, `" - "`, name | `0001 - 0003 - The Song` |
+| `Episode` | season padded to **3**, `" - "`, episode padded to **4**, `" - "`, name | `001 - 0002 - Pilot` |
+| `Season` | season padded to 4, and **nothing else** | `0004` |
+
+`[source: MediaBrowser.Controller/Entities/Audio/Audio.cs:94-98,
+MediaBrowser.Controller/Entities/TV/Episode.cs:238-242,
+MediaBrowser.Controller/Entities/TV/Season.cs:149-152 @ v10.11.11]`
+
+The asymmetry is real and not a transcription error: an episode's **season** is three digits while
+its **episode number** is four. A missing number contributes no prefix segment at all rather than a
+run of zeros.
+
+**Consequence worth stating plainly:** a track called `The Song` sorts under `T`, not under `S`.
+Applying §3.7.1 to audio — which is the natural thing to do when a codebase has one sort-name
+function — reorders every album in the library.
+
+#### 3.7.3 Explicit sort titles
+
+Metadata (004) may carry an explicit sort title. It replaces the derivation entirely, for every
+type, and is lowercased and digit-padded but not article-stripped.
 
 ### 3.8 Scanning and change detection
 
@@ -272,9 +337,15 @@ media generated at build time. No copyrighted media, ever.
 |---|---|---|---|
 | OQ-1 | The exact extension lists the reference honours | Nothing; conservative union until then | `tools/probe_library_extensions.py` |
 | OQ-2 | Case sensitivity of path normalisation for identity | The identity rule of §3.6; permanent per library | A decision plus a recorded per-library setting |
-| OQ-3 | The reference's sort-name normalisation, especially articles by language | Ordering parity in 005 | **`tools/probe_sort_names.py` — written, awaiting a run** |
 | OQ-4 | Does the reference merge a folder-per-film layout when the folder and file names disagree? | An edge in §3.3 | Fixture comparison via the differential harness |
 | OQ-5 | What the reference does with a file whose embedded tags contradict its path | §3.5 precedence | `tools/probe_music_precedence.py` |
+| OQ-6 | Whether the §3.7.2 formulas hold for items carrying an explicit sort title, and how many real items do | §3.7.3 | The override rows of `tools/probe_sort_names.py`, read against a larger library |
+
+### Resolved
+
+| # | Question | Answer | Resolved by |
+|---|---|---|---|
+| OQ-3 | The reference's sort-name normalisation | **Six ordered steps, three configurable lists, pad width 10 — and three item types that bypass all of it.** §3.7 now states both rules; 15 of 15 crafted cases matched | `tools/probe_sort_names.py`, 2026-08-26 |
 
 ## 8. References
 
