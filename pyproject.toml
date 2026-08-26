@@ -112,4 +112,7 @@ filterwarnings = ["error"]
 asyncio_mode = "auto"
 markers = [
     "conformance: asserts behaviour at the HTTP boundary (Principle VIII)",
+    # Nothing carries this yet. It exists so the network guard in tests/conftest.py has an exit
+    # that is declared rather than improvised when feature 010's differential harness arrives.
+    "needs_reference: needs a reachable Jellyfin; exempt from the no-network guard",
 ]

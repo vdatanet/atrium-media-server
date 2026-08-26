@@ -1,5 +1,7 @@
 # Atrium Media Server
 
+[![CI](https://github.com/vdatanet/atrium-media-server/actions/workflows/ci.yml/badge.svg)](https://github.com/vdatanet/atrium-media-server/actions/workflows/ci.yml)
+
 Atrium is a media server for **movies, TV series and music**, written from scratch in Python,
 that speaks the **Jellyfin HTTP API**.
 
@@ -37,6 +39,12 @@ $ curl -s localhost:8096/System/Info/Public
 ```
 
 That is a Jellyfin client's first request, answered the way a Jellyfin client expects.
+
+Every change goes through the same gate, locally and in
+[CI](.github/workflows/ci.yml) — `ruff`, `mypy --strict`, the test suite on the oldest and newest
+supported Python, and the two checks that keep the documentation honest. **No job contacts a
+Jellyfin server**: the probes that measure one are run by hand, and the suite fails any test that
+opens a TCP connection.
 
 Start here:
 

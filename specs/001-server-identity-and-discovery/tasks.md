@@ -686,12 +686,65 @@ contract pins the `10.11.10` document and the reachable server serves `10.11.11`
 all 55 endpoints; moving the pin is a version move with its own procedure, and is not this task's
 to make.
 
-## T18 — CI
+## T18 — CI  ✅
 
-- [ ] **Changes:** a workflow running `ruff`, `mypy --strict`, `pytest`, `tools/extract_v1_surface.py`, and a freshness check that `property-names.json` matches the pinned document when one is available.
+- [x] **Changes:** a workflow running `ruff`, `mypy --strict`, `pytest`, `tools/extract_v1_surface.py`, and a freshness check that `property-names.json` matches the pinned document when one is available.
 - **Depends on:** T17
 - **Verified by:** green on the branch; **no job touches the network**, and the suite passes with no Jellyfin reachable (Principle VII).
 - **Plan reference:** §8
+
+### Done — 2026-08-26
+
+**Two of the four things the task lists could not run in CI as written**, and both for the same
+reason: the pinned OpenAPI document is fetched, never vendored, so the runner has none.
+
+`tools/extract_v1_surface.py` *required* `--spec`, which made it a tool CI cannot run. It now runs
+without one, doing every check that needs no document — levels, duplicates, the shape of each
+entry, the version pin's presence — and its **last line names the checks that did not happen**.
+Silence there would read as a pass, which is the failure mode of every conditional gate.
+
+The `property-names.json` freshness check genuinely needs the document, so in CI it is conditional
+and says which branch it took. What holds without one moved into the suite, where it is a hard
+gate: the index is sorted, unique, self-counting, and **pins the same version `surface.yaml`
+does** — two committed artefacts that nothing had ever compared.
+
+**"No network" was a claim, and is now a gate.** The suite fails any test that opens a TCP
+connection, naming the address it dialled (Principle VII). Datagram sockets stay allowed, because
+`address_facing` opens one to ask the routing table which local address faces a peer and sends no
+packet. The exemption for feature 010's differential harness is a registered marker rather than
+something that will be improvised under pressure.
+
+Writing that guard turned up a test that was already reaching the network: the routing lookup's
+"returns None rather than raising" case used the hostname `not-an-address`, which a resolver with
+a search domain — or a provider that answers every name with its own advertising host — resolves
+happily. It is now `.invalid`, which RFC 6761 reserves for exactly this and which no resolver may
+answer.
+
+**The gates were each made to fail before being believed.** A modified golden file, a `level: L9`,
+a removed version pin, a test that opens a socket, an acceptance criterion whose test was renamed:
+five deliberate breakages, five red gates. This is the task where "the check runs" is the whole
+deliverable, and T17 had just found a gate that had never once run.
+
+**CI runs the tools on Python 3.9 and 3.14.** `tools/README.md` claims a probe works on the
+interpreter a machine already has — macOS and Xcode ship 3.9 — and on the newest. Every tool is
+compiled and its `--help` executed under both, which exercises the imports and the whole argument
+parser. The suite itself runs on 3.12, the floor the package declares, and on 3.14.
+
+**The first run failed, on the one thing that could not be checked locally.** Three jobs never
+started: `astral-sh/setup-uv@v10` does not resolve, because that action publishes floating major
+tags only up to `v7` and is pinned to a full version from `v8` on. The two jobs that use nothing
+beyond `checkout` passed, which is what said which half was wrong. Every action version here was
+read from the API rather than remembered — and the version that was *correct* was still
+unusable in the form everyone writes it.
+
+**And the acceptance criteria are now mapped to their tests, in a file that fails three ways.**
+The definition of done below says *by name*, which until now nobody could check without reading
+two documents side by side. `tests/conformance/test_acceptance.py` reads the criteria out of
+[spec §5](spec.md#5-acceptance-criteria) and fails if one has no test, if a named test no longer
+exists, or if the count changed. Writing it found that AC-10 had only indirect coverage — the
+alias sweep implies PascalCase without ever asserting it — so the casing assertion the
+[conformance document](../../docs/compatibility/conformance.md#l1--shape) promises now exists as
+itself.
 
 ## T19 — The `CamelCase` content-type profile
 
@@ -709,13 +762,23 @@ to make.
 
 The feature is done when **all** of these hold:
 
-- [ ] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing test — all ten, by name.
-- [ ] Every endpoint reaches the level declared in [`spec.md` §6](spec.md#6-conformance): L3 for `/System/Info/Public` is deferred until the differential harness (010) exists; **L2 is met now and the gap is recorded**, not silently skipped.
-- [ ] `docs/compatibility/surface.yaml` lists every route added, and no route exists outside it (T17).
-- [ ] The two cross-cutting sweeps run in CI and fail on a deliberately introduced violation of each.
-- [ ] Anything learned during implementation is back in `spec.md` or `plan.md`, in the same change.
-- [ ] Any newly measured reference behaviour is in `docs/compatibility/behaviours.md` with provenance.
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing test — all **eleven** now, by name, and the mapping is itself a test (T18).
+- [x] Every endpoint reaches the level declared in [`spec.md` §6](spec.md#6-conformance): L3 for `/System/Info/Public` is deferred until the differential harness (010) exists; **L2 is met now and the gap is recorded**, not silently skipped.
+- [x] `docs/compatibility/surface.yaml` lists every route added, and no route exists outside it (T17).
+- [x] The two cross-cutting sweeps run in CI and fail on a deliberately introduced violation of each — each sweep carries the tests that prove it rejects what it exists to reject.
+- [x] Anything learned during implementation is back in `spec.md` or `plan.md`, in the same change.
+- [x] Any newly measured reference behaviour is in `docs/compatibility/behaviours.md` with provenance.
 - [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+
+**Six of the seven hold. The last one waits on T19**, which is this feature's own §3.0 rule 2 and
+the only open task in the file: the reference answers `profile="CamelCase"` in camelCase and Atrium
+does not. It is recorded as a gap with a closing mechanism
+([behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)) and pinned by a
+test, so nothing about it is silent — but a feature is not `Implemented` while a task of its own
+is open, and moving that task out of 001 is a scope decision rather than a tidy-up. **002 does not
+have to wait for it**: what it inherits from 001 — the base model, the sweeps, the data directory,
+the persisted identity, the authentication seam, the byte-comparing harness — is all delivered, and
+none of it changes when the profile lands.
 
 ## What this feature owes the next one
 

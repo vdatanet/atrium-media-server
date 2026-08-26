@@ -1,0 +1,138 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The gate every change goes through, and it is the same gate the working rhythm in AGENTS.md asks
+# for locally - `ruff`, `mypy`, `pytest` - plus the two checks that keep the documentation honest.
+#
+# **No job contacts a Jellyfin server.** The probes under tools/ measure a real reference and are
+# never run here: they need credentials and a server, and a suite whose result depends on somebody
+# else's uptime is not a gate. The suite enforces this on itself - tests/conftest.py fails any test
+# that opens a TCP connection (Principle VII). Installing dependencies is the one network access,
+# and it is pinned by uv.lock.
+#
+# The pinned OpenAPI document is fetched, never vendored, so CI does not have one. The two checks
+# that would need it run in the mode that does not, and each says out loud which half did not run.
+# See specs/001-server-identity-and-discovery/plan.md section 8.3.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Read-only. Nothing here publishes, comments or writes to the repository.
+permissions:
+  contents: read
+
+# A second push to the same branch supersedes the first; main is never cancelled.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # Fail rather than reach for a Python that is not there.
+  UV_PYTHON_DOWNLOADS: automatic
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Pinned to a full version on purpose: astral-sh/setup-uv publishes floating major tags
+      # only up to v7, so `@v10` does not resolve. The first CI run said so.
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  types:
+    name: Types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Pinned to a full version on purpose: astral-sh/setup-uv publishes floating major tags
+      # only up to v7, so `@v10` does not resolve. The first CI run said so.
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+      # `strict = true` lives in pyproject.toml, so this cannot drift from the local command.
+      - run: uv run mypy
+
+  test:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor the package declares, and the newest interpreter. A version that only works in
+        # the middle of that range is a version nobody is running.
+        python: ["3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      # Pinned to a full version on purpose: astral-sh/setup-uv publishes floating major tags
+      # only up to v7, so `@v10` does not resolve. The first CI run said so.
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+      - run: uv sync --locked --python ${{ matrix.python }}
+      - run: uv run --no-sync pytest
+      - name: The golden responses are the ones in the repository
+        # `--update-golden` rewrites them; if a run needed it, the working tree would differ here.
+        # A golden that regenerated itself in CI would assert whatever the server happened to send.
+        run: git diff --exit-code -- tests/golden
+
+  documentation:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Deliberately the runner's own python3 and no environment: these tools are standard-library
+      # only so they can run before one exists, and this is where that claim gets tested.
+      - name: The v1 surface is internally consistent
+        run: python3 tools/extract_v1_surface.py --print-summary
+      - name: The property-name index is fresh, when a document is here to say so
+        # The index is extracted from the pinned OpenAPI document, which is fetched and never
+        # vendored - so this runner has none, and the check runs only if one was placed here.
+        # It says which of the two happened, because a step that prints nothing when it skips is
+        # a step nobody notices has stopped working.
+        #
+        # What holds without a document is asserted by the suite instead, where it is a hard gate
+        # rather than a conditional one: the index is sorted, self-counting, and pins the same
+        # version surface.yaml does. tests/conformance/test_aliases.py.
+        run: |
+          if [ -f reference/openapi.json ]; then
+            python3 tools/extract_property_names.py --spec reference/openapi.json --check
+          else
+            echo "no reference/openapi.json: the freshness check against the pinned document did"
+            echo "not run. The index's own integrity is asserted by the test suite."
+          fi
+
+  tools:
+    name: Tools (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # tools/README.md claims both ends of a range: a probe has to run on the interpreter a
+        # machine already has - macOS and Xcode ship 3.9 - and on the newest one. The claim is
+        # only worth making if something checks it.
+        python: ["3.9", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Every tool compiles
+        run: python -m compileall -q tools
+      - name: Every command-line tool starts
+        # `--help` exercises the imports and the whole argument parser, which is where a 3.10+
+        # spelling shows up. It reaches no server and reads no credentials.
+        run: |
+          set -e
+          for tool in tools/*.py; do
+            case "$(basename "$tool")" in _*) continue ;; esac
+            echo "--- $tool"
+            python "$tool" --help > /dev/null
+          done

@@ -38,6 +38,12 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pyt
 git commit && git push -u origin <branch> && gh pr create --base main
 ```
 
+[CI](.github/workflows/ci.yml) runs that same gate on every pull request, plus the surface and
+property-name checks, the suite on the oldest and newest supported Python, and the `tools/` scripts
+on the 3.9 floor they promise to run on. **No job contacts a Jellyfin server**, and the suite fails
+any test that opens a TCP connection — so a probe belongs in `tools/`, run by hand, never in the
+suite.
+
 **Never commit to `main`.** It has happened once in this project, caught only because opening the
 pull request failed with *"No commits between main and …"*. Merge with `--delete-branch`: a stacked
 pull request is only retargeted when its base branch is deleted, and three of them once merged into
@@ -60,6 +66,7 @@ reasoning:
 | T14 | Serialise seven fields | Nulls are omitted globally by one setting — resolving an "UNVERIFIED" entry that was waiting for a whole harness |
 | T16 | Check in three response bodies | One of the three declared content types serialises differently. The spec, an acceptance criterion and a *passing test* all said otherwise — the test compared Atrium against itself |
 | T17 | Assert the routes are registered | Four routing differences, including one the documentation had described as done since T13: an unmatched path was answering `{"detail": "Not Found"}` |
+| T18 | Add a CI workflow | Two of the four checks it was to run could not run in CI at all, and the suite's "no network" was a claim with nothing enforcing it |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
 question each, and a plain `urllib` request answers the rest.

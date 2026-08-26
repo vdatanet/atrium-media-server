@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import re
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -59,6 +60,60 @@ def test_index_is_present_and_plausible(reference_names: frozenset[str]) -> None
         f"the property-name index holds {len(reference_names)} names, which is too few to be the "
         "pinned document's. Regenerate it with tools/extract_property_names.py."
     )
+
+
+def test_index_is_internally_consistent() -> None:
+    """The index describes itself, and the description has to be true.
+
+    Its freshness against the pinned document can only be checked where the document is, and the
+    document is fetched rather than vendored - so CI checks what is checkable without one. This is
+    that: sorted, unique, and counted correctly. A hand-edited index shows up here.
+    """
+    data = json.loads(INDEX.read_text(encoding="utf-8"))
+    names = data["names"]
+    assert data["count"] == len(names), "the index's own count disagrees with its contents"
+    assert len(set(names)) == len(names), "the index repeats a name"
+    assert names == sorted(names), "the index is not sorted; it is generated, so it should be"
+
+
+def test_index_and_surface_pin_the_same_document() -> None:
+    """Two committed artefacts, one pinned version, and nothing was checking they agreed.
+
+    The index is extracted from the pinned OpenAPI document and `surface.yaml` is validated
+    against it. If those two ever name different versions, one of them was regenerated against a
+    server somebody had upgraded - which is exactly how a "pinned" reference stops being one.
+    """
+    surface = (
+        Path(__file__).resolve().parents[2] / "docs" / "compatibility" / "surface.yaml"
+    ).read_text(encoding="utf-8")
+    pinned = re.search(r'jellyfin_openapi_version:\s*"([^"]+)"', surface)
+    assert pinned is not None, "surface.yaml no longer pins an OpenAPI version"
+
+    indexed = json.loads(INDEX.read_text(encoding="utf-8"))["reference_version"]
+    assert indexed == pinned.group(1), (
+        f"the property-name index was extracted from {indexed} and surface.yaml pins "
+        f"{pinned.group(1)}. Moving the pin has a procedure - see "
+        f"docs/compatibility/conformance.md."
+    )
+
+
+def test_every_alias_is_pascal_case() -> None:
+    """Acceptance criterion 10, asserted directly rather than left to follow from the sweep below.
+
+    It does follow: every name in the reference's index is PascalCase, so an alias that is not
+    cannot be in it. But the two say different things when they fail - this one says *the casing
+    rule broke*, which is a mistake in `atrium.compat.model`, and the other says *this field has a
+    name the reference does not use*, which is a mistake in one field. Conflating them would send
+    the next reader to the wrong file.
+    """
+    import_model_modules()
+    wrong = []
+    for model in iter_models():
+        for field_name, field in model.model_fields.items():
+            alias = field.serialization_alias or field.alias or field_name
+            if not alias[:1].isupper() or "_" in alias:
+                wrong.append(f"{model.__qualname__}.{field_name} serialises as {alias!r}")
+    assert not wrong, "not PascalCase on the wire:\n  " + "\n  ".join(wrong)
 
 
 def test_every_alias_is_a_reference_property_name(reference_names: frozenset[str]) -> None:
