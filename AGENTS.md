@@ -10,11 +10,57 @@ Guidance for anyone — human or agent — making changes in this repository.
 3. **[docs/compatibility/behaviours.md](docs/compatibility/behaviours.md)** — the measured
    behaviours you must reproduce, including the defects we reproduce on purpose.
 
-## Project phase
+## Where the project is
 
-**Documentation.** No server code exists yet, deliberately. The workflow is
-`spec.md → plan.md → tasks.md → code`, and each arrow is a review gate
-([specs/README.md](specs/README.md)).
+**Implementing feature 001.** The specification phase is over for the dependency root: 001, 002 and
+003 are specified, planned and broken into tasks; the other seven features are specified only.
+
+**The state is in the files, not here**, so it cannot go stale:
+
+| Question | Read |
+|---|---|
+| Which features have a spec, a plan, tasks? | [`specs/README.md`](specs/README.md) — the status table |
+| Which tasks are done? | The feature's `tasks.md`. Finished ones are `[x]` and carry a **Done** note saying what the task got wrong |
+| What is next? | The first unticked task in the lowest-numbered feature |
+
+The **Done** notes are worth reading before starting the next task. Most of them record something
+the task statement or the plan asserted that turned out to be false, and the same class of mistake
+tends to recur.
+
+## The working rhythm
+
+One task, one branch, one pull request, reviewed and merged before the next begins.
+
+```
+git checkout main && git pull && git checkout -b feat/001-tNN-short-name
+# … the task …
+uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest
+git commit && git push -u origin <branch> && gh pr create --base main
+```
+
+**Never commit to `main`.** It has happened once in this project, caught only because opening the
+pull request failed with *"No commits between main and …"*. Merge with `--delete-branch`: a stacked
+pull request is only retargeted when its base branch is deleted, and three of them once merged into
+each other instead of into `main` because the branches were kept.
+
+Every gate is a real gate. A plan does not start until its spec is `Accepted`; tasks do not start
+until the plan is; code does not start until the tasks are (Principle III).
+
+## The habit that has produced every real finding
+
+**Measure the reference before implementing anything, even when the task looks trivial.**
+
+Every task since T4 has found something the specification had wrong, and none of them were found by
+reasoning:
+
+| Task | Looked like | Turned out |
+|---|---|---|
+| T11 | Write one `Server` header | Three headers; two of them unknown to the project |
+| T13 | Raise a 401 | Two error shapes, split by *where* the refusal happens |
+| T14 | Serialise seven fields | Nulls are omitted globally by one setting — resolving an "UNVERIFIED" entry that was waiting for a whole harness |
+
+The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
+question each, and a plain `urllib` request answers the rest.
 
 **Licence: GPL-3.0-or-later** ([ADR-0005](docs/decisions/0005-licence.md)). Every source file
 carries `# SPDX-License-Identifier: GPL-3.0-or-later` from its first commit. The licence is a
@@ -57,6 +103,10 @@ idea that creates a delta goes in
 [behaviours.md §6](docs/compatibility/behaviours.md#6-non-improvements) and is then not done.
 
 **Dates are absolute.** `2026-08-26`, never "recently".
+
+**Verify that an edit landed.** A `pyproject.toml` change once matched nothing and reported success
+because another tool had rewritten the block underneath it. A scripted edit that cannot fail is a
+scripted edit that will silently not happen.
 
 ## Where things live
 
