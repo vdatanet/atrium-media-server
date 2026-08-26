@@ -480,12 +480,45 @@ parameters — so 002 changing it is a finding for this plan rather than a quiet
 an all-zero GUID as a special value. Interesting for [005 §3.5](../005-item-query-api/spec.md), and
 not chased here — it needs isolating before it can be claimed.
 
-## T14 — `api/system.py`: the three routes
+## T14 — `api/system.py`: the three routes  ✅
 
-- [ ] **Changes:** the `PublicSystemInfo` and `SystemInfo` models; `GET /System/Info/Public`, `GET /System/Info`, `GET` and `POST /System/Ping`.
+- [x] **Changes:** the `PublicSystemInfo` and `SystemInfo` models; `GET /System/Info/Public`, `GET /System/Info`, `GET` and `POST /System/Ping`.
 - **Depends on:** T3, T9, T12, T13
 - **Verified by:** each route answers; `/System/Ping` returns the JSON string `"Jellyfin Server"` — the **product** name, not the operator's server name ([spec §3.3](spec.md#33-get-systemping-post-systemping--getpingsystem-postpingsystem)); `/System/Info` is `401` without a token and a superset of the public payload with one.
 - **Plan reference:** §3
+
+### Done — 2026-08-26
+
+**Fetching the real payload before writing the models found four things the spec had wrong.**
+[probe: manual request, Jellyfin 10.11.11, 2026-08-26]
+
+*`PackageName` is declared and not sent.* Chasing that to its cause resolved
+[behaviours §1.7](../../docs/compatibility/behaviours.md), which had been marked ⚠️ UNVERIFIED and
+assumed the absent-versus-null choice was per-property and inconsistent. **It is one line of
+configuration** — `DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull` on the whole JSON
+pipeline. [source: src/Jellyfin.Extensions/Json/JsonDefaults.cs:33, Jellyfin.Server/Extensions/ApiServiceCollectionExtensions.cs:148 @ v10.11.11] That now lives in `AtriumModel` rather than in a per-route flag, because a per-route
+flag is one someone eventually forgets, and the one they forget is the one a client sees a stray
+`null` on. The assumption was more complicated than the truth.
+
+*The field order is derived-first.* `SystemInfo` serialises its own properties **before** the
+inherited ones, as a derived .NET class does. So the two models are declared **independently
+rather than by inheritance**: subclassing would put them the other way round. No client cares
+about key order, but a byte-comparing golden test does, and the superset relationship is now
+asserted by a test — which is the stronger check anyway, since it fails if a field is added to one
+and forgotten in the other.
+
+*`CastReceiverApplications` is not empty upstream*, and the spec said it was. Atrium's is, honestly.
+
+*`EncoderLocation` and `SystemArchitecture` are populated* despite being deprecated. Matched;
+`platform.machine()` is mapped to the reference's `Architecture` names.
+
+**Two capability flags are deliberately honest rather than faithful.** The reference reports
+`SupportsLibraryMonitor: true` and `CanSelfRestart: true`; v1 has neither. A client told a
+capability exists behaves differently from one told it does not, and only one of those is
+recoverable.
+
+**The sweeps stopped being vacuous.** Three models, 36 fields, checked for alias and unit on every
+run — the first real work T3 and T7 have done since they were written.
 
 ## T15 — `server.py`: the application factory
 

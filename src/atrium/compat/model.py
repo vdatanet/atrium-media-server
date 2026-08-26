@@ -17,7 +17,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, model_serializer, model_validator
+from pydantic_core.core_schema import SerializerFunctionWrapHandler
 
 from atrium.compat.aliases import atrium_alias
 
@@ -36,6 +37,24 @@ class AtriumModel(BaseModel):
         serialize_by_alias=True,  # PascalCase without the caller having to ask
         extra="ignore",  # unknown request properties are ignored, not rejected
     )
+
+    @model_serializer(mode="wrap")
+    def _omit_nulls(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Drop null properties, as the reference does - globally, by one setting.
+
+        The reference configures `DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull`
+        for its whole JSON pipeline, so a property with no value is **absent** rather than `null`.
+        Measured too: `/System/Info` declares `PackageName` and does not send it.
+        [source: src/Jellyfin.Extensions/Json/JsonDefaults.cs:33,
+        Jellyfin.Server/Extensions/ApiServiceCollectionExtensions.cs:148 @ v10.11.11]
+        [probe: manual request, Jellyfin 10.11.11, 2026-08-26]
+
+        This is a single global rule rather than the per-property judgement
+        docs/compatibility/behaviours.md section 1.7 assumed it might be, which is why it belongs
+        here rather than in a `response_model_exclude_none` on every route - a per-route flag is
+        one someone eventually forgets.
+        """
+        return {key: value for key, value in handler(self).items() if value is not None}
 
     @model_validator(mode="before")
     @classmethod
