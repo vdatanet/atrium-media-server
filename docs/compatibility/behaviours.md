@@ -265,6 +265,33 @@ The branch most easily missed is the 300-second one: it is a floor on the **item
 on the position. A short clip stopped in the middle is *played*, not resumable. Reading it as a
 position floor produces a server that keeps resume points for every short item.
 
+### 1.9 Every response carries `X-Response-Time-ms`
+
+**Jellyfin does:** stamps every response with the time it took, in fractional milliseconds —
+`X-Response-Time-ms: 2.1329`. Its middleware is registered unconditionally; the two configuration
+flags beside it gate a slow-response *log line*, not the header. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` `[source: Jellyfin.Api/Middleware/ResponseTimeMiddleware.cs:17, Jellyfin.Server/Startup.cs:163 @ v10.11.11]`
+
+**Depends on it:** no known client. It is a diagnostic.
+
+**Atrium does:** the same. Omitting it would be a difference on **every** response in the project —
+55 rows of noise in the first differential run — for a middleware that costs fifteen lines.
+
+> **This project did not know the header existed.** Neither specification mentioned it, and no
+> amount of reading either codebase would have surfaced it: it took issuing one real request and
+> reading what came back. It is the smallest useful argument for the differential harness that
+> feature 010 delivers.
+
+### 1.10 JSON responses carry `charset=utf-8`
+
+**Jellyfin does:** sends `Content-Type: application/json; charset=utf-8`, as ASP.NET Core's JSON
+formatter does. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
+
+**Depends on it:** unlikely — a client parses JSON as UTF-8 regardless. But it is on every response.
+
+**Atrium does:** the same, through a response class rather than a middleware, so the content type
+belongs to the thing that produced the body. Starlette appends `charset=utf-8` only to `text/*`
+media types, so its `JSONResponse` would send a bare `application/json`.
+
 ---
 
 ## 3. Defects
@@ -524,6 +551,14 @@ Two, and both are listed here so they are never mistaken for oversights.
 `ProductName: "Jellyfin Server"` and a real `10.11.x` version string. Full reasoning in
 [reference-target.md §4](reference-target.md#4-server-identity-what-atrium-tells-clients-it-is).
 Humans see "Atrium" in the `Server` header, the `ServerName` field, the logs and the project page.
+
+**The `Server` header is a measured divergence, not a hypothetical one.** The reference sends
+`Server: Kestrel`. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` Atrium sends `Server: Atrium/<version>`.
+
+A client cannot usefully branch on it — `Kestrel` identifies a .NET web server, not Jellyfin, and
+the discriminator multi-server clients actually read is `ProductName`. So this is the one header
+where the honest answer costs nothing, and it is where a person looking at a `curl` dump, a proxy
+log or a bug report finds out what they are really talking to.
 
 ### 4.2 `LocalAddress` does not get an HTTPS override
 
