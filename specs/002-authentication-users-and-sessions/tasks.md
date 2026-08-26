@@ -110,9 +110,9 @@ to fail against and moves a counter no probe can reset, on somebody's own instal
 [spec §7](spec.md#7-open-questions) OQ-5, and the row in §3.3 for a wrong password says **assumed**
 rather than carrying a citation it has not earned.
 
-## T2 — `db/`: engine, session factory, Alembic
+## T2 — `db/`: engine, session factory, Alembic  ✅
 
-- [ ] **Changes:** `db/engine.py` with WAL and foreign-key pragmas applied per connection and a
+- [x] **Changes:** `db/engine.py` with WAL and foreign-key pragmas applied per connection and a
   session factory tied to the app lifecycle; Alembic scaffolding; a startup check that refuses to
   serve when the database revision is behind the code. SQLAlchemy 2.0 and Alembic enter
   `pyproject.toml` here — the first change to the dependency set since 001 T1, which is where the
@@ -124,6 +124,56 @@ rather than carrying a citation it has not earned.
 - **Note:** refusing beats warning. Serving against an unexpected schema produces corrupt data
   rather than an error, and the corruption surfaces much later.
 - **Plan reference:** §3, §7
+
+### Done — 2026-08-26
+
+**"Refuses when the database is behind" was one row of a table that turned out to have five.** The
+task, and [plan §7](plan.md#7-failure-handling), had two states: current, or behind. Writing the
+check made the missing ones obvious the moment a first run was considered. **An empty database is
+not a pending migration** — answering "run a migration first" to somebody who has just installed
+the server is a refusal with no decision behind it, since creating a schema where there was none
+cannot lose anything. And **a database from the future is not behind**: downgrading the server
+leaves a file a newer build wrote, and treating that as pending runs migrations backwards over data
+this build cannot read. Two more rows — tables with no stamp, and a stamp this build has never heard
+of — fall out of the same question. The plan now carries all five.
+
+**The check runs in the factory, not in the lifespan, and that reverses what 001 expected.** The
+comment 001 left on its lifespan said 002's migrations would go there. They do not: both refusals
+have to reach the operator as the sentence [plan §7](plan.md#7-failure-handling) promises, and a
+lifespan that raises delivers `Application startup failed` and a traceback instead. The gate keeps
+its purpose — 003's scan is slow and belongs there; opening a SQLite file is not.
+
+**The suite caught a leak the server never would have.** `create_app` opens an engine and the
+lifespan disposes it, and most tests here deliberately never run a lifespan — so nothing did. A
+pooled SQLite connection reaching the garbage collector unclosed emits a `ResourceWarning`, 001's
+`filterwarnings = ["error"]` turns that into a failure, and the failure lands in whichever test
+happened to be running when the collector got round to it, which is never the test that opened it.
+The fix is a fixture that wraps the factory and disposes what it built, in the same spirit as the
+network guard beside it: enforced rather than intended. A server would never have shown this,
+because a server exits.
+
+**Three pysqlite behaviours were measured before the module was written**, each with a plausible
+wrong answer. `PRAGMA journal_mode=WAL` inside the `connect` event takes and reports `wal` back —
+it is refused inside a transaction, and a `connect` handler is the one place there is certainly not
+one. `foreign_keys=ON` applied there is enforced. And the default pool for a file database hands
+connections between threads without a `ProgrammingError`, so SQLAlchemy already passes
+`check_same_thread=False`: adding it would have been a spell rather than a decision.
+
+**T2 has no migrations, so the check it adds could not be exercised by anything it ships.** A guard
+that cannot fail until the thing it guards exists is a guard nobody knows is broken, so the tests
+build a two-revision history in a temporary directory and point the module at it. One of those
+revisions reads `PRAGMA foreign_keys` back and refuses if it is off, which is the assertion behind
+`upgrade_to_head` reusing the server's engine: Alembic will open its own connection from a URL
+given the chance, and that one migrates with foreign keys disabled.
+
+**`db/schema.py` was not in the plan's module list, and `db/models.py` arrived early.** The schema
+check is not engine plumbing and not a migration, so it is its own module; the plan's §3 now says
+so. `models.py` ships with a `Base` and no tables because the migration environment needs one piece
+of metadata to compare against — T4 adds tables rather than also rewiring Alembic.
+
+**The wheel was checked, not assumed.** `env.py`, `script.py.mako` and `versions/` are data files
+inside a Python package, and a build backend that skipped them would produce a server that cannot
+migrate itself, with nothing in this repository noticing. They are in the wheel.
 
 ## T3 — `users/passwords.py`: Argon2id
 

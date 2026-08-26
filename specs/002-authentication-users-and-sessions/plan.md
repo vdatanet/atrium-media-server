@@ -4,7 +4,7 @@ title: Authentication, users and sessions — implementation plan
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8
+amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-26
@@ -62,6 +62,7 @@ behaviour WAL mode exists to avoid needing. Sessions live in memory with periodi
 src/atrium/
 ├── db/
 │   ├── engine.py         session factory, WAL pragmas, lifecycle
+│   ├── schema.py         which revision this build expects, and what it does when it is wrong
 │   ├── models.py         ORM tables
 │   ├── repositories.py   the boundary: domain objects in and out
 │   └── migrations/       Alembic, starting at revision 0001
@@ -77,6 +78,12 @@ src/atrium/
     ├── sessions.py       /Sessions, /Sessions/Capabilities/Full
     └── deps.py           require_user — the 001 seam, now implemented
 ```
+
+`alembic.ini` sits at the repository root for running migrations by hand. **The server does not
+read it**, and no database URL appears in it: a path in an ini file is a path that disagrees with
+`$ATRIUM_DATA_DIR` eventually, and `configparser` reads `%` in a path as interpolation, so a data
+directory containing one would fail in a way nobody would guess. `db/schema.py` builds the same
+configuration from `__file__`, because an installed server has no working directory worth trusting.
 
 `compat/auth.py` holds **extraction**, not resolution: pulling a token out of four possible places
 and parsing a client-identification header are wire-format concerns and belong beside the other
@@ -239,6 +246,20 @@ spurious logouts. The registry is built so a window can be added without a migra
 | Valid token, insufficient policy | Policy check | `403` | — |
 | Database unavailable at startup | Connection check | **Refuse to start** | Operator fixes it |
 | Migration pending | Alembic revision check | **Refuse to start**, naming the command | Operator migrates |
+| Database **empty** — no tables at all | Same check | **Create it** and bring it to head | — |
+| Tables but no revision stamp | Same check | **Refuse to start**, naming the tables | Operator moves the file aside |
+| Stamped at a revision this build does not know | Same check | **Refuse to start** | Operator reinstalls the newer build |
+
+**The empty database is not the pending-migration case, and the first draft of this table treated
+it as one.** A first run has no schema, and answering "run a migration first" to somebody who has
+just installed the server is a refusal with no decision behind it: creating a schema where there
+was none cannot lose anything, because there is nothing to lose. Upgrading a database that already
+holds data is the decision an operator makes, and that is the one this table refuses.
+
+**A database from the future is not "behind".** Downgrading the server leaves a file a newer build
+wrote, and reading that as pending would run migrations backwards over data this build cannot read.
+It is the row nobody thinks of and everybody eventually reaches, so it is a row rather than a
+surprise.
 | Argon2 parameters unsupported | Verify raises | `401` plus a log line naming the user | Password reset |
 
 **Refusing to start on a pending migration** matters more than it looks: serving requests against a

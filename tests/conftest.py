@@ -19,7 +19,9 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi import FastAPI
+from sqlalchemy import Engine
 
+from atrium import server
 from atrium.api.deps import require_user
 from atrium.config.paths import DataPaths
 from atrium.config.settings import Settings, load
@@ -90,6 +92,33 @@ def no_outbound_connections(
         original(self, address)
 
     monkeypatch.setattr(socket.socket, "connect", guarded)
+
+
+@pytest.fixture(autouse=True)
+def dispose_database_engines(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Close every database connection a test opened, rather than trusting it to.
+
+    `create_app` opens an engine and the lifespan disposes it - and most of these tests
+    deliberately never run a lifespan, so nothing would. SQLite notices: a pooled connection that
+    reaches the garbage collector unclosed emits a `ResourceWarning`, and `filterwarnings =
+    ["error"]` turns that into a failure in whichever test happened to be running when the
+    collector got round to it, which is never the test that opened it.
+
+    Wrapping the factory rather than teaching each test to tidy up keeps this true for the tests
+    nobody has written yet, in the same spirit as the network guard above: enforced, not intended.
+    """
+    opened: list[Engine] = []
+    build = server.create_database_engine
+
+    def recording(paths: DataPaths, **kwargs: object) -> Engine:
+        engine = build(paths, **kwargs)  # type: ignore[arg-type]
+        opened.append(engine)
+        return engine
+
+    monkeypatch.setattr(server, "create_database_engine", recording)
+    yield
+    for engine in opened:
+        engine.dispose()
 
 
 #: A user the override hands back. Not a credential: nothing authenticates as this.

@@ -38,6 +38,8 @@ from atrium.compat.routing import RelaxedPathMiddleware, RouteTable
 from atrium.config.paths import ConfigurationError, DataPaths, resolve_data_dir
 from atrium.config.settings import load as load_settings
 from atrium.config.state import load_or_create
+from atrium.db.engine import create_database_engine, session_factory, verify_connection
+from atrium.db.schema import ensure_current
 from atrium.lifecycle import Readiness, ReadinessMiddleware
 
 logger = logging.getLogger("atrium")
@@ -56,11 +58,21 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     state = load_or_create(resolved)
     readiness = Readiness()
 
+    # The database opens *here* rather than in the lifespan below, which is where 001 expected
+    # 002's migrations to go. Both refusals this involves - an unopenable database, and a schema
+    # this build does not expect - have to reach the operator as the sentence plan section 7
+    # promises, and a lifespan that raises delivers a traceback and "Application startup failed".
+    # The gate keeps its purpose: 003's scan is slow, and this is not.
+    engine = create_database_engine(resolved)
+    verify_connection(engine, resolved)
+    ensure_current(engine, resolved)
+    sessions = session_factory(engine)
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         # Everything slow belongs here, before the gate opens. Today there is nothing slow, and
-        # the gate exists anyway so that 002's migrations and 003's scan have somewhere to go
-        # that is already wired, already tested and already answering correctly meanwhile.
+        # the gate exists anyway so that 003's scan has somewhere to go that is already wired,
+        # already tested and already answering correctly meanwhile.
         readiness.mark_ready()
         logger.info(
             "Atrium %s serving the Jellyfin %s API from %s",
@@ -68,7 +80,12 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
             REFERENCE_VERSION,
             resolved.root,
         )
-        yield
+        try:
+            yield
+        finally:
+            # Returns every pooled connection, which is what closes the WAL cleanly. Without it a
+            # test that builds hundreds of instances leaves hundreds of open files behind.
+            engine.dispose()
 
     app = FastAPI(
         title="Atrium",
@@ -107,6 +124,8 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     app.router.redirect_slashes = False
 
     app.state.paths = resolved
+    app.state.db = engine
+    app.state.sessions = sessions
     app.state.settings = settings
     app.state.server_state = state
     app.state.readiness = readiness

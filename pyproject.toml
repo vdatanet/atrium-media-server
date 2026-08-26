@@ -21,8 +21,10 @@ classifiers = [
 # Only what feature 001 actually uses. Later features add their own, so the dependency set
 # always says what the code needs rather than what the roadmap intends.
 dependencies = [
+    "alembic>=1.14",
     "fastapi>=0.115",
     "pydantic>=2.10",
+    "sqlalchemy>=2.0",
     "uvicorn[standard]>=0.34",
 ]
 
