@@ -328,12 +328,35 @@ error message that says so in words rather than in a regex. And `PTH105` moved t
 **Durability is not only the file.** After the rename, the containing directory is `fsync`ed on
 POSIX — without that, a power loss can leave the rename unrecorded even though the data was synced.
 
-## T10 — `lifecycle.py` and the readiness gate
+## T10 — `lifecycle.py` and the readiness gate  ✅
 
-- [ ] **Changes:** `Readiness`; middleware answering `503` with `Retry-After` while not ready.
+- [x] **Changes:** `Readiness`; middleware answering `503` with `Retry-After` while not ready.
 - **Depends on:** T1
 - **Verified by:** a request during startup gets `503` with the header; after readiness the same request is served.
 - **Plan reference:** §5, §7
+
+### Done — 2026-08-26
+
+**Checking the contract before implementing it answered an open question and corrected the spec.**
+The pinned document declares a `503` on **all 395 operations** — so the gate is server-wide rather
+than an error path of one endpoint — and the response carries **two** headers, `Retry-After` and
+`Message`, with a **`text/html`** body. `spec.md` said "`503` with a `Retry-After` header"; it now
+has a §3.5, and OQ-2 moves to Resolved. `[spec: every operation's 503 response in the pinned 10.11.10 document]`
+
+A new OQ-4 replaces it, narrower and honest: the document *declares* both headers, and only a probe
+catching a server mid-start would confirm a running one *sends* them.
+
+**A raw ASGI middleware, not `BaseHTTPMiddleware`.** Starlette's wraps every response in a
+queue-backed stream. That is harmless for JSON and wrong for the byte-range and HLS delivery
+feature 008 adds — choosing the convenient one here would put a buffer in front of every media
+stream this server ever serves, and by then the reason would be untraceable. The docstring says so,
+because the next person to touch this file will not have 008 in mind.
+
+**`Readiness` is an object, not a module-level flag**, so two instances in one process do not share
+it. A test asserts that, because the failure it prevents is a test leaking into the next one.
+
+**`mark_unavailable` came for free and is worth having**: the same response withdraws the server
+from service during a long rebuild, with its own message and hint, without stopping the process.
 
 ## T11 — `compat/middleware.py`: the `Server` header
 
