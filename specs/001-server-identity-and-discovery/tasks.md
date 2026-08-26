@@ -289,13 +289,44 @@ put it in front of the conformance sweeps. And the permission test's skip condit
 referencing `os.geteuid` directly, because `skipif` expressions are evaluated at collection time on
 every platform and it does not exist on Windows.
 
-## T9 — `config/state.py`: server identity
+## T9 — `config/state.py`: server identity  ✅
 
-- [ ] **Changes:** `state.json` read and write; atomic write (temp file, `fsync`, `os.replace`); identity generated once on first start.
+- [x] **Changes:** `state.json` read and write; atomic write (temp file, `fsync`, `os.replace`); identity generated once on first start.
 - **Depends on:** T6, T8
 - **Verified by:** **the AC-4 test** — start and record the id; restart, unchanged; delete everything *except* `state.json`, restart, unchanged. Plus: a corrupt `state.json` refuses to start rather than regenerating, and a write interrupted before `os.replace` leaves the previous file intact.
 - **Note:** the third phase passes trivially today because there is no store. That is exactly why it must exist before there is one.
 - **Plan reference:** §4, §7, §8.1
+
+### Done — 2026-08-26
+
+**The AC-4 third phase does pass trivially, and the test says so in its own docstring** — including
+what it is for: 002 introduces a database, and the moment someone moves the identity into it for
+tidiness, this test is what says no. Simulated to confirm it would actually catch that: an identity
+kept in a rebuildable store changes across a rebuild, which is the failure the test exists to name.
+A test written afterwards would have been written to fit whatever the code had already done.
+
+**Three refusal messages say what is at stake, not just what failed.** A corrupt `state.json` does
+not regenerate — the message explains that generating a new identity would make every client treat
+this as a different server and re-authenticate, and offers the two real options (restore a backup,
+or delete the file to accept that cost). A test asserts both halves are in the message, so a later
+"simplification" of the wording fails.
+
+**A corrupt file is left alone.** Refusing to start must not also destroy the evidence a backup
+could be compared against.
+
+**`extra="allow"`, deliberately.** A newer Atrium may write keys this version does not know, and a
+downgrade hands them back untouched. Dropping them is a data-loss bug that surfaces only after
+someone has already downgraded to escape a different problem — the worst possible moment to lose
+something. Tested by round-tripping an unknown key.
+
+**Two things the linter improved.** `server_id` started as a bare `str` with a pattern, which
+pydantic rejected outright — its regex engine is Rust's and does not accept `\A`/`\Z`. The fix was
+not a different anchor but reusing `WireGuid`: one definition of what an identifier is, carrying the
+error message that says so in words rather than in a regex. And `PTH105` moved the rename from
+`os.replace` to `Path.replace`, which the atomicity tests now patch instead.
+
+**Durability is not only the file.** After the rename, the containing directory is `fsync`ed on
+POSIX — without that, a power loss can leave the rename unrecorded even though the data was synced.
 
 ## T10 — `lifecycle.py` and the readiness gate
 
