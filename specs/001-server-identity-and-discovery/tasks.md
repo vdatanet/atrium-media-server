@@ -358,12 +358,48 @@ it. A test asserts that, because the failure it prevents is a test leaking into 
 **`mark_unavailable` came for free and is worth having**: the same response withdraws the server
 from service during a long rebuild, with its own message and hint, without stopping the process.
 
-## T11 — `compat/middleware.py`: the `Server` header
+## T11 — `compat/middleware.py`: the `Server` header  ✅
 
-- [ ] **Changes:** middleware setting `Server: Atrium/{__version__}` on every response.
+- [x] **Changes:** middleware setting `Server: Atrium/{__version__}` on every response.
 - **Depends on:** T1
 - **Verified by:** the header is present and carries **Atrium's** version, not the reference's — asserted against both constants so a future edit cannot silently swap them.
 - **Plan reference:** §6.5
+
+### Done — 2026-08-26
+
+**One real request turned a one-header task into a three-header one.** Before writing a `Server`
+header it was worth knowing what the reference sends, so a request went to a live 10.11.11:
+
+```
+Server              'Kestrel'
+X-Response-Time-ms  '2.1329'
+Content-Type        'application/json; charset=utf-8'
+```
+
+Two of those three were unknown to this project, and **neither specification mentioned either**.
+
+**`X-Response-Time-ms` is the reference's, on every response.** Confirmed in its source rather than
+assumed from one observation: the middleware is registered unconditionally, and the configuration
+flags beside it gate a slow-response log line rather than the header. `[source: Jellyfin.Api/Middleware/ResponseTimeMiddleware.cs:17, Jellyfin.Server/Startup.cs:163 @ v10.11.11]` Omitting it would be a
+difference on every response in the project — 55 rows of noise in the first differential run — for
+fifteen lines of middleware. Now [behaviours §1.9](../../docs/compatibility/behaviours.md).
+
+**JSON carries `charset=utf-8`.** Starlette appends it only to `text/*`, so its `JSONResponse`
+sends a bare `application/json`. Fixed through a response class rather than a middleware, so the
+content type belongs to the thing that produced the body. This added `compat/responses.py`, which
+[plan §3](plan.md#3-modules) did not list; T15 wires it as the default response class. Now
+[behaviours §1.10](../../docs/compatibility/behaviours.md).
+
+**And the `Server` header itself is now a measured divergence rather than a hypothetical one.** The
+reference sends `Kestrel`. A client cannot usefully branch on that — it identifies a .NET web
+server, not Jellyfin — so this stays the one header where the honest answer costs nothing.
+[behaviours §4.1](../../docs/compatibility/behaviours.md) records it with the measurement.
+
+**One observation was deliberately not recorded.** The same response carried
+`Transfer-Encoding: chunked` and `Connection: close`, which would mean the reference sends no
+`Content-Length` on JSON. That server may sit behind a reverse proxy, and attributing a
+proxy's framing to the reference would put a false claim in the compatibility documents. It needs
+isolating before it can be written down.
 
 ## T12 — `net/address.py`: `LocalAddress`
 
