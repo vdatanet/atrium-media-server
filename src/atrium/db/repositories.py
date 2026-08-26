@@ -35,7 +35,7 @@ from atrium.compat.dates import utc_now
 from atrium.compat.guids import new_id
 from atrium.db import models
 from atrium.domain.session import AccessToken, IssuedToken, Session
-from atrium.domain.user import User
+from atrium.domain.user import LibraryAccess, User
 
 #: Sixteen bytes, rendered as 32 lowercase hex characters - the shape the reference's `AccessToken`
 #: has. `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`, spec section 3.3.
@@ -174,6 +174,42 @@ class UserRepository:
         self._session.flush()
         return _user(row)
 
+    def library_access(self, user_id: str) -> LibraryAccess:
+        """The two honoured list properties, read back out of the join table."""
+        rows = self._session.execute(
+            select(models.UserLibraryAccess)
+            .where(models.UserLibraryAccess.user_id == user_id)
+            .order_by(models.UserLibraryAccess.library_id)
+        ).scalars()
+        viewable, deletable = [], []
+        for row in rows:
+            if row.can_view:
+                viewable.append(row.library_id)
+            if row.can_delete:
+                deletable.append(row.library_id)
+        return LibraryAccess(tuple(viewable), tuple(deletable))
+
+    def set_library_access(self, user_id: str, access: LibraryAccess) -> None:
+        """Replace this user's library rows wholesale.
+
+        Deleted and rewritten rather than merged, because the two lists arrive as lists: a library
+        absent from `EnabledFolders` is a library the user may not see, and a merge would keep the
+        row that says otherwise.
+        """
+        self._session.execute(
+            delete(models.UserLibraryAccess).where(models.UserLibraryAccess.user_id == user_id)
+        )
+        for library_id in sorted(set(access.enabled_folders) | set(access.deletion_folders)):
+            self._session.add(
+                models.UserLibraryAccess(
+                    user_id=user_id,
+                    library_id=library_id,
+                    can_view=library_id in access.enabled_folders,
+                    can_delete=library_id in access.deletion_folders,
+                )
+            )
+        self._session.flush()
+
     def set_password_hash(self, user_id: str, password_hash: str | None) -> None:
         """Used by the rehash-on-login rule, which is the only moment the plaintext exists."""
         self._require(user_id).password_hash = password_hash
@@ -192,6 +228,19 @@ class UserRepository:
         row.invalid_login_attempt_count = 0
         row.last_login_date = when or utc_now()
         row.last_activity_date = row.last_login_date
+
+    def set_policy(self, user_id: str, columns: dict[str, object], extra: dict[str, Any]) -> None:
+        """Write the honoured flags into their columns and everything else into the blob.
+
+        The two halves land together because they are one document: writing the columns without
+        the blob leaves a client's unknown properties behind, and writing the blob without the
+        columns changes nothing anybody enforces.
+        """
+        row = self._require(user_id)
+        for column, value in columns.items():
+            setattr(row, column, value)
+        row.policy_extra = dict(extra)
+        self._session.flush()
 
     def replace_configuration(self, user_id: str, configuration: dict[str, object]) -> None:
         """Replaces, per spec section 3.6 - `POST /Users/Configuration` is not a merge."""

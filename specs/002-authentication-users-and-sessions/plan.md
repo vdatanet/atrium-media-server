@@ -4,7 +4,7 @@ title: Authentication, users and sessions — implementation plan
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10
+amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-26
@@ -233,6 +233,16 @@ session — and that is a `400`, not a `401`.
 Reading assembles a policy object from the nine columns plus the `policy_extra` blob. Writing
 splits it back. A property that is in neither the column set nor a known key list is still
 preserved — a client that round-trips a policy from a newer server must get its own data back.
+
+**What round-trips is the set of properties and their values, not the byte order.** Assembling
+emits this server's own order — the nine columns, the two lists, then everything carried — because
+the reference emits its own too: a C# object serialises its properties in a fixed order whatever a
+client sent, so echoing a client's key order would be the delta rather than the fidelity.
+
+**An honoured property never lives in the blob.** Splitting strips the eleven out before storing
+the rest, and assembling reads each from its column. That is what makes promoting a property from
+blob to column lossless in both directions: a stale copy left in an old blob is ignored rather than
+shadowing the column, and one write through `split` removes it without a migration of its own.
 
 The same shape applies to `UserConfiguration`, except that **all** of it is stored as a blob: v1
 acts on two properties and there is no query that filters on any of them, so there is nothing to
