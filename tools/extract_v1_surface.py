@@ -8,16 +8,26 @@ claims to implement?
 
 It checks, for every entry in the surface file:
 
+  * the `level` is one of L0..L3;
+  * the path is absolute and the method is an HTTP method;
+  * no (path, method) pair appears twice;
+  * the pinned document version is recorded, and the document given is that version;
+
+and, **when a document is given**:
+
   * the path exists in the OpenAPI document;
   * the method exists on that path;
-  * the recorded `operation` matches the document's `operationId`;
-  * the `level` is one of L0..L3;
-  * no (path, method) pair appears twice.
+  * the recorded `operation` matches the document's `operationId`.
+
+The document is fetched rather than vendored, so CI has none - and a tool that refuses to run
+without one is a tool CI does not run. Without `--spec` it does everything that needs no document
+and **says, in the last line, which checks did not happen**. Silence there would read as a pass.
 
 It does NOT check that the server implements them - that is the route-registration test, which
 reads the same file.
 
 Usage:
+    python3 tools/extract_v1_surface.py                                   # no document needed
     python3 tools/extract_v1_surface.py --spec reference/openapi.json
     python3 tools/extract_v1_surface.py --spec reference/openapi.json --print-summary
 
@@ -87,25 +97,33 @@ def parse_surface(text: str) -> tuple[dict[str, str], list[dict[str, str]]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--spec", required=True, type=Path, help="Pinned OpenAPI document")
+    parser.add_argument(
+        "--spec",
+        type=Path,
+        help="Pinned OpenAPI document. Without it, only the checks that need no document run - "
+        "which is what CI has, since the document is fetched rather than vendored",
+    )
     parser.add_argument("--surface", default=DEFAULT_SURFACE, type=Path)
     parser.add_argument("--print-summary", action="store_true")
     args = parser.parse_args()
 
-    spec = json.loads(args.spec.read_text(encoding="utf-8"))
-    paths = spec.get("paths", {})
+    spec = json.loads(args.spec.read_text(encoding="utf-8")) if args.spec else None
+    paths = spec.get("paths", {}) if spec else {}
     reference, endpoints = parse_surface(args.surface.read_text(encoding="utf-8"))
 
-    spec_version = spec.get("info", {}).get("version")
+    spec_version = spec.get("info", {}).get("version") if spec else None
     pinned = reference.get("jellyfin_openapi_version")
     errors: list[str] = []
+
+    if not endpoints:
+        errors.append(f"{args.surface} has no endpoints; the parser and the file disagree")
 
     if not pinned:
         errors.append(
             f"{args.surface} has no reference.jellyfin_openapi_version. The version gate cannot "
             f"run without it, and a gate that cannot run is worse than no gate"
         )
-    elif spec_version != pinned:
+    elif spec_version is not None and spec_version != pinned:
         errors.append(
             f"version mismatch: surface pins {pinned}, document is {spec_version}. "
             f"Moving the pin has a procedure - see docs/compatibility/conformance.md"
@@ -122,6 +140,14 @@ def main() -> int:
 
         if entry.get("level") not in LEVELS:
             errors.append(f"{where}: level {entry.get('level')!r} is not one of {sorted(LEVELS)}")
+
+        if not path.startswith("/"):
+            errors.append(f"{where}: a path is absolute or it is a typo")
+        if method != method.upper() or not method.isalpha():
+            errors.append(f"{where}: {method!r} is not an HTTP method")
+
+        if spec is None:
+            continue
 
         node = paths.get(path)
         if node is None:
@@ -143,7 +169,7 @@ def main() -> int:
     if args.print_summary and not errors:
         by_feature: Counter[str] = Counter(e.get("feature", "?") for e in endpoints)
         by_level: Counter[str] = Counter(e.get("level", "?") for e in endpoints)
-        print(f"{len(endpoints)} endpoints against Jellyfin {spec_version}")
+        print(f"{len(endpoints)} endpoints against Jellyfin {spec_version or pinned}")
         print("  by feature: " + ", ".join(f"{k}={v}" for k, v in sorted(by_feature.items())))
         print("  by level:   " + ", ".join(f"{k}={v}" for k, v in sorted(by_level.items())))
 
@@ -153,6 +179,16 @@ def main() -> int:
     if errors:
         print(f"\n{len(errors)} problem(s) in {args.surface}", file=sys.stderr)
         return 1
+
+    if spec is None:
+        # Named, not counted: a reader has to be able to tell "everything passed" from "the half
+        # that needs the contract did not run". The other half is the point of the tool.
+        print(
+            f"{args.surface}: {len(endpoints)} endpoints are internally consistent. "
+            f"Paths, methods and operation ids were NOT checked - no document was given. "
+            f"Fetch one with tools/fetch_reference_spec.py and pass --spec."
+        )
+        return 0
 
     print(f"{args.surface}: {len(endpoints)} endpoints consistent with {args.spec}")
     return 0

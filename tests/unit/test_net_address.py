@@ -160,7 +160,14 @@ def test_the_routing_lookup_answers_for_loopback() -> None:
 
 
 def test_the_routing_lookup_returns_none_rather_than_raising() -> None:
-    assert address_facing("not-an-address") is None
+    """`.invalid` is reserved by RFC 6761 and must never resolve, anywhere.
+
+    A bare `not-an-address` was the same test with a dependency hidden in it: a resolver with a
+    search domain, or a provider that answers every name with its own advertising host, resolves
+    it - and the test would then fail on somebody's laptop for a reason that has nothing to do
+    with this function.
+    """
+    assert address_facing("atrium-does-not-exist.invalid") is None
 
 
 def test_build_url_brackets_ipv6() -> None:

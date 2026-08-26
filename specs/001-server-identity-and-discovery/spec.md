@@ -302,6 +302,14 @@ The two cross-cutting sweeps described in
 response model, and units over every `*Ticks` and `*Date` field — are **delivered by this feature**,
 because it is the first one with a response model to sweep.
 
+**L3 for `/System/Info/Public` is not met, and is deferred rather than skipped.** Its second half —
+the same request issued to Atrium and to a real reference server, compared field by field — needs
+the differential harness that [feature 010](../010-conformance-harness/spec.md) delivers, and that
+harness needs a reachable Jellyfin, which no gate in this repository is allowed to depend on. What
+is met now is **L2**: a byte-compared golden response, every field's value asserted, and the
+measurements behind them recorded with provenance. The gap closes the first time 010 runs, and the
+`LocalAddress` row of its allowlist is already written.
+
 ## 7. Open questions
 
 | # | Question | Blocks | Resolved by |

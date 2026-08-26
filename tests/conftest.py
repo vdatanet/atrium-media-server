@@ -4,10 +4,15 @@
 Every test gets a fresh instance with a temporary data directory: no shared state between tests,
 no ordering dependencies, and the whole suite runs with no network and no external service
 (Principle VII). See specs/001-server-identity-and-discovery/plan.md section 8.4.
+
+The last of those is **enforced rather than intended** - see `no_outbound_connections` below. A
+suite that merely happens not to reach the network today is one commit away from a test that skips
+when a server is unreachable, and a test that skips is a test that does not exist.
 """
 
 from __future__ import annotations
 
+import socket
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
@@ -50,6 +55,41 @@ def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
         "Read the diff before committing. Each of these is a statement about what a client "
         "receives, and a change to one is a change to the contract."
     )
+
+
+@pytest.fixture(autouse=True)
+def no_outbound_connections(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail any test that opens a TCP connection, rather than trusting that none does.
+
+    Principle VII forbids tests that depend on network availability, and the failure mode it
+    guards against is not a test that *fails* without a server - it is one that quietly skips.
+    This turns the whole class into a loud error naming the address that was dialled.
+
+    **Datagram sockets are deliberately still allowed.** `net.address.address_facing` opens one
+    and calls `connect` to ask the routing table which local address faces a peer; that sends no
+    packet and needs nothing reachable, and it is the mechanism under test in
+    tests/unit/test_net_address.py.
+
+    A test that genuinely needs a reference server - the differential harness feature 010
+    specifies - carries `@pytest.mark.needs_reference` and is exempt. Nothing does yet.
+    """
+    if request.node.get_closest_marker("needs_reference") is not None:
+        return
+
+    original = socket.socket.connect
+
+    def guarded(self: socket.socket, address: object) -> None:
+        if self.type == socket.SOCK_STREAM:
+            raise AssertionError(
+                f"this test opened a TCP connection to {address!r}. The suite runs with no "
+                f"network and no external service (Principle VII): use a fixture, or mark the "
+                f"test @pytest.mark.needs_reference if it is one of feature 010's."
+            )
+        original(self, address)
+
+    monkeypatch.setattr(socket.socket, "connect", guarded)
 
 
 #: A user the override hands back. Not a credential: nothing authenticates as this.
