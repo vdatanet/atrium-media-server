@@ -127,10 +127,18 @@ say how it will be proven is not finished.
 no plan may start until its spec is accepted, and no code until its plan is. The open questions
 across the ten are the review agenda.
 
-Four of them have probe scripts. **Two are answered**, both on 2026-08-26 and both confirming the
-documentation while adding what it had missed: 005 OQ-6 found three response shapes the original
-measurement had never covered, and 003 OQ-3 found that sort names have *two* derivations, with
-three item types bypassing the one the spec described. Two remain to run: 007 OQ-2 and 009 OQ-1. Running them is the cheapest work available and it
+**All four probes have been run**, on 2026-08-26 against a live Jellyfin 10.11.11. Three confirmed
+the documentation and one contradicted it:
+
+| Question | Outcome |
+|---|---|
+| 005 OQ-6 — list envelope shapes | Confirmed, **plus three shapes** the original measurement never covered |
+| 003 OQ-3 — sort-name derivation | Confirmed 15/15, **plus a second rule**: three item types bypass it entirely |
+| 007 OQ-2 — completion thresholds | Answered: 90% / 5% / 300s, **and six branches** where the spec had two |
+| 009 OQ-1 — `Move` semantics | **Contradicted.** The spec had the reading backwards; §3.5 and AC-8 corrected |
+
+Every one returned more than it was sent to check. That is the argument for running a probe before
+writing a plan rather than after. Running them is the cheapest work available and it
 changes what the specs say, so it belongs before the plans, not after. See
 [tools/README.md](../tools/README.md#probes).
 
