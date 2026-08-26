@@ -20,7 +20,27 @@ from __future__ import annotations
 from starlette.requests import Request
 
 from atrium.compat.errors import UnauthenticatedError
+from atrium.config.paths import DataPaths
+from atrium.config.settings import Settings
+from atrium.config.state import ServerState
 from atrium.domain.user import User
+
+
+def get_settings(request: Request) -> Settings:
+    """The operator's configuration, put on the application by its factory."""
+    settings: Settings = request.app.state.settings
+    return settings
+
+
+def get_state(request: Request) -> ServerState:
+    """The server's own record of itself, including the identity it must never regenerate."""
+    state: ServerState = request.app.state.server_state
+    return state
+
+
+def get_paths(request: Request) -> DataPaths:
+    paths: DataPaths = request.app.state.paths
+    return paths
 
 
 async def require_user(request: Request) -> User:
@@ -33,4 +53,4 @@ async def require_user(request: Request) -> User:
     raise UnauthenticatedError
 
 
-__all__ = ["require_user"]
+__all__ = ["get_paths", "get_settings", "get_state", "require_user"]

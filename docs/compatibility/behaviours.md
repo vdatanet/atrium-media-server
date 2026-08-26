@@ -112,17 +112,25 @@ container is on the `MediaSource`. `[prior-probe: Jellyfin 10.11.11, 2026-06-13]
 **Atrium does:** the same. ffprobe's `format_name` is passed through verbatim at item level; the
 resolved single container goes on the `MediaSource`.
 
-### 1.7 Absent versus null
+### 1.7 A null property is absent, everywhere, by one setting
 
-**Jellyfin does:** omits many optional properties entirely rather than sending `null`, and the
-choice is per-property and not consistent.
+**Jellyfin does:** omit any property whose value is null. Not per-property and not a judgement —
+its whole JSON pipeline is configured with
+`DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull`. [source: src/Jellyfin.Extensions/Json/JsonDefaults.cs:33, Jellyfin.Server/Extensions/ApiServiceCollectionExtensions.cs:148 @ v10.11.11]
+
+Measured too: `/System/Info` declares `PackageName` in its schema and does not send it. [probe: manual request, Jellyfin 10.11.11, 2026-08-26]
 
 **Depends on it:** decoders differ. A generated Swift client distinguishes "absent" from "null"
 only when the schema is nullable; a hand-written Kotlin one usually does not.
 
-**Atrium does:** matches Jellyfin per property, verified by the differential harness rather than
-by rule. ⚠️ **UNVERIFIED** as a general rule — the per-property behaviour has not been enumerated.
-This is a known gap and is the first thing the L3 harness will surface.
+**Atrium does:** the same, in the base model rather than per route. A `response_model_exclude_none`
+flag on every route is one someone eventually forgets, and the one they forget is the one a client
+sees a stray `null` on.
+
+> **This entry previously read "per-property and not consistent", marked ⚠️ UNVERIFIED**, and
+> planned to let the differential harness enumerate it. It is one line of configuration. The
+> assumption was more complicated than the truth, which is worth remembering the next time
+> something looks like it needs a harness to work out.
 
 ### 1.8 `GET /Items/Latest` returns a bare array
 

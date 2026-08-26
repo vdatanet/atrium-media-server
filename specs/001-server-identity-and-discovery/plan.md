@@ -156,8 +156,12 @@ class AtriumModel(BaseModel):
 Responses are returned through FastAPI's `response_model`, which serialises `by_alias=True` by
 default. The base does **not** set `exclude_none`: absent-versus-null is per property in the
 reference and currently unverified
-([behaviours §1.7](../../docs/compatibility/behaviours.md#17-absent-versus-null)), so it is decided
-per model against a golden response rather than by a blanket rule.
+([behaviours §1.7](../../docs/compatibility/behaviours.md#17-a-null-property-is-absent-everywhere-by-one-setting)),
+so it is decided per model against a golden response rather than by a blanket rule.
+
+> **Superseded by measurement, T14.** There is no per-property judgement: the reference omits every
+> null, through one `DefaultIgnoreCondition` setting on its whole JSON pipeline. `AtriumModel`
+> therefore drops nulls in its serialiser, and no route needs `response_model_exclude_none`.
 
 **`api.deps.require_user`** — the authentication seam.
 
