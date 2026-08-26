@@ -112,7 +112,7 @@ say how it will be proven is not finished.
 
 | # | Feature | spec | plan | tasks |
 |---|---|---|---|---|
-| [001](001-server-identity-and-discovery/) | Server identity and discovery | **Accepted** | Draft | — |
+| [001](001-server-identity-and-discovery/) | Server identity and discovery | **Accepted** | **Accepted** | Draft |
 | [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | Draft | — | — |
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | Draft | — | — |
 | [004](004-metadata-resolution/) | Metadata resolution | Draft | — | — |
