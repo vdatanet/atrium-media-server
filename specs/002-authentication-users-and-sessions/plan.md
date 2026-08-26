@@ -4,7 +4,7 @@ title: Authentication, users and sessions — implementation plan
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4
+amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-26
@@ -154,9 +154,10 @@ async def require_user(request: Request) -> User:
 ```
 
 **`compat.auth.extract_token(request) -> str | None`** and
-**`compat.auth.parse_client_authorization(value) -> ClientInfo`** — pure functions over a request
-and a header, with no I/O, so the four mechanisms and the lenient parsing are table-testable
-without a server.
+**`compat.auth.parse_client_authorization(value) -> ClientInfo | None`** — pure functions over a
+request and a header, with no I/O, so the five mechanisms and the grammar are table-testable
+without a server. The `| None` is T7's correction: an unreadable header is not this function's
+error to raise, because whether it matters depends on the route (§6.3).
 
 **`users.sessions.SessionRegistry`** — the in-memory activity layer, with `touch(token)`,
 `snapshot()` and `flush()`.
@@ -165,8 +166,13 @@ without a server.
 
 ### 6.1 Token extraction
 
-Four sources, checked in this order, first hit wins: `Authorization: MediaBrowser Token="…"`,
-`X-Emby-Token`, `?ApiKey=`, `?api_key=`.
+**Five** sources, checked in this order, first hit wins: the `Token=` component of
+`Authorization`, then of `X-Emby-Authorization`, then `X-Emby-Token`, then `?ApiKey=`, then
+`?api_key=`.
+
+The second was missing from this plan and from the specification until T7 measured it: the
+reference reads both header names with the grammar of §6.3, and a token in either authenticates.
+`[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
 
 **The order is the reference's, measured, not ours.** `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` This plan first fixed the
 opposite one — `X-Emby-Token` ahead of `Authorization` — and argued that the order only had to be
@@ -176,9 +182,9 @@ once when the connection was built and a URL assembled from a template, and thos
 exactly when one of them is stale. Resolving in the other order turns a request the reference
 answers `200` into a `401`, for the clients most likely to do it.
 
-`Authorization` against a query parameter is **inferred** from the two pairs that were measured
-rather than measured itself, and the two query spellings were never set against each other. Both
-gaps are cheap to close if a client is ever seen to depend on them.
+The chain was measured pair by pair, in both directions each time. `Authorization` against a query
+parameter is **inferred** from it rather than measured, and the two query spellings were never set
+against each other. Both gaps are cheap to close if a client is ever seen to depend on them.
 
 ### 6.2 Authentication, and the timing guarantee
 
@@ -223,10 +229,26 @@ with no security in it.
 
 ### 6.3 The `X-Emby-Authorization` grammar
 
-`MediaBrowser Client="…", Device="…", DeviceId="…", Version="…"`, parsed leniently: any order,
-optional whitespace, values quoted or bare, unknown components ignored, the `MediaBrowser` prefix
-optional in practice. Missing `DeviceId` is the one fatal case, because it is what identifies the
-session — and that is a `400`, not a `401`.
+`MediaBrowser Client="…", Device="…", DeviceId="…", Version="…"`. Three things this plan said
+about it were wrong, and all three were measured in T7 rather than reasoned about. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+
+**The scheme word is required**, not "optional in practice": it must be `MediaBrowser` or `Emby`,
+case-insensitively, and without one nothing is read out of the header.
+
+**Whitespace around the `=` is refused.** `Token = x` is a `401` at the reference. Atrium refuses
+it too — being kinder lets a client be built against Atrium that fails against Jellyfin
+([behaviours §6](../../docs/compatibility/behaviours.md#6-non-improvements)) — and component names
+are matched case-sensitively for the same reason.
+
+**A missing `DeviceId` is fatal on one route, not in the parser.** An ordinary authenticated route
+serves a header without it. So `parse_client_authorization` reports what it found and returns
+`None` for a header it cannot read, and `require_client_authorization` carries
+`AuthenticateByName`'s rule — absent, unreadable or no `DeviceId` is a `400` there, and
+deliberately not a `401`.
+
+What is genuinely lenient, all measured: any order, values quoted or bare, no space after a comma
+or a space before one, extra spaces after the scheme, a trailing comma, and unknown components
+ignored rather than rejected.
 
 ### 6.4 Policy: enforced versus echoed
 

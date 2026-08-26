@@ -185,25 +185,26 @@ break when it is HTTPS. This is a genuine footgun that has cost real debugging t
 does **not** replicate the HTTPS override: `LocalAddress` reflects the scheme the server is
 actually reachable on for that network. ⚠️ **This is a deliberate divergence** — see §4.2.
 
-### 2.4 All four authentication mechanisms work, and one of them wins
+### 2.4 There are five authentication mechanisms, and one of them wins
 
-**Jellyfin does:** accept all four — listed in
-[api-surface-v1.md §3](api-surface-v1.md#3-authentication-users-and-sessions) — on an authenticated
-API route, and accept all four on the image and streaming routes too, where the query forms are the
-only practical option. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+**Jellyfin does:** accept **five**, not the four
+[api-surface-v1.md §3](api-surface-v1.md#3-authentication-users-and-sessions) lists. The fifth is
+`X-Emby-Authorization` carrying a `Token=` component: the reference reads that header and
+`Authorization` with the same grammar, and a token in either authenticates. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]` It is
+the historical Emby form and it is what a great many clients send, so a server implementing only
+the documented four would refuse clients that have worked against Jellyfin for years.
 
-When a request carries two that disagree, the order is **not** arbitrary:
+All five work on an authenticated API route, and on the image and streaming routes too, where the
+query forms are the only practical option.
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
 
-| Request | Answer | Which one was read |
-|---|---|---|
-| Real `X-Emby-Token`, bogus `Authorization` | `401` | `Authorization` |
-| Bogus `X-Emby-Token`, real `Authorization` | `200` | `Authorization` |
-| Real `X-Emby-Token`, bogus `?ApiKey=` | `200` | `X-Emby-Token` |
-| Bogus `X-Emby-Token`, real `?ApiKey=` | `401` | `X-Emby-Token` |
+When a request carries two that disagree, the order is **not** arbitrary. Measured pair by pair,
+in both directions each time:
 
-So `Authorization` beats `X-Emby-Token`, and `X-Emby-Token` beats the query. The third rung —
-`Authorization` against a query parameter — is **inferred from those two and not measured**, and
-the two query spellings were never set against each other.
+    Authorization  >  X-Emby-Authorization  >  X-Emby-Token  >  ?ApiKey= / ?api_key=
+
+The two query spellings were never set against each other, and `Authorization` against a query
+parameter is inferred from the chain rather than measured.
 
 **Depends on it:** a client holding a stale token in one place and a fresh one in another, which
 sounds contrived until you notice that clients set a header once when the connection is built and
@@ -213,6 +214,43 @@ request into a `401` for exactly those clients.
 **Atrium does:** the same order. [002 plan §6.1](../../specs/002-authentication-users-and-sessions/plan.md#61-token-extraction)
 fixed the opposite one and called it arbitrary, on the argument that it only had to be
 deterministic. It had to be deterministic **and** the reference's.
+
+### 2.12 The client header's grammar is stricter than "lenient" suggests
+
+**Jellyfin does:** require a scheme word, and it is `MediaBrowser` or `Emby`, compared
+case-insensitively. Anything else — `Bearer`, a made-up word, or no scheme at all — and nothing is
+read out of the header. Within it, one row per variation, all measured: `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+
+| Variation | Reference |
+|---|---|
+| Values quoted, or bare | accepted |
+| No space after a comma, or a space *before* one | accepted |
+| Extra spaces after the scheme | accepted |
+| Components in any order | accepted |
+| An unknown component alongside | accepted |
+| A trailing comma | accepted |
+| **Whitespace around the `=`** | **`401`** |
+| **A lowercase component name** (`token=`) | **`401`** |
+
+**Depends on it:** the two refusals are the interesting half. No working client can be sending
+either form today, because the reference refuses both.
+
+**Atrium does:** the same, including the two refusals. Being kinder costs nothing today and lets
+somebody build a client against Atrium that fails against Jellyfin, which is the direction that
+matters — see §6.
+
+### 2.13 `DeviceId` is mandatory on one route, not on the header
+
+**Jellyfin does:** answer `200` on an ordinary authenticated route for a client header carrying no
+`DeviceId` at all, and `400` for one on `POST /Users/AuthenticateByName`. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+
+**Depends on it:** clients that set the header once and reuse it, minus the component, on routes
+where nothing needs a session.
+
+**Atrium does:** the same. [002 plan §6.3](../../specs/002-authentication-users-and-sessions/plan.md#63-the-x-emby-authorization-grammar)
+called it "the one fatal case", which is true of one route and not of the parser: a parser that
+raised would refuse requests the reference serves.
 
 ### 2.5 `SortBy` vocabulary
 
@@ -854,3 +892,4 @@ This list exists so they stop being re-proposed.
 | A capability-advertisement endpoint so clients can use Atrium's better paths | The definition of a delta. If a client has to ask what server it is talking to, the project has failed |
 | Richer error bodies than Jellyfin's | Clients parse status codes; a different body shape is a difference they can observe |
 | Numeric ids because they are easier to debug | Breaks §1.4 and every client's id parsing |
+| Accepting whitespace around `=` in the client header, since the intent is obvious | The reference answers `401` (§2.12). No working client sends it, so tolerating it protects nobody — and it lets a client be developed against Atrium and then fail against Jellyfin |

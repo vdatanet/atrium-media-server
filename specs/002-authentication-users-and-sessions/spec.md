@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
 accepted: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions
+amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6
 depends_on: [001]
 ---
 
@@ -30,7 +30,7 @@ closed.
 
 - `POST /Users/AuthenticateByName`, `GET /Users/Public`, `GET /Users/Me`, `GET /Users/{userId}`,
   `POST /Users/Configuration`, `POST /Sessions/Capabilities/Full`, `GET /Sessions`.
-- The four token-presentation mechanisms, on every authenticated route in the project.
+- The five token-presentation mechanisms, on every authenticated route in the project.
 - The client-identification header, and the device identity it establishes.
 - User accounts, their configuration and the parts of their policy v1 honours.
 - Session lifecycle: creation, activity tracking, expiry.
@@ -47,14 +47,22 @@ closed.
 
 ### 3.1 How a client presents a token
 
-Four mechanisms, all accepted, on **every** authenticated route:
+**Five** mechanisms, all accepted, on **every** authenticated route:
 
 | Mechanism | Form |
 |---|---|
-| Header | `X-Emby-Token: {token}` |
 | Header | `Authorization: MediaBrowser Token="{token}"` |
+| Header | `X-Emby-Authorization: MediaBrowser Token="{token}"` |
+| Header | `X-Emby-Token: {token}` |
 | Query | `?ApiKey={token}` |
 | Query | `?api_key={token}` |
+
+Listed in the order the reference resolves them. **The second was missing from this specification
+until it was measured** `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]` — the reference reads both header names with the same
+grammar of §3.2, and a token in either authenticates. It is the historical Emby form, so a server
+implementing only the other four would refuse clients that have worked against the reference for
+years. Either header may carry the client's identification and the token together, which is what
+most clients send.
 
 `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
 
@@ -63,8 +71,12 @@ handed to media players and image loaders, which do not set headers. Supporting 
 breaks playback and artwork while leaving browsing intact — a failure that looks like a bug in the
 client.
 
-**When a request carries two that disagree, the one that wins is measured, not chosen:** the
-`Authorization` header beats `X-Emby-Token`, and `X-Emby-Token` beats either query form. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+**When a request carries two that disagree, the one that wins is measured, not chosen:**
+
+    Authorization  >  X-Emby-Authorization  >  X-Emby-Token  >  ?ApiKey= / ?api_key=
+
+measured pair by pair, in both directions each time.
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
 
 **The image and delivery route classes accept all four and require none.** On the reference an
 image and a static stream answer a request carrying no token at all, so on those two classes the
@@ -83,7 +95,9 @@ login it can never complete, with the user's password correct every time.
 
 `X-Emby-Authorization: MediaBrowser Client="…", Device="…", DeviceId="…", Version="…"`
 
-**Mandatory on `POST /Users/AuthenticateByName`.** The `Emby` in the name is historical.
+**Mandatory on `POST /Users/AuthenticateByName`, and there only.** A header carrying no
+`DeviceId` is served normally on every other route — measured `200`, not a refusal. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+The `Emby` in the name is historical.
 
 | Component | Meaning |
 |---|---|
@@ -92,9 +106,27 @@ login it can never complete, with the user's password correct every time.
 | `DeviceId` | Stable per-installation identifier. **This is what identifies a session** |
 | `Version` | Client version string |
 
-Parsing must be lenient in the ways clients are actually sloppy: any order, optional whitespace
-around `=` and after commas, values quoted or bare, and unknown components ignored rather than
-rejected.
+**The header must carry a scheme word**, and it is `MediaBrowser` or `Emby`, matched
+case-insensitively. Without one — or with any other word — nothing is read out of the header at
+all. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+
+Parsing is lenient in some of the ways clients are sloppy and **strict in two the reference is
+strict about**, and the difference was measured rather than assumed:
+
+| Variation | Accepted |
+|---|---|
+| Components in any order | yes |
+| Values quoted, or bare | yes |
+| No space after a comma, or a space before one | yes |
+| Extra spaces after the scheme, or a trailing comma | yes |
+| Unknown components | yes, ignored |
+| **Whitespace around the `=`** | **no** |
+| **A lowercase component name** | **no** |
+
+An earlier version of this section claimed whitespace around `=` was accepted. It is not, and
+matching the reference matters more than being kind: no working client sends that form, and
+accepting it would let a client be built against Atrium that fails against the reference
+([behaviours §6](../../docs/compatibility/behaviours.md#6-non-improvements)).
 
 **The header is accepted anywhere and authenticates nobody.** Alongside a token the request
 succeeds; carrying only this header and no token, an authenticated route answers `401` with the
@@ -304,9 +336,9 @@ gap: a client that saw `true` would offer the user a remote-control UI that does
 2. An unknown username answers `401`; a **disabled account answers `403`**; a missing
    `X-Emby-Authorization` answers `400`. All three carry the reference's `text/plain` body, byte
    for byte, and are asserted as bytes rather than as status codes.
-3. All four token mechanisms of §3.1 authenticate the same request identically on an API route, and
-   the `Authorization` header wins over `X-Emby-Token`, which wins over either query form, when a
-   request carries two that disagree. On the image and delivery route classes all four are
+3. All **five** token mechanisms of §3.1 authenticate the same request identically on an API
+   route, and a request carrying two resolves in the measured order:
+   `Authorization` > `X-Emby-Authorization` > `X-Emby-Token` > query. On the image and delivery route classes all four are
    **accepted and none is required**, which is what the reference does — the criterion there is
    that presenting a token is never itself a reason to refuse.
 4. No token on an authenticated route is `401`; a valid token lacking permission is `403`.
@@ -331,7 +363,7 @@ gap: a client that saw `true` would offer the user a remote-control UI that does
 | `POST /Users/Configuration` | **L2** | Round-trip test |
 | `GET /Sessions` | **L2** | Fixture with two sessions on two devices |
 | `POST /Sessions/Capabilities/Full` | **L1** | Shape only; its effect is asserted through `/Sessions` |
-| The four token mechanisms | **L2** | Table-driven across three route classes, including the precedence pairs (AC-3) |
+| The five token mechanisms | **L2** | Table-driven across three route classes, including the precedence pairs and the grammar table (AC-3) |
 
 ## 7. Open questions
 

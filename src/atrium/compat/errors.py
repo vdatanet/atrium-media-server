@@ -2,7 +2,7 @@
 """What a refusal looks like on the wire.
 
 Measured against a live 10.11.11 rather than assumed, and the answer is that the reference has
-**two** error shapes, not one.
+**three** error shapes, not one.
 `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
 
 **Empty**, for refusals decided before a handler runs - an unauthenticated request, a path that
@@ -15,7 +15,13 @@ else: no body, no `Content-Type`, and **no `WWW-Authenticate`**. A `405` additio
 not exist, a malformed identifier in a path. A JSON object with `type`, `title`, `status`, an
 `errors` map for validation failures, and a `traceId`.
 
-Only the first is implemented here, because only the first is reachable in feature 001. The second
+**Plain text**, for a refusal a controller decided itself. `text/plain` with no charset, and a
+fixed 25-byte body reading `Error processing request.` Every refusal from
+`POST /Users/AuthenticateByName` has this shape - the `400` for a broken client header, the `401`
+for an unknown username, the `403` for a disabled account - so the status is the entire difference
+between them. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+
+The first was implemented in feature 001, because only the first was reachable there. The second
 belongs to the features that raise it; its shape is recorded in
 docs/compatibility/behaviours.md section 1.11 so it does not have to be rediscovered.
 
@@ -52,6 +58,23 @@ class UnauthenticatedError(Exception):
     """No usable credential on a route that needs one. Answered with an empty 401."""
 
 
+class ClientAuthorizationError(Exception):
+    """The client-identification header is missing or unreadable where it is required.
+
+    A `400`, and deliberately not a `401`: a client that reads this as one tells its user that
+    their password is wrong, when what actually happened is that the client sent a broken header
+    (spec section 3.3).
+    """
+
+
+#: What a controller's own refusal says, byte for byte. Measured, and it is the same 25 bytes
+#: whatever went wrong, which is why the golden responses compare bytes and not status codes.
+CONTROLLER_ERROR_BODY = b"Error processing request."
+
+#: No `charset`, unlike the JSON responses (behaviours section 1.10). Measured.
+CONTROLLER_ERROR_TYPE = "text/plain"
+
+
 def empty_error(status_code: int, headers: dict[str, str] | None = None) -> Response:
     """A refusal with a status line and nothing else, as the reference sends."""
     return Response(status_code=status_code, headers=headers)
@@ -59,6 +82,19 @@ def empty_error(status_code: int, headers: dict[str, str] | None = None) -> Resp
 
 async def unauthenticated_handler(_request: Request, _exc: Exception) -> Response:
     return empty_error(401)
+
+
+def controller_error(status_code: int) -> Response:
+    """The third shape: a status, `text/plain`, and the reference's fixed sentence."""
+    return Response(
+        content=CONTROLLER_ERROR_BODY,
+        status_code=status_code,
+        media_type=CONTROLLER_ERROR_TYPE,
+    )
+
+
+async def client_authorization_handler(_request: Request, _exc: Exception) -> Response:
+    return controller_error(400)
 
 
 async def routing_handler(request: Request, exc: Exception) -> Response:
@@ -88,14 +124,20 @@ async def routing_handler(request: Request, exc: Exception) -> Response:
 #: wire shape of everything else.
 EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     UnauthenticatedError: unauthenticated_handler,
+    ClientAuthorizationError: client_authorization_handler,
     HTTPException: routing_handler,
 }
 
 __all__ = [
+    "CONTROLLER_ERROR_BODY",
+    "CONTROLLER_ERROR_TYPE",
     "EXCEPTION_HANDLERS",
     "ROUTING_REFUSALS",
+    "ClientAuthorizationError",
     "ExceptionHandler",
     "UnauthenticatedError",
+    "client_authorization_handler",
+    "controller_error",
     "empty_error",
     "routing_handler",
     "unauthenticated_handler",
