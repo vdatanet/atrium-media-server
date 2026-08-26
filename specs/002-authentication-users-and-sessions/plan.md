@@ -4,7 +4,7 @@ title: Authentication, users and sessions — implementation plan
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3
+amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3; by T8 - sections 6.5 and 6.6
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-26
@@ -275,6 +275,9 @@ gain from columns.
 `LastActivityDate` and `last_used` advance in an in-memory registry. A background task flushes
 dirty rows every 30 seconds, and a flush also happens on clean shutdown.
 
+`/Sessions` reads **through** the registry rather than out of the database: reporting the flushed
+value would tell a client that a session it is using right now was last active half a minute ago.
+
 The cost is bounded and stated: **an unclean shutdown loses up to 30 seconds of activity
 timestamps.** Nothing else is at risk — the token itself, the session identity and every user
 record are written synchronously. An activity timestamp is the only thing in this feature that can
@@ -285,7 +288,12 @@ be a little stale without anyone being able to tell.
 Re-authentication from a known `device_id` replaces the session and deletes its token in one
 transaction, so there is no window in which both are valid.
 
-`max_active_sessions` evicts the least-recently-used session on creation, not on a timer.
+`max_active_sessions` evicts the least-recently-used session on creation, not on a timer, and
+**an evicted session's tokens go with it**. A session removed from `/Sessions` whose token still
+worked would reappear on that device's next request, which is a gap in a list rather than an
+eviction. The reference's behaviour here is not measured; what is written down is that the two
+halves have to agree, because a server whose session list and whose credentials disagree is
+answering two different questions about the same device.
 
 **v1 does not expire tokens on inactivity**, per [spec §3.8](spec.md#38-sessions) OQ-2: a token
 that outlives the reference's is invisible to a client, whereas one that dies sooner produces

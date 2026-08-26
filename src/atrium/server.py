@@ -20,13 +20,15 @@ See specs/001-server-identity-and-discovery/plan.md section 3.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import sys
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI
+from sqlalchemy.exc import SQLAlchemyError
 
 from atrium import REFERENCE_VERSION, __version__
 from atrium.api import system
@@ -42,6 +44,7 @@ from atrium.db.engine import create_database_engine, session_factory, verify_con
 from atrium.db.schema import ensure_current
 from atrium.lifecycle import Readiness, ReadinessMiddleware
 from atrium.users import passwords as password_module
+from atrium.users.sessions import SessionRegistry
 
 logger = logging.getLogger("atrium")
 
@@ -75,6 +78,11 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     # remove. ADR-0006, plan section 6.2.
     passwords = password_module.build(settings.passwords)
 
+    # Activity accumulates here and reaches the database on the interval below, because advancing
+    # LastActivityDate synchronously would take a SQLite write lock on every authenticated
+    # request. plan section 6.5.
+    registry = SessionRegistry(sessions)
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         # Everything slow belongs here, before the gate opens. Today there is nothing slow, and
@@ -87,9 +95,18 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
             REFERENCE_VERSION,
             resolved.root,
         )
+        flusher = asyncio.create_task(registry.run())
         try:
             yield
         finally:
+            flusher.cancel()
+            with suppress(asyncio.CancelledError):
+                await flusher
+            # The clean-shutdown flush. Without it, stopping a server at the wrong moment would
+            # lose activity it had every opportunity to write - which is a different thing from
+            # the crash this design already accepts losing thirty seconds to.
+            with suppress(SQLAlchemyError):
+                registry.flush()
             # Returns every pooled connection, which is what closes the WAL cleanly. Without it a
             # test that builds hundreds of instances leaves hundreds of open files behind.
             engine.dispose()
@@ -134,6 +151,7 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     app.state.db = engine
     app.state.sessions = sessions
     app.state.passwords = passwords
+    app.state.registry = registry
     app.state.settings = settings
     app.state.server_state = state
     app.state.readiness = readiness
