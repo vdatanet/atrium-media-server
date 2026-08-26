@@ -364,9 +364,9 @@ T6 also added the half of the repository it needed: `library_access` and `set_li
 which turn the two honoured list properties into join-table rows and back. Replacing rather than
 merging, because a library absent from `EnabledFolders` is a library the user may not see.
 
-## T7 — `compat/auth.py`: extraction and parsing
+## T7 — `compat/auth.py`: extraction and parsing  ✅
 
-- [ ] **Changes:** `extract_token` over the four mechanisms in a fixed order; `parse_client_authorization`
+- [x] **Changes:** `extract_token` over the four mechanisms in a fixed order; `parse_client_authorization`
   for `X-Emby-Authorization`, lenient about order, whitespace, quoting and unknown components.
 - **Depends on:** 001 complete
 - **Verified by:** a table over the four mechanisms including a request carrying **two**, which
@@ -374,6 +374,43 @@ merging, because a library absent from `EnabledFolders` is a library the user ma
   extra-component headers; a header missing `DeviceId` is the one fatal case.
 - **Note:** pure functions over a request. No I/O, so the whole table runs without a server.
 - **Plan reference:** §5, §6.1, §6.3
+
+### Done — 2026-08-26
+
+**There is a fifth mechanism, and the specification had four.** `X-Emby-Authorization` carrying a
+`Token=` component authenticates: the reference reads that header and `Authorization` with the same
+grammar. It is the **historical Emby form**, which a great many clients send, so a server built to
+this specification would have refused clients that have worked against the reference for years —
+the worst class of finding this project can produce, and it took one request to find.
+
+**Three of the four claims in [plan §6.3](plan.md#63-the-x-emby-authorization-grammar) were wrong.**
+The `MediaBrowser` prefix is not "optional in practice": it is required, and it may be
+`MediaBrowser` or `Emby`, case-insensitively — `Bearer`, anything else, or nothing at all reads as
+an empty header. Whitespace around the `=` is **refused**, which is the one leniency both documents
+claimed. Component names are case-sensitive while the scheme is not. And a missing `DeviceId` is
+fatal on **one route**, not in the parser: an ordinary authenticated route answers `200` without
+it, so a parser that raised — as the plan described — would have refused requests the reference
+serves.
+
+**Atrium refuses the two forms the reference refuses, and that is a decision.** Accepting
+`Token = x` costs nothing today, because no working client can be sending it. What it costs is
+later: somebody builds a client against Atrium and it fails against Jellyfin. That is the direction
+of delta that matters, and it is now in
+[behaviours §6](../../docs/compatibility/behaviours.md#6-non-improvements) so it stops being
+re-proposed.
+
+**The precedence chain is complete and measured**, pair by pair and in both directions each time:
+`Authorization` > `X-Emby-Authorization` > `X-Emby-Token` > query. Only two rungs of it were known
+before this task, and the new mechanism landed in the **middle** rather than at either end — which
+is exactly where a guess would not have put it.
+
+**The third error shape got its implementation.** `compat/errors.py` documented two shapes and T1
+measured a third; the module still said "two". It now carries `ClientAuthorizationError` and the
+`text/plain` refusal with the reference's fixed 25-byte sentence, so T11's route has nothing left
+to invent.
+
+The tests are two tables, and each row carries the status the reference answered. A change that
+made this parser kinder than the reference fails there rather than in somebody's client.
 
 ## T8 — `users/sessions.py`: the registry
 
@@ -444,13 +481,14 @@ merging, because a library absent from `EnabledFolders` is a library the user ma
   nothing.
 - **Plan reference:** §3
 
-## T13 — The four mechanisms across route classes
+## T13 — The five mechanisms across route classes
 
 - [ ] **Changes:** `tests/conformance/test_auth_mechanisms.py`, table-driven over mechanism ×
   route class.
 - **Depends on:** T11
-- **Verified by:** **AC-3** — all four authenticate an API route identically, and the four
-  precedence pairs resolve the way T1 measured them. Image and delivery routes use stub routes
+- **Verified by:** **AC-3** — all **five** authenticate an API route identically (T7 measured the
+  fifth, `X-Emby-Authorization` carrying a token), and the precedence chain resolves the way T1 and
+  T7 measured it. Image and delivery routes use stub routes
   carrying the same dependency until 006 and 008 exist, and the stubs are replaced rather than
   duplicated when they do. The stubs assert that all four are **accepted**, not that a token is
   required: T1 measured that the reference requires none on either class, and asserting otherwise
