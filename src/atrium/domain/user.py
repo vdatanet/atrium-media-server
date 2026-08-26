@@ -20,6 +20,20 @@ from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
+class LibraryAccess:
+    """Which libraries a user may see, and which they may delete from.
+
+    The two honoured policy properties that are lists rather than flags. They are a join table
+    rather than fields on `User` because 005 filters every query on the first of them, and a tuple
+    here rather than a list because this object is frozen and a frozen object holding a mutable
+    list is frozen in the way that does not help.
+    """
+
+    enabled_folders: tuple[str, ...] = ()
+    deletion_folders: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class User:
     """An account. Frozen, because a repository hands these out and nothing upstream owns them."""
 
@@ -57,4 +71,4 @@ class User:
     configuration: dict[str, Any] = field(default_factory=dict)
 
 
-__all__ = ["User"]
+__all__ = ["LibraryAccess", "User"]

@@ -319,9 +319,9 @@ thing that is free to get right here and expensive to notice later.
 identity map, so handing the row's own dict to a caller would let a route edit the session's idea
 of what is in the database. Asserted, because it is invisible until it is not.
 
-## T6 — `users/policy.py`: enforced versus echoed
+## T6 — `users/policy.py`: enforced versus echoed  ✅
 
-- [ ] **Changes:** assembling a policy object from nine columns plus the blob, and splitting it back
+- [x] **Changes:** assembling a policy object from nine columns plus the blob, and splitting it back
   on write.
 - **Depends on:** T5
 - **Verified by:** the shape AC-8 asks of configuration, applied to policy — a policy containing
@@ -330,6 +330,39 @@ of what is in the database. Asserted, because it is invisible until it is not.
   **AC-8 itself is asserted over HTTP in T11**, because Principle VIII does not accept a criterion
   proven against the function behind the route.
 - **Plan reference:** §6.4
+
+### Done — 2026-08-26
+
+**"Byte-identically" is the wrong requirement, and asking for it would have produced a delta.**
+This task asked that a policy round-trip byte-identically. It cannot, and it should not: assembling
+a document from nine columns, two lists and a blob emits *this server's* key order, and the
+reference emits *its own* — a C# object serialises its properties in a fixed order whatever a
+client sent. Echoing a client's ordering would be the difference from the reference rather than
+fidelity to it. What round-trips is the **set of properties and their values**, which is now what
+the test asserts and what [plan §6.4](plan.md#64-policy-enforced-versus-echoed) says.
+
+**An honoured property must never live in the blob, and that is what makes the promotion
+lossless.** The task asked that a property moved from blob to column in a later migration not be
+lost; the sharper question is which of the two wins while both exist. The column does: splitting
+strips the eleven before storing the rest, assembling reads each from its column, and a stale copy
+left behind by a pre-migration write is ignored rather than shadowing it — otherwise the flag a
+server *enforces* and the flag it *reports* would come from two different places. One write through
+`split` removes the stale copy, with no migration of its own.
+
+**The refusal of a wrong-typed value is not defensive programming, it is SQLite.** A string in a
+boolean column is stored as a string and comes back as one, and the flag is then true for every
+value except the empty string. `split` refuses rather than letting the storage layer decide what
+somebody meant, and `True` is refused for an integer column for the same reason — in Python a bool
+*is* an int, so `MaxActiveSessions: true` would silently become 1.
+
+**The test document is the reference's, not an invention.** All 42 property names, measured
+`[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`. A round-trip over three properties would
+have proven the mechanism and nothing about the shape a client posts, and the eleven/nine/31 counts
+are asserted against it rather than restated.
+
+T6 also added the half of the repository it needed: `library_access` and `set_library_access`,
+which turn the two honoured list properties into join-table rows and back. Replacing rather than
+merging, because a library absent from `EnabledFolders` is a library the user may not see.
 
 ## T7 — `compat/auth.py`: extraction and parsing
 
