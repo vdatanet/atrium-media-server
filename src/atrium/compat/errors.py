@@ -24,8 +24,15 @@ route no browser was meant to drive. Matching the reference is also the safer be
 
 from __future__ import annotations
 
+from collections.abc import Callable, Coroutine
+from typing import Any
+
 from starlette.requests import Request
 from starlette.responses import Response
+
+#: The shape Starlette expects of a handler, spelled out so the registry below type-checks against
+#: what the application factory passes it.
+ExceptionHandler = Callable[[Request, Any], Coroutine[Any, Any, Response]]
 
 
 class UnauthenticatedError(Exception):
@@ -43,10 +50,13 @@ async def unauthenticated_handler(_request: Request, _exc: Exception) -> Respons
 
 #: Registered by the application factory. Kept here so the wire shape of an error lives beside the
 #: wire shape of everything else.
-EXCEPTION_HANDLERS = {UnauthenticatedError: unauthenticated_handler}
+EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
+    UnauthenticatedError: unauthenticated_handler
+}
 
 __all__ = [
     "EXCEPTION_HANDLERS",
+    "ExceptionHandler",
     "UnauthenticatedError",
     "empty_error",
     "unauthenticated_handler",

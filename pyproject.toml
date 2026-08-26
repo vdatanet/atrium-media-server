@@ -26,6 +26,11 @@ dependencies = [
     "uvicorn[standard]>=0.34",
 ]
 
+# Deferred from T1, when `atrium.server` did not exist yet: an entry point pointing at a missing
+# module fails the build, and a broken one is worse than none.
+[project.scripts]
+atrium = "atrium.server:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",
@@ -101,6 +106,9 @@ disallow_any_unimported = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config -q"
+# A warning nobody sees is a warning nobody fixes, and the first one to matter here was a
+# deprecated test client reaching a code path the server never uses.
+filterwarnings = ["error"]
 asyncio_mode = "auto"
 markers = [
     "conformance: asserts behaviour at the HTTP boundary (Principle VIII)",
