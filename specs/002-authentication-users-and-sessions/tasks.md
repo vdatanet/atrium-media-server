@@ -175,15 +175,52 @@ of metadata to compare against — T4 adds tables rather than also rewiring Alem
 inside a Python package, and a build backend that skipped them would produce a server that cannot
 migrate itself, with nothing in this repository noticing. They are in the wheel.
 
-## T3 — `users/passwords.py`: Argon2id
+## T3 — `users/passwords.py`: Argon2id  ✅
 
-- [ ] **Changes:** hash, verify, and `needs_rehash`; the self-describing stored format; the dummy
+- [x] **Changes:** hash, verify, and `needs_rehash`; the self-describing stored format; the dummy
   record generated once at startup; parameters read from configuration.
 - **Depends on:** T2
 - **Verified by:** a hash round-trips; a wrong password fails; a record written with lower
   parameters verifies **and** reports `needs_rehash`; the stored string parses back to its
   algorithm and parameters. The dummy record is never derived from a real password — asserted.
 - **Plan reference:** [ADR-0006](../../docs/decisions/0006-password-hashing.md), §6.2
+
+### Done — 2026-08-26
+
+**The library's `needs_rehash` and the decision's `needs_rehash` are different functions.**
+argon2-cffi's `check_needs_rehash` means *different from the current parameters*; ADR-0006 says
+*below* them. It reports true for a record made with **stronger** parameters, so delegating to it
+would rewrite that record weaker — at the one moment the plaintext exists. An operator who lowered
+these settings after moving to a smaller machine would silently downgrade every account on its
+owner's next login, and nothing anywhere would say so. Atrium compares memory and time itself.
+[plan §6.2](plan.md#62-authentication-and-the-timing-guarantee) records it, and a test asserts the
+downgrade does not happen.
+
+**Parallelism is not in that comparison**, which is a decision and not an omission. It divides the
+same work across lanes rather than adding any — RFC 9106 sets it from the cores available, and the
+cost is carried by memory and time. Rewriting a record because `p` moved would spend the plaintext
+moment on a change with no security in it.
+
+**One line would have run the KDF twice on every login, forever.** `extract_parameters` returns the
+library's enum, whose member name is `ID` — not `argon2id`, which is what the record says and what
+`ALGORITHM` holds. `type.name.lower()` gives `id`, which never equals `argon2id`, so `needs_rehash`
+short-circuited to true for **every** record including one written a microsecond earlier. Verifying
+still worked perfectly, so the round-trip test passed; what failed was `needs_rehash` against a
+record made by the same hasher, which is a test that only exists because the task statement asked
+for one.
+
+**The suite lowers the parameters through `config.toml`, which is the mechanism an operator has.**
+Measured on this machine: **41 ms** per hash at the shipped parameters against **0.06 ms** at the
+test ones, and the factory hashes a dummy record once per server it builds — of which this suite
+builds dozens. Patching a default would have been shorter and would not have exercised the setting.
+The shipped defaults are written out in `settings.py` rather than inherited from argon2-cffi, and a
+test ties them to RFC 9106's low-memory profile: a library default can move under a project without
+anybody deciding it should, and these are a security parameter.
+
+**The dummy record carries the policy's own parameters**, which is the part a refactor would
+quietly break. A dummy built at different parameters is verified in a different amount of time,
+which puts back precisely the signal it exists to remove: how long the refusal took would say
+whether the username was real. That is now a test rather than a property somebody remembers.
 
 ## T4 — Migration `0001_users_and_sessions`
 

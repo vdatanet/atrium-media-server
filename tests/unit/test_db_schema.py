@@ -20,6 +20,7 @@ from atrium.config.paths import ConfigurationError, DataPaths
 from atrium.db import schema
 from atrium.db.engine import create_database_engine
 from atrium.server import create_app, main
+from tests.conftest import data_dir
 
 #: The first revision reads back `PRAGMA foreign_keys` and refuses if it is off. That is the whole
 #: assertion behind `upgrade_to_head` reusing the server's engine: Alembic would happily open its
@@ -78,9 +79,7 @@ def downgrade() -> None:
 
 @pytest.fixture
 def prepared(tmp_path: Path) -> DataPaths:
-    paths = DataPaths(tmp_path / "atrium")
-    paths.prepare()
-    return paths
+    return data_dir(tmp_path / "atrium")
 
 
 @pytest.fixture

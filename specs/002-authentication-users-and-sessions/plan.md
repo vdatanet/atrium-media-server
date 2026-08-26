@@ -4,7 +4,7 @@ title: Authentication, users and sessions — implementation plan
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7
+amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-26
@@ -194,6 +194,19 @@ has the argument.
 The KDF still runs on the disabled and locked-out paths even though their status already discloses
 the account's state. It costs one verify and it keeps the property true where it does matter —
 between an unknown username and a wrong password, which are the two the status cannot separate.
+
+**"Rehash if the parameters are stale" means below the policy, not different from it.** argon2-cffi's
+`check_needs_rehash` means *different*, and reports true for a record made with **stronger**
+parameters than the current ones. Taking that meaning would rewrite a strong record weaker at the
+one moment the plaintext exists — so an operator who lowered these settings after moving to a
+smaller machine would silently downgrade every account on its owner's next login, with nothing
+saying so. [ADR-0006](../../docs/decisions/0006-password-hashing.md) says *below*, and Atrium
+compares memory and time itself rather than delegating.
+
+**Parallelism is deliberately not part of that comparison.** It divides the same work across lanes
+rather than adding any — RFC 9106 sets it from the cores available, and the cost is carried by
+memory and time. Rewriting a record because `p` moved would spend the plaintext moment on a change
+with no security in it.
 
 ### 6.3 The `X-Emby-Authorization` grammar
 
