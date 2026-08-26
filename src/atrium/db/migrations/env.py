@@ -17,7 +17,10 @@ interpolation, so a data directory containing one would fail in a way nobody wou
 
 from __future__ import annotations
 
+from typing import Any, Literal
+
 from alembic import context
+from alembic.autogenerate.api import AutogenContext
 from sqlalchemy import Connection
 
 from atrium.config.paths import DataPaths, resolve_data_dir
@@ -26,11 +29,34 @@ from atrium.db.models import Base
 
 target_metadata = Base.metadata
 
+#: Where this project's own column types live. Anything under here needs an import written into
+#: the migration; anything from SQLAlchemy already has one.
+OUR_PACKAGE = "atrium."
+
+
+def render_item(kind: str, obj: Any, autogen_context: AutogenContext) -> str | Literal[False]:
+    """Import the project's own column types into the migrations that use them.
+
+    Alembic adds an import for a rendered type **only** when it comes from `sqlalchemy.dialects`
+    (`autogenerate/render.py`, `_repr_type`). For anything else it renders the type with its module
+    path - `atrium.db.types.UtcDateTime()` - and imports nothing, so the generated migration is a
+    `NameError` waiting for the first operator who runs it. Nothing warns, and autogenerate
+    reports success.
+
+    `repr` rather than the bare class name, so a type that takes constructor arguments keeps them.
+    """
+    if kind == "type" and type(obj).__module__.startswith(OUR_PACKAGE):
+        module, name = type(obj).__module__, type(obj).__name__
+        autogen_context.imports.add(f"from {module} import {name}")
+        return repr(obj)
+    return False
+
 
 def _run(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
+        render_item=render_item,
         # SQLite cannot ALTER most things in place. Batch mode rewrites the table instead, which
         # is the only way a column ever gets dropped or a constraint changed on this backend.
         render_as_batch=True,
@@ -46,6 +72,7 @@ def run_migrations_offline() -> None:
     context.configure(
         url=f"sqlite+pysqlite:///{paths.database}",
         target_metadata=target_metadata,
+        render_item=render_item,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         render_as_batch=True,

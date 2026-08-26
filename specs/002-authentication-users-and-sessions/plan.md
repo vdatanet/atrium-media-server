@@ -4,7 +4,7 @@ title: Authentication, users and sessions — implementation plan
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2
+amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-26
@@ -32,10 +32,15 @@ get wrong by reflex. A hash never reaches a client, so Principle I is silent and
 on security grounds alone: Argon2id, decided in
 [ADR-0006](../../docs/decisions/0006-password-hashing.md).
 
-**The policy object is two things wearing one name.** The reference's `UserPolicy` carries about
-forty flags; v1 honours nine ([spec §3.5](spec.md#35-the-user-object)). Storing forty typed columns
-to enforce nine would be dishonest about which ones mean anything. **The nine honoured flags get
-real columns; the rest are kept in a JSON blob and echoed back unchanged.** The split is visible in
+**The policy object is two things wearing one name.** The reference's `UserPolicy` carries **42**
+properties `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`; v1 honours **eleven** ([spec §3.5](spec.md#35-the-user-object)). Storing 42
+typed columns to enforce eleven would be dishonest about which ones mean anything. **The honoured
+ones get real columns; the other 31 are kept in a JSON blob and echoed back unchanged.**
+
+Eleven honoured properties become **nine columns**, because two of the eleven — `EnabledFolders`
+and `EnableContentDeletionFromFolders` — are lists of libraries rather than flags, and those are
+the join table below. Three counts, all correct, all different: it is worth writing down which one
+a sentence means. The split is visible in
 the schema, so a reader can tell enforcement from storage without reading the enforcement code —
 and adding a tenth means moving a key out of the blob into a column, which is a migration and
 therefore a decision someone makes on purpose.
@@ -62,6 +67,7 @@ behaviour WAL mode exists to avoid needing. Sessions live in memory with periodi
 src/atrium/
 ├── db/
 │   ├── engine.py         session factory, WAL pragmas, lifecycle
+│   ├── types.py          the column types SQLite does not have
 │   ├── schema.py         which revision this build expects, and what it does when it is wrong
 │   ├── models.py         ORM tables
 │   ├── repositories.py   the boundary: domain objects in and out
@@ -102,13 +108,20 @@ First migration, `0001_users_and_sessions`.
 | `password_hash` | The self-describing Argon2id string, nullable for passwordless accounts |
 | `last_login_date`, `last_activity_date` | |
 | `invalid_login_attempt_count` | Reset on success |
-| `is_administrator`, `is_disabled`, `is_hidden`, `enable_all_folders`, `enable_media_playback`, `enable_content_deletion`, `login_attempts_before_lockout`, `max_active_sessions` | **The honoured flags**, typed and queryable |
-| `policy_extra` | JSON: every other policy property, echoed unchanged |
+| `is_administrator`, `is_disabled`, `is_hidden`, `enable_all_folders`, `enable_media_playback`, `enable_content_deletion`, `login_attempts_before_lockout`, `invalid_login_attempt_count`, `max_active_sessions` | **The nine honoured columns**, typed and queryable. `login_attempts_before_lockout` defaults to the reference's own **-1**, which is a sentinel — this schema stores the reference's vocabulary and does not decide what it means |
+| `policy_extra` | JSON: the other 31 policy properties, echoed unchanged |
 | `configuration` | JSON: the whole `UserConfiguration`, echoed unchanged |
 
-**`user_library_access`** — `(user_id, library_id)` for `EnabledFolders`, and
-`enable_content_deletion_from_folders`. A join table rather than a JSON list because 005 filters
-queries on it.
+**`user_library_access`** — one row per `(user_id, library_id)`, with `can_view` for
+`EnabledFolders` and `can_delete` for `EnableContentDeletionFromFolders`. A join table rather than
+a JSON list because 005 filters queries on it, on every request. `library_id` carries **no foreign
+key**: the table it would point at arrives with 003.
+
+**Every table declares its children as relationships**, not only as foreign-key columns. The unit
+of work orders inserts by relationship and not by `ForeignKey`, so a user and its first token
+created in one flush go in child-first and the database rejects them — which it only does at all
+because the engine turns the foreign-key pragma on. The relationships are `lazy="raise"`, since no
+ORM object crosses the repository boundary and a lazy load would mean one had.
 
 **`access_tokens`**
 
@@ -342,7 +355,7 @@ goal, and it would fix the project to a KDF chosen for compatibility rather than
 stored token never reaches a client. Hashing is a few lines and it means a leaked database does not
 hand over live sessions.
 
-**Forty typed policy columns.** Complete and honest about the shape, dishonest about the meaning: a
+**42 typed policy columns.** Complete and honest about the shape, dishonest about the meaning: a
 column implies something reads it, and thirty-one of them nothing would. The split makes the
 distinction structural.
 

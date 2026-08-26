@@ -100,19 +100,24 @@ def two_revisions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 # --------------------------------------------------------------------------------------------
 
 
-def test_with_no_revisions_yet_a_fresh_database_is_already_current(prepared: DataPaths) -> None:
-    """T2 ships an empty history, and "no revisions, no stamp" has to be a state, not an error.
+def test_a_fresh_database_is_brought_to_the_shipped_head(prepared: DataPaths) -> None:
+    """What every start looks like, including every test in this suite that builds a server.
 
-    T4 adds the first migration. Until it does, this is what every start looks like, including
-    every test in this suite that builds a server.
+    Until T4 this asserted the opposite - that a build with no revisions leaves an unstamped
+    database, which was true and had to be a state rather than an error. That test failed the
+    moment `0001` landed, which is what it was for: it named the day the assumption expired
+    instead of leaving a stale one passing.
     """
     engine = create_database_engine(prepared)
     try:
-        assert schema.head_revision(schema.alembic_config(prepared)) is None
+        assert schema.head_revision(schema.alembic_config(prepared)) == "0001"
         schema.ensure_current(engine, prepared)
-        assert schema.current_revision(engine) is None
+        assert schema.current_revision(engine) == "0001"
+        with engine.connect() as connection:
+            tables = set(inspect(connection).get_table_names())
     finally:
         engine.dispose()
+    assert {"users", "user_library_access", "access_tokens", "sessions"} <= tables
 
 
 # --------------------------------------------------------------------------------------------

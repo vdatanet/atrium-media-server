@@ -222,15 +222,66 @@ quietly break. A dummy built at different parameters is verified in a different 
 which puts back precisely the signal it exists to remove: how long the refusal took would say
 whether the username was real. That is now a test rather than a property somebody remembers.
 
-## T4 — Migration `0001_users_and_sessions`
+## T4 — Migration `0001_users_and_sessions`  ✅
 
-- [ ] **Changes:** `users` with the **nine honoured policy columns** plus `policy_extra` and
+- [x] **Changes:** `users` with the **nine honoured policy columns** plus `policy_extra` and
   `configuration` blobs; `user_library_access`; `access_tokens` keyed on `token_sha256`; `sessions`.
 - **Depends on:** T2
 - **Verified by:** upgrade then downgrade leaves an empty database; upgrade from an empty file
   works, which is the path an operator actually takes; `access_tokens` has **no column holding a
   usable token** — asserted by name and by a value test.
 - **Plan reference:** §4
+
+### Done — 2026-08-26
+
+**"Nine honoured policy columns" is one of three counts, and the documents used all three.** The
+reference sends **42** policy properties, not "about forty"; v1 honours **eleven** of them; and
+those eleven are **nine columns**, because two are lists of libraries and live in the join table.
+[spec §3.5](spec.md#35-the-user-object), [plan §1](plan.md#1-approach) and §4 now each say which
+number they mean. The 31 in plan §10 was right all along — 42 minus 11 — which is how the intended
+counting was recoverable at all. A test pins the nine.
+
+**`LoginAttemptsBeforeLockout` is `-1`, and -1 is not a count.** It is what the reference sends,
+so it is what most accounts carry, and [spec §3.3](spec.md#33-post-usersauthenticatebyname--authenticateuserbyname)
+reads that field as a threshold. The column stores the reference's own vocabulary and this schema
+decides nothing about it; the meaning is now OQ-6, to be measured alongside OQ-5 against the same
+throwaway account.
+
+**SQLite drops a timezone and keeps the wall clock.** Measured before the schema was written:
+storing `2026-08-26 23:30:00+02:00` yields `'2026-08-26 23:30:00.000000'`, read back naive — so the
+instant moves two hours into the future and nothing raises. `DateTime(timezone=True)` changes
+nothing on this dialect. Since `compat/dates.py` says naive datetimes have no place in this project
+and `utc_now()` returns an aware one, every timestamp column would have carried that error, on
+every installation not running in UTC — which is not the one this was written on. `db/types.py`
+converts on the way in, restores on the way out, and **refuses a naive value** rather than guessing
+which zone somebody meant.
+
+**Alembic generated a migration that would have failed on the first operator who ran it.** It
+renders a user-defined column type with its module path — `atrium.db.types.UtcDateTime()` — and
+imports nothing: `autogenerate/render.py` calls `imports.add` only for types from
+`sqlalchemy.dialects`. Autogenerate reports success and the file is a `NameError` waiting to
+happen. `env.py` now carries a `render_item` hook that registers the import for any type from this
+project, so the next custom type does not repeat it, and the template's import order is the one
+ruff wants so a generated migration passes lint unedited.
+
+**A foreign-key column does not tell the ORM the insert order.** Creating a user and its first
+token in one flush inserted the token first, and the database rejected it — which it only did
+because T2 turned the foreign-key pragma on. Without that pragma the row would have gone in with a
+dangling reference and nothing would have said so. The tables now declare relationships, which is
+what the unit of work sorts by; they are `passive_deletes=True` so the cascade stays in the
+database where the migration declares it, and `lazy="raise"` so an accidental lazy load past the
+repository boundary is an error rather than a surprise query.
+
+**T2's "no revisions yet" test failed, which is what it was for.** It asserted that a build with no
+migrations leaves an unstamped database — true, and true only until this task. It failed the moment
+`0001` landed and named the day the assumption expired, instead of sitting there passing against a
+state that no longer existed.
+
+**The strongest test here reads the database file as bytes.** "No column holds a usable token" can
+be asserted from column names, and that only proves nobody called a column `token`. So a real token
+is written through the code that stores one, and the assertion is that the plaintext appears
+nowhere in `atrium.db` **or its write-ahead log** — while the hash does, so a test that stored
+nothing cannot pass by accident.
 
 ## T5 — `db/repositories.py`: the boundary
 
