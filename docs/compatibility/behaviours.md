@@ -92,7 +92,8 @@ changes ids when `EnableCaseSensitiveItemIds` flips.
 ### 1.5 List responses carry `StartIndex`
 
 **Jellyfin does:** returns `{"Items": [...], "TotalRecordCount": n, "StartIndex": i}`. Emby omits
-`StartIndex`. `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
+`StartIndex`. Confirmed across all ten envelope-returning endpoints of the v1 surface.
+`[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-26]`
 
 **Depends on it:** no known client reads it (pagination is driven by the request), but its absence
 is a visible difference.
@@ -122,6 +123,19 @@ only when the schema is nullable; a hand-written Kotlin one usually does not.
 **Atrium does:** matches Jellyfin per property, verified by the differential harness rather than
 by rule. ⚠️ **UNVERIFIED** as a general rule — the per-property behaviour has not been enumerated.
 This is a known gap and is the first thing the L3 harness will surface.
+
+### 1.8 `GET /Items/Latest` returns a bare array
+
+**Jellyfin does:** answers with a JSON array of items, **not** the `{Items, TotalRecordCount,
+StartIndex}` envelope every other list endpoint uses. `/Items/Filters` is a third shape again
+(`{Genres, Tags, OfficialRatings, Years}`), and `/Search/Hints` a fourth
+(`{SearchHints, TotalRecordCount}`). `[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-26]`
+
+**Depends on it:** completely. A client decoding a bare array as an envelope gets nothing at all —
+not a degraded result, an empty one. This asymmetry is the reason the probe that measured it was
+worth writing before any code.
+
+**Atrium does:** the same four shapes, per endpoint, never normalised into one.
 
 ---
 
