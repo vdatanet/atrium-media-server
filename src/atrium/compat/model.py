@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, model_serializer, model_validator
 from pydantic_core.core_schema import SerializerFunctionWrapHandler
 
 from atrium.compat.aliases import atrium_alias
+from atrium.compat.profiles import Profile, camel_case, current
 
 
 class AtriumModel(BaseModel):
@@ -39,8 +40,16 @@ class AtriumModel(BaseModel):
     )
 
     @model_serializer(mode="wrap")
-    def _omit_nulls(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
-        """Drop null properties, as the reference does - globally, by one setting.
+    def _for_the_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Drop null properties and apply the requested serialisation profile.
+
+        **The profile is applied here, and here is the only place it can be applied correctly.**
+        The reference converts property names at every depth and leaves **dictionary keys** alone -
+        `ProviderIds`, `ImageTags` - and by the time a response is a plain `dict`, nothing can tell
+        one from the other. A field is still a field here, so a nested model renames itself and a
+        `dict[str, ...]` field's keys are never touched. See atrium.compat.profiles.
+
+        And the nulls: the reference drops them globally, by one setting.
 
         The reference configures `DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull`
         for its whole JSON pipeline, so a property with no value is **absent** rather than `null`.
@@ -54,7 +63,10 @@ class AtriumModel(BaseModel):
         here rather than in a `response_model_exclude_none` on every route - a per-route flag is
         one someone eventually forgets.
         """
-        return {key: value for key, value in handler(self).items() if value is not None}
+        serialised = {key: value for key, value in handler(self).items() if value is not None}
+        if current() is Profile.CAMEL:
+            return {camel_case(key): value for key, value in serialised.items()}
+        return serialised
 
     @model_validator(mode="before")
     @classmethod

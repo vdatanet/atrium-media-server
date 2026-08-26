@@ -1,7 +1,7 @@
 ---
 feature: 001-server-identity-and-discovery
 title: Server identity and discovery — implementation plan
-status: Accepted
+status: Implemented
 created: 2026-08-26
 updated: 2026-08-26
 spec_status_required: Accepted
@@ -87,6 +87,7 @@ src/atrium/
 │   ├── responses.py     the JSON response class and its exact content type
 │   ├── errors.py        the wire shape of a refusal
 │   ├── routing.py       how a path is matched: casing, trailing slash, Allow
+│   ├── profiles.py      which JSON serialisation was asked for, and the conversion
 │   └── middleware.py    Server and X-Response-Time-ms headers
 ├── net/
 │   └── address.py       LocalAddress resolution
@@ -95,12 +96,13 @@ src/atrium/
     └── system.py        the three routes of this feature
 ```
 
-Four of those modules are not in the tree this plan was accepted with, and one that was is gone.
+Five of those modules are not in the tree this plan was accepted with, and one that was is gone.
 `registry.py`, `responses.py` and `errors.py` arrived with the tasks that needed them (T7, T12,
 T13); `routing.py` arrived with T17, when the reference turned out to match paths more loosely than
-the framework does. `api/router.py` was never written: T15 put the assembly in the application
-factory, where the list of routers reads as one of the decisions the factory makes, and a module
-whose whole content is that list would have been indirection.
+the framework does; `profiles.py` with T19, when it turned out to have two serialisations.
+`api/router.py` was never written: T15 put the assembly in the application factory, where the list
+of routers reads as one of the decisions the factory makes, and a module whose whole content is
+that list would have been indirection.
 
 | Module | Owns | Must not |
 |---|---|---|
@@ -172,6 +174,22 @@ so it is decided per model against a golden response rather than by a blanket ru
 > **Superseded by measurement, T14.** There is no per-property judgement: the reference omits every
 > null, through one `DefaultIgnoreCondition` setting on its whole JSON pipeline. `AtriumModel`
 > therefore drops nulls in its serialiser, and no route needs `response_model_exclude_none`.
+
+> **Amended by T19: the serialiser also applies the content-type profile.** The reference answers
+> `Accept: application/json; profile="CamelCase"` in camelCase, and it converts **property names at
+> every depth while never touching dictionary keys**
+> ([behaviours §1.13](../../docs/compatibility/behaviours.md#113-the-camelcase-profile-really-is-camelcase)).
+> That single rule decides where the conversion may live. A response that has been rendered — to
+> bytes, or even to a plain `dict` — has lost the distinction between a property and a key, so the
+> only correct place is inside `AtriumModel`'s serialiser, where a field is still a field: a nested
+> model renames itself, and a `dict[str, …]` field's keys are left alone by construction rather
+> than by a list of exceptions.
+>
+> The negotiated profile reaches it through a **context variable** set by a middleware
+> (`compat.profiles`), because the web framework's serialisation call takes no context to pass one
+> through. The alternatives were worse in kind, not just in size: making every route call a helper
+> puts the correctness of every response in the hands of whoever writes the next one, and dropping
+> `response_model` to serialise by hand would have cost the generated OpenAPI document.
 
 **`api.deps.require_user`** — the authentication seam.
 
@@ -286,7 +304,7 @@ Every acceptance criterion in spec §5 maps to a named test.
 | 5 | Route test for `401`; dependency-override test for `200`; superset assertion |
 | 6 | Exact-body test for both methods |
 | 7, 8 | `LocalAddress` table — §8.2 |
-| 9 | Three requests with the three `Accept` values, bodies compared byte-for-byte — two of them equal by contract, the third equal only until T19 closes the gap it pins |
+| 9 | Three requests with the three `Accept` values: **two goldens**, because two of them are one serialisation and the third is the other — plus the negotiation table and the content-type echo |
 | 10 | The casing sweep — §8.3 |
 | 11 | The route table and the refusal shapes — §8.5 |
 

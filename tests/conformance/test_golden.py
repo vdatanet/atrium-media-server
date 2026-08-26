@@ -39,6 +39,7 @@ from fastapi import FastAPI
 
 from atrium.api.deps import require_user
 from atrium.api.system import _ARCHITECTURES
+from atrium.compat.profiles import Profile
 from atrium.compat.responses import JSON_MEDIA_TYPE
 from atrium.config.paths import DataPaths
 from atrium.domain.user import User
@@ -179,42 +180,83 @@ async def test_ping_answers_both_methods_identically(golden_client: httpx.AsyncC
 # --------------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("accept", PROFILES)
-async def test_every_profile_gets_the_pascal_case_golden(
+@pytest.mark.parametrize("accept", [PROFILES[0], PROFILES[1]])
+async def test_the_pascal_case_profiles_get_the_pascal_case_golden(
     golden_client: httpx.AsyncClient,
     golden: Callable[[str, httpx.Response], bytes],
     accept: str,
 ) -> None:
-    """AC-9. All three declared content types receive the same bytes from Atrium.
-
-    Two of those three are the contract. The third is a **known gap**: the reference answers
-    `profile="CamelCase"` with camelCase property names, and Atrium does not implement the profile
-    yet. See the test below, which is the one that fails the day it does.
-    """
+    """AC-9, first half. `application/json` and `profile="PascalCase"` are the same bytes."""
     response = await golden_client.get("/System/Info/Public", headers={"Accept": accept})
     assert response.status_code == 200
     golden("System.Info.Public", response)
 
 
-async def test_the_camel_case_profile_is_a_known_gap(golden_client: httpx.AsyncClient) -> None:
-    """Pinning a difference Atrium has not closed yet, so that closing it is noticed.
+async def test_the_camel_case_profile_gets_its_own_golden(
+    golden_client: httpx.AsyncClient, golden: Callable[[str, httpx.Response], bytes]
+) -> None:
+    """AC-9, second half. A different serialisation, so a different file.
 
-    The reference answers `Accept: application/json; profile="CamelCase"` with camelCase property
-    names and echoes the matched profile in its own content type.
+    Two goldens for one response is the honest shape: they are two contracts, and a client that
+    asks for the second and receives the first gets an empty object out of its decoder.
     [probe: tools/probe_content_type_profiles.py, Jellyfin 10.11.11, 2026-08-26]
-    Atrium answers PascalCase with a plain content type, which is
-    docs/compatibility/behaviours.md section 5's gap and task T19's job.
-
-    When T19 lands, this test fails - and its failure is the reminder to record the second golden
-    and delete this. That is the point of writing it down as a test rather than as a comment.
     """
-    response = await golden_client.get(
-        "/System/Info/Public", headers={"Accept": 'application/json; profile="CamelCase"'}
-    )
-    body = response.json()
-    assert "LocalAddress" in body, "still PascalCase: behaviours 1.13, closed by 001 T19"
-    assert "localAddress" not in body
-    assert response.headers["content-type"] == JSON_MEDIA_TYPE, "the profile is not echoed yet"
+    response = await golden_client.get("/System/Info/Public", headers={"Accept": PROFILES[2]})
+    assert response.status_code == 200
+    golden("System.Info.Public.CamelCase", response)
+
+
+@pytest.mark.parametrize(
+    ("accept", "content_type"),
+    [
+        (PROFILES[0], JSON_MEDIA_TYPE),
+        (PROFILES[1], 'application/json; profile="PascalCase"; charset=utf-8'),
+        (PROFILES[2], 'application/json; profile="CamelCase"; charset=utf-8'),
+    ],
+)
+async def test_the_response_echoes_the_profile_that_matched(
+    golden_client: httpx.AsyncClient, accept: str, content_type: str
+) -> None:
+    """The profile comes back in the content type, before the charset, canonically spelled."""
+    response = await golden_client.get("/System/Info/Public", headers={"Accept": accept})
+    assert response.headers["content-type"] == content_type
+
+
+async def test_the_two_serialisations_carry_the_same_values(
+    golden_client: httpx.AsyncClient,
+) -> None:
+    """Different names, identical content. Anything else would be two APIs, not two spellings."""
+    pascal = (await golden_client.get("/System/Info/Public")).json()
+    camel = (await golden_client.get("/System/Info/Public", headers={"Accept": PROFILES[2]})).json()
+    assert list(camel) == [name[:1].lower() + name[1:] for name in pascal]
+    assert list(camel.values()) == list(pascal.values())
+
+
+async def test_a_bare_string_body_echoes_the_profile_too(golden_client: httpx.AsyncClient) -> None:
+    """`/System/Ping` has no property names, and the reference still echoes the profile on it."""
+    response = await golden_client.get("/System/Ping", headers={"Accept": PROFILES[2]})
+    assert response.content == b'"Jellyfin Server"'
+    assert response.headers["content-type"] == Profile.CAMEL.media_type
+
+
+async def test_a_refusal_echoes_nothing(golden_client: httpx.AsyncClient) -> None:
+    """An empty 401 carries no content type in the reference, so there is nothing to echo."""
+    response = await golden_client.get("/System/Info", headers={"Accept": PROFILES[2]})
+    assert response.status_code == 401
+    assert "content-type" not in response.headers
+
+
+async def test_two_requests_do_not_share_a_profile(golden_client: httpx.AsyncClient) -> None:
+    """The negotiated profile lives in a context variable, and a context variable can leak.
+
+    Interleaved so that a leak shows: camelCase, then plain, then camelCase again.
+    """
+    first = await golden_client.get("/System/Info/Public", headers={"Accept": PROFILES[2]})
+    plain = await golden_client.get("/System/Info/Public")
+    again = await golden_client.get("/System/Info/Public", headers={"Accept": PROFILES[2]})
+    assert b'"localAddress"' in first.content
+    assert b'"LocalAddress"' in plain.content
+    assert again.content == first.content
 
 
 # --------------------------------------------------------------------------------------------

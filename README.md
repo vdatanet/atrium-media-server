@@ -29,7 +29,8 @@ Both reasons collapse into a single design rule, stated in the [constitution](do
 ## Status
 
 **Early implementation.** All ten features are specified; 001, 002 and 003 are planned and broken
-into tasks. Feature 001 — server identity and discovery — is being built, and the server answers:
+into tasks. **Feature 001 — server identity and discovery — is implemented**, and the server
+answers:
 
 ```
 $ atrium --data-dir /tmp/demo &

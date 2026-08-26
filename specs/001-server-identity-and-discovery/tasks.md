@@ -1,7 +1,7 @@
 ---
 feature: 001-server-identity-and-discovery
 title: Server identity and discovery — tasks
-status: Draft
+status: Implemented
 created: 2026-08-26
 updated: 2026-08-26
 plan_status_required: Accepted
@@ -746,15 +746,55 @@ alias sweep implies PascalCase without ever asserting it — so the casing asser
 [conformance document](../../docs/compatibility/conformance.md#l1--shape) promises now exists as
 itself.
 
-## T19 — The `CamelCase` content-type profile
+## T19 — The `CamelCase` content-type profile  ✅
 
-- [ ] **Changes:** profile selection from the request's `Accept`, a camelCase serialisation of every response model, and the matched profile echoed in the response's content type.
+- [x] **Changes:** profile selection from the request's `Accept`, a camelCase serialisation of every response model, and the matched profile echoed in the response's content type.
 - **Depends on:** T16
 - **Verified by:** the three declared content types produce the two bodies the reference produces; a response carrying a dictionary keeps that dictionary's keys unconverted; `UICulture` serialises as `uiCulture`; and T16's pinning test — which asserts the gap — is deleted in the same change.
 - **Note:** added by T16, which measured that the three declared content types are **two**
   behaviours rather than three names for one. Everything needed to build it is in
   [behaviours §1.13](../../docs/compatibility/behaviours.md#113-the-camelcase-profile-really-is-camelcase): the matching rule, the ranking rule and the two conversion rules. The one design constraint is that the conversion has to happen **where a model is still a model** — dictionary keys are not converted, and finished bytes cannot tell a property from a dictionary key. That decision amends [plan §5](plan.md#5-contracts), which is why it is a task and not a paragraph in T16.
 - **Plan reference:** §5, and the amendment it makes to it
+
+### Done — 2026-08-26
+
+**The design question was where, not how.** The conversion itself is thirty lines; the constraint
+that decides everything is that property names convert at every depth and **dictionary keys never
+do**. A response that has been rendered — to bytes, or even to a plain `dict` — has lost the
+difference between a property and a key, so the only correct place is inside `AtriumModel`'s own
+serialiser, where a field is still a field. A nested model renames itself and a `dict[str, …]`
+field is left alone by construction rather than by a list of exceptions, which is what keeps this
+right when feature 005 returns its first `ProviderIds`.
+
+The negotiated profile reaches the serialiser through a **context variable** set by a middleware,
+because the web framework's serialisation call takes no context to pass one through. The
+alternatives were worse in kind rather than in size: a helper every route must call puts the
+correctness of every response in the hands of whoever writes the next one, and dropping
+`response_model` to serialise by hand would have cost the generated OpenAPI document.
+[plan §5](plan.md#5-contracts) records it.
+
+**The rule was verified against the reference, not reasoned about.** 293 property names were read
+from nine endpoints under both profiles; all **281 conversions agreed** with the implementation,
+and the eight names left alone were exactly the dictionary keys.
+[probe: tools/probe_content_type_profiles.py, Jellyfin 10.11.11, 2026-08-26] The negotiation table
+is measured too, including the two rules nobody would guess: a `charset` parameter beside the
+profile stops it matching, and equal quality keeps the client's own order.
+
+**Writing `__init__` the obvious way broke the OpenAPI document.** The response class needed one
+extra default, and `*args, **kwargs` is how anyone would add it — except that FastAPI builds each
+operation's success status by **inspecting that signature** for a `status_code` parameter with an
+integer default. Without it the document raises `UnboundLocalError`, and six tests went red at
+once. T15's "the document is still generated" test is why that was a five-minute problem: nothing
+else in this feature would have noticed until something read the document.
+
+**Both tripwires fired, which is the part worth writing down.** T16's pinning test failed the
+moment the profile worked, exactly as it was written to; T18's acceptance map failed because that
+test was then renamed, naming the criterion left unasserted. Neither needed anyone to remember
+anything.
+
+`/System/Info/Public` now has **two** golden files, because it has two contracts. A client that
+asks for the second and receives the first does not get a degraded response — it gets an empty
+object out of its decoder.
 
 ---
 
@@ -768,17 +808,14 @@ The feature is done when **all** of these hold:
 - [x] The two cross-cutting sweeps run in CI and fail on a deliberately introduced violation of each — each sweep carries the tests that prove it rejects what it exists to reject.
 - [x] Anything learned during implementation is back in `spec.md` or `plan.md`, in the same change.
 - [x] Any newly measured reference behaviour is in `docs/compatibility/behaviours.md` with provenance.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+- [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
 
-**Six of the seven hold. The last one waits on T19**, which is this feature's own §3.0 rule 2 and
-the only open task in the file: the reference answers `profile="CamelCase"` in camelCase and Atrium
-does not. It is recorded as a gap with a closing mechanism
-([behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)) and pinned by a
-test, so nothing about it is silent — but a feature is not `Implemented` while a task of its own
-is open, and moving that task out of 001 is a scope decision rather than a tidy-up. **002 does not
-have to wait for it**: what it inherits from 001 — the base model, the sweeps, the data directory,
-the persisted identity, the authentication seam, the byte-comparing harness — is all delivered, and
-none of it changes when the profile lands.
+**All seven hold, and the feature is done.** The one gap 001 carried — the `CamelCase` profile,
+recorded in behaviours §5 with a closing mechanism and pinned by a test — was closed by T19, so
+§5 no longer lists it. What remains open is one thing, and it is not a gap in this feature:
+`/System/Info/Public` is specified at **L3** and is met at L2, because the differential half needs
+the harness [feature 010](../010-conformance-harness/spec.md) delivers and a reachable reference
+server, which no gate here may depend on. [spec §6](spec.md#6-conformance) says so in writing.
 
 ## What this feature owes the next one
 

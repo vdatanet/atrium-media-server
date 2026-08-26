@@ -59,8 +59,10 @@ ACCEPTANCE: dict[int, tuple[str, ...]] = {
     ),
     8: ("tests.unit.test_net_address:test_two_requesters_on_two_networks_get_two_answers",),
     9: (
-        "tests.conformance.test_golden:test_every_profile_gets_the_pascal_case_golden",
-        "tests.conformance.test_golden:test_the_camel_case_profile_is_a_known_gap",
+        "tests.conformance.test_golden:test_the_pascal_case_profiles_get_the_pascal_case_golden",
+        "tests.conformance.test_golden:test_the_camel_case_profile_gets_its_own_golden",
+        "tests.conformance.test_golden:test_the_response_echoes_the_profile_that_matched",
+        "tests.unit.test_compat_profiles:test_negotiation",
     ),
     10: (
         "tests.conformance.test_aliases:test_every_alias_is_pascal_case",
