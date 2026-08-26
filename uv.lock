@@ -106,6 +106,7 @@ name = "atrium-media-server"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "pydantic" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -121,6 +122,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "pydantic", specifier = ">=2.10" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
 ]
 
