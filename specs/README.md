@@ -127,8 +127,10 @@ say how it will be proven is not finished.
 no plan may start until its spec is accepted, and no code until its plan is. The open questions
 across the ten are the review agenda.
 
-Four of them now have probe scripts waiting to be pointed at a real server — 003 OQ-3, 005 OQ-6,
-007 OQ-2 and 009 OQ-1. Running them is the cheapest work available and it changes what the specs
-say, so it belongs before the plans, not after. See [tools/README.md](../tools/README.md#probes).
+Four of them have probe scripts. **005 OQ-6 is answered** — measured 2026-08-26, documentation
+confirmed, and three response shapes recorded that the original measurement had missed. Three
+remain to run: 003 OQ-3, 007 OQ-2 and 009 OQ-1. Running them is the cheapest work available and it
+changes what the specs say, so it belongs before the plans, not after. See
+[tools/README.md](../tools/README.md#probes).
 
 The order and rationale are in [../docs/roadmap.md](../docs/roadmap.md#feature-order).

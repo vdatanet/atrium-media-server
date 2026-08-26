@@ -77,8 +77,8 @@ the one inside Xcode's toolchain, which is what `python3` resolves to on a Mac w
 installed and nothing else.
 
 That means `from __future__ import annotations` at the top of every probe, and no syntax newer
-than 3.9 outside annotations. It is a constraint, not an accident: verified by running the full
-CLI and every pure function under 3.9.6.
+than 3.9 outside annotations. It is a constraint, not an accident: verified at both ends of the
+range — the full CLI and every pure function under **3.9.6**, and every module under **3.14.6**.
 
 **Dependency-free.** These run in CI before any environment is built, so they use only the
 standard library. `surface.yaml` is a deliberately flat subset of YAML for the same reason, and

@@ -54,10 +54,15 @@ Every list endpoint except `/Items/Latest` and `/Items/Filters` returns:
 ```
 
 `StartIndex` is present — the reference includes it where Emby does not.
-`[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
 
-**`GET /Items/Latest` returns a bare array**, not this envelope. `[spec: GetLatestMedia]` A client
-decoding it as an envelope gets nothing, so this asymmetry is load-bearing rather than cosmetic.
+**`GET /Items/Latest` returns a bare array**, not this envelope. A client decoding it as an
+envelope gets nothing, so this asymmetry is load-bearing rather than cosmetic.
+
+**Measured, not assumed.** All twelve list endpoints of the v1 surface were probed against a live
+reference: ten return the envelope with `StartIndex` present, `/Items/Latest` returns a bare
+array, `/Items/Filters` returns `{Genres, Tags, OfficialRatings, Years}`, and `/Search/Hints`
+returns `{SearchHints, TotalRecordCount}` — four shapes, and Atrium reproduces each per endpoint
+rather than normalising them. `[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-26]`
 
 **Paging** is `StartIndex` and `Limit` on the request. `TotalRecordCount` is the count *before*
 paging, so a client can size a scrollbar.
@@ -302,7 +307,11 @@ this feature means about seventy fields, the largest single surface in the proje
 | OQ-3 | The reference's tie-breaking key for each `sortBy` | Paging stability parity | `tools/probe_sort_stability.py` |
 | OQ-4 | The reference's completion threshold for `Resume` eligibility | The exclusion rule in §3.7 | `tools/probe_resume_threshold.py` |
 | OQ-5 | How the reference ranks `Similar` and `InstantMix` | Nothing; v1 diverges into determinism deliberately | Comparison, for interest rather than parity |
-| OQ-6 | Whether `/Items/Latest` really returns a bare array on a live server, or the spec is wrong | AC-1 | **`tools/probe_query_envelope.py` — written, awaiting a run** |
+### Resolved
+
+| # | Question | Answer | Resolved by |
+|---|---|---|---|
+| OQ-6 | Whether `/Items/Latest` really returns a bare array on a live server, or the spec is wrong | **Yes — bare array, and three other endpoints have three further shapes.** §3.1 now records all four | `tools/probe_query_envelope.py`, 2026-08-26 |
 
 ## 8. References
 
