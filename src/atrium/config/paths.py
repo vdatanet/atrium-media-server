@@ -2,15 +2,20 @@
 """Where an Atrium instance keeps its things.
 
 One directory holds everything an instance owns, so installing is copying a directory and a bug
-report can carry its configuration. Two files, and the split between them is deliberate: humans
+report can carry its configuration. The split between the first two files is deliberate: humans
 edit one and never the other, the server writes one and never the other.
 
     <data-dir>/
     ├── config.toml     the operator's.  Read at startup, never written by the server
     ├── state.json      the server's.    Written by the server, never edited by hand
+    ├── atrium.db       the server's.    SQLite, WAL - so -wal and -shm sit beside it
     ├── cache/
     ├── logs/
     └── transcodes/
+
+The database arrived with feature 002 and does **not** change what `state.json` is for: 001
+acceptance criterion 4 forbids putting the server identity anywhere rebuildable, and a database is
+rebuildable. The two files are not alternatives.
 
 See specs/001-server-identity-and-discovery/plan.md section 4.
 """
@@ -26,6 +31,10 @@ DATA_DIR_ENV = "ATRIUM_DATA_DIR"
 
 CONFIG_FILE = "config.toml"
 STATE_FILE = "state.json"
+
+#: WAL mode puts `atrium.db-wal` and `atrium.db-shm` beside it while the server runs. All three
+#: belong to the instance; copying the directory while it is stopped copies a consistent database.
+DATABASE_FILE = "atrium.db"
 
 
 class ConfigurationError(RuntimeError):
@@ -66,6 +75,10 @@ class DataPaths:
     @property
     def state_file(self) -> Path:
         return self.root / STATE_FILE
+
+    @property
+    def database(self) -> Path:
+        return self.root / DATABASE_FILE
 
     @property
     def cache(self) -> Path:
@@ -113,6 +126,7 @@ class DataPaths:
 
 __all__ = [
     "CONFIG_FILE",
+    "DATABASE_FILE",
     "DATA_DIR_ENV",
     "STATE_FILE",
     "ConfigurationError",
