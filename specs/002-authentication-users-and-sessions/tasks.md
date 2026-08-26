@@ -463,9 +463,9 @@ and swallows a database error there rather than turning a shutdown into a traceb
 The bound itself is now a test rather than a sentence: after a simulated crash the session row, its
 token and every user record are intact, and only the timestamp is stale.
 
-## T9 — `users/service.py`: authenticate
+## T9 — `users/service.py`: authenticate  ✅
 
-- [ ] **Changes:** the single entry point that verifies a password, owning the lockout counter, the
+- [x] **Changes:** the single entry point that verifies a password, owning the lockout counter, the
   timing guarantee and session creation.
 - **Depends on:** T3, T6, T7, T8. T1's findings are in: a disabled account is `403`
 - **Verified by:** correct credentials succeed; **every failure path runs the KDF** — unknown user,
@@ -476,6 +476,40 @@ token and every user record are intact, and only the timestamp is stale.
   `text/plain`. A test compares all four responses byte-for-byte, which is the only way the
   difference is visible.
 - **Plan reference:** §5, §6.2
+
+### Done — 2026-08-26
+
+**The counter increments on a path that ends in an exception, and that is a rollback waiting to
+happen.** A wrong password writes — it advances `InvalidLoginAttemptCount` — and then fails.
+Raising inside the unit of work rolls that write back, and the result is a server whose lockout
+counter never moves while **every test of "a wrong password is 401" still passes**. So the attempt
+produces an outcome and the refusal is raised after the transaction has closed. It is asserted by
+reading the counter back after each of three failures, rather than by testing lockout end to end,
+because the end-to-end test would also pass against the broken version until the very last attempt.
+
+**`-1` had to be decided, not just recorded.** The reference sends it for an untouched account and
+what it means is OQ-6. A positive threshold in a user's own policy is honoured as the count it
+plainly is; a sentinel falls back to a new `lockout_attempts` setting, which defaults to **0, no
+lockout**. The direction is chosen and written down: locking somebody out of their own server on a
+guess is a failure they experience and cannot undo, while not locking is invisible to every client
+and becomes correct the moment OQ-6 is answered. An operator who wants it sets a number.
+
+**A content type this feature had documented correctly was still wrong in the code.** Starlette
+appends `; charset=utf-8` to any `text/*` media type, and the reference sends **bare `text/plain`**
+on this shape — unlike its JSON, which does carry the charset. The natural way to write the handler
+produced a difference on every refusal in feature 002, and it took a test comparing the *header*
+rather than the body to see it. `controller_error` now sets the header directly, and
+[behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-three-error-shapes-not-one)
+says why.
+
+**An account with no password is not an account with an empty one.** It is opened by sending
+nothing, and sending something is a refusal — and the dummy verify runs either way, so the two
+answers cost the same.
+
+**The timing guarantee is counted, not timed.** Every failure path runs the KDF exactly once —
+unknown user, disabled, locked out, wrong password — asserted by counting invocations through a
+`Passwords` subclass. A count fails for the right reason; the ratio test in tests/security is a
+different claim and lands at T15.
 
 ## T10 — `api/deps.py`: `require_user`, implemented
 

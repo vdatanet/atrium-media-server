@@ -67,6 +67,25 @@ class ClientAuthorizationError(Exception):
     """
 
 
+class InvalidCredentialsError(Exception):
+    """The username or the password was wrong. A `401` in the controller's shape.
+
+    Distinct from `UnauthenticatedError`, which is the *empty* `401` a route sends when no token
+    reached it. Same status, different bytes, decided by which layer refused - which is exactly
+    what makes behaviours section 1.11 worth having.
+    """
+
+
+class AccountUnavailableError(Exception):
+    """The credentials were not the problem: this account cannot log in at all.
+
+    A `403`, measured, and the difference from `401` is load-bearing. Clients re-authenticate on
+    `401` and stop on `403`, so answering `401` here loops a user through a login their correct
+    password can never complete.
+    `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+    """
+
+
 #: What a controller's own refusal says, byte for byte. Measured, and it is the same 25 bytes
 #: whatever went wrong, which is why the golden responses compare bytes and not status codes.
 CONTROLLER_ERROR_BODY = b"Error processing request."
@@ -85,16 +104,32 @@ async def unauthenticated_handler(_request: Request, _exc: Exception) -> Respons
 
 
 def controller_error(status_code: int) -> Response:
-    """The third shape: a status, `text/plain`, and the reference's fixed sentence."""
+    """The third shape: a status, `text/plain`, and the reference's fixed sentence.
+
+    The content type is set as a **header** rather than through `media_type`, which is not
+    fussiness. Starlette appends `; charset=utf-8` to any `text/*` media type it is given, and the
+    reference sends bare `text/plain` here - measured, and different from its JSON responses, which
+    do carry the charset (behaviours sections 1.10 and 1.11). Going through `media_type` produced
+    `text/plain; charset=utf-8` on every refusal from this feature, which is a difference a client
+    can see, and it took a test comparing the header to notice.
+    """
     return Response(
         content=CONTROLLER_ERROR_BODY,
         status_code=status_code,
-        media_type=CONTROLLER_ERROR_TYPE,
+        headers={"Content-Type": CONTROLLER_ERROR_TYPE},
     )
 
 
 async def client_authorization_handler(_request: Request, _exc: Exception) -> Response:
     return controller_error(400)
+
+
+async def invalid_credentials_handler(_request: Request, _exc: Exception) -> Response:
+    return controller_error(401)
+
+
+async def account_unavailable_handler(_request: Request, _exc: Exception) -> Response:
+    return controller_error(403)
 
 
 async def routing_handler(request: Request, exc: Exception) -> Response:
@@ -125,6 +160,8 @@ async def routing_handler(request: Request, exc: Exception) -> Response:
 EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     UnauthenticatedError: unauthenticated_handler,
     ClientAuthorizationError: client_authorization_handler,
+    InvalidCredentialsError: invalid_credentials_handler,
+    AccountUnavailableError: account_unavailable_handler,
     HTTPException: routing_handler,
 }
 
@@ -133,12 +170,16 @@ __all__ = [
     "CONTROLLER_ERROR_TYPE",
     "EXCEPTION_HANDLERS",
     "ROUTING_REFUSALS",
+    "AccountUnavailableError",
     "ClientAuthorizationError",
     "ExceptionHandler",
+    "InvalidCredentialsError",
     "UnauthenticatedError",
+    "account_unavailable_handler",
     "client_authorization_handler",
     "controller_error",
     "empty_error",
+    "invalid_credentials_handler",
     "routing_handler",
     "unauthenticated_handler",
 ]
