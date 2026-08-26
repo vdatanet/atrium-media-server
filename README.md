@@ -26,8 +26,17 @@ Both reasons collapse into a single design rule, stated in the [constitution](do
 
 ## Status
 
-**Documentation phase.** No server code exists yet, and that is deliberate — this project is an
-exercise in Spec-Driven Development (SDD), so specifications come before implementation.
+**Early implementation.** All ten features are specified; 001, 002 and 003 are planned and broken
+into tasks. Feature 001 — server identity and discovery — is being built, and the server answers:
+
+```
+$ atrium --data-dir /tmp/demo &
+$ curl -s localhost:8096/System/Info/Public
+{"LocalAddress":"http://127.0.0.1:8096","ServerName":"atrium","Version":"10.11.11",
+ "ProductName":"Jellyfin Server","OperatingSystem":"","Id":"…","StartupWizardCompleted":false}
+```
+
+That is a Jellyfin client's first request, answered the way a Jellyfin client expects.
 
 Start here:
 
@@ -37,7 +46,8 @@ Start here:
 | [docs/README.md](docs/README.md) | Map of the documentation and how SDD is practised here |
 | [docs/roadmap.md](docs/roadmap.md) | What v1 is, what it is not, and in what order |
 | [docs/compatibility/api-surface-v1.md](docs/compatibility/api-surface-v1.md) | The 55 endpoints v1 must serve, and where that number comes from |
-| [specs/](specs/) | Feature specifications, one numbered directory each |
+| [specs/](specs/) | Feature specifications, one numbered directory each — and the status table |
+| [AGENTS.md](AGENTS.md) | How to work on this: the rhythm, the gates, and the habit that finds things |
 
 ## Scope of v1
 
