@@ -313,6 +313,7 @@ media types, so its `JSONResponse` would send a bare `application/json`.
 |---|---|
 | Unauthenticated request | `401`, **empty body**, `Content-Length: 0`, no `Content-Type`, **no `WWW-Authenticate`** |
 | Path matching no route | `404`, **empty body**, no `Content-Type` |
+| A method the path does not have | `405`, **empty body**, no `Content-Type`, and `Allow` naming every method that path has `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-26]` |
 | An item a handler could not find | `404`, **RFC 9457 problem details** as JSON |
 | A malformed value the model binder rejected | `400`, **RFC 9457 problem details** with an `errors` map |
 
@@ -334,6 +335,13 @@ runs, and the JSON ones by that pipeline.
 
 **Atrium does:** both, per refusal. `traceId` is a W3C trace-context identifier and is
 per-request by definition, so it is compared by shape rather than by value.
+
+> **The empty shapes were documented here and not implemented, for three tasks.** Until 001 had
+> routes there was no path to get wrong, so nothing noticed that an unmatched path answered
+> `{"detail": "Not Found"}` — the exact body two paragraphs above call neither shape. The
+> route-registration work (001 T17) was the first thing to ask the question, and it asked it by
+> issuing the request rather than by reading this file. A documented behaviour with no test is a
+> plan, not a behaviour.
 
 > **The absent `WWW-Authenticate` is worth keeping absent.** RFC 7235 says a 401 SHOULD carry one.
 > Adding `Basic` would make a browser open a credentials dialog on routes no browser was meant to
@@ -410,6 +418,30 @@ time feature 005 returns one.
 > "answers all three identically" — carried a `[spec: …]` citation, was true of the *schema*, and
 > was wrong about the server. It also had a passing conformance test, which asserted that Atrium's
 > three answers agree with each other. They did. Nobody had asked the reference.
+
+### 1.14 Paths match case-insensitively, and tolerate one trailing slash
+
+**Jellyfin does:** route `/system/info/public`, `/SYSTEM/INFO/PUBLIC` and `/System/info/Public` to
+the same handler as `/System/Info/Public`, and answer `/System/Info/Public/` with the same body.
+`/System/Info/Public//` is a `404`. ASP.NET Core's routing compares path segments without regard to
+case; the trailing slash is one empty segment, and two are one too many.
+`[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-26]`
+
+**Depends on it:** any client that lowercases a URL before sending it, and there is a long tail of
+reasons one might — a hand-written path literal typed in the wrong case, a URL normaliser, a proxy
+that canonicalises, a configuration file someone edited. None of them are exotic, and a client
+built against the reference has never had a reason to notice it was relying on this.
+
+**Atrium does:** the same, by rewriting a request's path to the route's own spelling before routing
+it. Only the segments a route declares literally are respelled; a path **parameter** is data and
+reaches the handler exactly as it arrived, because lowercasing an identifier is invisible until
+something case-sensitive reads one.
+
+> **The framework's default here is not neutral, it is a third behaviour.** Starlette answers an
+> unmatched trailing slash with a `307` redirect — a round trip the reference does not make — and
+> answers the *doubled* slash with a `307` to a URL that works, where the reference refuses. So
+> "leave the default alone" would not have meant "differ in one small way"; it would have meant
+> differing in two directions at once.
 
 ---
 

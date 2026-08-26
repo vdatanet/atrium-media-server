@@ -42,7 +42,12 @@ DEFAULT_SURFACE = Path("docs/compatibility/surface.yaml")
 # `endpoints:` list of single-level mappings. Parsing it with a few regexes keeps this tool
 # dependency-free, which matters because it runs in CI before any environment is built.
 _ENTRY_START = re.compile(r'^\s*-\s+path:\s*"([^"]+)"\s*$')
-_FIELD = re.compile(r"^\s{4}(\w+):\s*(.+?)\s*$")
+# Two spaces or more: the reference block is indented by two and an endpoint's fields by four.
+# This read `\s{4}` until 2026-08-26, which matched the endpoints and silently dropped every
+# reference field - so the version gate below had never once run. A check that cannot fail is a
+# check that will not happen, which is why `main` now refuses a surface file with no reference
+# block rather than treating it as one that pins nothing.
+_FIELD = re.compile(r"^\s{2,}(\w+):\s*(.+?)\s*$")
 
 
 def parse_surface(text: str) -> tuple[dict[str, str], list[dict[str, str]]]:
@@ -95,7 +100,12 @@ def main() -> int:
     pinned = reference.get("jellyfin_openapi_version")
     errors: list[str] = []
 
-    if pinned and spec_version != pinned:
+    if not pinned:
+        errors.append(
+            f"{args.surface} has no reference.jellyfin_openapi_version. The version gate cannot "
+            f"run without it, and a gate that cannot run is worse than no gate"
+        )
+    elif spec_version != pinned:
         errors.append(
             f"version mismatch: surface pins {pinned}, document is {spec_version}. "
             f"Moving the pin has a procedure - see docs/compatibility/conformance.md"

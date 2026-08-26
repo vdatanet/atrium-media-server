@@ -9,6 +9,11 @@ Scripts that keep the documentation honest. None of them is part of the server.
 | [`fetch_reference_spec.py`](fetch_reference_spec.py) | Fetch and sanitise the Jellyfin OpenAPI document from a running server into the git-ignored `reference/` directory |
 | [`extract_v1_surface.py`](extract_v1_surface.py) | Validate `docs/compatibility/surface.yaml` against that document — the automated half of Principle VI |
 
+The validator refuses a document whose version is not the one `surface.yaml` pins. Fetching from a
+`10.11.11` server therefore reports a mismatch against the pinned `10.11.10` contract: see
+[reference-target §1](../docs/compatibility/reference-target.md#1-the-pinned-version), which
+records why the two differ and what moving the pin costs.
+
 ## Probes
 
 A probe answers **one** question about how a real Jellyfin behaves, prints its finding together
@@ -22,6 +27,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | Script | Question | Answers | Writes |
 |---|---|---|---|
 | [`probe_content_type_profiles.py`](probe_content_type_profiles.py) | Does the server answer the three declared JSON content types identically? | 001 §3.0 rule 2 | no |
+| [`probe_routing.py`](probe_routing.py) | How does the server match a path to a route, and how does it refuse? | 001 §3.6 | no |
 | [`probe_query_envelope.py`](probe_query_envelope.py) | What shape does each list endpoint return? | 005 OQ-6 | no |
 | [`probe_sort_names.py`](probe_sort_names.py) | How does the server derive `SortName` from `Name`? | 003 OQ-3 | yes |
 | [`probe_playlist_move.py`](probe_playlist_move.py) | Does `Move`'s `newIndex` refer to the list before or after removal? | 009 OQ-1 | yes |
@@ -39,6 +45,7 @@ Then:
 
 ```bash
 python3 tools/probe_content_type_profiles.py
+python3 tools/probe_routing.py
 python3 tools/probe_query_envelope.py
 python3 tools/probe_sort_names.py     --allow-writes
 python3 tools/probe_playlist_move.py  --allow-writes

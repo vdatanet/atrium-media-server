@@ -24,6 +24,16 @@ one is registered and that no route exists outside the list.
 The second half matters as much as the first — it is the automated enforcement of Principle VI. An
 endpoint that appears in the router without appearing in the surface file fails CI.
 
+Both halves are checked against **two views** of what the application serves — the OpenAPI document
+the framework generates, and the route table the factory builds from its own list of routers — and
+against each other. Each view has a blind spot the other covers: a route hidden from the document,
+and a router included without being listed. See
+[001 plan §8.5](../../specs/001-server-identity-and-discovery/plan.md#85-routes-against-surfaceyaml).
+
+L0 also covers **what counts as the same path**. The reference matches case-insensitively and
+accepts one trailing slash ([§1.14](behaviours.md#114-paths-match-case-insensitively-and-tolerate-one-trailing-slash)),
+so a client that lowercases its URLs must not meet a `404` here.
+
 ## L1 — Shape
 
 Golden-response tests. A request is issued against a fixture library, and the **raw response bytes**
