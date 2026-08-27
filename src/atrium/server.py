@@ -31,6 +31,7 @@ from fastapi import FastAPI
 from sqlalchemy.exc import SQLAlchemyError
 
 from atrium import REFERENCE_VERSION, __version__
+from atrium import logs as log_setup
 from atrium.api import sessions as session_routes
 from atrium.api import system, users
 from atrium.compat.errors import EXCEPTION_HANDLERS
@@ -181,7 +182,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"atrium {__version__} (Jellyfin {REFERENCE_VERSION} API)")  # noqa: T201
         return 0
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s")
+    # Not `basicConfig` alone: SQLAlchemy writes every statement and its bound parameters once
+    # its logger is enabled for INFO, and this feature's bound parameters are password hashes and
+    # token hashes. atrium.logs also redacts the credential the query mechanisms put in a URL.
+    log_setup.configure(logging.INFO)
 
     try:
         app = create_app(DataPaths(resolve_data_dir(args.data_dir)))

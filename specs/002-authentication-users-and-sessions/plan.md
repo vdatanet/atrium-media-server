@@ -4,7 +4,7 @@ title: Authentication, users and sessions — implementation plan
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3; by T8 - sections 6.5 and 6.6; by T9 - section 7
+amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3; by T8 - sections 6.5 and 6.6; by T9 - section 7; by T14 - sections 8.2 and 9
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-26
@@ -362,6 +362,17 @@ Authenticate with a known password, capture every log record emitted at every le
 password appears in none of them — nor in any exception message, nor in a request trace. It runs at
 `DEBUG`, because that is where a password gets logged by accident.
 
+**Two claims, two scopes.** The password must not appear *at any level, from any logger*: a promise
+this project can keep, because a password never leaves `users/passwords.py`. The stored hash and the
+access token must not appear under the logging a server **actually ships with** — asserting them
+under force-everything-to-`DEBUG` would be promising that a debug-everything mode is safe, and
+nobody can keep that.
+
+Both of the shipped-configuration halves failed when they were written, and neither leak was
+anything this project wrote: SQLAlchemy logs bound parameters at `INFO`, and an HTTP library logs
+the request line. `atrium.logs` is what T14 added in answer, and it is called by the entry point
+rather than left for an operator to discover.
+
 ### 8.3 Migrations
 
 Every revision is applied and rolled back in a test. The first migration additionally runs against a
@@ -379,6 +390,8 @@ costs more security than the parameters buy.
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | A password reaches a log | Medium | **Severe** | §8.2, running at `DEBUG` |
+| A **hash** reaches a log, because SQLAlchemy writes bound parameters once its logger reaches `INFO` | **Realised** — it did | Moderate | `atrium.logs` sets the engine logger to `WARNING`; an operator who wants SQL echoed turns it on |
+| A **token** reaches a log, because two of the five mechanisms put it in a URL | **Realised** — it did | Moderate | `atrium.logs` redacts `api_key=` and `ApiKey=` from any record, leaving the rest of the line |
 | Timing discloses valid usernames | **Medium** | Moderate | §6.2, verified by §8.1 |
 | Token stored in plain text | Low | Severe on database disclosure | SHA-256 at the repository boundary; a test asserts no column holds a value that authenticates |
 | Session flush loses activity on crash | High | **Negligible, and stated** | §6.5 — bounded at 30 seconds, and nothing else is deferred |

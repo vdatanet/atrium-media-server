@@ -691,15 +691,45 @@ a mechanism that authenticated an unknown token would be worse than one that did
 **The precedence chain is asserted at the boundary as well as in the parser**, including on a
 delivery route, which is where a stale header beside a freshly built URL is most likely to happen.
 
-## T14 — The log test
+## T14 — The log test  ✅
 
-- [ ] **Changes:** `tests/security/test_no_password_in_logs.py`.
+- [x] **Changes:** `tests/security/test_no_password_in_logs.py`.
 - **Depends on:** T9
 - **Verified by:** authenticate with a known password at `DEBUG`, capture every record from every
   logger, and assert the password appears in none — nor in an exception message, nor a request
   trace, nor a repr.
 - **Note:** `DEBUG` is the point. Nobody logs a password at `INFO`.
 - **Plan reference:** §8.2, §9
+
+### Done — 2026-08-26
+
+**The password test passed on the first run. The two tests beside it did not, and neither leak was
+anything this project wrote.**
+
+SQLAlchemy logs every statement **and its bound parameters** as soon as its logger is enabled for
+`INFO` — which `logging.basicConfig(level=INFO)` does, and which the entry point called. The bound
+parameters of this feature's statements are **password hashes and token hashes**. Nothing in the
+code said "log this"; a library default and one line of setup did.
+
+And `?api_key=` puts a live credential in a **URL**, which is the field an access log exists to
+record. It leaked here through the test's own HTTP client; in production it is uvicorn's access
+log, enabled by the same `basicConfig` call.
+
+`atrium.logs` answers both — the engine logger set to `WARNING`, and a filter that rewrites the
+credential and leaves the rest of the request line intact, because a log with the request removed
+is not a log. Called by the entry point rather than left for an operator to discover.
+
+**Two claims, two scopes, and the difference is stated rather than blurred.** The password must not
+appear *at any level, from any logger* — a promise this project can keep, because a password never
+leaves `users/passwords.py`. The hash and the token must not appear under the logging a server
+**ships with**; asserting them under force-everything-to-`DEBUG` would be promising that a
+debug-everything mode is safe, and nobody can keep that.
+
+**The capture had to be built to catch a logger that does not propagate.** `caplog` sees the root;
+a library configured with `propagate = False` is exactly the one that would leak, so the fixture
+attaches to every logger in the process and looks in every field a record carries — message,
+arguments, formatted output and formatted traceback. Three tests assert the capture itself can
+fail, because a guard that cannot fail is decoration.
 
 ## T15 — The timing test
 
