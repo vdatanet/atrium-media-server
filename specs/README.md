@@ -114,7 +114,7 @@ say how it will be proven is not finished.
 |---|---|---|---|---|
 | [001](001-server-identity-and-discovery/) | Server identity and discovery | **Implemented** | **Implemented** | **Implemented** |
 | [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | **Implemented** | **Implemented** | **Implemented** |
-| [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Accepted** | **Accepted** | Draft |
+| [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Accepted** | **Accepted** | **Accepted** |
 | [004](004-metadata-resolution/) | Metadata resolution | Draft | — | — |
 | [005](005-item-query-api/) | Item query API | Draft | — | — |
 | [006](006-images/) | Images | Draft | — | — |
@@ -123,10 +123,10 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001 and 002 are implemented; 003 is specified, planned and broken into tasks.** That is the whole
-dependency root of v1: everything else needs at least one of them. The other seven specs remain drafts — no
-plan may start until its spec is accepted, and no code until its plan is. The open questions across
-the ten are the review agenda.
+**001 and 002 are implemented; 003 is specified, planned and broken into tasks — all three gates
+passed.** That is the whole dependency root of v1: everything else needs at least one of them. The
+other seven specs remain drafts — no plan may start until its spec is accepted, and no code until
+its plan is. The open questions across the ten are the review agenda.
 
 **002 measured more than it implemented.** Its eighteen tasks contradicted four things the accepted
 specification asserted — a fifth authentication mechanism the surface had never listed, a disabled
@@ -143,6 +143,14 @@ the documentation and one contradicted it:
 | 003 OQ-3 — sort-name derivation | Confirmed 15/15, **plus a second rule**: three item types bypass it entirely |
 | 007 OQ-2 — completion thresholds | Answered: 90% / 5% / 300s, **and six branches** where the spec had two |
 | 009 OQ-1 — `Move` semantics | **Contradicted.** The spec had the reading backwards; §3.5 and AC-8 corrected |
+
+**003's task list changed at its gate**, on 2026-08-27, and the two changes that mattered were
+tasks that were *not in it*: nothing measured the two open questions the specification names probes
+for, and nothing extended the acceptance map — which `test_every_implemented_feature_has_a_map`
+would have failed on the day 003 was marked `Implemented`. Reading a list tells you whether its
+steps are right, not which step is missing; both were found by checking the list against files in
+this repository. Four smaller corrections are recorded in
+[003's tasks](003-library-configuration-and-scanning/tasks.md#what-the-gate-changed).
 
 Every one returned more than it was sent to check. That is the argument for running a probe before
 writing a plan rather than after. Running them is the cheapest work available and it
