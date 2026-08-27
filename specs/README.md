@@ -113,7 +113,7 @@ say how it will be proven is not finished.
 | # | Feature | spec | plan | tasks |
 |---|---|---|---|---|
 | [001](001-server-identity-and-discovery/) | Server identity and discovery | **Implemented** | **Implemented** | **Implemented** |
-| [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | **Accepted** | **Accepted** | **Accepted** |
+| [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | **Implemented** | **Implemented** | **Implemented** |
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Accepted** | **Accepted** | Draft |
 | [004](004-metadata-resolution/) | Metadata resolution | Draft | — | — |
 | [005](005-item-query-api/) | Item query API | Draft | — | — |
@@ -123,10 +123,16 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001 is implemented; 002 and 003 are specified, planned and broken into tasks.** That is the whole
+**001 and 002 are implemented; 003 is specified, planned and broken into tasks.** That is the whole
 dependency root of v1: everything else needs at least one of them. The other seven specs remain drafts — no
 plan may start until its spec is accepted, and no code until its plan is. The open questions across
 the ten are the review agenda.
+
+**002 measured more than it implemented.** Its eighteen tasks contradicted four things the accepted
+specification asserted — a fifth authentication mechanism the surface had never listed, a disabled
+account refused with `403` rather than the `401` the spec argued for on purpose, a client-header
+grammar stricter than "lenient" in two ways, and `/Users/Public` disclosing every user's policy to
+an unauthenticated caller. Each of them was one request away, and none was reachable by reading.
 
 **All four probes have been run**, on 2026-08-26 against a live Jellyfin 10.11.11. Three confirmed
 the documentation and one contradicted it:

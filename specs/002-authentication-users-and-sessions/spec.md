@@ -1,11 +1,11 @@
 ---
 feature: 002-authentication-users-and-sessions
 title: Authentication, users and sessions
-status: Accepted
+status: Implemented
 created: 2026-08-26
 updated: 2026-08-26
 accepted: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6; by T12 - section 3.8
+amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6; by T12 - section 3.8; by T18 - AC-3 and AC-10
 depends_on: [001]
 ---
 
@@ -358,9 +358,9 @@ verbatim.
    for byte, and are asserted as bytes rather than as status codes.
 3. All **five** token mechanisms of §3.1 authenticate the same request identically on an API
    route, and a request carrying two resolves in the measured order:
-   `Authorization` > `X-Emby-Authorization` > `X-Emby-Token` > query. On the image and delivery route classes all four are
-   **accepted and none is required**, which is what the reference does — the criterion there is
-   that presenting a token is never itself a reason to refuse.
+   `Authorization` > `X-Emby-Authorization` > `X-Emby-Token` > query. On the image and delivery
+   route classes all five are **accepted and none is required**, which is what the reference does —
+   the criterion there is that presenting a token is never itself a reason to refuse.
 4. No token on an authenticated route is `401`; a valid token lacking permission is `403`.
 5. Re-authenticating from the same `DeviceId` replaces the session and invalidates the prior token.
 6. `/Users/Public` answers without a token, excludes hidden users, and answers `200` with `[]`
@@ -371,15 +371,17 @@ verbatim.
    administrator.
 8. `POST /Users/Configuration` round-trips every property, including ones v1 does not act on.
 9. Capabilities posted to `/Sessions/Capabilities/Full` appear in the caller's `/Sessions` entry.
-10. After `LoginAttemptsBeforeLockout` failures the account answers `401` even with correct
-    credentials, and one success afterwards resets the counter.
+10. After `LoginAttemptsBeforeLockout` failures the account answers **`403`** even with correct
+    credentials, and one success afterwards resets the counter. `403` rather than `401` for the
+    same reason a disabled account does — the reference's own answer here is unmeasured (§7, OQ-5),
+    and this criterion said `401` until §3.3 was corrected and the two drifted apart.
 11. A password never appears in any log record at any level, and never in an error body.
 
 ## 6. Conformance
 
 | Endpoint | Level | How it is proven |
 |---|---|---|
-| `POST /Users/AuthenticateByName` | **L3** | Golden response plus differential. Everything downstream depends on this being byte-right |
+| `POST /Users/AuthenticateByName` | **L3** | Golden response plus differential. Everything downstream depends on this being byte-right. **L2 is met; the differential half needs the harness [010](../010-conformance-harness/spec.md) delivers and a reachable reference server, so the gap is recorded rather than counted as met** |
 | `GET /Users/Public` | **L2** | Golden response; fixture with a hidden user |
 | `GET /Users/Me`, `GET /Users/{userId}` | **L2** | Golden response, permission matrix |
 | `POST /Users/Configuration` | **L2** | Round-trip test |

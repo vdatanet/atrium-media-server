@@ -12,9 +12,10 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Feature 001 is implemented. Feature 002 is next**, and its task list passed its gate on
-2026-08-26, so code may start. The specification phase is over for the dependency root: 001, 002 and
-003 are specified, planned and broken into tasks; the other seven features are specified only.
+**Features 001 and 002 are implemented. Feature 003 is next**, and its task list is still a draft —
+so the next gate is that list, not code. The specification phase is over for the dependency root:
+001, 002 and 003 are specified, planned and broken into tasks; the other seven features are
+specified only.
 
 **The state is in the files, not here**, so it cannot go stale:
 
@@ -69,6 +70,10 @@ reasoning:
 | T17 | Assert the routes are registered | Four routing differences, including one the documentation had described as done since T13: an unmatched path was answering `{"detail": "Not Found"}` |
 | T18 | Add a CI workflow | Two of the four checks it was to run could not run in CI at all, and the suite's "no network" was a claim with nothing enforcing it |
 | T19 | Serialise names differently | Writing one constructor the obvious way — `*args, **kwargs` — silently broke OpenAPI generation, because the framework *inspects that signature* |
+| 002 T1 | Answer two open questions | A **fifth** authentication mechanism nothing had listed, and a disabled account refused with `403` where the spec argued for `401` on purpose |
+| 002 T7 | Parse a header leniently | Three of the plan's four claims about the grammar were wrong, including the one leniency both documents named |
+| 002 T11 | Serve a login screen | `/Users/Public` sends every user's full policy and configuration to a caller with no token — the opposite of the acceptance criterion |
+| 002 T14 | Assert no password is logged | The password never leaked; a library logged the password **hash** and another logged the token, both at `INFO`, from one `basicConfig` call |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
 question each, and a plain `urllib` request answers the rest.

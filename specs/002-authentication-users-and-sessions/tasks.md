@@ -1,7 +1,7 @@
 ---
 feature: 002-authentication-users-and-sessions
 title: Authentication, users and sessions — tasks
-status: Accepted
+status: Implemented
 created: 2026-08-26
 updated: 2026-08-26
 accepted: 2026-08-26
@@ -843,9 +843,9 @@ two changes, because 002 landed its routes across T11 and T12 and "the feature i
 not a state the check could use in between. Removing it is what finishing a feature looks like here.
 The seven endpoints are now named one by one, beside 001's four, so a silent removal is not silent.
 
-## T18 — The acceptance map for 002
+## T18 — The acceptance map for 002  ✅
 
-- [ ] **Changes:** `tests/conformance/test_acceptance.py` extended to a second feature. It is
+- [x] **Changes:** `tests/conformance/test_acceptance.py` extended to a second feature. It is
   written for one today — one specification path, one map — so this is a change of shape, not an
   added dictionary.
 - **Depends on:** T13, T14, T15, T16, T17
@@ -858,22 +858,49 @@ The seven endpoints are now named one by one, beside 001's four, so a silent rem
   thing that makes that claim checkable.
 - **Plan reference:** §8
 
+### Done — 2026-08-26
+
+**Writing the map found two criteria that had drifted from the sections they describe.** AC-3 still
+said "all four are accepted" on the image and delivery classes after T7 measured a fifth mechanism,
+and **AC-10 still said a locked-out account answers `401`** after §3.3 was corrected to `403` and
+T9 implemented it. Neither would have been caught by a test: they are prose about prose, and the
+suite was green either way. What caught them was having to name, for each criterion, the test that
+asserts it — which is the whole argument for this file existing.
+
+**It was a change of shape rather than an added dictionary**, as the task said. One specification
+path and one map became a table of them, and every check runs once per feature. 001's map is
+untouched; adding 003 is one entry and one dictionary, which is what the restructure was for.
+
+**One check is new and is about the future rather than the present.** The implemented features are
+read out of `specs/README.md`'s status table rather than listed here, so marking 003 `Implemented`
+fails this file until its map is written — at the moment somebody is actually in a position to
+write it, rather than a year later when nobody remembers what the criteria meant.
+
 ---
 
 ## Definition of done
 
-- [ ] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing
       test — all eleven, by name, and the mapping is itself a test (T18).
-- [ ] Every endpoint reaches the level declared in [`spec.md` §6](spec.md#6-conformance). **L3 for
-      `AuthenticateByName` is deferred to 010** and the gap is recorded, not counted as met.
-- [ ] OQ-1 and OQ-3 are resolved with provenance, or recorded in [`spec.md` §7](spec.md#7-open-questions)
-      as a dated debt saying what was not reachable — never dropped because the code shipped anyway.
-- [ ] No column in any table holds a value that would authenticate if disclosed.
-- [ ] The three security tests — no password in logs, overlapping login timing, KDF on every failure
-      path — pass, and each fails when its guarantee is deliberately removed.
-- [ ] `surface.yaml` covers every route added, and no route exists outside it.
-- [ ] Anything learned during implementation is back in `spec.md` or `plan.md`, in the same change.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+- [x] Every endpoint reaches the level declared in [`spec.md` §6](spec.md#6-conformance). **L3 for
+      `AuthenticateByName` is deferred to 010** and the gap is recorded, not counted as met — L2 is
+      met now, and §6 says so in writing.
+- [x] OQ-1 and OQ-3 are resolved with provenance. Both were answered by T1's probe, and OQ-3 was
+      **contradicted** rather than confirmed. Three later ones — OQ-5's refusals and OQ-6's
+      sentinel — are recorded as dated debt naming what could not safely be measured from here.
+- [x] No column in any table holds a value that would authenticate if disclosed — asserted by name
+      *and* by reading the database file and its write-ahead log as bytes (T4).
+- [x] The three security tests pass, and each carries the failure it exists for: the log capture
+      is proven to see a deliberate leak, the timing test detects a removed dummy verify at 19×,
+      and the KDF count is exact rather than a bound, so a skipped verify fails it by construction.
+- [x] `surface.yaml` covers every route added, and no route exists outside it (T17).
+- [x] Anything learned during implementation is back in `spec.md` or `plan.md`, in the same change.
+- [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+
+**All eight hold, and the feature is done.** What remains open is named rather than forgotten: the
+L3 differential needs feature 010's harness and a reachable reference, and OQ-2, OQ-4, OQ-5 and
+OQ-6 are questions no probe could answer from here without failing logins against somebody's real
+account.
 
 ## What this feature owes the next one
 
