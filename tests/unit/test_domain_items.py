@@ -14,7 +14,9 @@ from datetime import UTC, datetime
 import pytest
 
 from atrium.domain.items import (
+    BY_NAME,
     FILE_BACKED,
+    IN_THE_TREE,
     PARENT_OF,
     PRODUCED_BY,
     CollectionType,
@@ -121,13 +123,25 @@ def vars_of(item: Item) -> dict[str, object]:
 # ------------------------------------------------------------------------------------------
 
 
-def test_every_type_says_what_its_parent_is() -> None:
-    assert set(PARENT_OF) == set(ItemType)
+def test_every_type_in_the_tree_says_what_its_parent_is() -> None:
+    """Over `IN_THE_TREE`, and that scoping is the point rather than a concession.
+
+    004 added five types that are **not** in the containment tree - a genre is referenced by items
+    in a library, not contained by one - and the tempting fix when this test first failed was to
+    widen it to `set(ItemType)` by mapping each of them to `None`. That would have passed and
+    would have made the next test meaningless: five types whose chain ends at themselves, in an
+    assertion written to prove every chain ends at the library.
+
+    So the exemption is named here, once, and the three maps below are total over the tree. A
+    ninth *tree* type with no parent still fails, which is what this test is for.
+    """
+    assert set(PARENT_OF) == IN_THE_TREE
+    assert BY_NAME.isdisjoint(PARENT_OF), "a by-name type with a parent is in the tree by accident"
 
 
 def test_every_chain_ends_at_the_library_itself() -> None:
     """A film's parent is its CollectionFolder, not nothing - the library is an item too."""
-    for start in ItemType:
+    for start in IN_THE_TREE:
         seen, current = [start], PARENT_OF[start]
         while current is not None:
             assert current not in seen, f"{start} has a cycle in its parent chain: {seen}"
@@ -136,10 +150,21 @@ def test_every_chain_ends_at_the_library_itself() -> None:
         assert seen[-1] is ItemType.COLLECTION_FOLDER
 
 
+def test_a_by_name_type_has_no_chain_at_all() -> None:
+    """The positive statement of the exemption above: not "excused from the tree" but "not in it".
+
+    A genre with a parent would appear under one library and belong to all of them, which is
+    precisely the bug the server-wide identity rule exists to avoid (004 spec section 3.7).
+    """
+    for kind in BY_NAME:
+        assert kind not in PARENT_OF
+        assert kind not in set().union(*PRODUCED_BY.values())
+
+
 def test_the_leaves_of_the_hierarchy_are_exactly_the_file_backed_types() -> None:
     """The two facts drifting apart is how a scanner invents a container that owns a container."""
     parents = {parent for parent in PARENT_OF.values() if parent is not None}
-    assert set(ItemType) - parents - {ItemType.COLLECTION_FOLDER} == FILE_BACKED
+    assert IN_THE_TREE - parents - {ItemType.COLLECTION_FOLDER} == FILE_BACKED
 
 
 @pytest.mark.parametrize("collection_type", list(CollectionType))
@@ -152,9 +177,14 @@ def test_a_collection_type_produces_only_its_own_types(collection_type: Collecti
         assert ItemType.MOVIE in others
 
 
-def test_every_type_is_produced_by_some_collection_type() -> None:
-    """A type nothing produces is a type the resolver can never create."""
-    assert set().union(*PRODUCED_BY.values()) == set(ItemType)
+def test_every_type_in_the_tree_is_produced_by_some_collection_type() -> None:
+    """A tree type nothing produces is a type the resolver can never create.
+
+    The by-name five are produced by a **refresh** rather than by a resolver - they come from a
+    name an item mentions, not from a file a walker found - so they are outside this the same way
+    they are outside `PARENT_OF`.
+    """
+    assert set().union(*PRODUCED_BY.values()) == IN_THE_TREE
 
 
 def test_no_type_is_produced_by_two_collection_types_except_the_library() -> None:
@@ -171,4 +201,20 @@ def test_the_type_values_are_the_references_spellings() -> None:
     """They are the vocabulary; 005 serialises these strings and clients branch on them."""
     assert ItemType.MUSIC_ARTIST == "MusicArtist"
     assert ItemType.COLLECTION_FOLDER == "CollectionFolder"
+    assert ItemType.MUSIC_GENRE == "MusicGenre"
     assert CollectionType.TVSHOWS == "tvshows"
+
+
+def test_the_tree_and_the_by_name_types_partition_every_type() -> None:
+    """No third category, and nothing in both. A type that is in neither has no rule anywhere:
+    no parent, no collection type, no identity, and no constraint - and the first symptom would be
+    a `KeyError` in the middle of a scan."""
+    assert set(ItemType) == IN_THE_TREE | BY_NAME
+    assert IN_THE_TREE.isdisjoint(BY_NAME)
+
+
+def test_a_by_name_item_knows_it_is_one() -> None:
+    genre = Item(id="e" * 32, type=ItemType.GENRE, name="Drama", library_id=None)
+    film = Item(id="f" * 32, type=ItemType.MOVIE, name="The Fixture", library_id="b" * 32)
+    assert genre.is_by_name and not genre.is_file_backed
+    assert not film.is_by_name

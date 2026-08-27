@@ -27,6 +27,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -331,19 +332,41 @@ class Item(Base):
     __table_args__ = (
         CheckConstraint(
             "type IN ('Movie', 'Series', 'Season', 'Episode', 'MusicArtist', 'MusicAlbum', "
-            "'Audio', 'CollectionFolder')",
+            "'Audio', 'CollectionFolder', 'Genre', 'MusicGenre', 'Studio', 'Person', 'Year')",
             name="ck_items_type",
+        ),
+        # **The by-name types are exactly the ones with no library**, stated as a constraint
+        # rather than left to the code that writes the rows. Both directions matter: a genre with
+        # a library would appear under one library and belong to all of them, and a film without
+        # one would be invisible to every query 005 scopes by library.
+        CheckConstraint(
+            "(library_id IS NULL) = (type IN ('Genre', 'MusicGenre', 'Studio', 'Person', 'Year'))",
+            name="ck_items_by_name_has_no_library",
         ),
         # Pattern-driven, not fact-driven: 005 orders nearly every list by `sort_name` within a
         # library and a type, and walks children by their number. Named here so a later reader
         # can tell which indexes serve a query and which serve a constraint.
         Index("ix_items_library_type_sort", "library_id", "type", "sort_name"),
         Index("ix_items_parent_index", "parent_id", "index_number"),
+        # 004 plan section 4's pattern-driven set, every one of them for a 005 query that does not
+        # exist yet: `years` and `sortBy=ProductionYear`, `sortBy=PremiereDate`,
+        # `minCommunityRating`, `Latest`, and `searchTerm`/`nameStartsWith` on the folded name.
+        # They are here rather than in 005 because adding an index to a populated table is a
+        # migration somebody has to run, and this table is populated by the feature that adds it.
+        Index("ix_items_production_year", "production_year"),
+        Index("ix_items_premiere_date", "premiere_date"),
+        Index("ix_items_community_rating", "community_rating"),
+        Index("ix_items_date_created", "date_created"),
+        Index("ix_items_name_folded", "name_folded"),
+        # Every scan asks for the set (004 plan section 6.8), and it is almost always empty -
+        # which is exactly the shape an index serves best.
+        Index("ix_items_refresh_pending", "refresh_pending"),
     )
 
     id: Mapped[str] = mapped_column(ID, primary_key=True)
-    library_id: Mapped[str] = mapped_column(
-        ID, ForeignKey("libraries.id", ondelete="CASCADE"), nullable=False
+    #: **Null for exactly the five by-name types**, held by the check constraint above.
+    library_id: Mapped[str | None] = mapped_column(
+        ID, ForeignKey("libraries.id", ondelete="CASCADE"), nullable=True
     )
     parent_id: Mapped[str | None] = mapped_column(
         ID, ForeignKey("items.id", ondelete="CASCADE"), nullable=True
@@ -369,6 +392,59 @@ class Item(Base):
     #: Only an explicit maintenance action purges, and a scan never does.
     removed_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
+    # -- 004: what a refresh resolves ---------------------------------------------------------
+
+    overview: Mapped[str | None] = mapped_column(String, nullable=True)
+    tagline: Mapped[str | None] = mapped_column(String, nullable=True)
+    original_title: Mapped[str | None] = mapped_column(String, nullable=True)
+    production_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    premiere_date: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    #: Ticks of 100 nanoseconds, converted once at ingestion (architecture section 4).
+    runtime_ticks: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    official_rating: Mapped[str | None] = mapped_column(String, nullable=True)
+    community_rating: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    #: Echoed as `ProviderIds`. A map rather than columns because the *keys* are open: a provider
+    #: nothing here knows about may still be named in a sidecar, and dropping it would lose the
+    #: one thing that stops a future refresh guessing (spec section 3.5 rule 1).
+    provider_ids: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+
+    #: The track gain in decibels, from the file's own tag. **One number, not four** - the
+    #: reference reads only the track gain and serves only this
+    #: `[source: MediaBrowser.Providers/MediaInfo/AudioFileProber.cs:362-375 @ v10.11.11]`
+    #: `[spec: BaseItemDto]`. Nullable because the tag is usually absent, and a null property is
+    #: omitted from a response entirely (behaviours section 1.7). See 004 T1.
+    normalization_gain: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    #: The reference's nine `MetadataField` values, as they were spelled in the sidecar that set
+    #: them `[spec: MetadataField]`. **Not** this feature's finer field vocabulary: a lock is a
+    #: coarser thing than a merge field, and `metadata/model.py`'s `LOCK_OF` is the map between
+    #: them. A list rather than nine booleans because it round-trips a value like
+    #: `ProductionLocations`, which locks nothing here and is still the user's.
+    locked_fields: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    #: `<lockdata>true</lockdata>`: no provider may change anything about this item.
+    is_locked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+
+    #: A provider was unreachable, so this item kept its local metadata and wants another go
+    #: (AC-8). The next scan retries these **even when their files did not change**, which is the
+    #: one thing in 004 that reads an item the change-detection signal would have skipped.
+    refresh_pending: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    metadata_refreshed_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+    #: Case- and diacritic-folded name. **Written by 004, read by nobody until 005** - it exists
+    #: for `searchTerm`, `nameStartsWith` and `/Search/Hints`, and a row that misses it is
+    #: invisible to search rather than broken, which is the failure mode worth an index and a
+    #: not-null default.
+    name_folded: Mapped[str] = mapped_column(String, nullable=False, default="", server_default="")
+
     library: Mapped[Library] = relationship(back_populates="items", lazy="raise")
 
     #: Self-referential, and declared for the same reason as `Library.items`: a scan writes a
@@ -383,6 +459,34 @@ class Item(Base):
     )
 
     sources: Mapped[list[ItemSource]] = relationship(
+        back_populates="item", lazy="raise", cascade="all, delete-orphan"
+    )
+
+    genres: Mapped[list[ItemGenre]] = relationship(
+        back_populates="item",
+        lazy="raise",
+        cascade="all, delete-orphan",
+        foreign_keys="ItemGenre.item_id",
+    )
+    studios: Mapped[list[ItemStudio]] = relationship(
+        back_populates="item",
+        lazy="raise",
+        cascade="all, delete-orphan",
+        foreign_keys="ItemStudio.item_id",
+    )
+    people: Mapped[list[ItemPerson]] = relationship(
+        back_populates="item",
+        lazy="raise",
+        cascade="all, delete-orphan",
+        foreign_keys="ItemPerson.item_id",
+    )
+    artists: Mapped[list[ItemArtist]] = relationship(
+        back_populates="item",
+        lazy="raise",
+        cascade="all, delete-orphan",
+        foreign_keys="ItemArtist.item_id",
+    )
+    images: Mapped[list[ItemImage]] = relationship(
         back_populates="item", lazy="raise", cascade="all, delete-orphan"
     )
 
@@ -447,3 +551,187 @@ class ItemUserData(Base):
         BigInteger, nullable=False, default=0, server_default=text("0")
     )
     last_played_date: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+class ItemGenre(Base):
+    """One genre on one item, in order, with **both** the spelling and the row it merges into.
+
+    The string is stored here and not only on the by-name item because they are two different
+    facts. An item's own response carries the spelling that item's file used - `Genres: ["sci-fi"]`
+    - while `/Genres` displays the first spelling anybody used, which may be `Sci-Fi`. One home
+    each; deriving either from the other loses the other (004 plan section 4).
+
+    `genre_item_id` points at a `Genre` row for film and series genres and a `MusicGenre` row for
+    audio genres, which is the whole of what keeps `/Genres` and `/MusicGenres` disjoint: neither
+    endpoint has to guess from context what kind of item referred to a name.
+    """
+
+    __tablename__ = "item_genres"
+    __table_args__ = (Index("ix_item_genres_genre", "genre_item_id"),)
+
+    item_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("items.id", ondelete="CASCADE"), primary_key=True
+    )
+    #: Document order. A genre list is ordered by the source that wrote it, not alphabetically.
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    #: **No cascade, deliberately.** Garbage collection deletes a by-name row only when nothing
+    #: references it; a cascade would let a mistake there delete the genre off every item that had
+    #: it, silently. Without one the same mistake is an integrity error.
+    genre_item_id: Mapped[str] = mapped_column(ID, ForeignKey("items.id"), nullable=False)
+
+    item: Mapped[Item] = relationship(back_populates="genres", lazy="raise", foreign_keys=[item_id])
+
+
+class ItemStudio(Base):
+    """One studio on one item, in order. Same two-homes rule as `ItemGenre`."""
+
+    __tablename__ = "item_studios"
+    __table_args__ = (Index("ix_item_studios_studio", "studio_item_id"),)
+
+    item_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("items.id", ondelete="CASCADE"), primary_key=True
+    )
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    studio_item_id: Mapped[str] = mapped_column(ID, ForeignKey("items.id"), nullable=False)
+
+    item: Mapped[Item] = relationship(
+        back_populates="studios", lazy="raise", foreign_keys=[item_id]
+    )
+
+
+class ItemPerson(Base):
+    """One person on one item, with their role and their place in the billing.
+
+    **The order is metadata, not an accident of insertion** (spec section 3.7 rule 2). Clients
+    render "starring" from the first few entries, so a cast list that arrives in a different order
+    is a different cast list.
+
+    `role` is the character, and it belongs on this row rather than on the person: the same actor
+    is a different character in every film, which is exactly why the association carries it.
+    """
+
+    __tablename__ = "item_people"
+    __table_args__ = (Index("ix_item_people_person", "person_item_id"),)
+
+    item_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("items.id", ondelete="CASCADE"), primary_key=True
+    )
+    #: Billing order, and the primary key's second half: one place in the list, one person.
+    sort_order: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    #: `Actor`, `Director`, `Writer`, `Composer` - the reference's `PersonKind` spellings.
+    person_type: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    #: The character played. Null for a director or a writer, who play nobody.
+    role: Mapped[str | None] = mapped_column(String, nullable=True)
+    person_item_id: Mapped[str] = mapped_column(ID, ForeignKey("items.id"), nullable=False)
+
+    item: Mapped[Item] = relationship(back_populates="people", lazy="raise", foreign_keys=[item_id])
+
+
+class ItemArtist(Base):
+    """One artist credit on one item, and **the credit kind is the whole point of the row**.
+
+    `/Artists` and `/Artists/AlbumArtists` are the same rows distinguished by this column and
+    nothing else. A track's performers are `artist`; the album's are `album_artist`; a compilation
+    has one album artist and a different performer on every track, which is what makes it one
+    album rather than one per track. Losing the distinction here makes those two endpoints
+    impossible to tell apart later without re-reading every file.
+    """
+
+    __tablename__ = "item_artists"
+    __table_args__ = (
+        CheckConstraint("credit IN ('artist', 'album_artist')", name="ck_item_artists_credit"),
+        Index("ix_item_artists_artist", "artist_item_id"),
+    )
+
+    item_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("items.id", ondelete="CASCADE"), primary_key=True
+    )
+    credit: Mapped[str] = mapped_column(String, primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    #: A `MusicArtist`, which is a **per-library** row rather than a by-name one - the gap
+    #: recorded in docs/compatibility/behaviours.md section 5.3.
+    artist_item_id: Mapped[str] = mapped_column(ID, ForeignKey("items.id"), nullable=False)
+
+    item: Mapped[Item] = relationship(
+        back_populates="artists", lazy="raise", foreign_keys=[item_id]
+    )
+
+
+class ItemImage(Base):
+    """Which file is which image for an item, with everything a response needs and no bytes.
+
+    **`relative_path` is read through `source_kind`**, and the three readings are not
+    interchangeable (004 plan section 4):
+
+    * `file` - relative to the item's **library root**. The user's own artwork, never written to.
+    * `embedded` - **absent**: the bytes are inside the audio file itself.
+    * `remote` - relative to the **data directory**, where a downloaded poster lands. Never inside
+      a library root, which is the structural half of the read-only guarantee (AC-15).
+
+    `width`, `height` and `tag` are written at association time and **never null**: 005 emits
+    `ImageTags` and `PrimaryImageAspectRatio` from these rows alone, before 006 exists to serve a
+    single byte, and a row missing them would make an item's aspect ratio silently absent.
+    """
+
+    __tablename__ = "item_images"
+    __table_args__ = (
+        CheckConstraint(
+            "source_kind IN ('file', 'embedded', 'remote')", name="ck_item_images_source_kind"
+        ),
+        CheckConstraint(
+            "(source_kind = 'embedded') = (relative_path IS NULL)",
+            name="ck_item_images_embedded_has_no_path",
+        ),
+    )
+
+    item_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("items.id", ondelete="CASCADE"), primary_key=True
+    )
+    #: `Primary`, `Backdrop`, `Logo`, `Thumb`, `Banner`, `Disc` - the reference's `ImageType`.
+    image_type: Mapped[str] = mapped_column(String, primary_key=True)
+    #: Zero for every type but `Backdrop`, which is numbered and ordered.
+    image_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    source_kind: Mapped[str] = mapped_column(String, nullable=False)
+    relative_path: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    width: Mapped[int] = mapped_column(Integer, nullable=False)
+    height: Mapped[int] = mapped_column(Integer, nullable=False)
+    #: 32 lowercase hex: the first 16 bytes of the SHA-256 of the image bytes. Stable across a
+    #: rescan because the bytes are, which is 006 AC-2's whole cache story computed here.
+    tag: Mapped[str] = mapped_column(ID, nullable=False)
+
+    item: Mapped[Item] = relationship(back_populates="images", lazy="raise")
+
+
+class ProviderCacheEntry(Base):
+    """One response somebody else's server sent, kept so a rescan does not ask again.
+
+    **The schema promises nothing about these rows.** They are evictable at any time: dropping the
+    table costs a refresh, not data. That is why the cache is not the mechanism behind AC-13 -
+    a rescan of an unchanged library makes no requests because 003's change detection means
+    nothing asks, not because something answered from here. This table exists for the two cases
+    where something *does* ask again: retrying after a provider was down, and a `Replace` refresh.
+    """
+
+    __tablename__ = "provider_cache"
+
+    #: The `ProviderIds` key - `Tmdb`, `MusicBrainz`. The same name the identity is stored under.
+    provider: Mapped[str] = mapped_column(String, primary_key=True)
+    #: Whatever identifies the request within that provider. Opaque here on purpose: the provider
+    #: module owns its own request shape, and this table owns none of it.
+    request_key: Mapped[str] = mapped_column(String, primary_key=True)
+
+    payload: Mapped[Any] = mapped_column(JSON, nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+    #: When this stops being fresh. An identity lookup by id never expires - an id does not change
+    #: meaning - so this is null for those (004 plan section 6.8).
+    expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)

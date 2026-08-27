@@ -73,7 +73,7 @@ from sqlalchemy.orm import Session as OrmSession
 
 from atrium.compat.dates import utc_now
 from atrium.db.repositories import ItemRepository
-from atrium.domain.items import PARENT_OF, Item, ItemType
+from atrium.domain.items import IN_THE_TREE, PARENT_OF, Item, ItemType
 from atrium.domain.library import Library
 from atrium.library.identity import ensure_unique
 from atrium.library.naming import PATH_ONLY, MetadataSource
@@ -133,7 +133,10 @@ def _depth_of(item_type: ItemType) -> int:
     return depth
 
 
-_DEPTH: dict[ItemType, int] = {one: _depth_of(one) for one in ItemType}
+#: Over `IN_THE_TREE`, not over `ItemType`. 004's five by-name types have no parent and no depth,
+#: and a scan never writes one - they are created by a refresh, from a name an item mentions. A
+#: `KeyError` here would be the honest failure if that ever stopped being true.
+_DEPTH: dict[ItemType, int] = {one: _depth_of(one) for one in IN_THE_TREE}
 
 
 def scan(

@@ -167,7 +167,7 @@ it.
 
 ## T4 — Migration `0003_metadata_and_by_name`, the models, and the by-name identity rule
 
-- [ ] **Changes:** revision 0003 exactly as [plan §4](plan.md#4-data-model) lays it out: the
+- [x] **Changes:** revision 0003 exactly as [plan §4](plan.md#4-data-model) lays it out: the
   metadata columns on `items` (including `name_folded` and, **per T1's finding**, the single
   nullable float `normalization_gain` rather than the map this list first named), the five join
   tables, `provider_cache`, the type check gaining `Genre`,
@@ -186,6 +186,34 @@ it.
   types must be exempted **deliberately, in the test that holds the map**, or the assertion gets
   loosened in passing and stops guarding the tree it was written for.
 - **Plan reference:** §4; spec §3.7
+- **Done (2026-08-27):** the task's warning about the containment map was right, and it was not
+  the expensive one. `domain/items.py` gained `BY_NAME` and `IN_THE_TREE`, and the four map
+  assertions are scoped to the tree with the exemption argued once and stated positively in a
+  test of its own — a by-name type has no chain **and** no collection type produces it. The
+  tempting fix, mapping the five to `None` in `PARENT_OF`, passes and makes
+  "every chain ends at the library" mean nothing.
+  **Four things the task did not anticipate.**
+  *The rebuild would have thrown away three constraints and two indexes, silently.* `items` has
+  to be copied because SQLite cannot alter a check constraint in place, and SQLAlchemy's SQLite
+  dialect **does not reflect check constraints** — so a batch operation that trusted reflection
+  drops `ck_items_type` and 0002's two indexes, and every test in the suite still passes.
+  `copy_from` carries the whole 0002 definition, indexes included.
+  *Nothing compared the migrations against the models.* A column added to one and forgotten in
+  the other passed the entire sweep. `test_the_migrations_and_the_models_describe_the_same_schema`
+  builds both databases and compares columns, indexes, primary keys, foreign keys and check
+  constraints; it covers every revision, not only this one, and it was checked by breaking it.
+  *Adding five enum members broke a scan at import time.* `library/scan.py` built its depth map
+  over `ItemType` and `PARENT_OF` is now total over the tree only — six test modules failed to
+  collect. Scoped, with the `KeyError` left as the honest failure if a scan ever does produce one.
+  *0002's "the check constraint lists exactly the types the domain has" had to be scoped, not
+  widened.* Widening it to today's `ItemType` would have made it assert that a list equals
+  itself, forever. A migration is a record of a point in time: 0002 compares against
+  `IN_THE_TREE`, and the whole-vocabulary assertion moved to 0003 where the five arrive.
+  **And the fold moved.** [Plan §6.7](plan.md#67-by-name-rows) put it in `metadata/byname.py`
+  (T9), but the *identity* is derived from it, so `library/identity.py` owns it and T9 will call
+  it. Two definitions of one fold is how a spelling merges into one row and derives another's id.
+  Its order is the reference's and matters: trim, then strip trailing dots, and **no second
+  trim** — so `Drama. . .` and `Drama. .` are two rows there and two here.
 
 ## T5 — `metadata/nfo.py`
 

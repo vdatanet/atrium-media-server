@@ -16,7 +16,8 @@ mount point - changes every identifier there. Atrium derives from the path relat
 root, so that move costs nothing. The identifiers differ from the reference's either way
 (docs/compatibility/behaviours.md section 1.4), so being better here has no compatibility cost.
 
-There are **four** identity rules, not one, and `RULE_OF` says which type uses which.
+There are **five** identity rules, not one, and `RULE_OF` says which type uses which. Four came
+from 003; the fifth is 004's by-name rule, and it is the only one with no library in the key.
 """
 
 from __future__ import annotations
@@ -30,12 +31,13 @@ from atrium.domain.items import ItemType
 
 
 class IdentityRule(StrEnum):
-    """The four shapes of spec section 3.6's table. A type uses exactly one."""
+    """The five shapes of spec 003 section 3.6's table plus 004's. A type uses exactly one."""
 
     FROM_PATH = "the file's path, relative to its library root"
     FROM_NAME = "the library plus the normalised name"
     FROM_PARENT_AND_NUMBER = "the parent's identity plus a number"
     FROM_LIBRARY = "the library's configured identity"
+    FROM_FOLDED_NAME = "the folded name alone, server-wide"
 
 
 #: Which rule each type uses. A test asserts this covers every `ItemType`, because a type with no
@@ -50,7 +52,26 @@ RULE_OF: Mapping[ItemType, IdentityRule] = {
     ItemType.MUSIC_ARTIST: IdentityRule.FROM_NAME,
     ItemType.SEASON: IdentityRule.FROM_PARENT_AND_NUMBER,
     ItemType.COLLECTION_FOLDER: IdentityRule.FROM_LIBRARY,
+    # 004's five. Server-wide: no library in the key, which is the whole difference from
+    # `FROM_NAME` and the reason `MusicArtist` above is a documented gap rather than a bug
+    # (docs/compatibility/behaviours.md section 5.3).
+    ItemType.GENRE: IdentityRule.FROM_FOLDED_NAME,
+    ItemType.MUSIC_GENRE: IdentityRule.FROM_FOLDED_NAME,
+    ItemType.STUDIO: IdentityRule.FROM_FOLDED_NAME,
+    ItemType.PERSON: IdentityRule.FROM_FOLDED_NAME,
+    ItemType.YEAR: IdentityRule.FROM_FOLDED_NAME,
 }
+
+#: What a filename cannot carry, and what the reference therefore replaces with a space before a
+#: name becomes a by-name key
+#: `[source: Emby.Server.Implementations/IO/ManagedFileSystem.cs:21-27 @ v10.11.11]`.
+#:
+#: This set is not "punctuation" or "anything awkward" - it is exactly Windows' invalid path
+#: characters, because the reference's by-name identity is derived from a **path** it would have
+#: to be able to create. Atrium creates no such path and derives nothing from one; it reproduces
+#: the set because the *observable* consequence is which two spellings become one item, and
+#: guessing at a wider or narrower set changes that.
+_PATH_INVALID = frozenset('"<>|:*?\\/') | {chr(code) for code in range(0x00, 0x20)}
 
 
 class IdentityCollisionError(RuntimeError):
@@ -105,6 +126,55 @@ def normalise_name(name: str, *, case_sensitive: bool = False) -> str:
     """
     normalised = unicodedata.normalize("NFC", name.strip())
     return normalised if case_sensitive else normalised.lower()
+
+
+def fold_by_name(name: str) -> str:
+    """The form a genre, studio, person or year name is reduced to before it becomes an identity.
+
+    **One definition, used twice.** The identifier hashes this, and 004's by-name repository keys
+    its rows on it, so the row a spelling merges into and the identifier that spelling produces
+    cannot disagree. A second fold written next to the repository is how they would.
+
+    The steps, in the reference's order
+    `[source: MediaBrowser.Controller/Entities/Genre.cs:84-92 @ v10.11.11]`
+    `[source: Emby.Server.Implementations/Library/LibraryManager.cs:636-658 @ v10.11.11]`:
+
+    1. every character a filename cannot carry becomes a **space**, one for one;
+    2. trim;
+    3. remove trailing dots - the reference's comment says Windows dislikes them;
+    4. lowercase.
+
+    The order matters for names nobody sensible writes and somebody eventually does: the reference
+    does not trim again after removing the dots, so `Drama. . .` folds with a trailing space and
+    `Drama. .` does not fold to the same thing. Reproduced rather than tidied, because tidying it
+    would merge two rows the reference keeps apart.
+
+    **Case folds, diacritics do not** - the whole envelope of
+    docs/compatibility/behaviours.md section 2.18. `Sci-Fi` and `sci-fi` are one genre; `Elektro`
+    and `Elektró` are two.
+
+    NFC is Atrium's own addition and observable nowhere: it unifies two byte encodings of the
+    *same* character - macOS hands back decomposed forms where Linux gives precomposed - and
+    leaves every genuinely different character alone. The reference has no equivalent because it
+    derives from a path produced on one machine.
+    """
+    replaced = "".join(" " if character in _PATH_INVALID else character for character in name)
+    return unicodedata.normalize("NFC", replaced.strip().rstrip(".")).lower()
+
+
+def for_by_name(item_type: ItemType, name: str) -> str:
+    """A `Genre`, `MusicGenre`, `Studio`, `Person` or `Year`: its folded name, and nothing else.
+
+    **Server-wide on purpose.** No library takes part in the key, so the same genre on films in
+    two libraries is one row with one identifier - which is what makes `/Genres` a list of genres
+    rather than a list of genres per library.
+
+    The type *is* in the key, so a `Genre` and a `MusicGenre` spelled the same are two items. That
+    is what keeps `/Genres` and `/MusicGenres` disjoint without either endpoint filtering by
+    guesswork (004 plan section 4).
+    """
+    _require(item_type, IdentityRule.FROM_FOLDED_NAME)
+    return derive(item_type.value, fold_by_name(name))
 
 
 def for_file(
@@ -193,6 +263,8 @@ __all__ = [
     "IdentityCollisionError",
     "IdentityRule",
     "ensure_unique",
+    "fold_by_name",
+    "for_by_name",
     "for_file",
     "for_library",
     "for_name",

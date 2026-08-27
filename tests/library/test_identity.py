@@ -28,6 +28,8 @@ from atrium.library.identity import (
     IdentityCollisionError,
     IdentityRule,
     ensure_unique,
+    fold_by_name,
+    for_by_name,
     for_file,
     for_library,
     for_name,
@@ -272,3 +274,93 @@ def test_the_whole_derivation_is_deterministic_across_processes() -> None:
         for _ in range(2)
     ]
     assert runs[0] == runs[1] == for_file(ItemType.MOVIE, LIBRARY, "Movies/Amélie (2001).mkv")
+
+
+# --------------------------------------------------------------------------------------------
+# 004: the by-name rule, and the fold behind it
+# --------------------------------------------------------------------------------------------
+
+
+def test_a_genre_and_a_music_genre_of_the_same_name_are_two_items() -> None:
+    """What keeps `/Genres` and `/MusicGenres` disjoint without either endpoint guessing.
+
+    The type is in the key, so `Drama` the film genre and `Drama` the music genre are two rows -
+    and a query for one can never return the other.
+    """
+    assert for_by_name(ItemType.GENRE, "Drama") != for_by_name(ItemType.MUSIC_GENRE, "Drama")
+
+
+def test_two_spellings_of_one_genre_are_one_item() -> None:
+    """AC-14, at identity level: `Sci-Fi` and `sci-fi` in two files produce one genre.
+
+    The reference's own behaviour rather than an improvement - 97 of 97 live ids reproduce from
+    the case-folded name (docs/compatibility/behaviours.md section 2.18).
+    """
+    assert for_by_name(ItemType.GENRE, "Sci-Fi") == for_by_name(ItemType.GENRE, "sci-fi")
+    assert for_by_name(ItemType.GENRE, "SCI-FI") == for_by_name(ItemType.GENRE, "sci-fi")
+
+
+def test_diacritics_are_not_folded() -> None:
+    """The other half of section 2.18's envelope, and the half that is easy to over-deliver on.
+
+    Stripping accents would merge `Elektro` and `Elektró` into one genre the reference keeps
+    apart, which is a delta a user sees as a genre that vanished.
+    """
+    assert for_by_name(ItemType.GENRE, "Elektro") != for_by_name(ItemType.GENRE, "Elektró")
+
+
+def test_no_library_takes_part_in_a_by_name_identity() -> None:
+    """Server-wide is the whole difference from `for_name`, and it is what makes `/Genres` a list
+    of genres rather than a list of genres per library."""
+    assert for_by_name(ItemType.GENRE, "Drama") == for_by_name(ItemType.GENRE, "Drama")
+    assert "library" not in for_by_name.__code__.co_varnames
+
+
+@pytest.mark.parametrize(
+    ("spelling", "folded"),
+    [
+        ("Sci-Fi", "sci-fi"),
+        ("  Rock  ", "rock"),
+        # Path-invalid characters become spaces, one for one - so these two names are one genre,
+        # which is the observable consequence of a fold the reference performs for a reason
+        # (building a filename) that does not apply here at all.
+        ("Drama/Romance", "drama romance"),
+        ("Drama Romance", "drama romance"),
+        ('He said "hi"', "he said  hi"),
+        ("AC/DC", "ac dc"),
+        ("What?", "what"),
+        # Trailing dots go, and **the trim does not run again afterwards**. The reference does
+        # `Trim().TrimEnd('.')` in that order, so these two fold differently: reproduced rather
+        # than tidied, because tidying merges two rows the reference keeps apart.
+        ("Drama...", "drama"),
+        ("Drama. . .", "drama. . "),
+        ("Drama. .", "drama. "),
+    ],
+)
+def test_the_fold_reproduces_the_references_envelope(spelling: str, folded: str) -> None:
+    assert fold_by_name(spelling) == folded
+
+
+def test_the_fold_and_the_identity_cannot_disagree() -> None:
+    """One definition, used twice: 004's by-name repository keys its rows on `fold_by_name` and
+    the identifier hashes the same call. Two folds written separately is how a spelling ends up
+    merging into one row and deriving another one's id."""
+    for spelling in ("Sci-Fi", "sci-fi", "Drama/Romance", "Drama Romance"):
+        assert for_by_name(ItemType.GENRE, spelling) == for_by_name(
+            ItemType.GENRE, fold_by_name(spelling)
+        ), "folding twice changes nothing, which is what makes the fold safe to apply early"
+
+
+def test_a_year_rides_the_same_machinery() -> None:
+    """Its digits are its name, and it has no join table: membership is `production_year`."""
+    assert for_by_name(ItemType.YEAR, "1999") == for_by_name(ItemType.YEAR, "1999")
+    assert for_by_name(ItemType.YEAR, "1999") != for_by_name(ItemType.YEAR, "2000")
+
+
+@pytest.mark.parametrize("wrong", [ItemType.MOVIE, ItemType.SERIES, ItemType.MUSIC_ARTIST])
+def test_a_type_that_belongs_to_another_rule_is_refused(wrong: ItemType) -> None:
+    """`MusicArtist` especially: it looks like a by-name type, it is one in the reference, and it
+    is per-library here (docs/compatibility/behaviours.md section 5.3). Deriving it this way would
+    produce a perfectly valid identifier for the wrong thing."""
+    with pytest.raises(ValueError, match="takes its identity from"):
+        for_by_name(wrong, "Whatever")
