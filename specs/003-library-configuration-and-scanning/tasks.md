@@ -809,14 +809,53 @@ configured runs on exactly it, forever.
 built worked exactly as designed — each of T10 to T13 had to delete its own line to go green, and
 `strict=True` meant none of them could have been left behind.
 
-## T14 — `library/resolver.py`
+## T14 — `library/resolver.py`  ✅
 
-- [ ] **Changes:** path → resolved item with parent-child structure, dispatched by collection type.
+- [x] **Changes:** path → resolved item with parent-child structure, dispatched by collection type.
 - **Depends on:** T11, T12, T13
 - **Verified by:** the full corpus passes **and no `xfail` marker remains in it** — asserted, so
   that a row cannot be parked rather than fixed; a file under a `music` root is never resolved as a
   movie regardless of its name.
 - **Plan reference:** §3
+
+### Done — 2026-08-27
+
+**Every item leaves through one function, and that is the whole design.** `_finished` is where a
+sort name is attached, so there is no branch that can build an item and forget to sort
+it — and, more to the point, none that can reach the base derivation directly.
+[plan §9](plan.md#9-risks) rates *"the base sort rule applied to audio"* as its most likely and most
+expensive mistake, and the reason is that it fails without a symptom: nothing raises, nothing logs,
+and every album in the library is simply in the wrong order. Eleven construction sites would have
+been eleven chances to get it wrong; there is one.
+
+**A `Season`'s number is `index_number`, and every other type's is `parent_index_number`.** That
+asymmetry is real — [spec §3.7.2](spec.md#372-the-three-types-that-replace-it)'s override reads a
+season's own number from `index_number` while an episode reads its *season* from
+`parent_index_number` — and the two are trivially easy to swap, because the season is the parent of
+the episode and "parent index" is the natural place to look. A comment sits on that line, and the
+sort-name tests would catch it: a season would sort as `Season` rather than as `0000`.
+
+**"A file under a music root is never resolved as a movie" is enforced, not dispatched.** Every
+item is checked against `PRODUCED_BY` before it is returned, so a resolver that grew a wrong branch
+fails **here**, in this feature, rather than in 005 three months later as an item a client cannot
+make sense of. The dispatch is already correct; the check is for the version of this file that
+somebody edits next year.
+
+**The library's `CollectionFolder` exists even when the library is empty.** A library that vanished
+from a client because its last file was deleted is a worse answer than an empty one, and it would
+have been the natural consequence of building items only from candidates.
+
+**No row can be parked behind an `xfail` any more**, which this task's verification asked for and
+which turned out to be worth stating carefully: there are two ways to make a failing corpus row
+green, and only one of them is fixing it. The other is putting its group back into `AWAITING`,
+which turns the failure into an *expected* failure and the run back to green with the row no longer
+asserting anything. A task that genuinely introduces a new parser group now has to change that test
+on purpose and say why.
+
+**Nothing here invents a timestamp.** `date_created` and `date_modified` are left to the scan,
+because a resolver that stamped them would give a different answer on every run — which is exactly
+what [spec §3.8](spec.md#38-scanning-and-change-detection) forbids, and the kind of impurity that
+makes a determinism test flake rather than fail.
 
 ## T15 — `library/scan.py`, **additive only**
 
