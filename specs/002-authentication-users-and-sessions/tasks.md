@@ -650,9 +650,9 @@ two do not read as inconsistent: spend the cost where a client could be harmed.
 applies to the caller's own session, and resolving the token a second time to find it would be two
 more reads for something already in hand.
 
-## T13 — The five mechanisms across route classes
+## T13 — The five mechanisms across route classes  ✅
 
-- [ ] **Changes:** `tests/conformance/test_auth_mechanisms.py`, table-driven over mechanism ×
+- [x] **Changes:** `tests/conformance/test_auth_mechanisms.py`, table-driven over mechanism ×
   route class.
 - **Depends on:** T11
 - **Verified by:** **AC-3** — all **five** authenticate an API route identically (T7 measured the
@@ -668,6 +668,28 @@ more reads for something already in hand.
   "no route exists outside the surface file" check sees — T17 is where that collides if it is going
   to.
 - **Plan reference:** §8
+
+### Done — 2026-08-26
+
+**The stub routes reach the application, and the reason is worth knowing.** The path middleware
+rewrites the paths its table knows and passes everything else through untouched — so a route added
+to one test's application is served, without being in `server.ROUTERS` and therefore without
+failing 001's "no route exists outside the surface file" check. The task's note said that collision
+was T17's to worry about; it never arrives, because a stub is a test fixture rather than a surface.
+
+**The stubs assert that a token is accepted, not that one is required**, which is the harder thing
+to keep straight. T1 measured that the reference demands no token on either class. What these pin
+is that presenting one is never itself a *reason to refuse* — whether the class demands one is 006's
+and 008's decision, and asserting it here would take it for them.
+
+**The table is fifteen rows because AC-3 is a claim about three classes**, not one. Supporting only
+the headers leaves browsing working and every poster and stream broken, and that failure looks like
+a bug in the client: an image loader and an external player are handed a URL and set no headers, so
+the query forms are the only ones they can use. The five bogus-token rows are the other half —
+a mechanism that authenticated an unknown token would be worse than one that did not work at all.
+
+**The precedence chain is asserted at the boundary as well as in the parser**, including on a
+delivery route, which is where a stale header beside a freshly built URL is most likely to happen.
 
 ## T14 — The log test
 
