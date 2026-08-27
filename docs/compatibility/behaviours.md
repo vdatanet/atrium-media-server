@@ -315,6 +315,28 @@ Atrium declines to find a number in is a stem it agrees with the reference about
 parses *less*: a digit is a track number only when a separator follows it, so `24K Magic.flac` is a
 song called `24K Magic` and not track 24 of `K Magic`. `tests/corpus/naming.yaml` pins both that and
 what it costs.
+### 2.17 No item and no media source carries a modification time
+
+**Jellyfin does:** expose `DateCreated` on an item and `Size` on a media source, and **no
+modification time anywhere**. 120 `Movie`, `Episode` and `Audio` items requested with
+`Fields=MediaSources,Path,Etag,DateCreated,DateLastMediaAdded` carried no property whose name
+contains "modif" on the item or on the source; the only time-shaped properties were `DateCreated`,
+`PremiereDate` and `RunTimeTicks`. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]` The
+pinned document agrees: `DateModified` exists on `FontFile` and `LogFile` and on nothing else.
+`[spec: components.schemas in the 10.11.10 document]`
+
+**Depends on it:** no client can, because there is nothing there to depend on. That is the whole
+value of the entry — it says which half of a scanner's change-detection signal is observable and
+which is private. `Size` is observable, so an item whose file was replaced by one of a different
+length **must** end up with the new number; a modification time is not, so which signal a server
+uses to decide *whether to look* creates no delta whatever it is.
+
+**Atrium does:** use `(size, mtime_ns)` as the signal and re-read the size of every file it
+examines ([003 §3.8](../../specs/003-library-configuration-and-scanning/spec.md#38-scanning-and-change-detection),
+[plan §6.4](../../specs/003-library-configuration-and-scanning/plan.md#64-change-detection)). The
+modification time is stored and never serialised. A full re-examination that ignores the signal is
+available to an operator, and it is unobservable for the same reason: it changes what the server
+looks at, not what it answers.
 
 ### 2.13 `DeviceId` is mandatory on one route, not on the header
 

@@ -1028,15 +1028,68 @@ checked. The surface assertion still holds the line that matters: the six method
 **`update` still cannot reach `removed_at`.** Changing what an item **is** and changing whether it
 is **there** stayed separate operations, so the T15 test that asserts it needed no change at all.
 
-## T18 — Change detection
+## T18 — Change detection  ✅
 
-- [ ] **Changes:** the `(size, mtime_ns)` signal and a `--deep` mode that ignores it.
+- [x] **Changes:** the `(size, mtime_ns)` signal and a `--deep` mode that ignores it.
 - **Depends on:** T17
 - **Verified by:** a modified file is re-examined and **keeps its identity and user data**; an
   unchanged file is skipped; `--deep` re-examines everything.
 - **Note:** mtime is not trustworthy on every filesystem. The default is fast, the escape hatch
   exists, and neither pretends to be the other.
 - **Plan reference:** §6.4
+
+### Done — 2026-08-27
+
+**Skipping the read was the easy half; not writing what the skip resolved to was the whole task.**
+An unexamined music file resolved from its path alone hangs from an album named after its
+*directory*, and the fixture's `spandau_ballet-through_the_barricades` track — the shape T1
+measured on 413 of 5,814 real tracks — is exactly that case. The first working version skipped the
+tag read, kept the stored row, and **still wrote the invented album beside the real one**, because
+the resolver had produced it and nothing dropped it. So the reconciliation is two steps: keep the
+stored row, then rebuild the set upwards from the file-backed items and drop any container nothing
+ends up under. Without the second step, the second scan of every music library silently doubles
+its albums. A test asserts the album name and that `added == 0`; removing either step fails it.
+
+**The skip is safe for one reason, and it is worth naming: no file-backed identity depends on a
+tag.** A `Movie`, an `Episode` and an `Audio` are identified by their path, so an unexamined file
+resolves to the *same* item it did last time and the resolution is only ever used to decide which
+row to keep. If 004 ever derives an identifier from a tag, this optimisation becomes unsound in a
+way that is invisible until somebody's favourites move.
+
+**A new signal has to be written back even when nothing else changed.** A file whose modification
+time moved on its own — a `touch`, a restore, a metadata tool — is re-examined, finds nothing
+different, and would be re-examined on *every* scan from then on if the report's "nothing changed"
+were allowed to mean "nothing to write". A library full of those is an incremental scan doing a
+full scan's work with nothing to show for it. Two rescans in one test hold it.
+
+**The blind spot is measured, not hypothetical.** Writing new bytes of the same length and
+restoring the time with `os.utime` produces a byte-for-byte identical `(size, mtime_ns)` on an
+ordinary local filesystem — which is what `cp -p`, `rsync -a` and an unpacked archive all do. The
+test reproduces it and then shows `deep` catching what the default misses. `shutil.copy` does not
+preserve the time and `shutil.copy2` does, which is the difference between a copy that is noticed
+and a copy that is not.
+
+**Measured on the reference, and it settled what the signal is allowed to be.** No library item and
+no media source carries a modification time: 120 `Movie`, `Episode` and `Audio` items requested
+with `Fields=MediaSources` had no such property, and the pinned document has `DateModified` on
+`FontFile` and `LogFile` only. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]` So the
+signal is private and creates no delta whatever it is — but `Size` **is** on the wire, which is why
+an examined file's size is always written back. behaviours §2.17.
+
+**The plan's contract named a `mode` argument.** It is one boolean. `confirm_removals` and
+`removal_threshold` had already arrived at T16 as the guards' own arguments, and a single
+enumeration would have had to carry every combination of the three. Plan §5 is corrected.
+
+**`deep` does not lift the guards, and there is a test for it.** An operator reaching for a deep
+scan because a share looked wrong is the last person who should thereby disarm the guard that
+catches a share being wrong. It says how hard to look, not what to believe.
+
+**One gap found and deliberately not closed here.** Spec §3.8's table says an emptied directory
+removes the container item, and containers are never removed: `missing` counts file-backed items
+only, by T16's design, because a renamed series would otherwise look like a mass deletion. A
+childless `Series` or `MusicAlbum` therefore stays in the database for ever. That is a removal
+question rather than a change-detection one, it has no acceptance criterion, and T21 has to either
+give it one or record it as an accepted gap.
 
 ## T19 — The root-move test
 
@@ -1075,6 +1128,12 @@ is **there** stayed separate operations, so the T15 test that asserts it needed 
 - **Note:** 002 T18 reshaped that file from one feature to a table of them precisely so 003 would be
   one entry rather than a third copy. If this task turns out to need more than one entry and one
   dictionary, the reshape did not work and that is the finding.
+- **Note:** T18 left one row of [spec §3.8](spec.md#38-scanning-and-change-detection) unimplemented
+  on purpose — an emptied directory does not remove its container item, because `missing` counts
+  file-backed items only and a renamed series would otherwise look like a mass deletion. No
+  acceptance criterion covers it. This task either gives it one or records it in
+  [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) as an accepted gap;
+  closing it without an answer is what the definition of done exists to prevent.
 - **Plan reference:** §8, [002 T18](../002-authentication-users-and-sessions/tasks.md)
 
 ---
@@ -1105,7 +1164,10 @@ is **there** stayed separate operations, so the T15 test that asserts it needed 
 ## What this feature owes the next ones
 
 004 needs the `MetadataSource` seam to be genuinely substitutable, or music identification lands as
-a rewrite rather than an implementation. 005 needs `sort_name` indexed and library visibility
+a rewrite rather than an implementation — and, from T18, it needs to know that the seam is **not
+asked about a file whose `(size, mtime_ns)` has not moved**, so a provider whose answer can change
+without the file changing will not be consulted, and an identifier derived from a tag would make
+the skip unsound. 005 needs `sort_name` indexed and library visibility
 joinable. 008 needs somewhere to record that a file wants probing without 003 probing it — and, from
 T2, it needs to generate its own decodable fixtures, because 003 generates none. All four are cheap
 here and expensive later.
