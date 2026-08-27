@@ -239,6 +239,25 @@ either form today, because the reference refuses both.
 somebody build a client against Atrium that fails against Jellyfin, which is the direction that
 matters — see §6.
 
+### 2.14 A client's declared capabilities and the server's flags are different values
+
+**Jellyfin does:** echo `SupportsMediaControl: true` back inside `Capabilities` for a session that
+posted it, while reporting `SupportsMediaControl: false` at the **top level** of the same session.
+`[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` `SupportsRemoteControl` is `false` there too. `PlayableMediaTypes` and
+`SupportedCommands`, by contrast, **are** hoisted from the declaration to the top level verbatim.
+
+`POST /Sessions/Capabilities/Full` answers `204` with no body and **replaces** rather than merges —
+the route is named `Full` and it behaves like it.
+
+**Depends on it:** a client that reads the top-level flag to decide whether another session can be
+controlled. Hoisting the declaration into it would tell every such client that a remote-control UI
+will work, for every session whose client declared it, whether or not anything is listening.
+
+**Atrium does:** the same. The declaration is the client's claim; the flag is the server's judgement
+about it, and v1 answers `false` because it has no remote control — which
+[002 §3.8](../../specs/002-authentication-users-and-sessions/spec.md#38-sessions) argued was honest
+rather than a gap, and which is now measured to be **not a divergence at all**.
+
 ### 2.13 `DeviceId` is mandatory on one route, not on the header
 
 **Jellyfin does:** answer `200` on an ordinary authenticated route for a client header carrying no
@@ -919,6 +938,24 @@ differently*. This section says *we have not done it yet, and here is how we wil
 matters*.
 
 ---
+
+### 5.1 `SupportedCommands` is not validated against the reference's enum
+
+The reference binds that field to an enum and answers `400` with RFC 9457 problem details for a
+value it does not know — the whole body is rejected, and the `errors` map reports `capabilities` as
+missing rather than naming the offending element. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
+
+Atrium accepts it. v1 acts on **none** of those commands, so reproducing a thirty-value enum in
+order to refuse values no working client sends is cost without a client that benefits — and the
+divergence is class A in §3.0's terms: the reference fails loudly, so nothing can have been built
+on the failure in a way that a success breaks.
+
+**This is the opposite call from the one in §2.12**, where Atrium matches the reference's strictness
+about whitespace in the client header, and the difference is worth stating so the two do not read as
+inconsistent. There, matching cost one character in a regular expression and the field is an
+authentication boundary. Here it costs an enum that has to be kept in step with the reference
+forever, on a field nothing reads. The principle is the same in both: spend the cost where a client
+could be harmed.
 
 ## 6. Non-improvements
 

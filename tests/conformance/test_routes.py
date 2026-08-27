@@ -53,6 +53,9 @@ IMPLEMENTED_FEATURES = frozenset({"001"})
 #: change; 002 arrives across two - the user routes at T11 and the session routes at T12 - so
 #: "the feature is implemented" is not a state it can use until both have landed. Each task adds
 #: its own routes here on purpose, and T17 collapses the whole list into `IMPLEMENTED_FEATURES`.
+#: All seven are here as of T12; the feature is not *implemented* until its goldens, its acceptance
+#: map and its mechanism table are too, which is what makes the collapse T17's change and not this
+#: one's.
 LANDED_ROUTES: frozenset[tuple[str, str]] = frozenset(
     {
         ("POST", "/Users/AuthenticateByName"),
@@ -60,6 +63,8 @@ LANDED_ROUTES: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/Users/Me"),
         ("GET", "/Users/{userId}"),
         ("POST", "/Users/Configuration"),
+        ("GET", "/Sessions"),
+        ("POST", "/Sessions/Capabilities/Full"),
     }
 )
 

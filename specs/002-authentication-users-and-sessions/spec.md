@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
 accepted: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6
+amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6; by T12 - section 3.8
 depends_on: [001]
 ---
 
@@ -312,8 +312,16 @@ all sessions for an administrator. Each carries the identity fields (`Id`, `User
 the declared capabilities, and — while something is playing — `NowPlayingItem` and `PlayState`,
 which feature 007 populates. `[spec: SessionInfoDto]`
 
-`SupportsMediaControl` and `SupportsRemoteControl` are `false` in v1. This is honest rather than a
-gap: a client that saw `true` would offer the user a remote-control UI that does nothing.
+**`POST /Sessions/Capabilities/Full` answers `204` with no body, and replaces rather than merges.**
+An unknown property is kept; the reference keeps it too. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
+
+`SupportsMediaControl` and `SupportsRemoteControl` are `false` in v1. This was argued as honest
+rather than a gap — a client that saw `true` would offer a remote-control UI that does nothing —
+and it is now **measured to be no divergence at all**: the reference reports `false` at the top
+level for a session that posted `SupportsMediaControl: true`, while echoing that `true` back inside
+`Capabilities`. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` The declaration is the client's; the flag is the server's
+judgement about it. `PlayableMediaTypes` and `SupportedCommands` *are* hoisted from the declaration
+verbatim.
 
 **Lifecycle**
 

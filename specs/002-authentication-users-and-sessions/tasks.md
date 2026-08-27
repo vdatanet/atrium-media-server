@@ -609,15 +609,46 @@ patterns in registration order — so `/users/public` reaches the public route r
 as a user whose identifier is `public`. That is a property of an ordering, so it is a test rather
 than a comment asking the next person to preserve it.
 
-## T12 — `api/sessions.py`
+## T12 — `api/sessions.py`  ✅
 
-- [ ] **Changes:** `GET /Sessions`, `POST /Sessions/Capabilities/Full`.
+- [x] **Changes:** `GET /Sessions`, `POST /Sessions/Capabilities/Full`.
 - **Depends on:** T8, T10
 - **Verified by:** capabilities posted then read back through `/Sessions`; a two-device fixture
   shows two sessions; `SupportsMediaControl` and `SupportsRemoteControl` are `false`, which is
   honest rather than a gap — a client seeing `true` would offer a remote-control UI that does
   nothing.
 - **Plan reference:** §3
+
+### Done — 2026-08-26
+
+**A client's declaration and the server's flag are different values from the same request.** The
+reference echoes `SupportsMediaControl: true` back inside `Capabilities` for a session that posted
+it, and reports `false` at the **top level** of that same session. `PlayableMediaTypes` and
+`SupportedCommands`, by contrast, *are* hoisted verbatim. Hoisting the flag too is the obvious
+implementation and would tell every controlling client that a remote-control UI will work, on every
+session whose client declared it.
+
+This also **upgrades an argued position to a measured one**: [spec §3.8](spec.md#38-sessions) said
+v1's `false` was honest rather than a gap, and it turns out not to be a divergence at all.
+
+**I nearly recorded a finding that was not there.** An early run showed capabilities posted and then
+absent from `/Sessions`, which would have contradicted AC-9 outright. The cause was the *previous*
+request in the same script: it carried `SupportedCommands: ["Pause"]`, the reference rejected the
+whole body with a `400`, and I had not checked that status before reading the next response. The
+capabilities are reflected. The lesson is the cheap one — **read the status of the request you are
+relying on**, not just the one you are looking at.
+
+**`SupportedCommands` is an enum on the reference, and an unknown value is a `400`** carrying RFC
+9457 problem details — the second error shape, and the `errors` map reports `capabilities` as
+missing rather than naming the offending element. Atrium accepts it, which is a **known, argued
+divergence** in [behaviours §5.1](../../docs/compatibility/behaviours.md): class A in §3.0's terms,
+because the reference fails loudly and nothing can have been built on the failure. It is written up
+beside the *opposite* call in §2.12 — where Atrium does match the reference's strictness — so the
+two do not read as inconsistent: spend the cost where a client could be harmed.
+
+**`require_user` now leaves the caller's session id on the request.** `/Sessions/Capabilities/Full`
+applies to the caller's own session, and resolving the token a second time to find it would be two
+more reads for something already in hand.
 
 ## T13 — The five mechanisms across route classes
 
