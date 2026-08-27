@@ -1,0 +1,279 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The naming corpus: what a path resolves to, and why each row is here.
+#
+# This file is the *specification* of naming behaviour, not a description of whatever the code
+# happens to do (003 plan section 6.1). The reference's rules live in a large table of regular
+# expressions; copying it is a licence problem and a design problem at once (Principle IV), so the
+# source of truth becomes these rows and the patterns are whatever makes them pass.
+#
+# **Every row states the reason it exists.** A row with no reason is a row nobody dares delete when
+# it becomes wrong, and nobody dares keep when a pattern fails against it.
+#
+# **Rows are added when a case is met. They are never removed because a pattern fails.** A failing
+# row is either a bug or a corpus error, and telling those two apart is the work.
+#
+# A row asserts only the fields it names under `expect`, so a row about title extraction says
+# nothing about season numbers and cannot go stale when something unrelated changes.
+#
+# `needs` says which parser the row waits for: clean (T10), movies (T11), series (T12), music (T13).
+#
+# **What is measured and what is not.** The episode numbering below was checked against a live
+# Jellyfin holding 917 episodes: `1x02` agreed with the resolved numbers 902 times out of 902 and
+# `S01E02` 15 out of 15, with no disagreements
+# [probe-style read: Jellyfin 10.11.11, 2026-08-27, tools/_probe.py against /Items?Fields=Path].
+# The *titles* could not be checked that way and the expected values here are ours: on that server
+# only 344 of 1,557 film names matched their own de-yeared filename, because metadata (004) had
+# already replaced them. The reference's item names measure 004, not 003.
+
+rows:
+  # ------------------------------------------------------------------------------------------
+  # Titles and years (T10). Section 3.3: strip a bracketed or trailing year in 1900-2099, then
+  # remove release-tag noise. 527 of the reference's 1,557 film filenames carried such noise.
+  # ------------------------------------------------------------------------------------------
+  - {path: "The Film (1999).mkv", collection_type: movies, needs: clean,
+     why: "the plain case: a bracketed year at the end", expect: {name: "The Film", year: 1999}}
+  - {path: "The Film 1999.mkv", collection_type: movies, needs: clean,
+     why: "a trailing year with no brackets", expect: {name: "The Film", year: 1999}}
+  - {path: "The Film [1999].mkv", collection_type: movies, needs: clean,
+     why: "square brackets are as common as round ones", expect: {name: "The Film", year: 1999}}
+  - {path: "The.Film.1999.mkv", collection_type: movies, needs: clean,
+     why: "dots as word separators - 171 of the reference's 1,557 filenames used them",
+     expect: {name: "The Film", year: 1999}}
+  - {path: "The_Film_1999.mkv", collection_type: movies, needs: clean,
+     why: "underscores, the other separator scene releases use",
+     expect: {name: "The Film", year: 1999}}
+  - {path: "The Film.mkv", collection_type: movies, needs: clean,
+     why: "no year at all is not an error; the year is simply unknown",
+     expect: {name: "The Film", year: null}}
+  - {path: "2001 A Space Odyssey (1968).mkv", collection_type: movies, needs: clean,
+     why: "a LEADING year that is part of the title, not the release year - the trap in the rule",
+     expect: {name: "2001 A Space Odyssey", year: 1968}}
+  - {path: "1917 (2019).mkv", collection_type: movies, needs: clean,
+     why: "a title that is entirely a year, with a real year after it",
+     expect: {name: "1917", year: 2019}}
+  - {path: "Blade Runner 2049 (2017).mkv", collection_type: movies, needs: clean,
+     why: "a year inside the title AND a release year; only the last one is the release year",
+     expect: {name: "Blade Runner 2049", year: 2017}}
+  - {path: "The Film (1899).mkv", collection_type: movies, needs: clean,
+     why: "below the 1900-2099 range, so it is part of the title rather than a year",
+     expect: {name: "The Film (1899)", year: null}}
+  - {path: "The Film (2199).mkv", collection_type: movies, needs: clean,
+     why: "above the range, for the same reason", expect: {name: "The Film (2199)", year: null}}
+  - {path: "The Film (1999) 1080p BluRay x264.mkv", collection_type: movies, needs: clean,
+     why: "release-tag noise after the year", expect: {name: "The Film", year: 1999}}
+  - {path: "The.Film.1999.1080p.BluRay.x264-GROUP.mkv", collection_type: movies, needs: clean,
+     why: "the full scene-release shape, which is a third of the reference's library",
+     expect: {name: "The Film", year: 1999}}
+  - {path: "The Film (1999) [2160p] [HDR] [x265] [10bit].mkv", collection_type: movies, needs: clean,
+     why: "a run of bracketed tags, where each bracket is a separate group to strip", expect: {name: "The Film", year: 1999}}
+  - {path: "The Film (1999) WEB-DL DDP5.1 H.264-GROUP.mkv", collection_type: movies, needs: clean,
+     why: "an audio-format tag containing a full stop and a digit, which naive stripping breaks",
+     expect: {name: "The Film", year: 1999}}
+  - {path: "The Film (1999) REMUX 1080p DTS-HD MA 5.1.mkv", collection_type: movies, needs: clean,
+     why: "another audio format with a decimal in it", expect: {name: "The Film", year: 1999}}
+  - {path: "The Film (1999) {edition-Director's Cut}.mkv", collection_type: movies, needs: clean,
+     why: "an edition marker in braces, which is metadata and not part of the title",
+     expect: {name: "The Film", year: 1999}}
+  - {path: "Amelie (2001).mkv", collection_type: movies, needs: clean,
+     why: "the ASCII control for the row below", expect: {name: "Amelie", year: 2001}}
+  - {path: "Amélie (2001).mkv", collection_type: movies, needs: clean,
+     why: "a non-ASCII title survives extraction unchanged - folding is sorting's job, not this",
+     expect: {name: "Amélie", year: 2001}}
+  - {path: "Le Fabuleux Destin d'Amélie Poulain (2001).mkv", collection_type: movies, needs: clean,
+     why: "an apostrophe inside a word is part of the title", expect: {name: "Le Fabuleux Destin d'Amélie Poulain", year: 2001}}
+  - {path: "WALL·E (2008).mkv", collection_type: movies, needs: clean,
+     why: "a middle dot is a character in the title, not a separator",
+     expect: {name: "WALL·E", year: 2008}}
+  - {path: "Am I Racist (2024).mkv", collection_type: movies, needs: clean,
+     why: "a title whose last word could be read as a tag if matching were loose",
+     expect: {name: "Am I Racist", year: 2024}}
+  - {path: "Hard Candy (2005).mkv", collection_type: movies, needs: clean,
+     why: "'Hard' and 'Candy' both appear in tag vocabularies; a title is not a tag",
+     expect: {name: "Hard Candy", year: 2005}}
+  - {path: "Web of Lies (2011).mkv", collection_type: movies, needs: clean,
+     why: "'Web' would be stripped by a rule that matched WEB anywhere",
+     expect: {name: "Web of Lies", year: 2011}}
+  - {path: "  The Film   (1999)  .mkv", collection_type: movies, needs: clean,
+     why: "surrounding and internal whitespace is trimmed and collapsed in a *title*",
+     expect: {name: "The Film", year: 1999}}
+
+  # ------------------------------------------------------------------------------------------
+  # Movies (T11). Section 3.3.
+  # ------------------------------------------------------------------------------------------
+  - {path: "The Film (1999).mkv", collection_type: movies, needs: movies,
+     why: "AC-1: the bare-file layout", expect: {name: "The Film", year: 1999, parts: ["The Film (1999).mkv"]}}
+  - {path: "The Film (1999)/The Film (1999).mkv", collection_type: movies, needs: movies,
+     why: "folder-per-film where folder and file agree",
+     expect: {name: "The Film", year: 1999, parts: ["The Film (1999)/The Film (1999).mkv"]}}
+  - {path: "The Film (1999)/movie.mkv", collection_type: movies, needs: movies,
+     why: "folder-per-film where the file says nothing; the folder is the name",
+     expect: {name: "The Film", year: 1999}}
+  - {path: "The Film (1999)/The Film (1999) - 1080p.mkv", collection_type: movies, needs: movies,
+     why: "OQ-4's neighbour: folder and file agree once the file's tags are stripped",
+     expect: {name: "The Film", year: 1999}}
+  - {path: "Another Film (2005)/The Film (1999).mkv", collection_type: movies, needs: movies,
+     why: "OQ-4: folder and file DISAGREE. The file wins, because it is the more specific name",
+     expect: {name: "The Film", year: 1999}}
+  - {path: "The Film (1999)/The Film (1999) - part1.mkv", collection_type: movies, needs: movies,
+     why: "AC-4: one film in two parts, and this is part one",
+     expect: {name: "The Film", year: 1999, part_number: 1}}
+  - {path: "The Film (1999)/The Film (1999) - part2.mkv", collection_type: movies, needs: movies,
+     why: "AC-4: part two, which must not become a second film",
+     expect: {name: "The Film", year: 1999, part_number: 2}}
+  - {path: "The Film (1999)/The Film (1999) - pt1.mkv", collection_type: movies, needs: movies,
+     why: "AC-4: the abbreviated part marker", expect: {name: "The Film", year: 1999, part_number: 1}}
+  - {path: "The Film (1999)/The Film (1999) - cd1.mkv", collection_type: movies, needs: movies,
+     why: "AC-4: the disc marker, from the era films were split across two discs",
+     expect: {name: "The Film", year: 1999, part_number: 1}}
+  - {path: "The Film (1999)/The Film (1999) - disc2.mkv", collection_type: movies, needs: movies,
+     why: "AC-4: the spelled-out disc marker", expect: {name: "The Film", year: 1999, part_number: 2}}
+  - {path: "The Film (1999)/The Film (1999)-a.mkv", collection_type: movies, needs: movies,
+     why: "AC-4: the letter form, which section 3.3 names explicitly",
+     expect: {name: "The Film", year: 1999, part_number: 1}}
+  - {path: "The Film (1999)/The Film (1999)-b.mkv", collection_type: movies, needs: movies,
+     why: "AC-4: the second letter", expect: {name: "The Film", year: 1999, part_number: 2}}
+  - {path: "Part of the Family (1994).mkv", collection_type: movies, needs: movies,
+     why: "a title beginning with the word Part is not a part marker",
+     expect: {name: "Part of the Family", year: 1994, part_number: null}}
+  - {path: "The Film 2 (2001).mkv", collection_type: movies, needs: movies,
+     why: "a sequel number is part of the title, not a part marker",
+     expect: {name: "The Film 2", year: 2001, part_number: null}}
+  - {path: "Ocean's Eleven (2001).mkv", collection_type: movies, needs: movies,
+     why: "an apostrophe survives; sorting removes it later and naming does not",
+     expect: {name: "Ocean's Eleven", year: 2001}}
+  - {path: "the film (1999).mkv", collection_type: movies, needs: movies,
+     why: "names differing only by case: this and the row above resolve to different titles",
+     expect: {name: "the film", year: 1999}}
+
+  # ------------------------------------------------------------------------------------------
+  # Series (T12). Section 3.4. The numbering below is the part the reference validated.
+  # ------------------------------------------------------------------------------------------
+  - {path: "The Series/Season 01/The Series - S01E02 - Title.mkv", collection_type: tvshows, needs: series,
+     why: "the ordinary three-level layout", expect: {series: "The Series", season: 1, episode: 2, name: "Title"}}
+  - {path: "The Series/Season 1/The Series - S01E02.mkv", collection_type: tvshows, needs: series,
+     why: "an unpadded season directory is the same season",
+     expect: {series: "The Series", season: 1, episode: 2}}
+  - {path: "The Series/The Series - S01E02.mkv", collection_type: tvshows, needs: series,
+     why: "no season directory: the season is inferred from the episode (section 3.4)",
+     expect: {series: "The Series", season: 1, episode: 2}}
+  - {path: "The Series/Season 01/The Series - s01e02 - Title.mkv", collection_type: tvshows, needs: series,
+     why: "lowercase markers are the same markers", expect: {season: 1, episode: 2}}
+  - {path: "The Series/Season 01/The Series.S01.E02.mkv", collection_type: tvshows, needs: series,
+     why: "a separator between the season and the episode marker", expect: {season: 1, episode: 2}}
+  - {path: "The Series/Season 01/The Series S01 E02.mkv", collection_type: tvshows, needs: series,
+     why: "a space between the season and episode markers, which a joined-only pattern misses", expect: {season: 1, episode: 2}}
+  - {path: "The Series/Season 01/The Series - 1x02 - Title.mkv", collection_type: tvshows, needs: series,
+     why: "MEASURED: 902 of the reference's 917 episodes used this form and all 902 agreed",
+     expect: {season: 1, episode: 2, name: "Title"}}
+  - {path: "The Series/Season 12/The Series - 12x305.mkv", collection_type: tvshows, needs: series,
+     why: "MEASURED: a three-digit episode number in the nxnn form", expect: {season: 12, episode: 305}}
+  - {path: "The Series/Season 01/The Series - E02.mkv", collection_type: tvshows, needs: series,
+     why: "an episode marker with no season; the season comes from the directory",
+     expect: {season: 1, episode: 2}}
+  - {path: "The Series/Season 01/The Series - EP02.mkv", collection_type: tvshows, needs: series,
+     why: "the two-letter spelling of the same marker", expect: {season: 1, episode: 2}}
+  - {path: "The Series/Season 01/The Series - S01E02-E03 - Two Parter.mkv", collection_type: tvshows, needs: series,
+     why: "AC-5: ONE item spanning two numbers, not two items",
+     expect: {season: 1, episode: 2, end_episode: 3}}
+  - {path: "The Series/Season 01/The Series - S01E02E03.mkv", collection_type: tvshows, needs: series,
+     why: "AC-5: the same span with no separator", expect: {season: 1, episode: 2, end_episode: 3}}
+  - {path: "The Series/Season 01/The Series - 1x02-1x03.mkv", collection_type: tvshows, needs: series,
+     why: "AC-5: a span written in the form this library actually uses",
+     expect: {season: 1, episode: 2, end_episode: 3}}
+  - {path: "The Series/Season 01/The Series - S01E02.mkv", collection_type: tvshows, needs: series,
+     why: "AC-5's control: a single number has no end number",
+     expect: {season: 1, episode: 2, end_episode: null}}
+  - {path: "The Series/Specials/The Series - S00E01 - A Special.mkv", collection_type: tvshows, needs: series,
+     why: "AC-6: Specials is an alias for season zero", expect: {season: 0, episode: 1}}
+  - {path: "The Series/Specials/The Series - A Special.mkv", collection_type: tvshows, needs: series,
+     why: "AC-6: the directory alone puts it in season zero", expect: {season: 0}}
+  - {path: "The Series/Season 00/The Series - S00E02.mkv", collection_type: tvshows, needs: series,
+     why: "AC-6: the numeric spelling of the same season", expect: {season: 0, episode: 2}}
+  - {path: "24/Season 01/24 - S01E01 - 12-00 AM.mkv", collection_type: tvshows, needs: series,
+     why: "AC-7: a series named with digits keeps its title. The pattern is matched against the filename first, then the directory - this is where naive scanners fail",
+     expect: {series: "24", season: 1, episode: 1}}
+  - {path: "24/Season 09/24 - 9x12.mkv", collection_type: tvshows, needs: series,
+     why: "AC-7: the same series in the nxnn form, where the title digits sit beside real numbers",
+     expect: {series: "24", season: 9, episode: 12}}
+  - {path: "1923/Season 01/1923 - S01E01.mkv", collection_type: tvshows, needs: series,
+     why: "AC-7: a series named with a four-digit number that also looks like a year",
+     expect: {series: "1923", season: 1, episode: 1}}
+  - {path: "The Daily Show/Season 2024/The Daily Show - 2024-01-31.mkv", collection_type: tvshows, needs: series,
+     why: "date-based naming, for a daily show with no episode numbers",
+     expect: {series: "The Daily Show", date: "2024-01-31"}}
+  - {path: "The Daily Show/Season 2024/The Daily Show - 2024.01.31.mkv", collection_type: tvshows, needs: series,
+     why: "the same date with dots, which is the scene spelling", expect: {date: "2024-01-31"}}
+  - {path: "The Daily Show/Season 2024/The Daily Show - 2024_01_31.mkv", collection_type: tvshows, needs: series,
+     why: "the same date with underscores, which is the third separator in real use", expect: {date: "2024-01-31"}}
+  - {path: "The Series/Season 02/The Series - S02E99 - Beyond Any Real Count.mkv", collection_type: tvshows, needs: series,
+     why: "section 3.4: an episode number exceeding any real count is not an error",
+     expect: {season: 2, episode: 99}}
+  - {path: "The Series/Season 01/The Series - S01E00.mkv", collection_type: tvshows, needs: series,
+     why: "episode zero exists in real libraries and is not the same as no episode",
+     expect: {season: 1, episode: 0}}
+  - {path: "The Series/Season 01/A Name With No Numbers At All.mkv", collection_type: tvshows, needs: series,
+     why: "section 3.4 and plan section 5: an unparseable name is a result with a title and nothing else, never an exception",
+     expect: {season: 1, episode: null}}
+  - {path: "The Series (2005)/Season 01/The Series (2005) - S01E02.mkv", collection_type: tvshows, needs: series,
+     why: "a disambiguating year on the series directory is not an episode number",
+     expect: {series: "The Series", season: 1, episode: 2}}
+  - {path: "The Series/Season 01/The Series - S01E02 - 1080p x265.mkv", collection_type: tvshows, needs: series,
+     why: "release tags after the numbers are not the episode title",
+     expect: {season: 1, episode: 2, name: null}}
+
+  # ------------------------------------------------------------------------------------------
+  # Music (T13). Section 3.5. Path-derived only: tags are 004 and override all of this.
+  # ------------------------------------------------------------------------------------------
+  - {path: "The Artist/The Album/01 - The Track.flac", collection_type: music, needs: music,
+     why: "the ordinary artist/album/track layout",
+     expect: {artist: "The Artist", album: "The Album", track: 1, title: "The Track"}}
+  - {path: "The Artist/The Album/01 The Track.flac", collection_type: music, needs: music,
+     why: "a space instead of a dash after the track number",
+     expect: {track: 1, title: "The Track"}}
+  - {path: "The Artist/The Album/01. The Track.flac", collection_type: music, needs: music,
+     why: "a full stop after the track number", expect: {track: 1, title: "The Track"}}
+  - {path: "The Artist/The Album/1-01 The Track.flac", collection_type: music, needs: music,
+     why: "the disc-track form some rippers use", expect: {disc: 1, track: 1, title: "The Track"}}
+  - {path: "The Artist/The Album (2001)/01 - The Track.flac", collection_type: music, needs: music,
+     why: "a year on the album directory is not part of the album name",
+     expect: {album: "The Album", year: 2001}}
+  - {path: "The Artist/The Album/CD1/01 - The Track.flac", collection_type: music, needs: music,
+     why: "AC-8: a disc directory; one album, and the track carries a disc number",
+     expect: {album: "The Album", disc: 1, track: 1}}
+  - {path: "The Artist/The Album/CD2/01 - Another Track.flac", collection_type: music, needs: music,
+     why: "AC-8: the second disc must not become a second album",
+     expect: {album: "The Album", disc: 2, track: 1}}
+  - {path: "The Artist/The Album/Disc 2/01 - Another Track.flac", collection_type: music, needs: music,
+     why: "AC-8: the spelled-out disc directory", expect: {album: "The Album", disc: 2}}
+  - {path: "The Artist/The Album/Disk 2/01 - Another Track.flac", collection_type: music, needs: music,
+     why: "AC-8: the third spelling, which real rippers produce", expect: {album: "The Album", disc: 2}}
+  - {path: "Various Artists/A Compilation/01 - One Artist - A Song.flac", collection_type: music, needs: music,
+     why: "AC-9: a compilation is one album; the album artist is the directory, not the track artist",
+     expect: {artist: "Various Artists", album: "A Compilation", track: 1}}
+  - {path: "Various Artists/A Compilation/02 - Another Artist - Another Song.flac", collection_type: music, needs: music,
+     why: "AC-9: a different track artist under the same album artist",
+     expect: {artist: "Various Artists", album: "A Compilation", track: 2}}
+  - {path: "The Artist/The Album/The Track.flac", collection_type: music, needs: music,
+     why: "no track number at all is not an error", expect: {title: "The Track", track: null}}
+  - {path: "The Track.flac", collection_type: music, needs: music,
+     why: "a file directly in the root has no artist and no album, and is still a track",
+     expect: {title: "The Track", artist: null, album: null}}
+  - {path: "The Artist/The Track.flac", collection_type: music, needs: music,
+     why: "one level of directory is an artist, not an album",
+     expect: {artist: "The Artist", album: null, title: "The Track"}}
+  - {path: "The Artist/The Album/10 - The Track.flac", collection_type: music, needs: music,
+     why: "a two-digit track number, so that padding is not mistaken for the number",
+     expect: {track: 10}}
+  - {path: "The Artist/The Album/101 - The Track.flac", collection_type: music, needs: music,
+     why: "a three-digit number is a track number, not a disc and a track",
+     expect: {track: 101}}
+  - {path: "Sigur Rós/( )/01 - Untitled.flac", collection_type: music, needs: music,
+     why: "an album whose name is punctuation, and a non-ASCII artist",
+     expect: {artist: "Sigur Rós", album: "( )", track: 1}}
+  - {path: "The Artist/The Album/01 - 1999.flac", collection_type: music, needs: music,
+     why: "a track whose title is a year is not an album year",
+     expect: {track: 1, title: "1999"}}
+  - {path: "The Artist/Live 1999/01 - The Track.flac", collection_type: music, needs: music,
+     why: "a year inside an album name stays in the album name",
+     expect: {album: "Live 1999"}}

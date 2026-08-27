@@ -519,9 +519,9 @@ A test asserts the measured ones are still all present — shrinking that set wo
 measurement — and another asserts the video and audio lists **do not overlap**, because the
 overlap *is* the fallback the reference was measured not to have.
 
-## T9 — The naming corpus and its harness
+## T9 — The naming corpus and its harness  ✅
 
-- [ ] **Changes:** `tests/corpus/naming.yaml` — rows of path, collection type and expected
+- [x] **Changes:** `tests/corpus/naming.yaml` — rows of path, collection type and expected
   resolution, **each with a one-line reason it exists**; the table-driven harness; a YAML parser in
   the `dev` dependency group, which currently has none.
 - **Depends on:** T3
@@ -537,6 +537,55 @@ overlap *is* the fallback the reference was measured not to have.
 - **Note:** rows are added when a case is met and **never removed because a pattern fails**. A
   failing row is either a bug or a corpus error, and telling them apart is the work.
 - **Plan reference:** §6.1
+
+### Done — 2026-08-27
+
+**The reference can validate the corpus's numbers and cannot validate its titles.**
+[plan §6.1](plan.md#61-the-naming-corpus) says the corpus is written from observed conventions
+*"and from what the reference produces for each case"* — so the reference's 1,557 films and 917
+episodes were read to check the rows against. The numbers held up completely: `1x02` agreed with
+the resolved season and episode **902 times out of 902**, `S01E02` **15 out of 15**, zero
+disagreements. The titles did not survive the same test, and not because they were wrong:
+
+| Of 1,557 film names | |
+|---|---|
+| match their own de-yeared filename | 344 |
+| match their folder | 12 |
+| match **neither** | **1,201** |
+
+**The reference's item names measure 004, not 003.** Metadata had already replaced them, so the
+second half of plan §6.1's sentence is not achievable through the API against any library with
+metadata enabled. The title rows here are ours, and the corpus header says which half of it is
+measured and which half is not, so nobody later mistakes one for the other.
+
+**`1x02` is not the exotic form. It is the dominant one** — 902 of 917 episodes on a real library,
+against 15 for `S01E02`. Written from intuition, this corpus would have had `SxxExx` as the main
+case and `1x02` as a footnote, and T12 would have optimised for the wrong shape. The rows now
+weight them the way a real library does, and the ones that were measured say so.
+
+**The reference has no multi-episode filenames at all**, so AC-5's `S01E02-E03` is unmeasured
+there. Its rows are ours, and they are marked as such.
+
+**88 rows, not the "several hundred" the plan estimates.** The rule that a row is never removed
+because a pattern fails makes padding permanent: a row that isolates nothing cannot be acted on
+when it fails and cannot be deleted either. Each of these isolates one convention, AC-4 to AC-9 are
+named in the reasons that carry them, and a test asserts [plan §6.1](plan.md#61-the-naming-corpus)'s
+own list of naive-scanner cases is still covered — so shrinking the corpus past those fails rather
+than passing quietly.
+
+**`strict=True` was verified rather than assumed.** A throwaway `naming` module satisfying one row
+was dropped in, and the run reported `XPASS(strict)` — a failure — for exactly the rows it
+satisfied. That is the mechanism T10 to T13 depend on: a row cannot start passing while its group
+is still listed in `AWAITING`, so each of those tasks has to delete its own line to go green.
+
+**PyYAML was already installed**, transitively, through `uvicorn[standard]`. The harness would have
+worked without declaring it and would have broken on the day that extra changed its own
+dependencies — a test suite failing for a reason nobody could see in this repository. Declaring it
+adds two lines to the lock and no packages.
+
+**The "every row states a reason" guard caught three rows on its first run** — `"bracketed tag
+runs"`, `"a space between them"`, `"and with underscores"`. All three were mine, written minutes
+earlier, and all three were expanded rather than the threshold lowered.
 
 ## T10 — `library/naming/clean.py`
 
