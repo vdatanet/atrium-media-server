@@ -39,6 +39,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_item_identity.py`](probe_item_identity.py) | What is an item's identifier derived from, and does moving a library root change it? | behaviours §1.4, 003 §3.6 | no |
 | [`probe_by_name_normalisation.py`](probe_by_name_normalisation.py) | Does the reference fold case when a genre name becomes an item, or does the list grow duplicates? | 004 §3.7, OQ-3 | no |
 | [`probe_sort_stability.py`](probe_sort_stability.py) | What breaks a tie under each `SortBy`, and does paging hold once one is broken? | 005 §3.4, OQ-3 | no |
+| [`probe_item_shapes.py`](probe_item_shapes.py) | Which properties does the reference emit per item type, bare and when asked? | 005 §3.2, plan §6.5; behaviours §1.7 | no |
 
 ### Running them
 
@@ -63,6 +64,7 @@ python3 tools/probe_music_precedence.py
 python3 tools/probe_item_identity.py
 python3 tools/probe_by_name_normalisation.py
 python3 tools/probe_sort_stability.py
+python3 tools/probe_item_shapes.py
 ```
 
 `probe_item_identity.py` is the one probe here that confirms a `[source: …]` citation from
@@ -88,6 +90,18 @@ response rather than a server.
 python3 tools/generate_cultures.py
 python3 tools/generate_cultures.py --from-file cultures.json
 ```
+
+`probe_item_shapes.py` asks for **every member of the server's own `ItemFields` enum**, read from
+`/api-docs/openapi.json`, rather than the names the specification happens to list. That is what
+makes "gated" a measurement rather than a restatement of the claim, and it is why the probe still
+works when the specification is wrong about which names exist. Without the document it falls back
+to the specification's own list and says so.
+
+It samples up to twelve items per type and reports presence as `12/12`, not as a boolean, because
+a null property is omitted (behaviours §1.7): one sample cannot tell a gated field from a field
+that is null on that item. It classifies over `/Items` alone and reports `/UserViews` separately —
+folding them together let one fat row promote a gated name to "per-type" for every content type at
+once, which is what its first run did.
 
 `probe_library_extensions.py` walks a bounded number of directories, because the tree belongs to
 somebody else; `--listings` and `--per-root` widen it, and it always reports what it did not

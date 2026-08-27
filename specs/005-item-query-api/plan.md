@@ -218,7 +218,22 @@ per-request shuffle. `TotalRecordCount` still reports the full count.
 One table in `item_dto.py` drives field emission: for each `ItemFields` token, the emitter and
 whether it is always-on, per-type, or gated (the three tiers of spec §3.2). The always-present
 set and the per-type sets are data, so the test that pins spec §3.2 is a comparison of two
-tables, not twenty hand-written assertions. Unknown tokens in `fields` are dropped and recorded
+tables, not twenty hand-written assertions.
+
+**The table is a rule about list rows, and there are two other shapes.** Measurement put
+`/Items/{itemId}` at up to 39 properties more than a bare list row of the same item, with no
+`Fields` in the request, and `/UserViews` at 40 unasked
+`[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`. So the builder takes the
+emission tier as a **parameter of the call site**, not of the item: a list row applies the table,
+the single-item route emits every field in the registry regardless of what was asked, and T11's
+`/UserViews` applies its own set. One table, three entry points — not three tables, which would
+drift, and not one entry point, which would make `/Items/{itemId}` wrong on every request.
+
+`ChannelId` is the registry's one always-on `null`: it is emitted on every item with a null value
+where every other null is suppressed (behaviours §1.7), so it cannot be produced by the base
+model's exclusion rule and needs an explicit emitter.
+
+Unknown tokens in `fields` are dropped and recorded
 (behaviours §1.12). `enableUserData=false` suppresses `UserData` on request; nothing suppresses
 it by default (behaviours §2.1). `enableImages=false` and `imageTypeLimit`/`enableImageTypes`
 prune the image tag maps the DTO would otherwise carry.
