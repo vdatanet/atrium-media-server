@@ -12,15 +12,16 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001 and 002 are implemented. Feature 003 is next**, and all three of its artefacts have
-passed their gates — so the next thing is code, starting at its T1. The specification phase is over
-for the dependency root: 001, 002 and 003 are specified, planned and broken into tasks; the other
-seven features are specified only.
+**Features 001, 002 and 003 are implemented. Feature 004 is next**, and it is **specified only** —
+so the next thing is not code, it is a plan written against
+[004's spec](specs/004-metadata-resolution/spec.md) and reviewed before any task list exists
+(Principle III). The other six features are specified only as well.
 
-**003's T1 is two probes**, and it is first for the reason the table below exists. It is also the
-one task here that needs something no probe has needed before — files placed under a library root
-on the reference — so it may end up `[!]`, which the task says how to handle rather than leaving to
-judgement.
+**004 inherits three things 003 wrote down for it**, and they are in
+[003's tasks](specs/003-library-configuration-and-scanning/tasks.md#what-this-feature-owes-the-next-ones)
+rather than here so they cannot go stale: the `MetadataSource` seam it has to fit, the fact that the
+seam is **not consulted for a file whose `(size, mtime_ns)` has not moved**, and the consequence —
+an identifier derived from a tag would make that skip unsound.
 
 **The state is in the files, not here**, so it cannot go stale:
 
@@ -80,6 +81,10 @@ reasoning:
 | 002 T11 | Serve a login screen | `/Users/Public` sends every user's full policy and configuration to a caller with no token — the opposite of the acceptance criterion |
 | 002 T14 | Assert no password is logged | The password never leaked; a library logged the password **hash** and another logged the token, both at `INFO`, from one `basicConfig` call |
 | 003 tasks | Review a nineteen-item list | Two of the findings were items **missing** from it: no task measured the two questions the spec names probes for, and no task extended the acceptance map — which a test would have failed the day 003 was marked `Implemented` |
+| 003 T18 | Store a signal and skip unchanged files | Skipping the read was the easy half. An unexamined music file resolves from its *path*, which hangs it under an album named after its directory — so the second scan of every music library would have silently doubled its albums |
+| 003 T19 | Write one test | The claim it exists to prove — "the reference derives ids from the absolute path" — was asserted in two documents and cited in neither. Measured at last: 448 of 448 live ids reproduce from the path alone, **containers included** |
+| 003 T20 | Report two things with their reasons | They cannot be one list. One file produced no item and the other produced one. And plan §7 named a failure that does not happen: a `chmod 000` file stats fine, so nothing in 003 ever notices it |
+| 003 T21 | Write the acceptance map | A specification row nobody had implemented and no criterion covered — "directory emptied → remove the container item" — which had been there since the spec was written |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
 question each, and a plain `urllib` request answers the rest.

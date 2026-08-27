@@ -1,13 +1,14 @@
 ---
 feature: 003-library-configuration-and-scanning
 title: Library configuration and scanning — tasks
-status: Accepted
+status: Implemented
 created: 2026-08-26
 updated: 2026-08-27
 accepted: 2026-08-27
 started: 2026-08-27
+implemented: 2026-08-27
 plan_status_required: Accepted
-plan_status_actual: Accepted
+plan_status_actual: Implemented
 ---
 
 # 003 — Tasks
@@ -1212,9 +1213,9 @@ rather than through a re-export, so the module boundary is real rather than deco
 letting a broken sink raise, and reporting a file count during the walk each fail at least one
 test.
 
-## T21 — The acceptance map for 003
+## T21 — The acceptance map for 003  ✅
 
-- [ ] **Changes:** `FEATURE_003` in `tests/conformance/test_acceptance.py`, and its entry in the
+- [x] **Changes:** `FEATURE_003` in `tests/conformance/test_acceptance.py`, and its entry in the
   `FEATURES` table; the status table in [`specs/README.md`](../README.md) moved to `Implemented`;
   the three artefacts marked `Implemented`.
 - **Depends on:** T20
@@ -1237,30 +1238,84 @@ test.
   closing it without an answer is what the definition of done exists to prevent.
 - **Plan reference:** §8, [002 T18](../002-authentication-users-and-sessions/tasks.md)
 
+### Done — 2026-08-27
+
+**The restructure paid off, and that is worth checking rather than assuming.** 002 T18 turned this
+file from one feature's map into a table of them on the bet that 003 would then be one entry and one
+dictionary. It was: `FEATURES` gained a line, `FEATURE_003` was written, and **not one check below
+them changed**. A refactor whose payoff nobody verifies is a refactor that might have been a waste,
+so the file now says so in its own docstring.
+
+**Thirteen criteria, forty-nine test names, and the map is the widest of the three** — because 003
+has no HTTP surface, so its criteria are proven at four levels instead of one: the naming corpus
+(pure), the resolver (pure, fixture paths), a scan into a real database, and the sort-name table.
+AC-4 to AC-9 each name `test_the_corpus` **and** a resolver test, because the corpus proves the
+parser and the resolver proves the scanner uses it — the same gap AC-13 exists for.
+
+**The corpus and the map cannot drift apart silently**, which was luck rather than design and is
+worth naming: `test_the_acceptance_criteria_that_live_here_are_covered` asserts that every one of
+AC-4 to AC-9 is named in some row's *reason*, so a criterion that lost its rows fails in the corpus
+before anybody reads this map.
+
+**The gap T20 found is closed the third way.** Spec §3.8's table said "directory emptied → remove
+the container item" from the day the specification was written; no acceptance criterion covered it,
+and nothing implemented it. Three ways out: implement it now, in a feature whose removal semantics
+were settled at T17 and whose guards do not watch below the root; delete the row and pretend it had
+never claimed anything; or say plainly what happens and name who closes it. The third. The reason it
+is not a bug is the argument itself — **removing a container is the judgement §3.8 refuses to make
+about a root, made one level down where no guard is watching**, and the observable half is a query
+deciding not to return an empty container, which is 005's and costs one predicate.
+[behaviours §5.2](../../docs/compatibility/behaviours.md#52-a-container-that-has-lost-every-file-is-not-removed),
+and 005's debt is written down.
+
+**Two open questions stay open, and the definition of done required a written reason rather than an
+answer.** OQ-6 and OQ-7 each need a *measurement this repository cannot take today* — a library with
+explicit sort titles, and names carrying characters the measured set does not contain. Both change
+the **ordering** of names that are already scanned, found and playable, so a wrong answer is a list
+in a slightly wrong order rather than a missing item. Closing either by guessing would turn
+"unmeasured" into "asserted", which is the whole failure the provenance rule exists to prevent. §7
+now says that, in the specification, rather than leaving it to be inferred from two blank cells.
+
+**One claim in the definition of done was checked rather than ticked**, and it is the one that could
+have been quietly false: the naming corpus's `AWAITING` table is **empty**, so no row is parked
+behind an `xfail` — T10 to T13 each deleted their own line as the task list required. `strict=True`
+is what made that visible: a lenient `xfail` that started passing would have been green and silent.
+
+**`spec_status_actual` moved with the status.** Both `plan.md` and `tasks.md` carry a gate field
+naming what they were written against; leaving those at `Accepted` while the artefact above them
+said `Implemented` would make the gate record a state that no longer existed.
+
 ---
 
 ## Definition of done
 
-- [ ] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing
       test — all thirteen, by name, in `FEATURE_003` (T21).
-- [ ] The naming corpus passes in full, **carries no `xfail` marker**, and every row states the
-      reason it exists.
-- [ ] The three destructive-failure tests pass, and each fails when its guard is removed.
-- [ ] Scanning twice, and scanning into an empty database, produce byte-identical identifiers.
-- [ ] Moving a library root changes no identifier.
-- [ ] No fixture file is a copyrighted work, and the fixture generator needs nothing outside the
-      locked dependency set.
-- [ ] The scanner writes sort names **through the dispatcher**, asserted against the database and
-      not only against the derivation table.
-- [ ] Anything learned during implementation is back in `spec.md` or `plan.md`, in the same change.
-- [ ] Any newly measured reference behaviour is in `docs/compatibility/behaviours.md` with
-      provenance.
-- [ ] **Every open question in [`spec.md` §7](spec.md#7-open-questions) is either resolved with
+- [x] The naming corpus passes in full, **carries no `xfail` marker**, and every row states the
+      reason it exists. Checked rather than assumed: `AWAITING` is empty, which is what
+      `test_no_row_is_parked_behind_an_xfail` asserts.
+- [x] The three destructive-failure tests pass, and each fails when its guard is removed —
+      `test_without_guard_one…`, `…two…`, `…three…` in `tests/library/test_scan_guards.py`.
+- [x] Scanning twice, and scanning into an empty database, produce byte-identical identifiers
+      (AC-2, AC-3).
+- [x] Moving a library root changes no identifier (AC-10, `tests/library/test_root_move.py`).
+- [x] No fixture file is a copyrighted work, and the fixture generator needs nothing outside the
+      locked dependency set — `test_the_generator_needs_nothing_outside_the_standard_library`.
+- [x] The scanner writes sort names **through the dispatcher**, asserted against the database and
+      not only against the derivation table (AC-13's three `test_scan` entries).
+- [x] Anything learned during implementation is back in `spec.md` or `plan.md`, in the same change.
+      The `amended:` lines in both name the tasks that changed which sections.
+- [x] Any newly measured reference behaviour is in `docs/compatibility/behaviours.md` with
+      provenance — §2.15 (T8), §2.16 (T18), §1.4's outside confirmation (T19), §5.2 (T21, marked
+      `⚠️ UNVERIFIED` because it cannot be measured read-only).
+- [x] **Every open question in [`spec.md` §7](spec.md#7-open-questions) is either resolved with
       provenance or still open with a written reason** — **OQ-1 and OQ-5 resolved at T1**, OQ-2 at
-      T7, OQ-4 at T11, and OQ-6 once the override formulas are read against a larger library. A
-      question that is
-      closed without an answer is the failure this line exists to prevent.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+      T7 (with the limit T19 found: the reference measured has the flag *set*, so it cannot say
+      what the default is), OQ-3 at the sort-name probe, OQ-4 at T11. **OQ-6 and OQ-7 stay open**,
+      each with the reason written into §7: both need a measurement this repository cannot take
+      today, and both change ordering rather than what is found. A question that is closed without
+      an answer is the failure this line exists to prevent.
+- [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
 
 ## What this feature owes the next ones
 
@@ -1272,3 +1327,9 @@ the skip unsound. 005 needs `sort_name` indexed and library visibility
 joinable. 008 needs somewhere to record that a file wants probing without 003 probing it — and, from
 T2, it needs to generate its own decodable fixtures, because 003 generates none. All four are cheap
 here and expensive later.
+
+**005 also inherits the one thing 003 decided not to do.** A container whose files have all gone
+keeps its row, so `/Items` has to decline to return a container with no visible children
+([behaviours §5.2](../../docs/compatibility/behaviours.md#52-a-container-that-has-lost-every-file-is-not-removed)).
+A predicate in one query, rather than a removal written into the database at scan time by a scanner
+with none of §6.5's guards watching it.

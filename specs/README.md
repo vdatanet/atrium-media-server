@@ -114,7 +114,7 @@ say how it will be proven is not finished.
 |---|---|---|---|---|
 | [001](001-server-identity-and-discovery/) | Server identity and discovery | **Implemented** | **Implemented** | **Implemented** |
 | [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | **Implemented** | **Implemented** | **Implemented** |
-| [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Accepted** | **Accepted** | **Accepted** |
+| [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Implemented** | **Implemented** | **Implemented** |
 | [004](004-metadata-resolution/) | Metadata resolution | Draft | — | — |
 | [005](005-item-query-api/) | Item query API | Draft | — | — |
 | [006](006-images/) | Images | Draft | — | — |

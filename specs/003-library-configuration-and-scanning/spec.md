@@ -1,10 +1,12 @@
 ---
 feature: 003-library-configuration-and-scanning
 title: Library configuration and scanning
-status: Accepted
+status: Implemented
 created: 2026-08-26
 updated: 2026-08-27
 accepted: 2026-08-26
+amended: 2026-08-27 by T1 - sections 3.2, 3.5 and the open questions; by T4 - section 3.7; by T5 - section 3.6; by T7 - sections 3.1 and 3.6 and OQ-2; by T11 - section 3.3 and OQ-4; by T12 - section 3.4; by T18 - section 3.8; by T19 - section 3.6 and OQ-2's limit; by T20 - sections 3.8 and 7
+implemented: 2026-08-27
 depends_on: []
 ---
 
@@ -402,7 +404,7 @@ the same items, the same identifiers and the same ordering.
 | File modified (size or time of change) | Re-inspect and update, **preserving identity and user data** |
 | File deleted | Remove the item, **preserving user data** in case it returns |
 | File renamed | Treated as delete plus add — identity is path-derived, so it changes |
-| Directory emptied | Remove the container item |
+| Directory emptied | Remove every item that was in it. **The container itself stays**, and stops being returned because nothing is under it — see below |
 
 **User data outlives items.** A file that disappears and comes back — a re-download, a remount, a
 temporarily unavailable network share — must not cost the user their favourites and resume
@@ -411,6 +413,16 @@ position. This is why user data is keyed by identity and retained after the item
 **An unavailable root is not an empty root.** If a library root cannot be read at all, the scan for
 that library fails loudly and changes nothing. Treating an unmounted share as "every item was
 deleted" is the single most destructive thing a scanner can do.
+
+**A container that has lost every one of its files keeps its own record**, and this is a change from
+what this section first said. A series whose episodes are all deleted still has a series; what it
+does not have is anything to show. Removing the container instead would mean deciding, at scan
+time, that a directory somebody emptied this afternoon is gone for good — the same judgement the
+paragraph above refuses to make about a root, made one level down and with no guard watching it.
+So the record stays and **a container with nothing visible under it is not offered to a client**,
+which is the observable half and which the query behaviour owns rather than the scan. Recorded as a
+bounded gap in [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) until
+that query behaviour exists.
 
 **A scan is a guess about what is worth looking at.** Deciding a file has not changed is cheap
 and occasionally wrong: a file can be replaced by one of the same length whose recorded time of
@@ -475,6 +487,15 @@ media generated at build time. No copyrighted media, ever.
 | OQ-6 | Whether the §3.7.2 formulas hold for items carrying an explicit sort title, and how many real items do | §3.7.3 | The override rows of `tools/probe_sort_names.py`, read against a larger library |
 | OQ-7 | What the reference does with a character that has no ASCII decomposition — `ø`, `ß`, a non-Latin script | The ordering of those names, and nothing else | Crafted names in `tools/probe_sort_names.py`; the measured set contains none |
 | OQ-8 | Whether a track number, disc number and title should be read from a file's name at all, given the reference reads none of the three from there (§3.5) | Only untagged music: for a tagged file both answer from the tag | How much real music carries no readable tag, which nothing can measure until 004 reads them |
+
+**Both are open on purpose, and neither blocks this feature.** Each needs a *measurement this
+repository cannot take today*, not a decision somebody has been avoiding. OQ-6 needs a library
+containing items with explicit sort titles, and the one measured has almost none; OQ-7 needs names
+carrying characters the measured set does not contain. Both change the **ordering** of names that
+are already scanned, found and playable — so a wrong answer is a list in a slightly wrong order,
+not a missing item or a lost identifier. Closing either by guessing would replace "unmeasured" with
+"asserted", which is the failure the provenance rule exists to prevent. Whoever next points a probe
+at a larger library answers them.
 
 ### Resolved
 
