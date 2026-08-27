@@ -4,7 +4,7 @@ title: Metadata resolution — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2
+amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -107,7 +107,8 @@ Revision `0003_metadata_and_by_name`, reversible.
 **`items` grows the resolved-metadata columns**: `overview`, `tagline`, `original_title`,
 `production_year`, `premiere_date`, `runtime_ticks`, `official_rating`, `community_rating`,
 `provider_ids` (JSON map, echoed as `ProviderIds`), `normalization_gain` (float, nullable),
-`locked_fields` (JSON list), `is_locked` (boolean), `refresh_pending` (boolean),
+`locked_fields` (JSON list of the reference's nine `MetadataField` values, §5),
+`is_locked` (boolean), `refresh_pending` (boolean),
 `metadata_refreshed_at`, and `name_folded`.
 
 **`normalization_gain` is one number, not the JSON map this plan first specified.** T1's survey
@@ -178,7 +179,17 @@ class Field(StrEnum): NAME, SORT_NAME, OVERVIEW, TAGLINE, ORIGINAL_TITLE, YEAR, 
 
 FieldValues = Mapping[Field, object]   # absent key == "nothing to say"; None/""/[] are not values
 class RefreshMode(StrEnum): DEFAULT, REPLACE, LOCAL_ONLY
+
+class MetadataField(StrEnum): CAST, GENRES, PRODUCTION_LOCATIONS, STUDIOS, TAGS, NAME, OVERVIEW,
+    RUNTIME, OFFICIAL_RATING                     # the reference's nine, spelled its way
+LOCK_OF: Mapping[Field, MetadataField]           # partial in both directions - see 6.1
 ```
+
+**`Field` and `MetadataField` are two vocabularies, not one renamed.** `Field` is what this
+feature merges; `MetadataField` is what the reference locks, it is wire surface
+`[spec: MetadataField]`, and it is what `locked_fields` stores — so a lock read from a sidecar
+round-trips through Atrium unchanged, including a value like `ProductionLocations` that guards
+nothing here. The relation between them is §6.1's first measured point.
 
 **Local sources** are one function each, pure given their bytes:
 
@@ -247,6 +258,33 @@ unioned across providers: a sidecar naming two genres and TMDB naming five is a 
 genres. Union produces lists nobody wrote and nobody can fix — the same reasoning as per-field
 merging, one level down.
 
+**Three things T3 measured in the reference's own merge**
+`[source: MediaBrowser.Providers/Manager/MetadataService.cs:1009-1140 @ v10.11.11]`, all of which
+this section had wrong and two of which change what T6 builds:
+
+1. **Locking is coarser than merging, and the two vocabularies are not the same size.** A lock is
+   one of nine `MetadataField` values `[spec: MetadataField]`; a merge field is one of this
+   feature's twenty-one. Eight of the nine guard a field 004 resolves, each guarding **exactly
+   one** — `Name` does not cover the sort name or the original title, and the reference overwrites
+   the original title unconditionally on the line after the name lock. Thirteen of the twenty-one
+   fields cannot be locked at all. `metadata/model.py`'s `LOCK_OF` is that map, and the table above
+   reads "field locked" through it rather than through a lock per field.
+2. **`Studios` and `Tags` are union-merged when not replacing** — `Concat(...).Distinct(ordinal
+   case-insensitive)` — while `Genres` and `People` are whole-replace. So §10's rejection of
+   union-merge is right about genres and **wrong about two of the four list fields**, and the
+   reference's shape wins: reproducing a list a client will read is Principle I, and the argument
+   in §10 was about a design we do not get to choose. T6 implements per-field list behaviour, not
+   one rule for all lists.
+3. **A `Runtime` from metadata is discarded for audio and video items.** The reference guards the
+   assignment with `target is not Audio && target is not Video`, because a media file's runtime
+   comes from probing it. An `.nfo` `<runtime>97</runtime>` on a film therefore changes nothing in
+   the reference, and honouring it here would be a delta — visible, because 004 has no prober and
+   Atrium's films would carry a runtime the reference's do not. §6.2 keeps parsing the element;
+   T6 applies it only to the types the reference applies it to.
+
+Where the lock arrives from is §6.2's business, and it had no answer until T3 asked: spec §3.6
+gives locks no HTTP route, so **the sidecar is the only channel in v1**.
+
 ### 6.2 Sidecars
 
 Discovery per the spec §3.2 table, tried in order beside the item's part-zero file. Parsing is
@@ -276,7 +314,13 @@ Field mapping: `title`→name, `sorttitle`→sort-name override (through 003 §3
 `originaltitle`, `year`/`premiered`, `plot`→overview, `tagline`, `runtime` (minutes→ticks at
 ingestion, per architecture §4), `mpaa`→official rating, `rating`→community rating, `genre`*,
 `studio`*, `tag`*, `actor` (`name`, `role`, document order), `director`, `writer`, and
-`uniqueid`/`tmdbid`/`imdbid`/`musicbrainz*` → `provider_ids`. Multiple `<genre>` elements are the
+`uniqueid`/`tmdbid`/`imdbid`/`musicbrainz*` → `provider_ids`, and — **added by T3, because
+nothing else in the feature could supply them** — `lockdata` → `is_locked` and `lockedfields` →
+`locked_fields`, the latter pipe-separated, matched case-insensitively against the nine
+`MetadataField` values, with an unknown token **dropped rather than refused**
+`[source: MediaBrowser.XbmcMetadata/Parsers/BaseNfoParser.cs:374-391,434-436 @ v10.11.11]`. Spec
+§3.6 gives locks no HTTP route, so without those two elements AC-10 — "a locked field survives a
+Replace refresh" — had no way to get a lock onto an item at all. Multiple `<genre>` elements are the
 multi-valued form; a single element containing ` / ` is **not** split — the reference's parser
 does not, and inventing a splitter here is how two servers disagree about one file.
 
@@ -482,6 +526,14 @@ track-level ids still work when tags carry them.
 **Union-merge for list fields.** Feels generous — every source contributes — and produces genre
 lists no single source wrote, which a user cannot correct by fixing any one file. First-provider-
 wins keeps every list attributable.
+
+**Corrected by T3, and the correction is the more interesting half.** This was never ours to
+decide for all four lists: the reference unions `Studios` and `Tags` and whole-replaces `Genres`
+and `People` `[source: MediaBrowser.Providers/Manager/MetadataService.cs:1113-1130 @ v10.11.11]`.
+The argument above is sound and applies to the two the reference happens to agree with; for the
+other two, Principle I says reproduce. §6.1 carries the per-field rule, and this entry stays
+because the reasoning is still worth having when a list field with **no** reference behaviour
+turns up.
 
 **One JSON blob for all metadata.** One column, no migration churn — and 005 filters and sorts on
 year, rating and genre, which would turn every query into JSON extraction over full scans. The
