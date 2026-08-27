@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, cast
 
@@ -35,10 +35,16 @@ from sqlalchemy.orm import Session as OrmSession
 from atrium.compat.dates import utc_now
 from atrium.compat.guids import new_id
 from atrium.db import models
-from atrium.domain.items import CollectionType, Item, ItemType, MediaSource
+from atrium.domain.items import BY_NAME, CollectionType, Item, ItemType, MediaSource
 from atrium.domain.library import Library
 from atrium.domain.session import AccessToken, IssuedToken, Session
+from atrium.domain.sorting import sort_name
 from atrium.domain.user import LibraryAccess, User
+from atrium.library.identity import for_name
+from atrium.metadata.artwork import ImageAssociation
+from atrium.metadata.byname import fold_for_search, genre_type, identity_of, person_type_of
+from atrium.metadata.merge import MetadataChanges
+from atrium.metadata.model import Field, MetadataField, PersonCredit, PersonKind
 
 #: Sixteen bytes, rendered as 32 lowercase hex characters - the shape the reference's `AccessToken`
 #: has. `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`, spec section 3.3.
@@ -668,3 +674,404 @@ class ItemRepository:
                 )
             )
         self._session.flush()
+
+
+class MetadataRepository:
+    """The only way 004's resolved metadata reaches the database.
+
+    `metadata/` must not write the item table directly (architecture section 1), and this is the
+    other end of that rule: `refresh.py` is the single caller, and everything it can do is one of
+    three methods.
+
+    **`apply` writes one item completely or not at all.** It never commits - the caller's unit of
+    work owns that - but within a call it flushes as a whole, so a failure part-way leaves the
+    caller's transaction rollable back with no half-written item in it. That matters more here
+    than elsewhere in this module: an item's genres live in a second table, and an item with its
+    new name and its old genres is worse than an item nothing touched.
+
+    **A by-name row is derived, so garbage collection is safe here** in a way it is not for 003's
+    containers. Deleting a genre nothing references loses only which spelling created it - and the
+    next reference recreates the row with the same identifier, because the identifier comes from
+    the folded name and nothing else (004 plan section 6.7).
+    """
+
+    def __init__(self, session: OrmSession) -> None:
+        self._session = session
+
+    # -- reading, for the merge's "what does the item already have?" ---------------------------
+
+    def values_of(self, item_id: str) -> dict[Field, object]:
+        """What the item currently holds, in the merge's vocabulary.
+
+        The merge needs this to answer "is this field empty?", which is the whole left-hand column
+        of its matrix. Lists come back from the join tables in their stored order.
+        """
+        row = self._session.get(models.Item, item_id)
+        if row is None:
+            raise LookupError(f"no item {item_id}")
+
+        values: dict[Field, object] = {}
+        for field, column in _SCALAR_COLUMNS.items():
+            found = getattr(row, column)
+            if found is not None:
+                values[field] = found
+        if row.name:
+            values[Field.NAME] = row.name
+        if row.provider_ids:
+            values[Field.PROVIDER_IDS] = dict(row.provider_ids)
+
+        genres = self._joined(models.ItemGenre, item_id, models.ItemGenre.position)
+        if genres:
+            values[Field.GENRES] = [one.name for one in genres]
+        studios = self._joined(models.ItemStudio, item_id, models.ItemStudio.position)
+        if studios:
+            values[Field.STUDIOS] = [one.name for one in studios]
+        people = self._joined(models.ItemPerson, item_id, models.ItemPerson.sort_order)
+        if people:
+            values[Field.PEOPLE] = [
+                PersonCredit(
+                    name=one.name,
+                    kind=PersonKind(one.person_type),
+                    role=one.role,
+                    sort_order=one.sort_order,
+                )
+                for one in people
+            ]
+        for field, credit in ((Field.ARTISTS, "artist"), (Field.ALBUM_ARTISTS, "album_artist")):
+            names = [
+                one.name
+                for one in self._joined(models.ItemArtist, item_id, models.ItemArtist.position)
+                if one.credit == credit
+            ]
+            if names:
+                values[field] = names
+        return values
+
+    def locks_of(self, item_id: str) -> tuple[bool, frozenset[MetadataField]]:
+        """`(whole item locked, the fields locked)`. Unknown values in the stored list are
+        dropped, the same way the sidecar parser drops them: a lock written by a newer build is
+        not a reason to refuse the ones this build understands."""
+        row = self._session.get(models.Item, item_id)
+        if row is None:
+            raise LookupError(f"no item {item_id}")
+        known = {member.value: member for member in MetadataField}
+        return row.is_locked, frozenset(
+            known[one] for one in (row.locked_fields or []) if one in known
+        )
+
+    def pending(self, library_id: str) -> list[str]:
+        """Items a provider failure left wanting another go (AC-8).
+
+        The next scan retries these **even when their files did not change**, which is the one
+        thing in 004 that reads an item the change-detection signal would have skipped.
+        """
+        return list(
+            self._session.execute(
+                select(models.Item.id).where(
+                    models.Item.library_id == library_id,
+                    models.Item.refresh_pending.is_(True),
+                )
+            ).scalars()
+        )
+
+    # -- writing --------------------------------------------------------------------------------
+
+    def apply(
+        self,
+        item_id: str,
+        changes: MetadataChanges,
+        *,
+        is_locked: bool | None = None,
+        locked_fields: Sequence[MetadataField] | None = None,
+        refresh_pending: bool | None = None,
+        refreshed_at: datetime | None = None,
+    ) -> None:
+        """Everything one refresh decided about one item.
+
+        The lock arguments are separate from `changes` because a lock is not a value a provider
+        supplied - it constrains what every provider may do, and it arrives from the sidecar
+        rather than from the merge (004 T3).
+        """
+        row = self._session.get(models.Item, item_id)
+        if row is None:
+            raise LookupError(f"no item {item_id}")
+
+        values = dict(changes.values)
+        for field, column in _SCALAR_COLUMNS.items():
+            if field in values:
+                setattr(row, column, values[field])
+
+        if Field.NAME in values:
+            row.name = str(values[Field.NAME])
+            row.name_folded = fold_for_search(row.name)
+        if Field.NAME in values or Field.SORT_NAME in values:
+            # A name that changed has a sort name that changed with it, and an explicit sort title
+            # replaces the derivation entirely (003 section 3.7.3). Recomputed here rather than by
+            # the caller, so the two columns cannot disagree.
+            forced = values.get(Field.SORT_NAME)
+            row.sort_name = sort_name(
+                _item(row, []), forced=str(forced) if forced is not None else None
+            )
+        if Field.PROVIDER_IDS in values:
+            row.provider_ids = dict(cast("Mapping[str, str]", values[Field.PROVIDER_IDS]))
+
+        if is_locked is not None:
+            row.is_locked = is_locked
+        if locked_fields is not None:
+            row.locked_fields = [one.value for one in locked_fields]
+        if refresh_pending is not None:
+            row.refresh_pending = refresh_pending
+        row.metadata_refreshed_at = refreshed_at if refreshed_at is not None else utc_now()
+
+        kind = ItemType(row.type)
+        if Field.GENRES in values:
+            self._write_genres(item_id, kind, _strings(values[Field.GENRES]))
+        if Field.STUDIOS in values:
+            self._write_studios(item_id, _strings(values[Field.STUDIOS]))
+        if Field.PEOPLE in values:
+            self._write_people(item_id, _credits(values[Field.PEOPLE]))
+        if Field.ARTISTS in values or Field.ALBUM_ARTISTS in values:
+            self._write_artists(
+                item_id,
+                row.library_id,
+                _strings(values.get(Field.ARTISTS, [])) if Field.ARTISTS in values else None,
+                _strings(values.get(Field.ALBUM_ARTISTS, []))
+                if Field.ALBUM_ARTISTS in values
+                else None,
+            )
+        if Field.IMAGES in values:
+            self._write_images(item_id, values[Field.IMAGES])
+
+        self._session.flush()
+
+    def ensure_by_name(self, kind: ItemType, spelling: str) -> str:
+        """The identifier of the by-name row for this spelling, creating the row if it is new.
+
+        **The incoming spelling becomes the display name only when no row exists.** An existing
+        row is reused rather than renamed, so the first spelling seen is the one `/Genres` shows -
+        which is the reference's behaviour and the reason two files spelling one genre two ways
+        produce one item with one name (AC-14).
+        """
+        item_id = identity_of(kind, spelling)
+        if self._session.get(models.Item, item_id) is None:
+            display = spelling.strip() or spelling
+            self._session.add(
+                models.Item(
+                    id=item_id,
+                    library_id=None,
+                    parent_id=None,
+                    type=kind.value,
+                    name=display,
+                    sort_name=sort_name(Item(id=item_id, type=kind, name=display, library_id=None)),
+                    name_folded=fold_for_search(display),
+                )
+            )
+            self._session.flush()
+        return item_id
+
+    def collect_by_name_garbage(self) -> int:
+        """Delete every by-name row nothing references. Returns how many went.
+
+        Safe here in a way it is not for 003's containers, because a by-name row is **derivable**:
+        the next reference recreates it with the same identifier, losing only which spelling came
+        first - which is exactly what the reference loses too.
+
+        A `Year` row is referenced by `items.production_year` rather than by a join table, which is
+        why it is checked separately: it is the one by-name kind with no join table at all.
+        """
+        referenced: set[str] = set()
+        for column in (
+            models.ItemGenre.genre_item_id,
+            models.ItemStudio.studio_item_id,
+            models.ItemPerson.person_item_id,
+        ):
+            referenced.update(self._session.execute(select(column)).scalars())
+
+        years = {
+            identity_of(ItemType.YEAR, str(year))
+            for year in self._session.execute(
+                select(models.Item.production_year).where(models.Item.production_year.is_not(None))
+            ).scalars()
+        }
+        referenced.update(years)
+
+        collectable = [
+            row_id
+            for row_id in self._session.execute(
+                select(models.Item.id).where(models.Item.type.in_([one.value for one in BY_NAME]))
+            ).scalars()
+            if row_id not in referenced
+        ]
+        if not collectable:
+            return 0
+        self._session.execute(delete(models.Item).where(models.Item.id.in_(collectable)))
+        self._session.flush()
+        return len(collectable)
+
+    # -- the join tables ------------------------------------------------------------------------
+
+    def _joined(self, model: Any, item_id: str, order: Any) -> list[Any]:
+        return list(
+            self._session.execute(
+                select(model).where(model.item_id == item_id).order_by(order)
+            ).scalars()
+        )
+
+    def _replace(self, model: Any, item_id: str) -> None:
+        self._session.execute(delete(model).where(model.item_id == item_id))
+
+    def _write_genres(self, item_id: str, kind: ItemType, names: Sequence[str]) -> None:
+        """The display string on the join row **and** the by-name row it merges into.
+
+        Two facts, two homes (004 plan section 4): an item's own response carries the spelling its
+        file used, while `/Genres` shows the first spelling anybody used. Deriving either from the
+        other loses the other.
+        """
+        self._replace(models.ItemGenre, item_id)
+        genre_kind = genre_type(kind)
+        for position, name in enumerate(names):
+            self._session.add(
+                models.ItemGenre(
+                    item_id=item_id,
+                    position=position,
+                    name=name,
+                    genre_item_id=self.ensure_by_name(genre_kind, name),
+                )
+            )
+
+    def _write_studios(self, item_id: str, names: Sequence[str]) -> None:
+        self._replace(models.ItemStudio, item_id)
+        for position, name in enumerate(names):
+            self._session.add(
+                models.ItemStudio(
+                    item_id=item_id,
+                    position=position,
+                    name=name,
+                    studio_item_id=self.ensure_by_name(ItemType.STUDIO, name),
+                )
+            )
+
+    def _write_people(self, item_id: str, people: Sequence[PersonCredit]) -> None:
+        """**Order and role are metadata, not an accident of insertion** (spec section 3.7 rule 2).
+
+        `sort_order` is the position in the list rather than whatever the source put in an
+        `<order>` element: those are sparse and sometimes duplicated, and the column is the join
+        table's primary key. What the source said is honoured by the *order of the list*, which
+        the merge and the parser preserve.
+        """
+        self._replace(models.ItemPerson, item_id)
+        for position, person in enumerate(people):
+            self._session.add(
+                models.ItemPerson(
+                    item_id=item_id,
+                    sort_order=position,
+                    person_type=person_type_of(person.kind),
+                    name=person.name,
+                    role=person.role,
+                    person_item_id=self.ensure_by_name(ItemType.PERSON, person.name),
+                )
+            )
+
+    def _write_artists(
+        self,
+        item_id: str,
+        library_id: str | None,
+        artists: Sequence[str] | None,
+        album_artists: Sequence[str] | None,
+    ) -> None:
+        """`/Artists` and `/Artists/AlbumArtists` are the `credit` column and nothing else.
+
+        An artist is a `MusicArtist`, which is **per-library** rather than by-name in Atrium -
+        the accepted gap of docs/compatibility/behaviours.md section 5.3 - so the row it points at
+        is derived from `(type, library, name)` the way 003 derives every other one, and it is
+        the *scanner* that creates it.
+
+        **The link is therefore optional and the name is not.** The scanner creates one artist per
+        album artist; a track's performers are frequently other people, so a credit naming one has
+        a name and no item behind it. Creating the missing item here would put a tree item outside
+        the scan that builds the tree, and the next scan would mark it removed - a row that
+        appears and disappears every other scan. Revision 0004 carries the argument.
+        """
+        if library_id is None:
+            return
+        for credit, names in (("artist", artists), ("album_artist", album_artists)):
+            if names is None:
+                continue
+            self._session.execute(
+                delete(models.ItemArtist).where(
+                    models.ItemArtist.item_id == item_id, models.ItemArtist.credit == credit
+                )
+            )
+            for position, name in enumerate(names):
+                self._session.add(
+                    models.ItemArtist(
+                        item_id=item_id,
+                        credit=credit,
+                        position=position,
+                        name=name,
+                        artist_item_id=self._artist_item(library_id, name),
+                    )
+                )
+
+    def _artist_item(self, library_id: str, name: str) -> str | None:
+        """The `MusicArtist` this credit links to, or `None` when the scanner made no such item."""
+        artist_id = for_name(ItemType.MUSIC_ARTIST, library_id, name)
+        return artist_id if self._session.get(models.Item, artist_id) is not None else None
+
+    def _write_images(self, item_id: str, images: object) -> None:
+        """Dimensions and tag are **never** null here, which the schema also enforces: 005 emits
+        `PrimaryImageAspectRatio` from these rows before 006 serves a byte.
+
+        The value must be `ImageAssociation`s rather than `ArtworkFile`s: which base a path is
+        relative to is `source_kind`, and `metadata/artwork.associate` is the one place that
+        decision is made. Anything else is ignored rather than guessed at.
+        """
+        self._replace(models.ItemImage, item_id)
+        if not isinstance(images, Sequence):
+            return
+        for image in images:
+            if not isinstance(image, ImageAssociation):
+                continue
+            self._session.add(
+                models.ItemImage(
+                    item_id=item_id,
+                    image_type=image.kind.value,
+                    image_index=image.index,
+                    source_kind=image.source_kind.value,
+                    relative_path=image.relative_path,
+                    width=image.width,
+                    height=image.height,
+                    tag=image.tag,
+                )
+            )
+
+
+#: Which column each scalar field is stored in. A field absent from here is stored some other way -
+#: a name, a list, a map - and `apply` handles each of those explicitly.
+_SCALAR_COLUMNS: dict[Field, str] = {
+    Field.OVERVIEW: "overview",
+    Field.TAGLINE: "tagline",
+    Field.ORIGINAL_TITLE: "original_title",
+    Field.YEAR: "production_year",
+    Field.PREMIERE_DATE: "premiere_date",
+    Field.RUNTIME: "runtime_ticks",
+    Field.OFFICIAL_RATING: "official_rating",
+    Field.COMMUNITY_RATING: "community_rating",
+    Field.NORMALIZATION_GAIN: "normalization_gain",
+    Field.INDEX_NUMBER: "index_number",
+    Field.PARENT_INDEX_NUMBER: "parent_index_number",
+}
+
+
+def _strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, Sequence):
+        return [str(one) for one in value]
+    return []
+
+
+def _credits(value: object) -> list[PersonCredit]:
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        return [one for one in value if isinstance(one, PersonCredit)]
+    return []

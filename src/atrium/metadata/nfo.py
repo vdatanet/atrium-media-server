@@ -42,7 +42,7 @@ import xml.etree.ElementTree as ElementTree
 import xml.parsers.expat as expat
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from pathlib import Path
 
@@ -349,7 +349,10 @@ def _premiere_date(values: dict[Field, object], text: str) -> None:
         parsed = None
     if parsed is None:
         return
-    values[Field.PREMIERE_DATE] = parsed
+    # **Midnight UTC, not a bare date.** The reference's `PremiereDate` is a date-time and 005
+    # serialises it as one; converting here rather than at the write path keeps architecture
+    # section 4's "conversion at ingestion, exactly once" true for dates as well as durations.
+    values[Field.PREMIERE_DATE] = datetime(parsed.year, parsed.month, parsed.day, tzinfo=UTC)
     values.setdefault(Field.YEAR, parsed.year)
 
 

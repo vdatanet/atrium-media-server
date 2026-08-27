@@ -372,8 +372,8 @@ it.
 
 ## T9 — The write path: `MetadataRepository` and the by-name rows
 
-- [ ] **Changes:** `metadata/byname.py` — the fold (lowercase, path-invalid characters to spaces,
-  trim, trailing dots off); `MetadataRepository` in `db/repositories.py` — `apply`,
+- [x] **Changes:** `metadata/byname.py` — **calling** T4's fold rather than defining a second one;
+  `MetadataRepository` in `db/repositories.py` — `apply`,
   `ensure_by_name`, garbage collection; join-table writes preserving people's role and order and
   artists' credit kind.
 - **Depends on:** T4, T6
@@ -382,6 +382,34 @@ it.
   GC removes a row nothing references and a later reference recreates it **with the same id**;
   `apply` is transactional — a failure mid-apply leaves no half-written item.
 - **Plan reference:** §5, §6.7
+- **Done (2026-08-27):** AC-14 holds at repository level, the fold's envelope is a table, garbage
+  collection recreates a row with the same identifier, and a deliberate failure mid-apply leaves
+  the item exactly as it was. Three things the task did not anticipate, and the first is a gap in
+  a *previous* feature that only became visible here.
+  **A track's performers are frequently not anybody's album artist**, and the schema forbade
+  saying so. `item_genres`, `item_studios` and `item_people` point at by-name rows a refresh
+  creates on demand; `item_artists` points at a `MusicArtist`, which is a **tree item the scanner
+  owns** ([behaviours §5.3](../../docs/compatibility/behaviours.md#53-an-artist-in-two-music-libraries-is-two-rows))
+  and which the scanner creates one of, per *album artist*. So the first credit naming a guest
+  performer failed a foreign key. Creating the missing item from the refresh would put a tree item
+  outside the scan that builds the tree, and the next scan would mark it removed — a row that
+  appears and disappears every other scan; dropping the credit loses the performer's name, which
+  is what AC-6 exists to keep. **Revision 0004** makes that one link nullable, and §5.3 carries
+  the whole argument: a client sees everyone who played and a shorter list of artists to browse.
+  **The migration sweep could not see the change it made.** `schema_of` recorded column and index
+  *names*, so a revision that only changes nullability "changed nothing" — and, worse, its
+  reversibility could not be proved either. Nullability is now part of what the sweep compares.
+  **A premiere date is a date-time, not a date.** `PremiereDate` is a date-time on the wire and
+  the column is one, so `.nfo` and tag reading now convert at ingestion — architecture §4's rule
+  for durations, applied to dates.
+  **And the image write path was duck-typed and silently wrong.** It read `source_kind` off the
+  presence of an attribute that `ArtworkFile` does not have, so every file-based poster was
+  recorded as *embedded*. `metadata/artwork.associate` is now the one place a path becomes
+  relative to something and the row gets a real type, `ImageAssociation`; the repository ignores
+  anything else rather than guessing.
+  The fold did **not** get a second definition here: `byname.py` calls `library/identity`'s, which
+  cost the module its place in the pure-metadata import rule — the guarantee followed the code
+  rather than evaporating, and `library/identity.py` is now held to the no-I/O half of it.
 
 ## T10 — Local refresh: orchestration without a network
 

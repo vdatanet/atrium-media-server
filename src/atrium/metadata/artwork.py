@@ -97,6 +97,77 @@ class ArtworkResult:
     warnings: tuple[str, ...] = ()
 
 
+class SourceKind(StrEnum):
+    """Where an image's bytes are, which is how `item_images.relative_path` is read.
+
+    The three readings are not interchangeable (004 plan section 4), and the schema says so from
+    the other side with a check constraint.
+    """
+
+    FILE = "file"
+    """Relative to the item's **library root**. The user's own artwork, never written to."""
+
+    EMBEDDED = "embedded"
+    """No path at all: the bytes are inside the audio file."""
+
+    REMOTE = "remote"
+    """Relative to the **data directory**, where a downloaded poster lands. Never inside a library
+    root, which is the structural half of the read-only guarantee (AC-15)."""
+
+
+@dataclass(frozen=True, slots=True)
+class ImageAssociation:
+    """One `item_images` row, ready to write - and **typed**, not duck-typed.
+
+    `find_artwork` returns absolute paths because it works on a directory; the row stores a path
+    relative to something, and *which* something is `source_kind`. `associate` is the one place
+    that conversion happens, and it exists because the first version of the write path read the
+    source kind off the presence of an attribute and silently recorded every file-based poster as
+    embedded.
+    """
+
+    kind: ImageKind
+    index: int
+    source_kind: SourceKind
+    relative_path: str | None
+    width: int
+    height: int
+    tag: str
+
+
+def associate(files: Iterable[ArtworkFile], *, root: Path) -> tuple[ImageAssociation, ...]:
+    """`ArtworkFile`s as rows, with their paths made relative to `root`.
+
+    An image with no path is embedded; anything else is a file under the library root. A file that
+    is somehow *not* under `root` is dropped rather than stored with an absolute path, because an
+    absolute path in that column is a path 006 would resolve against the wrong base.
+    """
+    associations: list[ImageAssociation] = []
+    for image in files:
+        if image.path == Path():
+            associations.append(_association(image, SourceKind.EMBEDDED, None))
+            continue
+        try:
+            relative = image.path.resolve().relative_to(root.resolve())
+        except ValueError:
+            logger.warning("%s is not under %s; not associated", image.path, root)
+            continue
+        associations.append(_association(image, SourceKind.FILE, relative.as_posix()))
+    return tuple(associations)
+
+
+def _association(image: ArtworkFile, kind: SourceKind, relative: str | None) -> ImageAssociation:
+    return ImageAssociation(
+        kind=image.kind,
+        index=image.index,
+        source_kind=kind,
+        relative_path=relative,
+        width=image.width,
+        height=image.height,
+        tag=image.tag,
+    )
+
+
 # ----------------------------------------------------------------------------------------------
 # The name tables
 # ----------------------------------------------------------------------------------------------
@@ -421,7 +492,10 @@ __all__ = [
     "SIMPLE_NAMES",
     "ArtworkFile",
     "ArtworkResult",
+    "ImageAssociation",
     "ImageKind",
+    "SourceKind",
+    "associate",
     "describe",
     "describe_bytes",
     "find_artwork",

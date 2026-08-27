@@ -4,7 +4,7 @@ title: Metadata resolution — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4
+amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -158,7 +158,7 @@ by-name row:
 | `item_genres` | `item_id`, `position`, `name`, `genre_item_id` → by-name row | `Genres`, `GenreItems`, 005 `genres`/`genreIds` |
 | `item_studios` | `item_id`, `position`, `name`, `studio_item_id` | `Studios`, 005 `studioIds` |
 | `item_people` | `item_id`, `person_type`, `sort_order`, `name`, `role`, `person_item_id` | `People` with role and ordering (spec §3.7 rule 2), 005 `personIds` |
-| `item_artists` | `item_id`, `credit` (`artist` \| `album_artist`), `position`, `name`, `artist_item_id` | `Artists`, `ArtistItems`, `AlbumArtists`, 005 `artistIds`/`albumArtistIds`, and the `/Artists` versus `/Artists/AlbumArtists` distinction — which is a distinction between credits, not rows |
+| `item_artists` | `item_id`, `credit` (`artist` \| `album_artist`), `position`, `name`, `artist_item_id` (**nullable** — revision 0004, see below) | `Artists`, `ArtistItems`, `AlbumArtists`, 005 `artistIds`/`albumArtistIds`, and the `/Artists` versus `/Artists/AlbumArtists` distinction — which is a distinction between credits, not rows |
 | `item_images` | `item_id`, `image_type`, `image_index`, `source_kind` (`file` \| `embedded` \| `remote`), `relative_path`, `width`, `height`, `tag` | `ImageTags`, `BackdropImageTags`, `PrimaryImageAspectRatio`, and everything 006 serves |
 
 The string is stored **on the join row**, not only on the by-name item, because an item's own
@@ -166,6 +166,16 @@ response carries its own spelling (`Genres: ["sci-fi"]`) while the by-name row d
 spelling seen — two facts, two homes. `genre_item_id` points at a `Genre` row for movie and
 series genres and a `MusicGenre` row for audio genres, which is what keeps `/Genres` and
 `/MusicGenres` disjoint without a filter guessing from context.
+
+**`artist_item_id` is the one nullable link, and T9 found out why.** The other three point at
+by-name rows a refresh creates on demand, so they can never dangle. A `MusicArtist` is a *tree*
+item the **scanner** owns
+([behaviours §5.3](../../docs/compatibility/behaviours.md#53-an-artist-in-two-music-libraries-is-two-rows)),
+and it creates one per *album artist*; a track's performers are frequently other people, so a
+credit naming one has a name and no item behind it. Creating it from the refresh would put a tree
+item outside the scan that builds the tree, and the next scan would mark it removed — a row that
+appears and disappears every other scan. The name is what a client renders and the link is what
+makes it clickable: storing the first and nulling the second is that sentence in the schema.
 
 `item_images.relative_path` is interpreted by `source_kind`: relative to the item's library root
 for `file`, absent for `embedded` (the bytes live in the audio file), relative to the data

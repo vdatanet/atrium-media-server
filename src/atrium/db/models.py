@@ -657,8 +657,15 @@ class ItemArtist(Base):
 
     name: Mapped[str] = mapped_column(String, nullable=False)
     #: A `MusicArtist`, which is a **per-library** row rather than a by-name one - the gap
-    #: recorded in docs/compatibility/behaviours.md section 5.3.
-    artist_item_id: Mapped[str] = mapped_column(ID, ForeignKey("items.id"), nullable=False)
+    #: recorded in docs/compatibility/behaviours.md section 5.3 - and therefore **nullable**,
+    #: unlike every other link in these tables.
+    #:
+    #: The others point at by-name rows a refresh creates on demand, so they can never dangle. A
+    #: `MusicArtist` is a tree item the *scanner* owns and it creates one per **album artist**; a
+    #: track's performers are frequently other people, so a credit naming one has a name and no
+    #: item behind it. The name is what a client renders and the link is what makes it clickable:
+    #: this column being nullable is that sentence, in the schema. See revision 0004.
+    artist_item_id: Mapped[str | None] = mapped_column(ID, ForeignKey("items.id"), nullable=True)
 
     item: Mapped[Item] = relationship(
         back_populates="artists", lazy="raise", foreign_keys=[item_id]
