@@ -511,14 +511,40 @@ unknown user, disabled, locked out, wrong password — asserted by counting invo
 `Passwords` subclass. A count fails for the right reason; the ratio test in tests/security is a
 different claim and lands at T15.
 
-## T10 — `api/deps.py`: `require_user`, implemented
+## T10 — `api/deps.py`: `require_user`, implemented  ✅
 
-- [ ] **Changes:** replace 001's always-`401` body. Signature unchanged.
+- [x] **Changes:** replace 001's always-`401` body. Signature unchanged.
 - **Depends on:** T9
 - **Verified by:** 001's tests still pass unmodified; a valid token reaches the route body; an
   unknown token is `401`; a valid token lacking permission is `403`.
 - **Note:** if the signature needs changing, that is a finding for 001's plan, not a quiet edit.
 - **Plan reference:** §5
+
+### Done — 2026-08-26
+
+**The signature did not need changing, and that is the finding.** 001 settled it before there was
+anything to authenticate with, and 002 replaced the body only: **no tracked test file changed in
+this task** — 001's nine tests for the seam pass exactly as written, including the two that assert
+the refusal's shape byte for byte. That is what settling a signature early buys, and it is worth
+recording that it actually paid rather than assuming it would.
+
+**A token belonging to a disabled account answers `403`, and the reference's answer is unmeasured.**
+The reasoning is the client's round trip: a client re-authenticates on `401`, `AuthenticateByName`
+answers `403` for that account anyway, so `401` here buys a round trip and arrives at the same
+place. What is *not* known is the shape — and neither is the shape of a permission `403`, because
+the account available to measure with is an administrator and an administrator lacks no permission.
+Both are emitted empty, by analogy with the `401` beside them which **was** measured, and both are
+now named in [spec §7](spec.md#7-open-questions) OQ-5 so T17's goldens do not pin them as though
+they were measured.
+
+**Three indexed reads per authenticated request, deliberately.** Resolve the token, find its
+session, load the user. A joined query would do one, and it would have to return a row across the
+boundary [architecture §1](../../docs/architecture.md) exists to keep closed. Collapsing them stays
+possible *behind* that boundary, which is where the optimisation belongs when something measures
+that it is needed rather than when somebody notices it is three.
+
+**An authenticated request advances activity in memory and writes nothing.** That is the payoff of
+T8 arriving first: the seam calls `touch` and returns, and the write happens on the interval.
 
 ## T11 — `api/users.py`: the five user routes
 

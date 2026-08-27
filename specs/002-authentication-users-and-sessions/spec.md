@@ -372,9 +372,9 @@ gap: a client that saw `true` would offer the user a remote-control UI that does
 | OQ-2 | The reference's token inactivity window, and whether it is observable | The expiry row of §3.8. v1 defaults to no inactivity expiry | A probe holding a token idle |
 | OQ-4 | Are `HasConfiguredPassword` and `HasConfiguredEasyPassword` read by any client? | Nothing; honest values are sent | Differential harness (010) |
 | OQ-6 | What `LoginAttemptsBeforeLockout = -1` means. It is what the reference sends, so it is what most accounts carry, and it is a sentinel rather than a threshold | §3.3's lockout rule, which reads it as a count | A probe against a throwaway account, alongside OQ-5 |
-| OQ-5 | The three refusals a probe will not send at a real installation: an enabled account given a **wrong password**, an account **locked out** by failed attempts, and a **live token whose user was disabled** after it was issued | The assumed rows of §3.3, and the `403` v1 answers a locked-out account with | `tools/probe_auth_mechanisms.py` against a **throwaway enabled** account somebody is willing to lock |
+| OQ-5 | The refusals a probe will not send at a real installation: an enabled account given a **wrong password**, an account **locked out** by failed attempts, a **live token whose user was disabled** after it was issued, and a **`403` for insufficient permission** — the account available to measure with is an administrator, and an administrator lacks no permission | The assumed rows of §3.3; the `403` v1 answers a locked-out account with; and the **shape** of both `403`s, which v1 sends empty by analogy with the measured empty `401` | `tools/probe_auth_mechanisms.py` against a **throwaway enabled, non-administrator** account somebody is willing to lock |
 
-**Why OQ-5 is not simply measured.** Each of the three needs a real account to fail against, and
+**Why OQ-5 is not simply measured.** Each of them needs a real account to fail against, and
 failing against one moves a lockout counter that no probe can reset — on somebody's own server, for
 an account somebody uses. The probe measures the refusals that cost nothing (an unknown username
 cannot be locked out, and an account already disabled cannot be locked further) and declines the
