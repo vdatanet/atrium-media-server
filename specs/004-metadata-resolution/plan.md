@@ -4,7 +4,7 @@ title: Metadata resolution — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2
+amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -373,11 +373,26 @@ warn-and-continue path (spec §3.3), and the item resolves from what remains.
 
 ### 6.4 Local artwork
 
-The spec §3.4 name tables, matched case-insensitively over `jpg`, `jpeg`, `png`, `webp`:
-per-item (`<stem>-poster.jpg` beside the file), per-folder (`poster`, `folder`, `cover`,
-`default`; `fanart`/`backdrop`/`background` plus `-N`/`N` numbered variants in order; `logo`,
-`clearlogo`; `thumb`, `landscape`; `banner`; `disc`, `cdart`). First name that exists wins within
-each type; numbered backdrops keep their numeric order as `image_index`.
+The spec §3.4 name tables, matched case-insensitively over `jpg`, `jpeg`, `png`, `webp`. Those
+tables were **corrected at T8** against the reference's own
+`[source: MediaBrowser.LocalMetadata/Images/LocalImageProvider.cs:18-400 @ v10.11.11]`; the
+differences that change code rather than wording:
+
+| This section said | It is |
+|---|---|
+| One Primary list for every type | **Five.** A music album and artist try `folder` first and answer to `jacket` and `albumart`; a series answers to `show`; a film to `movie`; a person only to `folder` and `poster` |
+| The per-item form is `<stem>-poster` | **The bare `<stem>` as well, and it is tried first** — before every folder name. The prefixed form works for every name, not only `poster` |
+| Thumb is `thumb`, `landscape` | **`landscape`, `thumb`** |
+| Disc is `disc`, `cdart` | Type-dependent: an album tries **`cdart` first**, a film tries `disc`, `cdart`, `discart` |
+| Backdrops are `fanart`/`backdrop`/`background` | Four families — `art` as well — plus an `extrafanart` folder taken whole. Their numbered variants use a dash (`fanart-1`) **except `backdrop`, which does not** (`backdrop1`) |
+| Numbered backdrops keep their numeric order | They do, and the **scan stops after three consecutive misses** rather than at the first gap, so a library that lost `fanart-3` keeps `fanart-4` onwards |
+
+First name that exists **and is readable** wins within each type — readability is part of the rule
+rather than a check after it, or one corrupt `poster.jpg` leaves an item with no image while a
+good `folder.png` sits beside it. Backdrops accumulate rather than first-winning, and their
+`image_index` is the position in the found list rather than the number in the file name, because
+those numbers are sparse in real libraries and `BackdropImageTags` is a dense array. An episode, a
+track and a person get a Primary and nothing else.
 
 Embedded cover art becomes `Primary` only when no file-based Primary exists (spec §3.4).
 Dimensions are read with Pillow at association time — header parse, no decode — and the content
