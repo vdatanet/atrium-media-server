@@ -100,16 +100,17 @@ def test_the_restricted_user_sees_only_the_permitted_library(
     )
 
 
-def test_a_by_name_row_is_exempt_from_the_library_clause_for_now(
+def test_a_by_name_row_is_reached_through_the_items_that_reference_it(
     repository: ItemQueryRepository, world: QueryWorld
 ) -> None:
     """A genre is not *in* a library; it is referenced by items that are, so `library_id` is null
     and the library clause cannot speak about it.
 
-    **This is deliberately incomplete.** Plan §6.1 gives by-name rows a clause of their own - a
-    genre exists for a user while a visible item references it - and that arrives with the by-name
-    queries in T8. Pinned here so that the day it changes, this test says so rather than a
-    `/Genres` test failing for reasons nobody connects to this predicate.
+    **T5 left this exempt and T8 closed it**, which is why the test was written before the clause
+    existed: plan §6.1 gives by-name rows a clause of their own - a genre exists for a user while
+    a *visible* item references it. The restricted user still sees the film genres, because the
+    films that carry them are in the library that user may see; `test_item_by_name.py` is where
+    the adversarial half lives.
     """
     page = repository.run(ItemQuery(user=world.restricted, limit=1000))
     assert any(one.item.is_by_name for one in page.items)
