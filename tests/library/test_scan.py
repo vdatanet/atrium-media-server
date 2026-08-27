@@ -30,7 +30,7 @@ from atrium.db.repositories import ItemRepository, LibraryRepository
 from atrium.domain.items import CollectionType, ItemType
 from atrium.domain.library import Library
 from atrium.library import config
-from atrium.library.scan import scan
+from atrium.library.scan import RootSuddenlyEmptyError, scan
 from tests.conftest import data_dir
 from tests.fixtures.library import BuiltFixture
 
@@ -246,11 +246,15 @@ def test_a_deleted_file_leaves_its_item_exactly_where_it_was(
     assert report.removed == 0
 
 
-def test_a_root_that_lost_everything_still_removes_nothing(
+def test_a_root_that_lost_everything_is_refused(
     engine: Engine, fixture_library: BuiltFixture
 ) -> None:
-    """The catastrophic case, and the reason for the whole ordering. An unmounted share and an
-    emptied directory look identical, and this scanner cannot act on either.
+    """The catastrophic case, and the reason for the whole ordering.
+
+    **This test was rewritten at T16**, and the rewrite is the record. Until the guards existed it
+    asserted that the scan completed and changed nothing, because the scanner had no removal path
+    to take. Now the scan is *refused* before it looks at anything, which is a stronger guarantee
+    and a visible change rather than a silent one.
     """
     library = a_library(engine, fixture_library, "movies")
     scanned(engine, library)
@@ -259,9 +263,9 @@ def test_a_root_that_lost_everything_still_removes_nothing(
     for path in sorted(Path(fixture_library.of("movies").root).rglob("*"), reverse=True):
         path.unlink() if path.is_file() else path.rmdir()
 
-    report = scanned(engine, library)
+    with pytest.raises(RootSuddenlyEmptyError):
+        scanned(engine, library)
     assert set(items_of(engine, library)) == before
-    assert (report.added, report.updated, report.removed) == (0, 0, 0)
 
 
 def test_the_repository_has_no_way_to_remove_an_item() -> None:

@@ -22,11 +22,22 @@ scanner that has not yet been given the ability, and `ScanReport.removed` stays 
 item would make a first scan of a large library take orders of magnitude longer than the walk that
 found it. `scan` never commits: it writes inside the transaction its caller opened, which is what
 makes the batching structural rather than a habit.
+
+**Three guards run before anything is written**, and they *refuse* rather than report - raising
+inside the caller's transaction, which rolls it back, so "removes nothing" is a property of the
+transaction rather than of this function remembering to stop. They constrain a scanner that cannot
+yet delete, which is the whole reason they are written first: the capability arrives at T17 into a
+world where the thing that limits it already exists and is already proven.
+
+Guard two is the one that matters. **An unmounted share and an emptied directory are
+indistinguishable by a readability check** - both are a directory that lists nothing - so the only
+way to tell them apart is to remember that this library used to have files in it.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import os
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -40,6 +51,43 @@ from atrium.library.identity import ensure_unique
 from atrium.library.naming import PATH_ONLY, MetadataSource
 from atrium.library.resolver import resolve
 from atrium.library.walker import Candidate, Skipped, WalkResult, walk
+
+#: How much of a library may disappear before a scan refuses to believe it (plan section 6.5,
+#: rule 3). A quarter: high enough that pruning a season or a few albums proceeds, low enough that
+#: a half-mounted share is caught. An operator who really did delete a third of their films passes
+#: `confirm_removals`, which is a decision somebody makes rather than a threshold nobody notices.
+DEFAULT_REMOVAL_THRESHOLD = 0.25
+
+
+class ScanRefusedError(RuntimeError):
+    """A guard stopped the scan before it wrote anything.
+
+    One base type because a caller's response is the same to all three: report it to the operator
+    and change nothing. The subclasses exist so that a caller *can* tell them apart, and so that a
+    test asserts which guard fired rather than that some guard did.
+    """
+
+
+class RootUnreadableError(ScanRefusedError):
+    """Guard one: a root is missing, is not a directory, or cannot be listed (AC-12)."""
+
+
+class RootSuddenlyEmptyError(ScanRefusedError):
+    """Guard two: a root that used to hold files now holds none.
+
+    **The one that matters.** An unmounted share and an emptied directory are indistinguishable by
+    a readability check - both are a directory that lists nothing - so the only way to tell them
+    apart is to remember that this library used to have files in it. Treating the first as the
+    second is the single most destructive thing a scanner can do.
+    """
+
+
+class TooManyRemovalsError(ScanRefusedError):
+    """Guard three: more of the library disappeared than a threshold allows.
+
+    The slower version of the same accident: a root that is *partly* wrong. Guard two never fires
+    for it, because the root still yields something.
+    """
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +106,14 @@ class ScanReport:
     removed: int = 0
     """**Always zero here.** This scanner has no removal code path at all - see the module
     docstring. T17 grants the capability, after T16 constrains it."""
+
+    missing: int = 0
+    """Items in the database whose files are no longer on disk.
+
+    Computed but **not acted on**: this scanner has no removal path, and T17 is what turns these
+    into soft deletions. Reported from here because guard three has to count them to decide whether
+    to refuse, and a number that was computed and thrown away would be a number nobody could check.
+    """
 
     skipped: tuple[Skipped, ...] = field(default_factory=tuple)
     """Every file the walk went past, each with its reason (plan section 7)."""
@@ -93,15 +149,40 @@ def scan(
     session: OrmSession,
     roots: Iterable[Path] | None = None,
     source: MetadataSource = PATH_ONLY,
+    *,
+    removal_threshold: float = DEFAULT_REMOVAL_THRESHOLD,
+    confirm_removals: bool = False,
 ) -> ScanReport:
     """Bring the database into line with what is on disk, **adding and updating only**.
 
     Writes inside the caller's transaction and never commits, so a caller that opens one unit of
     work per library gets one transaction per library, and a caller that opens one per item gets
     what it asked for and deserves.
+
+    Raises `ScanRefusedError` before writing anything when one of the three guards of plan section
+    6.5 fires. Raising rather than returning is deliberate: a returned report can be ignored by a
+    caller in a hurry, and an exception rolls the caller's transaction back on its way out.
     """
-    walked = _walk_every_root(library, roots)
+    paths = _root_paths(library, roots)
+    _require_readable_roots(library, paths)
+
+    walked = _walk_every_root(library, paths)
+    repository = ItemRepository(session)
+    existing = repository.by_library(library.id)
+
+    # `confirm_removals` lifts guards two and three and **not** guard one. Both of those refuse a
+    # loss the operator may have meant, and both of their messages end by saying to scan again with
+    # removals confirmed - so both have to honour it, or the message is a lie. Guard one refuses a
+    # root that is broken rather than empty, which is not something anybody confirms.
+    if not confirm_removals:
+        _require_not_suddenly_empty(library, walked, existing)
+
     resolution = resolve(library, walked.candidates, source)
+
+    found = {item.id for item in resolution.items}
+    missing = [item for item in existing.values() if item.id not in found and item.is_file_backed]
+    if not confirm_removals:
+        _require_removals_under_threshold(library, missing, existing, removal_threshold)
 
     # A collision is a bug in the derivation, not user error, and merging two files into one item
     # would hide it until somebody reported a film playing the wrong file (plan section 7).
@@ -111,8 +192,6 @@ def scan(
         if item.is_file_backed
     )
 
-    repository = ItemRepository(session)
-    existing = repository.by_library(library.id)
     now = utc_now()
     added = updated = unchanged = 0
 
@@ -134,24 +213,107 @@ def scan(
         added=added,
         updated=updated,
         unchanged=unchanged,
+        missing=len(missing),
         skipped=walked.skipped,
     )
 
 
-def _walk_every_root(library: Library, roots: Iterable[Path] | None) -> WalkResult:
-    """Every configured root, walked in a fixed order and merged into one result.
+def _root_paths(library: Library, roots: Iterable[Path] | None) -> list[Path]:
+    """Sorted, so that two scans of one library agree whatever order the configuration listed
+    them in (spec section 3.8)."""
+    return sorted(Path(root) for root in (roots if roots is not None else library.roots))
 
-    Roots are sorted so that two scans of the same library produce the same order whatever order
-    the configuration happened to list them in (spec section 3.8).
-    """
+
+def _walk_every_root(library: Library, paths: Sequence[Path]) -> WalkResult:
+    """Every configured root, walked and merged into one result."""
     candidates: list[Candidate] = []
     skipped: list[Skipped] = []
-    paths = sorted(Path(root) for root in (roots if roots is not None else library.roots))
     for root in paths:
         result = walk(root, library.collection_type)
         candidates.extend(result.candidates)
         skipped.extend(result.skipped)
     return WalkResult(candidates=tuple(candidates), skipped=tuple(skipped))
+
+
+# ----------------------------------------------------------------------------------------------
+# The three guards of plan section 6.5
+#
+# Separate functions on purpose. Each destructive test removes exactly one of them and asserts the
+# damage it was preventing - which is only possible if there is exactly one thing to remove.
+# ----------------------------------------------------------------------------------------------
+
+
+def _require_readable_roots(library: Library, paths: Sequence[Path]) -> None:
+    """Guard one (AC-12). Every root exists, is a directory, and can actually be listed.
+
+    Listed, not merely `is_dir`. A directory whose permissions forbid reading still stats as a
+    directory, so the check that matters is whether an entry can be taken out of it.
+    """
+    if not paths:
+        raise RootUnreadableError(
+            f"library {library.id} has no roots configured, so a scan of it would find nothing "
+            f"and could not tell that from a library whose files have all gone."
+        )
+    for root in paths:
+        try:
+            if not root.is_dir():
+                raise RootUnreadableError(
+                    f"{str(root)!r} is not a directory. The scan of library {library.id} is "
+                    f"abandoned and nothing is changed: a root that is not there is not the same "
+                    f"as a root with nothing in it (spec section 3.8)."
+                )
+            with os.scandir(root) as entries:
+                next(entries, None)
+        except OSError as exc:
+            raise RootUnreadableError(
+                f"{str(root)!r} cannot be read ({exc.strerror}). The scan of library "
+                f"{library.id} is abandoned and nothing is changed."
+            ) from exc
+
+
+def _require_not_suddenly_empty(
+    library: Library, walked: WalkResult, existing: dict[str, Item]
+) -> None:
+    """Guard two. A root that yields nothing, having previously yielded something, aborts.
+
+    The condition is *previously*: a genuinely new and empty library scans happily, and so does one
+    an operator has really emptied on purpose - the second time, once the first refusal has told
+    them what happened and they have removed the library or confirmed the removals.
+    """
+    if walked.candidates:
+        return
+    had = [item for item in existing.values() if item.is_file_backed]
+    if not had:
+        return
+    raise RootSuddenlyEmptyError(
+        f"library {library.id} previously held {len(had)} file(s) and its roots now yield none. "
+        f"That is what an unmounted share looks like, and it is indistinguishable from a directory "
+        f"somebody emptied - so the scan is abandoned and nothing is changed. Check the mount; if "
+        f"the files really are gone, scan again with removals confirmed."
+    )
+
+
+def _require_removals_under_threshold(
+    library: Library, missing: Sequence[Item], existing: dict[str, Item], threshold: float
+) -> None:
+    """Guard three. More than `threshold` of a library disappearing stops the scan.
+
+    Measured against the file-backed items only. Containers come and go as their children do, so
+    counting them would make a renamed series look like a mass deletion.
+    """
+    held = [item for item in existing.values() if item.is_file_backed]
+    if not held or not missing:
+        return
+    proportion = len(missing) / len(held)
+    if proportion <= threshold:
+        return
+    raise TooManyRemovalsError(
+        f"{len(missing)} of library {library.id}'s {len(held)} files are gone "
+        f"({proportion:.0%}, over the {threshold:.0%} this scan will act on without being asked). "
+        f"A root that is *partly* wrong looks exactly like this, and guard two does not fire for "
+        f"it because the root still yields something. Nothing is changed. Check the mount; if the "
+        f"files really are gone, scan again with removals confirmed."
+    )
 
 
 def _differs(before: Item, after: Item) -> bool:
@@ -171,4 +333,12 @@ def _differs(before: Item, after: Item) -> bool:
     )
 
 
-__all__ = ["ScanReport", "scan"]
+__all__ = [
+    "DEFAULT_REMOVAL_THRESHOLD",
+    "RootSuddenlyEmptyError",
+    "RootUnreadableError",
+    "ScanRefusedError",
+    "ScanReport",
+    "TooManyRemovalsError",
+    "scan",
+]
