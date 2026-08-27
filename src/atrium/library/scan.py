@@ -20,6 +20,23 @@ the moment the file comes back. A re-download, a remount or a share that was slo
 therefore costs nobody their favourites - and a returning file **revives the same item**, because
 the identifier comes from the path and the path has not changed.
 
+**A file whose size and modification time have not moved is not examined again** (plan
+section 6.4). "Examined" means the only content-reading this feature does: asking a
+`MetadataSource` what is embedded in the file. Everything else here reads paths, which are free.
+
+The signal is not a guess about the file, it is a guess about *whether looking would tell us
+anything new* - so getting it wrong is a missed update rather than a wrong item, and `deep=True`
+is the escape hatch for a filesystem where the guess is unsafe. **It is measurably unsafe on an
+ordinary one**: `cp -p`, `rsync -a` and an unpacked archive all restore the modification time, so
+a file replaced by a same-sized copy is invisible to any signal built from `(size, mtime_ns)`.
+
+Skipping the examination cannot produce a wrong item, and the reason is worth stating because it
+is what makes the whole thing safe. **No file-backed identity depends on a tag** - a `Movie`, an
+`Episode` and an `Audio` are all identified by their path - so an unexamined file resolves to the
+*same* item it did last time, and that item is then thrown away in favour of the row already in
+the database. The resolution of an unexamined file is never written; it exists only to find out
+which row to keep.
+
 **A scan never purges.** Hard deletion is an operator's decision and lives in
 `library/maintenance.py`, which this module does not import - a test asserts that, because a scan
 that merely *chose* not to purge would be one refactor away from purging.
@@ -43,7 +60,7 @@ way to tell them apart is to remember that this library used to have files in it
 from __future__ import annotations
 
 import os
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -55,7 +72,7 @@ from atrium.domain.items import PARENT_OF, Item, ItemType
 from atrium.domain.library import Library
 from atrium.library.identity import ensure_unique
 from atrium.library.naming import PATH_ONLY, MetadataSource
-from atrium.library.resolver import resolve
+from atrium.library.resolver import Resolution, resolve
 from atrium.library.walker import Candidate, Skipped, WalkResult, walk
 
 #: How much of a library may disappear before a scan refuses to believe it (plan section 6.5,
@@ -109,6 +126,18 @@ class ScanReport:
     updated: int = 0
     unchanged: int = 0
 
+    examined: int = 0
+    """Candidate files whose `(size, mtime_ns)` had moved, so this scan looked at them again
+    rather than keeping the row it already had.
+
+    Every other candidate was skipped by the signal (plan section 6.4). Looking at a file means
+    asking the metadata seam what is inside it, which only a music library does - so a `movies`
+    scan can report a non-zero `examined` having opened nothing. It is a count of what was *not
+    trusted*, not of what was read.
+
+    Under `deep` this is every candidate, which is the whole of what `deep` means.
+    """
+
     removed: int = 0
     """Items whose files are gone, marked `removed_at`. **Soft**: the row stays and so does the
     user data keyed to its identifier (spec section 3.8)."""
@@ -159,10 +188,16 @@ def scan(
     roots: Iterable[Path] | None = None,
     source: MetadataSource = PATH_ONLY,
     *,
+    deep: bool = False,
     removal_threshold: float = DEFAULT_REMOVAL_THRESHOLD,
     confirm_removals: bool = False,
 ) -> ScanReport:
-    """Bring the database into line with what is on disk, **adding and updating only**.
+    """Bring the database into line with what is on disk.
+
+    `deep` ignores the change-detection signal and examines every file (plan section 6.4). The
+    default is fast and the escape hatch exists; neither pretends to be the other. Use it when the
+    modification times cannot be trusted - a filesystem that rounds them, a restore that put them
+    back, a library whose tags were rewritten in place by a tool that preserved both size and time.
 
     Writes inside the caller's transaction and never commits, so a caller that opens one unit of
     work per library gets one transaction per library, and a caller that opens one per item gets
@@ -186,9 +221,16 @@ def scan(
     if not confirm_removals:
         _require_not_suddenly_empty(library, walked, existing)
 
-    resolution = resolve(library, walked.candidates, source)
+    # Change detection, plan section 6.4. The classification is made **before** resolution
+    # because what it gates is the examination itself: an unchanged file is never asked what is
+    # inside it. `deep` empties the set, which is the whole of what `deep` does.
+    unchanged_paths = frozenset() if deep else _unchanged_paths(walked, existing)
+    examined = len(walked.candidates) - len(unchanged_paths)
 
-    found = {item.id for item in resolution.items}
+    resolution = resolve(library, walked.candidates, _OnlyChanged(source, unchanged_paths))
+    kept = _reconcile(resolution, existing, deep=deep)
+
+    found = set(kept)
     # Already-removed items are not missing *again*. Counting them would make the guard fire on
     # every scan after a large removal, forever, with nothing left to protect.
     missing = [
@@ -202,16 +244,14 @@ def scan(
     # A collision is a bug in the derivation, not user error, and merging two files into one item
     # would hide it until somebody reported a film playing the wrong file (plan section 7).
     ensure_unique(
-        (item.id, item.relative_path or item.name)
-        for item in resolution.items
-        if item.is_file_backed
+        (item.id, item.relative_path or item.name) for item in kept.values() if item.is_file_backed
     )
 
     now = utc_now()
     added = updated = unchanged = 0
     returning: list[str] = []
 
-    for item in sorted(resolution.items, key=lambda one: (_DEPTH[one.type], one.id)):
+    for item in sorted(kept.values(), key=lambda one: (_DEPTH[one.type], one.id)):
         before = existing.get(item.id)
         if before is None:
             repository.add(replace(item, date_created=now, date_modified=now))
@@ -235,11 +275,108 @@ def scan(
         added=added,
         updated=updated,
         unchanged=unchanged,
+        examined=examined,
         removed=removed,
         revived=revived,
         missing=len(missing),
         skipped=walked.skipped,
     )
+
+
+# ----------------------------------------------------------------------------------------------
+# Change detection (plan section 6.4)
+# ----------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class _OnlyChanged:
+    """A `MetadataSource` that declines to look inside a file whose signal has not moved.
+
+    It answers `{}` rather than the previous answer, which sounds wrong and is not: a file's
+    **identity never depends on a tag**, so the item this produces has the same id it had last
+    time, and `_reconcile` then keeps the stored row and discards this resolution entirely. The
+    only thing the empty answer can affect is an item that is about to be thrown away.
+
+    Wrapping the caller's source rather than checking a flag inside the resolver keeps 003's one
+    piece of content-reading behind one object, so that when 004 supplies a real reader there is a
+    single place where "do not open this file" is decided.
+    """
+
+    source: MetadataSource
+    unchanged: frozenset[str]
+
+    def tags_for(self, relative_path: str) -> Mapping[str, str]:
+        if relative_path in self.unchanged:
+            return {}
+        return self.source.tags_for(relative_path)
+
+
+def _unchanged_paths(walked: WalkResult, existing: Mapping[str, Item]) -> frozenset[str]:
+    """The candidate files whose `(size, mtime_ns)` is exactly what was stored for them.
+
+    Both halves, not either: size alone misses a re-encode of the same length, and a modification
+    time alone misses a filesystem that rounds it. Together they are still a **guess**, and a
+    measurably fallible one - `cp -p` and `rsync -a` restore the modification time, so a file
+    replaced by a same-sized copy matches here and is skipped. That is what `deep` is for.
+
+    A source with no recorded signal never matches, so a row written by something that did not
+    stat the file is re-examined rather than trusted.
+    """
+    signals = {
+        source.relative_path: (source.size, source.mtime_ns)
+        for item in existing.values()
+        if item.is_file_backed
+        for source in item.sources
+        if source.size is not None and source.mtime_ns is not None
+    }
+    return frozenset(
+        candidate.relative_path
+        for candidate in walked.candidates
+        if signals.get(candidate.relative_path) == (candidate.size, candidate.mtime_ns)
+    )
+
+
+def _reconcile(
+    resolution: Resolution, existing: Mapping[str, Item], *, deep: bool
+) -> dict[str, Item]:
+    """The items this scan will write, with an unexamined file's stored row kept in place.
+
+    Two steps, and the second is the one that is easy to miss. **Keeping the stored row** is not
+    enough on its own: an unexamined music file resolved from its path alone hangs from an album
+    named after its *directory*, and that album is a container this scan invented and must not
+    write. So after the substitution the set is rebuilt from the file-backed items upwards, and a
+    container nothing ends up under is dropped.
+
+    That pruning changes nothing when no row is kept - every container the resolver produces
+    exists because a file asked for it - which is why a first scan, and a `deep` one, are
+    unaffected.
+
+    The test for "unchanged" is the whole source tuple rather than one path, so a two-part film
+    with one rewritten part is re-examined as one item. Movies never consult a tag, so the two
+    tests only ever disagree about an item that could not have been affected either way.
+    """
+    chosen = {item.id: item for item in resolution.items}
+    if not deep:
+        for item in resolution.items:
+            stored = existing.get(item.id)
+            if item.is_file_backed and stored is not None and stored.sources == item.sources:
+                chosen[item.id] = stored
+
+    lookup: dict[str, Item] = {**existing, **chosen}
+    kept: dict[str, Item] = {}
+    for item in chosen.values():
+        if item.is_file_backed or item.type is ItemType.COLLECTION_FOLDER:
+            _keep_with_ancestors(item, lookup, kept)
+    return kept
+
+
+def _keep_with_ancestors(item: Item, lookup: Mapping[str, Item], into: dict[str, Item]) -> None:
+    """This item and every container above it. Stops at one already kept, whose own ancestors
+    were kept with it - so the walk up is done once per chain rather than once per child."""
+    current: Item | None = item
+    while current is not None and current.id not in into:
+        into[current.id] = current
+        current = lookup.get(current.parent_id) if current.parent_id is not None else None
 
 
 def _root_paths(library: Library, roots: Iterable[Path] | None) -> list[Path]:

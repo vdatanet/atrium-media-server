@@ -174,8 +174,15 @@ truncated SHA-256 since 001, and 003 is the first caller its docstring anticipat
 
 **`domain.sorting.sort_name(item) -> str`** — dispatches on type, §6.2.
 
-**`library.scan.scan(library, mode) -> ScanReport`** — the orchestrator. The only thing in the
-feature that writes.
+**`library.scan.scan(library, session, roots=None, source=PATH_ONLY, *, deep=False, ...)
+-> ScanReport`** — the orchestrator. The only thing in the feature that writes.
+
+**Corrected at T18.** This section named a `mode` argument, which reads like a set of scanning
+modes and is one boolean: `deep` decides whether the §6.4 signal is consulted, and nothing else
+about a scan varies. `confirm_removals` and `removal_threshold` arrived at T16 as the guards' own
+arguments rather than as values of a `mode`, and a single enumeration would have had to carry all
+three combinations. The name `--deep` in the task list is what an operator eventually types; the
+feature has no command line, so nothing here parses one.
 
 **`MetadataSource`** — the seam for 004. 003 needs embedded tags to identify music
 ([spec §3.5](spec.md#35-music)) and 004 provides them. 003 defines the protocol and ships a
@@ -233,8 +240,42 @@ of any size.
 
 **mtime is not trustworthy everywhere** — some network filesystems round it, some restore it on
 copy. So: a changed `(size, mtime_ns)` always means re-examine; an unchanged pair means skip *by
-default*, and a `--deep` mode ignores the pair and re-examines everything. The default is fast, the
+default*, and a `deep` mode ignores the pair and re-examines everything. The default is fast, the
 escape hatch exists, and neither pretends to be the other.
+
+**"Restore it on copy" is not a worry about exotic filesystems, it is the ordinary case.** `cp -p`,
+`rsync -a` and an unpacked archive all put the modification time back, and a tag editor rewriting a
+header in place can leave the size alone. Measured on an ordinary local filesystem: writing new
+bytes of the same length and restoring the time yields a byte-for-byte identical signal
+`[probe: local measurement, macOS APFS, 2026-08-27]`. That is what `deep` is for, and
+`tests/library/test_change_detection.py` reproduces it rather than describing it.
+
+**What "examine" means here is exactly one thing: asking the §5 metadata seam what is embedded in
+the file.** Everything else a scan does reads paths, which is free. So the signal gates
+`MetadataSource.tags_for` and nothing else — which is also why the skip is *safe*: no file-backed
+identity depends on a tag, so an unexamined file resolves to the same identifier it did last time.
+
+**Skipping the read is therefore not enough on its own, and this is the trap.** An unexamined music
+file resolved from its path alone hangs from an album named after its *directory* — for the 413 of
+5,814 measured tracks whose tags disagree with their path, a different album from the one it is
+really in. Two steps, not one:
+
+1. **Keep the stored row** for a file whose whole source tuple matches what is stored. The
+   resolution of an unexamined file is used to find out *which row*, never written.
+2. **Rebuild the item set upwards from the file-backed items** and drop any container nothing ends
+   up under, so the album this scan invented is not written beside the one that is already there.
+
+Step 2 changes nothing when no row is kept — every container the resolver produces exists because
+some file asked for it — so a first scan and a `deep` scan are unaffected by it.
+
+The signal is read across an item's **whole source tuple**, not per path, so a two-part film with
+one rewritten part is re-examined as one item rather than left half-updated.
+
+**None of this is observable to a client.** No item and no media source on the reference carries a
+modification time ([behaviours §2.17](../../docs/compatibility/behaviours.md#217-no-item-and-no-media-source-carries-a-modification-time)),
+so the choice of signal creates no delta. `Size` *is* observable, which is why an examined file's
+size is always written back — and why a new signal is written back even when nothing else about
+the item changed, or every scan from then on would re-examine the same file forever.
 
 ### 6.5 The guard against a mass delete
 

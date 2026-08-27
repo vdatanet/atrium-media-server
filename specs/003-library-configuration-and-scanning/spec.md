@@ -393,7 +393,7 @@ the same items, the same identifiers and the same ordering.
 | Change on disk | The scan must |
 |---|---|
 | New file | Add the item, creating ancestors as needed |
-| File modified (size or mtime) | Re-inspect and update, **preserving identity and user data** |
+| File modified (size or time of change) | Re-inspect and update, **preserving identity and user data** |
 | File deleted | Remove the item, **preserving user data** in case it returns |
 | File renamed | Treated as delete plus add — identity is path-derived, so it changes |
 | Directory emptied | Remove the container item |
@@ -406,8 +406,14 @@ position. This is why user data is keyed by identity and retained after the item
 that library fails loudly and changes nothing. Treating an unmounted share as "every item was
 deleted" is the single most destructive thing a scanner can do.
 
-A scan reports progress and a summary: items added, updated, removed, and files skipped with the
-reason.
+**A scan is a guess about what is worth looking at.** Deciding a file has not changed is cheap
+and occasionally wrong: a file can be replaced by one of the same length whose recorded time of
+change was put back with it, which is what an ordinary copy or restore does. An operator can
+therefore ask for a **full re-examination** that ignores the signal and looks at every file. The
+default is the fast one, the full one is always available, and neither is described as the other.
+
+A scan reports progress and a summary: items added, updated, removed, files examined, and files
+skipped with the reason.
 
 ## 4. Data the feature owns
 
