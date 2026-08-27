@@ -226,14 +226,14 @@ def test_a_scanned_film_carries_the_base_sort_name(
 # ------------------------------------------------------------------------------------------
 
 
-def test_a_deleted_file_leaves_its_item_exactly_where_it_was(
+def test_a_deleted_file_is_soft_deleted_and_keeps_its_row(
     engine: Engine, fixture_library: BuiltFixture
 ) -> None:
-    """Not the final behaviour, and deliberately so.
+    """**Rewritten at T17**, and the rewrite is the record.
 
-    Spec section 3.8 wants a missing file soft-deleted with its user data kept, and T17 implements
-    that - **after** T16's guards are green. Until then the capability does not exist, so a scan
-    over a library that lost a file changes nothing at all.
+    Until the guards of T16 were green this asserted that a scan over a library that lost a file
+    changed *nothing at all*, because the scanner had no removal path. It now marks the item
+    removed - and the row stays, which is the half that makes user data outlive items.
     """
     library = a_library(engine, fixture_library, "movies")
     scanned(engine, library)
@@ -242,8 +242,15 @@ def test_a_deleted_file_leaves_its_item_exactly_where_it_was(
     Path(fixture_library.of("movies").path_of("Amélie (2001).mkv")).unlink()
     report = scanned(engine, library)
 
-    assert set(items_of(engine, library)) == before, "an item was removed by a scanner that cannot"
-    assert report.removed == 0
+    assert report.removed == 1
+    assert set(items_of(engine, library)) == before, "a row was deleted; removal here is soft"
+    assert len(_visible(engine, library)) == len(before) - 1
+
+
+def _visible(engine: Engine, library: Library) -> dict[str, object]:
+    factory = session_factory(engine)
+    with session_scope(factory) as db:
+        return ItemRepository(db).visible(library.id)
 
 
 def test_a_root_that_lost_everything_is_refused(
@@ -268,14 +275,39 @@ def test_a_root_that_lost_everything_is_refused(
     assert set(items_of(engine, library)) == before
 
 
-def test_the_repository_has_no_way_to_remove_an_item() -> None:
-    """The enforcement, asserted by shape rather than by discipline.
+def test_the_repository_still_has_no_way_to_delete_a_row() -> None:
+    """**Rewritten at T17.** The surface grew by exactly three, and none of them deletes.
 
-    A scan that merely *chooses* not to delete is one refactor away from deleting. A repository
-    with no method for it is not.
+    Before the guards existed this asserted the surface was `by_library`, `add`, `update` - the
+    scanner was *incapable* of removing anything. It can now remove, softly: `mark_removed` sets a
+    timestamp and `revive` clears it. Hard deletion is still not here; it is in
+    `library/maintenance.py`, which a scan does not import.
     """
     surface = {name for name in vars(ItemRepository) if not name.startswith("_")}
-    assert surface == {"by_library", "add", "update"}
+    assert surface == {"by_library", "visible", "add", "update", "mark_removed", "revive"}
+
+
+def test_a_scan_never_imports_the_thing_that_purges() -> None:
+    """Shape, not discipline - the same argument as the repository having no delete method.
+
+    A scan that merely *chose* not to purge would be one refactor away from purging, and purging
+    is the one operation here that a mount coming back cannot undo.
+    """
+    import ast
+    import inspect
+
+    from atrium.library import scan as scan_module
+
+    tree = ast.parse(inspect.getsource(scan_module))
+    imported = {
+        node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module
+    } | {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    assert not any("maintenance" in one for one in imported), sorted(imported)
 
 
 def test_update_cannot_reach_removed_at(engine: Engine, fixture_library: BuiltFixture) -> None:

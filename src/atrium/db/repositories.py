@@ -25,10 +25,11 @@ from __future__ import annotations
 
 import hashlib
 import secrets
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, delete, select
+from sqlalchemy import CursorResult, delete, select, update
 from sqlalchemy.orm import Session as OrmSession
 
 from atrium.compat.dates import utc_now
@@ -541,12 +542,19 @@ def _item(row: models.Item, sources: list[models.ItemSource]) -> Item:
 
 
 class ItemRepository:
-    """Everything a library holds. **Nothing here deletes an item.**
+    """Everything a library holds, and the two ends of an item's life.
 
-    That absence is deliberate and it is 003's structural decision (tasks T15): for the whole middle
-    of the feature the scanner is *incapable* of destroying a library, and the capability is granted
-    at T17 only once the guards that constrain it exist and their tests are green. A repository with
-    no removal method is what makes "incapable" a fact rather than a promise about the calling code.
+    **Nothing here deletes a row.** `mark_removed` sets `removed_at` and `revive` clears it; the
+    row stays either way, which is what makes 003 spec section 3.8's "user data outlives items"
+    true. A file that disappears and comes back - a re-download, a remount, a share slow to mount -
+    costs the user nothing, because the identifier is derived from the path and the path has not
+    changed. Hard deletion is a maintenance action and lives in `library/maintenance.py`, which a
+    scan does not import.
+
+    Until T16's guards were green this class had no removal method at all, so the scanner was
+    *incapable* of destroying a library rather than merely careful. `update` still cannot reach
+    `removed_at`: changing what an item **is** and changing whether it is **there** are different
+    operations, and a method that did both would be a removal path wearing another name.
     """
 
     def __init__(self, session: OrmSession) -> None:
@@ -572,6 +580,42 @@ class ItemRepository:
         ).scalars():
             sources.setdefault(source.item_id, []).append(source)
         return {row.id: _item(row, sources.get(row.id, [])) for row in rows}
+
+    def visible(self, library_id: str) -> dict[str, Item]:
+        """What a query sees: everything that has not been removed.
+
+        The shape 005 will use. `by_library` deliberately returns removed items too, because a scan
+        has to find them to bring one back when its file returns.
+        """
+        return {
+            item_id: item
+            for item_id, item in self.by_library(library_id).items()
+            if not item.is_removed
+        }
+
+    def mark_removed(self, item_ids: Sequence[str], when: datetime) -> int:
+        """The file is gone. The row is not (003 plan section 6.6)."""
+        if not item_ids:
+            return 0
+        result = self._session.execute(
+            update(models.Item)
+            .where(models.Item.id.in_(list(item_ids)), models.Item.removed_at.is_(None))
+            .values(removed_at=when)
+        )
+        self._session.flush()
+        return cast("CursorResult[Any]", result).rowcount
+
+    def revive(self, item_ids: Sequence[str]) -> int:
+        """The file came back, and it is the same item: same path, same derivation, same id."""
+        if not item_ids:
+            return 0
+        result = self._session.execute(
+            update(models.Item)
+            .where(models.Item.id.in_(list(item_ids)), models.Item.removed_at.is_not(None))
+            .values(removed_at=None)
+        )
+        self._session.flush()
+        return cast("CursorResult[Any]", result).rowcount
 
     def add(self, item: Item) -> None:
         self._session.add(
