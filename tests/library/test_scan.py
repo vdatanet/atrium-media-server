@@ -55,10 +55,10 @@ def a_library(engine: Engine, fixture_library: BuiltFixture, collection_type: st
         )
 
 
-def scanned(engine: Engine, library: Library):  # type: ignore[no-untyped-def]
+def scanned(engine: Engine, library: Library, **options: object):  # type: ignore[no-untyped-def]
     factory = session_factory(engine)
     with session_scope(factory) as db:
-        return scan(library, db)
+        return scan(library, db, **options)  # type: ignore[arg-type]
 
 
 def items_of(engine: Engine, library: Library) -> dict[str, object]:
@@ -213,9 +213,15 @@ def test_a_scanned_track_keeps_its_raw_name_in_its_sort_name(
 def test_a_scanned_film_carries_the_base_sort_name(
     engine: Engine, fixture_library: BuiltFixture
 ) -> None:
-    """The other half of AC-13, artefacts included: nothing collapses the double space."""
+    """The other half of AC-13, artefacts included: nothing collapses the double space.
+
+    **`refresh=False`** since 004 T10: this asserts what the *scanner* derives from a name, and the
+    fixture tree carries a `.nfo` that 003 planted for 004 to read - which 004 now does, correctly
+    renaming the film to what its sidecar says. Turning the refresh off keeps this test about the
+    thing it is named for; `tests/metadata/` holds the other half.
+    """
     library = a_library(engine, fixture_library, "movies")
-    scanned(engine, library)
+    scanned(engine, library, refresh=False)
     sorted_names = {i.name: i.sort_name for i in items_of(engine, library).values()}  # type: ignore[union-attr]
     assert sorted_names["The Matrix"] == "matrix"
     assert sorted_names["Rock & Roll"] == "rock  roll"
@@ -329,11 +335,14 @@ def test_update_cannot_reach_removed_at(engine: Engine, fixture_library: BuiltFi
     with session_scope(factory) as db:
         stored = ItemRepository(db).by_library(library.id)[item_id]
         assert stored.removed_at == marked
-        ItemRepository(db).update(replace(stored, name="Renamed", removed_at=None))
+        ItemRepository(db).update(replace(stored, end_index_number=99, removed_at=None))
 
     with session_scope(factory) as db:
         after = ItemRepository(db).by_library(library.id)[item_id]
-        assert after.name == "Renamed", "the update did not happen, so this proves nothing"
+        # `end_index_number` rather than `name`, since 004 T10: once a refresh has resolved an
+        # item's name that column belongs to 004 and `update` correctly declines to write it, so
+        # a rename would prove nothing here. This is a column the scanner still owns.
+        assert after.end_index_number == 99, "the update did not happen, so this proves nothing"
         assert after.removed_at == marked, "update revived an item, which is T17's to grant"
 
 

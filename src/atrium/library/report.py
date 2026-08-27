@@ -139,6 +139,14 @@ class ScanReport:
     item.** See the module docstring for why they are not in the same list as `noticed`."""
 
     noticed: tuple[Noticed, ...] = field(default_factory=tuple)
+
+    refreshed: object | None = None
+    """What 004's refresh did to the items this scan touched, or `None` when it did not run.
+
+    Typed as `object` on purpose: `report.py` is 003's and describes a scan, and giving it a
+    `RefreshReport` field would make `library/` depend on `metadata/`'s *types* as well as its
+    behaviour. A caller that wants the detail knows what it asked for.
+    """
     """Every file that *did* produce an item, and what could not be read from its name."""
 
     @property

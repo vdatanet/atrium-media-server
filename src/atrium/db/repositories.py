@@ -41,7 +41,7 @@ from atrium.domain.session import AccessToken, IssuedToken, Session
 from atrium.domain.sorting import sort_name
 from atrium.domain.user import LibraryAccess, User
 from atrium.library.identity import for_name
-from atrium.metadata.artwork import ImageAssociation
+from atrium.metadata.artwork import ImageAssociation, ImageKind, SourceKind
 from atrium.metadata.byname import fold_for_search, genre_type, identity_of, person_type_of
 from atrium.metadata.merge import MetadataChanges
 from atrium.metadata.model import Field, MetadataField, PersonCredit, PersonKind
@@ -648,13 +648,25 @@ class ItemRepository:
 
         `removed_at` is deliberately absent too: clearing it is a *revival*, which is T17's, and a
         method that could set it either way would be a removal path by another name.
+
+        **`name` and `sort_name` are absent once a refresh has resolved them** (004 T10). The
+        scanner names an item when it *creates* it, from its path; after that those two columns
+        belong to 004, which resolves them from sidecars and tags and writes them through
+        `MetadataRepository.apply`. Without this, the two features overwrite one column on every
+        scan in turn - the scan re-deriving `The Matrix` from the filename, the refresh restoring
+        `The Matrix (1999)` from the sidecar - and every rescan of an unchanged library reports
+        every item as updated, forever.
+
+        A retitled track still follows: its title tag reaches the name through the refresh, which
+        reads the same file.
         """
         row = self._session.get(models.Item, item.id)
         if row is None:
             raise LookupError(f"no item {item.id}")
         row.parent_id = item.parent_id
-        row.name = item.name
-        row.sort_name = item.sort_name
+        if row.metadata_refreshed_at is None:
+            row.name = item.name
+            row.sort_name = item.sort_name
         row.index_number = item.index_number
         row.parent_index_number = item.parent_index_number
         row.end_index_number = item.end_index_number
@@ -712,13 +724,20 @@ class MetadataRepository:
 
         values: dict[Field, object] = {}
         for field, column in _SCALAR_COLUMNS.items():
+            if field in _THE_SCANNER_OWNS:
+                continue
             found = getattr(row, column)
             if found is not None:
                 values[field] = found
-        if row.name:
-            values[Field.NAME] = row.name
         if row.provider_ids:
             values[Field.PROVIDER_IDS] = dict(row.provider_ids)
+        if row.tags:
+            values[Field.TAGS] = list(row.tags)
+        if row.forced_sort_name:
+            values[Field.SORT_NAME] = row.forced_sort_name
+        images = self.images_of(item_id)
+        if images:
+            values[Field.IMAGES] = images
 
         genres = self._joined(models.ItemGenre, item_id, models.ItemGenre.position)
         if genres:
@@ -747,6 +766,25 @@ class MetadataRepository:
                 values[field] = names
         return values
 
+    def images_of(self, item_id: str) -> list[ImageAssociation]:
+        """The associations as they are stored, in the shape `apply` takes.
+
+        Read back so the merge can tell that an item's artwork is already what a rescan just found
+        - without it, every image row in the library is rewritten on every refresh.
+        """
+        return [
+            ImageAssociation(
+                kind=ImageKind(row.image_type),
+                index=row.image_index,
+                source_kind=SourceKind(row.source_kind),
+                relative_path=row.relative_path,
+                width=row.width,
+                height=row.height,
+                tag=row.tag,
+            )
+            for row in self._joined(models.ItemImage, item_id, models.ItemImage.image_index)
+        ]
+
     def locks_of(self, item_id: str) -> tuple[bool, frozenset[MetadataField]]:
         """`(whole item locked, the fields locked)`. Unknown values in the stored list are
         dropped, the same way the sidecar parser drops them: a lock written by a newer build is
@@ -757,6 +795,22 @@ class MetadataRepository:
         known = {member.value: member for member in MetadataField}
         return row.is_locked, frozenset(
             known[one] for one in (row.locked_fields or []) if one in known
+        )
+
+    def refreshed(self, library_id: str) -> set[str]:
+        """Items a refresh has already resolved, so the scanner no longer owns their names.
+
+        One query, asked once per scan. The alternative was putting `metadata_refreshed_at` on the
+        domain item, which would have carried 004's bookkeeping into the vocabulary every layer
+        shares for the sake of one boolean.
+        """
+        return set(
+            self._session.execute(
+                select(models.Item.id).where(
+                    models.Item.library_id == library_id,
+                    models.Item.metadata_refreshed_at.is_not(None),
+                )
+            ).scalars()
         )
 
     def pending(self, library_id: str) -> list[str]:
@@ -804,14 +858,16 @@ class MetadataRepository:
         if Field.NAME in values:
             row.name = str(values[Field.NAME])
             row.name_folded = fold_for_search(row.name)
+        if Field.TAGS in values:
+            row.tags = _strings(values[Field.TAGS])
+        if Field.SORT_NAME in values:
+            row.forced_sort_name = str(values[Field.SORT_NAME])
         if Field.NAME in values or Field.SORT_NAME in values:
             # A name that changed has a sort name that changed with it, and an explicit sort title
             # replaces the derivation entirely (003 section 3.7.3). Recomputed here rather than by
             # the caller, so the two columns cannot disagree.
-            forced = values.get(Field.SORT_NAME)
-            row.sort_name = sort_name(
-                _item(row, []), forced=str(forced) if forced is not None else None
-            )
+            forced = row.forced_sort_name
+            row.sort_name = sort_name(_item(row, []), forced=forced)
         if Field.PROVIDER_IDS in values:
             row.provider_ids = dict(cast("Mapping[str, str]", values[Field.PROVIDER_IDS]))
 
@@ -1045,6 +1101,18 @@ class MetadataRepository:
                 )
             )
 
+
+#: Fields 003's scanner derives from a file's name and place, which `values_of` therefore does
+#: **not** report as the item's own values.
+#:
+#: They are read by `metadata/refresh.py` as the **path source**, last in the chain, because the
+#: reference merges what an item already had only after every provider has spoken
+#: `[source: MediaBrowser.Providers/Manager/MetadataService.cs:849-861 @ v10.11.11]`. Reporting
+#: them here would make a filename-derived name a value a default refresh must not overwrite, and
+#: AC-1 - "a film with a full `.nfo` resolves entirely from it" - would be unreachable.
+_THE_SCANNER_OWNS: frozenset[Field] = frozenset(
+    {Field.NAME, Field.INDEX_NUMBER, Field.PARENT_INDEX_NUMBER}
+)
 
 #: Which column each scalar field is stored in. A field absent from here is stored some other way -
 #: a name, a list, a map - and `apply` handles each of those explicitly.

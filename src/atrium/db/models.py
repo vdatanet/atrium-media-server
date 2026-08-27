@@ -439,6 +439,18 @@ class Item(Base):
     )
     metadata_refreshed_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
+    #: `<tag>` elements: free-text labels a user put on an item. A JSON array rather than a join
+    #: table because, unlike a genre or a studio, a tag has no by-name item in the reference's
+    #: model - it is a string on the item and nothing else. Revision 0005.
+    tags: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+
+    #: The explicit sort title, **as the user wrote it**. `sort_name` is derived from this
+    #: (003 section 3.7.3), and a derivation cannot be compared against what it was derived from -
+    #: which is why both are stored. Revision 0005.
+    forced_sort_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
     #: Case- and diacritic-folded name. **Written by 004, read by nobody until 005** - it exists
     #: for `searchTerm`, `nameStartsWith` and `/Search/Hints`, and a row that misses it is
     #: invisible to search rather than broken, which is the failure mode worth an index and a

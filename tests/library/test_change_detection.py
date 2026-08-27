@@ -368,8 +368,13 @@ def test_the_signal_cannot_see_a_same_sized_rewrite_and_deep_can(
     assert track_named(engine, library, "01 - Tagged Differently")
 
     found = scanned(engine, library, source=retagged, deep=True)
-    assert found.updated == 1
     assert track_named(engine, library, "Renamed By A Tag Editor")
+    # **The name changed, and the refresh is what changed it** - since 004 T10 the scanner names
+    # an item when it creates it and 004 owns the name afterwards, so `report.updated`, which
+    # counts rows the *scanner* rewrote, is no longer where a retitled track shows up. The
+    # assertion above is the behaviour; this one says which half of the scan did it.
+    assert found.refreshed is not None
+    assert found.refreshed.changed >= 1  # type: ignore[attr-defined]
 
 
 def test_deep_does_not_lift_the_guards(engine: Engine, fixture_library: BuiltFixture) -> None:
