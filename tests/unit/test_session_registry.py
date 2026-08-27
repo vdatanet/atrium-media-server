@@ -27,6 +27,7 @@ from atrium.config.paths import DataPaths
 from atrium.db import schema
 from atrium.db.engine import create_database_engine, session_factory
 from atrium.db.repositories import SessionRepository, TokenRepository, UserRepository
+from atrium.domain.session import Session
 from atrium.domain.user import User
 from atrium.users.sessions import DEFAULT_FLUSH_SECONDS, SessionRegistry
 from tests.conftest import data_dir
@@ -338,33 +339,41 @@ async def test_the_background_task_flushes_on_its_interval(
     registry.touch(established.token.record.token_sha256, established.session.id, later)
 
     task = asyncio.create_task(registry.run())
-    flushed = False
+    stored: Session | None = None
     try:
         # A wall-clock deadline rather than a count of sleeps. The count version waited for 200
         # iterations of `sleep(0.01)` and then asserted regardless, which cannot tell "the task
         # never flushed" from "this runner was busy and 200 sleeps took less than two seconds of
         # its attention". It failed that way once, on CI only, and the message it produced was
         # about a datetime rather than about a timeout.
+        #
+        # And the **stored row** rather than `registry.snapshot()`, which is the version that
+        # replaced it and flaked on CI in turn. `flush` takes and clears the pending set *before*
+        # it writes - deliberately, so a request arriving mid-flush starts a fresh entry rather
+        # than being dropped by the clear - so an empty snapshot means the flush has **started**,
+        # not that it has landed. Between those two moments the row still holds what `establish`
+        # wrote, and the test read it there. Reproduced by making the write sleep half a second:
+        # the failure is then every time, with exactly the message CI produced.
+        #
+        # The rule this is an instance of: poll the thing being asserted, not a proxy for it.
         deadline = time.monotonic() + FLUSH_DEADLINE_SECONDS
         while time.monotonic() < deadline:
             await asyncio.sleep(0.01)
-            if not registry.snapshot():
-                flushed = True
+            with factory() as reader:
+                stored = SessionRepository(reader).by_id(established.session.id)
+            if stored is not None and stored.last_activity_date == later:
                 break
     finally:
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
 
-    assert flushed, (
-        f"the background task did not flush within {FLUSH_DEADLINE_SECONDS}s. That is this test "
-        f"timing out, not the registry writing the wrong value - check the task is running before "
-        f"reading anything into the assertion below."
+    assert stored is not None
+    assert stored.last_activity_date == later, (
+        f"the background task did not write {later} within {FLUSH_DEADLINE_SECONDS}s. If this is "
+        f"a timeout rather than a wrong value, the task was not running or the interval was not "
+        f"the one this test set - both of which say nothing about what a flush writes."
     )
-    with factory() as reader:
-        stored = SessionRepository(reader).by_id(established.session.id)
-        assert stored is not None
-        assert stored.last_activity_date == later
 
 
 def test_the_default_interval_is_the_one_the_plan_states() -> None:
