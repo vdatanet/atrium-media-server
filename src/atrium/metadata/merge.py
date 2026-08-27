@@ -142,8 +142,14 @@ class Source:
 
 
 @dataclass(frozen=True, slots=True)
-class Subject:
-    """The item as it stands, and what may not be changed about it."""
+class Current:
+    """The item as it currently stands, and what may not be changed about it.
+
+    **Not `model.Subject`**, which is a different thing with a confusingly similar name: that one
+    is what a *provider is told* about an item so it can identify it - a name, a year, some ids.
+    This one is what the item *already has*. They met in `refresh.py` and the collision was worth
+    a rename rather than an alias.
+    """
 
     kind: ItemType
     values: FieldValues = field(default_factory=dict)
@@ -185,7 +191,7 @@ class MetadataChanges:
         return bool(self.values)
 
 
-def merge(subject: Subject, sources: Sequence[Source], mode: RefreshMode) -> MetadataChanges:
+def merge(subject: Current, sources: Sequence[Source], mode: RefreshMode) -> MetadataChanges:
     """What this refresh changes about `subject`.
 
     `sources` is already in precedence order; this function does not sort it. Plan section 6.1
@@ -254,7 +260,7 @@ def _first_value(sources: Sequence[Source], key: Field) -> object | None:
     return None
 
 
-def _is_locked(subject: Subject, key: Field) -> bool:
+def _is_locked(subject: Current, key: Field) -> bool:
     """Whether a lock forbids changing `key`.
 
     Through `LOCK_OF`, because a lock names one of the reference's nine coarse fields and this
@@ -427,10 +433,10 @@ def _fold_person(name: str) -> str:
 __all__ = [
     "CHAIN_OF",
     "LIST_RULE",
+    "Current",
     "ListRule",
     "MetadataChanges",
     "Source",
     "SourceKind",
-    "Subject",
     "merge",
 ]

@@ -38,9 +38,19 @@ from atrium.db.repositories import ItemRepository, MetadataRepository
 from atrium.domain.items import FILE_BACKED, PARENT_OF, Item, ItemType
 from atrium.domain.library import Library
 from atrium.metadata.artwork import associate, find_artwork, with_embedded
-from atrium.metadata.merge import CHAIN_OF, MetadataChanges, Source, SourceKind, Subject, merge
-from atrium.metadata.model import Field, MetadataField, RefreshMode
+from atrium.metadata.merge import CHAIN_OF, Current, MetadataChanges, Source, SourceKind, merge
+from atrium.metadata.model import (
+    Ambiguous,
+    Field,
+    MetadataField,
+    NoMatch,
+    RefreshMode,
+    RemoteProvider,
+    Subject,
+    is_value,
+)
 from atrium.metadata.nfo import NfoResult, find_sidecar, read_nfo
+from atrium.metadata.remote import ProviderUnavailableError
 from atrium.metadata.tags import ReadsTags, TagResult, TagSource
 
 logger = logging.getLogger(__name__)
@@ -64,12 +74,29 @@ class RefreshReport:
     """By-name rows nothing referenced any more, deleted at the end of the transaction."""
 
     unidentified: tuple[str, ...] = field(default_factory=tuple)
-    """Items a remote provider could not place. Empty in this slice - no provider exists yet."""
+    """Items a remote provider could not place - no match, or too many (AC-12).
+
+    Counted apart from a failure because they are different problems with different fixes: an
+    unidentified item needs a better name or a sidecar id, a failed one needs the provider to come
+    back.
+    """
+
+    disabled: tuple[str, ...] = field(default_factory=tuple)
+    """Why each provider sat out, **once per scan** rather than once per item (AC-9).
+
+    An operator who has configured no key should be told that once, not four thousand times.
+    """
+
+    pending: tuple[str, ...] = field(default_factory=tuple)
+    """Items a provider failure left wanting another go (AC-8). Retried by the next scan even
+    though their files did not change."""
 
     def summary(self) -> str:
+        disabled = f", {len(self.disabled)} provider(s) disabled" if self.disabled else ""
         return (
             f"library {self.library_id}: {self.changed} of {self.considered} items updated, "
             f"{len(self.warnings)} warnings, {self.collected} by-name rows collected"
+            f"{disabled}"
         )
 
 
@@ -81,6 +108,7 @@ def refresh_items(
     mode: RefreshMode = RefreshMode.DEFAULT,
     tags: ReadsTags | None = None,
     roots: Sequence[Path] | None = None,
+    providers: Sequence[RemoteProvider] = (),
 ) -> RefreshReport:
     """Resolve metadata for `item_ids` and write it, one `apply` per item.
 
@@ -98,7 +126,14 @@ def refresh_items(
 
     directories = _directories(items, paths)
     warnings: list[str] = []
+    unidentified: list[str] = []
+    pending: list[str] = []
     changed = 0
+
+    # **Once per scan, not once per item** (AC-9). Asked before the loop so a provider with no key
+    # is named once in the report and then never consulted again - four thousand identical lines
+    # is a report nobody reads.
+    usable, disabled = _usable(providers, mode)
 
     for item_id in item_ids:
         item = items.get(item_id)
@@ -109,8 +144,12 @@ def refresh_items(
             # A container whose children are all gone, or an item whose root is not mounted. Not
             # an error: the next scan will either find the files or remove the item.
             continue
-        if _apply_one(repository, item, located, reader, mode, warnings):
-            changed += 1
+        outcome = _apply_one(repository, item, located, reader, mode, usable, warnings)
+        changed += int(outcome.changed)
+        if outcome.unidentified:
+            unidentified.append(item_id)
+        if outcome.failed:
+            pending.append(item_id)
 
     collected = repository.collect_by_name_garbage()
     return RefreshReport(
@@ -119,7 +158,27 @@ def refresh_items(
         changed=changed,
         warnings=tuple(warnings),
         collected=collected,
+        unidentified=tuple(unidentified),
+        disabled=tuple(disabled),
+        pending=tuple(pending),
     )
+
+
+def _usable(
+    providers: Sequence[RemoteProvider], mode: RefreshMode
+) -> tuple[list[RemoteProvider], list[str]]:
+    """Which providers this refresh may consult, and the reasons the others may not."""
+    if not mode.consults_remote_providers:
+        return [], [f"{one.name}: local-only refresh" for one in providers]
+    usable: list[RemoteProvider] = []
+    disabled: list[str] = []
+    for provider in providers:
+        available = provider.enabled()
+        if available is True:
+            usable.append(provider)
+        else:
+            disabled.append(f"{provider.name}: {available}")
+    return usable, disabled
 
 
 def refresh_library(
@@ -129,10 +188,13 @@ def refresh_library(
     mode: RefreshMode = RefreshMode.DEFAULT,
     tags: ReadsTags | None = None,
     roots: Sequence[Path] | None = None,
+    providers: Sequence[RemoteProvider] = (),
 ) -> RefreshReport:
     """Every item in the library."""
     items = ItemRepository(session).by_library(library.id)
-    return refresh_items(library, session, list(items), mode=mode, tags=tags, roots=roots)
+    return refresh_items(
+        library, session, list(items), mode=mode, tags=tags, roots=roots, providers=providers
+    )
 
 
 # ----------------------------------------------------------------------------------------------
@@ -150,39 +212,215 @@ class _Located:
     relative_file: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class _Outcome:
+    changed: bool = False
+    unidentified: bool = False
+    failed: bool = False
+
+
 def _apply_one(
     repository: MetadataRepository,
     item: Item,
     located: _Located,
     reader: ReadsTags,
     mode: RefreshMode,
+    providers: Sequence[RemoteProvider],
     warnings: list[str],
-) -> bool:
+) -> _Outcome:
+    """**Local sources first, always** (plan section 6.8 step 1).
+
+    They are cheap, offline, and they decide what is still missing - which is the condition step 2
+    turns on and the whole of why AC-1 holds: a fully-sidecared film makes zero network requests
+    because **nothing is missing**, not because a cache absorbed the fetch.
+    """
     sidecar = _read_sidecar(item, located, warnings)
     tag_result = _read_tags(item, located, reader, warnings)
     art = _read_artwork(item, located, tag_result, warnings)
 
-    sources = _chain(item, sidecar, tag_result, art)
+    local = _chain(item, sidecar, tag_result, art)
     subject = _subject(repository, item)
+
+    remote, unidentified, failed = _remote(item, subject, local, providers, mode, warnings)
+
+    # **Every local source, then remote, then the path.** Not "before the last entry": the film
+    # chain lists `PATH` twice, so slicing off one leaves the other ahead of the provider - and a
+    # sidecar carrying nothing but an id would keep its filename as a name while TMDB's title sat
+    # unused behind it. The path is the last word (plan section 6.8), so it is what comes last.
+    ahead = [one for one in local if one.kind is not SourceKind.PATH]
+    behind = [one for one in local if one.kind is SourceKind.PATH]
+    sources = ahead + remote + behind
+
     changes = merge(subject, sources, mode)
 
     locked_fields = sidecar.locked_fields
     is_locked = sidecar.is_locked
-    if not changes and locked_fields is None and is_locked is None:
+    if not changes and locked_fields is None and is_locked is None and not failed:
         # Nothing to say and nothing to lock. Writing the item's own values back would touch every
         # row on every rescan, which is what makes "a rescan of an unchanged library changes
         # nothing" a property rather than a hope.
-        return False
+
+        return _Outcome(unidentified=unidentified)
 
     repository.apply(
         item.id,
         changes,
         is_locked=is_locked,
         locked_fields=locked_fields,
-        refresh_pending=False,
+        # **A failure marks the item and never blanks it** (AC-8). The next scan retries it even
+        # though its files did not change, which is the one case the change-detection signal
+        # cannot see.
+        refresh_pending=failed,
         refreshed_at=utc_now(),
     )
-    return True
+    return _Outcome(changed=True, unidentified=unidentified, failed=failed)
+
+
+#: What a remote provider is asked to supply. A field outside this set is never a reason to make a
+#: request: `IMAGES` is asked for separately (a provider offers, the caller decides), and
+#: `PROVIDER_IDS` arrives with whatever else is fetched.
+WANTED_FROM_REMOTE: frozenset[Field] = frozenset(
+    {
+        Field.NAME,
+        Field.ORIGINAL_TITLE,
+        Field.OVERVIEW,
+        Field.TAGLINE,
+        Field.YEAR,
+        Field.PREMIERE_DATE,
+        Field.RUNTIME,
+        Field.OFFICIAL_RATING,
+        Field.COMMUNITY_RATING,
+        Field.GENRES,
+        Field.STUDIOS,
+        Field.PEOPLE,
+        Field.ALBUM_ARTISTS,
+    }
+)
+
+
+def _remote(
+    item: Item,
+    subject: Current,
+    local: Sequence[Source],
+    providers: Sequence[RemoteProvider],
+    mode: RefreshMode,
+    warnings: list[str],
+) -> tuple[list[Source], bool, bool]:
+    """The remote step, behind **four** conditions (plan section 6.8 step 2).
+
+    The mode allows it, the provider is enabled, **the local pass left fields wanting that a
+    provider could supply**, and either an id is carried or there is a title worth searching for.
+
+    The third clause is where AC-1 lives, and it was a remark in the plan until the tasks gate
+    made it a condition: a fully-sidecared film makes zero network requests because nothing is
+    missing, **not** because a cache absorbed the fetch. On a `Replace` refresh the clause is
+    lifted - re-querying is what that mode is for.
+    """
+    if not providers:
+        return [], False, False
+
+    if mode is not RefreshMode.REPLACE and not _still_wanting(item, subject, local):
+        return [], False, False
+
+    sources: list[Source] = []
+    unidentified = False
+    failed = False
+
+    for provider in providers:
+        if not provider.handles(item.type):
+            continue
+        try:
+            found = provider.identify(_subject_for(item, subject, local))
+        except ProviderUnavailableError as exc:
+            warnings.append(str(exc))
+            failed = True
+            continue
+
+        if isinstance(found, Ambiguous):
+            unidentified = True
+            warnings.append(
+                f"{provider.name}: {item.name!r} matched {len(found.candidates)} candidates; "
+                f"left unidentified rather than guessing"
+            )
+            continue
+        if isinstance(found, NoMatch):
+            unidentified = True
+            continue
+
+        try:
+            values = provider.fetch(found, item.type)
+        except ProviderUnavailableError as exc:
+            warnings.append(str(exc))
+            failed = True
+            continue
+        if values:
+            sources.append(Source(SourceKind.REMOTE, dict(values), provider.name))
+
+    return sources, unidentified, failed
+
+
+def _wanted_for(kind: ItemType) -> frozenset[Field]:
+    """What a provider could usefully supply **for this type**.
+
+    Not the whole set: a film can never have an album artist, and a *file-backed* item's runtime
+    is discarded by the merge because it comes from probing the file. Counting either as "still
+    missing" makes every film want something for ever - which is how the first version of this
+    asked TMDB about a fully-sidecared film and broke AC-1 while looking correct.
+    """
+    wanted = WANTED_FROM_REMOTE
+    if kind not in (ItemType.MUSIC_ALBUM, ItemType.MUSIC_ARTIST, ItemType.AUDIO):
+        wanted -= {Field.ALBUM_ARTISTS}
+    if kind in FILE_BACKED:
+        wanted -= {Field.RUNTIME}
+    return wanted
+
+
+def _still_wanting(item: Item, subject: Current, local: Sequence[Source]) -> bool:
+    """Whether anything a provider could supply is still missing after the local pass.
+
+    "Missing" means neither the item already has it nor a local source just supplied it. A film
+    whose sidecar named every field is not missing anything, so nothing is asked - which is AC-1,
+    stated as a condition rather than hoped for.
+    """
+    supplied = {key for source in local for key, value in source.values.items() if is_value(value)}
+    held = {key for key, value in subject.values.items() if is_value(value)}
+    return bool(_wanted_for(item.type) - supplied - held)
+
+
+def _subject_for(item: Item, subject: Current, local: Sequence[Source]) -> Subject:
+    """What a provider is told: the best name and year the local pass produced, and every id.
+
+    The ids are the point. An id from a sidecar or a tag short-circuits identification entirely
+    (spec section 3.5 rule 1), and a subject built from the item alone would have thrown it away.
+    """
+
+    def first(key: Field) -> object | None:
+        for source in local:
+            value = source.values.get(key)
+            if is_value(value):
+                return value
+        return subject.values.get(key)
+
+    ids: dict[str, str] = {}
+    for source in reversed(local):
+        found = source.values.get(Field.PROVIDER_IDS)
+        if isinstance(found, Mapping):
+            ids.update({str(name): str(value) for name, value in found.items()})
+    existing = subject.values.get(Field.PROVIDER_IDS)
+    if isinstance(existing, Mapping):
+        for name, value in existing.items():
+            ids.setdefault(str(name), str(value))
+
+    name = first(Field.NAME)
+    year = first(Field.YEAR)
+    artists = first(Field.ALBUM_ARTISTS)
+    return Subject(
+        kind=item.type,
+        name=str(name) if name is not None else None,
+        year=int(year) if isinstance(year, int) else None,
+        provider_ids=ids,
+        album_artist=str(artists[0]) if isinstance(artists, Sequence) and artists else None,
+    )
 
 
 def _chain(
@@ -226,7 +464,7 @@ def _path_values(item: Item) -> dict[Field, object]:
     return values
 
 
-def _subject(repository: MetadataRepository, item: Item) -> Subject:
+def _subject(repository: MetadataRepository, item: Item) -> Current:
     """What a *previous refresh* resolved, and what may not be changed about it.
 
     `stored` carries the path-derived values as well, and only so that a value which is already
@@ -235,7 +473,7 @@ def _subject(repository: MetadataRepository, item: Item) -> Subject:
     """
     is_locked, locked_fields = repository.locks_of(item.id)
     resolved = repository.values_of(item.id)
-    return Subject(
+    return Current(
         kind=item.type,
         values=resolved,
         stored={**resolved, **_path_values(item)},

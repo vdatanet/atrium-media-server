@@ -4,7 +4,7 @@ title: Metadata resolution — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7; by T10 - sections 4, 6.1 and 6.8
+amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7; by T10 - sections 4, 6.1 and 6.8; by T14 - section 6.8
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -496,6 +496,17 @@ A refresh processes a batch of item ids after the scan that produced them commit
    fully-sidecared film makes zero network requests because nothing is missing, not because a
    cache absorbed the fetch — and it was implicit in step 1's "they decide what is still
    missing" until the tasks gate made it a condition rather than a remark.
+
+   **"Wanting" is per type**, which T14 found by writing the clause the obvious way first. A film
+   can never have an album artist and a file-backed item's runtime is discarded by the merge
+   because it comes from probing the file, so counting either as missing makes every film want
+   something for ever — and AC-1 fails while the code looks correct.
+
+   **The order is locals, then remote, then path.** Not "before the last source": the film chain
+   lists `PATH` twice, so slicing one off leaves the other ahead of the provider, and a sidecar
+   carrying nothing but an id keeps its filename as a name while the provider's title sits unused
+   behind it. `Replace` lifts the wanting clause entirely — re-querying is what that mode is
+   for.
 3. Merge (§6.1), then one `apply` per item; writes batched per library like the scan's own.
 
 Remote I/O runs on a small thread pool (four workers) feeding through `metadata.remote`, which

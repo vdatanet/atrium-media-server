@@ -93,6 +93,15 @@ class MusicBrainzProvider:
         self._access = access
         self._artists_seen: set[str] = set()
 
+    def handles(self, kind: ItemType) -> bool:
+        """Albums, and artists **only when their id is already known**.
+
+        A track is never handled: its recording id comes from its tags. An artist is handled
+        because plan section 6.6 says artists get one lookup each - but `identify` refuses to
+        *search* for one, so the lookup happens only for an artist whose album credited an id.
+        """
+        return kind in (ItemType.MUSIC_ALBUM, ItemType.MUSIC_ARTIST)
+
     def enabled(self) -> bool | str:
         """`True`, or the reason it is not (AC-9).
 
@@ -116,6 +125,15 @@ class MusicBrainzProvider:
         its own tags or not at all - and an artist is looked up by the id its album's credits
         carry rather than by name from scratch.
         """
+        if subject.kind is ItemType.MUSIC_ARTIST:
+            # **By id only.** Searching for an artist by name at one request per second is the
+            # budget this module exists to protect, and an artist whose albums credited no id is
+            # simply an artist MusicBrainz has nothing to say about here.
+            artist = subject.provider_ids.get(ARTIST)
+            if artist:
+                return Identity(provider=ARTIST, key=str(artist))
+            return NoMatch("MusicBrainz looks an artist up by id, and this one carries none")
+
         carried = subject.provider_ids.get(NAME) or subject.provider_ids.get(ALBUM)
         if carried:
             return Identity(provider=NAME, key=str(carried))
@@ -147,8 +165,16 @@ class MusicBrainzProvider:
 
     # -- fetching --------------------------------------------------------------------------------
 
-    def fetch(self, identity: Identity) -> Mapping[Field, object]:
-        """One release-group request: canonical title, date and artist credits."""
+    def fetch(
+        self, identity: Identity, kind: ItemType = ItemType.MUSIC_ALBUM
+    ) -> Mapping[Field, object]:
+        """One release-group request: canonical title, date and artist credits.
+
+        An artist identity goes to `fetch_artist` instead, which is the same one-request rule with
+        a different endpoint.
+        """
+        if kind is ItemType.MUSIC_ARTIST or identity.provider == ARTIST:
+            return self.fetch_artist(identity.key)
         payload = self._access.get(
             f"/release-group/{identity.key}",
             params={"inc": "artist-credits+genres", "fmt": "json"},

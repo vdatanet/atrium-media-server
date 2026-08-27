@@ -28,6 +28,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence, Set
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Protocol
 
 from atrium.domain.items import ItemType
 
@@ -278,6 +279,35 @@ class Ambiguous:
 IdentifyResult = Identity | NoMatch | Ambiguous
 
 
+class RemoteProvider(Protocol):
+    """What `metadata/refresh.py` needs of an online provider, and nothing more (plan section 5).
+
+    Four members, and the shape of them is what keeps the orchestrator free of per-provider
+    branching: it asks *can you handle this type*, *are you available*, *what is this*, and *what
+    do you know* - and never *which provider are you*.
+
+    `identify` is skipped entirely when the subject already carries this provider's id (spec
+    section 3.5 rule 1), which is the providers' own business rather than the caller's: each one
+    knows which key it stores under.
+    """
+
+    name: str
+    """The `ProviderIds` key - `Tmdb`, `MusicBrainzReleaseGroup`. One spelling between what is
+    searched for and what is stored."""
+
+    def handles(self, kind: ItemType) -> bool:
+        """Whether this provider has anything to say about items of this type."""
+        ...
+
+    def enabled(self) -> bool | str:
+        """`True`, or the reason it is not (AC-9)."""
+        ...
+
+    def identify(self, subject: Subject) -> IdentifyResult: ...
+
+    def fetch(self, identity: Identity, kind: ItemType) -> Mapping[Field, object]: ...
+
+
 __all__ = [
     "LOCK_OF",
     "Ambiguous",
@@ -290,6 +320,7 @@ __all__ = [
     "PersonCredit",
     "PersonKind",
     "RefreshMode",
+    "RemoteProvider",
     "Subject",
     "is_value",
     "values_only",
