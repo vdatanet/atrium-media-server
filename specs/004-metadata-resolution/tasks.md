@@ -1,12 +1,13 @@
 ---
 feature: 004-metadata-resolution
 title: Metadata resolution — tasks
-status: Accepted
+status: Implemented
 created: 2026-08-27
 updated: 2026-08-27
+implemented: 2026-08-27
 accepted: 2026-08-27
 plan_status_required: Accepted
-plan_status_actual: Accepted
+plan_status_actual: Accepted  # at the gate; both are Implemented since 2026-08-27
 ---
 
 # 004 — Tasks
@@ -621,7 +622,7 @@ it.
 
 ## T16 — The acceptance map, and Implemented
 
-- [ ] **Changes:** `FEATURE_004` in `tests/conformance/test_acceptance.py`, mapping **all
+- [x] **Changes:** `FEATURE_004` in `tests/conformance/test_acceptance.py`, mapping **all
   sixteen** criteria of [spec §5](spec.md#5-acceptance-criteria) to named tests;
   `specs/README.md`'s table; `spec.md`, `plan.md` and this file to `Implemented` with dates;
   AGENTS.md's where-the-project-is paragraph.
@@ -631,35 +632,59 @@ it.
   local gate (`ruff check`, `ruff format --check`, `mypy`, `pytest`) green; the definition of
   done below closed line by line.
 - **Plan reference:** §8; 003 T21 is the precedent
+- **Done (2026-08-27):** the map names sixteen criteria and **nine of them twice** — once where
+  the rule is proved and once where it is proved to be the rule a scan uses. That is not
+  belt-and-braces: 004's own task list says so out loud for AC-1, whose engine-level zero was
+  vacuous until a provider existed that could have answered.
+  The definition of done is closed line by line above. Two things in it were not true when the
+  list was written and are recorded rather than quietly satisfied: the feature needed **two more
+  schema revisions** after T4, and the golden for `/Localization/Cultures` is parse-identical to
+  the reference's rather than byte-identical — a divergence argued in
+  [behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx)
+  rather than hidden by a comparison that would not have seen it.
 
 ---
 
 ## Definition of done
 
-The feature is done when **all** of these hold:
+Closed line by line at T16, on 2026-08-27.
 
-- [ ] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all sixteen —
-      has a passing test, by name, in `FEATURE_004` (T16).
-- [ ] `GET /Localization/Cultures` reaches **L2** with a reviewed golden, and no route exists
-      outside `docs/compatibility/surface.yaml` (T15; the file already lists it, so the change is
-      the registration, not the surface).
-- [ ] The lock matrix holds twice: at engine level (T6) and end-to-end through `Replace` (T14).
-- [ ] **No file inside any library root is created, modified or deleted** — the AC-15 tree hash,
-      green with the remote code present and downloading (T10, re-held at T14).
-- [ ] No test in the suite reaches the network (AC-16 — the standing guard in
-      `tests/conftest.py`, which the counting transport complements rather than replaces).
-- [ ] The three new runtime dependencies — mutagen, Pillow, httpx — are in `pyproject.toml` with
-      plan §3's reasoning, each arriving in the task that first needs it, `uv.lock` moving in the
-      same change.
-- [ ] Anything learned during implementation is back in `spec.md` or `plan.md` **in the same
-      change**, with `amended:` lines naming the task and the section.
-- [ ] Any newly measured reference behaviour is in `docs/compatibility/behaviours.md` with
-      provenance.
-- [ ] Every open question in [`spec.md` §7](spec.md#7-open-questions) is either resolved with
-      provenance or still open with a written reason — OQ-5 at T1; OQ-1, OQ-2 and OQ-4 stay open
-      naming the differential harness or the fixture comparison that resolves them; and 003's
-      OQ-8 is updated at T7 with what this feature made measurable.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all sixteen —
+      has a passing test, by name, in `FEATURE_004` (T16). **Nine are named twice**, once at
+      engine level and once end to end, because a correct rule and a rule the caller actually
+      uses are two claims.
+- [x] `GET /Localization/Cultures` reaches **L2** with a reviewed golden, and no route exists
+      outside `docs/compatibility/surface.yaml` (T15). The golden is the whole 192-row list, and
+      it is parse-identical to the live reference's — the sixteen bytes it differs by are
+      [behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx).
+- [x] The lock matrix holds twice: at engine level (T6) and end-to-end through `Replace` (T14),
+      the second time against a provider that would have overwritten the field.
+- [x] **No file inside any library root is created, modified or deleted** — the AC-15 tree hash,
+      green with the remote code present and downloading (T10, re-held at T14), and **checked by
+      breaking it**: a byte written into a library root fails the suite.
+- [x] No test in the suite reaches the network (AC-16). The standing guard is complemented by an
+      import-direction test that no module under `metadata/` may construct an HTTP client except
+      `remote.py`, which is what makes it a property rather than a discipline.
+- [x] The three new runtime dependencies — mutagen (T7), Pillow (T8), httpx (T11) — are in
+      `pyproject.toml` with plan §3's reasoning inline, each arriving in the task that first
+      needs it, `uv.lock` moving in the same change.
+- [x] Anything learned is back in `spec.md` or `plan.md` in the same change. The `amended:` lines
+      name **eleven** tasks between them.
+- [x] Newly measured reference behaviour is in
+      [`behaviours.md`](../../docs/compatibility/behaviours.md) with provenance: §4.4 (non-ASCII
+      escaping), §5.4 (no loudness scan) and a second consequence added to §5.3 (a performer who
+      is nobody's album artist has a name and no artist item).
+- [x] Every open question in [`spec.md` §7](spec.md#7-open-questions) is resolved with provenance
+      or open with a written reason — OQ-5 resolved at T1, OQ-4 given partial evidence and left
+      open on 010, OQ-1 and OQ-2 unchanged and still 010's, and 003's OQ-8 updated at T7 with
+      which half moved.
+- [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+
+**Two schema revisions were added after T4 wrote the schema**, which is worth recording because
+neither was foreseeable from the plan: 0004 made `item_artists.artist_item_id` nullable (T9 —
+a track's performers are frequently not anybody's album artist), and 0005 added `items.tags` and
+`items.forced_sort_name` (T10 — a column the write path stores and never reads back is rewritten
+on every refresh, for ever).
 
 ## What this feature owes the next ones
 

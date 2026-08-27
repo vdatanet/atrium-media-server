@@ -1,12 +1,13 @@
 ---
 feature: 004-metadata-resolution
 title: Metadata resolution — implementation plan
-status: Accepted
+status: Implemented
 created: 2026-08-27
 updated: 2026-08-27
+implemented: 2026-08-27
 amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7; by T10 - sections 4, 6.1 and 6.8; by T14 - section 6.8; by T15 - section 6.9
 spec_status_required: Accepted
-spec_status_actual: Accepted
+spec_status_actual: Accepted  # at the gate; both are Implemented since 2026-08-27
 accepted: 2026-08-27
 ---
 

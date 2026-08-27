@@ -115,7 +115,7 @@ say how it will be proven is not finished.
 | [001](001-server-identity-and-discovery/) | Server identity and discovery | **Implemented** | **Implemented** | **Implemented** |
 | [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | **Implemented** | **Implemented** | **Implemented** |
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Implemented** | **Implemented** | **Implemented** |
-| [004](004-metadata-resolution/) | Metadata resolution | **Accepted** | **Accepted** | **Accepted** |
+| [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
 | [005](005-item-query-api/) | Item query API | **Accepted** | **Accepted** | — |
 | [006](006-images/) | Images | Draft | — | — |
 | [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
@@ -123,16 +123,22 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001, 002 and 003 are implemented. 004 has passed all three gates** — spec, plan and task list
-accepted on 2026-08-27 — **so the next thing is code: 004 T1**, the client survey that resolves
-OQ-5 before the schema freezes. 005 has an accepted spec and plan; its task list follows once 004
-is under way. The other five specs remain drafts, and their open questions are the standing
+**001, 002, 003 and 004 are implemented.** 005 has an accepted spec and plan; its task list is
+**the next thing**. The other five specs remain drafts, and their open questions are the standing
 review agenda.
 
-**004's task-list gate changed three things**, all of the class 003's gate taught — promises
-with no task holding them: AC-1 was only proven in a world with no remote code, the plan's
-opt-in live test had no task, and a new tool had no row in `tools/README.md`. Recorded in
-[004's tasks](004-metadata-resolution/tasks.md#what-the-gate-changed).
+**004's sixteen tasks contradicted eleven things the accepted documents asserted**, which is the
+highest rate any feature has managed and the reason its ordering put measurement first. The three
+that changed the most code: the reference **splits a genre on a slash** where plan §6.2 said it
+does not and cited the parser that does; the **path-derived name is merged last, not third**,
+without which AC-1 — "a film with a full `.nfo` resolves entirely from it" — is unreachable; and
+the culture table is **not** the ISO 639-2 registry plan §6.9 named but a 192-row list only the
+reference has. Each Done note in [004's tasks](004-metadata-resolution/tasks.md) records one.
+
+**Its task-list gate had already changed three things** of the class 003's gate taught — promises
+with no task holding them: AC-1 was only proven in a world with no remote code, the plan's opt-in
+live test had no task, and a new tool had no row in `tools/README.md`. All three were delivered,
+and the first turned out to be the most valuable thing on the list.
 
 **002 measured more than it implemented.** Its eighteen tasks contradicted four things the accepted
 specification asserted — a fifth authentication mechanism the surface had never listed, a disabled

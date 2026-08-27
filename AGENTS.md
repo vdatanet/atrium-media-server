@@ -12,16 +12,15 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001, 002 and 003 are implemented. 004 has passed all three gates** — spec, plan and
-[task list](specs/004-metadata-resolution/tasks.md) accepted — **so the next thing is code:
-004 T1**, the client survey. 005 has an accepted spec and plan; its task list follows once 004
-is under way. The other five features are specified only, their specs still drafts.
+**Features 001, 002, 003 and 004 are implemented.** 005 has an accepted spec and plan, so **the
+next thing is 005's task list**. The other five features are specified only, their specs still
+drafts.
 
-**004 inherits three things 003 wrote down for it**, and they are in
-[003's tasks](specs/003-library-configuration-and-scanning/tasks.md#what-this-feature-owes-the-next-ones)
-rather than here so they cannot go stale: the `MetadataSource` seam it has to fit, the fact that the
-seam is **not consulted for a file whose `(size, mtime_ns)` has not moved**, and the consequence —
-an identifier derived from a tag would make that skip unsound.
+**004 owes 005 four things**, written down in
+[004's tasks](specs/004-metadata-resolution/tasks.md#what-this-feature-owes-the-next-ones) rather
+than here so they cannot go stale: `name_folded` on every item it touched, the pattern-driven
+indexes, `ImageTags` emittable from `item_images` alone, and the artist **credit** distinction —
+`/Artists` versus `/Artists/AlbumArtists` is that column and nothing else.
 
 **The state is in the files, not here**, so it cannot go stale:
 
@@ -86,6 +85,9 @@ reasoning:
 | 003 T20 | Report two things with their reasons | They cannot be one list. One file produced no item and the other produced one. And plan §7 named a failure that does not happen: a `chmod 000` file stats fine, so nothing in 003 ever notices it |
 | 003 T21 | Write the acceptance map | A specification row nobody had implemented and no criterion covered — "directory emptied → remove the container item" — which had been there since the spec was written |
 | 004–005 gate | Accept two specs, write two plans | The **accepted** 005 spec's error path for enum values does not exist — an unrecognised token is ignored, not `400` — and the reference's own artist-sort paging drops and duplicates rows, which turned "ordering is total" from assumed parity into a documented divergence |
+| 004 T5 | Parse a sidecar | Plan §6.2 said the reference does **not** split a genre on ` / ` and cited the parser that does. Not splitting would have given Atrium a genre no reference server has — on a file both of them read, which is the exact disagreement the sentence was written to prevent |
+| 004 T10 | Wire the pieces together | The scan and the refresh were **fighting over one column**: every rescan re-derived a name from the filename, every refresh restored the sidecar's, for ever, with every item reported as updated. And the path-derived name turned out to be merged **last**, not third — without which AC-1 is unreachable |
+| 004 T15 | Generate a culture table | Plan §6.9's source was wrong three ways. The registry it named has 508 rows to the reference's 192, lists 24 languages' codes in the opposite order, and **cannot produce eight rows the reference has at all** |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
 question each, and a plain `urllib` request answers the rest.
