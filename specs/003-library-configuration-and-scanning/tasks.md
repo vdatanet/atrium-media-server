@@ -5,6 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-27
 accepted: 2026-08-27
+started: 2026-08-27
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -47,9 +48,9 @@ which step is not in it.
 
 ---
 
-## T1 — The two probes: measure before implementing
+## T1 — The two probes: measure before implementing  ✅
 
-- [ ] **Changes:** `tools/probe_library_extensions.py` (OQ-1 — which extensions the reference
+- [x] **Changes:** `tools/probe_library_extensions.py` (OQ-1 — which extensions the reference
   honours) and `tools/probe_music_precedence.py` (OQ-5 — what it does when embedded tags contradict
   the path). Both on the [`tools/_probe.py`](../../tools/_probe.py) skeleton; both listed in
   [`tools/README.md`](../../tools/README.md#probes); both exit non-zero when the finding contradicts
@@ -72,6 +73,54 @@ which step is not in it.
   quietly closing a question nobody answered. The rest of the list is not blocked by it.
 - **Plan reference:** [spec §3.2](spec.md#32-what-is-considered-a-media-file),
   [spec §3.5](spec.md#35-music), [tools/README.md](../../tools/README.md#probes)
+
+### Done — 2026-08-27
+
+**The obstacle this task was hedged against did not exist.** Both notes above say the probes need
+files placed under a library root on the reference — "a heavier ask than credentials" — and set out
+what to do when that could not be arranged. Neither probe writes anything. `/Environment/…` exposes
+a **read-only view of the server's filesystem**, which is the half the task thought was missing:
+census what the server admitted from its item list, census what is on disk through that view, and
+the difference is what it walked past. OQ-5 needed even less — the library it already has contains
+5,814 tracks, and 413 of them disagree with their own directory.
+
+The lesson is not that the guess was pessimistic. It is that **the task predicted a blocker instead
+of spending ten minutes finding out**, and the ten minutes would have produced a better plan for
+both probes, not just a cheaper one.
+
+**The real blocker was the harness, and it looked exactly like a server fault.** The probe died on
+`CERTIFICATE_VERIFY_FAILED` against a server `curl` reached fine. The reference is healthy and its
+certificate is publicly valid; the Python that runs the probes ships **no CA bundle at all** —
+`ssl.create_default_context().get_ca_certs()` returns zero. `/etc/ssl/cert.pem` is not a fix
+either: it lacks roots the keychain supplies to `curl`. Recorded in
+[tools/README.md](../../tools/README.md), because the next person will read that error as "the
+server is down".
+
+**`Server.get()` cannot send a query parameter named `path`** — Python binds it to the positional
+argument and raises. `/Environment/DirectoryContents`, the only read-only filesystem view there is,
+takes exactly `path`. `_probe.py` gains `get_where(path, params)` and a comment naming the other
+five names with the same problem.
+
+**Censusing extensions from item paths naively produces nonsense**, and it is the kind of nonsense
+that looks like data. Container items — `Series`, `Season`, `MusicAlbum`, `MusicArtist`, `BoxSet` —
+carry a **directory** path, and directory names are full of full stops, so a census over all types
+returned 25 confident rows including `.1-castellano+subs]`, `. rex` and `. bean`. Leaf types only,
+and the constant says why so nobody widens it back.
+
+**The finding neither document had:** under `movies` and `tvshows` roots, 89 `.mp3` and 3 `.mka`
+files produced **no item of any type** — not a film, not an episode, and not a track either, on a
+server that admits three audio extensions under its music root. The extension lists do not fall
+back to one another. A scanner that admitted every audio extension everywhere would invent items
+the reference does not have, which is a delta in the direction nothing tests for.
+[behaviours §2.15](../../docs/compatibility/behaviours.md#215-an-audio-file-under-a-video-root-is-not-an-item),
+[spec §3.2](spec.md#32-what-is-considered-a-media-file), [spec §3.5](spec.md#35-music), and OQ-1
+and OQ-5 are in the resolved table of [spec §7](spec.md#7-open-questions).
+
+**What is measured and what is not** is stated in both probes and in the spec, because the honest
+version of this finding is narrower than the useful-sounding one: these are the extensions *one
+real library contained*. An extension nobody has a file of was not measured. The same applies to
+OQ-5 — every album on that server lives in one directory, so a genuinely flat, well-tagged
+structure remains unproven and [spec §3.5](spec.md#35-music) says so.
 
 ## T2 — The fixture library generator
 
@@ -157,8 +206,9 @@ which step is not in it.
 
 - [ ] **Changes:** traversal, extension filtering, the ignore rules, and detection of files still
   being written.
-- **Depends on:** T7, and **T1 for the extension list** — or T1 marked `[!]` and the conservative
-  union used knowingly.
+- **Depends on:** T7, T1 — the extension lists are measured and in
+  [spec §3.2](spec.md#32-what-is-considered-a-media-file); the conservative union stands only for
+  extensions that measurement did not reach.
 - **Verified by:** hidden files, `.ignore` directories, zero-byte files and trailer/sample suffixes
   are all skipped; a file whose size changes between two passes is skipped **this** scan and picked
   up the next.
@@ -221,8 +271,9 @@ which step is not in it.
 
 - [ ] **Changes:** path-based structure; the `MetadataSource` protocol 004 will implement, with a
   path-only implementation for now. Removes the `xfail` markers from the `music` rows.
-- **Depends on:** T10, and **T1 for the precedence rule** — or T1 marked `[!]` and
-  [spec §3.5](spec.md#35-music)'s stated precedence used knowingly.
+- **Depends on:** T10, T1 — the precedence is measured, in
+  [spec §3.5](spec.md#35-music). Note what it does **not** cover: a flat directory of well-tagged
+  files, which the measured library had none of.
 - **Verified by:** the `music` corpus rows pass, including a two-disc album as one album and **a
   compilation with a different artist per track as one album**; the seam is exercised by a stub
   returning tags, proving 004 can override the path without 003 changing.
@@ -352,8 +403,9 @@ which step is not in it.
 - [ ] Any newly measured reference behaviour is in `docs/compatibility/behaviours.md` with
       provenance.
 - [ ] **Every open question in [`spec.md` §7](spec.md#7-open-questions) is either resolved with
-      provenance or still open with a written reason** — OQ-1 and OQ-5 at T1, OQ-2 at T7, OQ-4 at
-      T11, and OQ-6 once the override formulas are read against a larger library. A question that is
+      provenance or still open with a written reason** — **OQ-1 and OQ-5 resolved at T1**, OQ-2 at
+      T7, OQ-4 at T11, and OQ-6 once the override formulas are read against a larger library. A
+      question that is
       closed without an answer is the failure this line exists to prevent.
 - [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
 

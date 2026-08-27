@@ -3,7 +3,7 @@ feature: 003-library-configuration-and-scanning
 title: Library configuration and scanning
 status: Accepted
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-08-27
 accepted: 2026-08-26
 depends_on: []
 ---
@@ -76,9 +76,30 @@ Ignored regardless of extension:
 | Zero-byte files | Incomplete copies |
 | Files being written, detected by size change between two passes | Downloads in progress |
 
-> ⚠️ **OQ-1.** The exact extension lists the reference honours. Getting these wrong is directly
-> observable — a library missing items a client's user knows are there. Until measured, v1 uses the
-> conservative union of what a prober can open.
+**The extensions a collection type admits**, measured against a library of 8,288 items:
+
+| Collection type | Admitted |
+|---|---|
+| `movies` | `.mkv` `.mp4` `.avi` `.ts` |
+| `tvshows` | `.mkv` `.avi` `.mp4` |
+| `music` | `.flac` `.m4a` `.dsf` |
+
+`[probe: tools/probe_library_extensions.py, Jellyfin 10.11.11, 2026-08-27]`
+
+This is a **measured lower bound, not the reference's configured list.** It is what one real
+library contained; an extension nobody has a file of was not measured, and its absence here is not
+evidence of refusal. v1 keeps the conservative union for anything outside the table, and the
+measurement is repeatable, so a library holding a new extension reports it rather than being
+guessed at.
+
+**The lists do not fall back to one another, and that is the observable part.** Under `movies` and
+`tvshows` roots the same measurement found 89 `.mp3` files and 3 `.mka` files, and **not one of
+them became an item of any type** — not a film, not an episode, and not a track either, though the
+same server admits three audio extensions under its `music` root. A file whose extension is not on
+its own collection type's list is ignored; it is never promoted to another type because some other
+list would take it. Theme music sitting beside a film is the ordinary case, and it is not an item.
+`[probe: tools/probe_library_extensions.py, Jellyfin 10.11.11, 2026-08-27]`,
+[behaviours §2.15](../../docs/compatibility/behaviours.md#215-an-audio-file-under-a-video-root-is-not-an-item)
 
 ### 3.3 Movies
 
@@ -143,13 +164,33 @@ directory layout is the fallback. This is not a preference — a well-tagged lib
 directory structure must produce the right albums, and a compilation must not become one album per
 track.
 
+**Measured**, across 5,814 tracks: 413 of them (7.1%) carry an album name bearing no resemblance to
+the directory holding the file, which is a name that cannot have come from the path. A further 129
+resolved names keep **leading or trailing whitespace** — `Through the Barricades ` under a
+directory called `Spandau_Ballet-Through_the_Barricades` — and a path cannot produce those,
+because the name derived from a path is trimmed and a directory cannot end in a space. The tag is
+copied verbatim, artefacts and all.
+`[probe: tools/probe_music_precedence.py, Jellyfin 10.11.11, 2026-08-27]`
+
+**What that measurement does not cover:** every album on the measured library lived in exactly one
+directory, so the strongest form of the rule — a *flat* directory of well-tagged files resolving
+into the right albums — is not proven, only its precedence is. A directory name merely decorated
+with a year is counted separately and is not evidence of tag precedence: stripping a year from a
+directory is path cleaning, and folding the two together would roughly double the number while
+proving something weaker.
+
 Reading those tags is feature 004. This feature produces the structure and *asks* 004 for the
 identity; the ordering of that conversation is a plan concern.
 
 **Album artist versus track artist** is the distinction that makes compilations work: an album's
 identity comes from its album artist, so a compilation with a different artist on every track is
-one album, not many. Where no album artist is present, the album is attributed to `Various
-Artists` only if the track artists actually differ.
+one album, not many. Measured: of 468 albums, 59 hold tracks by more than one artist and 33 of
+those carry a single album artist throughout — each resolving to **one** album. The largest holds
+60 tracks by 40 distinct artists under one album artist.
+`[probe: tools/probe_music_precedence.py, Jellyfin 10.11.11, 2026-08-27]`
+
+Where no album artist is present, the album is attributed to `Various Artists` only if the track
+artists actually differ.
 
 ### 3.6 Identity
 
@@ -336,10 +377,8 @@ media generated at build time. No copyrighted media, ever.
 
 | # | Question | Blocks | Resolved by |
 |---|---|---|---|
-| OQ-1 | The exact extension lists the reference honours | Nothing; conservative union until then | `tools/probe_library_extensions.py` |
 | OQ-2 | Case sensitivity of path normalisation for identity | The identity rule of §3.6; permanent per library | A decision plus a recorded per-library setting |
 | OQ-4 | Does the reference merge a folder-per-film layout when the folder and file names disagree? | An edge in §3.3 | Fixture comparison via the differential harness |
-| OQ-5 | What the reference does with a file whose embedded tags contradict its path | §3.5 precedence | `tools/probe_music_precedence.py` |
 | OQ-6 | Whether the §3.7.2 formulas hold for items carrying an explicit sort title, and how many real items do | §3.7.3 | The override rows of `tools/probe_sort_names.py`, read against a larger library |
 
 ### Resolved
@@ -347,6 +386,8 @@ media generated at build time. No copyrighted media, ever.
 | # | Question | Answer | Resolved by |
 |---|---|---|---|
 | OQ-3 | The reference's sort-name normalisation | **Six ordered steps, three configurable lists, pad width 10 — and three item types that bypass all of it.** §3.7 now states both rules; 15 of 15 crafted cases matched | `tools/probe_sort_names.py`, 2026-08-26 |
+| OQ-1 | The exact extension lists the reference honours | **Measured, and the lists do not fall back to one another**: `movies` `.mkv` `.mp4` `.avi` `.ts`; `tvshows` `.mkv` `.avi` `.mp4`; `music` `.flac` `.m4a` `.dsf`. 89 `.mp3` and 3 `.mka` files under video roots produced **no item of any type**. A lower bound, not the configured list — §3.2 says which part is measured and which is not | `tools/probe_library_extensions.py`, 2026-08-27 |
+| OQ-5 | What the reference does with a file whose embedded tags contradict its path | **The tag wins, verbatim.** 413 of 5,814 tracks carry an album name with no resemblance to their directory, and 129 keep whitespace a path cannot produce. 33 compilations resolve to one album each. Not covered: a genuinely flat directory, which the measured library had none of | `tools/probe_music_precedence.py`, 2026-08-27 |
 
 ## 8. References
 
