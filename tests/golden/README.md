@@ -11,6 +11,15 @@ The levels this serves are defined in
 | `System.Info.Public.json` | `GET /System/Info/Public` — unauthenticated |
 | `System.Info.json` | `GET /System/Info` — authenticated |
 | `System.Ping.json` | `GET /System/Ping` and `POST /System/Ping`, which answer identically |
+| `System.Info.Public.CamelCase.json` | The same response under `profile="CamelCase"` |
+| `Users.AuthenticateByName.json` | `POST /Users/AuthenticateByName` |
+| `Users.Public.json` | `GET /Users/Public` — unauthenticated, and it carries `Configuration` and `Policy` |
+| `Users.Me.json` | `GET /Users/Me` |
+| `Users.Me.CamelCase.json` | The same, under `profile="CamelCase"` — the profile reaches **inside** `Policy` and `Configuration` |
+| `Users.ById.json` | `GET /Users/{userId}` |
+| `Users.Configuration.json` | `POST /Users/Configuration` — **empty**, because a `204` has no body |
+| `Sessions.json` | `GET /Sessions` |
+| `Sessions.Capabilities.Full.json` | `POST /Sessions/Capabilities/Full` — **empty**, for the same reason |
 
 ## Reading one
 
@@ -21,11 +30,26 @@ byte-unequal against every response the server produces.
 
 There is no trailing newline. The file is the body, and the body does not end in one.
 
-## `{data-dir}`
+## An empty file
 
-One value is substituted before comparison: the instance's data directory, which is a temporary
-directory and different on every run. Everything else that could vary between two machines is
-**pinned at its source** by the fixture — the server identity comes from a `state.json` written
+`Users.Configuration.json` and `Sessions.Capabilities.Full.json` are zero bytes, and that is the
+statement: those routes answer `204` and a body there would be a difference a client can see.
+
+## The placeholders
+
+One value is substituted in the 001 responses: the instance's data directory, which is a temporary
+directory and different on every run. Feature 002 adds three, and only where a value is unstable by
+construction rather than merely inconvenient — `{access-token}` and `{session-id}` are random and
+would be useless if they were not, and `{date}` appears in the two responses that report a
+timestamp as it happens. Four of 002's eight goldens have **no placeholder at all**: the dates are
+written before the response is read, so they are pinned like everything else.
+
+**What a placeholder gives up, an assertion takes back.** A substituted value cannot fail a
+comparison, so each is format-checked before it is replaced — 32 lowercase hex for a token or a
+session, seven fractional digits and a `Z` for a date. Otherwise `AccessToken` could become an
+integer and the golden would still pass.
+
+Everything else that could vary between two machines is **pinned at its source** by the fixture — the server identity comes from a `state.json` written
 before the server starts, `LocalAddress` is derived from the request, and the host architecture is
 fixed — so that the golden records real values in real positions rather than a row of placeholders.
 The reasoning for each is in [`test_golden.py`](../conformance/test_golden.py).

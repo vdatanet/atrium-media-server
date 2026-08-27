@@ -799,9 +799,9 @@ comparison logic alone would have proven arithmetic rather than the guard.
 so the directory reads in the order it applies, and they run without a gap. Both are things the
 plan shows by example in `0001_users_and_sessions` and neither was checked.
 
-## T17 — Surface and golden responses
+## T17 — Surface and golden responses  ✅
 
-- [ ] **Changes:** golden files for all seven 002 endpoints; `tests/conformance/test_routes.py`
+- [x] **Changes:** golden files for all seven 002 endpoints; `tests/conformance/test_routes.py`
   extended to cover them — `IMPLEMENTED_FEATURES` gains `"002"`, and the check that names 001's
   four endpoints one by one gains the sibling that names these seven.
 - **Depends on:** T11, T12
@@ -811,6 +811,37 @@ plan shows by example in `0001_users_and_sessions` and neither was checked.
   registered before 002 is implemented is in the surface file already, so nothing else would catch
   it. Changing that line is what declares this feature served.
 - **Plan reference:** conformance L0/L1
+
+### Done — 2026-08-26
+
+**Four of the eight goldens have no placeholder at all**, which took deciding rather than
+substituting. The harness's rule is that a placeholder exists because a value is unstable, never
+because it is inconvenient — so the server identity comes from a `state.json` written before the
+server starts, the user is created with a fixed identifier and a fixed configuration, and **the
+dates are written after logging in and before reading**. What is left is genuinely unstable: a
+token and a session identifier that are random by construction and would be useless if they were
+not, and the timestamps in the two responses that report them as they happen.
+
+**What a placeholder gives up, an assertion takes back.** A substituted value cannot fail a
+comparison, so every one is format-checked *before* it is replaced — 32 lowercase hex for a token
+or a session, seven fractional digits and a `Z` for a date. Otherwise `AccessToken` could quietly
+become an integer and the golden would still pass.
+
+**Two goldens are empty files, and that is the statement.** `POST /Users/Configuration` and
+`POST /Sessions/Capabilities/Full` answer `204`, and a body there would be a difference a client
+can see. Zero bytes on disk says so more precisely than a test asserting `content == b""` beside a
+golden that does not exist.
+
+**`Users.Me.CamelCase.json` is the one that would have caught T11's bug.** It shows
+`policy.isAdministrator` and `configuration.audioLanguagePreference` — the profile reaching *inside*
+two fields that are mappings here and objects on the reference. Without the `PropertyKeyed` marker
+those 58 properties would have been PascalCase, and no test that reads a parsed document would have
+noticed.
+
+**`IMPLEMENTED_FEATURES` gains `"002"` and `LANDED_ROUTES` is gone.** That list existed for exactly
+two changes, because 002 landed its routes across T11 and T12 and "the feature is implemented" was
+not a state the check could use in between. Removing it is what finishing a feature looks like here.
+The seven endpoints are now named one by one, beside 001's four, so a silent removal is not silent.
 
 ## T18 — The acceptance map for 002
 
