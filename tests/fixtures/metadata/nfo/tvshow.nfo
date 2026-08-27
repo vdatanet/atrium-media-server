@@ -1,0 +1,11 @@
+<!-- atrium synthetic fixture - not anybody's metadata -->
+<tvshow>
+  <title>The Fixture Series</title>
+  <plot>A series-level sidecar.</plot>
+  <premiered>2010-09-01</premiered>
+  <genre>Drama</genre>
+  <studio>Fixture Television</studio>
+  <mpaa>TV-14</mpaa>
+  <rating>8.1</rating>
+  <uniqueid type="tmdb" default="true">55555</uniqueid>
+</tvshow>

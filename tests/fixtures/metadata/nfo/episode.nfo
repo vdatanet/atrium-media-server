@@ -1,0 +1,14 @@
+<!-- atrium synthetic fixture - not anybody's metadata -->
+<episodedetails>
+  <title>The Pilot</title>
+  <plot>An episode-level sidecar.</plot>
+  <aired>2010-09-01</aired>
+  <runtime>44</runtime>
+  <rating>7.9</rating>
+  <actor>
+    <name>First Billed</name>
+    <role>The Lead</role>
+  </actor>
+  <director>A Director</director>
+  <uniqueid type="tmdb" default="true">66666</uniqueid>
+</episodedetails>

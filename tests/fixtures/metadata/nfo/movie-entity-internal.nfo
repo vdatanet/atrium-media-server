@@ -1,0 +1,8 @@
+<!-- atrium synthetic fixture - not anybody's metadata -->
+<!DOCTYPE movie [
+  <!ENTITY harmless "a string defined in a doctype">
+]>
+<movie>
+  <title>&harmless;</title>
+  <year>2005</year>
+</movie>
