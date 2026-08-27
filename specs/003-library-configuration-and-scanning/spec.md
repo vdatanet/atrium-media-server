@@ -1,10 +1,12 @@
 ---
 feature: 003-library-configuration-and-scanning
 title: Library configuration and scanning
-status: Accepted
+status: Implemented
 created: 2026-08-26
 updated: 2026-08-27
 accepted: 2026-08-26
+amended: 2026-08-27 by T1 - sections 3.2, 3.5 and the open questions; by T4 - section 3.7; by T5 - section 3.6; by T7 - sections 3.1 and 3.6 and OQ-2; by T11 - section 3.3 and OQ-4; by T12 - section 3.4; by T18 - section 3.8; by T19 - section 3.6 and OQ-2's limit; by T20 - sections 3.8 and 7
+implemented: 2026-08-27
 depends_on: []
 ---
 
@@ -279,11 +281,13 @@ from the file's absolute path alone, containers included
 to inherit it.
 
 **Case sensitivity is a property of a library, not of the server, and it is fixed when the library
-is created.** Paths are compared without regard to case by default — believed to be what the
-reference defaults to, and **that half is unmeasured**: the reference measured for identity has the
-setting switched on, so it reproduces its identifiers from the path verbatim and can say nothing
-about the default `⚠️ UNVERIFIED`. What is measured is that the setting exists and that it decides
-the key. An operator who needs two files differing only in case to be two items says so when the
+is created.** Paths are compared without regard to case by default. That is Atrium's decision, and
+it is stated as one: **what the reference defaults to is not something this repository has
+measured**, and OQ-9 records it as the open question it is rather than as a claim wearing a hedge.
+What *is* measured is that the reference has such a setting and that it decides the key — the
+server measured for identity has it switched on, and reproduces its identifiers from the path
+verbatim `[probe: tools/probe_item_identity.py, Jellyfin 10.11.11, 2026-08-27]`.
+An operator who needs two files differing only in case to be two items says so when the
 library is declared. The setting is recorded with that library and **an attempt to change it
 afterwards is refused, not accepted with a warning** — changing it rewrites every identifier under
 it, and nothing stores the old ones to undo with. Making it a server-wide switch would mean one
@@ -402,7 +406,7 @@ the same items, the same identifiers and the same ordering.
 | File modified (size or time of change) | Re-inspect and update, **preserving identity and user data** |
 | File deleted | Remove the item, **preserving user data** in case it returns |
 | File renamed | Treated as delete plus add — identity is path-derived, so it changes |
-| Directory emptied | Remove the container item |
+| Directory emptied | Remove every item that was in it. **The container itself stays**, and stops being returned because nothing is under it — see below |
 
 **User data outlives items.** A file that disappears and comes back — a re-download, a remount, a
 temporarily unavailable network share — must not cost the user their favourites and resume
@@ -411,6 +415,16 @@ position. This is why user data is keyed by identity and retained after the item
 **An unavailable root is not an empty root.** If a library root cannot be read at all, the scan for
 that library fails loudly and changes nothing. Treating an unmounted share as "every item was
 deleted" is the single most destructive thing a scanner can do.
+
+**A container that has lost every one of its files keeps its own record**, and this is a change from
+what this section first said. A series whose episodes are all deleted still has a series; what it
+does not have is anything to show. Removing the container instead would mean deciding, at scan
+time, that a directory somebody emptied this afternoon is gone for good — the same judgement the
+paragraph above refuses to make about a root, made one level down and with no guard watching it.
+So the record stays and **a container with nothing visible under it is not offered to a client**,
+which is the observable half and which the query behaviour owns rather than the scan. Recorded as a
+bounded gap in [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) until
+that query behaviour exists.
 
 **A scan is a guess about what is worth looking at.** Deciding a file has not changed is cheap
 and occasionally wrong: a file can be replaced by one of the same length whose recorded time of
@@ -475,6 +489,16 @@ media generated at build time. No copyrighted media, ever.
 | OQ-6 | Whether the §3.7.2 formulas hold for items carrying an explicit sort title, and how many real items do | §3.7.3 | The override rows of `tools/probe_sort_names.py`, read against a larger library |
 | OQ-7 | What the reference does with a character that has no ASCII decomposition — `ø`, `ß`, a non-Latin script | The ordering of those names, and nothing else | Crafted names in `tools/probe_sort_names.py`; the measured set contains none |
 | OQ-8 | Whether a track number, disc number and title should be read from a file's name at all, given the reference reads none of the three from there (§3.5) | Only untagged music: for a tagged file both answer from the tag | How much real music carries no readable tag, which nothing can measure until 004 reads them |
+| OQ-9 | What the reference **defaults** `EnableCaseSensitiveItemIds` to | Nothing. §3.6 states Atrium's own default and does not claim to match one | `tools/probe_item_identity.py` against a server that has not changed the setting; the one measured has it **set** |
+
+**Both are open on purpose, and neither blocks this feature.** Each needs a *measurement this
+repository cannot take today*, not a decision somebody has been avoiding. OQ-6 needs a library
+containing items with explicit sort titles, and the one measured has almost none; OQ-7 needs names
+carrying characters the measured set does not contain. Both change the **ordering** of names that
+are already scanned, found and playable — so a wrong answer is a list in a slightly wrong order,
+not a missing item or a lost identifier. Closing either by guessing would replace "unmeasured" with
+"asserted", which is the failure the provenance rule exists to prevent. Whoever next points a probe
+at a larger library answers them.
 
 ### Resolved
 
@@ -482,7 +506,7 @@ media generated at build time. No copyrighted media, ever.
 |---|---|---|---|
 | OQ-3 | The reference's sort-name normalisation | **Six ordered steps, three configurable lists, pad width 10 — and three item types that bypass all of it.** §3.7 now states both rules; 15 of 15 crafted cases matched | `tools/probe_sort_names.py`, 2026-08-26 |
 | OQ-1 | The exact extension lists the reference honours | **Measured, and the lists do not fall back to one another**: `movies` `.mkv` `.mp4` `.avi` `.ts`; `tvshows` `.mkv` `.avi` `.mp4`; `music` `.flac` `.m4a` `.dsf`. 89 `.mp3` and 3 `.mka` files under video roots produced **no item of any type**. A lower bound, not the configured list — §3.2 says which part is measured and which is not | `tools/probe_library_extensions.py`, 2026-08-27 |
-| OQ-2 | Case sensitivity of path normalisation for identity | **A per-library fact, not a server decision**, defaulting to case-insensitive — and **frozen once the library exists**, with the change refused rather than warned about. The reference's *default* is `⚠️ UNVERIFIED` as of T19: the measured server has the flag set, so it reproduces identifiers from the path verbatim and cannot answer it; `tools/probe_item_identity.py` run against a server with the flag unset would. §3.6 states it, and the same paragraph now records the two neighbouring traps: a library's identity is allocated rather than derived, so recreating a library is not editing one, and its collection type is frozen for the same reason | A decision plus a recorded per-library setting, 2026-08-27 |
+| OQ-2 | Case sensitivity of path normalisation for identity | **A per-library fact, not a server decision**, defaulting to case-insensitive — and **frozen once the library exists**, with the change refused rather than warned about. The question asked whether Atrium should treat case as a global decision or a per-library fact, and that is answered. What the *reference* defaults to was never part of it and is now OQ-9, measured by nothing. §3.6 states it, and the same paragraph now records the two neighbouring traps: a library's identity is allocated rather than derived, so recreating a library is not editing one, and its collection type is frozen for the same reason | A decision plus a recorded per-library setting, 2026-08-27 |
 | OQ-4 | Does the reference merge a folder-per-film layout when the folder and file names disagree? | **The interesting half of the question does not arise.** Across 1,480 one-film directories, a directory and a file naming two genuinely *different* works did not occur once; what occurs is the directory naming the same work more cleanly, and there the directory wins — 1,087 matches against the file's 457. §3.3 records the rule and the reason | Read against a live library, 2026-08-27 |
 | OQ-5 | What the reference does with a file whose embedded tags contradict its path | **The tag wins, verbatim.** 413 of 5,814 tracks carry an album name with no resemblance to their directory, and 129 keep whitespace a path cannot produce. 33 compilations resolve to one album each. Not covered: a genuinely flat directory, which the measured library had none of | `tools/probe_music_precedence.py`, 2026-08-27 |
 

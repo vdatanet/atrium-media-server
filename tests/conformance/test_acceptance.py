@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Every acceptance criterion of every implemented feature, mapped to the test that asserts it.
 
-The definition of done in `tasks.md` says *"every acceptance criterion has a passing test — all
-eleven, by name"*. That is a claim somebody has to check, and checking it by reading two documents
-side by side is a thing nobody does twice. This file is the map, and it fails three ways:
+Every feature's definition of done says some version of *"every acceptance criterion has a passing
+test, by name"* - eleven of them for 001, eleven for 002, thirteen for 003. That is a claim somebody
+has to check, and checking it by reading two documents side by side is a thing nobody does twice.
+This file is the map, and it fails three ways:
 
 * an acceptance criterion in the specification with no test named here — the box cannot be ticked;
 * a test named here that no longer exists — a rename or a deletion that silently orphaned a
@@ -13,10 +14,18 @@ side by side is a thing nobody does twice. This file is the map, and it fails th
 It asserts that the tests **exist**, not that they pass; the suite they are in does that. What it
 protects is the *mapping*, which is the part that rots quietly.
 
-**It was written for one feature and now carries two**, which was a change of shape rather than an
-added dictionary: one specification path and one map became a table of them, and every check below
-runs once per feature. 001's map is unchanged - the point of the restructure was that adding 003
-should be one entry rather than another copy of this file.
+**It was written for one feature and now carries three.** 002 T18 turned one specification path and
+one map into a table of them, betting that adding 003 would then be one entry and one dictionary
+rather than a third copy of this file. It was: nothing below changed shape for 003, and the diff
+that added it is a dictionary and a line in `FEATURES`. That is the whole of what the restructure
+was for, and it is recorded here because a restructure nobody checks the payoff of is a refactor
+that might have been a waste.
+
+**003's map is the widest**, and the reason is that 003 has no HTTP surface: its criteria are proven
+against fixtures at four different levels - the naming corpus, the resolver, a real scan into a real
+database, and the sort-name table - and several criteria are asserted at more than one. A criterion
+covered only by the corpus names `test_the_corpus`, which is the parametrised table that runs every
+row of it.
 
 It earned itself in 001 at T19: renaming a test made it fail and **name the criterion left
 unasserted**, which nobody would have noticed by reading.
@@ -150,11 +159,101 @@ FEATURE_002: dict[int, tuple[str, ...]] = {
     ),
 }
 
-#: Feature directory -> its map. Adding 003 is one entry here and one dictionary above, which is
-#: the whole reason this file changed shape rather than being copied.
+#: Feature 003. It has no endpoints, so nothing here is asserted at the HTTP boundary; the levels
+#: are the naming corpus (pure, no filesystem), the resolver (pure, fixture paths), a scan into a
+#: real database, and the migration. AC-4 to AC-9 are the naming half and each has corpus rows,
+#: which `test_the_corpus` runs - the corpus itself asserts that every one of those criteria is
+#: named in some row's reason, so the row and the map cannot drift apart silently.
+FEATURE_003: dict[int, tuple[str, ...]] = {
+    1: (
+        "tests.library.test_scan:test_a_library_scans_to_items",
+        "tests.library.test_walker:test_every_media_entry_is_a_candidate",
+        "tests.library.test_walker:test_nothing_declared_ignored_is_a_candidate",
+        "tests.library.test_resolver:test_every_item_hangs_from_something_that_is_there",
+        "tests.library.test_resolver:test_every_parent_is_the_type_the_hierarchy_says",
+        "tests.library.test_scan:test_the_rows_reach_the_database",
+    ),
+    2: (
+        "tests.library.test_scan:test_scanning_twice_changes_nothing",
+        "tests.library.test_resolver:test_resolving_twice_gives_the_same_items",
+        "tests.library.test_change_detection:test_a_second_scan_examines_nothing",
+    ),
+    3: (
+        "tests.library.test_scan:test_scanning_into_an_empty_database_gives_the_same_identifiers",
+        "tests.library.test_identity:test_the_whole_derivation_is_deterministic_across_processes",
+    ),
+    4: (
+        "tests.library.test_naming_corpus:test_the_corpus",
+        "tests.library.test_naming_movies:test_a_two_part_film_is_one_item_with_two_sources",
+        "tests.library.test_resolver:test_a_two_part_film_is_one_item_with_two_sources",
+        "tests.unit.test_domain_items:test_a_two_part_film_is_one_item_with_two_sources",
+        "tests.unit.test_migration_0002:test_one_film_holds_two_sources_in_order",
+    ),
+    5: (
+        "tests.library.test_naming_corpus:test_the_corpus",
+        "tests.library.test_naming_series:test_a_multi_episode_file_is_one_item_spanning_both_numbers",
+        "tests.library.test_resolver:test_a_multi_episode_file_is_one_episode",
+        "tests.unit.test_migration_0002:test_one_episode_spans_two_numbers",
+    ),
+    6: (
+        "tests.library.test_naming_corpus:test_the_corpus",
+        "tests.library.test_naming_series:test_specials_is_season_zero",
+        "tests.library.test_naming_series:test_an_episode_in_specials_is_in_season_zero",
+        "tests.library.test_resolver:test_specials_becomes_season_zero",
+        "tests.library.test_walker:test_specials_is_not_an_extras_folder",
+    ),
+    7: (
+        "tests.library.test_naming_corpus:test_the_corpus",
+        "tests.library.test_naming_series:test_a_series_named_with_digits_keeps_its_title",
+        "tests.library.test_naming_series:test_the_title_digits_are_not_read_as_numbers_in_the_dominant_convention",
+        "tests.library.test_resolver:test_a_series_named_with_digits_keeps_its_title",
+    ),
+    8: (
+        "tests.library.test_naming_corpus:test_the_corpus",
+        "tests.library.test_naming_music:test_two_discs_are_one_album_with_two_disc_numbers",
+        "tests.library.test_naming_music:test_the_two_discs_derive_one_album_identity",
+        "tests.library.test_resolver:test_a_two_disc_album_is_one_album",
+    ),
+    9: (
+        "tests.library.test_naming_corpus:test_the_corpus",
+        "tests.library.test_naming_music:test_a_compilation_is_one_album_however_many_artists_it_has",
+        "tests.library.test_resolver:test_a_compilation_is_one_album",
+    ),
+    10: (
+        "tests.library.test_root_move:test_moving_a_root_changes_no_identifier",
+        "tests.library.test_root_move:test_the_move_is_invisible_to_the_scan",
+        "tests.library.test_root_move:test_no_user_data_is_orphaned_by_the_move",
+        "tests.library.test_root_move:test_moving_one_root_of_two_changes_no_identifier",
+        "tests.library.test_identity:test_the_identifier_does_not_depend_on_where_the_library_is_mounted",
+    ),
+    11: (
+        "tests.library.test_removal:test_a_deleted_file_disappears_from_queries_and_its_user_data_survives",
+        "tests.library.test_removal:test_restoring_the_file_revives_the_item_with_the_same_identifier",
+        "tests.unit.test_migration_0002:test_the_same_path_scanned_again_finds_its_user_data",
+        "tests.unit.test_migration_0002:test_item_user_data_has_no_foreign_key_to_items",
+    ),
+    12: (
+        "tests.library.test_scan_guards:test_an_unreadable_root_removes_nothing",
+        "tests.library.test_scan_guards:test_a_root_that_is_not_there_removes_nothing",
+        "tests.library.test_scan_guards:test_a_root_that_is_a_file_removes_nothing",
+        "tests.library.test_scan_guards:test_without_guard_one_an_unreadable_root_looks_like_an_empty_one",
+    ),
+    13: (
+        "tests.unit.test_sorting:test_the_measured_cases",
+        "tests.unit.test_sorting:test_the_double_space_survives",
+        "tests.unit.test_sorting:test_the_trailing_space_survives",
+        "tests.library.test_scan:test_a_scanned_film_carries_the_base_sort_name",
+        "tests.library.test_scan:test_a_scanned_episode_and_season_carry_the_override_sort_names",
+        "tests.library.test_scan:test_a_scanned_track_keeps_its_raw_name_in_its_sort_name",
+    ),
+}
+
+#: Feature directory -> its map. Adding 003 was one entry here and one dictionary above, which is
+#: the whole reason this file changed shape at 002 T18 rather than being copied.
 FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "001-server-identity-and-discovery": FEATURE_001,
     "002-authentication-users-and-sessions": FEATURE_002,
+    "003-library-configuration-and-scanning": FEATURE_003,
 }
 
 

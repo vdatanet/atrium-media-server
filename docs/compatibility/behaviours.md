@@ -1046,6 +1046,7 @@ undocumented bug.
 | **Image decoration parameters ignored** ([006 §3.2](../../specs/006-images/spec.md)) | `percentPlayed`, `blur`, `foregroundLayer` have no effect | Implement if the differential shows a client sending them |
 | **No transcoding** ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)) | "Cannot play this" where the reference would transcode | Out of v1 by decision, not by accident. A v2 candidate |
 | **`Path`-derived identifiers differ from the reference's** ([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters)) | Nothing — ids are opaque | Not a gap to close; a deliberate design choice |
+| **A container that has lost every file is still returned** ([003 §3.8](../../specs/003-library-configuration-and-scanning/spec.md#38-scanning-and-change-detection)) | An empty series or album in a library, with nothing under it | A query-time filter in 005: a container with no visible children is not offered. See §5.2 |
 
 The difference between this section and §4 is intent. §4 says *we thought about it and chose
 differently*. This section says *we have not done it yet, and here is how we will know when it
@@ -1070,6 +1071,39 @@ inconsistent. There, matching cost one character in a regular expression and the
 authentication boundary. Here it costs an enum that has to be kept in step with the reference
 forever, on a field nothing reads. The principle is the same in both: spend the cost where a client
 could be harmed.
+
+### 5.2 A container that has lost every file is not removed
+
+**Jellyfin does:** ⚠️ **UNVERIFIED — not measured, and no citation is offered for it.** It is
+*believed* to remove a series, season or album whose files have all gone, on the next scan. Nobody
+here has watched it do so, and this entry does not pretend otherwise: measuring it means deleting a
+directory out of a real library, which no read-only probe can do and which nobody should do to
+somebody else's media to settle a documentation question. What would answer it is a disposable
+library on a server somebody owns — scanned, emptied of one series' episodes, scanned again.
+
+The unmeasured half does not change the decision below. Atrium's reason for keeping the row is an
+argument about **its own** guards, and it would stand whichever way the reference goes.
+
+**Depends on it:** a user sees an empty series in their library instead of not seeing it. Visible,
+and mildly annoying; nothing breaks and no state is lost.
+
+**Atrium does:** keep the row. 003's scan marks every *file-backed* item removed and leaves the
+containers above them alone, deliberately: removing a container is the same judgement 003 §3.8
+refuses to make about a root — *this directory is empty, so it is gone for good* — made one level
+down, where none of the three guards of [003 plan §6.5](../../specs/003-library-configuration-and-scanning/plan.md#65-the-guard-against-a-mass-delete)
+is watching. A share that mounts half-empty takes its roots' guards with it; a *directory* that
+mounts empty has nothing.
+
+**The observable half belongs to 005**, which decides what `/Items` returns: a container with no
+visible children is not offered, and the row's continued existence is then invisible. That is the
+closing mechanism, and it is cheaper and safer than the alternative — a filter costs one predicate
+and is wrong for one query, while a removal is written down and is wrong until somebody notices.
+
+**Found at T20 and decided at T21.** 003 §3.8's table said "directory emptied → remove the container
+item" from the day the specification was written, no acceptance criterion covered it, and nothing
+implemented it. The three ways out were to implement it late in a feature whose removal semantics
+were settled at T17, to delete the row and pretend it had never claimed anything, or to say plainly
+what happens and who closes it. This is the third.
 
 ## 6. Non-improvements
 
