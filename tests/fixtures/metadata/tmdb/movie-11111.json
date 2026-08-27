@@ -1,0 +1,48 @@
+{
+  "id": 11111,
+  "imdb_id": "tt2222222",
+  "title": "The Fixture",
+  "original_title": "El Atrezzo",
+  "tagline": "Every field, once.",
+  "overview": "A film that exists so a parser has something to read.",
+  "release_date": "1999-04-23",
+  "runtime": 97,
+  "vote_average": 7.4,
+  "poster_path": "/poster.jpg",
+  "backdrop_path": "/backdrop.jpg",
+  "genres": [{"id": 18, "name": "Drama"}, {"id": 878, "name": "Science Fiction"}],
+  "production_companies": [
+    {"id": 1, "name": "Fixture Pictures"},
+    {"id": 2, "name": "Second Studio"}
+  ],
+  "credits": {
+    "cast": [
+      {"name": "Second Billed", "character": "The Other One", "order": 1},
+      {"name": "First Billed", "character": "The Lead", "order": 0},
+      {"name": "Third Billed", "character": "Uncredited", "order": 2}
+    ],
+    "crew": [
+      {"name": "A Director", "job": "Director", "department": "Directing"},
+      {"name": "A Writer", "job": "Screenplay", "department": "Writing"},
+      {"name": "A Composer", "job": "Original Music Composer", "department": "Sound"},
+      {"name": "A Gaffer", "job": "Gaffer", "department": "Lighting"}
+    ]
+  },
+  "images": {
+    "posters": [{"file_path": "/poster.jpg", "width": 2000, "height": 3000}],
+    "backdrops": [
+      {"file_path": "/backdrop-0.jpg"},
+      {"file_path": "/backdrop-1.jpg"},
+      {"file_path": "/backdrop-2.jpg"},
+      {"file_path": "/backdrop-3.jpg"}
+    ],
+    "logos": [{"file_path": "/logo.png"}]
+  },
+  "release_dates": {
+    "results": [
+      {"iso_3166_1": "GB", "release_dates": [{"certification": "15", "type": 3}]},
+      {"iso_3166_1": "US", "release_dates": [{"certification": "", "type": 1},
+                                              {"certification": "PG-13", "type": 3}]}
+    ]
+  }
+}

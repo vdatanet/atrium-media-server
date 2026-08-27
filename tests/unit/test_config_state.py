@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -48,13 +49,13 @@ def test_identity_survives_a_rebuild_of_the_store_from_empty(paths: DataPaths) -
     """
     original = load_or_create(paths).server_id
 
+    # `shutil.rmtree` rather than one level of `iterdir`, since 004 T12: the layout gained
+    # `metadata/artwork`, which is two deep, and a rebuild deletes a tree rather than a directory.
     for entry in paths.root.iterdir():
         if entry.name == paths.state_file.name:
             continue
         if entry.is_dir():
-            for child in entry.iterdir():
-                child.unlink()
-            entry.rmdir()
+            shutil.rmtree(entry)
         else:
             entry.unlink()
     paths.prepare()
