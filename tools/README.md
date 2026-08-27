@@ -36,6 +36,8 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_library_extensions.py`](probe_library_extensions.py) | Which file extensions does the reference admit as items, and which does it ignore? | 003 §3.2, OQ-1 | no |
 | [`probe_music_precedence.py`](probe_music_precedence.py) | What happens when a file's embedded tags contradict its path? | 003 §3.5, OQ-5 | no |
 | [`probe_item_identity.py`](probe_item_identity.py) | What is an item's identifier derived from, and does moving a library root change it? | behaviours §1.4, 003 §3.6 | no |
+| [`probe_by_name_normalisation.py`](probe_by_name_normalisation.py) | Does the reference fold case when a genre name becomes an item, or does the list grow duplicates? | 004 §3.7, OQ-3 | no |
+| [`probe_sort_stability.py`](probe_sort_stability.py) | What breaks a tie under each `SortBy`, and does paging hold once one is broken? | 005 §3.4, OQ-3 | no |
 
 ### Running them
 
@@ -58,6 +60,8 @@ python3 tools/probe_auth_mechanisms.py --disabled-user probe-disabled
 python3 tools/probe_library_extensions.py
 python3 tools/probe_music_precedence.py
 python3 tools/probe_item_identity.py
+python3 tools/probe_by_name_normalisation.py
+python3 tools/probe_sort_stability.py
 ```
 
 `probe_item_identity.py` is the one probe here that confirms a `[source: …]` citation from

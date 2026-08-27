@@ -12,10 +12,11 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001, 002 and 003 are implemented. Feature 004 is next**, and it is **specified only** —
-so the next thing is not code, it is a plan written against
-[004's spec](specs/004-metadata-resolution/spec.md) and reviewed before any task list exists
-(Principle III). The other six features are specified only as well.
+**Features 001, 002 and 003 are implemented. 004 and 005 have accepted specs and plans in
+`Draft`** — so the next gate is the review of
+[004's plan](specs/004-metadata-resolution/plan.md) and
+[005's plan](specs/005-item-query-api/plan.md), and no task list may exist until a plan passes it
+(Principle III). The other five features are specified only, their specs still drafts.
 
 **004 inherits three things 003 wrote down for it**, and they are in
 [003's tasks](specs/003-library-configuration-and-scanning/tasks.md#what-this-feature-owes-the-next-ones)
@@ -85,6 +86,7 @@ reasoning:
 | 003 T19 | Write one test | The claim it exists to prove — "the reference derives ids from the absolute path" — was asserted in two documents and cited in neither. Measured at last: 448 of 448 live ids reproduce from the path alone, **containers included** |
 | 003 T20 | Report two things with their reasons | They cannot be one list. One file produced no item and the other produced one. And plan §7 named a failure that does not happen: a `chmod 000` file stats fine, so nothing in 003 ever notices it |
 | 003 T21 | Write the acceptance map | A specification row nobody had implemented and no criterion covered — "directory emptied → remove the container item" — which had been there since the spec was written |
+| 004–005 gate | Accept two specs, write two plans | The **accepted** 005 spec's error path for enum values does not exist — an unrecognised token is ignored, not `400` — and the reference's own artist-sort paging drops and duplicates rows, which turned "ordering is total" from assumed parity into a documented divergence |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
 question each, and a plain `urllib` request answers the rest.

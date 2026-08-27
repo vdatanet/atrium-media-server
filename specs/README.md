@@ -115,18 +115,19 @@ say how it will be proven is not finished.
 | [001](001-server-identity-and-discovery/) | Server identity and discovery | **Implemented** | **Implemented** | **Implemented** |
 | [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | **Implemented** | **Implemented** | **Implemented** |
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Implemented** | **Implemented** | **Implemented** |
-| [004](004-metadata-resolution/) | Metadata resolution | Draft | — | — |
-| [005](005-item-query-api/) | Item query API | Draft | — | — |
+| [004](004-metadata-resolution/) | Metadata resolution | **Accepted** | Draft | — |
+| [005](005-item-query-api/) | Item query API | **Accepted** | Draft | — |
 | [006](006-images/) | Images | Draft | — | — |
 | [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001 and 002 are implemented; 003 is specified, planned and broken into tasks — all three gates
-passed.** That is the whole dependency root of v1: everything else needs at least one of them. The
-other seven specs remain drafts — no plan may start until its spec is accepted, and no code until
-its plan is. The open questions across the ten are the review agenda.
+**001, 002 and 003 are implemented. 004 and 005 are accepted and planned** — their specs passed
+the gate on 2026-08-27 with two probes run against the review agenda first, and each carries a
+plan awaiting its own gate; task lists do not exist yet and may not start until the plans are
+accepted. The other five specs remain drafts, and their open questions are the standing review
+agenda.
 
 **002 measured more than it implemented.** Its eighteen tasks contradicted four things the accepted
 specification asserted — a fifth authentication mechanism the surface had never listed, a disabled
@@ -143,6 +144,18 @@ the documentation and one contradicted it:
 | 003 OQ-3 — sort-name derivation | Confirmed 15/15, **plus a second rule**: three item types bypass it entirely |
 | 007 OQ-2 — completion thresholds | Answered: 90% / 5% / 300s, **and six branches** where the spec had two |
 | 009 OQ-1 — `Move` semantics | **Contradicted.** The spec had the reading backwards; §3.5 and AC-8 corrected |
+
+**Two more were written and run at the 004/005 spec gate**, on 2026-08-27, and the pattern held:
+
+| Question | Outcome |
+|---|---|
+| 004 OQ-3 — genre re-normalisation | Confirmed: 97 of 97 by-name ids reproduce from the case-folded name, so §3.7 rule 1 is a reproduction, not a divergence — **and the merge was caught live**, two spellings on items collapsing into one row (behaviours §2.18) |
+| 005 OQ-3 — sort tie-breaking | Answered: the reference appends almost nothing, **and its own artist-sort paging drops and duplicates rows** — the defect 005 §3.4 rule 2 now diverges from on the record (behaviours §3.6) |
+
+The same gate found by hand-measurement that the accepted 005 spec's error path for enum values
+was **wrong** — an unrecognised token is ignored, not `400` (behaviours §1.12) — and that query
+parameter **names** match case-insensitively, which no route had needed before 005
+(behaviours §1.15).
 
 **003's task list changed at its gate**, on 2026-08-27, and the two changes that mattered were
 tasks that were *not in it*: nothing measured the two open questions the specification names probes
