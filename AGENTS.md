@@ -12,10 +12,15 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001 and 002 are implemented. Feature 003 is next**, and its task list is still a draft —
-so the next gate is that list, not code. The specification phase is over for the dependency root:
-001, 002 and 003 are specified, planned and broken into tasks; the other seven features are
-specified only.
+**Features 001 and 002 are implemented. Feature 003 is next**, and all three of its artefacts have
+passed their gates — so the next thing is code, starting at its T1. The specification phase is over
+for the dependency root: 001, 002 and 003 are specified, planned and broken into tasks; the other
+seven features are specified only.
+
+**003's T1 is two probes**, and it is first for the reason the table below exists. It is also the
+one task here that needs something no probe has needed before — files placed under a library root
+on the reference — so it may end up `[!]`, which the task says how to handle rather than leaving to
+judgement.
 
 **The state is in the files, not here**, so it cannot go stale:
 
@@ -74,6 +79,7 @@ reasoning:
 | 002 T7 | Parse a header leniently | Three of the plan's four claims about the grammar were wrong, including the one leniency both documents named |
 | 002 T11 | Serve a login screen | `/Users/Public` sends every user's full policy and configuration to a caller with no token — the opposite of the acceptance criterion |
 | 002 T14 | Assert no password is logged | The password never leaked; a library logged the password **hash** and another logged the token, both at `INFO`, from one `basicConfig` call |
+| 003 tasks | Review a nineteen-item list | Two of the findings were items **missing** from it: no task measured the two questions the spec names probes for, and no task extended the acceptance map — which a test would have failed the day 003 was marked `Implemented` |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
 question each, and a plain `urllib` request answers the rest.

@@ -3,7 +3,7 @@ feature: 003-library-configuration-and-scanning
 title: Library configuration and scanning — implementation plan
 status: Accepted
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-08-27
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-26
@@ -255,12 +255,27 @@ in this feature; 008 owns it and a scan only records that it is needed.
 
 ### 8.1 The fixture library
 
-Directory trees, `.nfo` sidecars and **synthetic media generated at build time** — a second of
-colour bars or a tone, muxed into each container the tests need. No copyrighted media, and the
-repository stays small.
+Directory trees, `.nfo` sidecars and **placeholder files generated at build time** — deterministic
+bytes carrying the right extension and a non-zero size, written by us with no external tool. No
+copyrighted media, and the repository stays small.
 
 Generation is deterministic, so two builds produce byte-identical files and a difference in a scan
 result is a difference in the scanner.
+
+**They are not decodable media, and they do not need to be.** This section previously called for a
+second of colour bars or a tone muxed into each container, which was a requirement inherited from
+what a fixture library *usually* is rather than from what 003 does with one. Nothing in this feature
+opens a media file: probing is 008 (§8.4), embedded tags are 004, and the `MetadataSource` of §5
+ships path-only here. What a 003 test reads from a fixture file is its path, its extension, and a
+size that changes when the test changes it — §6.4's whole change-detection signal.
+
+Muxing would have cost two things for that nothing. It adds a tool outside the locked dependency
+set, which the [CI](../../.github/workflows/ci.yml) test job does not install and would have to. And
+it makes *byte-identical across two builds* — the property that lets a difference in a scan result
+mean a difference in the scanner — depend on a muxer's version rather than on our own code, which
+is the one place determinism must not be borrowed.
+
+When 008 needs a decodable file it generates one there, beside the thing that decodes it.
 
 ### 8.2 The root-move test
 
