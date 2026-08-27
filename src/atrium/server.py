@@ -31,7 +31,7 @@ from fastapi import FastAPI
 from sqlalchemy.exc import SQLAlchemyError
 
 from atrium import REFERENCE_VERSION, __version__
-from atrium.api import system
+from atrium.api import system, users
 from atrium.compat.errors import EXCEPTION_HANDLERS
 from atrium.compat.middleware import ResponseHeadersMiddleware
 from atrium.compat.profiles import ContentProfileMiddleware
@@ -51,7 +51,10 @@ logger = logging.getLogger("atrium")
 
 #: Every router this server serves, in one place. The route table is built from exactly these, so
 #: a router that is not here is not routed and not in the surface check either.
-ROUTERS = (system.router,)
+#: `users.router` registers its literal paths before `/Users/{userId}`, and the route table tries
+#: patterns in this order - so `/users/public` reaches the public route rather than being read as a
+#: user whose identifier is `public`. tests/conformance/test_routes.py asserts it.
+ROUTERS = (system.router, users.router)
 
 
 def create_app(paths: DataPaths | None = None) -> FastAPI:

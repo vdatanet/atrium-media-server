@@ -820,6 +820,41 @@ whose only job is to remove something the client said it wanted.
 
 ---
 
+### 3.5 `/Users/Public` discloses every user's policy to anyone — class B, replicated
+
+**Jellyfin does:** answer `GET /Users/Public` with the **whole user object** — `Configuration` and
+`Policy` included — to a caller carrying no token at all, byte-identical to the authenticated
+response. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` All 42 policy properties and all 16 configuration properties, for every
+user not marked hidden, to anybody who can reach the port.
+
+**Depends on it:** unknown, and that is the crux. A login screen needs `Name`, `Id`,
+`PrimaryImageTag` and `HasPassword`. Nothing in the surface's named consumers is known to read
+`Policy` from this route — and §3.0.1 tie-break 1 says that absent evidence, assume a compensation
+exists. A client reading `Policy.IsAdministrator` here to decide what to show before login is not
+far-fetched.
+
+**Atrium does:** the same, and this is the entry that most deserves re-reading.
+
+The class is **B** — it succeeds, with more than it should. §3.0's question is whether a client can
+have built something that being correct would break, and here it plainly can: omitting two
+properties is exactly the shape that breaks a decoder expecting them.
+
+Against that: this is a **disclosure**, not a wrong number, and the argument for diverging is not
+that the reference is untidy but that replicating it publishes information about every account on
+the server. §3.0.2 forbids fixing a defect *because it is obviously wrong*, and "it discloses too
+much" is close enough to obviousness to be worth naming as the temptation it is.
+
+So the default holds — Principle V, replicate — and the divergence stays available and written down
+rather than argued again from scratch. If it is ever taken, its shape is a middling one on §3.0.3's
+list: strictly *less* information, on a route no known consumer reads those properties from, which
+is the least dangerous kind of change to make and still not free.
+
+> **This overturned an acceptance criterion, not a detail.** 002's AC-6 asserted that
+> `/Users/Public` **omits** `Configuration` and `Policy`, and its §3.4 gave the reason: "this is
+> pre-authentication, and it must not disclose what a user is allowed to do." The reasoning was
+> sound and the premise was measured to be false. Both are corrected, and the criterion now asserts
+> what the reference does.
+
 ## 4. Deliberate exceptions
 
 Two, and both are listed here so they are never mistaken for oversights.

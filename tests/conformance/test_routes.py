@@ -49,6 +49,20 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 #: that implements it, so that no route can ship ahead of the feature that specifies it.
 IMPLEMENTED_FEATURES = frozenset({"001"})
 
+#: Routes of a feature that is still landing. The check below assumed a feature arrives in one
+#: change; 002 arrives across two - the user routes at T11 and the session routes at T12 - so
+#: "the feature is implemented" is not a state it can use until both have landed. Each task adds
+#: its own routes here on purpose, and T17 collapses the whole list into `IMPLEMENTED_FEATURES`.
+LANDED_ROUTES: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("POST", "/Users/AuthenticateByName"),
+        ("GET", "/Users/Public"),
+        ("GET", "/Users/Me"),
+        ("GET", "/Users/{userId}"),
+        ("POST", "/Users/Configuration"),
+    }
+)
+
 
 def _load_surface_parser() -> Any:
     """Reuse the parser the surface validator already has, rather than write a second one.
@@ -103,7 +117,7 @@ def tabled_paths(app: FastAPI) -> frozenset[tuple[str, str]]:
 
 
 def test_every_route_this_feature_owns_is_registered(app: FastAPI) -> None:
-    expected = surface_paths(IMPLEMENTED_FEATURES)
+    expected = surface_paths(IMPLEMENTED_FEATURES) | LANDED_ROUTES
     assert expected, "no 001 entries in the surface file; the parser or the file changed shape"
     missing = expected - documented_paths(app)
     assert not missing, f"in surface.yaml and not served: {sorted(missing)}"
@@ -122,10 +136,10 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     """Everything served belongs to a feature that has been implemented.
 
     A 002 route registered while 002 is unimplemented is in the surface file, so the check above
-    would pass it. This one fails until `IMPLEMENTED_FEATURES` names the feature - which is a line
-    that gets changed on purpose, in the change that implements it.
+    would pass it. This one fails until `IMPLEMENTED_FEATURES` names the feature, or `LANDED_ROUTES`
+    names the route - both lines that get changed on purpose, in the change that implements them.
     """
-    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES)
+    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES) | LANDED_ROUTES
 
 
 def test_an_unlisted_route_fails_the_check(app: FastAPI) -> None:
@@ -138,6 +152,20 @@ def test_an_unlisted_route_fails_the_check(app: FastAPI) -> None:
     app.openapi_schema = None  # the document is cached; this route arrived after the first build
     extra = documented_paths(app) - surface_paths()
     assert extra == {("GET", "/System/NotInTheSurfaceFile")}
+
+
+def test_a_literal_path_wins_over_the_parameterised_one(app: FastAPI) -> None:
+    """`/users/public` is the public route, not a user whose identifier is `public`.
+
+    The table tries literals first and then patterns **in registration order**, so this is a
+    property of the order the routers are declared in - which makes it worth a test rather than a
+    comment asking the next person to keep it.
+    """
+    table: RouteTable = app.state.routes
+    assert table.canonicalise("/users/public") == "/Users/Public"
+    assert table.canonicalise("/USERS/ME") == "/Users/Me"
+    assert table.canonicalise("/users/configuration") == "/Users/Configuration"
+    assert table.canonicalise("/Users/abc123") == "/Users/abc123"
 
 
 def test_the_two_views_of_the_routes_agree(app: FastAPI) -> None:
