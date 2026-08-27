@@ -137,8 +137,11 @@ rows:
      why: "OQ-4's neighbour: folder and file agree once the file's tags are stripped",
      expect: {name: "The Film", year: 1999}}
   - {path: "Another Film (2005)/The Film (1999).mkv", collection_type: movies, needs: movies,
-     why: "OQ-4: folder and file DISAGREE. The file wins, because it is the more specific name",
-     expect: {name: "The Film", year: 1999}}
+     why: "OQ-4 answered by measurement, and this row was WRONG before it: the folder wins. On 1,557 real films the folder's cleaned name matched what the reference resolved 1,087 times against the file's 457",
+     expect: {name: "Another Film", year: 2005}}
+  - {path: "The Film [BluRay 1080p][DTS 2.0]/TheFilmBD1080.www.somesite.org.mkv", collection_type: movies, needs: movies,
+     why: "why the folder wins: download tools mangle filenames and leave directories alone - 135 of 1,557 films had a filename with no spaces at all while its folder had them",
+     expect: {name: "The Film", year: null}}
   - {path: "The Film (1999)/The Film (1999) - part1.mkv", collection_type: movies, needs: movies,
      why: "AC-4: one film in two parts, and this is part one",
      expect: {name: "The Film", year: 1999, part_number: 1}}

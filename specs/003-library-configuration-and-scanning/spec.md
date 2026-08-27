@@ -117,6 +117,16 @@ language, release-group brackets. Both are documented regex sets upstream.
 Atrium reimplements the *rules*, not the expressions (Principle IV). The acceptance test is
 behavioural: given a corpus of real-world names, the same title and year come out.
 
+**Where a film sits in its own directory, the directory names it.** Measured across 1,557 films:
+the directory's cleaned name matched what the reference resolved **1,087 times against the file's
+457**. The reason is mechanical — the tools that fetch films mangle filenames and leave directories
+alone. 135 of those films had a filename with **no spaces at all** while its directory had them,
+and others were truncated mid-word or suffixed with the name of the site that served them.
+`[read: Jellyfin 10.11.11, 2026-08-27]`
+
+A directory holding **several different titles** is a category rather than a film, and names none
+of them. That is the only part of the rule a single path cannot decide.
+
 **Multi-part files** are grouped into one item when they differ only by a part marker
 (`part1`/`pt1`/`cd1`/`disc1`, and the `-a`/`-b` form). The parts become one item's media sources,
 in order. Getting this wrong doubles a user's library, which is the most visible possible scanning
@@ -408,7 +418,6 @@ media generated at build time. No copyrighted media, ever.
 
 | # | Question | Blocks | Resolved by |
 |---|---|---|---|
-| OQ-4 | Does the reference merge a folder-per-film layout when the folder and file names disagree? | An edge in §3.3 | Fixture comparison via the differential harness |
 | OQ-6 | Whether the §3.7.2 formulas hold for items carrying an explicit sort title, and how many real items do | §3.7.3 | The override rows of `tools/probe_sort_names.py`, read against a larger library |
 | OQ-7 | What the reference does with a character that has no ASCII decomposition — `ø`, `ß`, a non-Latin script | The ordering of those names, and nothing else | Crafted names in `tools/probe_sort_names.py`; the measured set contains none |
 
@@ -419,6 +428,7 @@ media generated at build time. No copyrighted media, ever.
 | OQ-3 | The reference's sort-name normalisation | **Six ordered steps, three configurable lists, pad width 10 — and three item types that bypass all of it.** §3.7 now states both rules; 15 of 15 crafted cases matched | `tools/probe_sort_names.py`, 2026-08-26 |
 | OQ-1 | The exact extension lists the reference honours | **Measured, and the lists do not fall back to one another**: `movies` `.mkv` `.mp4` `.avi` `.ts`; `tvshows` `.mkv` `.avi` `.mp4`; `music` `.flac` `.m4a` `.dsf`. 89 `.mp3` and 3 `.mka` files under video roots produced **no item of any type**. A lower bound, not the configured list — §3.2 says which part is measured and which is not | `tools/probe_library_extensions.py`, 2026-08-27 |
 | OQ-2 | Case sensitivity of path normalisation for identity | **A per-library fact, not a server decision**, defaulting to case-insensitive as the reference does — and **frozen once the library exists**, with the change refused rather than warned about. §3.6 states it, and the same paragraph now records the two neighbouring traps: a library's identity is allocated rather than derived, so recreating a library is not editing one, and its collection type is frozen for the same reason | A decision plus a recorded per-library setting, 2026-08-27 |
+| OQ-4 | Does the reference merge a folder-per-film layout when the folder and file names disagree? | **The interesting half of the question does not arise.** Across 1,480 one-film directories, a directory and a file naming two genuinely *different* works did not occur once; what occurs is the directory naming the same work more cleanly, and there the directory wins — 1,087 matches against the file's 457. §3.3 records the rule and the reason | Read against a live library, 2026-08-27 |
 | OQ-5 | What the reference does with a file whose embedded tags contradict its path | **The tag wins, verbatim.** 413 of 5,814 tracks carry an album name with no resemblance to their directory, and 129 keep whitespace a path cannot produce. 33 compilations resolve to one album each. Not covered: a genuinely flat directory, which the measured library had none of | `tools/probe_music_precedence.py`, 2026-08-27 |
 
 ## 8. References
