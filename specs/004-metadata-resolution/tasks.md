@@ -134,7 +134,7 @@ it.
 
 ## T3 — `metadata/model.py`
 
-- [ ] **Changes:** the field vocabulary, `FieldValues`, `RefreshMode`, the identify results —
+- [x] **Changes:** the field vocabulary, `FieldValues`, `RefreshMode`, the identify results —
   pure, no I/O.
 - **Depends on:** nothing
 - **Verified by:** the value-ness rules as a table — `None`, `""`, `[]` and whitespace-only are
@@ -142,6 +142,28 @@ it.
   present-and-empty tag distinction survives; an import-direction test (`metadata/model` imports
   nothing from `db/`, `api/`, `library/`); mypy strict.
 - **Plan reference:** §3, §5
+- **Done (2026-08-27):** the vocabulary turned out to be **two** vocabularies, and finding that
+  out meant reading the reference's merge — which then contradicted the plan twice more.
+  **`Field` is not what a lock names.** A lock is one of nine `MetadataField` values
+  `[spec: MetadataField]`; a merge field is one of this feature's twenty-one. `LOCK_OF` is the
+  map, partial in both directions: eight of the nine guard exactly one field each, and thirteen of
+  the twenty-one cannot be locked at all. The trap is `Name`, which does **not** cover the sort
+  name or the original title — the reference overwrites the original title on the line after the
+  name lock, so grouping them would be kinder and a divergence.
+  **AC-10 had no way to happen.** Spec §3.6 gives locks no HTTP route, and nothing in the feature
+  read one from anywhere — so "a locked field survives a Replace refresh" was a criterion about a
+  state no code could produce. The channel is the sidecar: `<lockdata>` and `<lockedfields>`,
+  pipe-separated, matched case-insensitively, unknown tokens dropped rather than refused. Both are
+  now in [plan §6.2](plan.md#62-sidecars)'s field map for T5 to parse.
+  **Two more the same reading disproved**, both now in [plan §6.1](plan.md#61-the-merge) for T6:
+  the reference **union-merges `Studios` and `Tags`** while whole-replacing `Genres` and `People`,
+  so plan §10's blanket rejection of union-merge was right about half the list fields and wrong
+  about the other half; and a `Runtime` **from metadata is discarded for audio and video items**,
+  because a media file's runtime comes from probing it — so honouring `<runtime>` on a film would
+  give Atrium's films a runtime the reference's do not have.
+  The import-direction rule is written for the three modules plan §3 calls pure — `model.py`,
+  `merge.py`, `byname.py` — and names the two that do not exist yet rather than iterating over a
+  directory, so it starts guarding each on the day it lands. Checked by breaking it.
 
 ## T4 — Migration `0003_metadata_and_by_name`, the models, and the by-name identity rule
 
