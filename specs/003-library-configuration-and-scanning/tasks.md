@@ -1091,9 +1091,9 @@ childless `Series` or `MusicAlbum` therefore stays in the database for ever. Tha
 question rather than a change-detection one, it has no acceptance criterion, and T21 has to either
 give it one or record it as an accepted gap.
 
-## T19 — The root-move test
+## T19 — The root-move test  ✅
 
-- [ ] **Changes:** `tests/library/test_root_move.py`.
+- [x] **Changes:** `tests/library/test_root_move.py`.
 - **Depends on:** T18
 - **Verified by:** **AC-10** — scan at one path, move the whole tree, reconfigure the root, rescan:
   every identifier unchanged and no user data orphaned.
@@ -1101,6 +1101,56 @@ give it one or record it as an accepted gap.
   absolute-path derivation. It is the difference between a remount costing nothing and costing every
   client's favourites.
 - **Plan reference:** §1, §8.2
+
+### Done — 2026-08-27
+
+**The claim this whole feature is built on had no provenance.** Plan §1 and spec §3.6 both said
+"the reference derives item ids from the absolute path" and neither cited anything; behaviours §1.4
+had the derivation with a `[source: …]` citation, which is the weakest of the three forms — it says
+what the code appears to do, not what the server did, and T16 is the task that learned what happens
+when those differ. So the task began by measuring it, and the measurement is now
+`tools/probe_item_identity.py`: recomputing the documented expression from each item's own reported
+path reproduced **448 of 448** live ids across `Movie`, `Episode`, `Audio`, `Series` and
+`MusicAlbum`. The claim was right. It is now measured rather than believed, and it stays measured.
+
+**Containers are path-keyed on the reference too**, which nobody here had said. A `Series` and a
+`MusicAlbum` derive from their *directory*, not from their name — so on the reference a root move
+takes the containers with it, while under Atrium's rules those two derive from names and were never
+at risk. The test favourites both an `Episode` and a `Series` for exactly that reason: a test that
+favourited only the container would pass against the bug.
+
+**A measurement that says what it cannot answer.** The reference used has
+`EnableCaseSensitiveItemIds` **set**, which is why its ids reproduce from the path *verbatim* — 447
+of the 447 paths containing an uppercase character. That confirms behaviours §1.4's description
+exactly, and it also means this server cannot tell us the reference's **default**, which is what
+spec §3.6 and OQ-2 assert without provenance when they say Atrium's case-insensitive default is
+"what the reference does". That half is now marked `⚠️ UNVERIFIED`, in the spec and in the probe's
+own output, with the run that would settle it named.
+
+**The move is not merely survivable, it is invisible.** The report is asserted whole:
+`added`, `updated`, `removed`, `revived` and `missing` are all zero. A scanner that produced the
+right identifiers by adding every item again and removing every old one would satisfy "the
+identifiers are unchanged" and would still have discarded the user's state, because the removal is
+what user data is keyed against surviving. `examined == 0` is the T18 half — renaming a directory
+does not touch the files' modification times, so a remount re-reads nothing either.
+
+**Two controls, because a test that cannot fail proves nothing.** One computes what the identifiers
+would be under an absolute-path key over both locations and asserts the two sets are disjoint, so
+"unchanged" is a result rather than an observation that nothing was asked. The other asserts that
+joining the root to each stored path lands on a real file — a scanner can derive from a relative
+path and still *store* an absolute one, and everything else would pass until somebody used the
+stored path to rebuild identity. The first version of that test asserted a string property instead
+and **survived the mutation**; the version that asserts the invariant does not.
+
+**Verified by mutation, not by passing.** Keying identity on the absolute path fails 9 of the 10
+tests here; the tenth is the pure computation, which is supposed to be independent of the
+implementation. Worth recording: under that mutation the rescan does not quietly rewrite the
+library — guard three refuses it, because a root move looks exactly like a mass deletion. The
+guards were written for an unmounted share and they catch this too.
+
+**A library with two roots has two independent relative namespaces**, and one test moves only one
+of them. A derivation that happened to be relative to the *first* configured root would pass every
+other test in the file.
 
 ## T20 — Scan reporting
 

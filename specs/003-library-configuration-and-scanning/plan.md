@@ -29,10 +29,13 @@ whatever makes the corpus pass. This inverts the usual relationship: the tests a
 specification of the behaviour, and the implementation is free.
 
 **Identity is derived, and derived from a *relative* path.** The reference derives item ids from
-the absolute path, so moving a library from `/mnt/a` to `/mnt/b` — or running the same library from
-a container with a different mount point — changes every id and silently discards every client's
-favourites and resume positions. Atrium derives from the path **relative to its library root**, so
-that move costs nothing. The ids differ from the reference's either way
+the absolute path — **measured**, not inferred: recomputing the documented expression from each
+item's own reported path reproduced 448 of 448 live ids across five types, containers included
+`[probe: tools/probe_item_identity.py, Jellyfin 10.11.11, 2026-08-27]`. So moving a library from
+`/mnt/a` to `/mnt/b` — or running the same library from a container with a different mount point —
+changes every id there and silently discards every client's favourites and resume positions.
+Atrium derives from the path **relative to its library root**, so that move costs nothing, and
+§8.2's test is what holds it. The ids differ from the reference's either way
 ([behaviours §1.4](../../docs/compatibility/behaviours.md#14-item-identifiers-are-32-lowercase-hex-characters)),
 so there is no compatibility cost to being better here.
 
