@@ -35,7 +35,7 @@ from atrium.db.models import (
     LibraryRoot,
     User,
 )
-from atrium.domain.items import ItemType
+from atrium.domain.items import IN_THE_TREE, ItemType
 from tests.conftest import data_dir
 
 
@@ -317,12 +317,20 @@ def test_an_item_type_no_client_knows_is_refused(migrated: Engine) -> None:
 
 
 def test_the_check_constraint_lists_exactly_the_types_the_domain_has(migrated: Engine) -> None:
-    """Two lists of the same eight strings; something has to notice when one of them grows."""
+    """Two lists of the same eight strings; something has to notice when one of them grows.
+
+    It did, at 004 T4, and the answer was not to widen this: **a migration is a record of what the
+    schema was at a point in time**, and 0002 predates the five by-name types by a revision. So the
+    list this compares against is `IN_THE_TREE` - everything 003 could produce - and 0003 is where
+    the other five arrive, asserted in `test_migration_0003.py` against the whole of `ItemType`.
+    Widening this one instead would have made it assert nothing: it would list whatever the domain
+    lists, forever, which is the shape of a test that cannot fail.
+    """
     factory = session_factory(migrated)
     library_id = new_id()
     with session_scope(factory) as db:
         db.add(a_library(id=library_id))
-    for item_type in ItemType:
+    for item_type in sorted(IN_THE_TREE):
         with session_scope(factory) as db:
             db.add(an_item(library_id, type=item_type.value))
 

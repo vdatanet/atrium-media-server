@@ -4,7 +4,7 @@ title: Metadata resolution — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2
+amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -397,6 +397,15 @@ the reference's observable envelope exactly — one item per case-folded name, f
 displays, diacritics distinguish
 ([behaviours §2.18](../../docs/compatibility/behaviours.md#218-two-spellings-of-one-genre-are-one-item)) —
 without reproducing its id derivation, which differs everywhere by design (behaviours §1.4).
+
+**The fold itself lives in `library/identity.py`, not here** — moved by T4, because the identity
+*is* the fold: `for_by_name` hashes exactly what `ensure_by_name` keys its rows on, and two
+definitions of one fold is how a spelling ends up merging into one row and deriving another one's
+id. `byname.py` calls `fold_by_name`; it does not define a second one. The order of the steps is
+the reference's and matters for names nobody sensible writes — it trims, *then* removes trailing
+dots, and does not trim again — so `Drama. . .` and `Drama. .` are two rows there and two here
+`[source: MediaBrowser.Controller/Entities/Genre.cs:84-92 @ v10.11.11]`
+`[source: Emby.Server.Implementations/IO/ManagedFileSystem.cs:21-27 @ v10.11.11]`.
 
 Garbage collection runs at the end of a refresh transaction: a by-name row referenced by no join
 row is deleted. Spec §4 gives their lifetime as "until no item references them"; deletion is safe

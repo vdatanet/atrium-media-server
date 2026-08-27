@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""What a library holds: one model, eight types, and the structure between them.
+"""What a library holds: one model, thirteen types, and the structure between them.
 
 Everything in a library is one type - a film, a season, a track, an album, a library root
 (docs/glossary.md). That is the reference's design and not a simplification of it: `/Items` returns
@@ -24,7 +24,7 @@ from enum import StrEnum
 
 
 class ItemType(StrEnum):
-    """The eight types feature 003 produces.
+    """The eight types feature 003 produces, and the five feature 004 adds.
 
     The values are the reference's spellings because they are the vocabulary, not a serialisation:
     the glossary, the specifications and every client call an episode an `Episode`. `compat/` still
@@ -45,6 +45,15 @@ class ItemType(StrEnum):
     AUDIO = "Audio"
     COLLECTION_FOLDER = "CollectionFolder"
 
+    # The five 004 adds. They are items because 005 serves them as items - one query machinery,
+    # one envelope, `GET /Items/{id}` works on a genre - and they are **not** in the containment
+    # tree below: see `BY_NAME`.
+    GENRE = "Genre"
+    MUSIC_GENRE = "MusicGenre"
+    STUDIO = "Studio"
+    PERSON = "Person"
+    YEAR = "Year"
+
 
 class CollectionType(StrEnum):
     """What an operator declares a library root to be [spec section 3.1].
@@ -64,12 +73,45 @@ class CollectionType(StrEnum):
 #: [spec section 3.6].
 FILE_BACKED: frozenset[ItemType] = frozenset({ItemType.MOVIE, ItemType.EPISODE, ItemType.AUDIO})
 
+#: The types that exist because a **name** does: a genre, a studio, a person, a year
+#: [004 spec section 3.7]. They are items so that 005 can serve them through one query machinery,
+#: and they are outside everything below on purpose.
+#:
+#: **Three properties at once, and each one is why the containment maps exempt them explicitly
+#: rather than being loosened to accommodate them:**
+#:
+#: * **No parent, and no chain to a `CollectionFolder`.** A genre is not *in* a library; it is
+#:   referenced by items that are. Giving it a parent would make it appear under one library's
+#:   tree and belong to all of them.
+#: * **No library.** `items.library_id` is null for exactly these five, which the schema states as
+#:   a check constraint rather than a convention (004 plan section 4).
+#: * **No collection type produces them.** They are created by a refresh, not by a resolver, so
+#:   `PRODUCED_BY` does not mention them and the assertion that every type is produced by some
+#:   collection type is scoped to the tree.
+#:
+#: `MusicArtist` is deliberately **not** here. It is a by-name item in the reference and a
+#: per-library one in Atrium, which is a real difference recorded with its argument in
+#: docs/compatibility/behaviours.md section 5.3 - 003 derived those identifiers before the
+#: consequence had a surface to show on, and rewriting identity is the one operation this project
+#: treats as radioactive.
+BY_NAME: frozenset[ItemType] = frozenset(
+    {ItemType.GENRE, ItemType.MUSIC_GENRE, ItemType.STUDIO, ItemType.PERSON, ItemType.YEAR}
+)
+
+#: Everything the scanner arranges into a tree: every type that is not a by-name row. The three
+#: containment maps below are total over *this* set, never over `ItemType`.
+IN_THE_TREE: frozenset[ItemType] = frozenset(ItemType) - BY_NAME
+
 #: The type of an item's parent, or None for the one type that has none.
 #:
 #: Every chain ends at a `CollectionFolder`, because the library itself is an item
 #: [spec section 3.1] - so a film's parent is its library rather than nothing, and the leaves of
 #: this map are exactly `FILE_BACKED`. A test asserts both, since the two drifting apart is how a
 #: scanner ends up creating a container that owns a container.
+#:
+#: **Total over `IN_THE_TREE`, not over `ItemType`.** The five by-name types have no parent and no
+#: chain; mapping them to `None` would make them look like second roots, and widening the chain
+#: assertion to let them end anywhere would stop it guarding the tree it was written for.
 PARENT_OF: Mapping[ItemType, ItemType | None] = {
     ItemType.COLLECTION_FOLDER: None,
     ItemType.MOVIE: ItemType.COLLECTION_FOLDER,
@@ -85,6 +127,9 @@ PARENT_OF: Mapping[ItemType, ItemType | None] = {
 #: a resolver that consults this cannot turn a file under a `music` root into a movie however it
 #: is named, and a test can assert that without running a scan. Every library produces its own
 #: `CollectionFolder`, so that appears in all three.
+#:
+#: Total over `IN_THE_TREE`. A by-name row is created by a refresh finding a genre on an item, not
+#: by a resolver looking at a file, so no collection type produces one.
 PRODUCED_BY: Mapping[CollectionType, frozenset[ItemType]] = {
     CollectionType.MOVIES: frozenset({ItemType.COLLECTION_FOLDER, ItemType.MOVIE}),
     CollectionType.TVSHOWS: frozenset(
@@ -146,7 +191,15 @@ class Item:
 
     type: ItemType
     name: str
-    library_id: str
+
+    library_id: str | None
+    """The library this item belongs to - **null for exactly the five `BY_NAME` types**.
+
+    A genre is not in a library; it is referenced by items that are, and its identity is
+    server-wide (004 spec section 3.7). The schema states the correspondence as a check constraint
+    rather than trusting this docstring: `library_id IS NULL` if and only if the type is one of the
+    five.
+    """
 
     parent_id: str | None = None
 
@@ -192,6 +245,11 @@ class Item:
         return self.type in FILE_BACKED
 
     @property
+    def is_by_name(self) -> bool:
+        """A genre, music genre, studio, person or year: no library, no parent, no file."""
+        return self.type in BY_NAME
+
+    @property
     def relative_path(self) -> str | None:
         """The path this item's identity is derived from: its first source's.
 
@@ -217,7 +275,9 @@ class Item:
 
 
 __all__ = [
+    "BY_NAME",
     "FILE_BACKED",
+    "IN_THE_TREE",
     "PARENT_OF",
     "PRODUCED_BY",
     "CollectionType",
