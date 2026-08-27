@@ -366,6 +366,34 @@ modification time is stored and never serialised. A full re-examination that ign
 available to an operator, and it is unobservable for the same reason: it changes what the server
 looks at, not what it answers.
 
+### 2.18 Two spellings of one genre are one item
+
+**Jellyfin does:** fold case when a name becomes a by-name item, so `Electronic` and `electronic`
+on two files produce **one** genre row, not two. Measured from the outside: 97 of 97 live genre
+and music-genre ids reproduce from the case-folded name, every one of them only because of the
+fold; the measured library carries both spellings above on its items and holds exactly one row for
+each; and no two by-name rows differ only by case.
+`[probe: tools/probe_by_name_normalisation.py, Jellyfin 10.11.11, 2026-08-27]`
+
+The mechanism is the id itself: the by-name key is lowercased before hashing whenever
+`EnableNormalizedItemByNameIds` is set, and it defaults to set
+`[source: Emby.Server.Implementations/Library/LibraryManager.cs:636-658,1095-1100 @ v10.11.11]`
+`[source: MediaBrowser.Model/Configuration/ServerConfiguration.cs:72 @ v10.11.11]`. Two limits of
+the fold, both part of the behaviour: it is **case only** — spellings differing in diacritics stay
+separate items — and it also spans the characters a filename cannot carry, which the key builder
+replaces with spaces before hashing
+`[source: MediaBrowser.Controller/Entities/Genre.cs:79-92 @ v10.11.11]`. Which spelling a merged
+row *displays* is the one that created it, because an existing row is reused rather than renamed
+`[source: Emby.Server.Implementations/Library/LibraryManager.cs:1052-1075 @ v10.11.11]` — not
+observable read-only, so the probe reports it as source-backed rather than measured.
+
+**Depends on it:** yes, quietly. A client filtering by `genreIds` sends one id and expects the
+items of every spelling behind it; a user scrolling `/Genres` sees a list without near-duplicates.
+
+**Atrium does:** the same — one item per case-folded name, first spelling seen as the display
+name, diacritics preserved and distinct ([004 §3.7](../../specs/004-metadata-resolution/spec.md#37-people-genres-and-studios)).
+The ids themselves differ by derivation, as everywhere (§1.4).
+
 ### 2.13 `DeviceId` is mandatory on one route, not on the header
 
 **Jellyfin does:** answer `200` on an ordinary authenticated route for a client header carrying no
@@ -608,7 +636,12 @@ per-request by definition, so it is compared by shape rather than by value.
 ### 1.12 An unrecognised query value is ignored, not rejected
 
 **Jellyfin does:** answer `200` with a full, unfiltered result for `/Genres?SortBy=NotASortOption`.
-`[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+`[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]` The same holds across `/Items`'
+enum-valued parameters — an unrecognised token in `includeItemTypes`, `sortBy`, `fields` or
+`filters` drops that filter and the request succeeds — while a value that cannot parse as its
+declared *type* (`limit=abc`, a malformed id) is a `400` in §1.11's problem-details shape. The
+line is token-versus-type, not parameter-versus-parameter.
+`[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
 
 **Depends on it:** yes, and this is the measurement behind a decision already taken.
 [005 §3.3](../../specs/005-item-query-api/spec.md) accepts a bounded delta — Tier 3 query
@@ -702,6 +735,24 @@ something case-sensitive reads one.
 > answers the *doubled* slash with a `307` to a URL that works, where the reference refuses. So
 > "leave the default alone" would not have meant "differ in one small way"; it would have meant
 > differing in two directions at once.
+
+### 1.15 Query parameter names match case-insensitively
+
+**Jellyfin does:** treat `Limit=1`, `limit=1` and `LIMIT=1` as the same parameter, and a
+lowercased `sortby=PremiereDate&sortorder=Descending` reorders `/Items` exactly as the PascalCase
+spelling does. ASP.NET Core's query binding compares parameter names without regard to case, the
+same way §1.14's routing compares path segments.
+`[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+
+**Depends on it:** the pinned document spells every parameter camelCase (`startIndex`), the
+reference's own clients send PascalCase (`StartIndex`), and both work — so *every* client depends
+on at least one half of this, and which half is a per-client accident.
+
+**Atrium does:** the same, by canonicalising a request's query keys to the route's own declared
+spellings before the framework binds them — the query-string counterpart of the §1.14 path
+rewrite, and like it, values are data and are never touched. The framework default is a silent
+third behaviour: an unrecognised spelling would not be rejected but *ignored*, which for
+`StartIndex` against a camelCase route means every page is page one.
 
 ---
 
@@ -996,6 +1047,42 @@ is the least dangerous kind of change to make and still not free.
 > sound and the premise was measured to be false. Both are corrected, and the criterion now asserts
 > what the reference does.
 
+### 3.6 Ties are engine-resolved, and paging the artist sorts loses rows — class B, diverged
+
+**Jellyfin does:** append almost nothing after the ordering a client asked for. `Name` is chained
+when the first ordering is `SortName` or `Default`; after any other ordering — a date, a play
+count, an artist — **no further key is ever added**, not even the id
+`[source: Jellyfin.Server.Implementations/Item/BaseItemRepository.cs:1592-1652 @ v10.11.11]`. What
+that costs was measured per `SortBy` over 485-row windows, three ways — request twice, page in 97s,
+analyse the tie runs:
+
+- On the movie sorts (`SortName`, `DateCreated`, `PremiereDate`, `PlayCount`, `DatePlayed`) the
+  order is repeatable, pages reassemble the one-shot list exactly, and ties happen to arrive in
+  ascending id order — the engine's habit, guaranteed by nothing in the source.
+- On the artist sorts (`AlbumArtist`, `Artist`, whose key lives in a joined table) the same
+  request repeats identically, **but the concatenation of its pages is not the one-shot list**:
+  ties resolve differently at different offsets, so a client paging a large audio library sees
+  some items twice and never sees others.
+- `Random` is a fresh shuffle on every request — two identical 97-row requests shared 4 items —
+  matching the seedless per-row random in the source
+  `[source: Jellyfin.Server.Implementations/Item/OrderMapper.cs:33 @ v10.11.11]`.
+
+`[probe: tools/probe_sort_stability.py, Jellyfin 10.11.11, 2026-08-27]`
+
+**Depends on it:** no, and this one cannot be depended on. An order that differs between a paged
+and an unpaged read of the same data is not a value a client can build compensating code against —
+the only compensations are to fetch everything in one request or to tolerate duplicates and gaps,
+and both are defect-tolerant: neither stops working when the order becomes total. That is §3.0's
+first escape hatch, the same one §3.1 went through.
+
+**Atrium does: diverge — every ordering is total.** The requested keys, then `Name` where the
+reference chains it, then the id as the final key, so paging visits every item exactly once for
+every `SortBy` ([005 §3.4](../../specs/005-item-query-api/spec.md#34-sorting)). Within any tie the
+result is *an* order the reference could have produced — on the movie sorts it is the very order
+the measured server does produce — so no response is distinguishable from a plausible reference
+response; what changes is only that the order holds still across pages. No upstream issue is known
+for this; nothing here waits on one.
+
 ## 4. Deliberate exceptions
 
 Two, and both are listed here so they are never mistaken for oversights.
@@ -1112,6 +1199,28 @@ item" from the day the specification was written, no acceptance criterion covere
 implemented it. The three ways out were to implement it late in a feature whose removal semantics
 were settled at T17, to delete the row and pretend it had never claimed anything, or to say plainly
 what happens and who closes it. This is the third.
+
+### 5.3 An artist in two music libraries is two rows
+
+**Jellyfin does:** hold one server-wide item per artist name — artists are by-name items, like
+genres, with ids derived from the name alone
+`[source: Emby.Server.Implementations/Library/LibraryManager.cs:1030-1075 @ v10.11.11]`
+`[source: Emby.Server.Implementations/ServerApplicationPaths.cs:59 @ v10.11.11]` — so the same
+artist appearing in two music libraries is one row whose discography spans both.
+
+**Depends on it:** only a setup with **two or more music libraries** sharing an artist can
+observe the difference, and what it observes is cosmetic: the artist appears once per library in
+`/Artists`, each entry listing that library's albums. Nothing breaks and no state is lost; it
+looks wrong rather than behaving wrongly.
+
+**Atrium does:** keep 003's per-library artist identity — `(type, library, folded name)` — which
+was settled, implemented and accepted before this consequence had a surface to show on. Migrating
+to a server-wide rule in 004 would rewrite identifiers 003 already derived, which is the one
+operation this project treats as radioactive (003 plan §1). Recorded as an accepted gap rather
+than fixed quietly or shipped silently: the closing mechanism, if multi-music-library setups turn
+out to matter, is a deliberate identity migration with its own feature, informed by the
+differential harness (010). Single-music-library servers — the shape every measured setup has —
+cannot observe it at all.
 
 ## 6. Non-improvements
 

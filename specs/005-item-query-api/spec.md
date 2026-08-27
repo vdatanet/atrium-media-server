@@ -1,9 +1,10 @@
 ---
 feature: 005-item-query-api
 title: Item query API
-status: Draft
+status: Accepted
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-08-27
+accepted: 2026-08-27
 depends_on: [002, 004]
 ---
 
@@ -159,7 +160,13 @@ shows up gets promoted to Tier 2. This is the one place in v1 where a delta is a
 with a mechanism attached for closing it.
 
 **Errors:** `401` unauthenticated. `parentId` naming an unknown or invisible item is `404`. An
-unparseable enum value is `400`.
+unrecognised **token** in an enum-valued parameter is ignored, never rejected — the filter simply
+drops, measured across `includeItemTypes`, `sortBy`, `fields` and `filters`
+(behaviours §1.12) `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`. A value that cannot
+parse as its declared **type** — `limit=abc`, a malformed identifier — is `400`, in the
+problem-details shape of behaviours §1.11 `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`.
+This spec previously claimed the first case was a `400`; it is not, and treating it as one would
+have refused requests the reference serves.
 
 ### 3.4 Sorting
 
@@ -171,11 +178,32 @@ Three rules make ordering reproducible:
 
 1. **`SortName` uses the normalisation from 003 §3.7** — articles, diacritics, case, numeric
    prefixes. This is where ordering parity is won or lost, because it affects every list.
-2. **Ordering is total.** Ties break on a stable secondary key, so paging cannot show an item twice
-   or skip one. A comparison that leaves ties unresolved is a paging bug waiting for a large
-   library.
+2. **Ordering is total.** After the requested keys — and after the name, which the reference
+   chains behind a `SortName` ordering — ties break on the item id, so paging cannot show an item
+   twice or skip one. **The reference's ordering is not total, and what that costs is measured**:
+   its movie sorts arrive stable with ties in ascending id order, but under `AlbumArtist` and
+   `Artist` the concatenation of a query's pages is **not** the one-shot list — a client paging a
+   large audio library sees some items twice and never sees others
+   `[probe: tools/probe_sort_stability.py, Jellyfin 10.11.11, 2026-08-27]`. Totality is therefore
+   a deliberate divergence from a defect, argued in
+   [behaviours §3.6](../../docs/compatibility/behaviours.md#36-ties-are-engine-resolved-and-paging-the-artist-sorts-loses-rows--class-b-diverged):
+   within any tie Atrium's order is one the reference could have produced, and on the movie sorts
+   it is the very order the measured server does produce.
 3. **`Random` is seeded per request** and the seed is not exposed, so paging through a random
-   ordering is not meaningful. This matches the reference; clients use it for a single page.
+   ordering is not meaningful. Observably the reference's behaviour: a fresh shuffle on every
+   request — two identical 97-row requests shared 4 items
+   `[probe: tools/probe_sort_stability.py, Jellyfin 10.11.11, 2026-08-27]` — and clients use it
+   for a single page.
+
+Two further ordering behaviours, read from the source and reproduced:
+
+- **An item with no `PremiereDate` sorts by January 1 of its `ProductionYear`** under
+  `sortBy=PremiereDate`, rather than clumping with the dateless
+  `[source: Jellyfin.Server.Implementations/Item/OrderMapper.cs:49 @ v10.11.11]`.
+- **A request carrying `searchTerm` is ordered by match quality first** — exact match, then
+  prefix at a word boundary, then prefix, then contains — ahead of whatever `sortBy` asked for
+  `[source: Jellyfin.Server.Implementations/Item/BaseItemRepository.cs:1604-1611 @ v10.11.11]`
+  `[source: Jellyfin.Server.Implementations/Item/OrderMapper.cs:76-93 @ v10.11.11]`.
 
 ### 3.5 `GET /Items/{itemId}` — `GetItem`
 
@@ -186,7 +214,10 @@ One item in full. **This is the Jellyfin route**; the Emby dialect's
 ([ADR-0004](../../docs/decisions/0004-pin-to-jellyfin-10-11.md)).
 
 `404` for unknown or invisible items — the same answer for both, so the endpoint does not disclose
-the existence of items a user may not see.
+the existence of items a user may not see. The `404` carries the problem-details shape of
+behaviours §1.11, as does the `400` for an identifier that does not parse at all: which of the two
+a caller gets depends only on whether the id is *shaped* like an id
+`[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`.
 
 ### 3.6 `GET /UserViews` — `GetUserViews`
 
@@ -200,7 +231,7 @@ A user with no permitted libraries gets an empty envelope, not an error.
 | Endpoint | Returns | Rule that matters |
 |---|---|---|
 | `GET /Items/Latest` | **Bare array** of recently added items | Honours the user's latest-items exclusions from 002 §3.6 |
-| `GET /UserItems/Resume` | Items with a resume position | Ordered most-recently-played first; excludes items played past the completion threshold |
+| `GET /UserItems/Resume` | Items with a resume position | Ordered most-recently-played first; excludes items played past the completion threshold (007 §3.7) |
 | `GET /Shows/NextUp` | The next unwatched episode per series | One item per series, never several |
 | `GET /Items/{itemId}/Similar` | Related items | v1 scores on shared genres, people and studios. Deterministic |
 | `GET /Items/{itemId}/InstantMix` | A radio-style queue from a seed | Deterministic for a given seed and library |
@@ -304,14 +335,14 @@ this feature means about seventy fields, the largest single surface in the proje
 |---|---|---|---|
 | OQ-1 | Which fields the reference sends that §3.2 omits, and whether any client reads them | The bounded delta in §3.2 | Differential harness (010) — the single highest-value output it produces |
 | OQ-2 | Which Tier 3 parameters real clients actually send | Promotion out of Tier 3 | The ignored-parameter report (AC-15) against real client traffic |
-| OQ-3 | The reference's tie-breaking key for each `sortBy` | Paging stability parity | `tools/probe_sort_stability.py` |
-| OQ-4 | The reference's completion threshold for `Resume` eligibility | The exclusion rule in §3.7 | `tools/probe_resume_threshold.py` |
 | OQ-5 | How the reference ranks `Similar` and `InstantMix` | Nothing; v1 diverges into determinism deliberately | Comparison, for interest rather than parity |
 ### Resolved
 
 | # | Question | Answer | Resolved by |
 |---|---|---|---|
 | OQ-6 | Whether `/Items/Latest` really returns a bare array on a live server, or the spec is wrong | **Yes — bare array, and three other endpoints have three further shapes.** §3.1 now records all four | `tools/probe_query_envelope.py`, 2026-08-26 |
+| OQ-3 | The reference's tie-breaking key for each `sortBy` | **Almost none: `Name` is chained after `SortName` only, and nothing — not even the id — after anything else.** Measured, its movie sorts arrive stable with ties in id order, while `AlbumArtist`/`Artist` repeat identically yet their pages do not reassemble the one-shot list. §3.4 rule 2 is therefore a divergence from a defect, argued in behaviours §3.6 | `tools/probe_sort_stability.py`, 2026-08-27 |
+| OQ-4 | The reference's completion threshold for `Resume` eligibility | **90% ceiling, 5% floor, 300-second minimum runtime — one ordered rule with six branches**, measured at 007 OQ-2 and specified in 007 §3.7, which §3.7's exclusion follows. The `probe_resume_threshold.py` this row used to name was never needed: `probe_playstate.py` answered it | `tools/probe_playstate.py`, 2026-08-26 |
 
 ## 8. References
 

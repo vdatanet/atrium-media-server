@@ -1,9 +1,10 @@
 ---
 feature: 004-metadata-resolution
 title: Metadata resolution
-status: Draft
+status: Accepted
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-08-27
+accepted: 2026-08-27
 depends_on: [003]
 ---
 
@@ -180,9 +181,16 @@ People, genres, studios and years become **by-name items** — items in their ow
 
 Two rules:
 
-1. **Names are normalised for identity, preserved for display.** `Sci-Fi` and `sci-fi` are one
-   genre; the display name is the first spelling seen. Without this a library grows a long tail of
-   near-duplicate genres.
+1. **Names are folded for identity, preserved for display.** `Sci-Fi` and `sci-fi` are one genre;
+   the display name is the first spelling seen. Without this a library grows a long tail of
+   near-duplicate genres — and it is the reference's own behaviour, not an improvement: 97 of 97
+   live genre ids reproduce from the case-folded name, a library carrying `Electronic` and
+   `electronic` on its items holds one row for each, and no two by-name rows differ only by case
+   `[probe: tools/probe_by_name_normalisation.py, Jellyfin 10.11.11, 2026-08-27]`. The fold is
+   **case only** — spellings differing in diacritics stay separate items — plus the characters a
+   filename cannot carry; the first-spelling-wins half is source-backed rather than measured.
+   Mechanism and limits in
+   [behaviours §2.18](../../docs/compatibility/behaviours.md#218-two-spellings-of-one-genre-are-one-item).
 2. **People carry role and ordering.** A cast list is ordered, and the order is part of the
    metadata, not an accident of insertion. Clients display "starring" from the first few entries.
 
@@ -249,9 +257,14 @@ depend on network availability.
 |---|---|---|---|
 | OQ-1 | Which `.nfo` dialect the reference accepts, and how it handles fields Kodi writes but Jellyfin ignores | Field coverage in §3.2 | Fixture comparison via the differential harness |
 | OQ-2 | The reference's exact ambiguity threshold for remote matching | Nothing; v1 is deliberately more conservative | Comparison against a real server on a deliberately ambiguous fixture |
-| OQ-3 | Does the reference re-normalise genre names, or does its by-name list grow duplicates? | §3.7 rule 1, which may be a divergence | `tools/probe_by_name_normalisation.py` |
 | OQ-4 | Which `ProviderIds` keys clients read | Nothing; all known keys are emitted | Differential harness (010) |
 | OQ-5 | Whether ReplayGain values are exposed anywhere a client reads | Nothing in v1 | Survey of client code |
+
+### Resolved
+
+| # | Question | Answer | Resolved by |
+|---|---|---|---|
+| OQ-3 | Does the reference re-normalise genre names, or does its by-name list grow duplicates? | **It folds case into the by-name identity, so the list cannot grow case duplicates** — 97 of 97 live ids reproduce from the case-folded name, and a library carrying `Electronic` and `electronic` on items holds one row for each. §3.7 rule 1 is a reproduction with provenance, not a divergence; the fold's limits are in [behaviours §2.18](../../docs/compatibility/behaviours.md#218-two-spellings-of-one-genre-are-one-item) | `tools/probe_by_name_normalisation.py`, 2026-08-27 |
 
 ## 8. References
 
