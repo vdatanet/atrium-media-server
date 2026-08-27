@@ -3,7 +3,7 @@ feature: 008-playback-negotiation-and-delivery
 title: Playback negotiation and delivery
 status: Draft
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-08-27
 depends_on: [005, 007]
 ---
 
@@ -27,28 +27,34 @@ a cosmetic defect; get this wrong and nothing plays.
 
 - `POST` and `GET /Items/{itemId}/PlaybackInfo`.
 - Media inspection: what a file actually contains.
-- Device-profile evaluation and the direct-play / remux decision.
+- Device-profile evaluation and the direct-play / remux / transcode decision.
 - `GET /Audio/{itemId}/stream[.{container}]`, `GET /Audio/{itemId}/universal`.
 - `GET /Videos/{itemId}/stream[.{container}]`.
 - `GET /Videos/{itemId}/master.m3u8`, `/main.m3u8`, `/hls1/{playlistId}/{segmentId}.{container}`.
 - `DELETE /Videos/ActiveEncodings`.
-- Byte-range delivery, and the session lifecycle behind a remux.
+- **Software transcoding**: re-encoding video and/or audio when neither direct play nor remux
+  satisfies the profile, within the profile's ceilings.
+- Byte-range delivery, and the session lifecycle behind a remux or a transcode.
 
 **Out of scope**
 
-- **Transcoding.** Codec conversion, adaptive ladders, hardware acceleration, subtitle burn-in,
-  throttling. v1 stops at remux. A client whose profile cannot be satisfied by direct play or remux
-  is told so, and told honestly.
+- **Hardware-accelerated encoding and decoding.** VAAPI, QSV, NVENC, VideoToolbox. Every frame in
+  v1 goes through the CPU. This is a throughput decision, not a protocol one: the bytes a client
+  receives are the same either way, which is why it can arrive later without any client noticing.
+- **Subtitle burn-in.** Painting subtitles into frames needs a text-rendering stack and a second
+  filter path. v1 delivers subtitle files; it does not draw them.
 - Live streams, `/LiveStreams/Open`, `/LiveStreams/Close`.
 - Subtitle extraction, conversion and delivery as a separate route.
 - Trickplay.
 
-> **Why remux and not transcode.** Remuxing copies the elementary streams into a different
-> container: no decode, no encode, near-zero CPU, and an output whose size is computable. It covers
-> the large majority of real playback — most incompatibilities are container mismatches, not codec
-> ones. Transcoding is the single largest component of the reference and would multiply v1's scope;
-> its absence is visible only to clients that genuinely cannot decode what the user's files
-> contain.
+> **Why the order is direct play, then remux, then transcode.** Direct play costs nothing. Remuxing
+> copies the elementary streams into a different container: no decode, no encode, near-zero CPU, and
+> an output whose size is computable — and it covers the large majority of real playback, because
+> most incompatibilities are container mismatches, not codec ones. Transcoding costs a decode and an
+> encode per frame, so it is *last*, reached only when the first two have failed. It is in v1
+> because the alternative answer at that point is "cannot play this", and a file the user owns and
+> cannot watch is the one failure that has no cosmetic version
+> ([roadmap](../../docs/roadmap.md#in-scope)).
 
 ## 3. Behaviour
 
@@ -133,7 +139,8 @@ Given a media source and a device profile, exactly one outcome:
 |---|---|---|
 | **Direct play** | Client fetches the original file | Nothing |
 | **Direct stream (remux)** | Container rewritten, streams copied | Near zero |
-| **Not playable** | Neither works and transcoding is out of scope | — |
+| **Transcode** | At least one stream re-encoded to something the profile accepts | A decode and an encode per frame |
+| **Not playable** | No output this server can produce satisfies the profile | — |
 
 **Evaluation order**, and it stops at the first success:
 
@@ -143,7 +150,22 @@ Given a media source and a device profile, exactly one outcome:
 2. **Remux** — a container the profile accepts exists into which these elementary streams can be
    copied unchanged. Codec conditions still have to hold: remuxing does not fix an unsupported
    codec, it only fixes the wrapper.
-3. **Not playable** — say so, in the body, with the reason.
+3. **Transcode** — some output this server can produce satisfies the profile: a container it
+   accepts, holding codecs it accepts, within every ceiling it declared. Only the streams that fail
+   a condition are re-encoded (§3.4).
+4. **Not playable** — the profile accepts no container, or no codec, that v1 can produce. Say so, in
+   the body, with the reason.
+
+**"Not playable" is now a much smaller set**, and it is worth being precise about what is left in
+it: a profile listing only containers or codecs this server cannot produce, a source whose streams
+cannot be decoded at all, a source that is not readable, and a user whose policy forbids the step
+that would have answered.
+
+**The user's policy gates the ladder.** `EnableVideoPlaybackTranscoding`,
+`EnableAudioPlaybackTranscoding` and `EnablePlaybackRemuxing` remove their step from the evaluation
+for that user (002 §3.5); the request body's `EnableDirectPlay` / `EnableDirectStream` /
+`EnableTranscoding` switches remove it for that request. A step that is removed is not silently
+substituted: the decision falls through to the next one, and to "not playable" if none is left.
 
 **Three rules that prevent the classic failures:**
 
@@ -151,9 +173,12 @@ Given a media source and a device profile, exactly one outcome:
   profile that permits nothing; it is a client that has not told us, and the answer is direct play.
   Reading absence as prohibition is how a server ends up refusing to play anything to a simple
   client.
-- **Never claim a capability that is not there.** `SupportsTranscoding` is `false` in v1, always.
-  Advertising it and then failing at delivery time turns a clear "cannot play this" into a spinner
-  that never resolves.
+- **Never claim a capability that is not there.** `SupportsTranscoding` is `true` on a source
+  exactly when this server can produce, for *this* profile, a stream the profile accepts — and
+  `false` otherwise, including when the profile's ceilings leave nothing producible. It is a claim
+  about this negotiation, not a boast about the server. Advertising it and then failing at delivery
+  time turns a clear "cannot play this" into a spinner that never resolves, which is strictly worse
+  than the honest refusal v1 used to give.
 - **Never remove what the client said it can handle.** A stream copy alters the container, not the
   content. Where a profile declares support for a metadata format — a dynamic HDR variant, a
   coexistence range type — that declaration is honoured, and nothing is filtered out of the
@@ -162,7 +187,66 @@ Given a media source and a device profile, exactly one outcome:
   ([behaviours §3.4](../../docs/compatibility/behaviours.md#34-hdr10-metadata-stripped-from-clients-that-asked-for-it--class-b-no-compensation)),
   and it is a defect Atrium would have to write on purpose in order to have.
 
-### 3.4 Delivery: the rules that apply to every route
+### 3.4 Transcoding
+
+Reached only when direct play and remux have both failed. Everything in this section is in service
+of one idea: **do the least re-encoding that makes this source playable for this profile.**
+
+**Only the streams that fail a condition are re-encoded.**
+
+| Stream | v1 behaviour |
+|---|---|
+| Accepted by the profile, every condition holding | Copied, never re-encoded |
+| Rejected: codec, profile, level or bit depth | Re-encoded to a codec the profile accepts |
+| Rejected: resolution, frame rate or bitrate ceiling | Re-encoded down to the ceiling |
+| Audio rejected: channel count or sample rate | Downmixed or resampled to the ceiling |
+
+A file whose video the profile accepts and whose audio it does not is the common case — a modern
+video track with a surround audio track a browser cannot decode — and it costs an audio encode, not
+a video one. A server that re-encodes both because one was wrong burns two orders of magnitude more
+CPU than the job needs.
+
+**Ceilings are limits, not targets.** A profile permitting 1080p and 8 Mbps applied to a 720p
+3 Mbps source produces 720p at approximately the source bitrate. Nothing is ever upscaled,
+up-sampled or given more bits than it arrived with: that spends CPU to make the output larger and
+no better.
+
+**The output satisfies the profile it was built for.** This is the whole obligation of the feature.
+An output that violates a condition the client declared is worse than "cannot play this", because
+the refusal happens at the client's decoder, far from the cause, and looks like a broken file rather
+than an unsupported one.
+
+**Work starts where the client asked to start.** A request carrying a start position begins
+production at that position; it does not produce from the beginning and discard. Seeking to the last
+minute of a long film must not cost the whole film.
+
+**Production is throttled, not unbounded.** Work runs ahead of the player by a bounded margin and
+then waits. Without a ceiling, one client seeking repeatedly through a film has the server encoding
+several copies of it at once, and the machine is lost to a user who is not even watching.
+
+**A transcode is bounded work with an owner**: it belongs to a playback session (§3.8), it stops
+when the session stops, when the client disconnects, and when the server shuts down, and its output
+lives in scratch space with a ceiling.
+
+**Determinism is per session.** For a remux, the byte-identity rule holds globally: the same source
+and parameters give the same segments. For a re-encode the guarantee is narrower and is the one
+players actually need — **within a session, a segment that has been produced is served identically
+every time it is requested again**, so a retry after a network failure is the same bytes. Across
+sessions, re-encoded bytes may differ; no client compares them.
+
+**What the client is told about it.** `SupportsTranscoding`, `TranscodingUrl`,
+`TranscodingContainer` and `TranscodingSubProtocol` on the negotiated source describe this answer
+and nothing else: they are per source *and* per profile, decided by the negotiation that returned
+them (§3.3).
+
+> **Hardware acceleration is absent, and no client can tell.** The output of a CPU encode and a
+> hardware encode are both just a stream that satisfies the profile. What differs is how many
+> concurrent sessions a given machine survives — an operational property, not a protocol one. This
+> is why it can arrive in a later version without touching this specification's observable
+> behaviour, and it is the reason the exclusion is safe in a project whose first principle is that
+> a client cannot tell.
+
+### 3.5 Delivery: the rules that apply to every route
 
 **Byte ranges are mandatory.**
 
@@ -174,11 +258,20 @@ Given a media source and a device profile, exactly one outcome:
 | Unsatisfiable range | `416` with `Content-Range: bytes */total` |
 | No `Range` | `200` with the full body |
 
-**`Content-Length` is sent whenever the size is known** — always for direct play, and for remuxed
-output whenever it can be computed or the output is produced to a seekable location first.
+**`Content-Length` is sent whenever the size is known** — always for direct play, for remuxed
+output whenever it can be computed or the output is produced to a seekable location first, and for
+every HLS segment, which is finished before it is served.
+
+**The one delivery in v1 that cannot carry a size** is a progressive (non-HLS) re-encode, where the
+final length is not known until the last frame is produced. That response is chunked, exactly as the
+reference's is. The rule is *send the size when it is known*, never *invent one*: a wrong
+`Content-Length` truncates playback, which is a worse failure than the missing header this project
+went out of its way to fix.
 
 > **This is a deliberate divergence, and the most useful one in v1.** The reference's transcoding
-> and remuxing routes answer chunked, with no size and no range support. That single gap is why
+> and remuxing routes answer chunked, with no size and no range support, *including where the size
+> is perfectly knowable* — a finished HLS segment, a remux to a seekable location. That single gap
+> is why
 > every client that casts to a DLNA renderer has to run a local proxy: a renderer will not touch a
 > stream whose size it does not know. Recorded in
 > [behaviours §3.3](../../docs/compatibility/behaviours.md#33-transcoding-responses-carry-no-content-length-or-accept-ranges--class-c).
@@ -191,11 +284,11 @@ is usually downloading, and silently handing it a rewritten container corrupts w
 **Authentication** is via any of the four mechanisms (002 §3.1), in practice `?api_key=`, because
 these URLs go to media players that do not set headers.
 
-### 3.5 Audio delivery
+### 3.6 Audio delivery
 
 | Route | Behaviour |
 |---|---|
-| `GET /Audio/{itemId}/stream` | The source, with `static=true` for direct play or remuxed to the requested container |
+| `GET /Audio/{itemId}/stream` | The source, with `static=true` for direct play, remuxed to the requested container, or re-encoded when the requested container or codec cannot hold the source's streams |
 | `GET /Audio/{itemId}/stream.{container}` | Same, container from the path |
 | `GET /Audio/{itemId}/universal` | The server decides, from the client's stated constraints |
 
@@ -203,11 +296,13 @@ these URLs go to media players that do not set headers.
 `maxAudioSampleRate`, `maxAudioBitDepth`, `transcodingContainer`, `transcodingProtocol`,
 `startTimeTicks`, `deviceId`, `userId`, `mediaSourceId` and `enableRedirection`. `[spec: GetUniversalAudioStream]`
 
-**In v1 `/universal` can only answer with direct play or remux**, because that is all v1 does. When
-the constraints cannot be met without re-encoding — a sample-rate ceiling below the source, a
-bit-depth ceiling, a codec the client cannot decode — it answers with an error rather than serving
-something that violates the constraint. A client that asked for at most 48 kHz and received 96 kHz
-will fail at its own decoder, further from the cause.
+**`/universal` meets the constraints it is given, re-encoding where it must.** A sample-rate
+ceiling below the source, a bit-depth ceiling, a channel ceiling, a codec the client cannot decode:
+each is a reason to convert, and the answer is a stream that satisfies every stated constraint. The
+rule that does not bend is the one that was already here — **it never serves something that violates
+a constraint the client stated.** A client that asked for at most 48 kHz and received 96 kHz fails
+at its own decoder, further from the cause. Only a constraint set that v1 cannot produce at all
+answers with an error.
 
 **`enableRedirection`** may answer `302` to the direct-play URL rather than proxying, which is
 strictly better for the client. It is honoured when the client asks for it and direct play was the
@@ -216,20 +311,23 @@ decision.
 > ⚠️ **The reference's PCM/WAV routes are broken at 10.11.11**: `stream.wav` with any PCM codec
 > answers `500`, and `/universal` with `Container=wav` answers `200` with a body that has no RIFF
 > header. `[prior-probe: Jellyfin 10.11.11, 2026-08-03; upstream jellyfin/jellyfin#17537, merged to
-> master, not in any 10.11.x]` Producing PCM requires re-encoding, so it is outside v1's scope. When
-> transcoding lands, Atrium serves valid WAV with a real header and a real length — recorded in
-> [behaviours §3.2](../../docs/compatibility/behaviours.md#32-pcmwav-output--one-bug-two-symptoms-two-classes) so the
-> intent is not lost.
+> master, not in any 10.11.x]` Producing PCM requires re-encoding, which v1 now does, so **this path
+> is served in v1**: Atrium answers with valid WAV — a real RIFF header, a real `Content-Length`,
+> `Range` support — on both routes. Both divergences, and the risk carried by the second, are
+> reasoned in
+> [behaviours §3.2](../../docs/compatibility/behaviours.md#32-pcmwav-output--one-bug-two-symptoms-two-classes).
 
-### 3.6 Video delivery
+### 3.7 Video delivery
 
 `GET /Videos/{itemId}/stream` and `/stream.{container}` behave as their audio equivalents.
 
-**Remuxed video is delivered over HLS**, through three routes:
+**Remuxed and re-encoded video are both delivered over HLS**, through the same three routes. Which
+of the two a client is receiving is a property of the negotiation, not of the URL — and a client
+that only follows the playlist cannot tell, which is the point:
 
 | Route | Returns |
 |---|---|
-| `/Videos/{itemId}/master.m3u8` | The master playlist: one variant, since v1 has no ladder |
+| `/Videos/{itemId}/master.m3u8` | The master playlist: the variant this negotiation decided on |
 | `/Videos/{itemId}/main.m3u8` | The media playlist: the segment list |
 | `/Videos/{itemId}/hls1/{playlistId}/{segmentId}.{container}` | One segment |
 
@@ -237,23 +335,26 @@ Rules:
 
 1. **Segments are deterministic.** The same source with the same parameters yields the same segment
    boundaries every time, so a segment can be re-requested after a network failure and be the same
-   bytes. A server that re-derives boundaries per session cannot serve a retry.
+   bytes. A server that re-derives boundaries per session cannot serve a retry. For re-encoded
+   output the byte-identity half of this holds **within the session** (§3.4); the boundaries hold
+   always.
 2. **Segment duration is uniform** except for the last, and the playlist's declared duration matches
    what is delivered. Players build their seek bar from this.
 3. **A segment requested out of order is served.** Players seek; they do not walk the playlist.
 4. **The playlist is complete and marked ended** for a finite source. A live-style rolling playlist
    would make the file appear unseekable.
 
-### 3.7 Session lifecycle
+### 3.8 Session lifecycle
 
-Every remux belongs to a **playback session**, keyed by `PlaySessionId`, with an owning user and
-device.
+Every remux and every transcode belongs to a **playback session**, keyed by `PlaySessionId`, with
+an owning user and device. Nothing that costs CPU or disk exists outside one: that is what makes it
+stoppable, countable and reapable.
 
 | Event | Effect |
 |---|---|
 | Delivery request with a `PlaySessionId` | Session created or reused |
 | `DELETE /Videos/ActiveEncodings` with the id | Session and its work stopped |
-| Client stops requesting segments | Session reaped after an idle timeout |
+| Client stops requesting segments | Production pauses at the throttle margin, session reaped after an idle timeout |
 | Client disconnects mid-response | Work stopped immediately |
 | Server shutdown | All sessions stopped, scratch space cleared |
 
@@ -263,7 +364,9 @@ stops. The reference is called by real clients for exactly this reason, and a se
 without acting is worse than not implementing the route, because it looks correct.
 
 **Scratch space is bounded and reclaimed**: by session on stop, by age on a sweep, and by total
-size when a ceiling is reached. A remux that fills the disk takes the server down with it.
+size when a ceiling is reached. A remux that fills the disk takes the server down with it, and a
+transcode fills it faster — the output of a re-encode is written wholesale, and a user who seeks
+around a long film produces far more of it than they watch.
 
 ## 4. Data the feature owns
 
@@ -272,6 +375,7 @@ size when a ceiling is reached. A remux that fills the disk takes the server dow
 | Probe results per file | `MediaSources`, `MediaStreams` in 005 and here | Until the file changes |
 | Playback sessions | Whether a delivery request succeeds; `/Sessions` via 007 | Until stopped or reaped |
 | Remux scratch output | Response latency only | Disposable |
+| Transcode scratch output | Response latency, and whether a re-requested segment is the same bytes | Disposable, bounded, session-scoped |
 
 ## 5. Acceptance criteria
 
@@ -279,58 +383,102 @@ size when a ceiling is reached. A remux that fills the disk takes the server dow
 2. `PlaybackInfo` with a profile accepting the source's container and codecs answers direct play.
 3. A profile rejecting the container but accepting the codecs answers remux, with a
    `TranscodingUrl`.
-4. A profile rejecting the codecs answers `200` with an `ErrorCode` — never a `4xx`.
-5. `SupportsTranscoding` is `false` on every media source in v1.
-6. Every delivery route answers `Accept-Ranges: bytes`.
-7. `Range: bytes=100-199` answers `206` with a correct `Content-Range` and exactly 100 bytes.
-8. An unsatisfiable range answers `416` with `Content-Range: bytes */total`.
-9. Direct-play responses carry a `Content-Length` equal to the file size.
-10. **Remuxed responses carry a `Content-Length` and honour `Range`** (the §3.4 divergence).
-11. `static=true` on a source that cannot be served untouched answers an error, never a remux.
-12. `/universal` with a constraint that cannot be met without re-encoding answers an error, not a
-    violating stream.
-13. `/universal` with `enableRedirection` and a direct-play decision answers `302`.
-14. The same HLS source requested twice yields identical segment boundaries and identical segment
-    bytes.
-15. An HLS segment requested out of order is served correctly.
-16. `DELETE /Videos/ActiveEncodings` terminates the work, verified by the absence of the process and
+4. A profile rejecting the codecs, but accepting at least one codec and container this server can
+   produce, answers **transcode**, with a `TranscodingUrl` — not an error.
+5. A profile accepting no container or codec this server can produce answers `200` with an
+   `ErrorCode` — never a `4xx`.
+6. `SupportsTranscoding` is `true` exactly on the sources whose negotiated answer is a stream this
+   server can produce, and `false` on the ones that answered with an `ErrorCode`.
+7. A source whose video the profile accepts and whose audio it does not is delivered with its
+   **video stream copied**: same codec, same resolution, same frame count as the source.
+8. Delivered output satisfies **every** condition of the profile it was negotiated against —
+   asserted table-driven over the profile classes, on the delivered bytes, not on the decision.
+9. Nothing is upscaled or up-sampled: a 720p source under a 1080p ceiling is delivered at 720p.
+10. A request carrying a start position begins production at that position: time to first byte for a
+    seek near the end of a long source is of the same order as one near the beginning.
+11. Every delivery route whose body has a known size answers `Accept-Ranges: bytes`.
+12. `Range: bytes=100-199` answers `206` with a correct `Content-Range` and exactly 100 bytes.
+13. An unsatisfiable range answers `416` with `Content-Range: bytes */total`.
+14. Direct-play responses carry a `Content-Length` equal to the file size.
+15. **Remuxed responses carry a `Content-Length` and honour `Range`** (the §3.5 divergence).
+16. Every HLS segment carries a `Content-Length`, whether it was remuxed or re-encoded.
+17. A progressive re-encode whose final size is unknown answers chunked, and never a
+    `Content-Length` that is not the true length.
+18. `static=true` on a source that cannot be served untouched answers an error, never a silent remux
+    or re-encode.
+19. `/universal` with a constraint that requires re-encoding — a sample-rate, bit-depth or channel
+    ceiling below the source — answers a stream that **meets** the constraint.
+20. `/universal` with `Container=wav` answers a body with a valid RIFF header and a real length
+    ([behaviours §3.2](../../docs/compatibility/behaviours.md#32-pcmwav-output--one-bug-two-symptoms-two-classes)).
+21. `/universal` with `enableRedirection` and a direct-play decision answers `302`.
+22. The same **remuxed** HLS source requested twice yields identical segment boundaries and
+    identical segment bytes.
+23. Within one session, a **re-encoded** segment requested twice yields identical bytes.
+24. An HLS segment requested out of order is served correctly.
+25. `DELETE /Videos/ActiveEncodings` terminates the work, verified by the absence of the process and
     the reclamation of its scratch space.
-17. A client disconnecting mid-remux causes the work to stop within the timeout.
-18. Item-level `Container` is the demuxer list; the media source's `Container` is the single
+26. A client disconnecting mid-remux or mid-transcode causes the work to stop within the timeout.
+27. Production is throttled: a client that fetches the first segments and then stops does not cause
+    the whole source to be produced.
+28. Item-level `Container` is the demuxer list; the media source's `Container` is the single
     resolved container.
-19. Scratch space never exceeds its configured ceiling under repeated remux requests.
-20. A `PlaySessionId` from `PlaybackInfo` is accepted by the delivery route and by
+29. Scratch space never exceeds its configured ceiling under repeated remux and transcode requests.
+30. A `PlaySessionId` from `PlaybackInfo` is accepted by the delivery route and by
     `ActiveEncodings`.
+31. A user whose policy denies transcoding never receives one: the same request that answers
+    transcode for a permitted user answers `200` with an `ErrorCode` for this one.
 
 ## 6. Conformance
 
 | Endpoint | Level | How it is proven |
 |---|---|---|
-| `POST /Items/{itemId}/PlaybackInfo` | **L3** | Golden per profile class, plus differential. The negotiation is where clients diverge |
+| `POST /Items/{itemId}/PlaybackInfo` | **L3** | Golden per profile class — including the classes that force a transcode — plus differential. The negotiation is where clients diverge |
 | `GET /Audio/{itemId}/stream` | **L3** | Golden headers, byte-identity against the source, plus differential |
 | `GET /Audio/{itemId}/universal` | **L3** | Golden per constraint class, plus differential |
 | `GET /Videos/{itemId}/stream` | **L3** | Golden headers and range matrix, plus differential |
 | Container-suffixed forms | **L2** | Same assertions, path-derived container |
-| HLS routes | **L2** | Playlist shape, segment determinism (AC-14), out-of-order fetch |
-| `DELETE /Videos/ActiveEncodings` | **L2** | Process and scratch-space observation (AC-16) |
+| HLS routes | **L2** | Playlist shape, segment determinism (AC-22, AC-23), out-of-order fetch |
+| Transcoded output | **L2** | The delivered bytes are inspected and asserted against the profile they were negotiated for (AC-8, AC-9). **Not** byte-compared with the reference |
+| Throttling and scratch ceiling | **L2** | Produced output observed against what was fetched (AC-27, AC-29) |
+| `DELETE /Videos/ActiveEncodings` | **L2** | Process and scratch-space observation (AC-25) |
+
+**Transcoded bytes are not compared with the reference, and never will be.** Two encoders given the
+same instruction produce different bytes, and the difference is not a defect. What is asserted is
+the property a client depends on: *the output satisfies the profile*. Levels above that would be
+asserting that Atrium ships the reference's encoder, which is not a compatibility claim.
 
 **The range matrix is table-driven** over: no range, prefix, suffix, mid-file, single byte, exactly
 the whole file, one past the end, and a reversed range. These are where range implementations
 actually break, and each is one line of test.
 
 Media fixtures are **synthetic, generated at build time** — a few seconds of colour bars and a tone,
-muxed into each container the tests need. No copyrighted media, and the repository stays small.
+muxed into each container the tests need. No copyrighted media, and the repository stays small. The
+transcode tests need two more of them: a source whose codecs no common profile accepts, to force
+step 3 of the decision, and a source with an accepted video track beside a rejected audio track, for
+AC-7. **They stay seconds long**, because every transcode test now spends real CPU, and a suite that
+takes minutes is a suite that stops being run.
 
 ## 7. Open questions
 
 | # | Question | Blocks | Resolved by |
 |---|---|---|---|
-| OQ-1 | The reference's `ErrorCode` vocabulary and which code it uses for each failure | AC-4's exact value | `tools/probe_playback_info.py` |
+| OQ-1 | The reference's `ErrorCode` vocabulary and which code it uses for each failure | AC-5's exact value | `tools/probe_playback_info.py` |
 | OQ-2 | Does the reference set `SupportsDirectPlay` per source or per request? | Annotation semantics in §3.2 | `tools/probe_playback_info.py` |
 | OQ-3 | The reference's HLS segment duration and boundary rule | Segment-level parity | `tools/probe_hls.py` |
-| OQ-4 | Does the reference honour `enableRedirection`, and with which status? | AC-13 | `tools/probe_universal_audio.py` |
+| OQ-4 | Does the reference honour `enableRedirection`, and with which status? | AC-21 | `tools/probe_universal_audio.py` |
 | OQ-5 | Which of the 19 `/universal` parameters clients actually send | Parameter coverage | Differential harness (010) |
-| OQ-6 | Does `DELETE /Videos/ActiveEncodings` take the session id as a query parameter or apply to all of the caller's? | AC-16, AC-20 | `[spec: StopEncodingProcess]` plus a probe |
+| OQ-6 | Does `DELETE /Videos/ActiveEncodings` take the session id as a query parameter or apply to all of the caller's? | AC-25, AC-30 | `[spec: StopEncodingProcess]` plus a probe |
+| OQ-7 | Does the reference's master playlist advertise one variant or several when the answer is a transcode? | §3.7's master-playlist row | `tools/probe_transcode_decision.py` |
+| OQ-8 | Which container and codecs the reference picks for a given profile, and what it puts in `TranscodingContainer`, `TranscodingSubProtocol` and the `TranscodingUrl` parameters | Whether a client that parses that URL sees what it expects | `tools/probe_transcode_decision.py` |
+| OQ-9 | Does the reference copy the compatible stream and re-encode only the other, or re-encode both? | §3.4's stream table, AC-7 | `tools/probe_transcode_decision.py` |
+| OQ-10 | The reference's throttle margin and what it does when a client stops fetching | AC-27's threshold | `tools/probe_transcode_session.py` |
+| OQ-11 | Does the reference start work at the requested position, or produce from zero and discard? | AC-10's threshold | `tools/probe_transcode_session.py` |
+| OQ-12 | What the reference answers when transcoding is refused by `EnableTranscoding: false` in the request body | An error path §3.2 does not yet name | `tools/probe_playback_info.py` |
+
+**OQ-7 to OQ-12 arrived with the scope change on 2026-08-27** and none of them blocks the *decision*
+this specification makes — they block the *parity* of the values it reports. That is the honest
+statement of where this feature stands: what Atrium does is specified, what the reference puts in
+four fields while doing it is measured before the plan, not guessed after it (Principle II).
 
 ## 8. References
 

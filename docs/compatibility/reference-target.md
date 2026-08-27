@@ -81,7 +81,7 @@ reproduces the measurement, at which point the citation becomes a plain `[probe:
 | The `SortBy` vocabulary | 2026-06-13 | `tools/probe_sort_vocabulary.py` (feature 005) | not written |
 | Dates carry seven fractional digits | 2026-06-19 | `tools/probe_wire_format.py` (feature 001) | not written |
 | ~~`/Sessions/Playing/Progress` needs no `MediaSourceId`~~ | 2026-06-13 | `tools/probe_playstate.py` (feature 007) | ✅ **discharged 2026-08-26** |
-| PCM/WAV transcoding returns 500 | 2026-08-03 | Out of v1 scope; re-measure when transcoding lands | n/a |
+| PCM/WAV transcoding returns 500 | 2026-08-03 | `tools/probe_pcm_wav.py` (feature 008) | not written |
 | `LocalAddress` gets an HTTPS override | 2026-08-14 | `tools/probe_local_address.py` (feature 001) | not written |
 | `TotalRecordCount` is 0 without `limit` | 2026-08-05 | `tools/probe_by_name_counts.py` (feature 005) | not written |
 

@@ -888,10 +888,13 @@ harness ever finds such a client, this decision is revisited, not defended.
 
 #### Status in v1
 
-Tie-break 3 applies: producing PCM requires re-encoding, which is transcoding, which is out of v1
-([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)). **v1 serves neither
-symptom's path.** The decision is recorded now because the reasoning is fresh and the alternative
-is re-deriving it in a year with less information — not because anything is being built.
+**Both paths are served in v1.** Producing PCM requires re-encoding, and transcoding entered v1 on
+2026-08-27 ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)), so the deferral
+that used to close this section no longer applies: Atrium answers both routes with valid WAV — a
+real RIFF header, a real length, `Range` support — as decided above, and
+[008 AC-20](../../specs/008-playback-negotiation-and-delivery/spec.md#5-acceptance-criteria) is
+where it is asserted. The reasoning was written while it was fresh and was waiting for the code;
+this is the case it was written for.
 
 ### 3.3 Transcoding responses carry no `Content-Length` or `Accept-Ranges` — class C
 
@@ -900,9 +903,14 @@ is re-deriving it in a year with less information — not because anything is be
 **Depends on it:** negatively — DLNA renderers refuse a stream with no size, which is why clients
 that cast run a local sizing proxy.
 
-**Atrium does:** **diverge for remuxed output**, where the output size is computable or the file is
-seekable: send `Content-Length` and honour `Range`. Same reasoning as §3.2 — a client cannot branch
-on a response being more correct.
+**Atrium does:** **diverge wherever the size is knowable** — remuxed output whose size is
+computable or which is written somewhere seekable, and every HLS segment, transcoded ones included,
+since a segment is finished before it is served: send `Content-Length` and honour `Range`. Same
+reasoning as §3.2 — a client cannot branch on a response being more correct.
+
+**The one place Atrium does not diverge** is a progressive re-encode whose final length is unknown
+until the last frame. That answers chunked, exactly as the reference does, because the alternative
+is inventing a number, and a wrong `Content-Length` truncates playback.
 
 ### 3.4 HDR10+ metadata stripped from clients that asked for it — class B, no compensation
 
@@ -1044,7 +1052,7 @@ undocumented bug.
 | **Item fields outside the observed union omitted** ([005 §3.2](../../specs/005-item-query-api/spec.md)) | A field absent that the reference sends | The differential's key-set pass, which exists mainly for this |
 | **Policy flags stored but unenforced** ([002 §3.5](../../specs/002-authentication-users-and-sessions/spec.md)) | A restriction that does not restrict | All of them gate features v1 lacks; each is enforced in the change that adds its feature |
 | **Image decoration parameters ignored** ([006 §3.2](../../specs/006-images/spec.md)) | `percentPlayed`, `blur`, `foregroundLayer` have no effect | Implement if the differential shows a client sending them |
-| **No transcoding** ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)) | "Cannot play this" where the reference would transcode | Out of v1 by decision, not by accident. A v2 candidate |
+| **No subtitle burn-in** ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)) | Subtitles delivered as files; a client that can only take them painted into the frame shows none | The subtitle work in a later version. Transcoding itself is **in** v1 as of 2026-08-27, so the older "cannot play this" gap is closed |
 | **`Path`-derived identifiers differ from the reference's** ([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters)) | Nothing — ids are opaque | Not a gap to close; a deliberate design choice |
 | **A container that has lost every file is still returned** ([003 §3.8](../../specs/003-library-configuration-and-scanning/spec.md#38-scanning-and-change-detection)) | An empty series or album in a library, with nothing under it | A query-time filter in 005: a container with no visible children is not offered. See §5.2 |
 

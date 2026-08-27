@@ -20,13 +20,24 @@ Everything below is either a step toward that sentence or explicitly out.
 | **Sessions** | Session tracking, capability registration, playback start/progress/stop reporting |
 | **Images** | Primary, Backdrop, Thumb, Logo, Banner; on-the-fly resizing with a disk cache; content-hash tags |
 | **Playback** | `PlaybackInfo` negotiation against a client `DeviceProfile`; direct play with full `Range` support; remuxing to a compatible container without re-encoding, delivered over HLS |
+| **Transcoding** | Software re-encoding when neither direct play nor remux satisfies the profile: video and audio codec conversion, resolution / bitrate / channel ceilings, HLS delivery, throttling, and scratch space with a ceiling |
 | **Conformance** | The four-level harness in [compatibility/conformance.md](compatibility/conformance.md) |
+
+**Transcoding entered v1 on 2026-08-27**, and it is the one scope decision in this document that was
+reversed rather than refined. The reason it was out was cost, and the reason it is in is that
+"cannot play this" is the one answer a media server is not allowed to give: every other v1 feature
+degrades gracefully when it is wrong, and this one leaves the user staring at a file they own and
+cannot watch. `SupportsTranscoding` therefore becomes *true* in v1, and every consequence of that
+claim — throttling, session teardown, bounded scratch space — is owed in the same version, because
+advertising a capability and failing at delivery time is worse than not having it
+([008 §3.3](../specs/008-playback-negotiation-and-delivery/spec.md#33-the-decision)).
 
 ### Out of scope, and why
 
 | Not in v1 | Reason |
 |---|---|
-| **Full transcoding** | The largest component of Jellyfin: codec conversion, adaptive ladders, throttling, hardware acceleration, subtitle burn-in. v1 stops at remux, which covers the large majority of real playback |
+| **Hardware-accelerated transcoding** | VAAPI, QSV, NVENC, VideoToolbox: a per-machine hardware surface with its own detection, failure modes and driver matrix. v1 encodes on the CPU — slower, but portable and testable on any machine that can run the test suite |
+| **Subtitle burn-in** | Needs a text-rendering stack (fonts, ASS positioning, shaping) and a second filter path. v1 delivers subtitle files; it does not paint them into frames |
 | **Live TV, DVR, tuners** | A separate product with its own hardware surface |
 | **The Jellyfin web UI** | Would add a large endpoint surface whose only consumer is a UI this project is not building |
 | **Plugins** | .NET assembly loading; no Python analogue worth inventing |
@@ -49,9 +60,14 @@ priority order: each feature is testable the moment it lands, and each unlocks t
 | **005** | Item query API | `/Items` and the by-name endpoints: filtering, sorting, pagination, `Fields` | 002, 004 |
 | **006** | Images | Artwork delivery, resizing, cache, tags | 004, 005 |
 | **007** | User data and playstate | Favourites, played, resume, playback reporting | 002, 005 |
-| **008** | Playback negotiation and delivery | `PlaybackInfo`, direct play, remux, `Range` | 005, 007 |
+| **008** | Playback negotiation and delivery | `PlaybackInfo`, direct play, remux, software transcoding, `Range` | 005, 007 |
 | **009** | Playlists | Create, read, add, remove, reorder | 005 |
 | **010** | Conformance harness | The L0–L3 machinery as a deliverable, not a by-product | all |
+
+**008 is one feature, not two.** Transcoding lives inside it rather than in a directory of its own,
+because it is not a separate capability a client can ask for: it is the third branch of a single
+decision, reached only when the first two fail. Splitting it would put one decision ladder in two
+specifications and guarantee they drift.
 
 **010 is last in the list but not last in time.** L0 and L1 exist from 001 — the casing sweep has
 to be in place before the first response model, or Principle I is enforced by discipline instead of
@@ -68,10 +84,69 @@ enough to compare.
 - **003** can proceed in parallel with 001 and 002: it has no HTTP surface of its own and is
   validated entirely against the fixture library.
 
-## Beyond v1
+## v2 — the management CLI
+
+**One sentence:** everything an administrator does to an Atrium server can be done from a terminal,
+against the same HTTP API a client uses, with no privileged side door.
+
+Jellyfin's administrative surface is administered through its web UI. Atrium does not serve that UI
+([reference-target.md §5](compatibility/reference-target.md#5-what-is-not-a-target)), so v1 leaves a
+real gap: the server can be configured, but only by editing what is on disk. v2 closes it with a
+command-line client.
+
+**The constraint that makes this safe:** the CLI is a *client*. It speaks HTTP to the same endpoints
+any other client could call, holds a token obtained the same way, and has no access to the database
+or the configuration files that the API does not also give it. Anything the CLI can do, a Jellyfin
+client could do too — which is exactly why it costs Principle I nothing: a tool that consumes the
+API is not a dialect.
+
+| In v2 | Out of v2 |
+|---|---|
+| Users: create, list, update policy, reset password | Anything requiring an endpoint Jellyfin does not have |
+| Libraries: add, rename, remove, list, trigger a scan | Direct database access, direct config-file writes |
+| Server configuration: read and update | A second authentication path for "local" callers |
+| Sessions and playback: list, stop | Interactive full-screen UI — that is v3's problem |
+
+**This grows the served surface, and that is the point.** The admin endpoints are Jellyfin's own —
+`[spec: GetVirtualFolders, AddVirtualFolder, RemoveVirtualFolder, RenameVirtualFolder,
+RefreshLibrary, CreateUserByName, UpdateUserPolicy, GetConfiguration, UpdateConfiguration]` — and
+serving them is implementing more of Jellyfin, not inventing anything. The v1 endpoint set
+([api-surface-v1.md](compatibility/api-surface-v1.md)) grows accordingly, under the same rule as
+every other row in it: an endpoint enters the table with its provenance, or it does not enter.
+
+> **Why this repository, and why now.** The same shape of problem — an administrative surface that
+> needs a scriptable client — is waiting in other applications, and it is worth solving once with
+> the answer written down. Atrium is where the experiment runs, because it is the case with the
+> hardest constraint: the API cannot be bent to suit the tool. A CLI design that survives *"you may
+> not add an endpoint for your own convenience"* is a design that transfers; one that quietly grows
+> a helper route for every awkward operation teaches nothing. What v2 is expected to produce, beyond
+> a working tool, is a recorded answer to how a CLI is structured against an API it does not own.
+
+## v3 — the management UI
+
+**One sentence:** the same administrative surface as v2, in a browser, for the operations that are
+genuinely worse in a terminal.
+
+Atrium's own management UI — not the official Jellyfin web UI, which stays out for the reason it has
+always been out. It is a browser client of the endpoints v2 already brought into the server: users,
+libraries, scans, configuration, sessions.
+
+**The rule that decides every argument this feature will produce:** no endpoint exists for the sake
+of the UI. If the UI wants something the Jellyfin API does not offer, the UI does without it. The
+moment a route is added because a screen would be nicer with it, Atrium has a dialect and the
+project has lost the thing it exists for (Principle I).
+
+v3 follows v2 rather than replacing it: the CLI is the surface that gets exercised by scripts and
+tests, and the UI is a second consumer of the same calls, which is the cheapest way to find out
+whether v2's design was really API-shaped.
+
+## Later, unscheduled
 
 Not planned, not promised. Recorded so the shape of the ambition is visible:
 
-- **v2 candidates** — full transcoding; the official Jellyfin web UI; WebSocket push for library
-  changes; subtitle delivery and search; trickplay generation; Postgres as an alternative store.
-- **Permanently out** — an Atrium-specific API dialect, in any form. Principle I.
+- Hardware-accelerated transcoding, and subtitle burn-in.
+- Subtitle search and download from providers.
+- The official Jellyfin web UI.
+- WebSocket push for library changes; trickplay generation; Postgres as an alternative store.
+
+**Permanently out** — an Atrium-specific API dialect, in any form. Principle I.

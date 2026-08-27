@@ -147,10 +147,13 @@ failing here empties a user's grid during a refresh.
 `imageType` of `Chapter` with an index addresses a chapter thumbnail, for the scrubbing UI of a
 video client.
 
-v1 **serves** chapter images that exist on disk. It does not **extract** them; generating them
-means decoding video at intervals, which belongs with the transcoding work that is out of v1. An
-item whose chapters have no images answers `404` per chapter, which is what a client already
-handles for a server that has not finished generating them.
+v1 **serves** chapter images that exist on disk. It does not **extract** them: generating them
+means decoding a video at intervals and running a background job over the whole library, and that
+job — trickplay and chapter-image generation — is out of v1 in its own right
+([roadmap](../../docs/roadmap.md#out-of-scope-and-why)). The arrival of transcoding does not change
+this; a decode on demand for one client is not a sweep over every item. An item whose chapters have
+no images answers `404` per chapter, which is what a client already handles for a server that has
+not finished generating them.
 
 ## 4. Data the feature owns
 
