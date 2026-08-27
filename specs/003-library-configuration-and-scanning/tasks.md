@@ -122,9 +122,9 @@ real library contained*. An extension nobody has a file of was not measured. The
 OQ-5 — every album on that server lives in one directory, so a genuinely flat, well-tagged
 structure remains unproven and [spec §3.5](spec.md#35-music) says so.
 
-## T2 — The fixture library generator
+## T2 — The fixture library generator  ✅
 
-- [ ] **Changes:** `tests/fixtures/library/` holding directory trees and `.nfo` sidecars; a
+- [x] **Changes:** `tests/fixtures/library/` holding directory trees and `.nfo` sidecars; a
   generator producing the files at build time — **deterministic placeholder bytes with the right
   extension and a non-zero size**, no external muxer.
 - **Depends on:** 001 complete
@@ -141,6 +141,45 @@ structure remains unproven and [spec §3.5](spec.md#35-music) says so.
   "byte-identical across two builds" depend on its version rather than on ours.
 - **Note:** when 008 needs a decodable file, it generates one **there**, where something decodes it.
 - **Plan reference:** §8.1
+
+### Done — 2026-08-27
+
+**The determinism hazard was the clock, not the bytes.** This task's verification line asks for
+files that are byte-identical across two builds, and that part was never in doubt: content derived
+from a path is deterministic by construction. What would actually have made scans irreproducible is
+**`mtime`** — [plan §6.4](plan.md#64-change-detection) makes `(size, mtime_ns)` the change-detection
+signal, so a fixture written at the current time hands every scan a different signal and quietly
+makes [spec §3.8](spec.md#38-scanning-and-change-detection)'s "the same tree scanned twice produces
+the same items" untestable. The generator pins every file to one timestamp, and a test asserts
+there is exactly one. Nothing in the task said so; the byte-identity criterion reads like the whole
+of determinism and is about half of it.
+
+**Five of the thirteen acceptance criteria cannot live in a tree**, and this task was written as
+though §5 were a list of tree contents. AC-2, AC-3, AC-10, AC-11 and AC-12 are **mutations
+performed on the tree at scan time** — scan it twice, move the root, delete a file, make a
+directory unreadable. A fixture can no more hold them than it can hold a second scan. The test
+carries the map of which criteria the fixture is responsible for and says why the rest are absent,
+so that "covers the awkward cases of §5" is not later read as a claim that all thirteen are
+covered here.
+
+**A tree of files cannot declare an empty directory**, and one of the cases is exactly that:
+[spec §3.4](spec.md#34-series-seasons-and-episodes) says a season directory with no episodes is
+normal. The manifest gained a trailing-slash form for it. Small, and it would have been found much
+later — by a walker test that had nothing to walk.
+
+**"No fixture file is a copyrighted work" had to become a property, not a list.** Asserting it by
+checking extensions would pass for whatever extension nobody thought of, so the test asserts that
+**tests/fixtures holds nothing but `.py` files**. The first thing it caught was `__pycache__`,
+which is the interpreter's output for the very modules being checked and is the one exemption.
+
+**T1's findings are in the tree already**, which is the argument for having measured first: a
+`theme.mp3` and a `commentary.mka` sit beside a film and are declared to produce nothing
+([behaviours §2.15](../../docs/compatibility/behaviours.md#215-an-audio-file-under-a-video-root-is-not-an-item)),
+and a music entry carries an album tag bearing no resemblance to its directory — the shape 413 of
+the reference's 5,814 tracks had. Neither would have been in a fixture designed a day earlier.
+
+The whole tree is 54 files across three libraries and 54 KiB, generated, with a reason on every
+entry.
 
 ## T3 — `domain/items.py`
 
