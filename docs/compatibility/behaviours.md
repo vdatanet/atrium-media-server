@@ -1,6 +1,6 @@
 # Measured behaviours
 
-**Last verified: 2026-08-26, against Jellyfin 10.11.11.**
+**Last verified: 2026-08-27, against Jellyfin 10.11.11.**
 
 This is the registry required by Principle V. Every entry has the same three fields:
 
@@ -257,6 +257,28 @@ will work, for every session whose client declared it, whether or not anything i
 about it, and v1 answers `false` because it has no remote control — which
 [002 §3.8](../../specs/002-authentication-users-and-sessions/spec.md#38-sessions) argued was honest
 rather than a gap, and which is now measured to be **not a divergence at all**.
+
+### 2.15 An audio file under a video root is not an item
+
+**Jellyfin does:** admit a file only when its extension is on the list for its library's collection
+type, and it does not fall back to another type's list. Under the `movies` and `tvshows` roots of a
+library holding 8,288 items, 89 `.mp3` files and 3 `.mka` files produced **no item of any type** —
+not a `Movie`, not an `Episode`, and not an `Audio` either. The same server admits `.flac`, `.m4a`
+and `.dsf` under its `music` root, so the extensions are recognised; the collection type is what
+refuses them. `[probe: tools/probe_library_extensions.py, Jellyfin 10.11.11, 2026-08-27]`
+
+The measured admitted sets are `movies` `.mkv` `.mp4` `.avi` `.ts`; `tvshows` `.mkv` `.avi` `.mp4`;
+`music` `.flac` `.m4a` `.dsf`. They are a **lower bound** — what one real library contained — not
+the reference's configured lists, which the API does not expose.
+
+**Depends on it:** yes, by absence. A film library that admitted every audio extension would return
+theme music, commentary tracks and stray downloads as items the reference does not have, and the
+user would see a library that disagrees with the one their other client shows. Absence is as
+observable as presence.
+
+**Atrium does:** the same. Extension lists are per collection type, and a file whose extension is
+not on its own type's list is ignored silently ([003 §3.2](../../specs/003-library-configuration-and-scanning/spec.md#32-what-is-considered-a-media-file))
+— never promoted to another type because some other list would accept it.
 
 ### 2.13 `DeviceId` is mandatory on one route, not on the header
 

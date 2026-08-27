@@ -33,6 +33,8 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_playlist_move.py`](probe_playlist_move.py) | Does `Move`'s `newIndex` refer to the list before or after removal? | 009 OQ-1 | yes |
 | [`probe_playstate.py`](probe_playstate.py) | What does a playback-stopped report do to `UserData`? | 007 OQ-2 | yes |
 | [`probe_auth_mechanisms.py`](probe_auth_mechanisms.py) | How may a client present a token, and how is a refusal shaped? | 002 §3.1, §3.3, OQ-1, OQ-3 | no |
+| [`probe_library_extensions.py`](probe_library_extensions.py) | Which file extensions does the reference admit as items, and which does it ignore? | 003 §3.2, OQ-1 | no |
+| [`probe_music_precedence.py`](probe_music_precedence.py) | What happens when a file's embedded tags contradict its path? | 003 §3.5, OQ-5 | no |
 
 ### Running them
 
@@ -52,7 +54,19 @@ python3 tools/probe_sort_names.py     --allow-writes
 python3 tools/probe_playlist_move.py  --allow-writes
 python3 tools/probe_playstate.py      --allow-writes
 python3 tools/probe_auth_mechanisms.py --disabled-user probe-disabled
+python3 tools/probe_library_extensions.py
+python3 tools/probe_music_precedence.py
 ```
+
+The two 003 probes **write nothing and need no fixture placed anywhere**. They read the library the
+server already has: the item list for what it admitted, and `/Environment/DirectoryContents` — the
+read-only filesystem view the library-setup screen uses — for what was on disk and became nothing.
+Both therefore measure *that* library rather than the reference's configured lists, and each says
+in its own output which half of its finding is a measurement and which is a bound.
+
+`probe_library_extensions.py` walks a bounded number of directories, because the tree belongs to
+somebody else; `--listings` and `--per-root` widen it, and it always reports what it did not
+reach.
 
 `probe_auth_mechanisms.py` needs one thing the others do not: **an account that is disabled on the
 reference**, because measuring how a disabled user is refused is the whole of 002 OQ-3 and there is
@@ -62,6 +76,19 @@ means failed logins against somebody else's.
 
 It never tests lockout. Failing N logins on purpose would lock a real account, and the counter it
 moves is not one a probe can reset.
+
+**If a probe cannot verify the server's certificate**, the cause is usually local rather than the
+server's. A Python installed from python.org ships **no CA bundle at all** — `ssl` reports zero
+trusted certificates — so an HTTPS reference fails with `CERTIFICATE_VERIFY_FAILED` while `curl`
+against the same URL succeeds, which reads like a server fault and is not one. Run that Python's
+`Install Certificates.command`, or point `SSL_CERT_FILE` at a bundle for one run:
+
+```bash
+SSL_CERT_FILE=$(python3 -c "import certifi; print(certifi.where())") python3 tools/probe_music_precedence.py
+```
+
+The macOS system bundle at `/etc/ssl/cert.pem` is **not** always a substitute: it is missing roots
+that `curl` reaches through the keychain instead, so it can fail where the keychain succeeds.
 
 `.env` is git-ignored and holds a real password for a real server. The template is committed; the
 file it produces never is. Leaving `JELLYFIN_PASSWORD` empty is the safer choice — the probe

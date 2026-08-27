@@ -146,6 +146,16 @@ class Server:
     def get(self, path: str, **params: Any) -> Any:
         return self._request("GET", path, params=params)
 
+    def get_where(self, path: str, params: dict[str, Any]) -> Any:
+        """GET with the query as a dict, for parameter names `get`'s own signature swallows.
+
+        `get(path, **params)` cannot send a query parameter called `path` - Python binds it to the
+        positional argument and raises. That is not hypothetical: /Environment/DirectoryContents,
+        the only read-only view of the server's filesystem, takes exactly `path`. The same applies
+        to `method`, `params`, `body`, `extra_headers` and `raw`.
+        """
+        return self._request("GET", path, params=params)
+
     def get_raw(self, path: str, **params: Any) -> tuple[int, dict[str, str], bytes]:
         return self._request("GET", path, params=params, raw=True)
 
