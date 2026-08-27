@@ -164,7 +164,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T3 — The seeded world
 
-- [ ] **Changes:** `tests/fixtures/query.py` — the [plan §8](plan.md#8-testing-strategy) fixture:
+- [x] **Changes:** `tests/fixtures/query.py` — the [plan §8](plan.md#8-testing-strategy) fixture:
   a builder that inserts a known world **through the repositories**, no scan, no filesystem.
   Three libraries (movies, shows, music); an unrestricted user, a user restricted to one library,
   and a user permitted nothing (AC-9's); 003's awkward names, whitespace artefacts included;
@@ -184,6 +184,37 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   untouched: they exercise scanning; this world exercises querying, and no scan runs in 005's
   tests.
 - **Plan reference:** §8
+- **Done (2026-08-27):** four things the list did not say, one of which would have made every
+  golden response unreproducible.
+
+  **`MetadataRepository.apply` stamps `utc_now()` unless `refreshed_at` is passed.** A world built
+  without it differs between two builds in a column, and plan §8 checks golden bodies in against
+  this world — so the fixture would have been non-deterministic in exactly the way Principle VII
+  forbids, and the symptom would have been a suite that fails on a machine rather than on a
+  change. Every `apply` call here passes a constant. The invariants test builds the world twice
+  into two databases and compares every identifier, so a clock reaching into it later fails
+  loudly.
+
+  **"003's awkward names" and "a 100-item paging corpus" cannot be two sets.** As separate lists
+  they would both sit in the movies library, and plan §8 row 4's test — page *the corpus* and
+  assert each id seen exactly once — would be paging a different set than the library holds. They
+  are one corpus of 100, the first eight of which carry the awkward names. `CORPUS_SIZE` is
+  asserted indivisible by 7 and 97, the plan's own page sizes, because a corpus that divides
+  evenly never exercises the short final page.
+
+  **The list does not name images, and 004 spent a task owing them.** `ImageTags` emittable from
+  `item_images` alone is one of the four things
+  [004 wrote down for this feature](../004-metadata-resolution/tasks.md#what-this-feature-owes-the-next-ones),
+  and a world where every item has an empty tag map cannot tell an emitter that works from one
+  that returns `{}`. One film carries a primary image, people and a studio. Recorded here rather
+  than added quietly.
+
+  **A resumable item must not also be played**, or the Resume fixture and the NextUp fixture are
+  the same rows and neither test proves what it says. Asserted.
+
+  One alignment worth keeping: the multi-episode `S01E02-E03` file is exactly what NextUp must
+  answer with for its series, so the odd-shaped episode is the tested case rather than a shape
+  sitting unused beside the one that gets exercised.
 
 ## T4 — The three framework fights, once, in `compat/`
 
