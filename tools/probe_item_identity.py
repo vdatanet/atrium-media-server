@@ -173,8 +173,9 @@ def run(server: Server) -> Probe:
     if case_sensitive:
         probe.note(
             "This server has EnableCaseSensitiveItemIds SET, so it cannot say what the "
-            "reference's default is. Atrium's own default - case-insensitive, 003 spec section "
-            "3.6 - is asserted from the setting existing and not from a measurement, and this "
+            "reference's DEFAULT is - which is 003 OQ-9, open and measured by nothing. Atrium's "
+            "own default is case-insensitive (003 spec section 3.6) and is stated there as its "
+            "own decision rather than as a match for the reference's, precisely because this "
             "probe cannot supply one. Pointing it at a server with the flag unset would."
         )
 

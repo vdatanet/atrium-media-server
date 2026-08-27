@@ -1074,11 +1074,15 @@ could be harmed.
 
 ### 5.2 A container that has lost every file is not removed
 
-**Jellyfin does:** remove a series, season or album whose files have all gone, on the next scan.
-`[prior-probe: Jellyfin 10.11.11, 2026-06-13]` ⚠️ **UNVERIFIED** — measuring it means deleting a
-directory from a real library, which no read-only probe can do and which nobody should do to
-somebody else's media to settle a documentation question. It is stated here as what the reference is
-believed to do, and marked, rather than left out.
+**Jellyfin does:** ⚠️ **UNVERIFIED — not measured, and no citation is offered for it.** It is
+*believed* to remove a series, season or album whose files have all gone, on the next scan. Nobody
+here has watched it do so, and this entry does not pretend otherwise: measuring it means deleting a
+directory out of a real library, which no read-only probe can do and which nobody should do to
+somebody else's media to settle a documentation question. What would answer it is a disposable
+library on a server somebody owns — scanned, emptied of one series' episodes, scanned again.
+
+The unmeasured half does not change the decision below. Atrium's reason for keeping the row is an
+argument about **its own** guards, and it would stand whichever way the reference goes.
 
 **Depends on it:** a user sees an empty series in their library instead of not seeing it. Visible,
 and mildly annoying; nothing breaks and no state is lost.

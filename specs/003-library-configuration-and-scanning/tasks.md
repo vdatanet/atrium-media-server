@@ -1124,9 +1124,10 @@ favourited only the container would pass against the bug.
 `EnableCaseSensitiveItemIds` **set**, which is why its ids reproduce from the path *verbatim* — 447
 of the 447 paths containing an uppercase character. That confirms behaviours §1.4's description
 exactly, and it also means this server cannot tell us the reference's **default**, which is what
-spec §3.6 and OQ-2 assert without provenance when they say Atrium's case-insensitive default is
-"what the reference does". That half is now marked `⚠️ UNVERIFIED`, in the spec and in the probe's
-own output, with the run that would settle it named.
+spec §3.6 and OQ-2 asserted without provenance when they said Atrium's case-insensitive default was
+"what the reference does". T19 replaced that with a hedged claim carrying a `⚠️ UNVERIFIED` marker,
+which **T21 corrected again** — the claim is not made at all now, and the unmeasured half is OQ-8.
+The probe still says in its own output that a server with the flag set cannot answer it.
 
 **The move is not merely survivable, it is invisible.** The report is asserted whole:
 `added`, `updated`, `removed`, `revived` and `missing` are all zero. A scanner that produced the
@@ -1281,6 +1282,27 @@ have been quietly false: the naming corpus's `AWAITING` table is **empty**, so n
 behind an `xfail` — T10 to T13 each deleted their own line as the task list required. `strict=True`
 is what made that visible: a lenient `xfail` that started passing would have been green and silent.
 
+**Two provenance defects were found in this feature's own work, and both were T21's to fix.**
+Writing an audit of the project's claims meant re-reading them, and the two worst kinds turned up
+in what T19 and T21 had just written:
+
+* **A fabricated citation.** behaviours §5.2 carried
+  `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` beside a claim **nobody has measured** — the
+  version and date copied off a neighbouring entry. That is worse than no citation at all: no
+  citation is visible, and a real-looking one turns "we believe this" into "somebody measured this
+  in June" for every future reader. It is gone; the entry now says it is unmeasured, why it cannot
+  be measured read-only, and what would answer it.
+* **A hedged claim where an open question belonged.** T19 wrote "believed to be what the reference
+  defaults to … `⚠️ UNVERIFIED`" into spec §3.6, and the constitution says an unverified claim
+  *blocks the specification from leaving draft status* — so marking 003 `Implemented` in this very
+  task would have contradicted it. The resolution is not to delete the marker but to stop making
+  the claim: §3.6 states Atrium's own default as the decision it is, and **OQ-8** records the
+  reference's default as unmeasured. A question you have not answered is a supported state; a claim
+  you cannot support is not.
+
+Both were introduced by this session and caught by this session, which is the argument for the
+audit existing rather than for trusting the next reader to notice.
+
 **`spec_status_actual` moved with the status.** Both `plan.md` and `tasks.md` carry a gate field
 naming what they were written against; leaving those at `Accepted` while the artefact above them
 said `Implemented` would make the gate record a state that no longer existed.
@@ -1310,11 +1332,14 @@ said `Implemented` would make the gate record a state that no longer existed.
       `⚠️ UNVERIFIED` because it cannot be measured read-only).
 - [x] **Every open question in [`spec.md` §7](spec.md#7-open-questions) is either resolved with
       provenance or still open with a written reason** — **OQ-1 and OQ-5 resolved at T1**, OQ-2 at
-      T7 (with the limit T19 found: the reference measured has the flag *set*, so it cannot say
-      what the default is), OQ-3 at the sort-name probe, OQ-4 at T11. **OQ-6 and OQ-7 stay open**,
-      each with the reason written into §7: both need a measurement this repository cannot take
-      today, and both change ordering rather than what is found. A question that is closed without
-      an answer is the failure this line exists to prevent.
+      T7, OQ-3 at the sort-name probe, OQ-4 at T11. **OQ-6, OQ-7, OQ-8 and OQ-9 stay open**, each
+      with the reason written into §7: all four need a measurement this repository cannot take
+      today, and none of them changes what is found — two change ordering, one waits on 004 to read
+      tags, and one is a fact about the reference that §3.6 no longer claims. OQ-9 exists because
+      T19 wrote a hedged claim into §3.6
+      instead of an open question; a question that is closed without an answer is the failure this
+      line exists to prevent, and a claim that is asserted without one is the same failure with
+      better manners.
 - [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
 
 ## What this feature owes the next ones
