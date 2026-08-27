@@ -4,7 +4,7 @@ title: Authentication, users and sessions — implementation plan
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3; by T8 - sections 6.5 and 6.6; by T9 - section 7; by T14 - sections 8.2 and 9; by T15 - sections 8.1 and 9
+amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3; by T8 - sections 6.5 and 6.6; by T9 - section 7; by T14 - sections 8.2 and 9; by T15 - sections 8.1 and 9; by T16 - section 8.3
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-26
@@ -396,8 +396,16 @@ rather than left for an operator to discover.
 
 ### 8.3 Migrations
 
-Every revision is applied and rolled back in a test. The first migration additionally runs against a
-database created from an empty file, which is the path an operator actually takes.
+Every revision is applied and rolled back in a test — walked from the script directory rather than
+named, so a revision added by feature 003 is covered without anybody remembering to extend it. The
+first migration additionally runs against a database created from an empty file, which is the path
+an operator actually takes.
+
+**Reversible means the schema comes back**, not that a `downgrade()` exists. A downgrade that runs
+without error and leaves a table behind passes any test that only checks it did not raise, so each
+revision is applied, rolled back, and the schema compared against what was there before it. A
+revision that does not restore must contain `irreversible` in its docstring and say why — which is
+what turns §4's rule from a sentence into something that fails.
 
 ### 8.4 Fixtures
 
