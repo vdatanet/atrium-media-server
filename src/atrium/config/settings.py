@@ -96,6 +96,30 @@ class AuthenticationSettings(BaseModel):
     lockout_attempts: int = Field(default=0, ge=0)
 
 
+class ProviderSettings(BaseModel):
+    """What an operator configured for the online metadata providers (004 spec section 3.5).
+
+    **Empty is the normal case and not an error.** A provider with no credentials sits out with a
+    reason, everything local still works, and the scan report says which ones were disabled
+    (AC-9): a v1 install with no internet must produce a usable library.
+
+    The credentials are the operator's, so they live in the operator's file rather than in the
+    database - which also means a leaked backup of the library contains no keys.
+    """
+
+    #: TMDB's API key. Without it, films and series resolve from sidecars, tags and paths alone.
+    tmdb_api_key: str = ""
+
+    #: An email address or URL. MusicBrainz **requires** an identifying `User-Agent` and refuses
+    #: traffic without one, so this is that provider's credential even though it is not a secret
+    #: (004 plan section 6.6).
+    musicbrainz_contact: str = ""
+
+    #: The country whose certification becomes `official_rating` for a film (plan section 6.5).
+    #: Two letters, the reference's own default.
+    metadata_country: str = "US"
+
+
 class Settings(BaseModel):
     """The whole of `config.toml`, plus the data directory it was found in."""
 
@@ -107,6 +131,7 @@ class Settings(BaseModel):
     network: NetworkSettings = Field(default_factory=NetworkSettings)
     passwords: PasswordSettings = Field(default_factory=PasswordSettings)
     authentication: AuthenticationSettings = Field(default_factory=AuthenticationSettings)
+    providers: ProviderSettings = Field(default_factory=ProviderSettings)
 
 
 def _describe(error: ValidationError, path: Path) -> str:
@@ -151,6 +176,7 @@ __all__ = [
     "AuthenticationSettings",
     "NetworkSettings",
     "PasswordSettings",
+    "ProviderSettings",
     "Settings",
     "load",
 ]

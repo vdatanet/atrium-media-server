@@ -546,22 +546,63 @@ def test_pending_items_are_the_ones_a_scan_retries(engine: Engine, library: Libr
         assert MetadataRepository(db).pending(library.id) == [first]
 
 
-def test_the_repository_is_the_only_thing_that_writes_these_tables() -> None:
-    """`metadata/` must not write the item table directly (architecture section 1). Asserted on
-    the source rather than by convention: a module under `metadata/` that imported the models
-    would be writing rows from the wrong side of the boundary."""
+#: Modules under `metadata/` that may reach `db/` at all, and what each is allowed to reach for.
+#:
+#: The rule architecture section 1 states is that `metadata/` must not write **the item table**
+#: directly - not that it may not know a database exists. Two modules legitimately do:
+#:
+#: * `refresh.py` is the orchestrator and the only caller of the write repository, which is the
+#:   shape the rule asks for rather than an exception to it;
+#: * `remote.py` owns `provider_cache`, which is **its own** table and promises nothing - its rows
+#:   are what somebody else's server said and are evictable at any time.
+#:
+#: Everything else in the package is a reader that returns values. A module that grew an import
+#: of the item models would be writing rows from the wrong side of the boundary, and that is what
+#: this test is for.
+MAY_REACH_THE_DATABASE = {"refresh.py": "the write repository", "remote.py": "provider_cache"}
+
+
+def test_no_reader_under_metadata_reaches_the_database() -> None:
+    """Asserted on the source rather than by convention."""
     import ast
 
     package = Path(__file__).resolve().parents[2] / "src" / "atrium" / "metadata"
+    offenders = []
     for module in sorted(package.glob("*.py")):
+        if module.name in MAY_REACH_THE_DATABASE:
+            continue
         tree = ast.parse(module.read_text(encoding="utf-8"))
         imported = {
             node.module
             for node in ast.walk(tree)
             if isinstance(node, ast.ImportFrom) and node.module
         }
-        assert "atrium.db.models" not in imported, module.name
-        assert "atrium.db" not in imported or module.name == "refresh.py", module.name
+        if any(one.startswith("atrium.db") for one in imported):
+            offenders.append(module.name)
+    assert not offenders, (
+        f"{offenders} reach atrium.db. Only {sorted(MAY_REACH_THE_DATABASE)} may, and each for "
+        f"the reason named beside it."
+    )
+
+
+def test_nothing_under_metadata_imports_the_item_models_directly() -> None:
+    """Not even the two that may reach the database: `refresh.py` goes through the repository, and
+    `remote.py` touches one table it owns. A module holding `models.Item` would be one edit away
+    from writing an item row without the repository ever knowing."""
+    import ast
+
+    package = Path(__file__).resolve().parents[2] / "src" / "atrium" / "metadata"
+    for module in sorted(package.glob("*.py")):
+        tree = ast.parse(module.read_text(encoding="utf-8"))
+        names = {
+            alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.module == "atrium.db.models"
+            for alias in node.names
+        }
+        assert not names & {"Item", "ItemGenre", "ItemStudio", "ItemPerson", "ItemArtist"}, (
+            f"{module.name} imports {sorted(names)} - item rows are the repository's"
+        )
 
 
 def test_the_item_count_is_what_it_should_be(engine: Engine, library: Library) -> None:

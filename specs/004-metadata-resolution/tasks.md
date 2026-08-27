@@ -459,7 +459,7 @@ it.
 
 ## T11 — `metadata/remote.py`: the one HTTP door, sealed before anyone walks through it
 
-- [ ] **Changes:** httpx moves from the dev group to `[project.dependencies]`; per-provider token
+- [x] **Changes:** httpx moves from the dev group to `[project.dependencies]`; per-provider token
   buckets; `provider_cache` read/write with TTL and the `Replace` bypass; credentials from the
   configuration file; the transport injectable, with a counting transport for tests.
 - **Depends on:** T4
@@ -470,6 +470,27 @@ it.
 - **Note:** the second structural decision: both providers arrive *behind* an already-tested
   limiter and cache, so no later task can write an unthrottled loop against somebody's API.
 - **Plan reference:** §5, §6.8
+- **Done (2026-08-27):** the bucket, the cache and the door are green with no provider in
+  existence, and the import-direction test that says **no other module under `metadata/` may
+  import an HTTP library** is what turns "no test reaches the network" from a discipline into a
+  property: a provider that wanted its own client would have to change that test to get one.
+  **One design flaw the tests found, and it was the one thing caching a 404 is for.** The cache
+  returned a bare payload, so a stored `None` — which is how "this provider does not know that
+  id" is remembered — was indistinguishable from a miss, and the request was made again every
+  time. `get` returns a `CacheEntry`, and `CacheEntry` stopped being a class nothing used.
+  **And T9's boundary guard was stated too broadly to survive this task.** It forbade any module
+  under `metadata/` reaching `atrium.db`, which architecture §1 does not say: the rule is that
+  `metadata/` must not write **the item table**. `remote.py` owns `provider_cache`, its own table
+  whose rows promise nothing. The guard now names the two modules that may reach the database and
+  why, and a second one says that **none** of them may import the item models — including the two
+  that may, since holding `models.Item` is one edit away from writing an item row without the
+  repository knowing.
+  Two decisions worth naming: the bucket is consulted **after** the cache, so a hit costs no
+  token and a retry of a partly-cached refresh is cheap rather than a second full budget; and a
+  `429` **halves** the bucket for the rest of the scan rather than resetting it, because a bucket
+  that recovers immediately asks to be told again.
+  `providers` joins the configuration file — a TMDB key, a MusicBrainz contact, and the country
+  whose certification becomes an official rating. Empty is the normal case, not an error.
 
 ## T12 — `metadata/tmdb.py`
 
