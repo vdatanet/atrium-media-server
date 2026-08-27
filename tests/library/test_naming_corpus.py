@@ -143,6 +143,22 @@ def test_no_row_uses_an_absolute_path() -> None:
         assert not row["path"].startswith("/"), row["path"]
 
 
+def test_no_row_is_parked_behind_an_xfail() -> None:
+    """Every parser has landed, so nothing is waiting - asserted, because there are two ways to
+    make a failing row green and only one of them is fixing it.
+
+    The other is putting its group back into `AWAITING`, which turns the failure into an expected
+    failure and the run back to green with the row no longer asserting anything. This is what stops
+    that being done quietly. A task that genuinely introduces a *new* parser group has to change
+    this test on purpose and say why, which is the whole difference.
+    """
+    assert AWAITING == {}, (
+        f"{sorted(AWAITING)} is parked behind an xfail. If a parser regressed, fix the parser; if "
+        f"a corpus row is wrong, correct the row and say why in its reason. A row is never made "
+        f"green by suspending it (plan section 6.1)."
+    )
+
+
 def test_every_awaiting_group_has_rows_waiting_for_it() -> None:
     """An entry in AWAITING that no row uses is a task nobody will notice has finished."""
     used = {row["needs"] for row in rows()}
