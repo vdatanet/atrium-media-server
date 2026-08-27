@@ -273,11 +273,17 @@ is in [behaviours §1.4](../../docs/compatibility/behaviours.md#14-item-identifi
 
 **Relative to the root, not absolute.** An operator who moves a library from `/mnt/a` to `/mnt/b`,
 or who runs the same library from a container with a different mount point, must not lose every
-identifier. The reference has this problem; Atrium does not have to inherit it.
+identifier. The reference has this problem — every one of 448 measured identifiers is reproducible
+from the file's absolute path alone, containers included
+`[probe: tools/probe_item_identity.py, Jellyfin 10.11.11, 2026-08-27]` — and Atrium does not have
+to inherit it.
 
 **Case sensitivity is a property of a library, not of the server, and it is fixed when the library
-is created.** Paths are compared without regard to case by default, which is what the reference
-does; an operator who needs two files differing only in case to be two items says so when the
+is created.** Paths are compared without regard to case by default — believed to be what the
+reference defaults to, and **that half is unmeasured**: the reference measured for identity has the
+setting switched on, so it reproduces its identifiers from the path verbatim and can say nothing
+about the default `⚠️ UNVERIFIED`. What is measured is that the setting exists and that it decides
+the key. An operator who needs two files differing only in case to be two items says so when the
 library is declared. The setting is recorded with that library and **an attempt to change it
 afterwards is refused, not accepted with a warning** — changing it rewrites every identifier under
 it, and nothing stores the old ones to undo with. Making it a server-wide switch would mean one
@@ -473,7 +479,7 @@ media generated at build time. No copyrighted media, ever.
 |---|---|---|---|
 | OQ-3 | The reference's sort-name normalisation | **Six ordered steps, three configurable lists, pad width 10 — and three item types that bypass all of it.** §3.7 now states both rules; 15 of 15 crafted cases matched | `tools/probe_sort_names.py`, 2026-08-26 |
 | OQ-1 | The exact extension lists the reference honours | **Measured, and the lists do not fall back to one another**: `movies` `.mkv` `.mp4` `.avi` `.ts`; `tvshows` `.mkv` `.avi` `.mp4`; `music` `.flac` `.m4a` `.dsf`. 89 `.mp3` and 3 `.mka` files under video roots produced **no item of any type**. A lower bound, not the configured list — §3.2 says which part is measured and which is not | `tools/probe_library_extensions.py`, 2026-08-27 |
-| OQ-2 | Case sensitivity of path normalisation for identity | **A per-library fact, not a server decision**, defaulting to case-insensitive as the reference does — and **frozen once the library exists**, with the change refused rather than warned about. §3.6 states it, and the same paragraph now records the two neighbouring traps: a library's identity is allocated rather than derived, so recreating a library is not editing one, and its collection type is frozen for the same reason | A decision plus a recorded per-library setting, 2026-08-27 |
+| OQ-2 | Case sensitivity of path normalisation for identity | **A per-library fact, not a server decision**, defaulting to case-insensitive — and **frozen once the library exists**, with the change refused rather than warned about. The reference's *default* is `⚠️ UNVERIFIED` as of T19: the measured server has the flag set, so it reproduces identifiers from the path verbatim and cannot answer it; `tools/probe_item_identity.py` run against a server with the flag unset would. §3.6 states it, and the same paragraph now records the two neighbouring traps: a library's identity is allocated rather than derived, so recreating a library is not editing one, and its collection type is frozen for the same reason | A decision plus a recorded per-library setting, 2026-08-27 |
 | OQ-4 | Does the reference merge a folder-per-film layout when the folder and file names disagree? | **The interesting half of the question does not arise.** Across 1,480 one-film directories, a directory and a file naming two genuinely *different* works did not occur once; what occurs is the directory naming the same work more cleanly, and there the directory wins — 1,087 matches against the file's 457. §3.3 records the rule and the reason | Read against a live library, 2026-08-27 |
 | OQ-5 | What the reference does with a file whose embedded tags contradict its path | **The tag wins, verbatim.** 413 of 5,814 tracks carry an album name with no resemblance to their directory, and 129 keep whitespace a path cannot produce. 33 compilations resolve to one album each. Not covered: a genuinely flat directory, which the measured library had none of | `tools/probe_music_precedence.py`, 2026-08-27 |
 

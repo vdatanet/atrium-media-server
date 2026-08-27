@@ -35,6 +35,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_auth_mechanisms.py`](probe_auth_mechanisms.py) | How may a client present a token, and how is a refusal shaped? | 002 §3.1, §3.3, OQ-1, OQ-3 | no |
 | [`probe_library_extensions.py`](probe_library_extensions.py) | Which file extensions does the reference admit as items, and which does it ignore? | 003 §3.2, OQ-1 | no |
 | [`probe_music_precedence.py`](probe_music_precedence.py) | What happens when a file's embedded tags contradict its path? | 003 §3.5, OQ-5 | no |
+| [`probe_item_identity.py`](probe_item_identity.py) | What is an item's identifier derived from, and does moving a library root change it? | behaviours §1.4, 003 §3.6 | no |
 
 ### Running them
 
@@ -56,9 +57,16 @@ python3 tools/probe_playstate.py      --allow-writes
 python3 tools/probe_auth_mechanisms.py --disabled-user probe-disabled
 python3 tools/probe_library_extensions.py
 python3 tools/probe_music_precedence.py
+python3 tools/probe_item_identity.py
 ```
 
-The two 003 probes **write nothing and need no fixture placed anywhere**. They read the library the
+`probe_item_identity.py` is the one probe here that confirms a `[source: …]` citation from
+**outside** the source: it recomputes each item's id from that item's own reported path and
+compares. A source citation says what the code appears to do; this says what the server did. It
+also reports what it *cannot* answer — a server with `EnableCaseSensitiveItemIds` set says nothing
+about the reference's default for it.
+
+The two 003 naming probes **write nothing and need no fixture placed anywhere**. They read the library the
 server already has: the item list for what it admitted, and `/Environment/DirectoryContents` — the
 read-only filesystem view the library-setup screen uses — for what was on disk and became nothing.
 Both therefore measure *that* library rather than the reference's configured lists, and each says

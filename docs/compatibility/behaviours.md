@@ -81,6 +81,27 @@ then two, then the remaining eight in order).
 `[source: Emby.Server.Implementations/Library/LibraryManager.cs:636 @ v10.11.11;
 MediaBrowser.Common/Extensions/BaseExtensions.cs:30 @ v10.11.11]`
 
+**Confirmed from outside, which a source citation cannot do on its own.** Recomputing that
+expression from each item's own reported `Path` reproduced the `Id` the server returned for
+**448 of 448** items across `Movie`, `Episode`, `Audio`, `Series` and `MusicAlbum`, and 447 of the
+447 whose path contains an uppercase character reproduced from the path **verbatim** — which is
+what `EnableCaseSensitiveItemIds`, set on that server, means.
+`[probe: tools/probe_item_identity.py, Jellyfin 10.11.11, 2026-08-27]`
+
+Two things follow, and the second is the one 003 is built around:
+
+- **Containers are path-keyed too.** A `Series` and a `MusicAlbum` derive from their *directory*,
+  not from their name, so they move with everything else.
+- **The key is the path and nothing else** — not the library, not a stored row. So moving a library
+  root **changes every identifier under it**, and every client's favourites and resume positions
+  for everything in that library are silently discarded. The only symptom is a user saying their
+  library looks wrong.
+
+**The reference's *default* for `EnableCaseSensitiveItemIds` is not measured here**, and no claim
+in this repository that names it carries provenance. The server used above has the flag set, so it
+cannot answer the question; a server with it unset would. The probe says so in its own output
+rather than letting the measured value stand in for a default.
+
 **Depends on it:** clients key their caches, favourites and resume positions on these strings. A
 client's stored state survives a server rescan *because* the ids are derived, not sequential.
 
@@ -92,6 +113,13 @@ matching a C# type's `FullName`, which is an implementation detail of a codebase
 (Principle IV). Atrium's derivation is its own, documented in the library specification. Any
 client that assumes a particular id for a particular file is already broken against Jellyfin, which
 changes ids when `EnableCaseSensitiveItemIds` flips.
+
+**Atrium keys on the path *relative to its library root*** ([003 §3.6](../../specs/003-library-configuration-and-scanning/spec.md#36-identity)),
+so the root move above costs nothing —
+`tests/library/test_root_move.py` moves a scanned library to another mount, reconfigures the root
+and rescans, and asserts every identifier unchanged and no user data orphaned. That is a
+divergence from the reference in **behaviour nobody can observe**: the ids differ from the
+reference's either way, so there is no client that could tell.
 
 ### 1.5 List responses carry `StartIndex`
 
