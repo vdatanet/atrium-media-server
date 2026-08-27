@@ -124,6 +124,7 @@ class ItemQuery:
     exclude_ids: tuple[str, ...] | None = None
     search_term: str | None = None
     name_starts_with: str | None = None            # and the two range variants
+    genres: tuple[str, ...] | None = None          # by name; genre_ids is by identifier
     genre_ids / studio_ids / artist_ids / album_artist_ids / album_ids / person_ids / years
     filters: frozenset[Filter] = ...               # IsFavorite, IsPlayed, IsUnplayed, IsResumable
     is_played: bool | None = None
@@ -134,6 +135,13 @@ class ItemQuery:
     limit: int | None = None
     count: bool = True                             # enableTotalRecordCount
 ```
+
+**`genres` was missing from this contract until T2 built it**, and spec §3.3 promises it in
+tier 2 beside `genreIds`. The two are not interchangeable: a name arrives from a client that never
+fetched the by-name row it belongs to, so a query that could only take identifiers would answer
+nothing for a request the reference serves. T6 implements "every filtering predicate `ItemQuery`
+names", which is exactly why the omission would have been silent — no task was going to notice a
+promise this contract did not carry.
 
 **`db.item_queries.ItemQueryRepository`**:
 
