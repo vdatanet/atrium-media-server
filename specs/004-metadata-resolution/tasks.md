@@ -217,7 +217,7 @@ it.
 
 ## T5 — `metadata/nfo.py`
 
-- [ ] **Changes:** sidecar discovery per the [spec §3.2](spec.md#32-nfo-sidecars) table; the
+- [x] **Changes:** sidecar discovery per the [spec §3.2](spec.md#32-nfo-sidecars) table; the
   parser on stdlib expat feeding an `ElementTree.TreeBuilder`, refusing document type
   declarations outright (plan §6.2); the field map including `sorttitle` routed through 003 §3.7.3's
   explicit-sort-title treatment; provider ids; the size cap.
@@ -229,9 +229,34 @@ it.
   case. The refusal is a handler T5 installs, and there are three fixtures because the default
   parser treats the three shapes three different ways — [plan §6.2](plan.md#62-sidecars)); a
   single
-  `<genre>` containing ` / ` stays one genre; `runtime` minutes become ticks at ingestion and
-  nowhere else.
+  `<genre>` containing ` / ` **is split into two**, which is the opposite of what this line said
+  before T5 read the parser both documents were citing; `runtime` minutes become ticks at
+  ingestion and nowhere else.
 - **Plan reference:** §6.2
+- **Done (2026-08-27):** `metadata/nfo.py`, and every rule in it was measured rather than
+  reasoned. Four of them contradict a document.
+  **The genre split.** [Plan §6.2](plan.md#62-sidecars) said a single `<genre>` containing ` / `
+  is *not* split, "the reference's parser does not, and inventing a splitter here is how two
+  servers disagree about one file". Its parser splits on a bare `/`, trims each part and drops the
+  empties. Not splitting would have given Atrium a genre called `Science Fiction / Fantasy` that
+  no reference server has, on a file both of them read — the exact disagreement the sentence was
+  written to prevent, produced by following it. The cost of the rule, a genre that legitimately
+  contains a slash becoming two, is the reference's to own.
+  **A `<year>` at or below 1850 is discarded**, which matters because `<year>0</year>` is what
+  generators write for "unknown" — under a naive parse a film gets filed under the year zero.
+  **A premiere date is parsed in exactly one format and *fills* the year rather than setting it**,
+  so a sidecar with both keeps its `<year>` even when the two disagree. `date.fromisoformat`
+  accepts four more formats than the reference does, so the shape is checked before parsing.
+  **`<director>` and `<writer>` choose their separator from their content** — `|` or `;` if either
+  appears, otherwise `,` — which is what keeps `Matthew, Jr.` one person in a list written with
+  pipes, and splits them into two in a list written with commas.
+  Two things the task did not list and the feature needed anyway: `<lockdata>` and
+  `<lockedfields>` (T3 found that AC-10 had no other channel), and the `<id TMDB= IMDB=>` element
+  Kodi wrote before `<uniqueid>` existed — whose text content is read as an IMDb id **only** when
+  it starts with `tt`, because Kodi's own documentation says that content is arbitrary.
+  The DOCTYPE refusal T2 specified works: all three entity fixtures — which the stdlib expands,
+  raises on, and expands enormously — land on one warning, and the bomb is refused before
+  anything is allocated.
 
 ## T6 — `metadata/merge.py`
 
