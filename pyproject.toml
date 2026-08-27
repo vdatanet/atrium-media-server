@@ -41,6 +41,11 @@ dev = [
     "httpx>=0.28",
     "ruff>=0.9",
     "mypy>=1.14",
+    # The naming corpus (tests/corpus/naming.yaml) is a table of several dozen rows that each
+    # carry a sentence of prose saying why they exist. JSON has no comments and TOML has no
+    # comfortable shape for a list of heterogeneous records, and the reasons are the part of that
+    # file most likely to be read. A dev dependency only: nothing the server ships parses YAML.
+    "pyyaml>=6.0",
 ]
 
 [tool.hatch.version]
