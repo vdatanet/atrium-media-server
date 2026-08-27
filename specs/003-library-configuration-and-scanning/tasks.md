@@ -181,13 +181,56 @@ the reference's 5,814 tracks had. Neither would have been in a fixture designed 
 The whole tree is 54 files across three libraries and 54 KiB, generated, with a reason on every
 entry.
 
-## T3 — `domain/items.py`
+## T3 — `domain/items.py`  ✅
 
-- [ ] **Changes:** the item model and its types, with no I/O of any kind.
+- [x] **Changes:** the item model and its types, with no I/O of any kind.
 - **Depends on:** 001 complete
 - **Verified by:** an import-direction test — `domain/` imports nothing from `library/`, `db/` or
   `api/`.
 - **Plan reference:** §3, architecture §1
+
+### Done — 2026-08-27
+
+**The plan's data model could not hold two of the acceptance criteria, and the same mistake made
+both.** [plan §4](plan.md#4-data-model) described `items` as though every item had at most one file
+and occupied at most one number:
+
+- `relative_path` — singular — cannot hold a **two-part film**, which AC-4 and
+  [spec §3.3](spec.md#33-movies) require to be *one* `Movie` with two media sources. The plan never
+  mentioned a media source anywhere. T6 would have written the migration exactly as specified, and
+  T11 would have discovered at the point of writing part two that there was nowhere to put it.
+- `index_number` alone cannot hold `S01E02-E03`, which AC-5 requires to be **one** episode spanning
+  both numbers rather than two items.
+
+Both are corrected in [plan §4](plan.md#4-data-model) in this change: an `item_sources` child table,
+and `end_index_number`. Neither correction was expensive here. Both would have been a migration
+rewrite at T6 and a resolver rewrite at T11.
+
+**Moving `size` and `mtime_ns` onto the source is the same correction continued.**
+[plan §6.4](plan.md#64-change-detection) makes them the change-detection signal, and a film whose
+*second* part was replaced has changed — an item-level pair cannot say so. It also deletes a
+nullability that would otherwise have been everywhere, because a `Series` has no path at all and
+under this shape simply has no sources.
+
+**The parent of a film is its library, not nothing.** The first draft of `PARENT_OF` had `Movie`,
+`Series` and `MusicArtist` all hanging from `None`, which reads fine until you notice
+[spec §3.1](spec.md#31-libraries) says each library *is* an item. With `CollectionFolder` at the
+root of every chain, the leaves of the hierarchy are exactly the file-backed types — and a test
+asserts that equivalence, because the two drifting apart is how a scanner ends up creating a
+container that owns a container.
+
+**A `tags` field was written and then removed.** It looked reasonable — the metadata seam of
+[plan §5](plan.md#5-contracts) hands tags back, so why not carry them? Because nothing persists
+them: 003 uses tags to *resolve* a name and a number, and what the item stores is the result. A
+field on the object a repository hands out, holding something no repository ever loads, is a lie
+with a docstring. The fixture manifest carries the tags, which is where the stub reads them.
+
+**The import-direction test asserts the strong form** — a domain module imports the standard
+library and other domain modules, and nothing else — rather than the three packages the task named.
+`compat/` would be just as wrong as `db/`: it exists to know the wire format is Jellyfin's, and a
+domain object that knew would make the conformance sweep unenforceable. The test was checked by
+adding `from atrium.db.engine import build` to `items.py`, watching it fail with the package named,
+and reverting.
 
 ## T4 — `domain/sorting.py`: both derivations
 
