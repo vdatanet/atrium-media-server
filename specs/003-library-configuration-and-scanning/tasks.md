@@ -349,9 +349,9 @@ not be read still has to be *something*, and the alternative — refusing — wo
 directory abort a library. It is a different identity from season zero, which matters because
 `Specials` is season zero and an unreadable name is not.
 
-## T6 — Migration `0002_library_and_items`
+## T6 — Migration `0002_library_and_items`  ✅
 
-- [ ] **Changes:** `libraries` and roots; `items` with `relative_path`, `sort_name` and
+- [x] **Changes:** `libraries` and roots; `items` with `relative_path`, `sort_name` and
   `removed_at`; `item_user_data` keyed on the derived identity **with no foreign key to `items`**.
 - **Depends on:** **002 T4** (migration `0001_users_and_sessions`)
 - **Verified by:** up and down; the indexes 005 will need exist; **deleting an item row leaves its
@@ -359,6 +359,53 @@ directory abort a library. It is a different identity from season zero, which ma
   [spec §3.8](spec.md#38-scanning-and-change-detection) and nothing else would notice. Extends
   `tests/unit/test_migrations.py` rather than adding a second harness beside it.
 - **Plan reference:** §4
+
+### Done — 2026-08-27
+
+**This task's own description was stale, and the plan is the authority.** It asks for "`items` with
+`relative_path`" — which T3 had already corrected: [plan §4](plan.md#4-data-model) moved the path,
+size and mtime into an `item_sources` child table, because AC-4 needs one film with two of them.
+The task text is left as written, as every finished task's is; the schema follows the plan.
+
+**The ORM did not know that items depend on libraries, and the schema did.**
+`Base.metadata.sorted_tables` already ordered `libraries` before `items` — the foreign key says so.
+But the session's unit of work orders inserts from **mapper relationships**, not from foreign-key
+columns, and there was no relationship between the two. Writing a library and its items in one
+transaction — which is exactly what [plan §6.7](plan.md#67-scan-orchestration) says a scan does —
+failed on the foreign key. `Library.items`, `Item.library` and the self-referential
+`Item.parent`/`Item.children` are declared for the *ordering*, not for the traversal: a series, its
+seasons and its episodes are written in one transaction too. They carry `lazy="raise"` like every
+other relationship here and `passive_deletes=True`, so the cascade stays in the database rather
+than loading every descendant into memory to delete it a row at a time.
+
+This would have arrived at T16 as an intermittent-looking foreign-key error in a batched write.
+
+**`sort_name NOT NULL` cannot be demonstrated through the ORM.** The column carries a Python-side
+default, so assigning `None` inserts the empty string rather than failing — which is the right
+behaviour for the scanner and also means the ORM can never show the constraint. The test issues the
+insert in SQL instead. Found by writing the test the obvious way and watching it report
+`DID NOT RAISE`; a version that had asserted something weaker would have passed and proved nothing.
+
+**The foreign key that looked obvious would have broken 002.** `user_library_access.library_id`
+carried a comment saying it had no foreign key "yet, because the table it would point at does not
+exist" — and this task creates that table. Adding it is wrong, permanently: 002 spec §3.7
+guarantees a policy round-trips whole, `EnabledFolders` arrives from the client, and a client may
+name a library this server has not configured. Under a foreign key that policy write **fails**
+instead of round-tripping, which is a difference a client can see. The comment now says permanent,
+and says why.
+
+**Two tests elsewhere pinned `0001` as the head, and one of them meant to.**
+`test_db_schema.py::test_a_fresh_database_is_brought_to_the_shipped_head` had already survived this
+once — its docstring records that its predecessor "named the day the assumption expired instead of
+leaving a stale one passing". It has now done so twice, and is pinned to `0002` rather than taught
+to read the head: a test that looks the head up in the same place the code does asserts only that
+two functions agree, which they always will. The other, in `test_migration_0001.py`, is about
+zero-byte database files and pinned the head incidentally — it reads it now.
+
+**The generic sweep needed no change**, which is what it promised: `test_migrations.py` walks
+whatever the script directory holds, so `0002` was applied, rolled back and schema-compared without
+anybody extending it. `test_the_migration_and_the_models_agree` likewise compares the *whole*
+metadata, so it covers this revision already.
 
 ## T7 — `library/config.py`
 

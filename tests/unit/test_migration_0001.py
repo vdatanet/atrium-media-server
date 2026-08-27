@@ -101,6 +101,11 @@ def test_upgrade_from_an_empty_file(prepared: DataPaths) -> None:
 
     Not the same as no file at all - a restore that copied a zero-byte database, or a volume mount
     that created the path, both land here.
+
+    The head is read rather than spelled out, because this test is about the empty file and not
+    about which revision is current - it pinned `0001` until `0002` landed and failed for a reason
+    that had nothing to do with what it tests. The build's shipped head is pinned deliberately, in
+    one place, by test_db_schema.py.
     """
     prepared.database.write_bytes(b"")
     assert prepared.database.stat().st_size == 0
@@ -108,7 +113,9 @@ def test_upgrade_from_an_empty_file(prepared: DataPaths) -> None:
     engine = create_database_engine(prepared)
     try:
         schema.ensure_current(engine, prepared)
-        assert schema.current_revision(engine) == "0001"
+        assert schema.current_revision(engine) == schema.head_revision(
+            schema.alembic_config(prepared)
+        )
     finally:
         engine.dispose()
 
