@@ -525,7 +525,7 @@ it.
 
 ## T13 — `metadata/musicbrainz.py`
 
-- [ ] **Changes:** album-level identify and fetch; artist lookups; the mandatory identifying
+- [x] **Changes:** album-level identify and fetch; artist lookups; the mandatory identifying
   `User-Agent`; recording ids taken from tags only.
 - **Depends on:** T10, T11
 - **Verified by:** recorded response fixtures; the request budget asserted — refreshing an
@@ -533,6 +533,19 @@ it.
   the 1-per-second bucket engaged; no artwork code path exists (the spec scopes MusicBrainz to
   names, dates and relationships).
 - **Plan reference:** §6.6
+- **Done (2026-08-27):** the budget is asserted as a **list of the three paths asked for**, not a
+  total: an album of fourteen tracks costs one search, one release-group fetch and one artist
+  lookup, and the fourteen tracks contribute nothing. A count that did not separate "few" from
+  "not one per track" could not say the thing that matters — at one request per second the
+  difference is a first scan taking minutes or ninety.
+  Two things the payloads forced. **Artist credits are parts with join phrases between them** —
+  `Artist A`, `" & "`, `Artist B` — and keeping the phrases would put ` & ` in a list of artists.
+  And a **first release date is as precise as MusicBrainz knows**: `1998`, `1998-05` or
+  `1998-05-04`, so only the full form becomes a date while the others still supply the year.
+  "No artwork" is asserted on the source rather than promised: the module contains no reference to
+  a download, an image kind or an association. *We do not call it* is a promise; *there is nothing
+  to call* is a property.
+  The fixtures are synthetic, like T12's, and their README says so.
 
 ## T14 — Remote refresh end-to-end: modes, failures, and the zero-network rescan
 
