@@ -24,6 +24,34 @@ from atrium.compat.aliases import atrium_alias
 from atrium.compat.profiles import Profile, camel_case, current
 
 
+class PropertyKeyed:
+    """Marker: this mapping's keys are **property names**, not data.
+
+    The rule that dictionary keys are never converted is right for `ProviderIds` and `ImageTags`,
+    whose keys are values a client chose. It is wrong for a field that is an *object* on the
+    reference and a mapping here - `Policy` and `Configuration` are the two, because v1 carries the
+    31 policy properties it does not act on rather than declaring them.
+
+    Measured: under the CamelCase profile the reference sends `policy.isAdministrator` and
+    `configuration.audioLanguagePreference`, so a mapping left alone would send `IsAdministrator`
+    where the reference sends `isAdministrator` - on every one of those properties.
+    `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
+
+    Annotate the field and the conversion reaches inside it:
+
+        policy: Annotated[dict[str, Any] | None, PropertyKeyed] = None
+    """
+
+
+def _convert_keys(value: Any) -> Any:
+    """camelCase every key of a property-keyed value, at every depth."""
+    if isinstance(value, dict):
+        return {camel_case(str(key)): _convert_keys(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_convert_keys(item) for item in value]
+    return value
+
+
 class AtriumModel(BaseModel):
     """PascalCase on the wire, snake_case in Python, and lenient about what arrives.
 
@@ -65,8 +93,28 @@ class AtriumModel(BaseModel):
         """
         serialised = {key: value for key, value in handler(self).items() if value is not None}
         if current() is Profile.CAMEL:
-            return {camel_case(key): value for key, value in serialised.items()}
+            keyed = self._property_keyed()
+            return {
+                camel_case(key): _convert_keys(value) if key in keyed else value
+                for key, value in serialised.items()
+            }
         return serialised
+
+    @classmethod
+    def _property_keyed(cls) -> frozenset[str]:
+        """The wire names of this model's `PropertyKeyed` fields. Computed once per class."""
+        cached = cls.__dict__.get("__property_keyed__")
+        if cached is None:
+            cached = frozenset(
+                field.alias or atrium_alias(name)
+                for name, field in cls.model_fields.items()
+                if any(
+                    item is PropertyKeyed or item is PropertyKeyed.__class__
+                    for item in field.metadata
+                )
+            )
+            cls.__property_keyed__ = cached  # type: ignore[attr-defined]
+        return cached
 
     @model_validator(mode="before")
     @classmethod
@@ -100,4 +148,4 @@ class AtriumModel(BaseModel):
         return remapped
 
 
-__all__ = ["AtriumModel"]
+__all__ = ["AtriumModel", "PropertyKeyed"]

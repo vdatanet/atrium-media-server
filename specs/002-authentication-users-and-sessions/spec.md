@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
 accepted: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6
+amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6
 depends_on: [001]
 ---
 
@@ -66,7 +66,7 @@ most clients send.
 
 `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
 
-All four are required, not a choice. Clients use headers for API calls and the query forms for URLs
+All five are required, not a choice. Clients use headers for API calls and the query forms for URLs
 handed to media players and image loaders, which do not set headers. Supporting only the headers
 breaks playback and artwork while leaving browsing intact — a failure that looks like a bug in the
 client.
@@ -160,7 +160,7 @@ when present.
 | Field | Notes |
 |---|---|
 | `User` | The full user object of §3.5 |
-| `SessionInfo` | The session created by this authentication, §3.8 |
+| `SessionInfo` | The session created by this authentication, §3.8. `LastPlaybackCheckIn` is `0001-01-01T00:00:00.0000000Z` for one that has never played anything — .NET's minimum date, not null and not absent `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` |
 | `AccessToken` | 32 lowercase hex characters `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` |
 | `ServerId` | The server identity from 001 §3.1 |
 
@@ -206,9 +206,16 @@ wrong, do not tell the user their password is bad". Answering `401` where the re
 
 **Consumers:** video-client. Unauthenticated.
 
-Returns the users the server shows on login screens: an array of §3.5 objects, each carrying
-**only** `Name`, `Id`, `ServerId`, `PrimaryImageTag` and `HasPassword`. Configuration and policy
-are omitted — this is pre-authentication, and it must not disclose what a user is allowed to do.
+Returns the users the server shows on login screens: an array of **complete** §3.5 objects,
+`Configuration` and `Policy` included, byte-identical to what an authenticated caller receives.
+`[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
+
+**This section previously asserted the opposite** — that the two were omitted, "because this is
+pre-authentication and it must not disclose what a user is allowed to do". The reasoning was sound
+and the premise was measured to be false: the reference sends every user's full policy and
+configuration to anyone who can reach the port. Atrium replicates it, and the argument, including
+the case for diverging, is in
+[behaviours §3.5](../../docs/compatibility/behaviours.md#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated).
 
 **An empty array is a valid `200`.** Users flagged hidden from login screens are excluded, and an
 installation where every user is hidden legitimately returns `[]`.
@@ -220,9 +227,9 @@ Returned by §3.3, §3.4, §3.6 and §3.7.
 
 | Field | Type | Notes |
 |---|---|---|
-| `Name` | string | |
+| `Name` | string | Sent first |
+| `ServerId` | string | **Before `Id`** — the reference's order, not this table's former one `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` |
 | `Id` | string | 32 hex |
-| `ServerId` | string | |
 | `ServerName` | string | |
 | `PrimaryImageTag` | string | Present only when the user has an avatar |
 | `PrimaryImageAspectRatio` | number | Same condition |
@@ -232,8 +239,13 @@ Returned by §3.3, §3.4, §3.6 and §3.7.
 | `EnableAutoLogin` | boolean | |
 | `LastLoginDate` | date | Absent until first login |
 | `LastActivityDate` | date | |
-| `Configuration` | object | §3.6. Omitted from `/Users/Public` |
-| `Policy` | object | Omitted from `/Users/Public` |
+| `Configuration` | object | §3.6. **Sent by `/Users/Public` too** |
+| `Policy` | object | **Sent by `/Users/Public` too** |
+
+`ServerName` and `PrimaryImageAspectRatio` are declared and **absent from every measured
+response**, because they are null and nulls are omitted globally
+([behaviours §1.7](../../docs/compatibility/behaviours.md)). Their position in the order is
+therefore unverified: nothing can measure where a property that is never sent would sit.
 
 `[spec: UserDto]`
 
@@ -343,8 +355,10 @@ gap: a client that saw `true` would offer the user a remote-control UI that does
    that presenting a token is never itself a reason to refuse.
 4. No token on an authenticated route is `401`; a valid token lacking permission is `403`.
 5. Re-authenticating from the same `DeviceId` replaces the session and invalidates the prior token.
-6. `/Users/Public` omits `Configuration` and `Policy`, excludes hidden users, and answers `200`
-   with `[]` when all users are hidden.
+6. `/Users/Public` answers without a token, excludes hidden users, and answers `200` with `[]`
+   when all users are hidden. It carries the **whole** user object — `Configuration` and `Policy`
+   included — because the reference does; this criterion asserted the opposite until it was
+   measured.
 7. `GET /Users/{userId}` for another user answers `403` for a non-administrator and `200` for an
    administrator.
 8. `POST /Users/Configuration` round-trips every property, including ones v1 does not act on.

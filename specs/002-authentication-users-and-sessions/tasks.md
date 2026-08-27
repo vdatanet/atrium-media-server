@@ -546,9 +546,9 @@ that it is needed rather than when somebody notices it is three.
 **An authenticated request advances activity in memory and writes nothing.** That is the payoff of
 T8 arriving first: the seam calls `touch` and returns, and the write happens on the interval.
 
-## T11 — `api/users.py`: the five user routes
+## T11 — `api/users.py`: the five user routes  ✅
 
-- [ ] **Changes:** `POST /Users/AuthenticateByName`, `GET /Users/Public`, `GET /Users/Me`,
+- [x] **Changes:** `POST /Users/AuthenticateByName`, `GET /Users/Public`, `GET /Users/Me`,
   `GET /Users/{userId}`, `POST /Users/Configuration`, and their models.
 - **Depends on:** T10
 - **Verified by:** golden responses; `/Users/Public` omits `Configuration` and `Policy` and returns
@@ -563,6 +563,51 @@ T8 arriving first: the seam calls `touch` and returns, and the write happens on 
   has the test that says an identifier is data and is not respelled — it is written and passing
   against a router built for it, and this is the task where it stops being hypothetical.
 - **Plan reference:** §3
+
+### Done — 2026-08-26
+
+**`/Users/Public` sends the whole user object, to a caller with no token.** `Configuration` and
+`Policy` included, byte-identical to the authenticated response — 42 policy properties and 16
+configuration properties for every visible user, to anybody who can reach the port. AC-6 asserted
+the **opposite**, and [spec §3.4](spec.md#34-get-userspublic--getpublicusers) gave the reason:
+"this is pre-authentication, and it must not disclose what a user is allowed to do." The reasoning
+was sound and the premise was false.
+
+Atrium replicates it, per Principle V and because
+[behaviours §3.0.2](../../docs/compatibility/behaviours.md#302-what-is-never-acceptable) forbids
+fixing a defect *because it is obviously wrong* — and "it discloses too much" is close enough to
+obviousness to be worth naming as the temptation it is. The whole analysis, including the case for
+diverging and the shape that divergence would take, is
+[behaviours §3.5](../../docs/compatibility/behaviours.md). **It is the entry in this feature most
+worth a second opinion.**
+
+**Field order is measured, and it is not the order the specification listed.** `ServerId` comes
+**before** `Id`. No client cares; a golden comparing bytes does, and so does a differential run —
+so the model declares the reference's order and a test asserts it. `ServerName` and
+`PrimaryImageAspectRatio` are declared and absent from every measured response, because they are
+null and nulls are omitted globally; their *position* is therefore unverifiable, which the spec now
+says rather than implying it was checked.
+
+**A session that has never played anything reports `0001-01-01T00:00:00.0000000Z`** — .NET's
+minimum date, not null and not absent. A nullable field would have omitted it, on every session in
+every list.
+
+**The CamelCase profile reaches inside `Policy` and `Configuration`, and it did not.** Those are
+mappings here because v1 carries the properties it does not act on; on the reference they are
+*objects*, and measured under that profile the reference sends `policy.isAdministrator`. The rule
+that dictionary keys are never converted is right for `ProviderIds` and wrong for these, so
+`compat/model.py` gained a `PropertyKeyed` marker and the conversion now reaches inside a field
+that asks for it. Without it, every one of those 58 properties would have been PascalCase where the
+reference sends camelCase.
+
+**The route-registration check assumed a feature lands in one change.** 002 lands its routes across
+two tasks, so `IMPLEMENTED_FEATURES` cannot flip until T12. `LANDED_ROUTES` names the individual
+routes that have arrived, each added on purpose, and T17 collapses it back.
+
+**The literal routes must be registered before `/Users/{userId}`.** The table tries literals, then
+patterns in registration order — so `/users/public` reaches the public route rather than being read
+as a user whose identifier is `public`. That is a property of an ordering, so it is a test rather
+than a comment asking the next person to preserve it.
 
 ## T12 — `api/sessions.py`
 
