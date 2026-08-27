@@ -24,6 +24,13 @@ dependencies = [
     "alembic>=1.14",
     "argon2-cffi>=23.1",
     "fastapi>=0.115",
+    # Embedded audio tags: ID3, Vorbis comments, MP4 atoms - every container 003 admits. Pure
+    # Python, mature, and it exposes multi-valued frames as lists and embedded art as bytes, which
+    # is what AC-6 is about. The alternative was shelling to `ffprobe`, rejected in 004 plan
+    # section 10: a subprocess per file inside the scan's hot path, and its tag output joins
+    # multi-values into one string - destroying the thing AC-6 exists to keep. GPL-2.0-or-later,
+    # compatible with this project's GPL-3.0-or-later.
+    "mutagen>=1.47",
     "pydantic>=2.10",
     "sqlalchemy>=2.0",
     "uvicorn[standard]>=0.34",

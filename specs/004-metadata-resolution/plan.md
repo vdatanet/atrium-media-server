@@ -4,7 +4,7 @@ title: Metadata resolution — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1
+amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -63,7 +63,16 @@ fixture tree before and after a full scan-and-refresh to prove it stayed byte-id
 | Identifiers are derived, never allocated | [architecture §4](../../docs/architecture.md#4-cross-cutting-decisions) |
 | Configuration is a file, not an environment | [architecture §4](../../docs/architecture.md#4-cross-cutting-decisions) |
 
-**Deviations:** none.
+**Deviations:** one, taken at T7. **`library/scan.py` imports `metadata/tags.py`**, so `library/`
+now depends on a sibling that [architecture §1](../../docs/architecture.md#1-shape-of-the-system)
+draws beside it rather than under it. 003 built `MetadataSource` as a Protocol precisely so the
+scanner would not need to, and the alternative — leaving `PATH_ONLY` as the default and injecting
+the real reader at a composition point — was tried and rejected: a scan whose reader has to be
+supplied resolves a well-tagged music library from its directory names the first time anybody
+forgets, and the symptom (albums named after folders) reads as a scanning bug rather than a
+missing argument. The Protocol still carries the weight it was written for — `PATH_ONLY` is
+passable, and every test that wants a path-only scan says so — and the dependency is one import of
+one class.
 
 ## 3. Modules
 

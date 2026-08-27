@@ -5,7 +5,7 @@ status: Implemented
 created: 2026-08-26
 updated: 2026-08-27
 accepted: 2026-08-26
-amended: 2026-08-27 by T1 - sections 3.2, 3.5 and the open questions; by T4 - section 3.7; by T5 - section 3.6; by T7 - sections 3.1 and 3.6 and OQ-2; by T11 - section 3.3 and OQ-4; by T12 - section 3.4; by T18 - section 3.8; by T19 - section 3.6 and OQ-2's limit; by T20 - sections 3.8 and 7
+amended: 2026-08-27 by T1 - sections 3.2, 3.5 and the open questions; by T4 - section 3.7; by T5 - section 3.6; by T7 - sections 3.1 and 3.6 and OQ-2; by T11 - section 3.3 and OQ-4; by T12 - section 3.4; by T18 - section 3.8; by T19 - section 3.6 and OQ-2's limit; by T20 - sections 3.8 and 7; by 004's T7 - OQ-8
 implemented: 2026-08-27
 depends_on: []
 ---
@@ -488,10 +488,10 @@ media generated at build time. No copyrighted media, ever.
 |---|---|---|---|
 | OQ-6 | Whether the §3.7.2 formulas hold for items carrying an explicit sort title, and how many real items do | §3.7.3 | The override rows of `tools/probe_sort_names.py`, read against a larger library |
 | OQ-7 | What the reference does with a character that has no ASCII decomposition — `ø`, `ß`, a non-Latin script | The ordering of those names, and nothing else | Crafted names in `tools/probe_sort_names.py`; the measured set contains none |
-| OQ-8 | Whether a track number, disc number and title should be read from a file's name at all, given the reference reads none of the three from there (§3.5) | Only untagged music: for a tagged file both answer from the tag | How much real music carries no readable tag, which nothing can measure until 004 reads them |
+| OQ-8 | Whether a track number, disc number and title should be read from a file's name at all, given the reference reads none of the three from there (§3.5) | Only untagged music: for a tagged file both answer from the tag | How much real music carries no readable tag. **Half of this moved on 2026-08-27**: 004 T7 built the reader, so the question is now measurable against a real library and is no longer waiting on code. What it still needs is a *library* — this suite's music is silence we generated, so measuring the untagged fraction here would measure the fixture. A probe over the reference server's own music library answers it |
 | OQ-9 | What the reference **defaults** `EnableCaseSensitiveItemIds` to | Nothing. §3.6 states Atrium's own default and does not claim to match one | `tools/probe_item_identity.py` against a server that has not changed the setting; the one measured has it **set** |
 
-**Both are open on purpose, and neither blocks this feature.** Each needs a *measurement this
+**None of them blocks this feature, and each is open for its own reason.** Each needs a *measurement this
 repository cannot take today*, not a decision somebody has been avoiding. OQ-6 needs a library
 containing items with explicit sort titles, and the one measured has almost none; OQ-7 needs names
 carrying characters the measured set does not contain. Both change the **ordering** of names that

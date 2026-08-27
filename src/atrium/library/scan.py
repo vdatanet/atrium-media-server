@@ -76,10 +76,11 @@ from atrium.db.repositories import ItemRepository
 from atrium.domain.items import IN_THE_TREE, PARENT_OF, Item, ItemType
 from atrium.domain.library import Library
 from atrium.library.identity import ensure_unique
-from atrium.library.naming import PATH_ONLY, MetadataSource
+from atrium.library.naming import MetadataSource
 from atrium.library.report import Phase, Progress, ProgressSink, ScanReport, silent
 from atrium.library.resolver import Resolution, resolve
 from atrium.library.walker import Candidate, Skipped, WalkResult, walk
+from atrium.metadata.tags import TagSource
 
 #: How much of a library may disappear before a scan refuses to believe it (plan section 6.5,
 #: rule 3). A quarter: high enough that pruning a season or a few albums proceeds, low enough that
@@ -143,7 +144,7 @@ def scan(
     library: Library,
     session: OrmSession,
     roots: Iterable[Path] | None = None,
-    source: MetadataSource = PATH_ONLY,
+    source: MetadataSource | None = None,
     *,
     deep: bool = False,
     removal_threshold: float = DEFAULT_REMOVAL_THRESHOLD,
@@ -172,6 +173,14 @@ def scan(
     """
     paths = _root_paths(library, roots)
     _require_readable_roots(library, paths)
+
+    # **`None` means read the files**, and that is the default because the alternative failed
+    # silently: a scan whose source has to be injected resolves a well-tagged music library from
+    # its directory names the first time somebody forgets, and the symptom - albums named after
+    # folders - looks like a scanning bug rather than a missing argument. `PATH_ONLY` is still
+    # passable and still what a server with no reader runs on (003's `PathOnly`).
+    if source is None:
+        source = TagSource(paths)
 
     report = _Reporter(progress, library.id)
     walked = _walk_every_root(library, paths, report)
