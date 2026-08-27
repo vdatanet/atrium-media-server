@@ -293,7 +293,7 @@ it.
 
 ## T7 — `metadata/tags.py`, and the seam goes live
 
-- [ ] **Changes:** mutagen enters `[project.dependencies]` with plan §3's reasoning; the
+- [x] **Changes:** mutagen enters `[project.dependencies]` with plan §3's reasoning; the
   per-container readers; `TagSource` implementing 003's `MetadataSource`; the scan's music
   resolution pointed at it by default (`PATH_ONLY` remains the explicit no-reader fallback); a
   per-scan memo so one file is opened once for both the resolver's question and the refresh's.
@@ -308,6 +308,32 @@ it.
   this reader makes the untagged-fraction question answerable against a *real* library, which
   this suite is not, and the question should say which half moved.
 - **Plan reference:** §5, §6.3; spec §3.3
+- **Done (2026-08-27):** the seam is live. A tagged FLAC under `Some Folder/Another Folder/` now
+  becomes a track on `The Real Album` by `The Real Artist`, and the same tree scanned with
+  `PATH_ONLY` still becomes `Another Folder` by `Some Folder` — which is what makes that a
+  statement about the seam rather than about the fixture. 003's whole suite is green, and the
+  gating constraint is asserted rather than assumed: a source handed to a second scan reports
+  **zero** files opened, and `deep` reports one.
+  **The default had to change, and it cost a layering deviation** — the first this feature has
+  taken, recorded in [plan §2](plan.md#2-inherited-decisions). `scan()` now builds a `TagSource`
+  when no source is given, which means `library/` imports `metadata/`, two packages architecture
+  §1 draws side by side. Leaving the injection to a composition point was tried first: a scan
+  whose reader has to be supplied resolves a well-tagged music library from its directory names
+  the first time anybody forgets, and *albums named after folders* reads as a scanning bug rather
+  than a missing argument.
+  **`tags_for` and `values` are deliberately different shapes**, and it took writing both to see
+  why. The seam maps a key to **one string** and keeps an empty one, because 003's contract says a
+  present-and-empty tag is not an absent tag and the reference copies both; `values` keeps lists
+  and drops empties, because there an empty string is not a value. A multi-valued artist therefore
+  gives the seam its first value and the merge the whole list — AC-6 is unaffected, since what a
+  client renders as three artists comes from `values`.
+  **Four containers, one vocabulary, measured before it was written.** Vorbis comments, ID3
+  frames, MP4 atoms and free-form `----` atoms were each read back with mutagen before the mapping
+  existed, which is how the `trkn`/`disk` pair-of-integers shape and the `UFID` recording id got
+  handled rather than discovered later. Three artists stay three in every container and
+  `Earth, Wind & Fire; Live` stays one in every container.
+  **T2's deferred assertion is closed**: all four templates carry no tags at all, checked with the
+  reader rather than by searching the bytes for field names.
 
 ## T8 — `metadata/artwork.py`
 
