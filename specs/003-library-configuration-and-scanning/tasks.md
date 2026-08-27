@@ -466,9 +466,9 @@ was never what the reference does — it has the setting and defaults it off —
 should treat it as a global decision or a per-library fact. Per-library: a server-wide switch would
 mean one flip rewrote every identifier in every library at once.
 
-## T8 — `library/walker.py`
+## T8 — `library/walker.py`  ✅
 
-- [ ] **Changes:** traversal, extension filtering, the ignore rules, and detection of files still
+- [x] **Changes:** traversal, extension filtering, the ignore rules, and detection of files still
   being written.
 - **Depends on:** T7, T1 — the extension lists are measured and in
   [spec §3.2](spec.md#32-what-is-considered-a-media-file); the conservative union stands only for
@@ -477,6 +477,47 @@ mean one flip rewrote every identifier in every library at once.
   are all skipped; a file whose size changes between two passes is skipped **this** scan and picked
   up the next.
 - **Plan reference:** [spec §3.2](spec.md#32-what-is-considered-a-media-file)
+
+### Done — 2026-08-27
+
+**`os.walk` discards directory errors by default, and that default is the dangerous one here.** A
+directory the scan cannot list would simply not appear — no candidate, no skip, nothing said. Every
+file below it would then look *deleted* to the next scan's diff: a partial loss too small for
+[plan §6.5](plan.md#65-the-guard-against-a-mass-delete)'s emptiness guard to catch and quite large
+enough for a user to notice their favourites went missing. The walk now passes an error handler and
+reports the directory. Found because the test written for it did not fail.
+
+**A `chmod 000` on a *file* proves nothing about a walk**, which is how that was found. `stat`
+needs execute permission on the containing directory, not read permission on the file, so the
+unreadable-file test walked straight past its own premise and the file became a candidate. A walk
+never reads contents — an unreadable *file* is 008's problem, at the point something opens it. The
+case that belongs here is an unreadable directory.
+
+**`Specials` is not an extras folder, and nothing but a comment stops somebody making it one.**
+Both lists in this module — suffixes and directory names — are the kind that grow by someone adding
+the obvious next entry, and `specials` is the obvious next entry: it sits beside `Extras` and
+`Featurettes` in real libraries and it is not one of them. It is an alias for season zero
+([spec §3.4](spec.md#34-series-seasons-and-episodes), AC-6). A walker that filed it under extras
+would **drop every special episode in every series while producing a scan that looks entirely
+correct**. It has its own test, on its own, rather than a row in a table, and the constant says why
+it is absent.
+
+**The two passes are two functions, so no test sleeps.** Detecting a file still being written means
+looking at its size twice, and the gap in production is the traversal itself. Exposing `found` and
+`settle` separately lets a test change a file between them; a single `walk()` that slept would have
+put a sleep in the suite for every run, forever, to catch something that takes one line to arrange.
+
+**The walk reports *why*, not just *what***, and that is T20's requirement arriving eight tasks
+early. It costs nothing here — the reason is known at the moment the file is refused — and
+retrofitting it later would have meant re-deriving each reason from a path, which is the same
+decision made twice.
+
+**The extension lists carry their provenance inline.** The measured extensions are marked as
+measured and the rest are marked as [spec §3.2](spec.md#32-what-is-considered-a-media-file)'s
+conservative union, so a reader can tell a fact from a reasonable guess without leaving the file.
+A test asserts the measured ones are still all present — shrinking that set would be discarding a
+measurement — and another asserts the video and audio lists **do not overlap**, because the
+overlap *is* the fallback the reference was measured not to have.
 
 ## T9 — The naming corpus and its harness
 
