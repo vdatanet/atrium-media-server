@@ -24,12 +24,14 @@ page is invisible in a test and quadratic in a library.
 
 from __future__ import annotations
 
+import random
+import secrets
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, or_, select
+from sqlalchemy import Select, case, extract, func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 
 from atrium.db import models
@@ -40,7 +42,7 @@ from atrium.domain.items import (
     ItemType,
     MediaSource,
 )
-from atrium.domain.queries import Filter, ItemQuery
+from atrium.domain.queries import Filter, ItemQuery, SortBy, SortOrder
 from atrium.domain.user import User
 from atrium.library.identity import for_by_name
 from atrium.metadata.artwork import ImageAssociation, ImageKind, SourceKind
@@ -67,6 +69,9 @@ DESCENT = 2
 #: The value `item_artists.credit` carries for an album artist, as the check constraint spells
 #: it. `/Artists` and `/Artists/AlbumArtists` are the same rows distinguished by this string.
 ALBUM_ARTIST_CREDIT = "album_artist"
+
+#: The other value the same column carries: a performer on this particular track.
+PERFORMER_CREDIT = "artist"
 
 
 class ParentNotFoundError(LookupError):
@@ -155,12 +160,54 @@ class ItemQueryRepository:
 
     def run(self, query: ItemQuery) -> QueryPage:
         scoped = self._scope(query)
-        total = self._count(scoped) if query.count else 0
+        if _is_random(query):
+            return self._shuffled(scoped, query)
 
-        page = scoped.order_by(models.Item.sort_name, models.Item.id).offset(query.start_index)
+        total = self._count(scoped) if query.count else 0
+        page = scoped.order_by(*_order_by(query)).offset(query.start_index)
         if query.limit is not None:
             page = page.limit(query.limit)
         rows = list(self._session.execute(page).scalars())
+        return QueryPage(items=self._hydrate(rows, query.user), total=total)
+
+    def _shuffled(self, scoped: Select[tuple[models.Item]], query: ItemQuery) -> QueryPage:
+        """`Random`, which is not an `ORDER BY` at all (plan section 6.4).
+
+        The matching **ids** are fetched, shuffled in process against a seed, and only the page is
+        hydrated. Tens of thousands of 32-byte strings at worst, which is cheaper than teaching
+        SQLite a seeded shuffle and exactly as observable as the reference's per-request one.
+
+        The seed is fresh entropy per request and never exposed, so paging a random ordering is
+        not meaningful - which is also true of the reference, whose shuffle is per *row* and whose
+        two identical requests shared 4 items of 97
+        `[probe: tools/probe_sort_stability.py, Jellyfin 10.11.11, 2026-08-27]`. Clients use it
+        for a single page.
+        """
+        ids = list(
+            self._session.execute(scoped.with_only_columns(models.Item.id).order_by(None)).scalars()
+        )
+        total = len(ids) if query.count else 0
+        seed = query.random_seed if query.random_seed is not None else _entropy()
+        # S311: a shuffle of a result page, not a secret. The *seed* comes from `secrets`
+        # when the caller did not supply one, which is what stops a client predicting the
+        # order; `random.Random` is the reproducible shuffle a test can inject into.
+        shuffler = random.Random(seed)  # noqa: S311
+        shuffler.shuffle(ids)
+
+        end = None if query.limit is None else query.start_index + query.limit
+        wanted = ids[query.start_index : end]
+        if not wanted:
+            return QueryPage(items=(), total=total)
+
+        found = {
+            row.id: row
+            for row in self._session.execute(
+                select(models.Item).where(models.Item.id.in_(wanted))
+            ).scalars()
+        }
+        # Re-ordered to the shuffle: `IN` says nothing about order, and a page that came back in
+        # id order would be a shuffle the client never sees.
+        rows = [found[one] for one in wanted if one in found]
         return QueryPage(items=self._hydrate(rows, query.user), total=total)
 
     # -- scope (plan section 6.2) ------------------------------------------------------------
@@ -395,6 +442,146 @@ class ItemQueryRepository:
 
 
 # ------------------------------------------------------------------------------------------------
+# Ordering
+# ------------------------------------------------------------------------------------------------
+
+
+def _entropy() -> int:
+    """A seed nobody chose and nobody can reproduce. Not `random.seed()`'s own default, so that
+    the one place randomness enters this module is visible."""
+    return secrets.randbits(64)
+
+
+def _is_random(query: ItemQuery) -> bool:
+    """`Random` is decided by the **first** key, because it is not an `ORDER BY` and cannot be
+    combined with one. `sortBy=Random,SortName` is a random ordering."""
+    return bool(query.sort) and query.sort[0][0] is SortBy.RANDOM
+
+
+def _order_by(query: ItemQuery) -> list[Any]:
+    """The requested keys, and the tail that makes every ordering **total**.
+
+    behaviours section 3.6 is why the tail exists. The reference appends `Name` after `SortName`
+    and nothing at all after any other key - and the cost of that was measured: under
+    `AlbumArtist` and `Artist` the concatenation of a query's pages is *not* the one-shot list, so
+    a client paging a large audio library sees some items twice and never sees others. Atrium
+    appends the id, so paging visits every item exactly once for every `SortBy`. Within a tie the
+    result is an order the reference could have produced; what changes is that it holds still.
+
+    A relevance ranking goes **ahead of everything** when `searchTerm` is present, which is the
+    reference's own behaviour and not a nicety
+    `[source: Jellyfin.Server.Implementations/Item/BaseItemRepository.cs:1604-1611 @ v10.11.11]`:
+    a search ordered by name first is a search whose best match is on page four.
+    """
+    keys: list[Any] = []
+    if query.search_term:
+        keys.append(_relevance(query.search_term))
+
+    requested = query.sort or ((SortBy.SORT_NAME, SortOrder.ASCENDING),)
+    for sort_by, order in requested:
+        if sort_by is SortBy.RANDOM:
+            continue
+        keys.append(_directed(_primary(sort_by, query.user), order))
+
+    # `Name` after a `SortName` ordering is the one chain the reference has. Then the id, always,
+    # which is the divergence and the whole of it.
+    if requested[0][0] is SortBy.SORT_NAME:
+        keys.append(_directed(models.Item.name, requested[0][1]))
+    keys.append(models.Item.id.asc())
+    return keys
+
+
+def _directed(expression: Any, order: SortOrder) -> Any:
+    return expression.desc() if order is SortOrder.DESCENDING else expression.asc()
+
+
+def _primary(sort_by: SortBy, user: User) -> Any:
+    """Plan section 6.3's table, one expression per key."""
+    if sort_by is SortBy.SORT_NAME:
+        return models.Item.sort_name
+    if sort_by is SortBy.DATE_CREATED:
+        return models.Item.date_created
+    if sort_by is SortBy.PREMIERE_DATE:
+        return _premiere_year()
+    if sort_by is SortBy.PLAY_COUNT:
+        return func.coalesce(_user_scalar(models.ItemUserData.play_count, user), 0)
+    if sort_by is SortBy.DATE_PLAYED:
+        return _user_scalar(models.ItemUserData.last_played_date, user)
+    if sort_by is SortBy.ALBUM_ARTIST:
+        return _credit_name(ALBUM_ARTIST_CREDIT)
+    if sort_by is SortBy.ARTIST:
+        return _credit_name(PERFORMER_CREDIT)
+    raise ValueError(f"no ordering for {sort_by}")
+
+
+def _premiere_year() -> Any:
+    """An item with no `PremiereDate` sorts by **January 1 of its `ProductionYear`** rather than
+    clumping with the dateless
+    `[source: Jellyfin.Server.Implementations/Item/OrderMapper.cs:49 @ v10.11.11]`.
+
+    Expressed as *the effective year* rather than as a synthesised date, and the difference is
+    portability: `COALESCE(premiere_date, jan1(production_year))` needs a database function that
+    builds a timestamp out of an integer, and every dialect spells that differently.
+    `extract('year', …)` is one SQLAlchemy construct that compiles on both, and ordering by the
+    year first puts a year-only item exactly where January 1 would put it - ahead of every dated
+    item of the same year, which is what `_order_by`'s caller pairs it with below.
+    """
+    return func.coalesce(extract("year", models.Item.premiere_date), models.Item.production_year)
+
+
+def _user_scalar(column: Any, user: User) -> Any:
+    """One of the requesting user's user-data values, as a correlated scalar.
+
+    Correlated for the reason everything else here is: without it the subquery grows its own
+    `FROM` and stops being about this item.
+    """
+    return (
+        select(column)
+        .where(models.ItemUserData.user_id == user.id)
+        .where(models.ItemUserData.item_key == models.Item.id)
+        .correlate(models.Item.__table__)
+        .scalar_subquery()
+    )
+
+
+def _credit_name(credit: str) -> Any:
+    """The lowest credit name of one kind on this item, as a correlated scalar.
+
+    ⚠️ **Lower-cased rather than folded.** `fold_for_search` also strips diacritics and no SQL
+    dialect does that portably, so `Ángel` and `Angel` sort apart here where the search fold would
+    put them together. The reference's own key for these two sorts lives in a joined table the API
+    does not return, which is why `probe_sort_stability.py` reports rather than concludes on them
+    - so there is nothing measured to be wrong against, and this is recorded as a known
+    approximation rather than a claim.
+    """
+    return (
+        select(func.min(func.lower(models.ItemArtist.name)))
+        .where(models.ItemArtist.item_id == models.Item.id)
+        .where(models.ItemArtist.credit == credit)
+        .correlate(models.Item.__table__)
+        .scalar_subquery()
+    )
+
+
+def _relevance(term: str) -> Any:
+    """Match quality, ahead of whatever `sortBy` asked for: exact, prefix at a word boundary,
+    prefix, contains
+    `[source: Jellyfin.Server.Implementations/Item/OrderMapper.cs:76-93 @ v10.11.11]`.
+
+    Ascending, because the ranks count upwards from the best match - a `CASE` whose numbers went
+    the other way would need every caller to remember the direction.
+    """
+    folded = fold_for_search(term)
+    name = models.Item.name_folded
+    return case(
+        (name == folded, 0),
+        (name.startswith(folded), 1),
+        (name.contains(f" {folded}"), 2),
+        else_=3,
+    ).asc()
+
+
+# ------------------------------------------------------------------------------------------------
 # The filter battery
 # ------------------------------------------------------------------------------------------------
 
@@ -613,6 +800,7 @@ __all__ = [
     "ALBUM_ARTIST_CREDIT",
     "DESCENT",
     "EARN_THEIR_PLACE",
+    "PERFORMER_CREDIT",
     "HydratedItem",
     "ItemQueryRepository",
     "NameLink",

@@ -245,9 +245,9 @@ Per `SortBy`, the primary expression:
 |---|---|
 | `SortName` | `sort_name` |
 | `DateCreated` | `date_created` |
-| `PremiereDate` | `COALESCE(premiere_date, jan1(production_year))` — the reference's own fallback, spec §3.4 |
+| `PremiereDate` | the **effective year** — `COALESCE(extract(year, premiere_date), production_year)` — then the date itself. The reference's own fallback, spec §3.4 |
 | `PlayCount` / `DatePlayed` | `LEFT JOIN item_user_data` for the requesting user; `COALESCE(play_count, 0)`, null last-played first |
-| `AlbumArtist` / `Artist` | the minimum folded name over the item's credits of that kind, as a correlated subquery |
+| `AlbumArtist` / `Artist` | the minimum **lower-cased** name over the item's credits of that kind, as a correlated subquery |
 | `Random` | not SQL at all — §6.4 |
 
 `sortBy` accepts a comma list zipped with `sortOrder` (missing orders default `Ascending`).
@@ -258,11 +258,27 @@ When `searchTerm` is present, match quality is prepended ahead of everything: a 
 `name_folded` ranking exact, prefix-at-word-boundary, prefix, contains — the reference's
 relevance order (spec §3.4).
 
+**Two expressions in that table were written portably rather than literally, and T7 says why.**
+
+- `PremiereDate` reads *"January 1 of `ProductionYear`"*, and building a timestamp out of an
+  integer is spelled differently in every dialect. Ordering by the **effective year** first, with
+  the date as the second key, puts a year-only item exactly where January 1 would put it — ahead
+  of every dated item of the same year — and `extract` is one SQLAlchemy construct that compiles
+  on SQLite and on Postgres alike.
+- The artist keys are **lower-cased, not folded**. `fold_for_search` also strips diacritics and no
+  dialect does that portably, so `Ángel` and `Angel` sort apart here where the search fold would
+  put them together. There is nothing measured to be wrong against: the reference's own key for
+  those two sorts lives in a joined table the API does not return, which is why
+  `probe_sort_stability.py` reports rather than concludes on them. Recorded as a known
+  approximation, not a claim.
+
 ### 6.4 Random
 
 Fetch the matching **ids only**, shuffle in process with `random.Random(seed)`, slice the page,
 hydrate the slice in shuffled order. The seed is fresh entropy per request and never exposed;
-tests inject it. Cost: one id-list query — tens of thousands of 32-byte strings at worst — which
+tests inject it — through `ItemQuery.random_seed`, because a query is the whole of what produced a
+result and two equal queries must describe the same page. A seed passed beside the query would
+break that quietly, for the one ordering where it matters most. Cost: one id-list query — tens of thousands of 32-byte strings at worst — which
 is cheaper than teaching SQLite a seeded shuffle and exactly as observable as the reference's
 per-request shuffle. `TotalRecordCount` still reports the full count.
 
@@ -440,7 +456,7 @@ these tests; 003 already proved scanning.
 | 1 | Golden bodies for all four shapes; every list endpoint asserted against its shape |
 | 2 | `UserData` present with `Key`/`ItemId` on every item of every list, no parameters |
 | 3 | The §6.5 registry: each gated field absent bare, present with `Fields` |
-| 4 | Property test: for **every** supported `sortBy`, page the 100-item corpus at sizes 1, 7, 97 and assert each id seen exactly once, in the unpaged order |
+| 4 | Property test: for **every** supported `sortBy`, page the 100-item corpus at sizes 1, 7, 97 and assert each id seen exactly once, in the unpaged order — **and page the whole world too**, because the corpus is films and films have no artist credits, so `AlbumArtist` and `Artist` would be tested with a null key on every row *(amended at T7)* |
 | 5 | By-name endpoints with and without `limit` report the true count (behaviours §3.1) |
 | 6 | Ordering of the awkward-name fixture equals the 003 corpus expectation |
 | 7 | Injected-seed `Random`: full set, no duplicates within a page |
