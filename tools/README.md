@@ -8,6 +8,7 @@ Scripts that keep the documentation honest. None of them is part of the server.
 |---|---|
 | [`fetch_reference_spec.py`](fetch_reference_spec.py) | Fetch and sanitise the Jellyfin OpenAPI document from a running server into the git-ignored `reference/` directory |
 | [`extract_v1_surface.py`](extract_v1_surface.py) | Validate `docs/compatibility/surface.yaml` against that document — the automated half of Principle VI |
+| [`generate_cultures.py`](generate_cultures.py) | Regenerate `src/atrium/metadata/cultures.py` — the table `GET /Localization/Cultures` serves — from a measurement of the reference |
 
 The validator refuses a document whose version is not the one `surface.yaml` pins. Fetching from a
 `10.11.11` server therefore reports a mismatch against the pinned `10.11.10` contract: see
@@ -75,6 +76,18 @@ server already has: the item list for what it admitted, and `/Environment/Direct
 read-only filesystem view the library-setup screen uses — for what was on disk and became nothing.
 Both therefore measure *that* library rather than the reference's configured lists, and each says
 in its own output which half of its finding is a measurement and which is a bound.
+
+`generate_cultures.py` is the one script here that **writes into `src/`**, and it reports like a
+probe for exactly that reason: it prints what it measured, says whether the committed table
+changed, and exits non-zero if the response no longer has the shape the table was built from. The
+list it produces is **not** the Library of Congress ISO 639-2 registry — see the script's own
+docstring for the measurement that settled that, and `--from-file` for running it against a saved
+response rather than a server.
+
+```bash
+python3 tools/generate_cultures.py
+python3 tools/generate_cultures.py --from-file cultures.json
+```
 
 `probe_library_extensions.py` walks a bounded number of directories, because the tree belongs to
 somebody else; `--listings` and `--per-root` widen it, and it always reports what it did not

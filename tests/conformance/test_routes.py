@@ -45,9 +45,11 @@ pytestmark = pytest.mark.conformance
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 
-#: The feature these tests police. When 002 lands, it joins this set - deliberately, in the change
-#: that implements it, so that no route can ship ahead of the feature that specifies it.
-IMPLEMENTED_FEATURES = frozenset({"001", "002"})
+#: The features these tests police. A feature joins this set **in the change that implements it**,
+#: so that no route can ship ahead of the feature that specifies it - and, just as importantly, so
+#: that a feature marked `Implemented` whose route is not registered fails here rather than in
+#: somebody's client. 004 joined at T15, which is the line this file's own comment promised.
+IMPLEMENTED_FEATURES = frozenset({"001", "002", "004"})
 
 
 def _load_surface_parser() -> Any:

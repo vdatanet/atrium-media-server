@@ -587,7 +587,7 @@ it.
 
 ## T15 — Cultures: measure, generate, serve
 
-- [ ] **Changes:** measure the live reference's `GET /Localization/Cultures` first and record
+- [x] **Changes:** measure the live reference's `GET /Localization/Cultures` first and record
   what the shape and the B/T code handling actually are, with provenance, correcting
   [plan §6.9](plan.md#69-cultures) if it guessed wrong; `tools/generate_cultures.py` (3.9 floor,
   stdlib), listed in [`tools/README.md`](../../tools/README.md)'s reference-material table like
@@ -599,6 +599,25 @@ it.
   in both views with 004 in the set; the casing and unit sweeps pick up the new model; running
   the generator twice produces byte-identical output, and the tools CI job holds it to 3.9.
 - **Plan reference:** §6.9; spec §3.8
+- **Done (2026-08-27):** the task said measure first, and measuring first was the whole task.
+  **[Plan §6.9](plan.md#69-cultures) named the wrong source.** The Library of Congress ISO 639-2
+  registry has 508 rows; the reference returns **192**, under three rules — only languages with a
+  two-letter code, terminological code first (the registry's file lists them the other way round,
+  so 24 languages would have come out backwards), and **eight rows the registry does not contain
+  at all**. The last settles it: no filtering produces `pt-br`, so a generator reading the
+  registry ships a list missing rows a client can ask for. The source is the reference, read
+  through its own API like every probe here — and the generator *is* a probe, reporting what it
+  measured and exiting non-zero if the shape changes. (The registry was tried first; `loc.gov`
+  answers a scripted request with a bot challenge, which is a second reason rather than the one.)
+  **The byte-compare found a divergence that is not this endpoint's.** Atrium's response parses
+  identically to the reference's and is sixteen bytes shorter: the reference escapes non-ASCII as
+  `\u00E7` and Atrium sends `ç`. Same JSON string, every parser agrees — and matching it means
+  re-encoding every body and upper-casing each escape's hex, a substitution that is unsafe on a
+  string containing a literal backslash. Recorded as a deliberate exception with that argument in
+  [behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx),
+  and it belongs to `compat/responses.py` for every endpoint at once if 010 ever finds a client
+  that reads raw bytes. **This is the first response in the project to contain a non-ASCII
+  character at all**, which is why nothing had noticed.
 
 ## T16 — The acceptance map, and Implemented
 

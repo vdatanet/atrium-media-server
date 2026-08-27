@@ -158,6 +158,27 @@ async def test_system_info(
     assert b"PackageName" not in body, "a null property is absent, not null: behaviours 1.7"
 
 
+async def test_cultures(
+    golden_client: httpx.AsyncClient,
+    golden: Callable[[str, httpx.Response], bytes],
+    golden_authenticated: User,
+) -> None:
+    """004 AC: `GET /Localization/Cultures` reaches L2 - the whole list, to the byte.
+
+    The table is generated from a measurement of the reference
+    `[probe: tools/generate_cultures.py, Jellyfin 10.11.11, 2026-08-27]`, so this file is the
+    contract: a regeneration that added, dropped or reordered a language shows up here as a diff
+    somebody has to look at, which is the point of a golden rather than a count.
+    """
+    response = await golden_client.get("/Localization/Cultures")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == JSON_MEDIA_TYPE
+    body = golden("Localization.Cultures", response)
+    assert b'"ThreeLetterISOLanguageNames":["fra","fre"]' in body, (
+        "the terminological code comes first; a client reads the first entry"
+    )
+
+
 async def test_ping(
     golden_client: httpx.AsyncClient, golden: Callable[[str, httpx.Response], bytes]
 ) -> None:

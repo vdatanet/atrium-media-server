@@ -105,7 +105,11 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 # Probes and tools are command-line programs whose output IS the product, and they carry a Python
 # 3.9 floor (see tools/README.md) so they cannot use 3.11+ spellings the pyupgrade rules prefer.
-"tools/*" = ["T20", "UP017", "UP045", "UP007"]
+"tools/*" = ["T20", "UP017", "UP045", "UP007", "UP035", "UP006"]
+# Generated, and one culture is called "Church Slavic; Old Slavonic; Church Slavonic; Old
+# Bulgarian; Old Church Slavonic". Wrapping a generated string literal to satisfy a line
+# length would make the file harder to diff for no reader's benefit.
+"src/atrium/metadata/cultures.py" = ["E501"]
 # Tests assert on values that would otherwise look like magic numbers, and asserting on a
 # hardcoded test password is the entire point of tests/security.
 "tests/*" = ["N802", "S101", "S105", "S106"]

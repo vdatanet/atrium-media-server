@@ -4,7 +4,7 @@ title: Metadata resolution — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7; by T10 - sections 4, 6.1 and 6.8; by T14 - section 6.8
+amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7; by T10 - sections 4, 6.1 and 6.8; by T14 - section 6.8; by T15 - section 6.9
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -523,13 +523,30 @@ client would complicate every test to speed up nothing.
 ### 6.9 Cultures
 
 `metadata/cultures.py` is a generated table, committed, with a header naming its source and date.
-`tools/generate_cultures.py` rebuilds it from the Library of Congress ISO 639-2 registry: rows of
-`Name`, `DisplayName`, `TwoLetterISOLanguageName`, `ThreeLetterISOLanguageName`,
-`ThreeLetterISOLanguageNames` per `[spec: CultureDto]`, with the B/T split (`fre`/`fra`) carried
-in the plural list the way the reference carries it — it builds from its own embedded ISO 639-2
-file `[source: Emby.Server.Implementations/Localization/LocalizationManager.cs:27,102-166 @ v10.11.11]`.
-Membership differences against the reference's list are differential material for 010, not
-guessed at here.
+Rows of `Name`, `DisplayName`, `TwoLetterISOLanguageName`, `ThreeLetterISOLanguageName`,
+`ThreeLetterISOLanguageNames` per `[spec: CultureDto]`, with the B/T split carried in the plural
+list the way the reference carries it.
+
+**The source is the reference itself, not the ISO 639-2 registry** — corrected at T15, which
+measured the endpoint before writing anything
+`[probe: tools/generate_cultures.py, Jellyfin 10.11.11, 2026-08-27]`. The registry has 508 rows;
+the reference returns **192**, and the difference is three rules rather than one:
+
+| | |
+|---|---|
+| Only languages with a **two-letter code** | which is exactly the 192; the reference skips a row whose second field is empty `[source: Emby.Server.Implementations/Localization/LocalizationManager.cs:136-141 @ v10.11.11]` |
+| The **terminological** code first | French is `["fra", "fre"]`. The registry's own file lists the bibliographic code first, so a table built from it has 24 languages' codes the wrong way round — and a client reads the first entry |
+| **Eight rows the registry does not contain** | `zh-hk`, `zh-cn`, `zh-tw`, `fr-ca`, `pt-br`, `pt-pt`, `es-419` and a bilingual Chinese `ze`, whose "two-letter code" is a tag. A row whose code contains a dash takes the code as its `Name` and keeps the friendly name as `DisplayName` |
+
+The third settles it: no amount of filtering the registry produces those eight, so a generator
+reading it would ship a list missing rows a client can ask for. Membership is therefore
+**measured**, not differential material — and the generator reports like a probe, exiting non-zero
+if the response stops having the shape the table was built from.
+
+**One divergence the byte-compare found**, and it is not this endpoint's: the reference escapes
+every non-ASCII character as `\uXXXX` and Atrium sends the character. Both are the same JSON
+string; the argument is in
+[behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx).
 
 ## 7. Failure handling
 
