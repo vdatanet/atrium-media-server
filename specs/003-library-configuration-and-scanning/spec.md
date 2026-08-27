@@ -217,6 +217,30 @@ those carry a single album artist throughout — each resolving to **one** album
 Where no album artist is present, the album is attributed to `Various Artists` only if the track
 artists actually differ.
 
+**The fallback is narrower than "the directory layout" suggests.** It holds for the album and the
+artist, which the directories name, and **not** for the track number, the disc number or the title:
+the reference takes a track and a disc number from the embedded tag, or failing that from the
+number the container carries, and from nowhere else, and it names a file whose tags supply no title
+after that file's whole name, leading digits included.
+`[source: MediaBrowser.Providers/MediaInfo/AudioFileProber.cs:181 @ v10.11.11]`
+`[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:1369 @ v10.11.11]`
+`[source: Emby.Server.Implementations/Library/ResolverHelper.cs:96 @ v10.11.11]`
+So an untagged `01 - The Track.flac` is an item named `01 - The Track` with no track number, rather
+than `The Track` as track one. The measured library cannot show this from the outside — all 5,814
+of its tracks carry a title tag, so the fallback never runs there
+`[read: Jellyfin 10.11.11, 2026-08-27, /Items?IncludeItemTypes=Audio&Fields=Path]` — and the 77.9%
+agreement recorded for track numbers is how often a tag matched the name beside it, not evidence of
+a fallback the reference has.
+
+Atrium reads all three from the name anyway when nothing else supplies them, which is a difference
+a library of untagged music can see. **OQ-8** holds that open. What follows from the measurement
+either way is the tie-break *within* the fallback: a name Atrium declines to take a number out of
+is a name it agrees with the reference about, so an ambiguous one is read as saying **less**. A
+leading number is a track number only when something separates it from what follows, so
+`24K Magic.flac` is a song called `24K Magic` and not track 24 of `K Magic`, and a file named after
+a hash keeps its name whole. Recorded in
+[behaviours §2.16](../../docs/compatibility/behaviours.md#216-a-music-tracks-number-comes-from-tags-never-from-its-filename).
+
 ### 3.6 Identity
 
 Every item gets an identifier that is **32 lowercase hexadecimal characters** and **stable across
@@ -435,6 +459,7 @@ media generated at build time. No copyrighted media, ever.
 |---|---|---|---|
 | OQ-6 | Whether the §3.7.2 formulas hold for items carrying an explicit sort title, and how many real items do | §3.7.3 | The override rows of `tools/probe_sort_names.py`, read against a larger library |
 | OQ-7 | What the reference does with a character that has no ASCII decomposition — `ø`, `ß`, a non-Latin script | The ordering of those names, and nothing else | Crafted names in `tools/probe_sort_names.py`; the measured set contains none |
+| OQ-8 | Whether a track number, disc number and title should be read from a file's name at all, given the reference reads none of the three from there (§3.5) | Only untagged music: for a tagged file both answer from the tag | How much real music carries no readable tag, which nothing can measure until 004 reads them |
 
 ### Resolved
 

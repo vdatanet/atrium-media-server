@@ -310,3 +310,41 @@ rows:
   - {path: "The Artist/Another Album/03 - A Later Track.flac", collection_type: music, needs: music,
      why: "a track with no disc marker is on disc ONE, not on an unknown disc - the reference reports disc 1 for 5,152 of 5,814 tracks, and treating it as unknown scored 21% against 98%",
      expect: {disc: 1, track: 3, album: "Another Album"}}
+
+  # Added after 003 T20, where a stem that merely BEGAN with a digit was being read as a track
+  # number: `4f3a9c2e1b7d.flac` resolved to track 4 of `f3a9c2e1b7d`. The corpus had no row for a
+  # digit-leading title, so neither answer was pinned.
+  #
+  # The reference derives **no** track number from a filename - a track and a disc number come from
+  # the embedded tag or the container's, and nowhere else
+  # [source: MediaBrowser.Providers/MediaInfo/AudioFileProber.cs:181 @ v10.11.11] - and it names a
+  # file with no title tag after its whole stem, digits included
+  # [source: Emby.Server.Implementations/Library/ResolverHelper.cs:96 @ v10.11.11]. Its own library
+  # cannot settle the shape either way: none of its 5,814 tracks has a stem of it, and every one of
+  # them carries a title tag, so the fallback never fires there
+  # [read: Jellyfin 10.11.11, 2026-08-27, /Items?IncludeItemTypes=Audio&Fields=Path].
+  #
+  # So the tie-break is to parse LESS: a stem these rows decline a number for is a stem that agrees
+  # with the reference exactly. What the rows above still do for `01 - The Track.flac` is a
+  # divergence confined to untagged files, recorded in behaviours section 2.16 and open as OQ-8.
+  - {path: "The Artist/The Album/4f3a9c2e1b7d.flac", collection_type: music, needs: music,
+     why: "a hash-named file is not track 4 of 'f3a9c2e1b7d'; those digits are part of the name and the reference keeps them",
+     expect: {track: null, title: "4f3a9c2e1b7d"}}
+  - {path: "The Artist/The Album/24K Magic.flac", collection_type: music, needs: music,
+     why: "a real song title beginning with digits glued to a letter, which was resolving to track 24 of 'K Magic'",
+     expect: {track: null, title: "24K Magic"}}
+  - {path: "The Artist/The Album/2Pac - Changes.flac", collection_type: music, needs: music,
+     why: "the same shape where the digits start an ARTIST's name, and the whole stem is the title",
+     expect: {track: null, title: "2Pac - Changes"}}
+  - {path: "The Artist/The Album/1-24K Magic.flac", collection_type: music, needs: music,
+     why: "the disc-and-track pattern had the same hole: this is track 1 of a song called '24K Magic', not track 24 of 'K Magic'",
+     expect: {disc: 1, track: 1, title: "24K Magic"}}
+  - {path: "The Artist/The Album/01Track.flac", collection_type: music, needs: music,
+     why: "the cost of the rule, stated rather than hidden: a number somebody meant as a track number is not one when nothing separates it from the title",
+     expect: {track: null, title: "01Track"}}
+  - {path: "The Artist/The Album/01.flac", collection_type: music, needs: music,
+     why: "the boundary the rule keeps: a stem that is only a number is still a number, because no letter touches it",
+     expect: {track: 1}}
+  - {path: "2Pac/The Album/01 - The Track.flac", collection_type: music, needs: music,
+     why: "the control: a DIRECTORY whose name starts with a digit was never in question, and an artist keeps its digits",
+     expect: {artist: "2Pac", track: 1, title: "The Track"}}

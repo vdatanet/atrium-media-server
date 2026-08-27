@@ -19,6 +19,23 @@ T13 owes 004, and a stub that returns real tags proves it in the tests rather th
 **A trailing year in an album directory stays in the album's name**, unlike a film's. `Live 1999`
 is an album called `Live 1999`, while `The Album (2001)` is `The Album` from 2001. Only a
 *bracketed* year is a year here, because the bare form is part of how albums are named.
+
+**A leading digit is a track number only when a separator follows it.** `24K Magic.flac` is a song
+called `24K Magic`, not track 24 of `K Magic`, and `4f3a9c2e1b7d.flac` is a file named after a hash,
+not track 4 of `f3a9c2e1b7d`. The separator used to be optional, on the reasoning that a number
+alone is a number — which holds for `01.flac` and stops holding the moment a letter touches the
+digits. The cost is stated rather than hidden: `01Track.flac` no longer yields track one.
+
+**The reference derives no track number from a filename at all.** A track and a disc number come
+from the embedded tag, or failing that from the container's own, and from nowhere else
+`[source: MediaBrowser.Providers/MediaInfo/AudioFileProber.cs:181 @ v10.11.11]`
+`[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:1369 @ v10.11.11]`; a file
+with no title tag is named after its **whole stem**, leading digits included
+`[source: Emby.Server.Implementations/Library/ResolverHelper.cs:96 @ v10.11.11]`. So every stem
+this module declines to read a number out of is a stem it agrees with the reference about, and that
+is the tie-break whenever a shape is ambiguous: parse *less*. What it still does for
+`01 - The Track.flac` is a divergence confined to files carrying no tags — recorded in
+`docs/compatibility/behaviours.md` §2.16 and open as 003 OQ-8.
 """
 
 from __future__ import annotations
@@ -38,11 +55,14 @@ DEFAULT_DISC = 1
 _DISC_DIRECTORY = re.compile(r"(?i)\A(?:cd|disc|disk|volume|vol)[\s._-]*(\d{1,2})\Z")
 
 #: `1-01 Title`: a disc and a track glued with a dash. Requires digits on **both** sides, so that
-#: `101 Title` stays track 101 and `01-Title` stays track 1.
-_DISC_AND_TRACK = re.compile(r"\A(\d{1,2})-(\d{1,3})(?![\d])[\s._-]*(.*)\Z")
+#: `101 Title` stays track 101 and `01-Title` stays track 1, and a separator or the end of the stem
+#: after them, for the reason `_TRACK` gives.
+_DISC_AND_TRACK = re.compile(r"\A(\d{1,2})-(\d{1,3})(?![\d])(?:[\s._-]+(.*))?\Z")
 
-#: `01 Title`, `01 - Title`, `01. Title`. The separator is optional; a number alone is a number.
-_TRACK = re.compile(r"\A(\d{1,3})(?![\d])[\s._-]*(.*)\Z")
+#: `01 Title`, `01 - Title`, `01. Title`, and `01` alone - a number by itself is still a number.
+#: What may follow the digits is a **separator or nothing at all**: a digit touching a letter is
+#: part of a name, not a number in front of one. See the module docstring for what that costs.
+_TRACK = re.compile(r"\A(\d{1,3})(?![\d])(?:[\s._-]+(.*))?\Z")
 
 #: A bracketed year on an album directory. Bare digits are left alone - see the module docstring.
 _ALBUM_YEAR = re.compile(r"\s*[(\[]\s*((?:19|20)\d{2})\s*[)\]]\s*\Z")
@@ -161,13 +181,17 @@ def _album(directory: str | None) -> tuple[str | None, int | None]:
 
 
 def _numbers(stem: str) -> tuple[int | None, int | None, str]:
-    """Disc, track and title, from the filename."""
+    """Disc, track and title, from the filename.
+
+    A stem neither pattern accepts is a title, whole. Both patterns leave their title group unset
+    for a stem that is only numbers, which is why each is read through `or ""`.
+    """
     both = _DISC_AND_TRACK.match(stem)
     if both is not None:
-        return int(both.group(1)), int(both.group(2)), both.group(3).strip()
+        return int(both.group(1)), int(both.group(2)), (both.group(3) or "").strip()
     one = _TRACK.match(stem)
     if one is not None:
-        return None, int(one.group(1)), one.group(2).strip()
+        return None, int(one.group(1)), (one.group(2) or "").strip()
     return None, None, stem.strip()
 
 

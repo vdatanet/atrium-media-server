@@ -280,6 +280,42 @@ observable as presence.
 not on its own type's list is ignored silently ([003 §3.2](../../specs/003-library-configuration-and-scanning/spec.md#32-what-is-considered-a-media-file))
 — never promoted to another type because some other list would accept it.
 
+### 2.16 A music track's number comes from tags, never from its filename
+
+**Jellyfin does:** take an `Audio` item's `IndexNumber` and `ParentIndexNumber` from the file's
+embedded tag, or failing that from the number the container carries, and from nothing else. No
+resolver and no provider reads a leading number off the filename.
+`[source: MediaBrowser.Providers/MediaInfo/AudioFileProber.cs:181 @ v10.11.11]`
+`[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:1369 @ v10.11.11]`
+A file whose tags supply no title keeps the name every item starts with — its **whole filename
+stem**, leading digits included.
+`[source: Emby.Server.Implementations/Library/ResolverHelper.cs:96 @ v10.11.11]`
+
+So an untagged `01 - The Track.flac` resolves on the reference to an item named `01 - The Track`
+with no track number at all, rather than to `The Track` as track one.
+
+**Its own library cannot show this**, and that is worth stating because the numbers elsewhere in
+this document came from it. All 5,814 of its tracks carry a title tag, so the fallback never fires
+there, and not one of the 5,814 filenames begins with a digit glued straight to a letter.
+`[read: Jellyfin 10.11.11, 2026-08-27, /Items?IncludeItemTypes=Audio&Fields=Path]` The 77.9%
+path-versus-reference agreement on track numbers recorded at 003 T13 measures how often a **tag**
+happened to match the filename beside it, not a path fallback the reference has.
+
+**Depends on it:** unknown, and narrowly. Only a library holding untagged music can tell the two
+apart; for a tagged file both servers answer from the tag and agree.
+
+**Atrium does:** read a track number, a disc number and a title off the filename when its metadata
+source says nothing — which for an untagged file is a value the reference does not have.
+[003 §3.5](../../specs/003-library-configuration-and-scanning/spec.md#35-music) states the
+divergence and **OQ-8 holds the decision open**: the evidence that would settle it is how much real
+music carries no readable tag, and nothing can measure that until 004 reads them.
+
+What is already settled is the direction of the tie-break inside that fallback. Since every stem
+Atrium declines to find a number in is a stem it agrees with the reference about, an ambiguous shape
+parses *less*: a digit is a track number only when a separator follows it, so `24K Magic.flac` is a
+song called `24K Magic` and not track 24 of `K Magic`. `tests/corpus/naming.yaml` pins both that and
+what it costs.
+
 ### 2.13 `DeviceId` is mandatory on one route, not on the header
 
 **Jellyfin does:** answer `200` on an ordinary authenticated route for a client header carrying no
