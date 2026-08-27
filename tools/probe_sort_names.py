@@ -92,12 +92,15 @@ def derive(name: str) -> str:
 
     # Digit runs are left-padded with zeros to a fixed width, which is how lexical comparison
     # produces numeric ordering.
-    out, chunk_start, in_digits = [], 0, sortable[:1].isdigit()
+    # `isdecimal` rather than `isdigit`: C#'s char.IsDigit is the Unicode Nd category exactly,
+    # while Python's isdigit also accepts superscripts. atrium.domain.sorting makes the same
+    # choice, and a test asserts the two agree.
+    out, chunk_start, in_digits = [], 0, sortable[:1].isdecimal()
     for index, char in enumerate(sortable):
-        if char.isdigit() != in_digits:
+        if char.isdecimal() != in_digits:
             chunk = sortable[chunk_start:index]
             out.append(chunk.rjust(DIGIT_PAD, "0") if in_digits else chunk)
-            chunk_start, in_digits = index, char.isdigit()
+            chunk_start, in_digits = index, char.isdecimal()
     tail = sortable[chunk_start:]
     out.append(tail.rjust(DIGIT_PAD, "0") if in_digits else tail)
     sortable = "".join(out)

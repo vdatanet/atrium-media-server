@@ -273,6 +273,13 @@ intuition and obvious in one written from a measurement.
 runs, which is why the pad width is part of the contract: a different width produces a different
 ordering between names whose digit runs differ in length.
 
+> ⚠️ **OQ-7.** Step 6 says "transliterate anything still outside ASCII", and the only case measured
+> was `Amélie` — which needs no transliteration, because `é` decomposes and folding alone reaches
+> it. What the reference does with a character that has **no** ASCII decomposition (`ø`, `ß`, `æ`,
+> or a name in a non-Latin script) is unmeasured. v1 folds, then applies a short table of the
+> obvious Latin readings, then drops what is left; dropping is at least stable, which a partial
+> guess would not be.
+
 The three lists are server configuration rather than protocol. Atrium exposes them with the same
 defaults and honours them the same way.
 
@@ -380,6 +387,7 @@ media generated at build time. No copyrighted media, ever.
 | OQ-2 | Case sensitivity of path normalisation for identity | The identity rule of §3.6; permanent per library | A decision plus a recorded per-library setting |
 | OQ-4 | Does the reference merge a folder-per-film layout when the folder and file names disagree? | An edge in §3.3 | Fixture comparison via the differential harness |
 | OQ-6 | Whether the §3.7.2 formulas hold for items carrying an explicit sort title, and how many real items do | §3.7.3 | The override rows of `tools/probe_sort_names.py`, read against a larger library |
+| OQ-7 | What the reference does with a character that has no ASCII decomposition — `ø`, `ß`, a non-Latin script | The ordering of those names, and nothing else | Crafted names in `tools/probe_sort_names.py`; the measured set contains none |
 
 ### Resolved
 
