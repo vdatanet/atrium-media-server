@@ -34,7 +34,7 @@ from sqlalchemy.orm import Session as OrmSession
 from atrium.compat.dates import utc_now
 from atrium.compat.guids import new_id
 from atrium.db import models
-from atrium.domain.items import CollectionType
+from atrium.domain.items import CollectionType, Item, ItemType, MediaSource
 from atrium.domain.library import Library
 from atrium.domain.session import AccessToken, IssuedToken, Session
 from atrium.domain.user import LibraryAccess, User
@@ -517,3 +517,110 @@ class LibraryRepository:
         if row is None:
             raise LookupError(f"no library {library_id}")
         return row
+
+
+def _item(row: models.Item, sources: list[models.ItemSource]) -> Item:
+    return Item(
+        id=row.id,
+        type=ItemType(row.type),
+        name=row.name,
+        library_id=row.library_id,
+        parent_id=row.parent_id,
+        sort_name=row.sort_name,
+        sources=tuple(
+            MediaSource(relative_path=one.relative_path, size=one.size, mtime_ns=one.mtime_ns)
+            for one in sorted(sources, key=lambda one: one.part_index)
+        ),
+        index_number=row.index_number,
+        parent_index_number=row.parent_index_number,
+        end_index_number=row.end_index_number,
+        date_created=row.date_created,
+        date_modified=row.date_modified,
+        removed_at=row.removed_at,
+    )
+
+
+class ItemRepository:
+    """Everything a library holds. **Nothing here deletes an item.**
+
+    That absence is deliberate and it is 003's structural decision (tasks T15): for the whole middle
+    of the feature the scanner is *incapable* of destroying a library, and the capability is granted
+    at T17 only once the guards that constrain it exist and their tests are green. A repository with
+    no removal method is what makes "incapable" a fact rather than a promise about the calling code.
+    """
+
+    def __init__(self, session: OrmSession) -> None:
+        self._session = session
+
+    def by_library(self, library_id: str) -> dict[str, Item]:
+        """Every item in one library, by identifier, with its sources attached.
+
+        Sources are fetched in one further query rather than through the relationship, which is
+        `lazy="raise"`: a scan reads the whole library once and then compares in memory, so two
+        queries is the whole cost regardless of how many items there are.
+        """
+        rows = list(
+            self._session.execute(
+                select(models.Item).where(models.Item.library_id == library_id)
+            ).scalars()
+        )
+        if not rows:
+            return {}
+        sources: dict[str, list[models.ItemSource]] = {}
+        for source in self._session.execute(
+            select(models.ItemSource).where(models.ItemSource.item_id.in_([row.id for row in rows]))
+        ).scalars():
+            sources.setdefault(source.item_id, []).append(source)
+        return {row.id: _item(row, sources.get(row.id, [])) for row in rows}
+
+    def add(self, item: Item) -> None:
+        self._session.add(
+            models.Item(
+                id=item.id,
+                library_id=item.library_id,
+                parent_id=item.parent_id,
+                type=item.type.value,
+                name=item.name,
+                sort_name=item.sort_name,
+                index_number=item.index_number,
+                parent_index_number=item.parent_index_number,
+                end_index_number=item.end_index_number,
+                date_created=item.date_created,
+                date_modified=item.date_modified,
+                removed_at=item.removed_at,
+            )
+        )
+        self._session.flush()
+        self._write_sources(item)
+
+    def update(self, item: Item) -> None:
+        """Everything a rescan can change. `id` is not among them - it is what identifies the row.
+
+        `removed_at` is deliberately absent too: clearing it is a *revival*, which is T17's, and a
+        method that could set it either way would be a removal path by another name.
+        """
+        row = self._session.get(models.Item, item.id)
+        if row is None:
+            raise LookupError(f"no item {item.id}")
+        row.parent_id = item.parent_id
+        row.name = item.name
+        row.sort_name = item.sort_name
+        row.index_number = item.index_number
+        row.parent_index_number = item.parent_index_number
+        row.end_index_number = item.end_index_number
+        row.date_modified = item.date_modified
+        self._session.execute(delete(models.ItemSource).where(models.ItemSource.item_id == item.id))
+        self._write_sources(item)
+
+    def _write_sources(self, item: Item) -> None:
+        for part_index, source in enumerate(item.sources):
+            self._session.add(
+                models.ItemSource(
+                    item_id=item.id,
+                    part_index=part_index,
+                    relative_path=source.relative_path,
+                    size=source.size,
+                    mtime_ns=source.mtime_ns,
+                )
+            )
+        self._session.flush()

@@ -857,9 +857,9 @@ because a resolver that stamped them would give a different answer on every run 
 what [spec §3.8](spec.md#38-scanning-and-change-detection) forbids, and the kind of impurity that
 makes a determinism test flake rather than fail.
 
-## T15 — `library/scan.py`, **additive only**
+## T15 — `library/scan.py`, **additive only**  ✅
 
-- [ ] **Changes:** walk, resolve, diff, write — with **no removal code path at all**. Writes batched
+- [x] **Changes:** walk, resolve, diff, write — with **no removal code path at all**. Writes batched
   into one transaction per library. Introduces the `ScanReport` type of
   [plan §5](plan.md#5-contracts), which T16 and T17 populate and T21 completes.
 - **Depends on:** T9, T14
@@ -875,6 +875,55 @@ makes a determinism test flake rather than fail.
 - **Note:** `ScanReport` exists from this task so that T16's threshold and T17's removals report
   into one type rather than each inventing a partial one.
 - **Plan reference:** §6.7, §5
+
+### Done — 2026-08-27
+
+**"Incapable" is enforced by shape, not by discipline.** A scan that merely *chooses* not to delete
+is one refactor away from deleting, so `ItemRepository` has **no removal method at all** — its
+public surface is `by_library`, `add`, `update`, and a test asserts that list by name. `update`
+cannot reach `removed_at` either: clearing it is a *revival* and setting it is a removal, and a
+method that could write it either way would be a removal path wearing another name.
+
+The two tests that matter here assert an **absence**: delete a file and rescan, nothing changes;
+empty the entire root and rescan, nothing changes. Both will be *rewritten* at T17, and that is the
+point — they record what this scanner is, so that the day it gains the ability is a visible change
+rather than a silent one.
+
+**The unit of work does not order rows within a table either.** T6 found that SQLAlchemy needs a
+mapper relationship to know `items` depends on `libraries`; this needed the same fact one level
+down. `parent_id` is written as a **column**, not through the `Item.parent` relationship, so
+nothing tells the session that a season's row has to go in before its episodes'. Items are sorted
+by their depth in `PARENT_OF` before writing, which is a static property of the type and does not
+depend on the ORM being clever. It would have surfaced as a foreign-key error on a tree deeper than
+one level, which is every library that is not films.
+
+**AC-13 is asserted from the database, and that is the whole reason it is here rather than at T4.**
+T4 proved the two derivations are right; this proves the **scanner uses them**. They are different
+claims, and a green sort-name table beside a library ordered by the wrong rule looks exactly like
+success — which is why [plan §9](plan.md#9-risks) rates it most likely to break.
+
+**The batching test counts transactions, not seconds.** A timing threshold either flakes on a busy
+runner or is so generous it catches nothing, while *how many transactions* is the actual decision
+[plan §6.7](plan.md#67-scan-orchestration) made. 1,501 items, one commit — and `scan` never commits
+at all, so the batching is structural: a caller that opens one unit of work per library gets one
+transaction per library, and one that opens one per item gets what it asked for.
+
+**`_differs` deliberately does not compare `date_modified`.** It is set *because* something changed,
+so comparing it would make every item differ from itself and turn every rescan into a full rewrite
+of the library — which AC-2 would have caught, but only after somebody wondered why a rescan of an
+unchanged tree reported thousands of updates.
+
+**`ScanReport.removed` exists from this task and is always zero.** The task asked for it so that
+T16's threshold and T17's removals report into one type rather than each inventing half of one, and
+a field that is structurally zero is a better statement of what this scanner is than a missing one.
+
+**A 002 test was flaky and this task is what exposed it.** `test_the_background_task_flushes_on_its
+_interval` waited for **200 iterations of `sleep(0.01)`** and then asserted regardless. That cannot
+tell *"the task never flushed"* from *"this runner was busy and two hundred sleeps took less than
+two seconds of its attention"* — and on a loaded CI runner it took the second path, failing with a
+message about a `datetime` rather than about a timeout. It is now a wall-clock deadline with an
+assertion that says which of the two happened. Fixed here rather than left: a test that fails for a
+reason its own message denies is worse than one that fails.
 
 ## T16 — The safety guards and the destructive tests
 
