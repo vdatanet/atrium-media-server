@@ -14,9 +14,15 @@ identifiers were derived, so nothing stored the old ones, and the first symptom 
 their favourites look wrong weeks later. So for the whole middle of this feature the capability
 simply does not exist, and it is granted only once the thing that constrains it does.
 
-**A file that has gone is therefore left exactly as it was.** That is not the final behaviour - 003
-spec section 3.8 says it should be soft-deleted and its user data kept - it is the behaviour of a
-scanner that has not yet been given the ability, and `ScanReport.removed` stays zero to say so.
+**A file that has gone is now soft-deleted** (003 plan section 6.6): `removed_at` is set, the row
+stays, and everything a user did with that item is still keyed to an identifier that derives again
+the moment the file comes back. A re-download, a remount or a share that was slow to mount
+therefore costs nobody their favourites - and a returning file **revives the same item**, because
+the identifier comes from the path and the path has not changed.
+
+**A scan never purges.** Hard deletion is an operator's decision and lives in
+`library/maintenance.py`, which this module does not import - a test asserts that, because a scan
+that merely *chose* not to purge would be one refactor away from purging.
 
 **One transaction per library** (plan section 6.7). SQLite has a single writer, so a commit per
 item would make a first scan of a large library take orders of magnitude longer than the walk that
@@ -104,15 +110,18 @@ class ScanReport:
     unchanged: int = 0
 
     removed: int = 0
-    """**Always zero here.** This scanner has no removal code path at all - see the module
-    docstring. T17 grants the capability, after T16 constrains it."""
+    """Items whose files are gone, marked `removed_at`. **Soft**: the row stays and so does the
+    user data keyed to its identifier (spec section 3.8)."""
+
+    revived: int = 0
+    """Items whose files came back, brought out of removal **with the same identifier**."""
 
     missing: int = 0
     """Items in the database whose files are no longer on disk.
 
-    Computed but **not acted on**: this scanner has no removal path, and T17 is what turns these
-    into soft deletions. Reported from here because guard three has to count them to decide whether
-    to refuse, and a number that was computed and thrown away would be a number nobody could check.
+    The same number as `removed` in an ordinary scan; it stays a separate field because guard
+    three counts it *before* deciding whether to act, and a scan that refuses reports a `missing`
+    with a `removed` of zero.
     """
 
     skipped: tuple[Skipped, ...] = field(default_factory=tuple)
@@ -180,7 +189,13 @@ def scan(
     resolution = resolve(library, walked.candidates, source)
 
     found = {item.id for item in resolution.items}
-    missing = [item for item in existing.values() if item.id not in found and item.is_file_backed]
+    # Already-removed items are not missing *again*. Counting them would make the guard fire on
+    # every scan after a large removal, forever, with nothing left to protect.
+    missing = [
+        item
+        for item in existing.values()
+        if item.id not in found and item.is_file_backed and not item.is_removed
+    ]
     if not confirm_removals:
         _require_removals_under_threshold(library, missing, existing, removal_threshold)
 
@@ -194,25 +209,34 @@ def scan(
 
     now = utc_now()
     added = updated = unchanged = 0
+    returning: list[str] = []
 
     for item in sorted(resolution.items, key=lambda one: (_DEPTH[one.type], one.id)):
         before = existing.get(item.id)
         if before is None:
             repository.add(replace(item, date_created=now, date_modified=now))
             added += 1
-        elif _differs(before, item):
+            continue
+        if before.is_removed:
+            # The file came back. Same path, same derivation, same identifier - so the user data
+            # keyed to it is still there and was never disturbed (spec section 3.8).
+            returning.append(item.id)
+        if _differs(before, item):
             repository.update(replace(item, date_modified=now))
             updated += 1
         else:
             unchanged += 1
 
-    # Whatever is in `existing` and not in the resolution stays exactly where it is. There is no
-    # branch here for it, deliberately.
+    revived = repository.revive(returning)
+
+    removed = repository.mark_removed([item.id for item in missing], now)
     return ScanReport(
         library_id=library.id,
         added=added,
         updated=updated,
         unchanged=unchanged,
+        removed=removed,
+        revived=revived,
         missing=len(missing),
         skipped=walked.skipped,
     )

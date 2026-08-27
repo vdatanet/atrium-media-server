@@ -215,7 +215,7 @@ def test_losing_one_file_is_not_a_disaster(
     delete_some_films(fixture_library, 1)
     report = rescan(engine, library)
     assert report.missing == 1  # type: ignore[union-attr]
-    assert report.removed == 0, "nothing removes yet; T17 grants that"  # type: ignore[union-attr]
+    assert report.removed == 1, "T17 granted the capability this guard constrains"  # type: ignore[union-attr]
 
 
 def test_the_threshold_is_configurable(

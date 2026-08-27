@@ -982,9 +982,9 @@ It sits beside `removed`, which is still structurally zero.
 counting them would make a renamed series look like a mass deletion and refuse a scan that was
 doing exactly what it should.
 
-## T17 — Removal and soft deletion
+## T17 — Removal and soft deletion  ✅
 
-- [ ] **Changes:** `removed_at` on a missing file; revival on return; the maintenance action that
+- [x] **Changes:** `removed_at` on a missing file; revival on return; the maintenance action that
   purges, which a scan never does.
 - **Depends on:** **T16 green**
 - **Verified by:** **AC-11** — delete a file, rescan, the item disappears from queries and its user
@@ -992,6 +992,41 @@ doing exactly what it should.
 - **Note:** this task is what grants the scanner the ability to remove. It does not start before
   T16 passes.
 - **Plan reference:** §6.6
+
+### Done — 2026-08-27
+
+**An already-removed item is not missing again**, and getting that wrong would have disarmed T16's
+third guard permanently. The first version counted every item without a file as missing, including
+the ones a previous scan had already marked — so after one large removal the guard would have fired
+on **every subsequent scan, forever**, refusing to act on a loss that had already happened and with
+nothing left to protect. A test holds it: rescan after a removal reports `(removed=0, missing=0)`.
+
+**Purging lives in its own module, and a test asserts `scan.py` does not import it.** The same
+shape argument as T15's repository having no delete method: a scan that merely *chose* not to purge
+would be one refactor away from purging, and purging is the one operation here that a mount coming
+back cannot undo.
+
+**It has a grace period, which nothing asked for.** Thirty days, because the failure this really
+protects against is an operator running a purge to tidy up *on the same afternoon* a share was slow
+to mount — at which point the rows are gone and the next scan re-adds them with the same
+identifiers but no record of ever having been away. `grace=0` is available for somebody who has
+just cleared a library on purpose; nobody should get it by accident.
+
+**Purging does not delete anybody's history, and that is the point of the missing foreign key**
+arriving at the one moment a row really is deleted. It removes the thing a user pointed at, not
+what they did with it — so if that file ever returns, the association returns with it. There is a
+test for exactly that: purge, restore the file, and the play count is still three. That is what
+makes purging safe enough to exist at all.
+
+**Three tests from T15 and T16 were rewritten here, and the rewrites are the record.** One asserted
+that a deleted file changed nothing; one asserted the repository's surface was three methods; one
+asserted `removed` was zero. All three were true statements about a scanner that could not remove,
+and all three are now different — visibly, in the diff, rather than by quietly ceasing to be
+checked. The surface assertion still holds the line that matters: the six methods include two that
+*mark* and none that *delete*.
+
+**`update` still cannot reach `removed_at`.** Changing what an item **is** and changing whether it
+is **there** stayed separate operations, so the T15 test that asserts it needed no change at all.
 
 ## T18 — Change detection
 
