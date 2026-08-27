@@ -4,7 +4,7 @@ title: Metadata resolution — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7
+amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7; by T10 - sections 4, 6.1 and 6.8
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -118,7 +118,12 @@ Revision `0003_metadata_and_by_name`, reversible.
 `provider_ids` (JSON map, echoed as `ProviderIds`), `normalization_gain` (float, nullable),
 `locked_fields` (JSON list of the reference's nine `MetadataField` values, §5),
 `is_locked` (boolean), `refresh_pending` (boolean),
-`metadata_refreshed_at`, and `name_folded`.
+`metadata_refreshed_at`, `name_folded`, and — **added at T10, because a column the write path
+stores and never reads back is resolved and rewritten on every refresh for ever** — `tags` (a JSON
+array: `<tag>` elements have no by-name item in the reference's model, so they are strings on the
+item rather than a sixth join table) and `forced_sort_name` (the `<sorttitle>` **as the user wrote
+it**, kept beside the `sort_name` derived from it, because a derivation cannot be compared against
+what it was derived from). Revision 0005.
 
 **`normalization_gain` is one number, not the JSON map this plan first specified.** T1's survey
 settled OQ-5 against both halves of the guess: the reference reads exactly one replay-gain tag,
@@ -304,15 +309,20 @@ this section had wrong and two of which change what T6 builds:
 Where the lock arrives from is §6.2's business, and it had no answer until T3 asked: spec §3.6
 gives locks no HTTP route, so **the sidecar is the only channel in v1**.
 
-**One ambiguity in spec §3.1's table, left visible rather than resolved.** The film column lists
-*Path-derived* **twice**, at positions 3 and 5. In a first-value-wins walk a repeated source is a
-no-op — the second occurrence can only win a field the first already lost — so `CHAIN_OF`
-reproduces the table literally and behaves as though it did not. The two readings differ in
-exactly one observable way, and it is worth settling before 005 serves the result: with `PATH` at
-position 3, ahead of the remote provider, **a `Replace` refresh cannot take a film's name from
-TMDB** — the filename always wins. If the intended reading was `[nfo, TMDB, path]`, the film's
-name under `Replace` comes from the provider instead. T14 holds `Replace` end-to-end and is where
-this gets measured against the reference rather than argued.
+**The ambiguity in spec §3.1's table, settled at T10.** The film column lists *Path-derived*
+**twice**, at positions 3 and 5, and T6 left both in `CHAIN_OF` because a repeated source in a
+first-value-wins walk is a no-op. T10 measured which one the table meant: **position 5**. The
+reference builds a scratch result, merges each local provider into it, then the remote ones, and
+folds in what the item already had **last**
+`[source: MediaBrowser.Providers/Manager/MetadataService.cs:809,849-861 @ v10.11.11]` — so the
+path-derived name is the final fallback rather than an early source.
+
+That is not a tidy-up; **AC-1 rests on it.** "A film with a full `.nfo` resolves entirely from it"
+is unreachable if the name 003 derived from the filename counts as a value a default refresh must
+not overwrite. `refresh.py` therefore reads `items.name`, `index_number` and
+`parent_index_number` as the *path source*, and the subject's own values as what a **previous
+refresh** resolved. Position 3 stays in `CHAIN_OF` because it changes nothing and the spec's
+table says it.
 
 ### 6.2 Sidecars
 

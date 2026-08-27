@@ -66,13 +66,14 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from sqlalchemy.orm import Session as OrmSession
 
 from atrium.compat.dates import utc_now
-from atrium.db.repositories import ItemRepository
+from atrium.db.repositories import ItemRepository, MetadataRepository
 from atrium.domain.items import IN_THE_TREE, PARENT_OF, Item, ItemType
 from atrium.domain.library import Library
 from atrium.library.identity import ensure_unique
@@ -80,7 +81,9 @@ from atrium.library.naming import MetadataSource
 from atrium.library.report import Phase, Progress, ProgressSink, ScanReport, silent
 from atrium.library.resolver import Resolution, resolve
 from atrium.library.walker import Candidate, Skipped, WalkResult, walk
-from atrium.metadata.tags import TagSource
+from atrium.metadata.model import RefreshMode
+from atrium.metadata.refresh import pending_and_touched, refresh_items
+from atrium.metadata.tags import MemoisedSource, TagSource
 
 #: How much of a library may disappear before a scan refuses to believe it (plan section 6.5,
 #: rule 3). A quarter: high enough that pruning a season or a few albums proceeds, low enough that
@@ -147,6 +150,8 @@ def scan(
     source: MetadataSource | None = None,
     *,
     deep: bool = False,
+    refresh: bool = True,
+    refresh_mode: RefreshMode = RefreshMode.DEFAULT,
     removal_threshold: float = DEFAULT_REMOVAL_THRESHOLD,
     confirm_removals: bool = False,
     progress: ProgressSink = silent,
@@ -181,6 +186,12 @@ def scan(
     # passable and still what a server with no reader runs on (003's `PathOnly`).
     if source is None:
         source = TagSource(paths)
+    # **One ask per file per scan**, whatever the source is, and one object answering both the
+    # resolver's question and the refresh's. `TagSource` memoises for its own reasons; an
+    # arbitrary `MetadataSource` does not, and both halves ask - so without this a caller's reader
+    # is consulted twice for every changed file, which is the cost 003 wrote the memo to avoid,
+    # reintroduced by the feature the memo was written for.
+    reader = MemoisedSource(source)
 
     report = _Reporter(progress, library.id)
     walked = _walk_every_root(library, paths, report)
@@ -203,7 +214,7 @@ def scan(
     # Reported once, after the fact, because `resolve` is a single pure call with nothing to
     # interrupt it. Emitting a made-up gradient across it would be a progress bar animating while
     # nothing is measured, which is the failure this whole module is trying not to be.
-    resolution = resolve(library, walked.candidates, _OnlyChanged(source, unchanged_paths))
+    resolution = resolve(library, walked.candidates, _OnlyChanged(reader, unchanged_paths))
     kept = _reconcile(resolution, existing, deep=deep)
     report(
         Phase.RESOLVING,
@@ -232,6 +243,9 @@ def scan(
     now = utc_now()
     added = updated = unchanged = 0
     returning: list[str] = []
+    # Asked once. An item 004 has resolved has a name the scanner must not re-derive over -
+    # see `ItemRepository.update` and `_differs`.
+    resolved = MetadataRepository(session).refreshed(library.id)
 
     ordered = sorted(kept.values(), key=lambda one: (_DEPTH[one.type], one.id))
     for written, item in enumerate(ordered, start=1):
@@ -245,7 +259,7 @@ def scan(
             # The file came back. Same path, same derivation, same identifier - so the user data
             # keyed to it is still there and was never disturbed (spec section 3.8).
             returning.append(item.id)
-        if _differs(before, item):
+        if _differs(before, item, names_are_the_scanners=item.id not in resolved):
             repository.update(replace(item, date_modified=now))
             updated += 1
         else:
@@ -254,6 +268,34 @@ def scan(
     revived = repository.revive(returning)
 
     removed = repository.mark_removed([item.id for item in missing], now)
+
+    # **004's refresh, over what this scan touched.** Last, after every row is written, because a
+    # refresh reads the tree it is annotating - a container's directory comes from its children,
+    # and those children have to exist first. Inside the caller's transaction like everything else
+    # here, so a scan and the refresh that follows it commit or roll back together.
+    #
+    # `deep` hands it everything: that mode exists for a library whose *contents* changed under
+    # unchanged signals, and re-resolving the tree without re-reading the metadata would answer
+    # only half the question it was asked.
+    refreshed = None
+    if refresh:
+        touched = (
+            list(kept)
+            if deep
+            else [item.id for item in ordered if _touched(existing, item, resolved)]
+        )
+        refreshed = refresh_items(
+            library,
+            session,
+            pending_and_touched(session, library, touched),
+            mode=refresh_mode,
+            # **The same reader, for both halves of the scan.** Passing `None` here would let the
+            # refresh build one of its own, so a caller who asked for `PATH_ONLY` would get a
+            # path-only tree and a tag-read refresh - an opt-out that worked for half the scan.
+            tags=reader,
+            roots=paths,
+        )
+
     return ScanReport(
         library_id=library.id,
         added=added,
@@ -268,7 +310,26 @@ def scan(
         # resolution: a notice about an item this scan decided not to write would be a line an
         # operator could not go and look at.
         noticed=tuple(one for one in resolution.noticed if one.item_id in kept),
+        refreshed=refreshed,
     )
+
+
+def _touched(existing: Mapping[str, Item], item: Item, resolved: AbstractSet[str]) -> bool:
+    """Whether this scan added or changed the item, which is what a refresh is for.
+
+    An unchanged item is not refreshed, and that is not an optimisation: it is the same signal
+    003's change detection uses, extended one step further. A rescan of an unchanged library
+    therefore does no metadata work at all - which is what AC-13 will rest on once there is a
+    network to count requests to.
+    """
+    before = existing.get(item.id)
+    if before is None:
+        return True
+    # **A revival is not a change.** A file that disappeared and came back is byte-for-byte the
+    # file it was; its row kept every column through the soft delete, so re-reading it would open
+    # a file whose signal never moved - the one thing 003 wrote this rule to prevent. An item
+    # whose refresh actually failed is picked up by `refresh_pending` instead.
+    return _differs(before, item, names_are_the_scanners=item.id not in resolved)
 
 
 # ----------------------------------------------------------------------------------------------
@@ -505,15 +566,22 @@ def _require_removals_under_threshold(
     )
 
 
-def _differs(before: Item, after: Item) -> bool:
+def _differs(before: Item, after: Item, *, names_are_the_scanners: bool = True) -> bool:
     """Whether a rescan found anything worth writing.
 
     `date_modified` is not compared - it is set *because* something changed, so comparing it would
     make every item differ from itself and turn every rescan into a full rewrite.
+
+    **The name is compared only while the scanner still owns it.** Once 004 has resolved a name
+    from a sidecar or a tag, the scanner's path-derived one differs from it by design, and
+    comparing them would report every item as updated on every scan while `ItemRepository.update`
+    correctly declined to write either - a report that says a scan did work it did not do.
     """
+    named_differently = names_are_the_scanners and (
+        before.name != after.name or before.sort_name != after.sort_name
+    )
     return (
-        before.name != after.name
-        or before.sort_name != after.sort_name
+        named_differently
         or before.parent_id != after.parent_id
         or before.index_number != after.index_number
         or before.parent_index_number != after.parent_index_number

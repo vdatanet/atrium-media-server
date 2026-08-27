@@ -147,6 +147,19 @@ class Subject:
 
     kind: ItemType
     values: FieldValues = field(default_factory=dict)
+    """What a **previous refresh** resolved. This is what the mode's "field empty on item" column
+    asks about, and it deliberately excludes the fields 003's scanner owns - a name derived from a
+    filename is not a value a default refresh must preserve, or AC-1 could not hold."""
+
+    stored: FieldValues = field(default_factory=dict)
+    """What is **physically on the row**, scanner-owned fields included.
+
+    Used for one thing and nothing else: deciding that a settled value is already the stored one,
+    so nothing is written. Without it a name excluded from `values` looks empty every time and is
+    rewritten on every refresh, and "a rescan of an unchanged library changes nothing" becomes
+    false in a way no engine-level test can see.
+    """
+
     locked_fields: frozenset[MetadataField] = frozenset()
     is_locked: bool = False
 
@@ -200,8 +213,12 @@ def merge(subject: Subject, sources: Sequence[Source], mode: RefreshMode) -> Met
         if not _applies_to(candidate, subject.kind):
             continue
         settled = _apply(candidate, subject.values.get(candidate), winner, mode)
-        if settled is not _UNCHANGED:
-            changes[candidate] = settled
+        if settled is _UNCHANGED:
+            continue
+        if candidate in subject.stored and settled == subject.stored[candidate]:
+            # Already what the row says. Writing it again would touch every item on every refresh.
+            continue
+        changes[candidate] = settled
 
     return MetadataChanges(values=changes, refused=frozenset(refused))
 

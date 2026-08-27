@@ -35,7 +35,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, cast
 
 import mutagen
 from mutagen.flac import FLAC
@@ -482,6 +482,89 @@ class TagSource:
         return len(self._memo)
 
 
+class ReadsTags(Protocol):
+    """What `metadata/refresh.py` needs of a reader: 003's seven keys, and the full reading.
+
+    `TagSource` satisfies it. So does `MemoisedSource` over anything else, which is how a caller's
+    own `MetadataSource` - a fake in a test, a cache, `PATH_ONLY` - reaches the refresh without
+    the refresh having to know what it is.
+    """
+
+    def tags_for(self, relative_path: str) -> Mapping[str, str]: ...
+
+    def result_for(self, relative_path: str) -> TagResult: ...
+
+
+class MemoisedSource:
+    """Any `MetadataSource`, asked at most once per path, answering both questions.
+
+    Per scan and thrown away with it. Two things make it necessary rather than tidy: the resolver
+    and the refresh both ask, so a source that does not memoise is consulted twice for every
+    changed file; and a source that is not a `TagSource` still has to be able to answer the
+    refresh, or a caller who supplied their own reader would get a tree built from it and metadata
+    built from something else.
+    """
+
+    def __init__(self, source: object) -> None:
+        self._source = source
+        self._tags: dict[str, Mapping[str, str]] = {}
+        self._results: dict[str, TagResult] = {}
+
+    def tags_for(self, relative_path: str) -> Mapping[str, str]:
+        found = self._tags.get(relative_path)
+        if found is None:
+            found = self.result_for(relative_path).tags
+            self._tags[relative_path] = found
+        return found
+
+    def result_for(self, relative_path: str) -> TagResult:
+        found = self._results.get(relative_path)
+        if found is None:
+            found = self._read(relative_path)
+            self._results[relative_path] = found
+        return found
+
+    def _read(self, relative_path: str) -> TagResult:
+        full = getattr(self._source, "result_for", None)
+        if callable(full):
+            return cast("TagResult", full(relative_path))
+        tags = cast("Mapping[str, str]", self._source.tags_for(relative_path))  # type: ignore[attr-defined]
+        return TagResult(values=values_from_seam(tags), tags=tags)
+
+
+#: 003 section 3.5's seven keys, and which field each can supply. `albumartist` and `album` are
+#: absent because they name the item's *parents*, which the resolver has already used them for.
+_SEAM_FIELDS: Mapping[str, Field] = {
+    "title": Field.NAME,
+    "artist": Field.ARTISTS,
+    "track": Field.INDEX_NUMBER,
+    "disc": Field.PARENT_INDEX_NUMBER,
+    "year": Field.YEAR,
+}
+
+
+def values_from_seam(tags: Mapping[str, str]) -> dict[Field, object]:
+    """As much of the field vocabulary as 003's seven keys can supply.
+
+    A source that is not a `TagSource` still contributes what it knows - a title, a track number -
+    rather than nothing, which is what makes a caller's own reader useful to both halves of a scan.
+    """
+    values: dict[Field, object] = {}
+    for key, field_name in _SEAM_FIELDS.items():
+        text = tags.get(key)
+        if text is None or not text.strip():
+            continue
+        if field_name is Field.ARTISTS:
+            values[field_name] = [text]
+        elif field_name in (Field.INDEX_NUMBER, Field.PARENT_INDEX_NUMBER, Field.YEAR):
+            match = _LEADING_NUMBER.match(text)
+            if match:
+                values[field_name] = int(match.group(1))
+        else:
+            values[field_name] = text
+    return values
+
+
 def warnings_of(sources: Sequence[TagSource]) -> list[str]:
     """Every warning every memoised read produced, for the scan report."""
     return [result.warning for source in sources for result in source.results() if result.warning]
@@ -489,8 +572,11 @@ def warnings_of(sources: Sequence[TagSource]) -> list[str]:
 
 __all__ = [
     "EmbeddedArt",
+    "MemoisedSource",
+    "ReadsTags",
     "TagResult",
     "TagSource",
     "read_tags",
+    "values_from_seam",
     "warnings_of",
 ]

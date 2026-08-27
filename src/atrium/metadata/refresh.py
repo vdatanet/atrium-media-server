@@ -1,0 +1,385 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Orchestration: read the local sources, merge, and write once per item.
+
+The only caller of the write repository (plan section 5). Everything else in `metadata/` reads
+something and returns values; this module is where those values become rows.
+
+**The path-derived values are a source, and they come last.** That is the one structural decision
+here and it was measured rather than argued. The reference builds a scratch result, merges each
+local provider into it, then the remote ones, and only **then** folds in what the item already had
+`[source: MediaBrowser.Providers/Manager/MetadataService.cs:809,849-861 @ v10.11.11]` - so the
+name a scanner derived from a filename is the *last* fallback, not the first. Spec section 3.1's
+table lists *Path-derived* twice, at positions 3 and 5, and this is the measurement that says
+which one it meant: **position 5**.
+
+It matters because AC-1 depends on it. A film with a full `.nfo` "resolves entirely from it", and
+it cannot if the name 003 derived from the filename counts as a value a default refresh must not
+overwrite. So `items.name`, `index_number` and `parent_index_number` are read **as the path
+source** rather than as the subject's own values, and the subject is what a *previous refresh*
+resolved. One consequence falls out for free: a later scan that re-derives a name from a changed
+filename is corrected by the refresh that follows it, rather than quietly winning.
+
+**Nothing here writes into a library root** (AC-15). This module opens files to read them, and the
+only path it ever constructs for writing is inside the data directory - which no local source
+needs at all, so in this slice there is no write path outside the database whatsoever.
+"""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from sqlalchemy.orm import Session as OrmSession
+
+from atrium.compat.dates import utc_now
+from atrium.db.repositories import ItemRepository, MetadataRepository
+from atrium.domain.items import FILE_BACKED, PARENT_OF, Item, ItemType
+from atrium.domain.library import Library
+from atrium.metadata.artwork import associate, find_artwork, with_embedded
+from atrium.metadata.merge import CHAIN_OF, MetadataChanges, Source, SourceKind, Subject, merge
+from atrium.metadata.model import Field, MetadataField, RefreshMode
+from atrium.metadata.nfo import NfoResult, find_sidecar, read_nfo
+from atrium.metadata.tags import ReadsTags, TagResult, TagSource
+
+logger = logging.getLogger(__name__)
+
+#: The library's own item. **Not refreshed**: spec section 3.2's sidecar table and section 3.4's
+#: artwork tables both describe *items in* a library, and a library has no directory of its own in
+#: this model - it would borrow its first film's, which it did once, and the library ended up
+#: wearing that film's poster.
+_THE_LIBRARY = ItemType.COLLECTION_FOLDER
+
+
+@dataclass(frozen=True, slots=True)
+class RefreshReport:
+    """What one refresh of one library did."""
+
+    library_id: str
+    considered: int = 0
+    changed: int = 0
+    warnings: tuple[str, ...] = ()
+    collected: int = 0
+    """By-name rows nothing referenced any more, deleted at the end of the transaction."""
+
+    unidentified: tuple[str, ...] = field(default_factory=tuple)
+    """Items a remote provider could not place. Empty in this slice - no provider exists yet."""
+
+    def summary(self) -> str:
+        return (
+            f"library {self.library_id}: {self.changed} of {self.considered} items updated, "
+            f"{len(self.warnings)} warnings, {self.collected} by-name rows collected"
+        )
+
+
+def refresh_items(
+    library: Library,
+    session: OrmSession,
+    item_ids: Sequence[str],
+    *,
+    mode: RefreshMode = RefreshMode.DEFAULT,
+    tags: ReadsTags | None = None,
+    roots: Sequence[Path] | None = None,
+) -> RefreshReport:
+    """Resolve metadata for `item_ids` and write it, one `apply` per item.
+
+    `tags` is **the scan's own reader**, so the file a scan already opened is not opened again -
+    that memo is the whole reason the seam and this module can both ask - and so that a caller who
+    supplied a reader of their own gets it used for both halves of the scan. `None` builds a
+    `TagSource` over the roots, which is what a refresh run on its own needs.
+
+    Writes inside the caller's transaction and never commits, exactly like `library/scan.py`.
+    """
+    paths = [Path(one) for one in (roots if roots is not None else library.roots)]
+    reader: ReadsTags = tags if tags is not None else TagSource(paths)
+    items = ItemRepository(session).by_library(library.id)
+    repository = MetadataRepository(session)
+
+    directories = _directories(items, paths)
+    warnings: list[str] = []
+    changed = 0
+
+    for item_id in item_ids:
+        item = items.get(item_id)
+        if item is None or item.is_removed or item.type is _THE_LIBRARY:
+            continue
+        located = directories.get(item_id)
+        if located is None:
+            # A container whose children are all gone, or an item whose root is not mounted. Not
+            # an error: the next scan will either find the files or remove the item.
+            continue
+        if _apply_one(repository, item, located, reader, mode, warnings):
+            changed += 1
+
+    collected = repository.collect_by_name_garbage()
+    return RefreshReport(
+        library_id=library.id,
+        considered=len(item_ids),
+        changed=changed,
+        warnings=tuple(warnings),
+        collected=collected,
+    )
+
+
+def refresh_library(
+    library: Library,
+    session: OrmSession,
+    *,
+    mode: RefreshMode = RefreshMode.DEFAULT,
+    tags: ReadsTags | None = None,
+    roots: Sequence[Path] | None = None,
+) -> RefreshReport:
+    """Every item in the library."""
+    items = ItemRepository(session).by_library(library.id)
+    return refresh_items(library, session, list(items), mode=mode, tags=tags, roots=roots)
+
+
+# ----------------------------------------------------------------------------------------------
+# One item
+# ----------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class _Located:
+    """Where on disk an item's metadata is looked for."""
+
+    root: Path
+    directory: Path
+    stem: str | None
+    relative_file: str | None
+
+
+def _apply_one(
+    repository: MetadataRepository,
+    item: Item,
+    located: _Located,
+    reader: ReadsTags,
+    mode: RefreshMode,
+    warnings: list[str],
+) -> bool:
+    sidecar = _read_sidecar(item, located, warnings)
+    tag_result = _read_tags(item, located, reader, warnings)
+    art = _read_artwork(item, located, tag_result, warnings)
+
+    sources = _chain(item, sidecar, tag_result, art)
+    subject = _subject(repository, item)
+    changes = merge(subject, sources, mode)
+
+    locked_fields = sidecar.locked_fields
+    is_locked = sidecar.is_locked
+    if not changes and locked_fields is None and is_locked is None:
+        # Nothing to say and nothing to lock. Writing the item's own values back would touch every
+        # row on every rescan, which is what makes "a rescan of an unchanged library changes
+        # nothing" a property rather than a hope.
+        return False
+
+    repository.apply(
+        item.id,
+        changes,
+        is_locked=is_locked,
+        locked_fields=locked_fields,
+        refresh_pending=False,
+        refreshed_at=utc_now(),
+    )
+    return True
+
+
+def _chain(
+    item: Item, sidecar: NfoResult, tag_result: TagResult, images: Sequence[object]
+) -> list[Source]:
+    """Spec section 3.1's order for this item's type, as sources.
+
+    `CHAIN_OF` lists `PATH` twice for a film, because the spec's table does. A repeated source in
+    a first-value-wins walk is a no-op, so this builds one entry per kind and the duplicate costs
+    nothing - see `metadata/merge.py`.
+    """
+    by_kind: dict[SourceKind, Source] = {
+        SourceKind.NFO: Source(SourceKind.NFO, dict(sidecar.values), "sidecar"),
+        SourceKind.TAGS: Source(SourceKind.TAGS, dict(tag_result.values), "tags"),
+        SourceKind.PATH: Source(SourceKind.PATH, _path_values(item), "path"),
+    }
+    ordered = [
+        by_kind[kind]
+        for kind in CHAIN_OF.get(item.type, (SourceKind.NFO, SourceKind.PATH))
+        if kind in by_kind
+    ]
+    if images:
+        # Artwork is not in the precedence chain at all: no other source supplies `IMAGES` in this
+        # slice, and a remote provider's artwork is a separate association kind (section 6.5).
+        ordered.insert(0, Source(SourceKind.NFO, {Field.IMAGES: list(images)}, "artwork"))
+    return ordered
+
+
+def _path_values(item: Item) -> dict[Field, object]:
+    """What 003 derived from the file's name and place. **The last word, not the first.**
+
+    Read off the item because that is where the scanner put it, and treated as a source rather
+    than as the item's own value - which is the difference between AC-1 holding and a `.nfo` title
+    never being able to replace a filename.
+    """
+    values: dict[Field, object] = {Field.NAME: item.name}
+    if item.index_number is not None:
+        values[Field.INDEX_NUMBER] = item.index_number
+    if item.parent_index_number is not None:
+        values[Field.PARENT_INDEX_NUMBER] = item.parent_index_number
+    return values
+
+
+def _subject(repository: MetadataRepository, item: Item) -> Subject:
+    """What a *previous refresh* resolved, and what may not be changed about it.
+
+    `stored` carries the path-derived values as well, and only so that a value which is already
+    what the row says is not written again. Keeping the two apart is what lets a sidecar's title
+    replace a filename **and** a second refresh of the same file write nothing.
+    """
+    is_locked, locked_fields = repository.locks_of(item.id)
+    resolved = repository.values_of(item.id)
+    return Subject(
+        kind=item.type,
+        values=resolved,
+        stored={**resolved, **_path_values(item)},
+        locked_fields=locked_fields,
+        is_locked=is_locked,
+    )
+
+
+def _read_sidecar(item: Item, located: _Located, warnings: list[str]) -> NfoResult:
+    path = find_sidecar(located.directory, item.type, located.stem)
+    if path is None:
+        return NfoResult()
+    result = read_nfo(path, item.type)
+    warnings.extend(str(one) for one in result.warnings)
+    return result
+
+
+def _read_tags(item: Item, located: _Located, reader: ReadsTags, warnings: list[str]) -> TagResult:
+    """Only for audio, and through **the reader the scan used**, asked once.
+
+    `MemoisedSource` makes any `MetadataSource` answer this: a `TagSource` gives the whole read,
+    anything else gives what 003's seven keys can supply, and `PATH_ONLY` gives nothing - which is
+    exactly what a path-only scan means.
+    """
+    if item.type is not ItemType.AUDIO or located.relative_file is None:
+        return TagResult()
+    result = reader.result_for(located.relative_file)
+    if result.warning:
+        warnings.append(result.warning)
+    return result
+
+
+def _read_artwork(
+    item: Item, located: _Located, tag_result: TagResult, warnings: list[str]
+) -> Sequence[object]:
+    found = find_artwork(located.directory, item.type, located.stem)
+    found = with_embedded(found, tag_result.art)
+    warnings.extend(found.warnings)
+    return associate(found.files, root=located.root)
+
+
+# ----------------------------------------------------------------------------------------------
+# Where an item's metadata lives
+# ----------------------------------------------------------------------------------------------
+
+
+def _directories(items: Mapping[str, Item], roots: Sequence[Path]) -> dict[str, _Located]:
+    """The directory each item's metadata is looked for in.
+
+    A file-backed item's is its file's own. **A container has no path of its own** - a `Series`
+    has no file and a tag-derived `MusicAlbum` may not correspond to any directory at all - so it
+    borrows its first descendant's, walked up by the difference in depth. That is a best guess
+    rather than a fact, and it is the right one for the ordinary layout: `Artist/Album/01.flac`
+    puts the album at `Artist/Album` and the artist at `Artist`.
+
+    The library's own item is excluded, or it would borrow its first film's directory.
+    """
+    located: dict[str, _Located] = {}
+    for item in items.values():
+        if item.type in FILE_BACKED and item.relative_path:
+            root = _root_of(item.relative_path, roots)
+            if root is None:
+                continue
+            absolute = root / item.relative_path
+            located[item.id] = _Located(
+                root=root,
+                directory=absolute.parent,
+                stem=absolute.stem,
+                relative_file=item.relative_path,
+            )
+
+    children: dict[str, list[str]] = {}
+    for item in items.values():
+        if item.parent_id is not None:
+            children.setdefault(item.parent_id, []).append(item.id)
+
+    for item in items.values():
+        if item.id in located or item.type not in PARENT_OF or item.type is _THE_LIBRARY:
+            continue
+        descendant = _first_file_backed(item.id, items, children)
+        if descendant is None or descendant.id not in located:
+            continue
+        steps = _depth(descendant.type) - _depth(item.type) - 1
+        directory = located[descendant.id].directory
+        for _ in range(max(steps, 0)):
+            directory = directory.parent
+        located[item.id] = _Located(
+            root=located[descendant.id].root,
+            directory=directory,
+            stem=None,
+            relative_file=None,
+        )
+    return located
+
+
+def _first_file_backed(
+    item_id: str, items: Mapping[str, Item], children: Mapping[str, list[str]]
+) -> Item | None:
+    """Depth-first, in identifier order, so the answer does not depend on row order."""
+    for child_id in sorted(children.get(item_id, ())):
+        child = items.get(child_id)
+        if child is None:
+            continue
+        if child.type in FILE_BACKED and child.relative_path:
+            return child
+        found = _first_file_backed(child_id, items, children)
+        if found is not None:
+            return found
+    return None
+
+
+def _depth(kind: ItemType) -> int:
+    depth, current = 0, PARENT_OF.get(kind)
+    while current is not None:
+        depth, current = depth + 1, PARENT_OF.get(current)
+    return depth
+
+
+def _root_of(relative_path: str, roots: Sequence[Path]) -> Path | None:
+    """Which configured root holds this file. The first that does, as `TagSource` decides it."""
+    for root in roots:
+        if (root / relative_path).exists():
+            return root
+    return roots[0] if roots else None
+
+
+def pending_and_touched(session: OrmSession, library: Library, touched: Iterable[str]) -> list[str]:
+    """The items a scan should hand to a refresh: what it touched, plus what is still pending.
+
+    The second half is AC-8's channel: a provider failure marks an item `refresh_pending`, and the
+    next scan retries it **even though its files did not change** - which is exactly the case the
+    change-detection signal cannot see.
+    """
+    seen = list(dict.fromkeys(touched))
+    known = set(seen)
+    still_pending = MetadataRepository(session).pending(library.id)
+    return seen + [one for one in still_pending if one not in known]
+
+
+__all__ = [
+    "MetadataChanges",
+    "MetadataField",
+    "RefreshReport",
+    "pending_and_touched",
+    "refresh_items",
+    "refresh_library",
+]

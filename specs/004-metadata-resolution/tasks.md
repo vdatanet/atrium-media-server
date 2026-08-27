@@ -413,7 +413,7 @@ it.
 
 ## T10 — Local refresh: orchestration without a network
 
-- [ ] **Changes:** `metadata/refresh.py`, local slice only — sidecar, tags, artwork, through the
+- [x] **Changes:** `metadata/refresh.py`, local slice only — sidecar, tags, artwork, through the
   merge, one `apply` per item; `library/scan.py` hands changed-and-new item ids to it after a
   scan commits, `deep` hands everything; `Local only` mode complete.
 - **Depends on:** T5, T6, T7, T8, T9
@@ -425,6 +425,37 @@ it.
 - **Note:** zero network is trivial in this task — no remote code exists yet — which is exactly
   why the guard arrives now: it is cheap to hold before T11 and expensive to retrofit after.
 - **Plan reference:** §6.8, §8; spec AC-15
+- **Done (2026-08-27):** AC-15 lands and was checked by breaking it — a byte written into a
+  library root fails the suite. AC-1, AC-2, AC-4, AC-5, AC-6, AC-7, AC-10, AC-11 and AC-14 hold
+  at integration level. **Wiring the pieces together disproved more than any single piece had.**
+  **Spec §3.1's duplicated *Path-derived* is settled: position 5.** T6 recorded the ambiguity;
+  T10 measured it. The reference merges what an item already had **after** every provider has
+  spoken, so a path-derived name is the last fallback rather than an early source — and AC-1 is
+  unreachable the other way round, because a filename-derived name would be a value a default
+  refresh must not overwrite. `items.name`, `index_number` and `parent_index_number` are read as
+  the *path source*; the subject is what a **previous refresh** resolved.
+  **The scan and the refresh were fighting over one column.** With both writing `items.name`,
+  every rescan re-derived `The Matrix` from the filename and every refresh restored
+  `The Matrix (1999)` from the sidecar — for ever, with every item reported as updated. The
+  scanner now names an item when it **creates** it and 004 owns the name afterwards, which is the
+  reference's own shape. Three of 003's tests moved to the layer that now owns the behaviour.
+  **Three fields were rewritten on every refresh because nothing read them back**, and one of
+  them had nowhere to be read back *from*: `<tag>` elements are in spec §3.2 and were in no
+  column at all. Revision 0005 adds `tags` and `forced_sort_name` — the latter because a
+  `sort_name` derived from a sort title cannot be compared against the title it came from.
+  `item_images` is now read back too. A `Subject` gained `stored` beside `values`: *has the item
+  got a value here* and *is this already what the row says* are two questions, and answering the
+  second with the first makes a rescan rewrite the library.
+  **A `PATH_ONLY` scan was reading tags anyway.** The refresh built a reader of its own, so an
+  opt-out worked for half the scan. One `MemoisedSource` now answers both the resolver's question
+  and the refresh's, for any `MetadataSource`, asked **once per file** — which also stopped a
+  caller's own reader being consulted twice for every changed file.
+  **And the library item was wearing its first film's poster**, because a `CollectionFolder` has
+  no directory of its own and borrowed a descendant's. It is not refreshed: spec §3.2 and §3.4
+  describe items *in* a library.
+  One mistake worth recording because it cost real time: an edit script reused a variable and
+  wrote a test file's contents over `refresh.py`. AGENTS.md's "verify that an edit landed" covers
+  the file you did not mean to edit as well as the one you did.
 
 ## T11 — `metadata/remote.py`: the one HTTP door, sealed before anyone walks through it
 
