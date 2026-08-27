@@ -4,7 +4,7 @@ title: Metadata resolution — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2
+amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -284,6 +284,16 @@ this section had wrong and two of which change what T6 builds:
 
 Where the lock arrives from is §6.2's business, and it had no answer until T3 asked: spec §3.6
 gives locks no HTTP route, so **the sidecar is the only channel in v1**.
+
+**One ambiguity in spec §3.1's table, left visible rather than resolved.** The film column lists
+*Path-derived* **twice**, at positions 3 and 5. In a first-value-wins walk a repeated source is a
+no-op — the second occurrence can only win a field the first already lost — so `CHAIN_OF`
+reproduces the table literally and behaves as though it did not. The two readings differ in
+exactly one observable way, and it is worth settling before 005 serves the result: with `PATH` at
+position 3, ahead of the remote provider, **a `Replace` refresh cannot take a film's name from
+TMDB** — the filename always wins. If the intended reading was `[nfo, TMDB, path]`, the film's
+name under `Replace` comes from the provider instead. T14 holds `Replace` end-to-end and is where
+this gets measured against the reference rather than argued.
 
 ### 6.2 Sidecars
 

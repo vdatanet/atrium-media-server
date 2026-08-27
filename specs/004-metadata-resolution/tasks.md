@@ -260,8 +260,8 @@ it.
 
 ## T6 — `metadata/merge.py`
 
-- [ ] **Changes:** the per-field precedence walk, the mode × locked × empty matrix, the
-  lists-whole-from-one-provider rule. Pure.
+- [x] **Changes:** the per-field precedence walk, the mode × locked × empty matrix, the
+  per-field list rules — **four of them, not one**, which T3 measured and this task built. Pure.
 - **Depends on:** T3
 - **Verified by:** every cell of the [plan §6.1](plan.md#61-the-merge) matrix as a table test —
   AC-10 and AC-11 are held here first, at engine level, and again end-to-end at T14; the provider
@@ -270,6 +270,26 @@ it.
 - **Note:** this is the first structural decision landing: the thing that constrains overwriting
   exists, tested, before anything capable of overwriting does.
 - **Plan reference:** §6.1
+- **Done (2026-08-27):** the nine cells of the matrix are a table, AC-10 and AC-11 are held by
+  name, and the three things T3 measured are what the module is actually shaped by.
+  **"Lists whole from one provider" is one rule where the reference has four.** `Genres` is taken
+  whole; `Studios` and `Tags` are **unioned** with what the item already has, case-insensitively,
+  the item's own spelling surviving; `People` has existing entries **enriched** — a missing role
+  filled in, nobody added, nobody removed, matched by name with diacritics stripped; and
+  `ProviderIds` accumulates key by key, with a default refresh **not** replacing an id the item
+  already carries. That last asymmetry is the right one and is the reference's: an id is the
+  user's decision about what this thing is, and a default refresh that overwrote one would undo a
+  correction without being asked.
+  **`Local only` is not a third behaviour.** It is `Default` over a chain with the remote sources
+  removed, which is why the matrix has three rows and the code has one branch.
+  **A file-backed item ignores a runtime from metadata**, because its runtime comes from probing
+  the file — `FILE_BACKED` turns out to be exactly the reference's `is not Audio && is not Video`.
+  **And spec §3.1's table has an ambiguity**, now written down in [plan §6.1](plan.md#61-the-merge)
+  rather than quietly resolved: the film column lists *Path-derived* twice, at positions 3 and 5.
+  A repeated source in a first-value-wins walk is a no-op, so `CHAIN_OF` reproduces it literally
+  and nothing behaves differently — but the two readings differ in one observable way, and it is
+  worth settling: with `PATH` ahead of `REMOTE`, **a `Replace` refresh cannot take a film's name
+  from TMDB**. T14 measures it.
 
 ## T7 — `metadata/tags.py`, and the seam goes live
 
