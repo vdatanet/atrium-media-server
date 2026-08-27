@@ -29,6 +29,7 @@ from atrium.config.state import ServerState, load_or_create
 from atrium.domain.user import User
 from atrium.server import create_app
 from tests.conformance.golden import REWRITTEN, UPDATE_OPTION
+from tests.fixtures.library import BuiltFixture, build_fixture_library
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -189,3 +190,15 @@ def authenticated(app: FastAPI) -> User:
     """Reach the authenticated path without shipping a credential. plan section 1."""
     app.dependency_overrides[require_user] = lambda: TEST_USER
     return TEST_USER
+
+
+@pytest.fixture
+def fixture_library(tmp_path: Path) -> BuiltFixture:
+    """The declared library of tests/fixtures/library, written fresh for this test.
+
+    Fresh per test rather than shared, deliberately. The 003 tests that matter most *mutate the
+    tree* - delete a file and rescan, move a root, make a directory unreadable - and a shared tree
+    would make them order-dependent in the one feature whose wrong answers are silent. Building it
+    is a few hundred small writes and costs less than the first assertion that has to be debugged.
+    """
+    return build_fixture_library(tmp_path / "library")
