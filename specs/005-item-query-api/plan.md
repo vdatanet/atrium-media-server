@@ -206,6 +206,37 @@ fast path and the common one; under any other container → parent-chain joins, 
 tree's depth is a constant of the domain model. An unknown or invisible `parentId` is the
 identical `404` of §6.13 before any query runs.
 
+**The filters**, which this plan had nowhere else to put and T6 therefore had to decide:
+
+- **Every one is a clause on the same statement**, never a second query or a walk in Python. The
+  related-row filters are `EXISTS` rather than joins: a join multiplies the result set by the
+  number of matching rows and needs a `DISTINCT` to undo it, which then has to survive every
+  `ORDER BY` §6.3 adds. `EXISTS` asks the question the filter is asking — *is there one* — and
+  leaves the row count alone.
+- **`None` means "the client did not ask"; an empty collection means "it asked for nothing".**
+  `includeItemTypes=` with every token unrecognised drops to an empty tuple (behaviours §1.12),
+  and the honest answer to *items of no type* is no items. Collapsing the two returns the whole
+  library to a request that filtered for something the server does not know.
+- **Absence of a `item_user_data` row is a state**, not a gap. "Unplayed" is `NOT EXISTS(played)`
+  and not `EXISTS(NOT played)`: the second finds only items somebody has already touched, which on
+  a fresh account is none of them.
+- **`mediaTypes` has no column.** `MediaType` is a property of the item *type*, measured once into
+  `domain.items.MEDIA_TYPE_OF` `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]` — and the
+  measurement disagrees with anything derived from `FILE_BACKED`: a `MusicAlbum` is `Unknown`,
+  which a rule built on *does it hold audio* would call `Audio`.
+- **`genres` matches by name through the identity fold**, not as a string. Two spellings of one
+  genre merge to one by-name row whose id is derived from the folded name (behaviours §2.18), so a
+  client filtering by `Sci-Fi` finds the film tagged `sci-fi`. Both `Genre` and `MusicGenre` are
+  offered, because a client filtering by `Rock` does not know which table its films and its tracks
+  landed in.
+- **`artistIds` is the superset, `albumArtistIds` the subset**, and the direction was measured
+  rather than reasoned: `artistIds` matches any credit and `albumArtistIds` only `album_artist`.
+  On the reference one artist answers 6 items to the other parameter's 2, and a performer who is
+  nobody's album artist answers 2 to 0
+  `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`.
+- **`albumIds` is `parent_id`.** A track's album is its parent; there is no album column, and
+  inventing one would be a second home for a fact the tree already states.
+
 ### 6.3 ORDER BY
 
 Per `SortBy`, the primary expression:

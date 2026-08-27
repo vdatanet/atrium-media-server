@@ -33,10 +33,18 @@ from sqlalchemy import Select, or_, select
 from sqlalchemy.orm import Session as OrmSession
 
 from atrium.db import models
-from atrium.domain.items import FILE_BACKED, Item, ItemType, MediaSource
-from atrium.domain.queries import ItemQuery
+from atrium.domain.items import (
+    FILE_BACKED,
+    MEDIA_TYPE_OF,
+    Item,
+    ItemType,
+    MediaSource,
+)
+from atrium.domain.queries import Filter, ItemQuery
 from atrium.domain.user import User
+from atrium.library.identity import for_by_name
 from atrium.metadata.artwork import ImageAssociation, ImageKind, SourceKind
+from atrium.metadata.byname import fold_for_search
 from atrium.metadata.model import PersonCredit, PersonKind
 
 #: The four container types that have to earn their place. A `Series` with no visible episode is
@@ -55,6 +63,10 @@ EARN_THEIR_PLACE: frozenset[ItemType] = frozenset(
 #: every tree this domain has. So the visibility `EXISTS` is a bounded join rather than a
 #: recursive query - and if the tree ever grows a level, this constant is what fails first.
 DESCENT = 2
+
+#: The value `item_artists.credit` carries for an album artist, as the check constraint spells
+#: it. `/Artists` and `/Artists/AlbumArtists` are the same rows distinguished by this string.
+ALBUM_ARTIST_CREDIT = "album_artist"
 
 
 class ParentNotFoundError(LookupError):
@@ -162,6 +174,8 @@ class ItemQueryRepository:
         is a bounded walk down `DESCENT` levels of parent links.
         """
         statement = select(models.Item).where(self._visible_to(query.user))
+        for clause in _filters(query):
+            statement = statement.where(clause)
 
         if query.parent_id is None:
             return statement
@@ -380,6 +394,194 @@ class ItemQueryRepository:
         }
 
 
+# ------------------------------------------------------------------------------------------------
+# The filter battery
+# ------------------------------------------------------------------------------------------------
+
+
+def _filters(query: ItemQuery) -> list[Any]:
+    """Every predicate `ItemQuery` names, as clauses, in one place.
+
+    A list rather than a chain of `if` statements inside the query builder, because the property
+    that matters is that **each field narrows something**: plan section 8 row 16 tests one
+    parameter at a time against a world slice built to be narrowed by it, and a predicate that
+    silently did nothing would pass every functional test in the feature.
+
+    `None` means "the client did not ask", and an **empty collection means the client asked for
+    nothing** - `includeItemTypes=` with every token unrecognised drops to an empty tuple
+    (behaviours section 1.12), and the honest answer to "items of no type" is no items rather
+    than every item.
+    """
+    clauses: list[Any] = []
+    item = models.Item
+
+    if query.include_types is not None:
+        clauses.append(item.type.in_([one.value for one in query.include_types]))
+    if query.exclude_types is not None:
+        clauses.append(item.type.not_in([one.value for one in query.exclude_types]))
+    if query.media_types is not None:
+        clauses.append(item.type.in_(_types_of_media(query.media_types)))
+
+    if query.ids is not None:
+        clauses.append(item.id.in_(list(query.ids)))
+    if query.exclude_ids is not None:
+        clauses.append(item.id.not_in(list(query.exclude_ids)))
+
+    clauses += _name_clauses(query)
+    clauses += _related_clauses(query)
+    clauses += _user_state_clauses(query)
+
+    if query.years is not None:
+        clauses.append(item.production_year.in_(list(query.years)))
+    if query.min_community_rating is not None:
+        clauses.append(item.community_rating >= query.min_community_rating)
+    return clauses
+
+
+def _types_of_media(media_types: Iterable[str]) -> list[str]:
+    """`Video`, `Audio` or `Unknown` back into the item types that answer them.
+
+    There is no `media_type` column: it is a property of the *type*, measured once into
+    `MEDIA_TYPE_OF`. Matching case-insensitively for the same reason `known_tokens` does - a
+    parameter whose name matches case-insensitively while its values did not would be a
+    distinction no client could have learned.
+    """
+    wanted = {one.casefold() for one in media_types}
+    return [kind.value for kind, media in MEDIA_TYPE_OF.items() if media.casefold() in wanted]
+
+
+def _name_clauses(query: ItemQuery) -> list[Any]:
+    """Everything matched against `name_folded`, which 004 wrote and nothing read until now.
+
+    Case **and** diacritics are folded on both sides, so a user typing `amelie` finds `Amélie`.
+    Folding only the column would make the filter depend on how the client typed it; folding only
+    the term would make it depend on how the file was named.
+    """
+    clauses: list[Any] = []
+    folded = models.Item.name_folded
+    if query.search_term:
+        clauses.append(folded.contains(fold_for_search(query.search_term)))
+    if query.name_starts_with:
+        clauses.append(folded.startswith(fold_for_search(query.name_starts_with)))
+    if query.name_starts_with_or_greater:
+        clauses.append(folded >= fold_for_search(query.name_starts_with_or_greater))
+    if query.name_less_than:
+        clauses.append(folded < fold_for_search(query.name_less_than))
+    return clauses
+
+
+def _related_clauses(query: ItemQuery) -> list[Any]:
+    """The join tables, each as an `EXISTS` rather than a join.
+
+    A join would multiply the result set by the number of matching rows and need a `DISTINCT` to
+    undo it, which then has to survive every `ORDER BY` T7 adds. `EXISTS` asks the question the
+    filter is actually asking - *is there one* - and leaves the row count alone.
+    """
+    clauses: list[Any] = []
+    if query.genres is not None:
+        clauses.append(_links_to(models.ItemGenre, "genre_item_id", _genre_ids(query.genres)))
+    if query.genre_ids is not None:
+        clauses.append(_links_to(models.ItemGenre, "genre_item_id", list(query.genre_ids)))
+    if query.studio_ids is not None:
+        clauses.append(_links_to(models.ItemStudio, "studio_item_id", list(query.studio_ids)))
+    if query.person_ids is not None:
+        clauses.append(_links_to(models.ItemPerson, "person_item_id", list(query.person_ids)))
+    if query.artist_ids is not None:
+        clauses.append(_links_to(models.ItemArtist, "artist_item_id", list(query.artist_ids)))
+    if query.album_artist_ids is not None:
+        # **The credit column, leaned on for the first time.** `/Artists` and
+        # `/Artists/AlbumArtists` are these same rows distinguished by this one value, so a filter
+        # that ignored it would make the two endpoints impossible to tell apart from a query.
+        clauses.append(
+            _links_to(
+                models.ItemArtist,
+                "artist_item_id",
+                list(query.album_artist_ids),
+                credit=ALBUM_ARTIST_CREDIT,
+            )
+        )
+    if query.album_ids is not None:
+        # A track's album is its parent. There is no album column, and inventing one would be a
+        # second place for a fact the tree already states.
+        clauses.append(models.Item.parent_id.in_(list(query.album_ids)))
+    return clauses
+
+
+def _genre_ids(names: Iterable[str]) -> list[str]:
+    """Genre **names** to the by-name rows they identify, both kinds.
+
+    A name rather than an id is what a client sends when it never fetched the by-name row, and it
+    has to find the item whichever spelling that item used: two spellings of one genre merge to
+    one row (behaviours section 2.18), and the row's identity is derived from the folded name. So
+    the name is folded through the project's own identity rule rather than compared as a string,
+    and `Genre` and `MusicGenre` are both offered because a client filtering by `Rock` does not
+    know which table its films and its tracks landed in.
+    """
+    return [
+        for_by_name(kind, name) for name in names for kind in (ItemType.GENRE, ItemType.MUSIC_GENRE)
+    ]
+
+
+def _links_to(model: Any, column: str, ids: Sequence[str], credit: str | None = None) -> Any:
+    linked = (
+        select(model.item_id)
+        .where(model.item_id == models.Item.id)
+        .where(getattr(model, column).in_(list(ids)))
+        .correlate(models.Item.__table__)
+    )
+    if credit is not None:
+        linked = linked.where(model.credit == credit)
+    return linked.exists()
+
+
+def _user_state_clauses(query: ItemQuery) -> list[Any]:
+    """Favourite, played and resumable - and **absence of a row is a state**, not a gap.
+
+    A user with no `item_user_data` row for an item has not played it and has not favourited it.
+    So "unplayed" is `NOT EXISTS(played)` rather than `EXISTS(NOT played)`: the second finds only
+    the items somebody has already touched, which for a fresh account is none of them.
+    """
+    clauses: list[Any] = []
+    if query.is_favorite is not None:
+        clauses.append(_user_state(models.ItemUserData.is_favorite, query.user, query.is_favorite))
+    if query.is_played is not None:
+        clauses.append(_user_state(models.ItemUserData.played, query.user, query.is_played))
+
+    if Filter.IS_FAVORITE in query.filters:
+        clauses.append(_user_state(models.ItemUserData.is_favorite, query.user, True))
+    if Filter.IS_PLAYED in query.filters:
+        clauses.append(_user_state(models.ItemUserData.played, query.user, True))
+    if Filter.IS_UNPLAYED in query.filters:
+        clauses.append(_user_state(models.ItemUserData.played, query.user, False))
+    if Filter.IS_RESUMABLE in query.filters:
+        # `playback_position_ticks > 0`. 007 section 3.7's six-branch rule already guarantees a
+        # stored position is a mid-playback one: a report past the completion threshold clears it
+        # and marks the item played instead, so there is no "resumable at 99%" to exclude here.
+        clauses.append(
+            _user_row(query.user).where(models.ItemUserData.playback_position_ticks > 0).exists()
+        )
+    return clauses
+
+
+def _user_state(column: Any, user: User, wanted: bool) -> Any:
+    present = _user_row(user).where(column).exists()
+    return present if wanted else ~present
+
+
+def _user_row(user: User) -> Select[tuple[str]]:
+    """The requesting user's row for the item under consideration, correlated.
+
+    Correlated explicitly for the reason `_container_earns_its_place` is: without it the subquery
+    grows its own `FROM` and the clause stops being about *this* item.
+    """
+    return (
+        select(models.ItemUserData.item_key)
+        .where(models.ItemUserData.user_id == user.id)
+        .where(models.ItemUserData.item_key == models.Item.id)
+        .correlate(models.Item.__table__)
+    )
+
+
 def _ordered(rows: Iterable[Any]) -> list[Any]:
     """Document order, which is metadata rather than an accident of insertion: a cast list in a
     different order is a different cast list (004 spec section 3.7 rule 2)."""
@@ -408,6 +610,7 @@ def _item(row: models.Item, sources: Sequence[models.ItemSource]) -> Item:
 
 
 __all__ = [
+    "ALBUM_ARTIST_CREDIT",
     "DESCENT",
     "EARN_THEIR_PLACE",
     "HydratedItem",

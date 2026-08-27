@@ -340,7 +340,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T6 — The filter battery
 
-- [ ] **Changes:** every filtering predicate `ItemQuery` names, in the repository:
+- [x] **Changes:** every filtering predicate `ItemQuery` names, in the repository:
   `include_types` and `exclude_types`, `ids` and `exclude_ids`, `media_types`, `search_term` as
   containment on `name_folded`, the three `name_starts_with` variants on the folded name,
   `genre_ids`, `studio_ids`, `artist_ids`, `album_artist_ids`, `album_ids`, `person_ids`,
@@ -354,6 +354,44 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   `artist_ids` and `album_artist_ids` differ on the compilation — the credit distinction,
   leaned on for the first time.
 - **Plan reference:** §5, §6.3; spec §3.3
+- **Done (2026-08-27):** the first predicate written found a **defect in 003's write path**.
+
+  `searchTerm` matched nothing, on any item, because **`ItemRepository.add` never wrote
+  `name_folded`.** `name`, `sort_name` and `name_folded` are three derivations of one string; the
+  first two were written there and the third was left to `MetadataRepository.apply`, which sets it
+  only when a refresh *changes* the name. So an item that had been scanned and not yet refreshed
+  carried an empty folded name — **invisible to `searchTerm` and `nameStartsWith`**, silently,
+  while looking perfectly correct in every list it appeared in. 004 wrote the column and nothing
+  read it until now, which is exactly how it survived two features. Fixed in `add` and in the
+  branch of `update` that owns the name before a refresh does.
+
+  **The two artist parameters were measurable and guessable-wrong.** The first version of the test
+  asserted that `artistIds` finds performers and `albumArtistIds` finds album artists, as disjoint
+  sets. Measured: `artistIds` is the **superset** — it matches any credit, the album's own
+  album-artist row included — and one artist on the reference answers 6 items to `albumArtistIds`'
+  2, while a performer who is nobody's album artist answers 2 to 0
+  `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`.
+
+  **T3's world could not exercise four of these predicates**, and two of them would have passed
+  anyway. No film carried a `ProductionYear` or a `CommunityRating`, so `years` and
+  `minCommunityRating` had nothing to narrow — a predicate over a column that is null on every row
+  narrows nothing and passes every assertion about the rows it returned. And every item's
+  performer *was* its album artist, so the two artist filters returned identical rows: "the credit
+  distinction, leaned on for the first time" would have been leaned on and proved nothing. The
+  world now carries ten rated films and a **guest album** — a second artist's record with one
+  track performed by the first — which is the only shape in which the two can disagree.
+
+  Three decisions the plan did not contain, now in §6.2: related-row filters are `EXISTS` and not
+  joins, because a join needs a `DISTINCT` that then has to survive every `ORDER BY` T7 adds; an
+  **empty collection means "asked for nothing"** while `None` means "did not ask", which is the
+  difference between answering no items and answering the whole library to a request whose tokens
+  were all dropped (behaviours §1.12); and absence of a user-data row **is a state**, so unplayed
+  is `NOT EXISTS(played)` rather than `EXISTS(NOT played)` — the second finds only items somebody
+  has already touched, which on a fresh account is none of them.
+
+  `MediaType` turned out to need a measured table rather than a derivation: `MusicAlbum` is
+  `Unknown`, which any rule built on "does it hold audio" would call `Audio`. It is
+  `domain.items.MEDIA_TYPE_OF`, and T9 needs it too — it is in §3.2's always-present set.
 
 ## T7 — Ordering is total; `Random` is seeded
 

@@ -123,6 +123,38 @@ PARENT_OF: Mapping[ItemType, ItemType | None] = {
     ItemType.AUDIO: ItemType.MUSIC_ALBUM,
 }
 
+#: The reference's `MediaType` for each type: what *kind of thing* an item is to a player, as
+#: opposed to what kind of row it is. Always present on every item (005 spec section 3.2), and a
+#: filterable value in its own right - `mediaTypes=Unknown` is a real query the reference answers.
+#:
+#: Measured rather than derived from `FILE_BACKED`, and the two do not agree: an `Audio` file is
+#: `Audio` and a `Movie` is `Video`, but every container is `Unknown` including `MusicAlbum`, which
+#: a rule built on "does it hold audio" would have called `Audio`.
+#: `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+#:
+#: **The five by-name types are `Unknown` by default here and were not measured.** No probe asked
+#: what `MediaType` a `Genre` carries; `Unknown` is what every other non-file type answers, and the
+#: gap is named rather than hidden.
+#:
+#: A `Playlist` answers `Audio` on the measured server - derived from its contents rather than from
+#: its type - which is 009's problem and is why `Playlist` is not a member of `ItemType` here.
+MEDIA_TYPE_OF: Mapping[ItemType, str] = {
+    ItemType.MOVIE: "Video",
+    ItemType.EPISODE: "Video",
+    ItemType.AUDIO: "Audio",
+    ItemType.SERIES: "Unknown",
+    ItemType.SEASON: "Unknown",
+    ItemType.MUSIC_ARTIST: "Unknown",
+    ItemType.MUSIC_ALBUM: "Unknown",
+    ItemType.COLLECTION_FOLDER: "Unknown",
+    ItemType.GENRE: "Unknown",
+    ItemType.MUSIC_GENRE: "Unknown",
+    ItemType.STUDIO: "Unknown",
+    ItemType.PERSON: "Unknown",
+    ItemType.YEAR: "Unknown",
+}
+
+
 #: Which types a collection type may produce. The rule of spec section 3.1, written down once:
 #: a resolver that consults this cannot turn a file under a `music` root into a movie however it
 #: is named, and a test can assert that without running a scan. Every library produces its own
@@ -278,6 +310,7 @@ __all__ = [
     "BY_NAME",
     "FILE_BACKED",
     "IN_THE_TREE",
+    "MEDIA_TYPE_OF",
     "PARENT_OF",
     "PRODUCED_BY",
     "CollectionType",
