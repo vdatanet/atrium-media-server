@@ -641,9 +641,9 @@ exactly that reason.
 still on them they would fail as `XPASS(strict)` — verified at T9 — so the line could not have been
 left behind by accident.
 
-## T11 — `library/naming/movies.py`
+## T11 — `library/naming/movies.py`  ✅
 
-- [ ] **Changes:** bare file, folder-per-film, and multi-part grouping. Removes the `xfail` markers
+- [x] **Changes:** bare file, folder-per-film, and multi-part grouping. Removes the `xfail` markers
   from the `movies` rows.
 - **Depends on:** T10
 - **Verified by:** the `movies` corpus rows pass, including **a multi-part film resolving to one
@@ -653,6 +653,52 @@ left behind by accident.
   file names disagree — is decided here. Either the differential harness answers it or the corpus
   records the choice with a reason; it does not stay open past this task without one.
 - **Plan reference:** [spec §3.3](spec.md#33-movies)
+
+### Done — 2026-08-27
+
+**OQ-4 asked the wrong question, and the corpus row answering it had the answer backwards.** The
+question was what the reference does when a folder and a file *disagree*. Measured across 1,480
+one-film directories: a folder and a file naming two genuinely **different works did not occur
+once**. What occurs constantly is the folder naming the *same* work more cleanly — and there the
+folder wins by a wide margin.
+
+| Whose cleaned name matched what the reference resolved | |
+|---|---|
+| the **folder** only | **635** |
+| the **file** only | **3** |
+| both | 452 |
+| neither (metadata had replaced the title) | 390 |
+
+Taking the folder outright scores **1,087 of 1,557** against taking the file's **457**. The
+corpus row said *"the file wins, because it is the more specific name"*, which was written from
+intuition and is wrong. It is corrected, with the measurement in its reason — a failing row is
+either a bug or a corpus error, and this was the second kind.
+
+**The reason is mechanical rather than aesthetic**, which is why it generalises: the tools that
+fetch films mangle filenames and leave directories alone. Of 1,557 films, **135 had a filename with
+no spaces at all** while its directory had them, and others were truncated mid-word or suffixed
+with the site that served them.
+
+**A cleverer rule was tried and scored worse.** Preferring the folder only when the two names look
+like the same work — a containment test on the folded names — scored **1,038 against 1,087**,
+because the cleaner mangles one side often enough that the similarity test fails on films where the
+folder is still right. The simplest rule that the data supports is the one that shipped.
+
+**One part of it genuinely cannot be decided from a single path.** A *genre* directory holding
+forty films would give all forty the title `Action`. Nothing in one path distinguishes a category
+from a film — only what else is in the directory does — so `group` makes that call, and a directory
+holding several different titles names none of them. That is the same function AC-4 needed anyway.
+
+**There are no multi-part films on the reference at all** — zero in 1,557 — so AC-4 is unmeasured
+there and its rows and tests are ours. The `-a`/`-b` marker [spec §3.3](spec.md#33-movies) names is
+the ambiguous one: unanchored it eats hyphenated titles, and `Vitamin-C` would become part three.
+It is recognised only after a closing bracket or a digit, which is what `The Film (1999)-a` looks
+like and what a hyphenated title does not.
+
+**The whole pipeline was run over the reference's 1,557 paths**: 1,557 in, 1,557 out — nothing
+merged that should not have been — 0 empty names, and the resolved name matched the reference's for
+**69.9%**, against 29.4% for the file alone. The remaining 30% are titles metadata replaced, which
+T9 established the API cannot show us.
 
 ## T12 — `library/naming/series.py`
 

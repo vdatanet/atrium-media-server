@@ -9,6 +9,22 @@ and nothing else, which is what plan section 5 requires - a scan that threw on a
 would abort on somebody's real library rather than on ours.
 """
 
-from atrium.library.naming.clean import CleanName, clean_name, from_text, is_tag
+from atrium.library.naming.clean import (
+    CleanName,
+    clean_name,
+    cut_at_release_metadata,
+    from_text,
+    is_tag,
+)
+from atrium.library.naming.movies import MovieParse, group, parse_movie
 
-__all__ = ["CleanName", "clean_name", "from_text", "is_tag"]
+__all__ = [
+    "CleanName",
+    "MovieParse",
+    "clean_name",
+    "cut_at_release_metadata",
+    "from_text",
+    "group",
+    "is_tag",
+    "parse_movie",
+]

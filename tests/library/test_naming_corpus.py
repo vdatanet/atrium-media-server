@@ -35,7 +35,6 @@ CORPUS = Path(__file__).resolve().parents[1] / "corpus" / "naming.yaml"
 #: is what makes that mandatory rather than polite: leaving a line here once the parser works turns
 #: every row in the group into a failure.
 AWAITING: dict[str, str] = {
-    "movies": "T11 - library/naming/movies.py",
     "series": "T12 - library/naming/series.py",
     "music": "T13 - library/naming/music.py",
 }
