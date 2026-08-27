@@ -549,7 +549,7 @@ it.
 
 ## T14 — Remote refresh end-to-end: modes, failures, and the zero-network rescan
 
-- [ ] **Changes:** `refresh.py` gains the remote steps behind mode, `enabled()` and
+- [x] **Changes:** `refresh.py` gains the remote steps behind mode, `enabled()` and
   fields-still-wanting checks; `refresh_pending` set on failure and retried by the next scan; the
   per-scan report names disabled providers once; **the opt-in live replay test** — one movie
   against TMDB, one album against MusicBrainz, `@pytest.mark.needs_reference`, skipped by
@@ -565,6 +565,25 @@ it.
   job rather than an accident of T10's empty world; AC-15 re-run with remote code present —
   downloads land under the data directory and the library hash has not moved.
 - **Plan reference:** §6.8, §7, §8
+- **Done (2026-08-27):** the six criteria hold, and **AC-1 is the interesting one** — the gate was
+  right that T10's zero was vacuous, and writing the clause exposed two ways to get it wrong that
+  both look correct.
+  **"Wanting" has to be per type.** Written the obvious way, a film wanted an `ALBUM_ARTISTS` it
+  can never have, so *every* film asked TMDB and AC-1 failed against a test that had passed in
+  T10's empty world. A file-backed item's `RUNTIME` is the same shape of mistake: the merge
+  discards it because a runtime comes from probing the file, so wanting it is wanting something
+  that could never be applied.
+  **And the chain order was still wrong.** Inserting the remote source "before the last local
+  one" left the *second* `PATH` — the film chain lists it twice — ahead of the provider, so a
+  sidecar carrying nothing but an id kept its filename as a name while TMDB's title sat unused
+  behind it. Locals, then remote, then every path source.
+  **A name collision worth a rename rather than an alias**: `merge.Subject` (what an item already
+  has) met `model.Subject` (what a provider is *told*) in this module. The first is now
+  `merge.Current`.
+  The opt-in live test [plan §8](plan.md#8-testing-strategy) promised is here — one film against
+  TMDB, one album against MusicBrainz, asserting the **shape** rather than the values, skipped
+  unless credentials are in the environment. It is the first user of the `needs_reference` marker,
+  whose docstring in `tests/conftest.py` said *"Nothing does yet."*
 
 ## T15 — Cultures: measure, generate, serve
 

@@ -152,6 +152,7 @@ def scan(
     deep: bool = False,
     refresh: bool = True,
     refresh_mode: RefreshMode = RefreshMode.DEFAULT,
+    providers: Sequence[object] = (),
     removal_threshold: float = DEFAULT_REMOVAL_THRESHOLD,
     confirm_removals: bool = False,
     progress: ProgressSink = silent,
@@ -289,6 +290,7 @@ def scan(
             session,
             pending_and_touched(session, library, touched),
             mode=refresh_mode,
+            providers=providers,  # type: ignore[arg-type]
             # **The same reader, for both halves of the scan.** Passing `None` here would let the
             # refresh build one of its own, so a caller who asked for `PATH_ONLY` would get a
             # path-only tree and a tag-read refresh - an opt-out that worked for half the scan.

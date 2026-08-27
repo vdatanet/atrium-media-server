@@ -27,10 +27,10 @@ from atrium.domain.items import FILE_BACKED, IN_THE_TREE, ItemType
 from atrium.metadata.merge import (
     CHAIN_OF,
     LIST_RULE,
+    Current,
     ListRule,
     Source,
     SourceKind,
-    Subject,
     merge,
 )
 from atrium.metadata.model import (
@@ -51,8 +51,8 @@ def film(
     *,
     locked: frozenset[MetadataField] = frozenset(),
     whole_item: bool = False,
-) -> Subject:
-    return Subject(
+) -> Current:
+    return Current(
         kind=ItemType.MOVIE,
         values=dict(values or {}),
         locked_fields=locked,
@@ -447,14 +447,14 @@ def test_a_file_backed_item_ignores_a_runtime_from_metadata(kind: ItemType) -> N
     """A film's runtime comes from probing the file. Honouring an `.nfo` `<runtime>` here would
     give Atrium a duration the reference does not report - visible, because 004 has no prober and
     the reference's value comes from one."""
-    subject = Subject(kind=kind)
+    subject = Current(kind=kind)
     changes = merge(subject, [Source(LOCAL, {Field.RUNTIME: 58_200_000_000})], RefreshMode.REPLACE)
     assert Field.RUNTIME not in changes.values
 
 
 @pytest.mark.parametrize("kind", sorted(set(CHAIN_OF) - FILE_BACKED))
 def test_a_container_does_take_its_runtime_from_metadata(kind: ItemType) -> None:
-    subject = Subject(kind=kind)
+    subject = Current(kind=kind)
     changes = merge(subject, [Source(LOCAL, {Field.RUNTIME: 58_200_000_000})], RefreshMode.DEFAULT)
     assert changes.values[Field.RUNTIME] == 58_200_000_000
 

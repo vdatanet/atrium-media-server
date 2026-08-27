@@ -75,8 +75,11 @@ def no_outbound_connections(
     packet and needs nothing reachable, and it is the mechanism under test in
     tests/unit/test_net_address.py.
 
-    A test that genuinely needs a reference server - the differential harness feature 010
-    specifies - carries `@pytest.mark.needs_reference` and is exempt. Nothing does yet.
+    A test that genuinely needs a reference service carries `@pytest.mark.needs_reference` and is
+    exempt. **One does, since 004 T14**: the live provider replay plan section 8 promised, which
+    checks that TMDB and MusicBrainz still answer in the shape this project's synthetic fixtures
+    claim. It is skipped unless credentials are in the environment and it never runs in CI.
+    Feature 010's differential harness will be the second.
     """
     if request.node.get_closest_marker("needs_reference") is not None:
         return

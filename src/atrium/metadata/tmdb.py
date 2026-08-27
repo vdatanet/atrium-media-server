@@ -117,6 +117,12 @@ class TmdbProvider:
 
     # -- availability ----------------------------------------------------------------------------
 
+    def handles(self, kind: ItemType) -> bool:
+        """Films and series. A season or an episode takes its metadata from its series' payload,
+        which v1 does not fetch (plan section 6.5 scopes episodes to the season payload, and no
+        task in this feature builds that); a track is MusicBrainz's."""
+        return kind in (ItemType.MOVIE, ItemType.SERIES)
+
     def enabled(self) -> bool | str:
         """`True`, or **the reason it is not** (AC-9).
 

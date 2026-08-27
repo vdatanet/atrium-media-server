@@ -138,7 +138,8 @@ filterwarnings = ["error"]
 asyncio_mode = "auto"
 markers = [
     "conformance: asserts behaviour at the HTTP boundary (Principle VIII)",
-    # Nothing carries this yet. It exists so the network guard in tests/conftest.py has an exit
-    # that is declared rather than improvised when feature 010's differential harness arrives.
-    "needs_reference: needs a reachable Jellyfin; exempt from the no-network guard",
+    # Carried by exactly one test since 004 T14: the live provider replay of plan section 8. It
+    # exists so the network guard in tests/conftest.py has an exit that is declared rather than
+    # improvised, and so feature 010's differential harness has one waiting.
+    "needs_reference: needs a reachable reference service - a Jellyfin server, or the online metadata providers 004 uses. Exempt from the no-network guard, skipped by default, never in CI",
 ]
