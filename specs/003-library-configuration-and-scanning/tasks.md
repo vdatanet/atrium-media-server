@@ -293,15 +293,61 @@ row, which says nothing on its own and is what makes the row below it mean somet
 carry all fifteen, and one of them asserts the probe still sends fifteen — a shrinking case list
 means a row of §3.7.1 quietly stopped being measured.
 
-## T5 — `library/identity.py`
+## T5 — `library/identity.py`  ✅
 
-- [ ] **Changes:** the NUL-separated, relative-path derivation; path normalisation; the
+- [x] **Changes:** the NUL-separated, relative-path derivation; path normalisation; the
   `case_sensitive_identity` flag.
 - **Depends on:** T3
 - **Verified by:** 32 lowercase hex; deterministic across processes; type-separated (the same path
   as two types gives two ids); NFC and separator normalisation; a collision aborts rather than
   merging.
 - **Plan reference:** §6.3
+
+### Done — 2026-08-27
+
+**The plan's contract described one of the four identity rules and called it the contract.**
+[plan §5](plan.md#5-contracts) named a single `derive(item_type, library_id, relative_path)`. That
+is right for a `Movie`, an `Episode` and an `Audio`, and wrong for the other five types:
+[spec §3.6](spec.md#36-identity) gives a `Season` its *series' identity plus a number*, gives a
+`Series`, `MusicAlbum` and `MusicArtist` their *library plus a normalised name*, and gives a
+`CollectionFolder` the library alone. Two of those are not paths at all.
+
+The dangerous part is that the wrong signature still *works*: passing a series identity as the
+`relative_path` argument satisfies it and returns a perfectly valid identifier for the wrong thing.
+Nothing raises, nothing looks odd, and the symptom arrives much later as an item that does not
+match its file. There are now four functions, each refusing a type that belongs to another rule,
+and a `RULE_OF` map a test checks covers every type exactly once. [plan §5](plan.md#5-contracts) is
+corrected in this change.
+
+**Half of this task's verification was already 001's, and rewriting it would have been worse than
+skipping it.** "32 lowercase hex", "deterministic across processes" and the NUL separation are
+properties of `atrium.compat.guids.derive`, which has existed since 001 with a docstring saying
+*"feature 003 is its first real caller"* — and 001 already tests the cross-process run, which is
+the only way to catch an identifier that depends on hash randomisation. Asserting them again in
+`tests/library/` would have been testing somebody else's function, and the copy would have drifted
+towards agreeing with itself. What is tested here is what 003 adds: the four keys, the
+normalisation, and the collision. One cross-process test remains, for the normalisation wrapped
+around the hash rather than the hash.
+
+**"The normalised name" was never defined anywhere.** [spec §3.6](spec.md#36-identity) used the
+phrase for three item types and left it to the reader. Since the identity of every series and album
+in a library depends on it, the definition is now in the spec: the same three steps a path gets —
+separators, Unicode form, and case — so that a series whose directory is renamed from `the series`
+to `The Series` is the same series, for the same reason a file whose path changed case is the same
+file.
+
+**A collision needed something to abort.** [plan §7](plan.md#7-failure-handling) says two files
+deriving one identifier abort and name both paths, and the task's verification asks for it — but
+nobody can exhibit a real truncated-SHA-256 collision, so there was nothing to test. `ensure_unique`
+is that abort as a pure function over `(id, path)` pairs, which the scan will call at T16 and which
+a test exercises today with a forced duplicate. It also had to learn that **the same path twice is
+not a collision**: a rescan sees every file again, and an abort there would make the second scan of
+any library fail.
+
+**`for_season(series, None)` returns an identity rather than raising.** A season whose number could
+not be read still has to be *something*, and the alternative — refusing — would make one unparseable
+directory abort a library. It is a different identity from season zero, which matters because
+`Specials` is season zero and an unreadable name is not.
 
 ## T6 — Migration `0002_library_and_items`
 
