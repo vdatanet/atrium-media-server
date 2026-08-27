@@ -49,14 +49,24 @@ def revision_ids() -> list[str]:
 
 
 def schema_of(engine: Engine) -> dict[str, list[str]]:
-    """Table to its columns and indexes, which is what "the schema came back" means here."""
+    """Table to its columns and indexes, which is what "the schema came back" means here.
+
+    **Nullability is part of a column's name here**, added by 004 T9. Revision 0004 changes one
+    column from `NOT NULL` to nullable and nothing else, and this function could not see it: it
+    recorded names, so "every revision changes the schema" reported that one as changing nothing.
+    A sweep that cannot see a kind of change cannot prove that kind of change is reversible
+    either, which is the more serious half.
+    """
     with engine.connect() as connection:
         inspector = inspect(connection)
         found = {}
         for table in inspector.get_table_names():
             if table == schema.VERSION_TABLE:
                 continue
-            columns = sorted(column["name"] for column in inspector.get_columns(table))
+            columns = sorted(
+                f"{column['name']}{'' if column['nullable'] else ' NOT NULL'}"
+                for column in inspector.get_columns(table)
+            )
             indexes = sorted(index["name"] or "" for index in inspector.get_indexes(table))
             found[table] = columns + [f"index:{name}" for name in indexes]
     return found

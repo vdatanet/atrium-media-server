@@ -10,7 +10,7 @@ the reference, so `movie-full.nfo` carries one and this suite asserts two genres
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -45,7 +45,7 @@ def test_a_full_sidecar_yields_every_scalar_field() -> None:
     assert found[Field.SORT_NAME] == "Fixture, The"
     assert found[Field.ORIGINAL_TITLE] == "El Atrezzo"
     assert found[Field.YEAR] == 1999
-    assert found[Field.PREMIERE_DATE] == date(1999, 4, 23)
+    assert found[Field.PREMIERE_DATE] == datetime(1999, 4, 23, tzinfo=UTC)
     assert found[Field.OVERVIEW] == "A film that exists so a parser has something to read."
     assert found[Field.TAGLINE] == "Every field, once."
     assert found[Field.OFFICIAL_RATING] == "PG-13"
@@ -332,7 +332,9 @@ def test_a_premiere_date_supplies_the_year_when_nothing_else_did(tmp_path: Path)
     sidecar = tmp_path / "movie.nfo"
     sidecar.write_text("<movie><premiered>1999-04-23</premiered></movie>", encoding="utf-8")
     found = read_nfo(sidecar, ItemType.MOVIE).values
-    assert found[Field.PREMIERE_DATE] == date(1999, 4, 23)
+    assert found[Field.PREMIERE_DATE] == datetime(1999, 4, 23, tzinfo=UTC), (
+        "midnight UTC, not a bare date: PremiereDate is a date-time on the wire"
+    )
     assert found[Field.YEAR] == 1999
 
 
@@ -497,7 +499,9 @@ def test_an_artists_biography_is_its_overview() -> None:
 
 
 def test_an_episodes_air_date_is_its_premiere_date() -> None:
-    assert values_of("episode.nfo", ItemType.EPISODE)[Field.PREMIERE_DATE] == date(2010, 9, 1)
+    assert values_of("episode.nfo", ItemType.EPISODE)[Field.PREMIERE_DATE] == datetime(
+        2010, 9, 1, tzinfo=UTC
+    )
 
 
 # ----------------------------------------------------------------------------------------------

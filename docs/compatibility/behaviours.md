@@ -1223,6 +1223,23 @@ out to matter, is a deliberate identity migration with its own feature, informed
 differential harness (010). Single-music-library servers — the shape every measured setup has —
 cannot observe it at all.
 
+**A second consequence, found by 004 T9 and larger than the first.** Because an artist is a *tree*
+item here rather than a by-name one, it is the **scanner** that creates it — one per **album
+artist**, from the album's own tags. A track's *performers* are frequently other people, and 004
+records all of them (AC-6). So a performer who is nobody's album artist has a **name on the track
+and no artist item behind it**: a client renders the name and cannot follow it, and `/Artists`
+does not list them. In the reference, where artists are by-name items created on demand, every
+performer has a row.
+
+The three ways out were weighed at T9 and two are worse than the gap. Creating the missing item
+from the refresh puts a tree item outside the scan that builds the tree, and the next scan — which
+reconciles what it resolved against what exists — would mark it removed: a row that appears and
+disappears every other scan. Dropping the credit loses the performer's name, which is the thing
+AC-6 exists to keep. So the name is stored and the link is nullable
+(`item_artists.artist_item_id`, revision 0004), which is that sentence in the schema. The closing
+mechanism is the same deliberate identity migration as above; until then a client sees a complete
+list of who played on a track and a shorter list of artists to browse.
+
 ### 5.4 No loudness scan, so a track without the tag has no gain
 
 **Jellyfin does:** serve `NormalizationGain` on an item from **two** sources, in a fixed

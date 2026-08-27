@@ -33,7 +33,7 @@ import logging
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -393,15 +393,20 @@ def _year(raw: _Raw) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _date(raw: _Raw) -> date | None:
-    """A full date, only when the tag carries one. `1998` alone is a year and not a date."""
+def _date(raw: _Raw) -> datetime | None:
+    """A full date, only when the tag carries one. `1998` alone is a year and not a date.
+
+    Midnight UTC, because `PremiereDate` is a date-time on the wire and the conversion belongs at
+    ingestion (architecture section 4).
+    """
     text = _first(raw, "date")
     if text is None or len(text) < 10:
         return None
     try:
-        return date.fromisoformat(text[:10].replace("/", "-"))
+        parsed = date.fromisoformat(text[:10].replace("/", "-"))
     except ValueError:
         return None
+    return datetime(parsed.year, parsed.month, parsed.day, tzinfo=UTC)
 
 
 def _gain(raw: _Raw) -> float | None:
