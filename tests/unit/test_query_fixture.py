@@ -30,7 +30,9 @@ from tests.fixtures.query import (
     ALBUM_ARTIST,
     AWKWARD_NAMES,
     CORPUS_SIZE,
+    FIRST_YEAR,
     GENRE_SPELLINGS,
+    RATED,
     SOLO_PERFORMER,
     QueryWorld,
     build_query_world,
@@ -243,6 +245,30 @@ def test_the_album_artist_credit_does_point_at_an_item(
         row for row in rows(session, models.ItemArtist, item_id=world.album, credit="album_artist")
     )
     assert credit.artist_item_id == world.album_artist
+
+
+def test_the_rated_films_carry_a_year_and_a_rating(session: OrmSession, world: QueryWorld) -> None:
+    """Added at T6, which could not test `years` or `minCommunityRating` without them: a predicate
+    over a column that is null on every row narrows nothing and passes every assertion about the
+    rows it returned."""
+    assert len(world.rated) == RATED
+    for offset, item_id in enumerate(world.rated):
+        row = session.get(models.Item, item_id)
+        assert row is not None
+        assert row.production_year == FIRST_YEAR + offset
+        assert row.community_rating is not None
+
+
+def test_no_other_film_carries_a_year(session: OrmSession, world: QueryWorld) -> None:
+    """So `years=[FIRST_YEAR]` selects one film rather than most of the library - which is what
+    makes the narrowing assertion mean something."""
+    years = [
+        row.production_year
+        for row in rows(session, models.Item, type=ItemType.MOVIE.value)
+        if row.production_year is not None
+    ]
+    assert len(years) == RATED
+    assert len(set(years)) == RATED
 
 
 # ------------------------------------------------------------------------------------------

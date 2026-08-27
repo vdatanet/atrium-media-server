@@ -80,6 +80,12 @@ AWKWARD_NAMES = (
     "10 Things I Hate About You",
 )
 
+#: How many films carry a `ProductionYear` and a `CommunityRating`, and where the years start.
+#: Ten is enough for `years=[FIRST_YEAR]` to select one film and `min_community_rating` to select
+#: a proper subset - both of which are what "the predicate narrows something" means.
+RATED = 10
+FIRST_YEAR = 1990
+
 #: Total movies in the movies library, the awkward ones included. Plan section 8 row 4 pages this
 #: at 1, 7 and 97, so the count is deliberately not a multiple of any of them.
 CORPUS_SIZE = 100
@@ -91,9 +97,27 @@ GENRE_SPELLINGS = ("sci-fi", "Sci-Fi")
 #: The compilation's album artist, which gets a `MusicArtist` item, and the per-track performers.
 #: **`SOLO_PERFORMER` is nobody's album artist**, so its credit row carries a name and a null
 #: `artist_item_id` - the revision-0004 shape, and the whole reason that column is nullable.
+#:
+#: **The third track is performed by the album artist**, which is what makes `artistIds` and
+#: `albumArtistIds` distinguishable at all. With every performer being somebody else, filtering by
+#: the artist's id under either parameter answers the same rows, and the credit column - the whole
+#: of what separates `/Artists` from `/Artists/AlbumArtists` - is untested. A compilation with one
+#: track by its own compiler is also the ordinary case rather than a contrivance.
 ALBUM_ARTIST = "Various Artists"
-TRACK_PERFORMERS = ("The Compilers", "Solo Performer")
+TRACK_PERFORMERS = ("The Compilers", "Solo Performer", ALBUM_ARTIST)
 SOLO_PERFORMER = "Solo Performer"
+
+#: A **second** album artist, and a track on its record performed by the first one.
+#:
+#: This is what makes `artistIds` and `albumArtistIds` distinguishable, and the seeded world could
+#: not do it before T6. Measured on the reference, `artistIds` is the superset - "Alan Cook"
+#: answers 6 items to `albumArtistIds`' 2, and a performer who is nobody's album artist answers 2
+#: to 0 `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`. A world where every item's
+#: performer and album artist are the same person makes the two parameters return identical rows,
+#: and the credit column - the whole of what separates `/Artists` from `/Artists/AlbumArtists` -
+#: goes untested while looking tested.
+GUEST_ALBUM_ARTIST = "The Compilers"
+GUEST_ALBUM = "Another Record"
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +159,10 @@ class QueryWorld:
     awkward: tuple[str, ...]
     """The movie ids whose names are `AWKWARD_NAMES`, in the same order as that tuple."""
 
+    rated: tuple[str, ...]
+    """The films carrying a `ProductionYear` and a `CommunityRating`: `RATED` of them, years
+    running from `FIRST_YEAR` and ratings from 5.0 in steps of 0.5."""
+
     series: tuple[SeriesHandle, ...]
     """Three of them. NextUp's one-row-per-series rule needs a choice among watched series to
     mean anything, which is why it is three and not one."""
@@ -151,6 +179,14 @@ class QueryWorld:
     tracks: tuple[str, ...]
     album_artist: str
     """The `MusicArtist` item for `ALBUM_ARTIST`."""
+
+    guest_artist: str
+    """The `MusicArtist` item for `GUEST_ALBUM_ARTIST`, who owns a second album."""
+
+    guest_track: str
+    """A track on that second album **performed by** `ALBUM_ARTIST` and credited to
+    `GUEST_ALBUM_ARTIST` as album artist. It is the one item that `artistIds` finds for the first
+    artist and `albumArtistIds` does not."""
 
     favourites: tuple[str, ...]
     """Items with `is_favorite` set for `everyone`."""
@@ -202,7 +238,7 @@ def build_query_world(session: OrmSession) -> QueryWorld:
 
     corpus, awkward = _seed_movies(items, metadata, movies)
     series, specials_season, multi_episode = _seed_shows(items, shows)
-    album, tracks, album_artist = _seed_music(items, metadata, music)
+    album, tracks, album_artist, guest_artist, guest_track = _seed_music(items, metadata, music)
 
     favourites = (corpus[0], album)
     resumable = (corpus[1], corpus[2])
@@ -218,12 +254,15 @@ def build_query_world(session: OrmSession) -> QueryWorld:
         nobody=nobody,
         corpus=corpus,
         awkward=awkward,
+        rated=corpus[:RATED],
         series=series,
         specials_season=specials_season,
         multi_episode=multi_episode,
         album=album,
         tracks=tracks,
         album_artist=album_artist,
+        guest_artist=guest_artist,
+        guest_track=guest_track,
         favourites=favourites,
         resumable=resumable,
     )
@@ -274,6 +313,21 @@ def _seed_movies(
         # Zero-padded so the name order and the numeric order agree; a test comparing an ordering
         # against `sorted()` should not be measuring the padding instead.
         corpus.append(_add(items, _movie(library, f"Paging Item {index:03d}", index)))
+
+    # **Years and ratings on the first ten films.** T3's list did not name them and T6 cannot
+    # test `years` or `min_community_rating` without them: a predicate applied to a column that is
+    # null on every row narrows nothing and passes every assertion about the rows it returned.
+    for offset, item_id in enumerate(corpus[:RATED]):
+        metadata.apply(
+            item_id,
+            MetadataChanges(
+                values={
+                    Field.YEAR: FIRST_YEAR + offset,
+                    Field.COMMUNITY_RATING: round(5.0 + offset * 0.5, 1),
+                }
+            ),
+            refreshed_at=REFRESHED_AT,
+        )
 
     # One genre, two spellings, on two films. Both reach the same by-name row.
     for item_id, spelling in zip(corpus[:2], GENRE_SPELLINGS, strict=True):
@@ -469,7 +523,7 @@ def _episode_id(library: Library, series_name: str, season: int, episode: int) -
 
 def _seed_music(
     items: ItemRepository, metadata: MetadataRepository, library: Library
-) -> tuple[str, tuple[str, ...], str]:
+) -> tuple[str, tuple[str, ...], str, str, str]:
     """A compilation: one album artist, a different performer on every track.
 
     That shape is what makes it *one* album rather than one per track, and it is the reason
@@ -514,6 +568,8 @@ def _seed_music(
         refreshed_at=REFRESHED_AT,
     )
 
+    guest_artist_id, guest_track = _seed_guest_album(items, metadata, library)
+
     tracks: list[str] = []
     for number, performer in enumerate(TRACK_PERFORMERS, start=1):
         relative = f"{ALBUM_ARTIST}/{album_name}/{number:02d} Track {number}.flac"
@@ -539,7 +595,75 @@ def _seed_music(
             refreshed_at=REFRESHED_AT,
         )
         tracks.append(track.id)
-    return album_id, tuple(tracks), artist_id
+    return album_id, tuple(tracks), artist_id, guest_artist_id, guest_track
+
+
+def _seed_guest_album(
+    items: ItemRepository, metadata: MetadataRepository, library: Library
+) -> tuple[str, str]:
+    """A second artist, a second album, and one track on it performed by the first artist.
+
+    A guest appearance, which is an ordinary thing for a record to have and the only shape in
+    which the two artist parameters can disagree: the track's *performer* is one artist and its
+    *album artist* is another, so exactly one of the two filters finds it.
+    """
+    artist_id = identity.for_name(ItemType.MUSIC_ARTIST, library.id, GUEST_ALBUM_ARTIST)
+    _add(
+        items,
+        _with_sort_name(
+            Item(
+                id=artist_id,
+                type=ItemType.MUSIC_ARTIST,
+                name=GUEST_ALBUM_ARTIST,
+                library_id=library.id,
+                parent_id=identity.for_library(library.id),
+                date_created=_created(420),
+            )
+        ),
+    )
+    album_id = identity.for_name(ItemType.MUSIC_ALBUM, library.id, GUEST_ALBUM)
+    _add(
+        items,
+        _with_sort_name(
+            Item(
+                id=album_id,
+                type=ItemType.MUSIC_ALBUM,
+                name=GUEST_ALBUM,
+                library_id=library.id,
+                parent_id=artist_id,
+                date_created=_created(421),
+            )
+        ),
+    )
+    metadata.apply(
+        album_id,
+        MetadataChanges(values={Field.ALBUM_ARTISTS: [GUEST_ALBUM_ARTIST]}),
+        refreshed_at=REFRESHED_AT,
+    )
+
+    relative = f"{GUEST_ALBUM_ARTIST}/{GUEST_ALBUM}/01 Guest Track.flac"
+    track = _with_sort_name(
+        Item(
+            id=identity.for_file(ItemType.AUDIO, library.id, relative),
+            type=ItemType.AUDIO,
+            name="Guest Track",
+            library_id=library.id,
+            parent_id=album_id,
+            sources=(MediaSource(relative_path=relative, size=300),),
+            index_number=1,
+            parent_index_number=1,
+            date_created=_created(422),
+        )
+    )
+    _add(items, track)
+    metadata.apply(
+        track.id,
+        MetadataChanges(
+            values={Field.ARTISTS: [ALBUM_ARTIST], Field.ALBUM_ARTISTS: [GUEST_ALBUM_ARTIST]}
+        ),
+        refreshed_at=REFRESHED_AT,
+    )
+    return artist_id, track.id
 
 
 # ------------------------------------------------------------------------------------------

@@ -632,6 +632,14 @@ class ItemRepository:
                 type=item.type.value,
                 name=item.name,
                 sort_name=item.sort_name,
+                # **The third derivation of the same string, and it was missing.** `name`,
+                # `sort_name` and `name_folded` all come from the item's name; the first two were
+                # written here and the third was left to `MetadataRepository.apply`, which only
+                # sets it when a refresh *changes* the name. An item scanned and not yet
+                # refreshed therefore had an empty folded name - and an empty folded name is
+                # invisible to `searchTerm` and `nameStartsWith`, silently, while the item itself
+                # looks perfectly correct in every list. Found by 005 T6.
+                name_folded=fold_for_search(item.name),
                 index_number=item.index_number,
                 parent_index_number=item.parent_index_number,
                 end_index_number=item.end_index_number,
@@ -667,6 +675,7 @@ class ItemRepository:
         if row.metadata_refreshed_at is None:
             row.name = item.name
             row.sort_name = item.sort_name
+            row.name_folded = fold_for_search(item.name)
         row.index_number = item.index_number
         row.parent_index_number = item.parent_index_number
         row.end_index_number = item.end_index_number
