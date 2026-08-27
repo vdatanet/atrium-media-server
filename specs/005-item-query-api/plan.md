@@ -4,6 +4,7 @@ title: Item query API — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
+amended: 2026-08-27 by the tasks gate - sections 6.6 and 8
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -231,6 +232,13 @@ false` skips the count query and reports `0` — the one case where `0` is hones
 caller asked for it. By-name endpoints report the true count with or without `limit`: the
 recorded divergence of behaviours §3.1, held by AC-5.
 
+The filter summary is computed, never stored: the distinct `Genres`, `Tags`, `OfficialRatings`
+and `Years` over the §6.1-visible items in scope, `parentId` and `includeItemTypes` narrowing it
+like any query, each list ordered as the reference orders it — which T15 measures before the
+model freezes. *(Added by the tasks gate, 2026-08-27: the shape was defined here and the
+computation nowhere, which is this plan failing its own §10 test — a task was about to invent a
+design decision.)*
+
 ### 6.7 By-name endpoints
 
 The same pipeline with `kind` pinned: `/Genres` → `Genre` rows, `/MusicGenres` → `MusicGenre`,
@@ -330,9 +338,11 @@ depends only on the id's shape (spec §3.5).
 
 The fixture is a **seeded database, not a filesystem**: a builder inserts a known world through
 the repositories — three libraries (movies, shows, music), a restricted user and an unrestricted
-one, 003's awkward names (whitespace artefacts included), a series with specials and a
-multi-episode file, a compilation with per-track artists, case-variant genres, and a
-100-item paging corpus. No scan runs in these tests; 003 already proved scanning.
+one, 003's awkward names (whitespace artefacts included), three series — row 10 below proves
+NextUp on three watched ones, a need this paragraph originally forgot to seed *(amended by the
+tasks gate, 2026-08-27)* — one of them with specials and a multi-episode file, a compilation
+with per-track artists, case-variant genres, and a 100-item paging corpus. No scan runs in
+these tests; 003 already proved scanning.
 
 | Spec AC | Test |
 |---|---|
