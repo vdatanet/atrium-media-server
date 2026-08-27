@@ -332,6 +332,23 @@ compilation-heavy fixture separate the two (AC-13). `/Years` → `Year` rows wit
 carrying that `production_year`. `parentId` scopes the membership `EXISTS`, `searchTerm` matches
 the folded name, and paging and sorting are §6.3's, unchanged.
 
+**The membership clause lives in §6.1's predicate, not here.** A by-name row *is* an item:
+`/Items?includeItemTypes=Genre` has to give the same answer as `/Genres`, and two predicates in
+two places is how they stop agreeing. What `run_by_name` adds on top is only what these routes ask
+that `/Items` does not — the `parentId` scope and the credit reading.
+
+**The five kinds do not reach their items the same way**, so the clause is a `CASE` over the type
+rather than one join. Three have a join table; `Person` and `Studio` have their own; and **`Year`
+has none at all** — it is referenced by `items.production_year`, a column, which is the one branch
+that could have been written and forgotten.
+
+> **Nothing created a `Year` row until T8.** `MetadataRepository.apply` wrote a by-name row for
+> every genre, studio and person it saw and none for the year, while `collect_by_name_garbage` had
+> always protected `Year` rows on the assumption that something made them. `/Years` would have
+> listed nothing, and `GET /Items/{yearId}` would have answered `404` for a year the library
+> plainly has. Fixed in the write path rather than by deriving the list from a `DISTINCT`, because
+> a `Year` is an item and the item route has to answer for it too.
+
 ### 6.8 Discovery endpoints
 
 **`/Items/Latest`**: visible file-backed items, `date_created` descending, the user's

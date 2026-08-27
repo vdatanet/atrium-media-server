@@ -31,12 +31,14 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Select, case, extract, func, or_, select
+from sqlalchemy import Integer, Select, case, cast, extract, func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 
 from atrium.db import models
 from atrium.domain.items import (
+    BY_NAME,
     FILE_BACKED,
+    IN_THE_TREE,
     MEDIA_TYPE_OF,
     Item,
     ItemType,
@@ -72,6 +74,15 @@ ALBUM_ARTIST_CREDIT = "album_artist"
 
 #: The other value the same column carries: a performer on this particular track.
 PERFORMER_CREDIT = "artist"
+
+#: How each by-name kind is reached from the items that reference it. `Year` is absent because it
+#: has no join table at all - it is referenced by `items.production_year`, a column.
+_LINK_OF: dict[ItemType, tuple[Any, str]] = {
+    ItemType.GENRE: (models.ItemGenre, "genre_item_id"),
+    ItemType.MUSIC_GENRE: (models.ItemGenre, "genre_item_id"),
+    ItemType.STUDIO: (models.ItemStudio, "studio_item_id"),
+    ItemType.PERSON: (models.ItemPerson, "person_item_id"),
+}
 
 
 class ParentNotFoundError(LookupError):
@@ -210,6 +221,79 @@ class ItemQueryRepository:
         rows = [found[one] for one in wanted if one in found]
         return QueryPage(items=self._hydrate(rows, query.user), total=total)
 
+    def run_by_name(
+        self, kind: ItemType, query: ItemQuery, *, credit: str | None = None
+    ) -> QueryPage:
+        """The same pipeline with the type pinned (plan section 6.7).
+
+        `credit` is what separates `/Artists` from `/Artists/AlbumArtists`: `None` means any
+        credit and `album_artist` means that one. `MusicArtist` is the odd member of this family -
+        it is a **per-library** row in Atrium rather than a by-name one (behaviours section 5.3),
+        so it is already carried by the ordinary visibility predicate and only needs the credit
+        reading on top.
+
+        **The count is always true**, with `limit` and without. The reference disables counting on
+        these routes when there is no `limit` and answers `TotalRecordCount: 0` beside a non-empty
+        `Items`; Atrium diverges, argued in behaviours section 3.1.
+        """
+        statement = (
+            select(models.Item)
+            .where(models.Item.type == kind.value)
+            .where(self._visible_to(query.user))
+        )
+        for clause in _filters(query):
+            statement = statement.where(clause)
+        if query.parent_id is not None or credit is not None:
+            statement = statement.where(self._reached_from(kind, query, credit))
+
+        total = self._count(statement) if query.count else 0
+        page = statement.order_by(*_order_by(query)).offset(query.start_index)
+        if query.limit is not None:
+            page = page.limit(query.limit)
+        rows = list(self._session.execute(page).scalars())
+        return QueryPage(items=self._hydrate(rows, query.user), total=total)
+
+    def _reached_from(self, kind: ItemType, query: ItemQuery, credit: str | None) -> Any:
+        """Membership narrowed by `parentId`, by a credit reading, or by both.
+
+        The general predicate already says *some visible item references this row*; this says
+        *some visible item **in this scope** references it, under this credit*. Both are `EXISTS`
+        over the same shape, and they are separate because the first is true of every query and
+        the second only of these routes.
+        """
+        item = models.Item.__table__.alias("reached_from")
+        visible = item.c.removed_at.is_(None) & self._library_permitted_on(item, query.user)
+        if query.parent_id is not None:
+            parent = self._require_visible(query.parent_id, query.user)
+            if ItemType(parent.type) is ItemType.COLLECTION_FOLDER:
+                visible = visible & (item.c.library_id == parent.library_id)
+            else:
+                visible = visible & item.c.id.in_(self._descendants(parent.id))
+
+        if kind is ItemType.YEAR:
+            return (
+                select(item.c.id)
+                .where(visible)
+                .where(item.c.production_year == cast(models.Item.name, Integer))
+                .correlate(models.Item.__table__)
+                .exists()
+            )
+
+        if kind is ItemType.MUSIC_ARTIST:
+            link_table, column = models.ItemArtist, "artist_item_id"
+        else:
+            link_table, column = _LINK_OF[kind]
+        linked = (
+            select(link_table.item_id)
+            .where(link_table.item_id == item.c.id)
+            .where(getattr(link_table, column) == models.Item.id)
+            .where(visible)
+            .correlate(models.Item.__table__)
+        )
+        if credit is not None:
+            linked = linked.where(link_table.credit == credit)
+        return linked.exists()
+
     # -- scope (plan section 6.2) ------------------------------------------------------------
 
     def _scope(self, query: ItemQuery) -> Select[tuple[models.Item]]:
@@ -280,6 +364,7 @@ class ItemQueryRepository:
             (models.Item.removed_at.is_(None))
             & self._library_permitted(user)
             & self._container_earns_its_place()
+            & self._by_name_is_referenced(user)
         )
 
     def _library_permitted(self, user: User) -> Any:
@@ -299,6 +384,63 @@ class ItemQueryRepository:
             .where(models.UserLibraryAccess.can_view)
         )
         return or_(by_name, models.Item.library_id.in_(permitted))
+
+    def _by_name_is_referenced(self, user: User) -> Any:
+        """A genre exists for a user while a **visible item** references it (plan section 6.1).
+
+        Without this, `/Genres` lists a genre whose every film sits in a library the user cannot
+        see - which is not a leak of the films but is a leak of *what is in the library*, and it
+        is the one thing a by-name row can disclose. It is in the general predicate rather than in
+        `run_by_name` because a by-name row is an item: `/Items?includeItemTypes=Genre` has to
+        agree with `/Genres`, and two predicates in two places is how they stop agreeing.
+
+        The five by-name kinds do not all reach their items the same way, which is why this is a
+        `CASE` over the type rather than one clause: three have a join table, `Year` is referenced
+        by a **column**, and `Person` and `Studio` have tables of their own.
+        """
+        return or_(
+            models.Item.type.not_in([one.value for one in BY_NAME]),
+            *((models.Item.type == kind.value) & self._referenced(kind, user) for kind in BY_NAME),
+        )
+
+    def _referenced(self, kind: ItemType, user: User) -> Any:
+        """Whether any item this user may see points at the by-name row under consideration."""
+        item = models.Item.__table__.alias(f"referencing_{kind.value.lower()}")
+        visible = (
+            (item.c.removed_at.is_(None))
+            & self._library_permitted_on(item, user)
+            & item.c.type.in_([one.value for one in IN_THE_TREE])
+        )
+        if kind is ItemType.YEAR:
+            # The one by-name kind with **no join table**: a year is referenced by a column, and
+            # the row's own name is the year as text.
+            return (
+                select(item.c.id)
+                .where(visible)
+                .where(item.c.production_year == cast(models.Item.name, Integer))
+                .correlate(models.Item.__table__)
+                .exists()
+            )
+        link, column = _LINK_OF[kind]
+        return (
+            select(link.item_id)
+            .where(link.item_id == item.c.id)
+            .where(getattr(link, column) == models.Item.id)
+            .where(visible)
+            .correlate(models.Item.__table__)
+            .exists()
+        )
+
+    def _library_permitted_on(self, item: Any, user: User) -> Any:
+        """`_library_permitted`, against an aliased items table rather than the mapped one."""
+        if user.enable_all_folders:
+            return item.c.library_id.is_not(None)
+        permitted = (
+            select(models.UserLibraryAccess.library_id)
+            .where(models.UserLibraryAccess.user_id == user.id)
+            .where(models.UserLibraryAccess.can_view)
+        )
+        return item.c.library_id.in_(permitted)
 
     def _container_earns_its_place(self) -> Any:
         """A `Series`, `Season`, `MusicArtist` or `MusicAlbum` with nothing visible beneath it is

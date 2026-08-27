@@ -447,7 +447,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T8 — By-name queries
 
-- [ ] **Changes:** `ItemQueryRepository.run_by_name` — `Genre`, `MusicGenre` and `Year` rows,
+- [x] **Changes:** `ItemQueryRepository.run_by_name` — `Genre`, `MusicGenre` and `Year` rows,
   and `MusicArtist` rows under either credit reading (`/Artists`' any-credit,
   `/Artists/AlbumArtists`' album-credit); membership as an `EXISTS` over the join tables against
   the §6.1 item predicate, scoped by `parentId`; `searchTerm` on the folded name; §6.3's paging
@@ -460,6 +460,32 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   `limit`, which T14 re-holds on the wire
   ([behaviours §3.1](../../docs/compatibility/behaviours.md#31-totalrecordcount-is-0-on-by-name-endpoints-without-limit--class-b)).
 - **Plan reference:** §6.7
+- **Done (2026-08-28):** **nothing had ever created a `Year` row.**
+
+  `MetadataRepository.apply` writes a by-name row for every genre, studio and person it sees, and
+  none for the year — while `collect_by_name_garbage` has always protected `Year` rows on the
+  assumption that something made them, and its docstring explains at length *why* a `Year` is
+  checked separately. So the collection half of a feature existed, carefully documented, with no
+  creation half at all. `/Years` would have listed nothing, and `GET /Items/{yearId}` would have
+  answered `404` for a year the library plainly has. Fixed in the write path rather than by
+  deriving `/Years` from a `DISTINCT`, because a `Year` **is** an item and the item route has to
+  answer for it.
+
+  **The membership clause belongs in §6.1's predicate, not in `run_by_name`.** A by-name row is an
+  item, so `/Items?includeItemTypes=Genre` has to give the same answer as `/Genres` — two
+  predicates in two places is how they stop agreeing, and a test now asserts the two routes agree
+  on a user who may see neither. What `run_by_name` adds is only what these routes ask that
+  `/Items` does not: the `parentId` scope and the credit reading.
+
+  **T5's pinned test came good.** It asserted by-name rows were visible to everyone and said in
+  its own docstring that T8 would narrow it. It did, and the test needed only its reason rewritten
+  — which is the whole argument for pinning a deliberate gap rather than leaving it implicit.
+
+  The adversarial half is the one worth keeping: a genre whose every film sits in a library the
+  user cannot see is **not** a leak of the films. It is a leak of what the library contains, which
+  is the only thing a by-name row can disclose — and it is tested by making one row unreachable
+  for one user and reachable for another out of the same database, so an implementation that hid
+  every by-name row could not pass.
 
 ## T9 — The item surface: models, the DTO builder, and the `Fields` registry
 

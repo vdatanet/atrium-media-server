@@ -888,6 +888,15 @@ class MetadataRepository:
             row.refresh_pending = refresh_pending
         row.metadata_refreshed_at = refreshed_at if refreshed_at is not None else utc_now()
 
+        if Field.YEAR in values and values[Field.YEAR] is not None:
+            # **The by-name row for a year, which nothing created until 005 T8.** A `Year` is
+            # referenced by `items.production_year` rather than by a join table, so it has no
+            # write path of its own the way a genre does - and `collect_by_name_garbage` below
+            # has always protected these rows on the assumption that something made them. Without
+            # this, `/Years` lists nothing and `GET /Items/{yearId}` answers 404 for a year the
+            # library plainly has.
+            self.ensure_by_name(ItemType.YEAR, str(values[Field.YEAR]))
+
         kind = ItemType(row.type)
         if Field.GENRES in values:
             self._write_genres(item_id, kind, _strings(values[Field.GENRES]))
