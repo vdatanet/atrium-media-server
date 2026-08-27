@@ -126,7 +126,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T2 — `domain/queries.py`: the vocabulary
 
-- [ ] **Changes:** `ItemQuery`, `SortBy`, `SortOrder`, `Filter`, exactly as
+- [x] **Changes:** `ItemQuery`, `SortBy`, `SortOrder`, `Filter`, exactly as
   [plan §5](plan.md#5-contracts) declares them — frozen, pure, no I/O. Nothing else moves.
 - **Depends on:** nothing
 - **Verified by:** mypy strict; the `SortBy` members equal [spec §3.4](spec.md#34-sorting)'s
@@ -136,6 +136,31 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   standing domain sweep in `tests/unit/test_import_directions.py` picks the module up by
   construction, so a stray import upward fails with no new test written.
 - **Plan reference:** §5
+- **Done (2026-08-27):** the contract was missing a parameter its own specification promises.
+  Plan §5's `ItemQuery` lists `genre_ids` and no `genres`, while [spec §3.3](spec.md#33-get-items--getitems)
+  puts `genres` in tier 2 beside `genreIds` — and the two are not interchangeable, because a name
+  arrives from a client that never fetched the by-name row it belongs to. T6's statement is "every
+  filtering predicate `ItemQuery` names", so the omission would have been silent all the way to
+  `Implemented`: no task was going to notice a promise the contract did not carry. `genres` is in
+  the dataclass and plan §5 is amended in this change.
+
+  Everything else held. All 32 parameters spec §3.3 promises across tiers 1 and 2 are either a
+  field here or a DTO concern that plan §6.5 owns — `fields`, `enableUserData`, `enableImages`,
+  `imageTypeLimit`, `enableImageTypes` are emission options, not predicates, and belong to the
+  builder's context rather than to the query.
+
+  **CI found a third thing, on the interpreter floor.** Asserting that a slotted query refuses an
+  unknown attribute passed on 3.14 and failed on 3.12: a `@dataclass(frozen=True, slots=True)`
+  answers `FrozenInstanceError` on 3.14 and `TypeError: super(type, obj)...` on 3.12, from the
+  generated `__setattr__` reaching a stale `__class__` cell. Reproduced on 3.12.14 with a bare
+  dataclass and no Atrium code in it. Every domain record is frozen-and-slotted, so this is the
+  project's, not this module's — the test now asserts that it raises, not what.
+
+  The tests are two tables rather than assertions. The `SortBy` set is compared **whole**, because
+  containment would let a well-meaning `Name` member through — a key that would work against
+  Atrium and do nothing against the reference. And every field's default is a row, with a test
+  that fails on a field having *no* row: the default is what a client gets by sending nothing,
+  which is the case least likely to be covered anywhere else.
 
 ## T3 — The seeded world
 
