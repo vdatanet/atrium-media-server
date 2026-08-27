@@ -587,14 +587,59 @@ adds two lines to the lock and no packages.
 runs"`, `"a space between them"`, `"and with underscores"`. All three were mine, written minutes
 earlier, and all three were expanded rather than the threshold lowered.
 
-## T10 — `library/naming/clean.py`
+## T10 — `library/naming/clean.py`  ✅
 
-- [ ] **Changes:** title and year extraction; release-tag stripping. Removes the `xfail` markers
+- [x] **Changes:** title and year extraction; release-tag stripping. Removes the `xfail` markers
   from the `clean` rows.
 - **Depends on:** T9
 - **Verified by:** the corpus rows tagged `clean` pass with no marker left on them. Written from the
   rules, not transcribed from the reference's expressions — Principle IV.
 - **Plan reference:** §1, §6.1
+
+### Done — 2026-08-27
+
+**The corpus passed on the first run, which is exactly when a corpus proves nothing.** All 25
+`clean` rows went green before any of them had met a real filename — unsurprising, because the same
+person wrote the rows and the rules within an hour of each other. So the parser was run over the
+**1,557 real film filenames** on the reference. It found three defects the corpus could not:
+
+| | before | after |
+|---|---|---|
+| crashes | 0 | 0 |
+| **empty titles** | **1** | **0** |
+| titles still carrying release noise | **46** | **8** |
+
+1. **A leading bracketed year emptied the title.** `(2015) The Film …` is a real convention, and
+   "the title is everything before the year" returns nothing for it. An item with **no name** is
+   worse than one with a wrong name, because nothing can find it — and it would have reached a
+   client as a blank row.
+2. **Bracket groups are glued together with no space between them.** `[1080p][Castellano][wWw…]`
+   is *one whitespace token whose brackets balance*, so the first implementation — which counted
+   bracket depth across tokens — never saw three groups and cut nothing. The second attempt cuts on
+   the text, and that is the whole of the difference between 46 and 8.
+3. **"Does the name contain a space" is not how you tell a dot-separated name from a space-
+   separated one.** Real names mix both. The test is which character is *doing the separating* —
+   whichever there are more of.
+
+**The eight that remain are recorded, not chased.** Both residual shapes would need a looser rule,
+and looser is the direction that damages real titles: breaking the dot/space tie towards dots
+changes how every space-separated name tokenises, and stripping tags from the middle of a name
+would gut every title that legitimately contains one of these words. `Hard Candy` and `Web of Lies`
+are in the corpus to hold that line. 0.5% of one library, and 004 replaces those titles anyway.
+
+**Seven rows were added, and none was written from what the code does.** Each expected value was
+decided first and then checked — the corpus is the specification, so a row recording whatever the
+parser happened to output would turn it into a description of the code and quietly delete the only
+thing keeping the two honest.
+
+**Language names became tags, which sounds dangerous and is not.** `spanish`, `english` and the
+rest appear inside the bracket runs and had to be recognised there. Titles are only ever trimmed of
+tags **from the end**, so `The English Patient` keeps its middle — and it is now a corpus row for
+exactly that reason.
+
+**`AWAITING` lost its `clean` line**, which is what makes those 32 rows count. With `strict=True`
+still on them they would fail as `XPASS(strict)` — verified at T9 — so the line could not have been
+left behind by accident.
 
 ## T11 — `library/naming/movies.py`
 

@@ -98,6 +98,30 @@ rows:
      why: "surrounding and internal whitespace is trimmed and collapsed in a *title*",
      expect: {name: "The Film", year: 1999}}
 
+  # Rows added at T10, after running the parser over 1,557 real filenames from a live reference.
+  # Each of these is a shape the corpus did not have and the parser got wrong.
+  - {path: "(2015) The Film.mkv", collection_type: movies, needs: clean,
+     why: "a LEADING bracketed year: taking everything before it literally returned an EMPTY title, which is worse than a wrong one",
+     expect: {name: "The Film", year: 2015}}
+  - {path: "(2015) The Film (Another Title).mkv", collection_type: movies, needs: clean,
+     why: "the same shape with a bracketed alternative title, which is not release metadata and stays",
+     expect: {name: "The Film (Another Title)", year: 2015}}
+  - {path: "The Film [1080p][Castellano][wWw.SomeSite.NL].mkv", collection_type: movies, needs: clean,
+     why: "bracket groups GLUED together with no space - one whitespace token whose brackets balance, which token-level counting never sees",
+     expect: {name: "The Film", year: null}}
+  - {path: "The Film [BluRay 1080p][AC3 5.1 Castellano][Subs].mkv", collection_type: movies, needs: clean,
+     why: "the same run with spaces inside each group, so the cut is on the group and not on the token",
+     expect: {name: "The Film", year: null}}
+  - {path: "The Film (1999) [Not A Tag At All].mkv", collection_type: movies, needs: clean,
+     why: "the control for the two rows above: a bracket holding no tag is not release metadata",
+     expect: {name: "The Film", year: 1999}}
+  - {path: "The English Patient (1996).mkv", collection_type: movies, needs: clean,
+     why: "a language name inside a title, which the bracket rule needed as a tag and this keeps out of titles",
+     expect: {name: "The English Patient", year: 1996}}
+  - {path: "The.Film.(1966).BDrip.720p.mkv", collection_type: movies, needs: clean,
+     why: "dots as the separator AND a bracketed year, which the first separator rule mishandled",
+     expect: {name: "The Film", year: 1966}}
+
   # ------------------------------------------------------------------------------------------
   # Movies (T11). Section 3.3.
   # ------------------------------------------------------------------------------------------
