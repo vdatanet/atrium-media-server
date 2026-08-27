@@ -78,7 +78,7 @@ src/atrium/
 │   ├── resolver.py       path -> resolved item, per collection type
 │   ├── identity.py       the derivation
 │   ├── scan.py           orchestration, change detection, the safety guard
-│   └── report.py         progress and summary
+│   └── report.py         progress, and the summary's three categories (§7)
 └── db/
     └── migrations/       revision 0002: items, libraries, user data
 ```
@@ -319,10 +319,33 @@ in this feature; 008 owns it and a scan only records that it is needed.
 | Root unreadable or not a directory | Pre-scan check | **Abort that library**, remove nothing | Operator fixes the mount |
 | Root suddenly empty | §6.5 rule 2 | **Abort that library**, remove nothing | Operator fixes the mount |
 | Removal exceeds the threshold | §6.5 rule 3 | Stop, report, require confirmation | Operator confirms or investigates |
-| Unreadable file inside a readable root | Per-file | Skip, count, report with the reason | Operator fixes permissions |
-| Unparseable name | Resolver | Item with a title and nothing else | 004 may identify it |
+| File that cannot be **stat**ed — a dangling symlink | Per-file, during the walk | Skip, count, report with the reason | Operator fixes the link |
+| Directory that cannot be **listed** | Per-directory, during the walk | Skip it and everything under it, count, report | Operator fixes permissions |
+| File whose **contents** cannot be read | **Not detected here** | Scanned like any other file, because nothing in 003 opens one | 008 finds it when it goes to probe or play it |
+| Unparseable name | Resolver | Item with a title and nothing else, **and a notice in the report** | 004 may identify it |
 | File still being written | Size changed between passes | Skip this scan, pick it up next | Automatic |
 | Two files deriving the same id | Insert conflict | **Abort**, naming both paths | A collision is a bug in §6.3, not user error |
+
+**Corrected at T20.** This table had one row reading *"unreadable file inside a readable root →
+skip, count, report"*, and it is not what happens. A `chmod 000` file **stats perfectly well**, and
+stat is all the walk does — so it becomes a candidate, becomes an item, and is discovered to be
+unreadable by whoever first opens it, which is 008. The two cases that *are* detectable are a file
+whose stat raises (a dangling symlink) and a directory that cannot be listed. All three are held by
+`tests/library/test_report.py::test_a_file_is_only_unreadable_when_it_cannot_be_stat_ed`, including
+the one that is scanned, because the row that was wrong is the one an implementer would otherwise
+write a check for and never see fire.
+
+**A skipped file and a noticed one are different things, and the report keeps them apart.** A
+skipped file produced **no item**; a noticed one produced a thin one that is in the library now. An
+operator told "2 files skipped" when one of the two was in fact scanned goes looking for something
+that is not missing. `library/report.py` holds the argument; the vocabulary for each lives with the
+thing that produces it, so `Skip` is the walker's and `Notice` is the resolver's.
+
+**Only the resolver can raise a notice**, which is not a style choice. An `Episode` with no episode
+number is either a name nothing could be read from or a daily show whose episodes are dated, and an
+item carries no date to tell the two apart — so a notice computed from the finished items reports
+every episode of every daily show as unparseable. The first version of T20 did exactly that and the
+fixture caught it.
 
 ## 8. Testing strategy
 

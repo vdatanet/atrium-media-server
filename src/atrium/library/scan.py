@@ -37,6 +37,10 @@ is what makes the whole thing safe. **No file-backed identity depends on a tag**
 the database. The resolution of an unexamined file is never written; it exists only to find out
 which row to keep.
 
+**What it did and what it walked past are reported separately**, and `library/report.py` says
+why at length: a skipped file produced no item and a noticed one did, so an operator told that two
+files were skipped when one of them is sitting in their library has been told something false.
+
 **A scan never purges.** Hard deletion is an operator's decision and lives in
 `library/maintenance.py`, which this module does not import - a test asserts that, because a scan
 that merely *chose* not to purge would be one refactor away from purging.
@@ -59,9 +63,10 @@ way to tell them apart is to remember that this library used to have files in it
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from sqlalchemy.orm import Session as OrmSession
@@ -72,6 +77,7 @@ from atrium.domain.items import PARENT_OF, Item, ItemType
 from atrium.domain.library import Library
 from atrium.library.identity import ensure_unique
 from atrium.library.naming import PATH_ONLY, MetadataSource
+from atrium.library.report import Phase, Progress, ProgressSink, ScanReport, silent
 from atrium.library.resolver import Resolution, resolve
 from atrium.library.walker import Candidate, Skipped, WalkResult, walk
 
@@ -80,6 +86,8 @@ from atrium.library.walker import Candidate, Skipped, WalkResult, walk
 #: a half-mounted share is caught. An operator who really did delete a third of their films passes
 #: `confirm_removals`, which is a decision somebody makes rather than a threshold nobody notices.
 DEFAULT_REMOVAL_THRESHOLD = 0.25
+
+logger = logging.getLogger(__name__)
 
 
 class ScanRefusedError(RuntimeError):
@@ -113,60 +121,6 @@ class TooManyRemovalsError(ScanRefusedError):
     """
 
 
-@dataclass(frozen=True, slots=True)
-class ScanReport:
-    """What one scan of one library did.
-
-    Carries `removed` from the start even though this module can never make it non-zero, so that
-    T16's threshold and T17's removals report into one type rather than each inventing half of one.
-    """
-
-    library_id: str
-    added: int = 0
-    updated: int = 0
-    unchanged: int = 0
-
-    examined: int = 0
-    """Candidate files whose `(size, mtime_ns)` had moved, so this scan looked at them again
-    rather than keeping the row it already had.
-
-    Every other candidate was skipped by the signal (plan section 6.4). Looking at a file means
-    asking the metadata seam what is inside it, which only a music library does - so a `movies`
-    scan can report a non-zero `examined` having opened nothing. It is a count of what was *not
-    trusted*, not of what was read.
-
-    Under `deep` this is every candidate, which is the whole of what `deep` means.
-    """
-
-    removed: int = 0
-    """Items whose files are gone, marked `removed_at`. **Soft**: the row stays and so does the
-    user data keyed to its identifier (spec section 3.8)."""
-
-    revived: int = 0
-    """Items whose files came back, brought out of removal **with the same identifier**."""
-
-    missing: int = 0
-    """Items in the database whose files are no longer on disk.
-
-    The same number as `removed` in an ordinary scan; it stays a separate field because guard
-    three counts it *before* deciding whether to act, and a scan that refuses reports a `missing`
-    with a `removed` of zero.
-    """
-
-    skipped: tuple[Skipped, ...] = field(default_factory=tuple)
-    """Every file the walk went past, each with its reason (plan section 7)."""
-
-    @property
-    def changed(self) -> int:
-        return self.added + self.updated
-
-    def reasons(self) -> dict[str, int]:
-        counts: dict[str, int] = {}
-        for one in self.skipped:
-            counts[one.reason.value] = counts.get(one.reason.value, 0) + 1
-        return counts
-
-
 #: How deep each type sits, so that a parent is always written before its children.
 #:
 #: Explicit rather than left to the unit of work. `parent_id` is set as a column here rather than
@@ -191,6 +145,7 @@ def scan(
     deep: bool = False,
     removal_threshold: float = DEFAULT_REMOVAL_THRESHOLD,
     confirm_removals: bool = False,
+    progress: ProgressSink = silent,
 ) -> ScanReport:
     """Bring the database into line with what is on disk.
 
@@ -206,11 +161,17 @@ def scan(
     Raises `ScanRefusedError` before writing anything when one of the three guards of plan section
     6.5 fires. Raising rather than returning is deliberate: a returned report can be ignored by a
     caller in a hurry, and an exception rolls the caller's transaction back on its way out.
+
+    `progress` is called as the scan moves through its three phases (plan section 6.7) and defaults
+    to reporting to nobody. **A guard that refuses raises without a final report**, which is
+    correct: there is no summary of a scan that did not happen, and a progress sink that had been
+    told "walking, 3 of 3 roots" and then hears nothing more is being told the truth.
     """
     paths = _root_paths(library, roots)
     _require_readable_roots(library, paths)
 
-    walked = _walk_every_root(library, paths)
+    report = _Reporter(progress, library.id)
+    walked = _walk_every_root(library, paths, report)
     repository = ItemRepository(session)
     existing = repository.by_library(library.id)
 
@@ -227,8 +188,17 @@ def scan(
     unchanged_paths = frozenset() if deep else _unchanged_paths(walked, existing)
     examined = len(walked.candidates) - len(unchanged_paths)
 
+    # Reported once, after the fact, because `resolve` is a single pure call with nothing to
+    # interrupt it. Emitting a made-up gradient across it would be a progress bar animating while
+    # nothing is measured, which is the failure this whole module is trying not to be.
     resolution = resolve(library, walked.candidates, _OnlyChanged(source, unchanged_paths))
     kept = _reconcile(resolution, existing, deep=deep)
+    report(
+        Phase.RESOLVING,
+        len(walked.candidates),
+        len(walked.candidates),
+        f"{len(kept)} item(s)",
+    )
 
     found = set(kept)
     # Already-removed items are not missing *again*. Counting them would make the guard fire on
@@ -251,7 +221,9 @@ def scan(
     added = updated = unchanged = 0
     returning: list[str] = []
 
-    for item in sorted(kept.values(), key=lambda one: (_DEPTH[one.type], one.id)):
+    ordered = sorted(kept.values(), key=lambda one: (_DEPTH[one.type], one.id))
+    for written, item in enumerate(ordered, start=1):
+        report(Phase.WRITING, written, len(ordered))
         before = existing.get(item.id)
         if before is None:
             repository.add(replace(item, date_created=now, date_modified=now))
@@ -280,6 +252,10 @@ def scan(
         revived=revived,
         missing=len(missing),
         skipped=walked.skipped,
+        # Filtered to what was kept, so the report describes the **library** rather than the
+        # resolution: a notice about an item this scan decided not to write would be a line an
+        # operator could not go and look at.
+        noticed=tuple(one for one in resolution.noticed if one.item_id in kept),
     )
 
 
@@ -385,15 +361,55 @@ def _root_paths(library: Library, roots: Iterable[Path] | None) -> list[Path]:
     return sorted(Path(root) for root in (roots if roots is not None else library.roots))
 
 
-def _walk_every_root(library: Library, paths: Sequence[Path]) -> WalkResult:
-    """Every configured root, walked and merged into one result."""
+def _walk_every_root(
+    library: Library, paths: Sequence[Path], report: _Reporter | None = None
+) -> WalkResult:
+    """Every configured root, walked and merged into one result.
+
+    Progress here counts **roots**, not files, and `detail` says which one. How many files a tree
+    holds is precisely what this loop is computing, so there is no denominator to report until it
+    is over - see `Progress.total`.
+    """
     candidates: list[Candidate] = []
     skipped: list[Skipped] = []
-    for root in paths:
+    for done, root in enumerate(paths, start=1):
         result = walk(root, library.collection_type)
         candidates.extend(result.candidates)
         skipped.extend(result.skipped)
+        if report is not None:
+            report(Phase.WALKING, done, len(paths), str(root))
     return WalkResult(candidates=tuple(candidates), skipped=tuple(skipped))
+
+
+class _Reporter:
+    """The only thing that calls the progress sink, so a sink that raises cannot take a scan down.
+
+    A progress sink is somebody else's code - a log line, a websocket, a terminal - and a scan
+    destroyed by its own instrumentation would roll back a transaction that had nothing wrong with
+    it. So a sink that raises is **disabled for the rest of this scan** and logged once. Once,
+    rather than per item: a sink that fails on the first call fails on all of them, and a scan of a
+    large library would otherwise write one traceback per file to explain a single broken callback.
+    """
+
+    __slots__ = ("_library_id", "_sink", "_working")
+
+    def __init__(self, sink: ProgressSink, library_id: str) -> None:
+        self._sink = sink
+        self._library_id = library_id
+        self._working = True
+
+    def __call__(self, phase: Phase, done: int, total: int | None, detail: str = "") -> None:
+        if not self._working:
+            return
+        try:
+            self._sink(Progress(self._library_id, phase, done, total, detail))
+        except Exception:
+            self._working = False
+            logger.exception(
+                "progress sink raised; progress for the scan of library %s is disabled for the "
+                "rest of this scan. The scan itself continues.",
+                self._library_id,
+            )
 
 
 # ----------------------------------------------------------------------------------------------
@@ -499,7 +515,6 @@ __all__ = [
     "RootSuddenlyEmptyError",
     "RootUnreadableError",
     "ScanRefusedError",
-    "ScanReport",
     "TooManyRemovalsError",
     "scan",
 ]

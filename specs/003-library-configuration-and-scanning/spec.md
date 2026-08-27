@@ -418,8 +418,11 @@ change was put back with it, which is what an ordinary copy or restore does. An 
 therefore ask for a **full re-examination** that ignores the signal and looks at every file. The
 default is the fast one, the full one is always available, and neither is described as the other.
 
-A scan reports progress and a summary: items added, updated, removed, files examined, and files
-skipped with the reason.
+A scan reports progress and a summary: items added, updated, removed, files examined, files
+skipped with the reason, and files that **were** scanned but whose names said too little to place
+the item they produced. The last two are counted apart. A file that was skipped is not in the
+library and a file that was noticed is, so an operator told that both were "skipped" would go
+looking for something that is not missing.
 
 ## 4. Data the feature owns
 

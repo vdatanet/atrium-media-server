@@ -243,6 +243,13 @@ SHOWS = Library(
             "section 3.4: an episode number exceeding any real count is not an error",
         ),
         Entry(
+            "The Series/Season 01/blob.mkv",
+            Kind.MEDIA,
+            "plan section 7: a name nothing can be read from is not an error. It becomes an item "
+            "with a title and no episode number, and the scan says so rather than dropping the "
+            "file - T20",
+        ),
+        Entry(
             "The Series/Season 03/",
             Kind.IGNORED,
             "section 3.4: a season directory with no episodes is normal, and stays empty here",

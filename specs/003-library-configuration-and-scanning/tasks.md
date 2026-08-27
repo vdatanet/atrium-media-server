@@ -1152,14 +1152,65 @@ guards were written for an unmounted share and they catch this too.
 of them. A derivation that happened to be relative to the *first* configured root would pass every
 other test in the file.
 
-## T20 — Scan reporting
+## T20 — Scan reporting  ✅
 
-- [ ] **Changes:** progress and the summary `ScanReport` carries — added, updated, removed, and
+- [x] **Changes:** progress and the summary `ScanReport` carries — added, updated, removed, and
   files skipped **with the reason**.
 - **Depends on:** T17
 - **Verified by:** a scan over a fixture containing an unreadable file and an unparseable name
   reports both, each with its reason, and neither aborts the scan.
 - **Plan reference:** §3, §7
+
+### Done — 2026-08-27
+
+**"Reports both, each with its reason" cannot be one list, and that is the task.** An unreadable
+file produced **no item**; an unparseable name produced one that is sitting in the library now. An
+operator told "2 files skipped" goes looking for two missing films and finds one, having spent the
+search on something that is not missing. So the summary has two lists — `skipped` and `noticed` —
+and `library/report.py` opens by saying why. The vocabulary for each lives with whatever produces
+it: `Skip` is the walker's and `Notice` is the resolver's.
+
+**The fixture caught a real bug before any test did.** The first version computed notices in
+`report.py` from the finished items — every `Episode` with no `index_number` — which looked clean
+and kept the resolver pure. Adding one unparseable name to the fixture reported **two** notices,
+and the second was `The Daily Show - 2024-01-31.mkv`. A daily show's episodes are ordered by their
+date and need no number; an `Item` carries no date, so from the items alone "the name said nothing"
+and "the name said a date" are the same thing. Only the module that read the name can tell them
+apart. Left uncaught, every scan of a library with a daily show in it would have reported every one
+of its episodes as unparseable — the kind of noise that gets a whole category ignored.
+
+**Plan §7 named a failure that does not happen.** It said an unreadable file inside a readable root
+is skipped, counted and reported. It is not: a `chmod 000` file **stats perfectly well**, and stat
+is all the walk does, so it becomes a candidate, becomes an item, and is found to be unreadable by
+whoever first opens it — 008. What *is* detectable is a file whose stat raises (a dangling symlink)
+and a directory that cannot be listed. A test holds all three, including the one that is scanned,
+because a row that is wrong in this direction is one an implementer writes a check for and never
+sees fire.
+
+**Progress reports roots during the walk, not files, because it does not know how many files there
+are** — that is the number the walk is computing. `Progress.total` is `None`-able and `fraction`
+returns `None` rather than a number, since a progress bar that invents a denominator jumps
+backwards, which is worse than one that admits it does not know. Resolution is reported once, after
+the fact: `resolve` is a single pure call, and animating a made-up gradient across it would be the
+exact dishonesty this module exists to avoid.
+
+**A scan must not be destroyed by its own instrumentation.** A progress sink is somebody else's
+code, and a scan that died because a terminal went away would roll back a transaction that had
+nothing wrong with it. A sink that raises is **disabled for the rest of that scan and logged
+once** — once, because a sink that fails on the first call fails on all of them, and a scan of a
+large library would otherwise write one traceback per file to explain one broken callback.
+
+**A refused scan returns no summary and reports no progress.** There is no summary of a scan that
+did not happen, and the guards refuse before the walk, so a sink hears nothing at all rather than
+hearing a phase begin and then silence.
+
+**`ScanReport` moved to `library/report.py`**, which plan §3 has listed since the plan was written
+and which did not exist until now. `scan.py` imports it; the tests import it from where it lives
+rather than through a re-export, so the module boundary is real rather than decorative.
+
+**Verified by mutation.** Noticing every numberless episode, calling a broken sink more than once,
+letting a broken sink raise, and reporting a file count during the walk each fail at least one
+test.
 
 ## T21 — The acceptance map for 003
 
