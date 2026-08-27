@@ -36,6 +36,12 @@ dependencies = [
     # silently absent. 006 needs Pillow anyway for resizing, so this is the same dependency
     # arriving one feature early - and it is used here for **header reads only**: `Image.open`
     # parses enough to report a size and never decodes a pixel.
+    # The two remote providers, used synchronously (004 plan section 6.8). It was already in the
+    # dev group for FastAPI's test client, so promoting it beats carrying a second HTTP client -
+    # and having exactly one means `metadata/remote.py` can be the only module that constructs a
+    # client, which is what makes "no test reaches the network" enforceable by construction rather
+    # than by discipline.
+    "httpx>=0.28",
     "pillow>=11.0",
     "pydantic>=2.10",
     "sqlalchemy>=2.0",
@@ -51,7 +57,6 @@ atrium = "atrium.server:main"
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
-    "httpx>=0.28",
     "ruff>=0.9",
     "mypy>=1.14",
     # The naming corpus (tests/corpus/naming.yaml) is a table of several dozen rows that each
