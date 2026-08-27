@@ -1,11 +1,12 @@
 ---
 feature: 005-item-query-api
 title: Item query API — implementation plan
-status: Draft
+status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
 spec_status_required: Accepted
 spec_status_actual: Accepted
+accepted: 2026-08-27
 ---
 
 # 005 — Implementation plan
