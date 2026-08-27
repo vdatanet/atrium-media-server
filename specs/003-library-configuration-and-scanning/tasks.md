@@ -232,9 +232,9 @@ domain object that knew would make the conformance sweep unenforceable. The test
 adding `from atrium.db.engine import build` to `items.py`, watching it fail with the package named,
 and reverting.
 
-## T4 — `domain/sorting.py`: both derivations
+## T4 — `domain/sorting.py`: both derivations  ✅
 
-- [ ] **Changes:** the base six-step derivation, the three type overrides, and the **dispatcher**
+- [x] **Changes:** the base six-step derivation, the three type overrides, and the **dispatcher**
   that chooses between them — `sort_name(item)`, one entry point, so that no caller can reach the
   base rule directly.
 - **Depends on:** T3
@@ -250,6 +250,48 @@ and reverting.
   base rule reaching audio as High likelihood and every-album-reordered impact; a private base
   function with no public caller is what makes that unreachable rather than merely tested.
 - **Plan reference:** §6.2, §9
+
+### Done — 2026-08-27
+
+**Step 6 asserts something nobody measured, and it took writing it to notice.**
+[spec §3.7.1](spec.md#371-the-base-derivation) step 6 is "fold diacritics; transliterate anything
+still outside ASCII" — and the whole measured set contains exactly one non-ASCII name, `Amélie`,
+whose `é` **decomposes**. Folding alone reaches it. Not one crafted case needed a transliteration,
+so the second half of that step is a claim with no measurement under it. `ø`, `ß`, `æ` and every
+non-Latin script were never sent. Now **OQ-7**, with the spec and
+[behaviours §2.6](../../docs/compatibility/behaviours.md#26-sortname-has-two-derivations-and-three-types-use-the-second)
+both saying which half is reproduced and which half is a decision: v1 folds, applies a short table
+of the obvious Latin readings, and drops what remains. Dropping is at least stable — the same name
+always sorts to the same place — which a partial guess would not be.
+
+**The algorithm now exists twice, and something checks the copies agree.**
+[`tools/probe_sort_names.py`](../../tools/probe_sort_names.py) carries its own derivation and
+**cannot import this one**: a probe is standard-library only and runs on a 3.9 with no environment
+built. So `tests/unit/test_sorting_matches_the_probe.py` asserts the two produce the same answer
+for all fifteen cases, both override formulas, and all four configured defaults. What drift would
+cost is specific rather than tidy: the probe is the regression suite for the project's *beliefs*,
+and a probe that has drifted from `domain/sorting.py` stays green while the reference and the
+server we ship disagree — the one failure it exists to prevent. Checked by changing the pad width
+to 9 and watching it name the three rows that diverged.
+
+**`isdigit` is the wrong predicate and the probe had it too.** C#'s `char.IsDigit` is the Unicode
+`Nd` category exactly; Python's `str.isdigit` also accepts superscripts, so `R²` would pad to
+something no ordering wants. Both sides now use `isdecimal`. Unmeasured either way — no probe case
+carried one — but a deliberate choice beats an inherited one, and the drift test would otherwise
+have been asserting agreement between two things deliberately made different.
+
+**`Season` is not "the prefix plus the name" with an empty name.** The first version of the
+"does not fall through to the base rule" test parametrised all three overriding types and asserted
+each keeps its raw name. `Season` fails that, correctly: its formula is
+[the number alone and nothing else](spec.md#372-the-three-types-that-replace-it). The test was
+wrong, not the code — and it is exactly the misreading that would later have somebody "fix" the
+function by appending the name.
+
+**Fifteen rows, not fourteen.** [spec §3.7.1](spec.md#371-the-base-derivation)'s table prints
+fourteen; the probe sent fifteen. The extra one is `Amelie`, the ASCII control for the diacritic
+row, which says nothing on its own and is what makes the row below it mean something. The tests
+carry all fifteen, and one of them asserts the probe still sends fifteen — a shrinking case list
+means a row of §3.7.1 quietly stopped being measured.
 
 ## T5 — `library/identity.py`
 

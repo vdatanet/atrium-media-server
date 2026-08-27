@@ -324,6 +324,12 @@ recognise as wrong.
 **Atrium does:** both, exactly, including the whitespace artefacts. Full specification in
 [003 §3.7](../../specs/003-library-configuration-and-scanning/spec.md).
 
+**One part of step 6 is not measured and is not claimed.** The step says "transliterate anything
+still outside ASCII", and the only case in the measured set is `Amélie` — whose `é` decomposes, so
+folding alone reaches it. A character with no ASCII decomposition (`ø`, `ß`, a non-Latin script)
+was never sent. Atrium folds, applies a short table of the obvious Latin readings, and drops what
+remains; that last part is a decision, not a reproduction, and it is 003 OQ-7.
+
 Two temptations to name, because both are what a careful implementer would otherwise do:
 
 1. **Tidying the whitespace.** Collapsing `rock  roll` to `rock roll` changes the ordering of every
