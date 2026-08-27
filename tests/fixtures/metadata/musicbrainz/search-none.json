@@ -1,0 +1,11 @@
+{
+  "count": 2,
+  "release-groups": [
+    {"id": "aaaaaaaa-0000-4000-8000-000000000001", "title": "A Different Album",
+     "first-release-date": "1998",
+     "artist-credit": [{"name": "The Fixture Ensemble"}]},
+    {"id": "aaaaaaaa-0000-4000-8000-000000000002", "title": "The Fixture Album",
+     "first-release-date": "1998",
+     "artist-credit": [{"name": "Somebody Else"}]}
+  ]
+}

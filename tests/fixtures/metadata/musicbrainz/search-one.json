@@ -1,0 +1,16 @@
+{
+  "count": 1,
+  "release-groups": [
+    {
+      "id": "00000000-0000-4000-8000-000000000002",
+      "title": "The Fixture Album",
+      "primary-type": "Album",
+      "first-release-date": "1998-05-04",
+      "artist-credit": [
+        {"name": "The Fixture Ensemble",
+         "artist": {"id": "00000000-0000-4000-8000-000000000003",
+                    "name": "The Fixture Ensemble"}}
+      ]
+    }
+  ]
+}

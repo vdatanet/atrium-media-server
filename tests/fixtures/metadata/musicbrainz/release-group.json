@@ -1,0 +1,15 @@
+{
+  "id": "00000000-0000-4000-8000-000000000002",
+  "title": "The Fixture Album",
+  "primary-type": "Album",
+  "first-release-date": "1998-05-04",
+  "genres": [{"name": "electronic"}, {"name": "ambient"}],
+  "artist-credit": [
+    {"name": "The Fixture Ensemble",
+     "joinphrase": " & ",
+     "artist": {"id": "00000000-0000-4000-8000-000000000003",
+                "name": "The Fixture Ensemble"}},
+    {"name": "A Guest",
+     "artist": {"id": "00000000-0000-4000-8000-000000000004", "name": "A Guest"}}
+  ]
+}
