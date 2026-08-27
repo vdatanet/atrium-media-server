@@ -304,3 +304,9 @@ rows:
   - {path: "The Artist/Live 1999/01 - The Track.flac", collection_type: music, needs: music,
      why: "a year inside an album name stays in the album name",
      expect: {album: "Live 1999"}}
+
+  # Added at T13, after running the parser over 5,814 real tracks from a live reference. The
+  # control for it is the CD2 row above, which asserts that an explicit disc still wins.
+  - {path: "The Artist/Another Album/03 - A Later Track.flac", collection_type: music, needs: music,
+     why: "a track with no disc marker is on disc ONE, not on an unknown disc - the reference reports disc 1 for 5,152 of 5,814 tracks, and treating it as unknown scored 21% against 98%",
+     expect: {disc: 1, track: 3, album: "Another Album"}}

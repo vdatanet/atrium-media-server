@@ -747,9 +747,9 @@ number that is not *larger* than the first is not a span — `12-00 AM` is an ep
 not the same as no season**: a falsy check conflates `Specials` with a directory that says nothing,
 and there is a test for each.
 
-## T13 — `library/naming/music.py` and the metadata seam
+## T13 — `library/naming/music.py` and the metadata seam  ✅
 
-- [ ] **Changes:** path-based structure; the `MetadataSource` protocol 004 will implement, with a
+- [x] **Changes:** path-based structure; the `MetadataSource` protocol 004 will implement, with a
   path-only implementation for now. Removes the `xfail` markers from the `music` rows.
 - **Depends on:** T10, T1 — the precedence is measured, in
   [spec §3.5](spec.md#35-music). Note what it does **not** cover: a flat directory of well-tagged
@@ -758,6 +758,56 @@ and there is a test for each.
   compilation with a different artist per track as one album**; the seam is exercised by a stub
   returning tags, proving 004 can override the path without 003 changing.
 - **Plan reference:** §5, [spec §3.5](spec.md#35-music)
+
+### Done — 2026-08-27
+
+**A track with no disc marker is on disc one, not on an unknown disc.** Measured across 5,814 real
+tracks: the reference reports disc 1 for **5,152** of them. Treating an unmarked track as *unknown*
+— which is what the first implementation did, and what "the path did not say" naturally suggests —
+scored **21.2%** against **98.0%** for defaulting to one.
+
+[spec §3.7.2](spec.md#372-the-three-types-that-replace-it) corroborates it from the other side, and
+nobody had noticed: an `Audio` sort name is `0001 - 0003 - The Song`, and **that leading `0001` is
+this default**. Without it every track in the library would sort with a prefix one segment short of
+what the specification shows.
+
+**Path-only resolution, measured on the same 5,814 tracks:**
+
+| | |
+|---|---|
+| disc | **98.0%** |
+| album artist | 89.3% |
+| album | 84.9% |
+| track number | 77.9% |
+| title | **4.9%** |
+
+That last figure is not a defect — it is T9's finding again, from the other end. Titles come from
+tags, which is exactly what the seam is for, and a module scoring 4.9% on titles while scoring 98%
+on discs is a module doing the half of the job it owns.
+
+**A single directory level is an artist, not an album**, and the first implementation had it the
+other way round. `Artist/Track.flac` read the one directory as the album, which would file every
+loose track in a library under an album named after the person who made it. Caught by a corpus row
+whose whole reason was that sentence.
+
+**A trailing year in an album directory stays in the album's name.** `Live 1999` is an album
+called `Live 1999`, while `The Album (2001)` is `The Album` from 2001 — so only a *bracketed* year
+is a year here, unlike a film's. The bare form is part of how albums are named.
+
+**An empty tag is a tag, not an absence.** A file that says its album is the empty string has said
+something, and the reference copies it — 129 of 5,814 resolved names keep whitespace a path could
+not produce, which is how T1 identified them as tags at all. Treating empty as absent would put
+that track back under its directory's name, silently.
+
+**The seam is proven substitutable rather than described as such.** A stub source overrules the
+path in **every** field the parse carries, one test per field: if any of them could not be
+overridden, 004 would have to change this module to add it, and music identification would land
+there as a rewrite. `PathOnly` is not a placeholder either — a server with no metadata provider
+configured runs on exactly it, forever.
+
+**The corpus is now green in full: `AWAITING` is empty and no `xfail` remains.** The mechanism T9
+built worked exactly as designed — each of T10 to T13 had to delete its own line to go green, and
+`strict=True` meant none of them could have been left behind.
 
 ## T14 — `library/resolver.py`
 
