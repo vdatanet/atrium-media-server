@@ -58,6 +58,18 @@ class UnauthenticatedError(Exception):
     """No usable credential on a route that needs one. Answered with an empty 401."""
 
 
+class ForbiddenError(Exception):
+    """A usable credential, and the account may not do this. Answered with an empty 403.
+
+    ⚠️ **The shape is not measured.** The empty `401` above was measured for an unauthenticated
+    route; no refusal of this kind could be issued against the reference from here, because the
+    account available to measure with is an administrator and an administrator lacks no
+    permission. It is emitted in the same shape as the `401` beside it, on the argument that it is
+    decided in the same place - before any route body runs - and 002 spec section 7 (OQ-5) carries
+    it as an open question rather than as a claim.
+    """
+
+
 class ClientAuthorizationError(Exception):
     """The client-identification header is missing or unreadable where it is required.
 
@@ -101,6 +113,10 @@ def empty_error(status_code: int, headers: dict[str, str] | None = None) -> Resp
 
 async def unauthenticated_handler(_request: Request, _exc: Exception) -> Response:
     return empty_error(401)
+
+
+async def forbidden_handler(_request: Request, _exc: Exception) -> Response:
+    return empty_error(403)
 
 
 def controller_error(status_code: int) -> Response:
@@ -159,6 +175,7 @@ async def routing_handler(request: Request, exc: Exception) -> Response:
 #: wire shape of everything else.
 EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     UnauthenticatedError: unauthenticated_handler,
+    ForbiddenError: forbidden_handler,
     ClientAuthorizationError: client_authorization_handler,
     InvalidCredentialsError: invalid_credentials_handler,
     AccountUnavailableError: account_unavailable_handler,
@@ -173,12 +190,14 @@ __all__ = [
     "AccountUnavailableError",
     "ClientAuthorizationError",
     "ExceptionHandler",
+    "ForbiddenError",
     "InvalidCredentialsError",
     "UnauthenticatedError",
     "account_unavailable_handler",
     "client_authorization_handler",
     "controller_error",
     "empty_error",
+    "forbidden_handler",
     "invalid_credentials_handler",
     "routing_handler",
     "unauthenticated_handler",
