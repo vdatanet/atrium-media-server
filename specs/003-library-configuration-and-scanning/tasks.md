@@ -700,9 +700,9 @@ merged that should not have been — 0 empty names, and the resolved name matche
 **69.9%**, against 29.4% for the file alone. The remaining 30% are titles metadata replaced, which
 T9 established the API cannot show us.
 
-## T12 — `library/naming/series.py`
+## T12 — `library/naming/series.py`  ✅
 
-- [ ] **Changes:** season and episode extraction across the naming conventions, including
+- [x] **Changes:** season and episode extraction across the naming conventions, including
   date-based; multi-episode files; specials; extras. Removes the `xfail` markers from the `series`
   rows.
 - **Depends on:** T10
@@ -711,6 +711,41 @@ T9 established the API cannot show us.
   is where naive scanners fail: the pattern is matched against the filename first, then the parent
   directory.
 - **Plan reference:** [spec §3.4](spec.md#34-series-seasons-and-episodes)
+
+### Done — 2026-08-27
+
+**917 of 917.** Run over every episode of a real library, the parser produced the same season and
+episode number the reference resolved for **all 917** — no crashes, none missing, none wrong — and
+derived a series name for every one `[read: Jellyfin 10.11.11, 2026-08-27]`. That is the strongest
+result any task here has had, and it is worth saying why it was available: T9 measured the ground
+truth *before* this was written, so the numbering had a real target to hit rather than a corpus
+written by the same hand an hour earlier.
+
+**The pattern order is load-bearing, not tidiness.** `S01E02-E03` **contains** `S01E02`, so a
+scanner that tries the simple pattern first finds it, stops, and discards the second number with
+nothing to show for it. That is AC-5 failing silently, and the only thing preventing it is that the
+span patterns are tried first. The module says so where the patterns are declared, because the
+obvious tidy-up is to sort them by how common they are.
+
+**The spec contradicted itself about extras, and this task is where it had to be settled.**
+[§3.2](spec.md#32-what-is-considered-a-media-file) lists them as ignored;
+[§3.4](spec.md#34-series-seasons-and-episodes) said they are *"attached to their parent"*. Those
+are different behaviours and T8 had already implemented the first. v1 ignores them, and §3.4 now
+says so with the argument: an extra is not structure — it has its own title, artwork and duration,
+which are 004's, 006's and 008's — and there is **nowhere to attach one**, because an item's files
+are the parts of the work itself and a trailer among them would play as part of the film. An
+operator loses nothing they can currently see, and a later feature that adds a surface for extras
+starts from a rule rather than from two paragraphs that disagree.
+
+**`1x02` shaped the implementation because T9 measured it.** 902 of 917 episodes used it against
+`S01E02`'s 15. Written from intuition this module would have had `SxxExx` as the main path and
+`1x02` as an afterthought, and been the slow way round on 98% of a real library.
+
+**Two guards exist because the numbers are ambiguous, not because a test wanted them.** A second
+number that is not *larger* than the first is not a span — `12-00 AM` is an episode title, and
+`24 - S01E01 - 12-00 AM` would otherwise become an episode spanning 1 to 0. And season **zero is
+not the same as no season**: a falsy check conflates `Specials` with a directory that says nothing,
+and there is a test for each.
 
 ## T13 — `library/naming/music.py` and the metadata seam
 

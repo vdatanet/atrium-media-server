@@ -17,14 +17,19 @@ from atrium.library.naming.clean import (
     is_tag,
 )
 from atrium.library.naming.movies import MovieParse, group, parse_movie
+from atrium.library.naming.series import SPECIALS, EpisodeParse, parse_episode, season_of_directory
 
 __all__ = [
+    "SPECIALS",
     "CleanName",
+    "EpisodeParse",
     "MovieParse",
     "clean_name",
     "cut_at_release_metadata",
     "from_text",
     "group",
     "is_tag",
+    "parse_episode",
     "parse_movie",
+    "season_of_directory",
 ]
