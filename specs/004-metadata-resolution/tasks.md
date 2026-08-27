@@ -337,7 +337,7 @@ it.
 
 ## T8 — `metadata/artwork.py`
 
-- [ ] **Changes:** Pillow enters the dependencies; the name tables of
+- [x] **Changes:** Pillow enters the dependencies; the name tables of
   [spec §3.4](spec.md#34-local-artwork); ordering for numbered backdrops; dimensions and the
   content tag at association time; embedded cover art as `Primary` only when no file-based one
   exists.
@@ -347,6 +347,28 @@ it.
   exists without dimensions and a tag**; the tag is unchanged across a rescan of an unchanged file
   and changes when the bytes do — 006 AC-2's ancestor, cheaper to hold now than to retrofit.
 - **Plan reference:** §6.4
+- **Done (2026-08-27):** the tables in [spec §3.4](spec.md#34-local-artwork) and
+  [plan §6.4](plan.md#64-local-artwork) were a **subset of the reference's with two orderings
+  reversed**, and both are corrected in this change.
+  **Reversed:** `thumb` before `landscape` — the reference tries `landscape` first — and `disc`
+  before `cdart` for a music album, where the reference prefers `cdart` because that is what
+  every ripper writes.
+  **Missing:** the Primary list is **five lists, not one** (an album and an artist try `folder`
+  first and answer to `jacket` and `albumart`; a series to `show`; a film to `movie`; a person to
+  neither); the per-item form is the **bare file name**, tried before every folder name, as well
+  as the `<stem>-<name>` prefix, which applies to every name and not only `poster`; there is a
+  fourth backdrop family (`art`) and an `extrafanart` folder taken whole; `clearart` is an `Art`
+  image; and an episode, a track and a person get a Primary and **nothing else**.
+  **And the numbered rule is not the one T2's fixture was built for.** Variants use a dash
+  (`fanart-1`) except `backdrop`, which does not (`backdrop1`), and the scan **stops after three
+  consecutive misses** rather than at the first gap — so a library that lost `fanart-3` keeps
+  `fanart-4` onwards. The fixture holds `fanart3` and `fanart-10` expecting a
+  lexicographic-versus-numeric trap; neither is found, and the fixture proves the real rule just
+  as well, so it stays with its expectation corrected.
+  **Readability is part of the first-match rule rather than a check after it.** One corrupt
+  `poster.jpg` must not leave an item with no image while a good `folder.png` sits beside it, so
+  a file Pillow cannot identify is skipped with a warning **and the next name wins** — asserted
+  on the `unreadable/` fixture.
 
 ## T9 — The write path: `MetadataRepository` and the by-name rows
 

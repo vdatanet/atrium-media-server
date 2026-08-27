@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-27
 accepted: 2026-08-27
-amended: 2026-08-27 by T1 - section 3.3, OQ-4 and OQ-5
+amended: 2026-08-27 by T1 - section 3.3, OQ-4 and OQ-5; by T8 - section 3.4
 depends_on: [003]
 ---
 
@@ -120,17 +120,33 @@ an unreadable tag block the way it treats a malformed sidecar: warn, continue.
 
 Files beside the media, recognised by name, before any provider is consulted:
 
-| Image | Names |
+| Image | Names, in the order they are tried |
 |---|---|
-| Primary | `poster`, `folder`, `cover`, `default`, or `<filename>-poster` |
-| Backdrop | `fanart`, `backdrop`, `background`, and numbered variants |
+| Primary | the item's own file name; then `poster`, `folder`, `cover`, `default` — **but a music album or artist tries `folder` first** and also answers to `jacket` and `albumart`, a series to `show`, a film to `movie`, and a person only to `folder` and `poster` |
+| Backdrop | `fanart`, `background`, `art`, `backdrop`, each with numbered variants, and an `extrafanart` folder taken whole |
 | Logo | `logo`, `clearlogo` |
-| Thumb | `thumb`, `landscape` |
+| Art | `clearart` |
+| Thumb | `landscape`, `thumb` |
 | Banner | `banner` |
-| Disc | `disc`, `cdart` |
+| Disc | `disc`, `cdart`, `discart` — **but a music album tries `cdart` first**, and only a film answers to `discart` |
+
+Each name may also be prefixed with the item's own file name, which is what lets two films in one
+folder have different posters.
+
+**Backdrops accumulate; every other type is first-match-wins.** An item has one poster and as many
+backdrops as it has files for, in that order.
+
+**An episode, a track and a person get a Primary and nothing else** — no logo, no banner, no
+backdrop, no disc.
 
 Embedded cover art in an audio file is a Primary image when no file-based one exists. Delivery,
 resizing and cache tags are feature 006; this feature only decides **which file is which image**.
+
+> **Corrected at T8**, which read the reference's tables rather than reasoning from this one. Two
+> orderings here were backwards — `thumb` before `landscape`, and `disc` before `cdart` for an
+> album — and the list was a subset: the per-type names, the bare-file-name form, the `art` family
+> and the `extrafanart` folder were all missing
+> `[source: MediaBrowser.LocalMetadata/Images/LocalImageProvider.cs:18-400 @ v10.11.11]`.
 
 ### 3.5 Remote providers
 

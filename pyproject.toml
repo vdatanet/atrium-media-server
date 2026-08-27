@@ -31,6 +31,12 @@ dependencies = [
     # multi-values into one string - destroying the thing AC-6 exists to keep. GPL-2.0-or-later,
     # compatible with this project's GPL-3.0-or-later.
     "mutagen>=1.47",
+    # Image dimensions at association time. `PrimaryImageAspectRatio` needs width and height
+    # (005 section 3.2), and an association row without them makes an item's aspect ratio
+    # silently absent. 006 needs Pillow anyway for resizing, so this is the same dependency
+    # arriving one feature early - and it is used here for **header reads only**: `Image.open`
+    # parses enough to report a size and never decodes a pixel.
+    "pillow>=11.0",
     "pydantic>=2.10",
     "sqlalchemy>=2.0",
     "uvicorn[standard]>=0.34",
