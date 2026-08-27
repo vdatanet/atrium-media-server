@@ -210,6 +210,15 @@ The stable identity is:
 | Series, MusicAlbum, MusicArtist | The library root plus the normalised name |
 | CollectionFolder | The library's configured identity |
 
+**Normalised** means the same thing for a path and for a name, and it is three steps: separators
+reduced to one form, the text reduced to one Unicode form, and case folded — the last only when the
+library is not case-sensitive. Each exists because the *same* file or name would otherwise produce
+two identifiers: a walker on one platform yields one separator and on another the other; one
+filesystem hands back a decomposed accent where another gives the precomposed character; and a
+directory renamed only in its capitalisation is not a different directory. A path that is absolute,
+or that climbs above its root, is refused rather than normalised — either one means the caller has
+a path that is not relative to the root it believes it is.
+
 **Reproducing the reference's exact identifiers for the same file is not a goal**, and the reasoning
 is in [behaviours §1.4](../../docs/compatibility/behaviours.md#14-item-identifiers-are-32-lowercase-hex-characters).
 

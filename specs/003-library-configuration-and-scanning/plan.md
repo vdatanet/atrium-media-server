@@ -150,7 +150,27 @@ Each returns a structured result with everything the path can tell us and `None`
 No exceptions for unparseable input: an unrecognised name is a result with a title and nothing else,
 which is what the reference produces too.
 
-**`library.identity.derive(item_type, library_id, relative_path) -> Guid32`** — §6.3.
+**`library.identity`** — one function per identity *rule*, not one function. §6.3 describes the
+hashing, and [spec §3.6](spec.md#36-identity) describes four different keys going into it:
+
+```python
+def for_file(item_type, library_id, relative_path, *, case_sensitive=False) -> Guid32: ...
+def for_name(item_type, library_id, name, *, case_sensitive=False) -> Guid32: ...
+def for_season(series_id, season_number) -> Guid32: ...
+def for_library(library_id) -> Guid32: ...
+```
+
+**Corrected at T5.** This section previously named a single
+`derive(item_type, library_id, relative_path)`, which is the rule for a `Movie`, an `Episode` and
+an `Audio` and is wrong for the other five types: a `Season`'s key is its series' identity plus a
+number, a `Series`, `MusicAlbum` or `MusicArtist` takes its library plus a normalised name, and a
+`CollectionFolder` takes the library alone. Passing a series identity as the `relative_path`
+argument would have satisfied the signature and produced a perfectly valid identifier for the wrong
+thing. Each function now refuses a type belonging to another rule, and `RULE_OF` maps every type to
+exactly one.
+
+The hashing itself is **not** in `library/`: `atrium.compat.guids.derive` has done the NUL-joined,
+truncated SHA-256 since 001, and 003 is the first caller its docstring anticipated.
 
 **`domain.sorting.sort_name(item) -> str`** — dispatches on type, §6.2.
 

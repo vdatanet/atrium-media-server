@@ -1,0 +1,202 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Where an item's identifier comes from.
+
+Stability is the whole requirement (spec 003 section 3.6). Clients key their caches, favourites and
+resume positions on these strings, so an identifier that changes when a library is rescanned
+silently discards a user's state - and nothing reports it, because from the client's side the old
+item simply stopped existing and a new one appeared.
+
+**The hashing is not here.** `atrium.compat.guids.derive` does the NUL-joined SHA-256 truncated to
+sixteen bytes, and has since 001. What this module owns is the part 003 adds: *which* stable facts
+go into the key for each type, and how a path is normalised before it becomes one of them.
+
+**Relative to the root, never absolute.** The reference derives from the absolute path, so moving a
+library from `/mnt/a` to `/mnt/b` - or running the same library from a container with a different
+mount point - changes every identifier there. Atrium derives from the path relative to its library
+root, so that move costs nothing. The identifiers differ from the reference's either way
+(docs/compatibility/behaviours.md section 1.4), so being better here has no compatibility cost.
+
+There are **four** identity rules, not one, and `RULE_OF` says which type uses which.
+"""
+
+from __future__ import annotations
+
+import unicodedata
+from collections.abc import Iterable, Mapping
+from enum import StrEnum
+
+from atrium.compat.guids import derive
+from atrium.domain.items import ItemType
+
+
+class IdentityRule(StrEnum):
+    """The four shapes of spec section 3.6's table. A type uses exactly one."""
+
+    FROM_PATH = "the file's path, relative to its library root"
+    FROM_NAME = "the library plus the normalised name"
+    FROM_PARENT_AND_NUMBER = "the parent's identity plus a number"
+    FROM_LIBRARY = "the library's configured identity"
+
+
+#: Which rule each type uses. A test asserts this covers every `ItemType`, because a type with no
+#: rule is a type the scanner cannot give an identifier to, and the failure would arrive as a
+#: `KeyError` in the middle of a scan rather than as a missing row here.
+RULE_OF: Mapping[ItemType, IdentityRule] = {
+    ItemType.MOVIE: IdentityRule.FROM_PATH,
+    ItemType.EPISODE: IdentityRule.FROM_PATH,
+    ItemType.AUDIO: IdentityRule.FROM_PATH,
+    ItemType.SERIES: IdentityRule.FROM_NAME,
+    ItemType.MUSIC_ALBUM: IdentityRule.FROM_NAME,
+    ItemType.MUSIC_ARTIST: IdentityRule.FROM_NAME,
+    ItemType.SEASON: IdentityRule.FROM_PARENT_AND_NUMBER,
+    ItemType.COLLECTION_FOLDER: IdentityRule.FROM_LIBRARY,
+}
+
+
+class IdentityCollisionError(RuntimeError):
+    """Two different files derived the same identifier.
+
+    Plan section 7: this aborts rather than merging, and it names both paths. A collision is a bug
+    in the derivation, not user error - merging the two items would silently hide it, and the
+    symptom a user would eventually report is a film that plays the wrong file.
+    """
+
+
+def normalise_path(relative_path: str, *, case_sensitive: bool = False) -> str:
+    """A path reduced to the form the derivation hashes.
+
+    Separators, then Unicode, then case. Each step exists because the *same file* would otherwise
+    produce two identifiers:
+
+    * **Separators.** A walker on one platform yields `a/b`, on another `a\\b`.
+    * **NFC.** macOS filesystems hand back decomposed forms, so `Amélie` arrives as `e` plus a
+      combining acute where Linux gives the precomposed character. Different bytes, same name, and
+      without this, different identifiers for the same film on two machines.
+    * **Case**, unless the library was created case-sensitive - see `case_sensitive` below.
+
+    Absolute paths and `..` segments are refused rather than normalised away. Either one means the
+    caller has a path that is not relative to the root it thinks it is, and an identifier derived
+    from it would be quietly wrong rather than loudly absent.
+    """
+    if relative_path.startswith(("/", "\\")):
+        raise ValueError(
+            f"{relative_path!r} is absolute. Identity is derived from the path relative to its "
+            f"library root, so that moving the root changes nothing (spec section 3.6)."
+        )
+
+    segments = [segment for segment in relative_path.replace("\\", "/").split("/") if segment]
+    if any(segment == ".." for segment in segments):
+        raise ValueError(
+            f"{relative_path!r} climbs above its library root. A path reaching outside the root "
+            f"it is relative to is a walker bug, not a name to be normalised."
+        )
+
+    joined = unicodedata.normalize("NFC", "/".join(s for s in segments if s != "."))
+    return joined if case_sensitive else joined.lower()
+
+
+def normalise_name(name: str, *, case_sensitive: bool = False) -> str:
+    """The name form the by-name rule hashes: trimmed, NFC, and cased like a path.
+
+    Section 3.6 says "the normalised name" without saying what normalised means; this is the
+    definition, and it is deliberately the same one paths get. A series whose directory is renamed
+    from `the series` to `The Series` is the same series, for exactly the reason a file whose path
+    changed case is the same file.
+    """
+    normalised = unicodedata.normalize("NFC", name.strip())
+    return normalised if case_sensitive else normalised.lower()
+
+
+def for_file(
+    item_type: ItemType,
+    library_id: str,
+    relative_path: str,
+    *,
+    case_sensitive: bool = False,
+) -> str:
+    """A `Movie`, `Episode` or `Audio`: its path, relative to its library root.
+
+    `case_sensitive` is the library's `case_sensitive_identity` flag, **frozen at creation**
+    (plan section 6.3) because flipping it rewrites every identifier in that library. `library/
+    config.py` is what refuses the edit; this function simply obeys whichever value it was given.
+    """
+    _require(item_type, IdentityRule.FROM_PATH)
+    return derive(
+        item_type.value, library_id, normalise_path(relative_path, case_sensitive=case_sensitive)
+    )
+
+
+def for_name(
+    item_type: ItemType, library_id: str, name: str, *, case_sensitive: bool = False
+) -> str:
+    """A `Series`, `MusicAlbum` or `MusicArtist`: its library plus its normalised name.
+
+    Not its path, deliberately. An album is one album whether its tracks sit in one directory or
+    several, and a series survives its directory being renamed - which is the same reason
+    section 3.5 lets a tag outrank a directory.
+    """
+    _require(item_type, IdentityRule.FROM_NAME)
+    return derive(item_type.value, library_id, normalise_name(name, case_sensitive=case_sensitive))
+
+
+def for_season(series_id: str, season_number: int | None) -> str:
+    """A `Season`: its series' identity plus its number.
+
+    Not a path, because a season very often has no directory of its own (section 3.4) - and when it
+    does, that directory may be called `Season 01`, `Season 1` or `Specials`. The number is the
+    stable fact; `None` is itself a stable fact and gets its own identity rather than an error,
+    because a season whose number could not be read still has to be *something*.
+    """
+    return derive(
+        ItemType.SEASON.value, series_id, "" if season_number is None else str(season_number)
+    )
+
+
+def for_library(library_id: str) -> str:
+    """The `CollectionFolder` that is the library itself."""
+    return derive(ItemType.COLLECTION_FOLDER.value, library_id)
+
+
+def ensure_unique(assignments: Iterable[tuple[str, str]]) -> dict[str, str]:
+    """Map identifier to path, refusing two paths that derived the same one.
+
+    Plan section 7's abort, as a pure function so that the scan does not have to invent it and a
+    test does not have to find a real SHA-256 collision to exercise it.
+
+    Both paths are named, because the useful question when this fires is what the two inputs had
+    in common - and the answer is never visible from the identifier.
+    """
+    seen: dict[str, str] = {}
+    for item_id, path in assignments:
+        if item_id in seen and seen[item_id] != path:
+            raise IdentityCollisionError(
+                f"{seen[item_id]!r} and {path!r} both derive {item_id}. Two files cannot be one "
+                f"item: this is a bug in the derivation (plan section 6.3), not user error, and "
+                f"merging them would hide it until somebody reported a film playing the wrong file."
+            )
+        seen[item_id] = path
+    return seen
+
+
+def _require(item_type: ItemType, rule: IdentityRule) -> None:
+    actual = RULE_OF.get(item_type)
+    if actual is not rule:
+        raise ValueError(
+            f"{item_type.value} takes its identity from {actual}, not from {rule}. Deriving it "
+            f"the wrong way produces a perfectly valid identifier for the wrong thing, which is "
+            f"why this refuses instead of obliging."
+        )
+
+
+__all__ = [
+    "RULE_OF",
+    "IdentityCollisionError",
+    "IdentityRule",
+    "ensure_unique",
+    "for_file",
+    "for_library",
+    "for_name",
+    "for_season",
+    "normalise_name",
+    "normalise_path",
+]
