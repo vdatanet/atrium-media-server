@@ -160,21 +160,24 @@ content hash used for cache invalidation, so it must change when the image chang
 | GET | `/Audio/{itemId}/universal` | `GetUniversalAudioStream` | M | Server-decides variant |
 | GET | `/Videos/{itemId}/stream` | `GetVideoStream` | V | |
 | GET | `/Videos/{itemId}/stream.{container}` | `GetVideoStreamByContainer` | D | Container-suffixed form, for players that sniff by extension |
-| GET | `/Videos/{itemId}/master.m3u8` | `GetMasterHlsVideoPlaylist` | D | Remux path — see below |
-| GET | `/Videos/{itemId}/main.m3u8` | `GetVariantHlsVideoPlaylist` | D | Remux path |
-| GET | `/Videos/{itemId}/hls1/{playlistId}/{segmentId}.{container}` | `GetHlsVideoSegment` | D | Remux path |
+| GET | `/Videos/{itemId}/master.m3u8` | `GetMasterHlsVideoPlaylist` | D | Remux and transcode path — see below |
+| GET | `/Videos/{itemId}/main.m3u8` | `GetVariantHlsVideoPlaylist` | D | Remux and transcode path |
+| GET | `/Videos/{itemId}/hls1/{playlistId}/{segmentId}.{container}` | `GetHlsVideoSegment` | D | Remux and transcode path |
 | DELETE | `/Videos/ActiveEncodings` | `StopEncodingProcess` | V | Clients call this when the user stops; a server that ignores it leaks processes |
 
 The three HLS routes are tagged `D` because the analysed clients direct-play. They are in v1
-because v1's playback scope is **direct play plus remuxing** (see
-[../roadmap.md](../roadmap.md)), and remuxed delivery is served over HLS. Full transcoding — codec
-conversion, adaptive ladders, hardware acceleration — is out of v1.
+because v1's playback scope is **direct play, remuxing and software transcoding** (see
+[../roadmap.md](../roadmap.md)), and both remuxed and re-encoded delivery are served over HLS. The
+same three routes carry both: which one a client is being served is a property of the negotiation,
+not of the URL. Hardware acceleration and subtitle burn-in are out of v1 — **no endpoint of this
+table depends on either**, which is why they can arrive later without the surface moving.
 
 **Range support is not optional.** Every delivery route must answer `Range` requests with `206`,
 correct `Content-Range` and `Accept-Ranges: bytes`, and must send `Content-Length` on non-chunked
 responses. Jellyfin's *transcoding* routes do not, and that single gap forces every client that
 casts to a DLNA renderer to run a local sizing proxy. Atrium serving a correct `Content-Length` on
-remuxed output is one of the few places where being right costs nothing and helps a lot.
+remuxed and transcoded output is one of the few places where being right costs nothing and helps a
+lot.
 
 ## 9. Playback reporting
 
@@ -201,7 +204,7 @@ that "missing" is never confused with "forgotten".
 | Backup, scheduled tasks, activity log | Operations surface, not client surface |
 | Quick Connect | Convenience auth; adds a second auth state machine |
 | Subtitles: search, download, burn-in | Delivery of *existing* external subtitle files may land in v1; provider search does not |
-| Full transcoding | The largest single component of Jellyfin; v1 stops at remux |
+| Hardware-accelerated transcoding | v1 re-encodes on the CPU; VAAPI/QSV/NVENC/VideoToolbox are a per-machine surface, not an endpoint |
 | Trickplay / chapter images generation | Serving existing chapter images is in; generating them is not |
 | WebSocket `/socket` | Push notification of library changes; clients poll instead in v1 |
 | Books, photos, home videos | Out of the stated media scope |

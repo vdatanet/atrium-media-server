@@ -262,12 +262,19 @@ whole set so clients see the shape they expect, but **honours eleven of them**:
 | `EnableContentDeletion`, `EnableContentDeletionFromFolders` | Whether deletion is permitted |
 | `LoginAttemptsBeforeLockout`, `InvalidLoginAttemptCount` | §3.3. The reference sends **-1** for the first, which is a sentinel and not a count `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` — see §7 OQ-6 |
 | `MaxActiveSessions` | Cap on concurrent sessions; `0` means unlimited, and `0` is what the reference sends `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` |
+| `EnableVideoPlaybackTranscoding`, `EnableAudioPlaybackTranscoding`, `EnablePlaybackRemuxing` | Whether the negotiation may answer this user with a transcode or a remux ([008 §3.3](../008-playback-negotiation-and-delivery/spec.md#33-the-decision)) `[spec: UserPolicy]` |
 
-**The other 31 are stored and echoed unchanged.** **This is a known, bounded gap**, not an oversight: a
+**The other 28 are stored and echoed unchanged.** **This is a known, bounded gap**, not an oversight: a
 flag returned but unenforced is a delta a client could observe by testing the restriction. It is
 accepted for v1 because the unenforced flags all gate features v1 does not have (Live TV, sync,
-transcoding limits, remote control) — enforcing "you may not transcode" on a server that never
-transcodes is not observable. Any flag whose feature arrives must be enforced in the same change.
+remote control) — enforcing "you may not sync" on a server that never syncs is not observable. Any
+flag whose feature arrives must be enforced in the same change.
+
+**The three transcoding flags moved into the enforced set on 2026-08-27**, when transcoding entered
+v1 ([roadmap](../../docs/roadmap.md#in-scope)). That is this rule working as written rather than an
+edit to it: the feature arrived, so the flags that restrict it stopped being unobservable, and a
+user whose policy forbids transcoding is told the source is not playable instead of being handed
+one.
 
 ### 3.6 `POST /Users/Configuration` — `UpdateUserConfiguration`
 

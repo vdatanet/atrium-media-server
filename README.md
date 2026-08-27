@@ -63,7 +63,7 @@ Start here:
 **In:** movies, TV series (seasons/episodes), music (artists/albums/tracks/playlists); library
 scanning and identification; metadata from local sidecars, embedded tags and online providers;
 user accounts, authentication and per-user play state; image delivery; playback negotiation with
-direct play and stream remuxing.
+direct play, stream remuxing and software transcoding.
 
 **Out:** live TV, DVR, channels, plugins, DLNA, SyncPlay, hardware-accelerated transcoding,
 subtitle burn-in, book/photo libraries, the official Jellyfin web UI.
