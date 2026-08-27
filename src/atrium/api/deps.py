@@ -130,6 +130,12 @@ async def require_user(request: Request) -> User:
         # In memory. Writing it here would take a SQLite write lock on every authenticated
         # request, which is the whole reason the registry exists (plan section 6.5).
         registry.touch(record.token_sha256, session.id)
+
+    # Left for the routes that need to know *which* session asked - `/Sessions/Capabilities/Full`
+    # applies to the caller's own. Stashed rather than re-resolved, because resolving it twice
+    # means two more reads for something already in hand.
+    request.state.token_sha256 = record.token_sha256
+    request.state.session_id = session.id if session is not None else None
     return user
 
 
