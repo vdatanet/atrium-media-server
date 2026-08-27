@@ -281,7 +281,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T5 — `db/item_queries.py`: one predicate, one count, complete hydration — and the counter that keeps them honest
 
-- [ ] **Changes:** `ItemQueryRepository.run` over scope and visibility:
+- [x] **Changes:** `ItemQueryRepository.run` over scope and visibility:
   [plan §6.2](plan.md#62-scope-and-recursion)'s three scope shapes — the whole world, direct
   children, recursive via `library_id` under a `CollectionFolder` and bounded parent hops under
   anything else; [plan §6.1](plan.md#61-visibility-in-one-predicate)'s predicate — 002's policy,
@@ -305,6 +305,38 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 - **Note:** the first structural decision, landed. From here on the repository is the only
   module that reads items, and a route that wanted its own SQL has a test to argue with.
 - **Plan reference:** §5, §6.1, §6.2
+- **Done (2026-08-27):** the visibility predicate was **wrong in the direction that shows too
+  much**, and nothing about the SQL looked wrong.
+
+  "Containers earn their place" is a correlated `EXISTS`. Written the obvious way, SQLAlchemy puts
+  the item table in the subquery's *own* `FROM` and the correlation silently becomes a **cross
+  join** — so the clause asks "does any visible file exist at all" rather than "beneath this
+  container", and every container in a non-empty library passes. An explicit `.correlate()` is the
+  whole difference. It was found by emptying a series and watching it stay visible; no amount of
+  reading the statement would have shown it, because the statement is valid and reads correctly.
+  Plan §6.1 now carries the warning.
+
+  **Plan §5's `.items: list[Item]` could not be `Item`.** Genres, credits, images and *another
+  user's* play state are not properties of the file 003's scanner saw. Putting them on `Item`
+  would give the scanner five fields it can never fill and a reader no way to tell "empty" from
+  "not loaded". `HydratedItem` wraps the item; the property the plan actually wanted — the DTO
+  builder receives plain values with no session — is now literally true rather than nearly true.
+  §5 amended.
+
+  **The task's own claim was false when written.** "No module under `api/` imports `sqlalchemy` or
+  `atrium.db.models` — true today" is not true today: `api/deps.py` imports `Session` and
+  `sessionmaker`, and always will, because it is the module that hands a route its session
+  factory. The rule is now about **route** modules, and `deps.py` is held by a *stricter* test
+  instead of an exemption: it may name the session types and nothing that builds a statement.
+  Both rules were checked by breaking them.
+
+  **By-name rows are visible to everyone at T5**, because a genre has no library and the library
+  clause cannot speak about it. That is plan §6.1's design — the by-name clause arrives with T8 —
+  and it is pinned with a test so the day it narrows, this says so rather than a `/Genres` test
+  failing for reasons nobody connects to this predicate.
+
+  One small trap for whoever writes T9: `item_people` spells its document order `sort_order` while
+  the other three join tables spell it `position`.
 
 ## T6 — The filter battery
 

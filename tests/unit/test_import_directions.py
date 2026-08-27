@@ -97,6 +97,120 @@ def test_a_domain_module_opens_nothing(module: Path) -> None:
 
 
 # ------------------------------------------------------------------------------------------
+# `api/` owns no SQL
+# ------------------------------------------------------------------------------------------
+
+#: 005 plan section 9 row 2: "an endpoint bypasses the shared pipeline and drifts", whose impact
+#: is High because the visibility predicate is the security-relevant piece of the feature. The
+#: mitigation is that route modules own no SQL - one repository is the only reader, so seventeen
+#: endpoints inherit the predicate instead of each remembering it.
+#:
+#: Load-bearing from T10 on, when `api/` has eleven modules and every one of them is a list
+#: endpoint. Asserted now rather than then, because the first route to reach for a session is the
+#: one that gets away with it.
+NO_SQL_ABOVE = ("sqlalchemy",)
+
+#: **`deps.py` is the exception, and it was already one when 005 T5 said there were none.** It is
+#: the dependency-wiring module rather than a route: it hands routes the session factory, which is
+#: precisely the boundary object the rule exists to route everything through. A rule that excluded
+#: it would have to be satisfied by moving the wiring somewhere `api/` imports anyway, which is
+#: the same code in a worse place.
+#:
+#: The exemption is narrow on purpose. `deps.py` may **name** the session types; the moment it
+#: imports something that builds a statement it is writing queries in the routing layer, which is
+#: the thing being forbidden.
+WIRING = "deps.py"
+WIRING_MAY_IMPORT = frozenset({"Session", "sessionmaker", "OrmSession"})
+
+#: `atrium.db.models` by name rather than `atrium.db` wholesale: a route legitimately holds a
+#: **repository**, which is the boundary object. What it may not hold is a row.
+NO_ROWS_ABOVE = ("atrium.db.models",)
+
+
+def api_modules() -> list[Path]:
+    return sorted((PACKAGE / "api").rglob("*.py"))
+
+
+def test_there_are_api_modules_to_check() -> None:
+    assert api_modules(), f"no modules found under {PACKAGE / 'api'}"
+
+
+@pytest.mark.parametrize("module", api_modules(), ids=lambda path: path.name)
+def test_a_route_module_writes_no_sql(module: Path) -> None:
+    """The rule is about *reaching for* SQL, so it names the toolkit rather than a pattern: a
+    module that imports `sqlalchemy` at all has a session or a statement in it somewhere."""
+    tree = ast.parse(module.read_text(encoding="utf-8"))
+    imported = {
+        alias.name.split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        node.module.split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module
+    }
+    if module.name == WIRING:
+        pytest.skip(
+            f"{WIRING} is the wiring module; test_the_wiring_module_only_names_types holds it"
+        )
+    reached = sorted(imported & set(NO_SQL_ABOVE))
+    assert not reached, (
+        f"atrium/api/{module.name} imports {reached}. Route modules own no SQL: the item "
+        f"repository is the only reader, which is what makes the visibility predicate impossible "
+        f"for an endpoint to forget (005 plan section 9 row 2). A route holds a repository, not a "
+        f"session."
+    )
+
+
+def test_the_wiring_module_only_names_types() -> None:
+    """The narrow half of the exemption above.
+
+    `api/deps.py` imports from `sqlalchemy` and always will - it is what hands a route its session
+    factory. What it must never import is something that *builds* a statement: `select`, `delete`,
+    `update`, `text`. Those would be SQL in the routing layer wearing a dependency's clothes.
+    """
+    module = PACKAGE / "api" / WIRING
+    tree = ast.parse(module.read_text(encoding="utf-8"))
+    names = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.level == 0
+        and (node.module or "").startswith("sqlalchemy")
+        for alias in node.names
+    }
+    beyond = sorted(names - WIRING_MAY_IMPORT)
+    assert not beyond, (
+        f"atrium/api/{WIRING} imports {beyond} from sqlalchemy. It may name the session types and "
+        f"nothing else: anything that builds a statement is SQL in the routing layer."
+    )
+
+
+@pytest.mark.parametrize("module", api_modules(), ids=lambda path: path.name)
+def test_a_route_module_never_holds_a_row(module: Path) -> None:
+    """A repository is a boundary object and a route may hold one. A `models.Item` is a row, and a
+    route that has one has bypassed the boundary rather than crossed it."""
+    tree = ast.parse(module.read_text(encoding="utf-8"))
+    reached = sorted(
+        {name for node in ast.walk(tree) for name in _dotted_targets(node) if name in NO_ROWS_ABOVE}
+    )
+    assert not reached, (
+        f"atrium/api/{module.name} imports {reached}. The repository returns domain objects, "
+        f"never rows - `tests/unit/test_repositories.py` asserts that end of it, and this is the "
+        f"other."
+    )
+
+
+def _dotted_targets(node: ast.AST) -> set[str]:
+    if isinstance(node, ast.Import):
+        return {alias.name for alias in node.names}
+    if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+        return {node.module} | {f"{node.module}.{alias.name}" for alias in node.names}
+    return set()
+
+
+# ------------------------------------------------------------------------------------------
 # The pure core of `metadata/`
 # ------------------------------------------------------------------------------------------
 
