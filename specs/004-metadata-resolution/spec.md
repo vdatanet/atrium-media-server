@@ -1,9 +1,10 @@
 ---
 feature: 004-metadata-resolution
 title: Metadata resolution
-status: Accepted
+status: Implemented
 created: 2026-08-26
 updated: 2026-08-27
+implemented: 2026-08-27
 accepted: 2026-08-27
 amended: 2026-08-27 by T1 - section 3.3, OQ-4 and OQ-5; by T8 - section 3.4
 depends_on: [003]

@@ -14,7 +14,7 @@ This file is the map, and it fails three ways:
 It asserts that the tests **exist**, not that they pass; the suite they are in does that. What it
 protects is the *mapping*, which is the part that rots quietly.
 
-**It was written for one feature and now carries three.** 002 T18 turned one specification path and
+**It was written for one feature and now carries four.** 002 T18 turned one specification path and
 one map into a table of them, betting that adding 003 would then be one entry and one dictionary
 rather than a third copy of this file. It was: nothing below changed shape for 003, and the diff
 that added it is a dictionary and a line in `FEATURES`. That is the whole of what the restructure
@@ -250,10 +250,101 @@ FEATURE_003: dict[int, tuple[str, ...]] = {
 
 #: Feature directory -> its map. Adding 003 was one entry here and one dictionary above, which is
 #: the whole reason this file changed shape at 002 T18 rather than being copied.
+#: 004's sixteen. **Nine of them are asserted twice on purpose** - once at engine level, where the
+#: rule is proved, and once end to end, where the rule is proved to be the one a scan uses. The
+#: gap between those two claims is where a correct merge sitting behind a caller that never asks
+#: it lives, and 004's own task list says so out loud for AC-1: T10's zero network requests was
+#: vacuous in a world with no remote code, so T14 holds it again with a provider that would have
+#: answered.
+FEATURE_004: dict[int, tuple[str, ...]] = {
+    1: (
+        "tests.metadata.test_local_refresh:test_a_film_with_a_full_sidecar_resolves_from_it",
+        "tests.metadata.test_remote_refresh:test_a_fully_sidecared_film_makes_zero_network_requests",
+        "tests.metadata.test_remote_refresh:test_a_film_with_a_sparse_sidecar_does_ask",
+    ),
+    2: (
+        "tests.metadata.test_nfo:test_a_sparse_sidecar_says_nothing_about_what_it_leaves_empty",
+        "tests.metadata.test_local_refresh:test_a_sparse_sidecar_leaves_the_rest_to_the_next_source",
+        "tests.metadata.test_merge:test_the_first_source_with_a_value_wins_per_field",
+    ),
+    3: (
+        "tests.metadata.test_nfo:test_provider_ids_come_from_both_spellings",
+        "tests.metadata.test_tmdb:test_a_carried_id_makes_zero_search_requests",
+        "tests.metadata.test_remote_refresh:test_a_sidecar_id_is_fetched_without_a_search",
+    ),
+    4: (
+        "tests.metadata.test_nfo:test_a_malformed_sidecar_warns_and_yields_nothing",
+        "tests.metadata.test_nfo:test_all_three_entity_shapes_land_on_the_same_path",
+        "tests.metadata.test_local_refresh:test_a_malformed_sidecar_warns_and_the_item_still_resolves",
+    ),
+    5: (
+        "tests.metadata.test_tags_in_a_scan:test_a_tagged_track_hangs_under_the_album_its_tags_name",
+        "tests.metadata.test_local_refresh:test_a_well_tagged_track_takes_its_album_and_artist_from_its_tags",
+    ),
+    6: (
+        "tests.metadata.test_tags:test_a_track_with_three_artists_has_three_artists",
+        "tests.metadata.test_tags:test_a_semicolon_inside_one_value_stays_one_artist",
+        "tests.metadata.test_local_refresh:test_a_track_with_three_artists_yields_three_artists",
+    ),
+    7: (
+        "tests.metadata.test_artwork:test_the_first_name_of_every_type_wins_when_all_fourteen_are_present",
+        "tests.metadata.test_artwork:test_landscape_beats_thumb_which_is_the_opposite_of_the_specs_table",
+        "tests.metadata.test_local_refresh:test_local_artwork_becomes_the_right_image_type",
+    ),
+    8: (
+        "tests.metadata.test_remote_refresh:test_with_every_provider_down_the_scan_completes_and_nothing_is_blanked",
+        "tests.metadata.test_remote_refresh:test_the_next_scan_retries_a_pending_item_whose_files_did_not_change",
+        "tests.metadata.test_remote_door:test_a_transport_error_is_unavailable",
+    ),
+    9: (
+        "tests.metadata.test_remote_refresh:test_without_credentials_the_scan_completes_and_names_what_sat_out",
+        "tests.metadata.test_tmdb:test_without_a_key_the_provider_says_why_it_is_disabled",
+        "tests.metadata.test_musicbrainz:test_without_a_contact_the_provider_sits_out_with_a_reason",
+    ),
+    10: (
+        "tests.metadata.test_merge:test_a_locked_field_survives_replace",
+        "tests.metadata.test_local_refresh:test_a_locked_field_survives_a_replace_refresh",
+        "tests.metadata.test_remote_refresh:test_a_locked_field_survives_a_replace_refresh_against_a_provider",
+    ),
+    11: (
+        "tests.metadata.test_merge:test_a_default_refresh_never_overwrites_a_non_empty_field",
+        "tests.metadata.test_merge:test_the_matrix",
+        "tests.metadata.test_local_refresh:test_a_default_refresh_does_not_overwrite_what_a_previous_one_resolved",
+    ),
+    12: (
+        "tests.metadata.test_tmdb:test_two_survivors_are_ambiguous_and_therefore_unidentified",
+        "tests.metadata.test_musicbrainz:test_two_survivors_leave_the_album_unidentified",
+        "tests.metadata.test_remote_refresh:test_an_ambiguous_match_leaves_the_item_unidentified_and_says_so",
+    ),
+    13: (
+        "tests.metadata.test_remote_refresh:test_rescanning_an_unchanged_library_makes_zero_requests",
+        "tests.metadata.test_local_refresh:test_a_rescan_of_an_unchanged_library_refreshes_nothing",
+        "tests.metadata.test_remote_door:test_a_cached_request_costs_no_request_and_no_token",
+    ),
+    14: (
+        "tests.library.test_identity:test_two_spellings_of_one_genre_are_one_item",
+        "tests.metadata.test_write_path:test_two_spellings_of_one_genre_produce_one_item",
+        "tests.metadata.test_local_refresh:test_two_spellings_of_one_genre_become_one_item",
+    ),
+    15: (
+        "tests.metadata.test_local_refresh:test_a_full_scan_and_refresh_leaves_the_library_byte_identical",
+        "tests.metadata.test_local_refresh:test_the_same_holds_for_a_music_library",
+        "tests.metadata.test_remote_refresh:test_downloads_land_under_the_data_directory_and_the_library_is_untouched",
+    ),
+    16: (
+        # The standing guard, which every test in the suite runs under rather than one asserting
+        # it. The counting transports complement it; they do not replace it.
+        "tests.metadata.test_remote_door:test_the_suites_network_guard_is_still_watching",
+        "tests.metadata.test_remote_door:test_no_module_under_metadata_constructs_a_client_except_this_one",
+    ),
+}
+
+
 FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "001-server-identity-and-discovery": FEATURE_001,
     "002-authentication-users-and-sessions": FEATURE_002,
     "003-library-configuration-and-scanning": FEATURE_003,
+    "004-metadata-resolution": FEATURE_004,
 }
 
 
