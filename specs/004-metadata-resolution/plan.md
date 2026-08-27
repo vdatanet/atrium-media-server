@@ -4,7 +4,7 @@ title: Metadata resolution — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - section 6.8
+amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -106,9 +106,21 @@ Revision `0003_metadata_and_by_name`, reversible.
 
 **`items` grows the resolved-metadata columns**: `overview`, `tagline`, `original_title`,
 `production_year`, `premiere_date`, `runtime_ticks`, `official_rating`, `community_rating`,
-`provider_ids` (JSON map, echoed as `ProviderIds`), `replay_gain` (JSON, write-only until 008
-decides — spec §3.3 reads it, OQ-5 says nothing serves it yet), `locked_fields` (JSON list),
-`is_locked` (boolean), `refresh_pending` (boolean), `metadata_refreshed_at`, and `name_folded`.
+`provider_ids` (JSON map, echoed as `ProviderIds`), `normalization_gain` (float, nullable),
+`locked_fields` (JSON list), `is_locked` (boolean), `refresh_pending` (boolean),
+`metadata_refreshed_at`, and `name_folded`.
+
+**`normalization_gain` is one number, not the JSON map this plan first specified.** T1's survey
+settled OQ-5 against both halves of the guess: the reference reads exactly one replay-gain tag,
+the track gain, and serves it as `NormalizationGain` on the item — so a `replay_gain` map holding
+four values would be three columns' worth of storage that no response in the reference's shape
+can ever carry, and a *dropped* column would lose the one value that 005 has to emit. Nullable
+because the tag is usually absent: the reference omits the property entirely when it has no value
+([behaviours §1.7](../../docs/compatibility/behaviours.md#17-a-null-property-is-absent-everywhere-by-one-setting)), and a track with no tag must serialise the same way. The
+reference's second source for this number — an opt-in loudness scan of the file, which overrides
+the tag when it has run — is **not** in v1: it needs a decoder pass per track, which is 008's
+dependency and not this feature's, and the divergence it creates is recorded with its argument in
+[behaviours §5.4](../../docs/compatibility/behaviours.md#54-no-loudness-scan-so-a-track-without-the-tag-has-no-gain).
 
 Pattern-driven columns, named as such so nobody normalises them away:
 

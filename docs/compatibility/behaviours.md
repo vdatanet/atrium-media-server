@@ -1142,6 +1142,7 @@ undocumented bug.
 | **No subtitle burn-in** ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)) | Subtitles delivered as files; a client that can only take them painted into the frame shows none | The subtitle work in a later version. Transcoding itself is **in** v1 as of 2026-08-27, so the older "cannot play this" gap is closed |
 | **`Path`-derived identifiers differ from the reference's** ([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters)) | Nothing — ids are opaque | Not a gap to close; a deliberate design choice |
 | **A container that has lost every file is still returned** ([003 §3.8](../../specs/003-library-configuration-and-scanning/spec.md#38-scanning-and-change-detection)) | An empty series or album in a library, with nothing under it | A query-time filter in 005: a container with no visible children is not offered. See §5.2 |
+| **No loudness scan** ([004 §3.3](../../specs/004-metadata-resolution/spec.md#33-embedded-tags)) | On a server whose operator enabled the reference's opt-in scan, `NormalizationGain` absent where it would have a computed value. Tag-carried gains are unaffected | 008, which brings the decoder the scan needs. See §5.4 |
 
 The difference between this section and §4 is intent. §4 says *we thought about it and chose
 differently*. This section says *we have not done it yet, and here is how we will know when it
@@ -1221,6 +1222,38 @@ than fixed quietly or shipped silently: the closing mechanism, if multi-music-li
 out to matter, is a deliberate identity migration with its own feature, informed by the
 differential harness (010). Single-music-library servers — the shape every measured setup has —
 cannot observe it at all.
+
+### 5.4 No loudness scan, so a track without the tag has no gain
+
+**Jellyfin does:** serve `NormalizationGain` on an item from **two** sources, in a fixed
+precedence. A measured loudness value wins when one exists, converted to a gain against a −18 LUFS
+reference; otherwise the value read from the file's tags is used
+`[source: Emby.Server.Implementations/Dto/DtoService.cs:1000-1007 @ v10.11.11]`. The tag path reads
+exactly one tag — the track gain, with a trailing unit suffix stripped
+`[source: MediaBrowser.Providers/MediaInfo/AudioFileProber.cs:362-375 @ v10.11.11]`. The measured
+path is a scheduled task that decodes every audio file, and it runs only for libraries whose
+options enable it
+`[source: Emby.Server.Implementations/ScheduledTasks/Tasks/AudioNormalizationTask.cs:82,101,173 @ v10.11.11]`
+`[source: MediaBrowser.Model/Configuration/LibraryOptions.cs:49 @ v10.11.11]`. When neither source
+has a value the property is absent, like every other null (§1.7).
+
+**Depends on it:** no observed client. Neither of the two clients of
+[api-surface-v1 §1](api-surface-v1.md#1-how-this-set-was-derived) reads the property — one has no
+code path for it and puts volume levelling beyond its current version, the other carries it only
+because its API layer is generated from the reference's document (survey by role, 2026-08-27;
+[004 OQ-5](../../specs/004-metadata-resolution/spec.md#7-open-questions)). A client that *did* read
+it would be a music client applying a per-track volume adjustment.
+
+**Atrium does:** the tag half only. A track whose file carries the track-gain tag gets the same
+number the reference would report from the same tag; a track without it reports nothing, where a
+reference **with the scan enabled** would report a computed value. The scan is out of v1's reach
+for a concrete reason rather than a shrug: it decodes every audio file end to end, which needs the
+transcoding dependency 008 owns and which no part of 004 otherwise requires — putting it in the
+scan path would make a first scan of a large music library cost hours of CPU for a field nothing
+reads. The closing mechanism is 008: once a decoder is a dependency the server already has, the
+task is a bounded addition, and the precedence above is the whole of the behaviour to reproduce.
+The gap is invisible on the default configuration, because the option is off unless an operator
+turns it on.
 
 ## 6. Non-improvements
 

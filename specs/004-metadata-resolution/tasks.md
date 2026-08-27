@@ -51,7 +51,7 @@ it.
 
 ## T1 — The client survey: resolve OQ-5 before the schema freezes
 
-- [ ] **Changes:** no source. [spec §7](spec.md#7-open-questions) OQ-5 — whether ReplayGain values
+- [x] **Changes:** no source. [spec §7](spec.md#7-open-questions) OQ-5 — whether ReplayGain values
   are exposed anywhere a client reads — moves to the resolved table with the survey's finding, or
   stays open with a written reason. The survey reads the two client checkouts
   [api-surface-v1 §1](../../docs/compatibility/api-surface-v1.md#1-how-this-set-was-derived)
@@ -66,6 +66,21 @@ it.
 - **Note:** first because it is the only measurement 004 can take today that changes a schema
   decision, and every feature so far has paid for building on an unmeasured claim.
 - **Plan reference:** §4; spec §3.3
+- **Done (2026-08-27):** the task offered T4 two answers — a `replay_gain` map or its recorded
+  absence — and **the finding is neither**. The reference reads exactly one of the four ReplayGain
+  values, the track gain, and *does* serve it, as `NormalizationGain` on every item
+  `[source: MediaBrowser.Providers/MediaInfo/AudioFileProber.cs:362-375 @ v10.11.11]` `[spec: BaseItemDto]`.
+  So a map stores three values no response can carry, and dropping the column loses one that 005
+  has to emit. T4 builds a single nullable float, `normalization_gain`
+  ([plan §4](plan.md#4-data-model), amended in this change).
+  Two more things the reading turned up, both recorded rather than left in a transcript. The
+  reference has a **second** source for the same field — an opt-in loudness scan that decodes every
+  audio file and overrides the tag — which v1 cannot afford before 008 owns a decoder, so it is an
+  accepted gap with its closing mechanism
+  ([behaviours §5.4](../../docs/compatibility/behaviours.md#54-no-loudness-scan-so-a-track-without-the-tag-has-no-gain)).
+  And OQ-4's partial evidence came back **empty in the strongest sense**: neither client mentions
+  `ProviderIds`, or any provider's name, anywhere. That is a floor of zero, which cannot tell us
+  which keys to emit, so OQ-4 stays open on 010 with the evidence written beside it.
 
 ## T2 — Fixture groundwork: sidecars, artwork, and the four template containers
 
@@ -98,8 +113,9 @@ it.
 ## T4 — Migration `0003_metadata_and_by_name`, the models, and the by-name identity rule
 
 - [ ] **Changes:** revision 0003 exactly as [plan §4](plan.md#4-data-model) lays it out: the
-  metadata columns on `items` (including `name_folded` and, **per T1's finding**, `replay_gain` or
-  its recorded absence), the five join tables, `provider_cache`, the type check gaining `Genre`,
+  metadata columns on `items` (including `name_folded` and, **per T1's finding**, the single
+  nullable float `normalization_gain` rather than the map this list first named), the five join
+  tables, `provider_cache`, the type check gaining `Genre`,
   `MusicGenre`, `Studio`, `Person`, `Year`, and `library_id` nullable with the check tying `NULL`
   to exactly those five. `db/models.py` to match. `domain/items.py` gains the five types **outside
   the containment tree**. `library/identity.py` gains the server-wide by-name rule beside 003's
