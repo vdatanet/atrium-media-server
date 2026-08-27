@@ -769,13 +769,35 @@ absolute-millisecond assertions, and tripped over the literals in its own forbid
 was reaching for is a property, not a grep — the same measurements multiplied by any constant give
 the same verdict — so that is what it asserts now.
 
-## T16 — Migration tests
+## T16 — Migration tests  ✅
 
-- [ ] **Changes:** apply and roll back every revision; upgrade from an empty file.
+- [x] **Changes:** apply and roll back every revision; upgrade from an empty file.
 - **Depends on:** T4
 - **Verified by:** green both directions. An irreversible migration is allowed but must say so in
   its docstring and say why.
 - **Plan reference:** §4, §8.3
+
+### Done — 2026-08-26
+
+**"Reversible" had to be given a definition before it could be tested.** T4 asserted that rolling
+back revision `0001` left an empty database — true, and it only tests the revision that exists. The
+rule plan §4 states is about the *history*, so this walks whatever the script directory holds and a
+revision added by 003 is covered without anybody remembering to extend anything.
+
+And the definition matters more than the sweep: **a `downgrade()` that runs without error and
+leaves a table behind passes any test that only checks it did not raise.** So each revision is
+applied, rolled back, and the schema — tables, columns and indexes — compared against what was
+there before it. A revision that does not restore has to contain `irreversible` in its docstring
+and say why, which is what turns §4's sentence into something that fails.
+
+**The sweep carries the failure it exists for, end to end.** A fixture revision that creates two
+tables and drops one on the way down, in a temporary script directory the module is pointed at —
+the same technique T2 used to test a check for migrations that did not exist yet. Asserting the
+comparison logic alone would have proven arithmetic rather than the guard.
+
+**Two conventions became tests rather than habits**: revision identifiers are zero-padded numbers,
+so the directory reads in the order it applies, and they run without a gap. Both are things the
+plan shows by example in `0001_users_and_sessions` and neither was checked.
 
 ## T17 — Surface and golden responses
 
