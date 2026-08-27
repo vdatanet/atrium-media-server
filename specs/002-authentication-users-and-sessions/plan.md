@@ -4,7 +4,7 @@ title: Authentication, users and sessions — implementation plan
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3; by T8 - sections 6.5 and 6.6; by T9 - section 7; by T14 - sections 8.2 and 9
+amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3; by T8 - sections 6.5 and 6.6; by T9 - section 7; by T14 - sections 8.2 and 9; by T15 - sections 8.1 and 9
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-26
@@ -354,7 +354,28 @@ discovered much later.
 Measure `authenticate` for an unknown username and for a known username with a wrong password;
 assert the two distributions overlap. Written as a **ratio with a generous bound** rather than an
 absolute time, because a timing test that asserts milliseconds fails on a loaded CI runner and
-teaches everyone to ignore it.
+teaches everyone to ignore it. A ratio is scale-invariant: a runner three times slower moves both
+branches together and the assertion does not notice.
+
+**It is the backstop, not the guarantee.** The guarantee is counted — every failure path runs the
+KDF exactly once, asserted by counting invocations (§6.2). That test fails for a precise reason and
+never flakes. This one checks that the counting test is counting the thing that matters, and it
+carries the failure it exists for: with the dummy verify removed, the ratio measured **19×**.
+
+**The KDF has to dominate, or it measures the wrong thing.** Measured through `authenticate`:
+
+| Argon2 memory | unknown | wrong password | ratio |
+|---|---|---|---|
+| 8 KiB — the suite's own setting | 0.139 ms | 0.493 ms | **3.55** |
+| 1 MiB | 0.627 ms | 0.997 ms | 1.59 |
+| 4 MiB | 2.132 ms | 2.510 ms | 1.18 |
+
+The gap that does not close is **not** the KDF. It is the failed-attempt counter, which the
+known-username path writes and the unknown path does not — a second channel, real, and shrinking
+against the KDF as the parameters rise. At the shipped 64 MiB it is under one percent of a 41 ms
+verify, so it is bounded and recorded rather than removed: not writing the counter would cost the
+lockout the specification requires, and writing it on both paths would mean a table of failed
+attempts for usernames that do not exist.
 
 ### 8.2 The log test
 
@@ -393,6 +414,7 @@ costs more security than the parameters buy.
 | A **hash** reaches a log, because SQLAlchemy writes bound parameters once its logger reaches `INFO` | **Realised** — it did | Moderate | `atrium.logs` sets the engine logger to `WARNING`; an operator who wants SQL echoed turns it on |
 | A **token** reaches a log, because two of the five mechanisms put it in a URL | **Realised** — it did | Moderate | `atrium.logs` redacts `api_key=` and `ApiKey=` from any record, leaving the rest of the line |
 | Timing discloses valid usernames | **Medium** | Moderate | §6.2, verified by §8.1 |
+| The **failed-attempt counter write** is a second timing channel: the known-username path writes it and the unknown path does not | **Measured, and small** | Low | Bounded rather than removed — at the shipped 64 MiB it is under 1% of a 41 ms verify. §8.1 has the numbers |
 | Token stored in plain text | Low | Severe on database disclosure | SHA-256 at the repository boundary; a test asserts no column holds a value that authenticates |
 | Session flush loses activity on crash | High | **Negligible, and stated** | §6.5 — bounded at 30 seconds, and nothing else is deferred |
 | Policy blob loses unknown properties | Medium | Moderate | AC-8 round-trips properties v1 does not know |

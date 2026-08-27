@@ -731,15 +731,43 @@ attaches to every logger in the process and looks in every field a record carrie
 arguments, formatted output and formatted traceback. Three tests assert the capture itself can
 fail, because a guard that cannot fail is decoration.
 
-## T15 — The timing test
+## T15 — The timing test  ✅
 
-- [ ] **Changes:** `tests/security/test_login_timing.py`.
+- [x] **Changes:** `tests/security/test_login_timing.py`.
 - **Depends on:** T9
 - **Verified by:** unknown username and known-username-wrong-password produce **overlapping**
   distributions, asserted as a ratio with a generous bound.
 - **Note:** a ratio, not milliseconds. A timing test that asserts absolute time fails on a loaded
   runner and teaches everyone to ignore it — which is worse than not having it.
 - **Plan reference:** §8.1
+
+### Done — 2026-08-26
+
+**The distributions overlap because of the KDF, and there is a second channel underneath it.** The
+known-username path **writes** the failed-attempt counter; the unknown path does not. Measured
+through `authenticate`, the ratio is **3.55** at the suite's own cheap Argon2 settings, 1.59 at
+1 MiB and 1.18 at 4 MiB — the gap shrinking as the KDF grows to dominate it. At the shipped 64 MiB
+it is under one percent of a 41 ms verify.
+
+It is **bounded and recorded rather than removed**, because both ways of removing it are worse:
+not writing the counter costs the lockout the specification requires, and writing it on both paths
+means a table of failed attempts for usernames that do not exist.
+[plan §8.1](plan.md#81-the-timing-test) has the numbers and [§9](plan.md#9-risks) has the row.
+
+**This is why the test runs at parameters the suite does not use.** At 8 KiB the KDF is 0.034 ms
+and SQLite's commit is the whole measurement — the test would be reporting on the storage engine
+and calling it a timing leak. It runs at 8 MiB, where the KDF dominates as it does in production
+without costing half a minute.
+
+**The bound is three, and the failure it exists for measures nineteen.** With the dummy verify
+removed — which is exactly what somebody writes while optimising the branch that has no password
+to check — the unknown username returns in the time of one indexed lookup and every other branch
+pays for the KDF. That test is in the file: a guard that cannot fail is decoration.
+
+**One test in this file was too clever and was replaced.** It read its own source to forbid
+absolute-millisecond assertions, and tripped over the literals in its own forbidden list. What it
+was reaching for is a property, not a grep — the same measurements multiplied by any constant give
+the same verdict — so that is what it asserts now.
 
 ## T16 — Migration tests
 
