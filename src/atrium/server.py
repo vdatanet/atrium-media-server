@@ -37,6 +37,11 @@ from atrium.api import sessions as session_routes
 from atrium.compat.errors import EXCEPTION_HANDLERS
 from atrium.compat.middleware import ResponseHeadersMiddleware
 from atrium.compat.profiles import ContentProfileMiddleware
+from atrium.compat.query_params import (
+    CanonicalQueryMiddleware,
+    IgnoredParameters,
+    QueryParameterTable,
+)
 from atrium.compat.responses import AtriumJSONResponse
 from atrium.compat.routing import RelaxedPathMiddleware, RouteTable
 from atrium.config.paths import ConfigurationError, DataPaths, resolve_data_dir
@@ -142,10 +147,25 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     # application, and it is what an Allow header is built from too. compat/routing.py.
     routes = RouteTable.from_routers(ROUTERS)
 
-    # Innermost, so it sits directly in front of the router and nothing else sees the rewrite.
-    # Then the profile, which every serialiser downstream reads; then the gate; then the headers -
-    # the last added is the outermost, which is what puts `Server` and `X-Response-Time-ms` on a
-    # 503 served while starting.
+    # Which query parameter spellings each route declares, and the tally of what was sent and
+    # ignored. Built from ROUTERS for the same reason the route table is, and it refuses at boot a
+    # route whose parameters differ only in case - plan 005 section 9 row 5. compat/query_params.py.
+    query_parameters = QueryParameterTable.from_routers(ROUTERS)
+    ignored_parameters = IgnoredParameters()
+
+    # Innermost of all, because it looks a route up by the path the rewrite below has already
+    # canonicalised - so it must run *after* that one, which in `add_middleware` terms means being
+    # added *before* it: the last added is the outermost.
+    app.add_middleware(
+        CanonicalQueryMiddleware,
+        table=query_parameters,
+        routes=routes,
+        ignored=ignored_parameters,
+    )
+    # Then the path rewrite, directly in front of the router so nothing else sees it. Then the
+    # profile, which every serialiser downstream reads; then the gate; then the headers - the last
+    # added is the outermost, which is what puts `Server` and `X-Response-Time-ms` on a 503 served
+    # while starting.
     app.add_middleware(RelaxedPathMiddleware, table=routes)
     app.add_middleware(ContentProfileMiddleware)
     app.add_middleware(ReadinessMiddleware, readiness=readiness)
@@ -168,6 +188,8 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     app.state.server_state = state
     app.state.readiness = readiness
     app.state.routes = routes
+    app.state.query_parameters = query_parameters
+    app.state.ignored_parameters = ignored_parameters
     return app
 
 

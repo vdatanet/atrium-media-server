@@ -22,10 +22,15 @@ to the body - which is the only place a property name can be told apart from a d
 
 A refusal carries no content type at all, in the reference and here, so it echoes nothing: an
 empty `401`, `404` or `405` is built by `atrium.compat.errors`, not by this class.
+
+**And the bytes inside the body are escaped the reference's way**, which is not Python's. See
+`ESCAPED` and `render` below, and behaviours section 1.16.
 """
 
 from __future__ import annotations
 
+import json
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -33,6 +38,29 @@ from fastapi.responses import JSONResponse
 from starlette.background import BackgroundTask
 
 from atrium.compat.profiles import JSON_MEDIA_TYPE, current
+
+#: ASCII characters the reference escapes as `\uXXXX` even though JSON does not require it, and
+#: which are never JSON structure - so they can be replaced across the whole document safely.
+#: Measured by echoing them through a validation error, which is the one route that puts arbitrary
+#: client text in a response body.
+#: `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]` (behaviours section 1.16)
+ESCAPED: Mapping[int, str] = {
+    ord("&"): "\\u0026",
+    ord("'"): "\\u0027",
+    ord("+"): "\\u002B",
+    ord("<"): "\\u003C",
+    ord(">"): "\\u003E",
+    ord("`"): "\\u0060",
+}
+
+#: A `\uXXXX` the encoder produced, as opposed to the literal characters `\u00e9` inside a string.
+#: The leading group matches an even number of backslashes, which is what tells the two apart:
+#: every literal backslash in data has already been doubled by `json.dumps`.
+_ENCODER_ESCAPE = re.compile(r"(?<!\\)((?:\\\\)*)\\u([0-9a-f]{4})")
+
+#: The same parity trick for a data quote, which `json.dumps` writes as `\"` and the reference
+#: writes as `\u0022`.
+_ENCODER_QUOTE = re.compile(r'(?<!\\)((?:\\\\)*)\\"')
 
 
 class AtriumJSONResponse(JSONResponse):
@@ -64,5 +92,28 @@ class AtriumJSONResponse(JSONResponse):
             content, status_code, headers, media_type or current().media_type, background
         )
 
+    def render(self, content: Any) -> bytes:
+        r"""The body, escaped the way the reference escapes it.
 
-__all__ = ["JSON_MEDIA_TYPE", "AtriumJSONResponse"]
+        The reference is an ASP.NET Core application and its serialiser uses the **HTML-safe**
+        `JavaScriptEncoder`, which escapes every non-ASCII character and seven ASCII ones as
+        `\uXXXX` with **uppercase** hex. `28 años después` goes out as `28 a\u00F1os despu\u00E9s`
+        and `Abraham\u0027s Boys` keeps its apostrophe escaped. Python writes both literally.
+
+        No client can tell: a JSON parser decodes the two forms to the same string, so Principle I
+        does not require this. What requires it is Principle VIII - the goldens compare **bytes**,
+        and a library with accented titles would otherwise differ from the reference on nearly
+        every response while being correct in every field. Reproducing it here, once, is cheaper
+        than an asterisk on every golden.
+
+        `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]` (behaviours section 1.16)
+        """
+        text = json.dumps(
+            content, ensure_ascii=True, allow_nan=False, indent=None, separators=(",", ":")
+        )
+        text = _ENCODER_ESCAPE.sub(lambda m: m.group(1) + "\\u" + m.group(2).upper(), text)
+        text = _ENCODER_QUOTE.sub(lambda m: m.group(1) + "\\u0022", text)
+        return text.translate(dict(ESCAPED)).encode("utf-8")
+
+
+__all__ = ["ESCAPED", "JSON_MEDIA_TYPE", "AtriumJSONResponse"]
