@@ -24,8 +24,11 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
+    CheckConstraint,
     ForeignKey,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -164,8 +167,11 @@ class UserLibraryAccess(Base):
     user_id: Mapped[str] = mapped_column(
         ID, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    #: Libraries arrive with feature 003; this column deliberately carries no foreign key yet,
-    #: because the table it would point at does not exist.
+    #: **No foreign key to `libraries`, and this is permanent rather than pending.** 003 created
+    #: that table and the obvious next step was to point at it - which would break 002. A policy
+    #: round-trips whole (002 spec section 3.7), `EnabledFolders` arrives from the client, and a
+    #: client may legitimately name a library this server has not configured. Under a foreign key
+    #: that policy write fails instead of round-tripping, which is a difference a client can see.
     library_id: Mapped[str] = mapped_column(ID, primary_key=True)
 
     can_view: Mapped[bool] = mapped_column(
@@ -252,3 +258,192 @@ class Session(Base):
 
 
 __all__ = ["AccessToken", "Base", "Session", "User", "UserLibraryAccess"]
+
+
+# ----------------------------------------------------------------------------------------------
+# Feature 003: libraries, items, and the user data that outlives them
+# ----------------------------------------------------------------------------------------------
+
+
+class Library(Base):
+    """A configured root and what it is: the operator's side of feature 003.
+
+    `case_sensitive_identity` is **frozen at creation** and `library/config.py` refuses to change
+    it (003 plan section 6.3). It is not a preference: flipping it rewrites every identifier in the
+    library, which discards every client's favourites and resume positions for everything in it.
+    """
+
+    __tablename__ = "libraries"
+    __table_args__ = (
+        # The three collection types of 003 spec section 3.1, in the schema rather than only in
+        # the resolver. A row with a fourth would be a library nothing knows how to scan, and it
+        # would be written long before anything noticed.
+        CheckConstraint(
+            "collection_type IN ('movies', 'tvshows', 'music')",
+            name="ck_libraries_collection_type",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(ID, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    collection_type: Mapped[str] = mapped_column(String, nullable=False)
+
+    case_sensitive_identity: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+
+    roots: Mapped[list[LibraryRoot]] = relationship(
+        back_populates="library", lazy="raise", cascade="all, delete-orphan"
+    )
+    #: Declared for the ordering, not for the traversal. Without a relationship the unit of work
+    #: does not know `items` depends on `libraries`, and writing a library and its items in **one
+    #: transaction** - which is exactly what a scan does (003 plan section 6.7) - fails on the
+    #: foreign key. The schema knew; the mapper did not.
+    items: Mapped[list[Item]] = relationship(
+        back_populates="library", lazy="raise", passive_deletes=True
+    )
+
+
+class LibraryRoot(Base):
+    """One directory a library is built from. A library may have several (003 plan section 4)."""
+
+    __tablename__ = "library_roots"
+
+    library_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("libraries.id", ondelete="CASCADE"), primary_key=True
+    )
+    #: Absolute, and the only absolute path in the schema. Everything an item stores is relative
+    #: to one of these, which is what makes moving a library free (003 spec section 3.6).
+    path: Mapped[str] = mapped_column(String, primary_key=True)
+
+    library: Mapped[Library] = relationship(back_populates="roots", lazy="raise")
+
+
+class Item(Base):
+    """Everything a library holds, in one table, because the reference has one kind of thing.
+
+    **No path column.** An item's files live in `item_sources`: a two-part film is one `Movie` with
+    two of them (003 spec section 3.3, AC-4), and a `Series` has none at all. Putting the path here
+    would make the first impossible and the second a nullable column on every row.
+    """
+
+    __tablename__ = "items"
+    __table_args__ = (
+        CheckConstraint(
+            "type IN ('Movie', 'Series', 'Season', 'Episode', 'MusicArtist', 'MusicAlbum', "
+            "'Audio', 'CollectionFolder')",
+            name="ck_items_type",
+        ),
+        # Pattern-driven, not fact-driven: 005 orders nearly every list by `sort_name` within a
+        # library and a type, and walks children by their number. Named here so a later reader
+        # can tell which indexes serve a query and which serve a constraint.
+        Index("ix_items_library_type_sort", "library_id", "type", "sort_name"),
+        Index("ix_items_parent_index", "parent_id", "index_number"),
+    )
+
+    id: Mapped[str] = mapped_column(ID, primary_key=True)
+    library_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("libraries.id", ondelete="CASCADE"), nullable=False
+    )
+    parent_id: Mapped[str | None] = mapped_column(
+        ID, ForeignKey("items.id", ondelete="CASCADE"), nullable=True
+    )
+
+    type: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    #: The ordering key for nearly every query 005 issues, which is why it is indexed above and
+    #: why it is not nullable: an item with no sort name would sort first, everywhere, silently.
+    sort_name: Mapped[str] = mapped_column(String, nullable=False, default="", server_default="")
+
+    #: Episode or track number, and season or disc number.
+    index_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    parent_index_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: The last number a multi-episode file spans: `S01E02-E03` is one item, not two (AC-5).
+    end_index_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    date_created: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    date_modified: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+    #: **Items are soft-deleted** (003 plan section 6.6). A file that disappears sets this; the row
+    #: stays so that the identifier stays derivable and the user data keyed on it stays associated.
+    #: Only an explicit maintenance action purges, and a scan never does.
+    removed_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+    library: Mapped[Library] = relationship(back_populates="items", lazy="raise")
+
+    #: Self-referential, and declared for the same reason as `Library.items`: a scan writes a
+    #: series, its seasons and its episodes in one transaction, and the mapper has to know which
+    #: order that is. `passive_deletes` leaves the cascade to the database rather than loading
+    #: every descendant into memory to delete it one row at a time.
+    parent: Mapped[Item | None] = relationship(
+        back_populates="children", lazy="raise", remote_side="Item.id"
+    )
+    children: Mapped[list[Item]] = relationship(
+        back_populates="parent", lazy="raise", passive_deletes=True
+    )
+
+    sources: Mapped[list[ItemSource]] = relationship(
+        back_populates="item", lazy="raise", cascade="all, delete-orphan"
+    )
+
+
+class ItemSource(Base):
+    """One file behind an item, in order. Several of these is a multi-part film."""
+
+    __tablename__ = "item_sources"
+
+    item_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("items.id", ondelete="CASCADE"), primary_key=True
+    )
+    #: Zero first. The item's identity derives from part zero's path, so adding a part later does
+    #: not change an identifier somebody has already favourited.
+    part_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    relative_path: Mapped[str] = mapped_column(String, nullable=False)
+
+    #: Together, the change-detection signal (003 plan section 6.4). Per source rather than per
+    #: item, because a film whose *second* part was replaced has changed.
+    size: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    mtime_ns: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+    item: Mapped[Item] = relationship(back_populates="sources", lazy="raise")
+
+
+class ItemUserData(Base):
+    """Per-user, per-item state - and **it outlives the item**.
+
+    **There is deliberately no foreign key to `items`**, and that absence is the whole feature.
+    003 spec section 3.8 says a file that disappears and comes back must not cost the user their
+    favourites and resume position: a re-download, a remount, a network share slow to mount. Under
+    a cascade the first slow mount would delete a user's history, permanently, and the only symptom
+    would be a user saying their watched list looks wrong.
+
+    Keyed on `item_key` - the derived identity, not a row reference - so the association is
+    restored the moment the same path is scanned again, because the same path derives the same
+    identifier (003 spec section 3.6).
+
+    **007 owns what these columns mean**; 003 owns the guarantee that the row survives.
+    """
+
+    __tablename__ = "item_user_data"
+
+    user_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    #: The item's derived identity. Not a foreign key. See the docstring above before adding one.
+    item_key: Mapped[str] = mapped_column(ID, primary_key=True)
+
+    is_favorite: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    played: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    play_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    #: Ticks of 100 nanoseconds, the internal unit everywhere (architecture section 4).
+    playback_position_ticks: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
+    last_played_date: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
