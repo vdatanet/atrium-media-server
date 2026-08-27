@@ -98,17 +98,37 @@ creation (§6.3). Roots live in a child table, since a library can have several.
 | `id` | Derived, 32-hex, primary key |
 | `library_id`, `parent_id` | |
 | `type` | `Movie`, `Series`, `Season`, `Episode`, `MusicArtist`, `MusicAlbum`, `Audio`, `CollectionFolder` |
-| `relative_path` | Relative to the root. Absolute paths are reconstructed, never stored |
 | `name`, `sort_name` | `sort_name` is indexed; it is the ordering key for nearly every query |
 | `index_number`, `parent_index_number` | Episode and track numbers, disc and season numbers |
-| `size`, `mtime_ns` | The change-detection signal (§6.4) |
+| `end_index_number` | Nullable. The last number a multi-episode file spans — see below |
 | `date_created`, `date_modified` | |
 | `removed_at` | Nullable. **Items are soft-deleted** (§6.6) |
 
+**`item_sources`** — the file or files behind an item: `item_id`, `part_index`, `relative_path`,
+`size`, `mtime_ns`. Ordered by `part_index`, and the item's identity is derived from part zero's
+path.
+
+This table and `end_index_number` are both **corrections made at T3**, and they are the same
+mistake twice: this section described the item table as though every item had at most one file and
+occupied at most one number, and two acceptance criteria say otherwise.
+
+- A `relative_path` column on `items` cannot hold a **two-part film**, which AC-4 and
+  [spec §3.3](spec.md#33-movies) require to be *one* `Movie` with two media sources. Nothing in this plan mentioned a
+  media source at all; T6 would have written the migration as specified and T11 would have found
+  there was nowhere to put part two.
+- `index_number` alone cannot hold `S01E02-E03`, which AC-5 requires to be **one** episode
+  spanning both numbers rather than two items.
+
+Moving `size` and `mtime_ns` onto the source rather than the item is the same correction
+continued: §6.4's change detection must notice a change to *either* part, and a film whose second
+part was replaced and whose first was not has changed. It also removes a nullability that would
+otherwise be everywhere — a `Series` has no path, and under this shape it simply has no sources.
+
 Indexes are chosen for the queries 005 actually issues: `(library_id, type, sort_name)`,
-`(parent_id, index_number)`, and a unique index on `id`. A column exists to serve a query pattern
-or a fact; the ones above that are pattern-driven are marked as such in the migration's docstring,
-because a later reader will otherwise try to normalise them away.
+`(parent_id, index_number)`, a unique index on `id`, and `(item_id, part_index)` on the sources. A
+column exists to serve a query pattern or a fact; the ones above that are pattern-driven are marked
+as such in the migration's docstring, because a later reader will otherwise try to normalise them
+away.
 
 **`item_user_data`** — keyed `(user_id, item_key)` where `item_key` is the derived identity, and
 **with no foreign key to `items`**. This is deliberate and it is what makes
