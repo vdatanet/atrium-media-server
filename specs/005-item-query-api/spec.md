@@ -70,9 +70,18 @@ paging, so a client can size a scrollbar.
 
 ### 3.2 The item representation
 
-One representation for every item type, discriminated by `Type` (`Movie`, `Series`, `Season`,
-`Episode`, `MusicArtist`, `MusicAlbum`, `Audio`, `Playlist`, `CollectionFolder`, `UserView`,
-`Folder`).
+**There is not one representation. There are three**, and which one a client gets depends on the
+route it asked, not on the item type.
+`[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`
+
+| Route | What comes back |
+|---|---|
+| A list row | The narrow shape below: always-present, plus what the type has, plus whatever `Fields` asked for |
+| A single item by id | **Everything**, unasked. `Fields` has nothing left to add |
+| The user's views | A third shape: as wide as a full body, unasked, for library roots |
+
+Items are discriminated by `Type` (`Movie`, `Series`, `Season`, `Episode`, `MusicArtist`,
+`MusicAlbum`, `Audio`, `Playlist`, `CollectionFolder`, `UserView`, `Folder`).
 
 **Always present**, on every item, in every list:
 
@@ -81,31 +90,52 @@ One representation for every item type, discriminated by `Type` (`Movie`, `Serie
 | `Id`, `ServerId`, `Name`, `Type` | |
 | `MediaType` | `Video`, `Audio` or `Unknown` |
 | `IsFolder` | |
+| `LocationType` | `FileSystem` for everything v1 serves |
+| `ChannelId` | **Always, and always `null`** — the one property that survives the null-omission of [behaviours §1.7](../../docs/compatibility/behaviours.md#17-a-null-property-is-absent-everywhere-by-one-setting) |
 | `UserData` | **Always**, with no `Fields` or `EnableUserData` needed. Jellyfin's version carries `Key` and `ItemId` inside it `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` |
 | `ImageTags` | Empty object when the item has no images |
+| `ImageBlurHashes` | `ImageTags`' shape again, a BlurHash per image id. A client rendering placeholders reads it |
 | `BackdropImageTags` | |
 
-**Present when the item type has them:**
+**Present in a list row when the item type has them:**
 
 | Group | Fields |
 |---|---|
-| Common | `SortName`, `Overview`, `ProductionYear`, `PremiereDate`, `RunTimeTicks`, `OfficialRating`, `CommunityRating`, `Genres`, `GenreItems`, `Studios`, `People`, `PrimaryImageAspectRatio` |
+| Common | `ProductionYear`, `PremiereDate`, `RunTimeTicks`, `OfficialRating`, `CommunityRating` |
 | Episode | `IndexNumber`, `ParentIndexNumber`, `SeriesId`, `SeriesName`, `SeasonId`, `SeriesPrimaryImageTag`, `SeriesThumbImageTag`, `ParentThumbItemId`, `ParentThumbImageTag`, `ParentBackdropImageTags` |
 | Season, Series | `ChildCount`, `IndexNumber` |
 | Audio | `Album`, `AlbumId`, `AlbumArtist`, `AlbumArtists`, `AlbumPrimaryImageTag`, `Artists`, `ArtistItems`, `IndexNumber` (track), `ParentIndexNumber` (disc) |
 | Library roots | `CollectionType` |
 | Playlist entries | `PlaylistItemId` — see 009 |
 
-**Only when asked for via `Fields`:** `MediaSources`, `MediaStreams`, `Path`, `Etag`, `Chapters`,
-`DateCreated`, `DateLastMediaAdded`, `ProviderIds`, `Tags`, `Taglines`, `ExternalUrls`,
+**Only when a list row asks for them:** `MediaSources`, `MediaStreams`, `Path`, `Etag`,
+`Chapters`, `DateCreated`, `DateLastMediaAdded`, `ProviderIds`, `Tags`, `Taglines`, `ExternalUrls`,
 `OriginalTitle`, `ParentId`, `CumulativeRunTimeTicks`, `RecursiveItemCount`, `ChildCount`,
-`SortName`, `Width`, `Height`. `[spec: ItemFields]`
+**`SortName`, `Overview`, `Genres`, `GenreItems`, `Studios`, `People`,
+`PrimaryImageAspectRatio`**, `Width`, `Height`. `[spec: ItemFields]`
+
+> **`SeriesThumbImageTag` was not observed at all** — not bare, not asked for, not in a full body,
+> across twelve episodes. Whether it is gated, or simply absent because none of those episodes'
+> series carries a Thumb, cannot be told apart from outside: a null property is omitted. It stays
+> in the table, unconfirmed, rather than being deleted on one library's evidence.
+
+> **The seven in bold were in the per-type group until they were measured**, and six of them are
+> requestable tokens — which is what made the row wrong, because a token is gated by definition. A
+> list of movies carries no overview, no genres, no cast and no aspect ratio unless the client
+> asks. `PrimaryImageAspectRatio` is the one with a dependency behind it: 004 supplies the width
+> and height it is computed from, and a list row still does not carry it.
+> `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`
 
 **Where this field set comes from.** It is the union of what the two analysed clients actually read
 from a response, not the reference's full representation, which has over 150 properties. A field no
 client reads is not observable, and Principle VI applies to fields as it does to endpoints.
 Emitting the full set would mean specifying and testing a hundred fields whose correctness nobody
 can check.
+
+**The single-item route is the exception to that**, and it is not a choice: the reference emits
+everything there whatever the request says, so a narrow answer is observable as a missing field
+rather than as a smaller one. What v1 emits from it is the union above, and the differential
+harness is what closes the rest.
 
 > ⚠️ **This is a known, bounded delta.** A different client reading a field Atrium omits sees it as
 > absent. The mitigation is measurement, not guessing: the differential harness (010) reports every

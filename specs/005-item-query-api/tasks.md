@@ -75,7 +75,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T1 — Measure the item representation before the registry freezes
 
-- [ ] **Changes:** `tools/probe_item_shapes.py` — one question: which properties the reference
+- [x] **Changes:** `tools/probe_item_shapes.py` — one question: which properties the reference
   actually emits, per item type, in a list and in full. For every type the live library can
   produce (`Movie`, `Series`, `Season`, `Episode`, `MusicArtist`, `MusicAlbum`, `Audio`,
   `CollectionFolder`, and `/UserViews`' own rows), fetch one item bare and once more with every
@@ -95,6 +95,34 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   A type the library cannot produce (`Playlist` before 009 exists) is recorded as unmeasured, not
   guessed.
 - **Plan reference:** §6.5; spec §3.2
+- **Done (2026-08-27):** the table was wrong in six ways, and the first one is structural: **there
+  is no single item representation.** A bare `/Items/{itemId}` carries up to 39 properties a bare
+  list row does not — `Overview`, `Genres`, `People`, `Studios`, `SortName`, `MediaSources`,
+  `PrimaryImageAspectRatio` and the rest — with **no `Fields` in the request**, and `/UserViews` is
+  a third shape at 40 unasked. §3.2 opened with "One representation for every item type" and T9's
+  registry was going to be one table; it is now one table with the tier as a parameter of the call
+  site, or `/Items/{itemId}` is wrong on every request.
+
+  Then: **three properties are always present and were in no tier** — `ChannelId`,
+  `ImageBlurHashes`, `LocationType`. **Seven of the twelve "Common" per-type names are gated on a
+  list row** — `SortName`, `Overview`, `Genres`, `GenreItems`, `Studios`, `People`,
+  `PrimaryImageAspectRatio` — six of them being `ItemFields` tokens, which is what made the row
+  wrong, since a token is gated by definition. A list of movies carries no overview, no genres, no
+  cast and no aspect ratio unless the client asks, and `PrimaryImageAspectRatio` is the one 004
+  went out of its way to supply. `ChildCount` arrives unasked on `Playlist`.
+
+  **And one finding that is not about 005 at all:** behaviours §1.7 says a null property is
+  absent everywhere, by one line of configuration, with a source citation. `ChannelId` arrived as
+  an explicit `null` **208 times** — every item of every type, both routes — and `ParentId` on the
+  parentless `/UserViews` rows. The entry is amended with the exception and marked as a
+  measurement with no mechanism: what defeats the setting cannot be established without a
+  `reference/` checkout, which this machine does not have. It is the highest-traffic delta the
+  project could have shipped, and nothing in 005 was looking for it.
+
+  The probe's own first run was wrong in the same class of way the spec was: it folded
+  `/UserViews` in with the content types, and one fat row promoted five gated names to "per-type"
+  for every type at once. **The tiers are a property of the route, not of the item type.** Full
+  findings in [notes/item-shapes.md](notes/item-shapes.md).
 
 ## T2 — `domain/queries.py`: the vocabulary
 

@@ -152,17 +152,43 @@ its whole JSON pipeline is configured with
 
 Measured too: `/System/Info` declares `PackageName` in its schema and does not send it. [probe: manual request, Jellyfin 10.11.11, 2026-08-26]
 
-**Depends on it:** decoders differ. A generated Swift client distinguishes "absent" from "null"
-only when the schema is nullable; a hand-written Kotlin one usually does not.
+**Except that two properties survive it.** `ChannelId` arrives as an explicit `null` on **every
+item of every type**, in list rows and in single-item bodies alike — 208 observations across nine
+content types — and `ParentId` arrives as an explicit `null` on the `/UserViews` rows that have no
+parent. `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`
 
-**Atrium does:** the same, in the base model rather than per route. A `response_model_exclude_none`
-flag on every route is one someone eventually forgets, and the one they forget is the one a client
-sees a stray `null` on.
+```json
+"OfficialRating": "ES-18",
+"ChannelId": null,
+"CommunityRating": 6.7,
+```
+
+**What overrides the setting has not been established here.** The configuration cited above is not
+in dispute; something defeats it for these two properties, and identifying it needs a reading of
+the reference's source that this repository cannot currently do — there is no `reference/`
+checkout on the machine that ran the probe. The exception is therefore recorded as a measurement
+with no mechanism, which is weaker than the rest of this entry and is marked as such.
+
+**Depends on it:** decoders differ. A generated Swift client distinguishes "absent" from "null"
+only when the schema is nullable; a hand-written Kotlin one usually does not — and the exception
+is where that bites hardest, because a client which draws the distinction sees `ChannelId: null`
+on every row of every list, the highest-traffic response in the API.
+
+**Atrium does:** the same, in the base model rather than per route — with `ChannelId` emitted
+explicitly as `null` on every item, and `ParentId` likewise where it has no parent. A
+`response_model_exclude_none` flag on every route is one someone eventually forgets, and the one
+they forget is the one a client sees a stray `null` on; the two exceptions are named in one place
+for the same reason.
 
 > **This entry previously read "per-property and not consistent", marked ⚠️ UNVERIFIED**, and
 > planned to let the differential harness enumerate it. It is one line of configuration. The
 > assumption was more complicated than the truth, which is worth remembering the next time
 > something looks like it needs a harness to work out.
+>
+> **And then it was measured, on 2026-08-27, and the exception it had ruled out turned out to
+> exist after all** — narrower than the original "per-property and not consistent", but real, and
+> found only because a probe counted nulls it was not looking for. The line of configuration was
+> the right answer to "how is this done" and the wrong answer to "does it hold everywhere".
 
 ### 1.8 `GET /Items/Latest` returns a bare array
 
