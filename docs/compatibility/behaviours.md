@@ -1125,6 +1125,31 @@ of not diverging is a bug in a new server destroying somebody's library. Revisit
 trash with a retention window to delete into. Specified in
 [009 §3.6](../../specs/009-playlists/spec.md).
 
+### 4.4 Non-ASCII characters are sent as themselves, not as `\uXXXX`
+
+**Jellyfin does:** escape every non-ASCII character in a JSON body. `Occitan (post 1500);
+Provençal` goes out as `Occitan (post 1500); Proven\u00E7al`, with the hex in **upper case** — the
+default of .NET's JSON encoder, applied to every response rather than to this endpoint
+`[probe: tools/generate_cultures.py, Jellyfin 10.11.11, 2026-08-27]`. Found by byte-comparing
+Atrium's `GET /Localization/Cultures` against the reference's, which is the first response in the
+project to contain a non-ASCII character at all.
+
+**Depends on it:** nothing can. `"ç"` and `"\u00E7"` are **the same JSON string** — every
+conformant parser produces the identical value, and the difference survives only in bytes nobody
+reads. It is visible in `Content-Length`, which no client checks against an expectation.
+
+**Atrium does:** send the character. Matching would mean re-encoding every response body with
+`ensure_ascii` and then upper-casing the hex of each escape, and that second step is the problem:
+a string that legitimately contains a backslash followed by `u00e7` is indistinguishable from an
+escape after the fact, so the substitution is **unsafe in general**. Trading a real corruption
+risk on unusual data for a byte difference no client can observe is the wrong trade, and it is the
+shape §3.0.3 describes: the divergence is invisible through any parser, and reproducing it costs
+correctness elsewhere.
+
+Worth revisiting only if the differential harness (010) finds a client that reads raw bytes — and
+if one exists, the fix belongs in `compat/responses.py` for every endpoint at once, not in the
+feature that happened to notice.
+
 ---
 
 ## 5. Accepted gaps in v1

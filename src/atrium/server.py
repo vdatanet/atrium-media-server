@@ -32,8 +32,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from atrium import REFERENCE_VERSION, __version__
 from atrium import logs as log_setup
+from atrium.api import localization, system, users
 from atrium.api import sessions as session_routes
-from atrium.api import system, users
 from atrium.compat.errors import EXCEPTION_HANDLERS
 from atrium.compat.middleware import ResponseHeadersMiddleware
 from atrium.compat.profiles import ContentProfileMiddleware
@@ -56,7 +56,7 @@ logger = logging.getLogger("atrium")
 #: `users.router` registers its literal paths before `/Users/{userId}`, and the route table tries
 #: patterns in this order - so `/users/public` reaches the public route rather than being read as a
 #: user whose identifier is `public`. tests/conformance/test_routes.py asserts it.
-ROUTERS = (system.router, users.router, session_routes.router)
+ROUTERS = (system.router, users.router, session_routes.router, localization.router)
 
 
 def create_app(paths: DataPaths | None = None) -> FastAPI:
