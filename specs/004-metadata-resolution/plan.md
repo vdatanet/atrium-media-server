@@ -4,7 +4,7 @@ title: Metadata resolution — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4
+amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -71,7 +71,7 @@ fixture tree before and after a full scan-and-refresh to prove it stayed byte-id
 src/atrium/
 ├── metadata/
 │   ├── model.py          Field vocabulary, FieldValues, RefreshMode, ProviderIdentity — pure
-│   ├── nfo.py            sidecar discovery and parsing (stdlib ElementTree)
+│   ├── nfo.py            sidecar discovery and parsing (stdlib expat, §6.2)
 │   ├── tags.py           embedded tags via mutagen; implements 003's MetadataSource
 │   ├── artwork.py        local artwork discovery and the §6.4 name tables
 │   ├── merge.py          per-field precedence, locks, refresh modes — pure
@@ -116,7 +116,8 @@ the track gain, and serves it as `NormalizationGain` on the item — so a `repla
 four values would be three columns' worth of storage that no response in the reference's shape
 can ever carry, and a *dropped* column would lose the one value that 005 has to emit. Nullable
 because the tag is usually absent: the reference omits the property entirely when it has no value
-([behaviours §1.7](../../docs/compatibility/behaviours.md#17-a-null-property-is-absent-everywhere-by-one-setting)), and a track with no tag must serialise the same way. The
+([behaviours §1.7](../../docs/compatibility/behaviours.md#17-a-null-property-is-absent-everywhere-by-one-setting)),
+and a track with no tag must serialise the same way. The
 reference's second source for this number — an opt-in loudness scan of the file, which overrides
 the tag when it has run — is **not** in v1: it needs a decoder pass per track, which is 008's
 dependency and not this feature's, and the divergence it creates is recorded with its argument in
@@ -249,10 +250,27 @@ merging, one level down.
 ### 6.2 Sidecars
 
 Discovery per the spec §3.2 table, tried in order beside the item's part-zero file. Parsing is
-stdlib `ElementTree`: it refuses DTDs and entity definitions outright, which turns the whole XXE
-class into the malformed-sidecar path — warn, name the file, continue (AC-4). A sidecar over 5 MB
-is treated as malformed rather than read, because no real `.nfo` is megabytes and a decompression
-bomb should cost a warning, not the scan.
+stdlib, and **the parser has to be built rather than called**, because the sentence this plan
+first carried here — that `ElementTree` "refuses DTDs and entity definitions outright" — is not
+true. Measured against the three fixtures T2 checked in for it (Python 3.14.6, expat 1.3.0):
+
+| Input | `ElementTree.parse` as it comes |
+|---|---|
+| A document type declaration defining an entity | **Parses, and expands the entity into the value** |
+| The same, but the entity is external (`SYSTEM "file:///…"`) | **Raises** `ParseError: undefined entity` — no external entity is ever fetched, so file disclosure is impossible, but by *failing* rather than by refusing the declaration |
+| Nested entities, five levels of ten | **Parses, and expands 400 bytes into 200,000 characters** |
+
+So the XXE class is closed by default and the **expansion** class is wide open: a `.nfo` a user
+drops into a library can cost a scan an arbitrary amount of memory. What makes the original
+sentence true is one handler, all stdlib — an `xml.parsers.expat` parser feeding an
+`ElementTree.TreeBuilder`, with `StartDoctypeDeclHandler` raising and
+`SetParamEntityParsing(XML_PARAM_ENTITY_PARSING_NEVER)` — after which **every** document carrying
+a declaration is refused before a single entity is expanded, and all three fixtures land on the
+same path: warn, name the file, continue (AC-4). No real `.nfo` has a DTD; refusing the whole
+construct costs nothing a user will notice and removes the class rather than the instance.
+
+A sidecar over 5 MB is treated as malformed rather than read, for the same reason one size up: no
+real `.nfo` is megabytes, and a large file should cost a warning, not the scan.
 
 Field mapping: `title`→name, `sorttitle`→sort-name override (through 003 §3.7.3's treatment),
 `originaltitle`, `year`/`premiered`, `plot`→overview, `tagline`, `runtime` (minutes→ticks at

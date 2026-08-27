@@ -84,7 +84,7 @@ it.
 
 ## T2 — Fixture groundwork: sidecars, artwork, and the four template containers
 
-- [ ] **Changes:** `tests/fixtures/metadata/` — sidecar fixtures (full, sparse, id-bearing,
+- [x] **Changes:** `tests/fixtures/metadata/` — sidecar fixtures (full, sparse, id-bearing,
   malformed, entity-bearing), artwork files covering every name in
   [plan §6.4](plan.md#64-local-artwork)'s tables, and four tiny silent template containers (FLAC,
   MP3, M4A, Ogg) **checked in**, with the commands that generated them recorded in a README beside
@@ -98,6 +98,39 @@ it.
   ([spec §6](spec.md#6-conformance)) true without adding a muxer to CI — 003 T2's lesson,
   inherited rather than relearned.
 - **Plan reference:** §8
+- **Done (2026-08-27):** 56 files, 20,718 bytes, in `tests/fixtures/metadata/` with a
+  [README](../../tests/fixtures/metadata/README.md) carrying every generation command.
+  Three things the task did not expect.
+  **The entity fixture disproved [plan §6.2](plan.md#62-sidecars).** The plan said stdlib
+  `ElementTree` "refuses DTDs and entity definitions outright, which turns the whole XXE class
+  into the malformed-sidecar path". It does not. Measured: an internal entity **parses and
+  expands**; an external one raises, so file disclosure is genuinely impossible but by *failing*
+  rather than refusing; and five nested levels expand 400 bytes into 200,000 characters, which is
+  a scan-memory hole the plan believed was already closed. One fixture became three, one per
+  shape, and §6.2 now names the handler T5 has to install — expat with `StartDoctypeDeclHandler`
+  raising — which was verified to work before being written down rather than after.
+  **The artwork was generated wrong the first time and looked right.** Fourteen images came out
+  320×240 — lavfi's default — because in zsh `$4:s=` is a substitution modifier on `$4`, so
+  everything after `:s=` was eaten and `ffmpeg` never saw a size. Nothing failed; the files
+  existed, opened, and were the wrong size. AGENTS.md's "verify that an edit landed" turns out to
+  cover fixtures too.
+  **Every byte was checked against the tools that will read it**, before being committed rather
+  than at T5, T7 and T8: mutagen opens all four templates and round-trips multi-valued tags in
+  each; Pillow identifies all 39 images at their intended dimensions and refuses exactly the one
+  meant to be refused. Two toolchain facts are recorded in the README because they will bite
+  whoever regenerates: this `ffmpeg` has no `libvorbis` (its own Vorbis encoder takes stereo
+  only, so the Ogg template is the one stereo file) and no webp encoder (`cwebp` made that one).
+  **And the task list did not mention that 003 forbids exactly this.**
+  `test_the_generator_is_the_only_source_of_media` asserted that `tests/fixtures` holds nothing
+  but `.py` files — 003's way of keeping "no fixture file is a copyrighted work" a property
+  rather than a list, since a list of extensions passes for whichever extension nobody thought
+  of. The first committed sidecar failed it. It is now scoped to `tests/fixtures/library`, where
+  it is unchanged and still true, and 004's tree holds the same property from the other side:
+  `inventory.py` declares every file by digest, `tests/metadata/test_fixture_tree.py` holds the
+  tree to it **in both directions**, and two size caps read from disk mean that whatever anybody
+  adds later is too small to be a recognisable piece of somebody's work even if they update the
+  table in the same commit. Both directions were checked by breaking them — a stowaway `.jpg`
+  and one appended byte each fail the suite.
 
 ## T3 — `metadata/model.py`
 
@@ -135,12 +168,17 @@ it.
 ## T5 — `metadata/nfo.py`
 
 - [ ] **Changes:** sidecar discovery per the [spec §3.2](spec.md#32-nfo-sidecars) table; the
-  parser on stdlib `ElementTree`; the field map including `sorttitle` routed through 003 §3.7.3's
+  parser on stdlib expat feeding an `ElementTree.TreeBuilder`, refusing document type
+  declarations outright (plan §6.2); the field map including `sorttitle` routed through 003 §3.7.3's
   explicit-sort-title treatment; provider ids; the size cap.
 - **Depends on:** T2, T3
 - **Verified by:** the fixture sidecars parse to their expected `FieldValues`; the malformed and
-  the entity-bearing fixtures each produce a warning naming the file and nothing else (AC-4's
-  parser half — `ElementTree` refuses DTDs, so the XXE class *is* the malformed path); a single
+  the three entity-bearing fixtures each produce a warning naming the file and nothing else
+  (AC-4's parser half — but **not** because `ElementTree` refuses DTDs, which T2 measured it does
+  not do: it expands internal entities, expands an entity bomb, and fails only on the external
+  case. The refusal is a handler T5 installs, and there are three fixtures because the default
+  parser treats the three shapes three different ways — [plan §6.2](plan.md#62-sidecars)); a
+  single
   `<genre>` containing ` / ` stays one genre; `runtime` minutes become ticks at ingestion and
   nowhere else.
 - **Plan reference:** §6.2

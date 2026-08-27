@@ -1,0 +1,35 @@
+<!-- atrium synthetic fixture - not anybody's metadata -->
+<movie>
+  <title>The Fixture</title>
+  <sorttitle>Fixture, The</sorttitle>
+  <originaltitle>El Atrezzo</originaltitle>
+  <year>1999</year>
+  <premiered>1999-04-23</premiered>
+  <plot>A film that exists so a parser has something to read.</plot>
+  <tagline>Every field, once.</tagline>
+  <runtime>97</runtime>
+  <mpaa>PG-13</mpaa>
+  <rating>7.4</rating>
+  <genre>Drama</genre>
+  <genre>Science Fiction / Fantasy</genre>
+  <studio>Fixture Pictures</studio>
+  <studio>Second Studio</studio>
+  <tag>synthetic</tag>
+  <tag>checked-in</tag>
+  <actor>
+    <name>First Billed</name>
+    <role>The Lead</role>
+  </actor>
+  <actor>
+    <name>Second Billed</name>
+    <role>The Other One</role>
+  </actor>
+  <actor>
+    <name>Third Billed</name>
+    <role>Uncredited</role>
+  </actor>
+  <director>A Director</director>
+  <writer>A Writer</writer>
+  <uniqueid type="tmdb" default="true">11111</uniqueid>
+  <uniqueid type="imdb">tt2222222</uniqueid>
+</movie>

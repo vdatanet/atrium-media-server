@@ -6,7 +6,9 @@ Four properties, and each of them is load-bearing for a later task rather than t
 * **byte-identical across two builds** - otherwise a difference in a scan result might be a
   difference in the fixture, and AC-2 and AC-3 stop meaning anything;
 * **nothing is committed but code** - which is how "no fixture file is a copyrighted work" stays
-  true without anybody reviewing it again;
+  true without anybody reviewing it again. Scoped to *this* package since 004 T2: that feature's
+  fixtures are read rather than walked, so they have to be bytes, and they hold the same property
+  from the other side - see `tests/metadata/test_fixture_tree.py`;
 * **nothing outside the locked dependency set** - the task job installs nothing else, so a
   generator that reached for a muxer would fail there and not here;
 * **the awkward cases are actually in the tree** - a fixture that quietly lost the compilation is
@@ -122,16 +124,26 @@ def test_the_generator_is_the_only_source_of_media() -> None:
     This is the assertion behind the definition-of-done line. It is deliberately about the whole
     package rather than a list of extensions: a `.mkv` nobody expected would be caught, and so
     would a `.jpg` that somebody helpfully added "just as an example".
+
+    **Narrowed from `tests/fixtures` to `tests/fixtures/library` by 004 T2**, which is the first
+    thing in the project that has to commit bytes: a sidecar exists to be parsed and a container
+    exists to be opened, and neither can be generated from a manifest by a feature whose whole
+    subject is reading them. Nothing about 003's tree changed. The property those bytes hold
+    instead is the inverse one - the tree matches a checked-in inventory of sizes and hashes in
+    both directions, under a per-file cap small enough that whatever passes cannot be a
+    recognisable piece of anybody's work - in `tests/metadata/test_fixture_tree.py`.
     """
+    generated = FIXTURE_PACKAGE / "library"
     committed = [
-        str(path.relative_to(FIXTURE_PACKAGE))
-        for path in sorted(FIXTURE_PACKAGE.rglob("*"))
+        str(path.relative_to(generated))
+        for path in sorted(generated.rglob("*"))
         if path.is_file()
         and path.suffix != ".py"
         and "__pycache__" not in path.parts  # the interpreter's own output for the files above
     ]
     assert not committed, (
-        f"tests/fixtures holds non-code files: {committed}. The fixture library is generated, "
+        f"tests/fixtures/library holds non-code files: {committed}. The fixture library is "
+        f"generated, "
         f"never committed - that is what makes 'no fixture file is a copyrighted work' a "
         f"property of the code rather than a promise."
     )

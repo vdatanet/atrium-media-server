@@ -1,0 +1,5 @@
+<!-- atrium synthetic fixture - not anybody's metadata -->
+<movie>
+  <uniqueid type="tmdb" default="true">33333</uniqueid>
+  <imdbid>tt4444444</imdbid>
+</movie>

@@ -1,0 +1,16 @@
+<!-- atrium synthetic fixture - not anybody's metadata.
+     Five levels of ten: 10^5 expansions of a two-character string, so a parser that expands
+     this produces about 200 KB from 400 bytes. Deliberately modest - the point is that the
+     growth is exponential, not that this file can exhaust a machine. -->
+<!DOCTYPE movie [
+  <!ENTITY a "xx">
+  <!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">
+  <!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">
+  <!ENTITY d "&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;">
+  <!ENTITY e "&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;">
+  <!ENTITY f "&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;">
+]>
+<movie>
+  <title>&f;</title>
+  <year>2007</year>
+</movie>

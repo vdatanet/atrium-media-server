@@ -1,0 +1,8 @@
+<!-- atrium synthetic fixture - not anybody's metadata -->
+<!DOCTYPE movie [
+  <!ENTITY disclosure SYSTEM "file:///etc/hostname">
+]>
+<movie>
+  <title>&disclosure;</title>
+  <year>2006</year>
+</movie>
