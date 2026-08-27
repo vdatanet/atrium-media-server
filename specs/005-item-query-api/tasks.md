@@ -395,7 +395,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T7 — Ordering is total; `Random` is seeded
 
-- [ ] **Changes:** [plan §6.3](plan.md#63-order-by)'s table — `SortName`, `DateCreated`,
+- [x] **Changes:** [plan §6.3](plan.md#63-order-by)'s table — `SortName`, `DateCreated`,
   `PremiereDate` with the reference's January-1-of-`ProductionYear` fallback, `PlayCount` and
   `DatePlayed` over the user-data join, `AlbumArtist` and `Artist` as the minimum folded credit
   name; the comma-list zip with `sortOrder`; the tail — `Name` when the first key is `SortName`,
@@ -415,6 +415,35 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   is why the tail exists, and the property test is the tripwire [plan §9](plan.md#9-risks) names
   for a refactor that drops it.
 - **Plan reference:** §6.3, §6.4
+- **Done (2026-08-27):** **AC-4 as written would have passed while testing nothing for the two
+  sorts it exists to protect.**
+
+  The criterion says to page *the 100-item corpus*, and the corpus is films. Films have no artist
+  credits, so under `AlbumArtist` and `Artist` every row's key is null and the property test
+  exercises the id tail and nothing else. Those two are precisely the sorts
+  [behaviours §3.6](../../docs/compatibility/behaviours.md#36-ties-are-engine-resolved-and-paging-the-artist-sorts-loses-rows--class-b-diverged)
+  measured **losing rows** on the reference — the whole reason the tail exists. The test now pages
+  the whole world as well, and a second test asserts the artist keys actually order something, so
+  a null-keyed run cannot masquerade as a passing one. Plan §8 row 4 amended.
+
+  **Two of plan §6.3's expressions were written portably rather than literally.**
+  `COALESCE(premiere_date, jan1(production_year))` needs a database function that builds a
+  timestamp out of an integer, and every dialect spells that differently; ordering by the
+  *effective year* first, with the date second, puts a year-only item exactly where January 1
+  would — and `extract` compiles on both stores. The fixture was shaped to catch the difference:
+  one film's premiere date is **older than its own production year**, so a dateless-clumping
+  implementation puts it on the wrong side of a year-only film, whichever end it clumps at.
+
+  The artist keys are **lower-cased, not folded**: `fold_for_search` strips diacritics and no
+  dialect does that portably. There is nothing measured to be wrong against — the reference's key
+  for those two lives in a joined table the API does not return, which is why
+  `probe_sort_stability.py` reports rather than concludes on them — so it is recorded as a known
+  approximation rather than a claim.
+
+  **The seed had to be a field of the query.** Plan §6.4 said "tests inject it" without saying
+  where. Passing it beside the query would mean two equal `ItemQuery` values describing different
+  pages, for the one ordering where that matters most, so `random_seed` is on `ItemQuery` with a
+  docstring saying it is never client-supplied. §5 and §6.4 amended.
 
 ## T8 — By-name queries
 

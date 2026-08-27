@@ -134,5 +134,14 @@ class ItemQuery:
     #: client that never sends it expects a real total to size a scrollbar with (spec 3.3).
     count: bool = True
 
+    #: The shuffle for `SortBy.RANDOM`, and **never anything a client sent**.
+    #:
+    #: It is a field of the query rather than an argument to the repository because a query is the
+    #: whole of what produced a result: two `ItemQuery` values that compare equal must describe the
+    #: same page, and a seed living outside them would break that quietly for the one ordering
+    #: where it matters most. Fresh entropy per request in the server, injected by tests
+    #: (plan section 6.4). It is not a parameter of the API and is never echoed.
+    random_seed: int | None = None
+
 
 __all__ = ["Filter", "ItemQuery", "SortBy", "SortOrder"]

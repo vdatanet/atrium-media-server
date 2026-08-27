@@ -76,6 +76,7 @@ DEFAULTS: dict[str, Any] = {
     "start_index": 0,
     "limit": None,
     "count": True,
+    "random_seed": None,
 }
 
 

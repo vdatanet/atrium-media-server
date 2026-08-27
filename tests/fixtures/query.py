@@ -86,6 +86,11 @@ AWKWARD_NAMES = (
 RATED = 10
 FIRST_YEAR = 1990
 
+#: Which of the rated films carries a real `PremiereDate`, and what it is. Older than the film's
+#: own production year on purpose: see `_seed_movies`.
+DATED_OFFSET = 1
+DATED_PREMIERE = datetime(1989, 6, 1, tzinfo=UTC)
+
 #: Total movies in the movies library, the awkward ones included. Plan section 8 row 4 pages this
 #: at 1, 7 and 97, so the count is deliberately not a multiple of any of them.
 CORPUS_SIZE = 100
@@ -318,16 +323,19 @@ def _seed_movies(
     # test `years` or `min_community_rating` without them: a predicate applied to a column that is
     # null on every row narrows nothing and passes every assertion about the rows it returned.
     for offset, item_id in enumerate(corpus[:RATED]):
-        metadata.apply(
-            item_id,
-            MetadataChanges(
-                values={
-                    Field.YEAR: FIRST_YEAR + offset,
-                    Field.COMMUNITY_RATING: round(5.0 + offset * 0.5, 1),
-                }
-            ),
-            refreshed_at=REFRESHED_AT,
-        )
+        values: dict[Field, object] = {
+            Field.YEAR: FIRST_YEAR + offset,
+            Field.COMMUNITY_RATING: round(5.0 + offset * 0.5, 1),
+        }
+        if offset == DATED_OFFSET:
+            # **One film with a real premiere date, and it is deliberately older than its own
+            # production year.** Under `sortBy=PremiereDate` a year-only item sorts at January 1
+            # of that year, so this film (1989) must come out *before* the one whose production
+            # year is 1990 and which has no date at all. An implementation that clumped the
+            # dateless - first or last, either way - puts them in the other order, and a fixture
+            # whose dates agreed with its years could not tell the two apart.
+            values[Field.PREMIERE_DATE] = DATED_PREMIERE
+        metadata.apply(item_id, MetadataChanges(values=values), refreshed_at=REFRESHED_AT)
 
     # One genre, two spellings, on two films. Both reach the same by-name row.
     for item_id, spelling in zip(corpus[:2], GENRE_SPELLINGS, strict=True):
