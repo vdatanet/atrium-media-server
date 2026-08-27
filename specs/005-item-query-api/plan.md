@@ -146,9 +146,16 @@ promise this contract did not carry.
 **`db.item_queries.ItemQueryRepository`**:
 
 ```python
-def run(self, query: ItemQuery) -> QueryPage        # .items: list[Item], .total: int
+def run(self, query: ItemQuery) -> QueryPage        # .items: tuple[HydratedItem, ...], .total: int
 def run_by_name(self, kind: ItemType, query: ItemQuery) -> QueryPage
 ```
+
+**A page carries `HydratedItem`, not `Item`.** This paragraph said `list[Item]` until T5 built it,
+and `Item` cannot hold what the sentence below requires: genres, credits, images and *another
+user's* play state are not properties of the file the scanner saw. Putting them on `Item` would
+give 003's scanner five fields it can never fill and a reader no way to tell "empty" from "not
+loaded". `HydratedItem` wraps the item and carries the rest, so the DTO builder still receives
+plain values — which is the property that mattered, and it is now literally true.
 
 Two invariants callers may assume, and tests enforce: **the count is the pre-paging count** under
 exactly the query's predicates, and **hydration is complete** — items arrive with their genres,
@@ -179,6 +186,13 @@ Every query — items and by-name alike — is filtered by `visible_to(user)`:
    behaviours §5.2. The tree's depth is fixed by `PARENT_OF`, so this is a correlated `EXISTS`
    through at most two parent hops, not a recursive query. A `CollectionFolder` is exempt: an
    empty library is still a library, and `/UserViews` shows it.
+
+   > **The correlation is the whole clause, and losing it fails open.** Written without an
+   > explicit `correlate`, the ORM puts the item table in the subquery's *own* `FROM` and the
+   > `EXISTS` becomes a cross join — the clause then asks "does any visible file exist at all",
+   > which every container in a non-empty library passes. It is a one-word difference that turns
+   > a visibility rule into a tautology, and nothing about the resulting SQL looks wrong. T5
+   > found it by emptying a series and watching it stay visible.
 
 By-name rows add their own clause: a `Genre` exists for a user while a visible item references it
 (`EXISTS` over the join table against the item predicate above), so `/Genres` never lists a genre

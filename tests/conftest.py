@@ -14,12 +14,15 @@ from __future__ import annotations
 
 import socket
 from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
+from dataclasses import field as dataclasses_field
 from pathlib import Path
 
 import httpx
 import pytest
 from fastapi import FastAPI
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 
 from atrium import server
 from atrium.api.deps import require_user
@@ -193,6 +196,48 @@ def authenticated(app: FastAPI) -> User:
     """Reach the authenticated path without shipping a credential. plan section 1."""
     app.dependency_overrides[require_user] = lambda: TEST_USER
     return TEST_USER
+
+
+@dataclass
+class QueryCounter:
+    """Every SQL statement one engine executed, so a test can assert on how many there were.
+
+    The N+1 ban is a contract rather than a hope (005 plan §5): hydration is complete *and* costs
+    a fixed number of statements, so a page of one and a page of a hundred are the same number of
+    round trips. That is invisible in a functional test - the wrong implementation returns exactly
+    the right answer - and quadratic in a real library.
+
+    Counting statements rather than timing them is deliberate: a timing assertion is a flake, and
+    what actually went wrong is always visible in the count.
+    """
+
+    statements: list[str] = dataclasses_field(default_factory=list)
+
+    def __len__(self) -> int:
+        return len(self.statements)
+
+    @contextmanager
+    def watching(self, engine: Engine) -> Iterator[QueryCounter]:
+        def record(_conn: object, _cursor: object, statement: str, *_rest: object) -> None:
+            self.statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record)
+        try:
+            yield self
+        finally:
+            event.remove(engine, "before_cursor_execute", record)
+
+    def reset(self) -> None:
+        self.statements.clear()
+
+    def report(self) -> str:
+        """The statements, one per line, for a failure message that says what to delete."""
+        return "\n".join(f"  {n + 1}. {one}" for n, one in enumerate(self.statements))
+
+
+@pytest.fixture
+def query_counter() -> QueryCounter:
+    return QueryCounter()
 
 
 @pytest.fixture
