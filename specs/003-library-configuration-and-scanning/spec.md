@@ -226,9 +226,24 @@ is in [behaviours §1.4](../../docs/compatibility/behaviours.md#14-item-identifi
 or who runs the same library from a container with a different mount point, must not lose every
 identifier. The reference has this problem; Atrium does not have to inherit it.
 
-> ⚠️ **OQ-2.** Whether path normalisation is case-sensitive. The reference lowercases by default and
-> exposes a setting. Case-sensitivity changes every identifier, so the choice is permanent for a
-> given library and must be recorded with it.
+**Case sensitivity is a property of a library, not of the server, and it is fixed when the library
+is created.** Paths are compared without regard to case by default, which is what the reference
+does; an operator who needs two files differing only in case to be two items says so when the
+library is declared. The setting is recorded with that library and **an attempt to change it
+afterwards is refused, not accepted with a warning** — changing it rewrites every identifier under
+it, and nothing stores the old ones to undo with. Making it a server-wide switch would mean one
+flip rewrote every identifier in every library at once.
+
+**The same applies to a library's own identity, and it is easier to trigger by accident.** A
+library's identity is allocated when it is declared and kept, rather than derived from its name or
+its roots — so renaming a library, or moving its roots to another mount, costs nothing. The
+consequence worth stating plainly: *deleting* a library and declaring another one with the same
+name and the same roots is **not** the same library, and every item under it gets a new
+identifier. Editing a library is free; recreating one is not.
+
+**A library's collection type is fixed at creation too**, and refused afterwards for the same
+reason: it selects which resolution rules apply, so changing it re-resolves every file under a
+different set of rules and gives every item a new type and a new identifier.
 
 ### 3.7 Sort names
 
@@ -393,7 +408,6 @@ media generated at build time. No copyrighted media, ever.
 
 | # | Question | Blocks | Resolved by |
 |---|---|---|---|
-| OQ-2 | Case sensitivity of path normalisation for identity | The identity rule of §3.6; permanent per library | A decision plus a recorded per-library setting |
 | OQ-4 | Does the reference merge a folder-per-film layout when the folder and file names disagree? | An edge in §3.3 | Fixture comparison via the differential harness |
 | OQ-6 | Whether the §3.7.2 formulas hold for items carrying an explicit sort title, and how many real items do | §3.7.3 | The override rows of `tools/probe_sort_names.py`, read against a larger library |
 | OQ-7 | What the reference does with a character that has no ASCII decomposition — `ø`, `ß`, a non-Latin script | The ordering of those names, and nothing else | Crafted names in `tools/probe_sort_names.py`; the measured set contains none |
@@ -404,6 +418,7 @@ media generated at build time. No copyrighted media, ever.
 |---|---|---|---|
 | OQ-3 | The reference's sort-name normalisation | **Six ordered steps, three configurable lists, pad width 10 — and three item types that bypass all of it.** §3.7 now states both rules; 15 of 15 crafted cases matched | `tools/probe_sort_names.py`, 2026-08-26 |
 | OQ-1 | The exact extension lists the reference honours | **Measured, and the lists do not fall back to one another**: `movies` `.mkv` `.mp4` `.avi` `.ts`; `tvshows` `.mkv` `.avi` `.mp4`; `music` `.flac` `.m4a` `.dsf`. 89 `.mp3` and 3 `.mka` files under video roots produced **no item of any type**. A lower bound, not the configured list — §3.2 says which part is measured and which is not | `tools/probe_library_extensions.py`, 2026-08-27 |
+| OQ-2 | Case sensitivity of path normalisation for identity | **A per-library fact, not a server decision**, defaulting to case-insensitive as the reference does — and **frozen once the library exists**, with the change refused rather than warned about. §3.6 states it, and the same paragraph now records the two neighbouring traps: a library's identity is allocated rather than derived, so recreating a library is not editing one, and its collection type is frozen for the same reason | A decision plus a recorded per-library setting, 2026-08-27 |
 | OQ-5 | What the reference does with a file whose embedded tags contradict its path | **The tag wins, verbatim.** 413 of 5,814 tracks carry an album name with no resemblance to their directory, and 129 keep whitespace a path cannot produce. 33 compilations resolve to one album each. Not covered: a genuinely flat directory, which the measured library had none of | `tools/probe_music_precedence.py`, 2026-08-27 |
 
 ## 8. References

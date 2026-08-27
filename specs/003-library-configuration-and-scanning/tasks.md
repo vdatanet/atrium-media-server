@@ -407,9 +407,9 @@ whatever the script directory holds, so `0002` was applied, rolled back and sche
 anybody extending it. `test_the_migration_and_the_models_agree` likewise compares the *whole*
 metadata, so it covers this revision already.
 
-## T7 — `library/config.py`
+## T7 — `library/config.py`  ✅
 
-- [ ] **Changes:** libraries, roots, collection types; the `case_sensitive_identity` flag frozen at
+- [x] **Changes:** libraries, roots, collection types; the `case_sensitive_identity` flag frozen at
   creation.
 - **Depends on:** T6
 - **Verified by:** an attempt to change the flag on an existing library is **refused**, not accepted
@@ -418,6 +418,53 @@ metadata, so it covers this revision already.
   decision is only real once the setting is recorded per library and the edit is refused. Move OQ-2
   to the resolved table of [spec §7](spec.md#7-open-questions) in this change, not a later one.
 - **Plan reference:** §6.3
+
+### Done — 2026-08-27
+
+**There were two frozen fields, not one.** The task names `case_sensitive_identity`, and the same
+argument applies word for word to a library's **collection type**: it selects which resolution
+rules apply, so changing it re-resolves every file under a different set of rules and gives every
+item a new type and a new identifier. Both are now refused, and [spec §3.6](spec.md#36-identity)
+says so.
+
+**And a third thing behaves the same way without being a field at all.** A library's identity is
+*allocated* when it is declared, not derived from its name or its roots — which is deliberate, and
+is what makes renaming a library or moving its roots free. The consequence nobody had written down
+is the mirror image: **deleting a library and declaring another one with the same name and the same
+roots is not the same library**, and every item under it gets a new identifier. It is the same
+destruction the frozen flag exists to prevent, reachable by an operator who thinks they are tidying
+up, and no code can refuse it because nothing can tell the two intentions apart. So it is in the
+spec instead. Two tests hold the other half: renaming a library and moving its roots both leave
+every identifier unchanged.
+
+**The refusal is enforced twice, in two different shapes.** `library/config.py` raises with an
+explanation and a way forward; `LibraryRepository` has **no method that can change the flag at
+all** — `rename` and `set_roots` take the fields an operator may edit and the flag is not among
+them. A guard in a service is a guard one new caller can go around; a repository with nowhere to
+put the value is not. A test asserts the repository's public surface by name, so adding a setter
+fails rather than being reviewed.
+
+**`update` accepts the frozen arguments in order to refuse them.** Leaving them out of the
+signature would have produced `TypeError: unexpected keyword argument`, which tells an operator
+they typed something wrong rather than that they asked for something destructive. It also lets a
+caller round-tripping a library it just read pass the values unchanged, which is not a request for
+anything and is allowed through.
+
+**Two roots where one contains the other are refused**, which nothing had said. Every file under
+the inner root would be found twice, under two relative paths, and therefore under two
+identifiers — a doubled library, which is the failure AC-4 exists to prevent arriving by a
+different door. Root spellings are normalised for the same reason: `/mnt/films`, `/mnt/films/` and
+`/mnt/./films` are one directory written three ways, and left alone an operator could configure the
+same tree twice.
+
+**Symbolic links are deliberately not resolved.** An operator who mounted a share at a stable path
+and expects that path to be the root is right, and resolving would put the mount target in the
+configuration — where the next remount changes it, and with it every relative path underneath.
+
+**OQ-2 is resolved**, in the resolved table of [spec §7](spec.md#7-open-questions). The question
+was never what the reference does — it has the setting and defaults it off — but whether Atrium
+should treat it as a global decision or a per-library fact. Per-library: a server-wide switch would
+mean one flip rewrote every identifier in every library at once.
 
 ## T8 — `library/walker.py`
 

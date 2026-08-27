@@ -34,6 +34,8 @@ from sqlalchemy.orm import Session as OrmSession
 from atrium.compat.dates import utc_now
 from atrium.compat.guids import new_id
 from atrium.db import models
+from atrium.domain.items import CollectionType
+from atrium.domain.library import Library
 from atrium.domain.session import AccessToken, IssuedToken, Session
 from atrium.domain.user import LibraryAccess, User
 
@@ -433,3 +435,85 @@ __all__ = [
     "normalise_name",
     "token_digest",
 ]
+
+
+def _library(row: models.Library, roots: list[str]) -> Library:
+    return Library(
+        id=row.id,
+        name=row.name,
+        collection_type=CollectionType(row.collection_type),
+        roots=tuple(roots),
+        case_sensitive_identity=row.case_sensitive_identity,
+    )
+
+
+class LibraryRepository:
+    """Configured libraries and their roots.
+
+    **There is no method here that changes `case_sensitive_identity`.** That is the enforcement,
+    not a convention: `rename` and `set_roots` take the fields an operator may edit, and the flag
+    is not among them, so no caller can change it by forgetting a rule. `library/config.py` refuses
+    the request with an explanation; this refuses it by having nowhere to put it.
+    """
+
+    def __init__(self, session: OrmSession) -> None:
+        self._session = session
+
+    def by_id(self, library_id: str) -> Library | None:
+        row = self._session.get(models.Library, library_id)
+        return _library(row, self._roots(library_id)) if row is not None else None
+
+    def all(self) -> list[Library]:
+        rows = list(
+            self._session.execute(select(models.Library).order_by(models.Library.name)).scalars()
+        )
+        return [_library(row, self._roots(row.id)) for row in rows]
+
+    def add(self, library: Library) -> Library:
+        """Domain object in, domain object out. The flag arrives here once and never again."""
+        row = models.Library(
+            id=library.id or new_id(),
+            name=library.name,
+            collection_type=library.collection_type.value,
+            case_sensitive_identity=library.case_sensitive_identity,
+        )
+        self._session.add(row)
+        self._session.flush()
+        self._write_roots(row.id, library.roots)
+        return _library(row, self._roots(row.id))
+
+    def rename(self, library_id: str, name: str) -> None:
+        self._require(library_id).name = name
+
+    def set_roots(self, library_id: str, roots: tuple[str, ...]) -> None:
+        """Replaces rather than merges, which is what an operator editing a list means by it."""
+        self._require(library_id)
+        self._session.execute(
+            delete(models.LibraryRoot).where(models.LibraryRoot.library_id == library_id)
+        )
+        self._write_roots(library_id, roots)
+
+    def remove(self, library_id: str) -> None:
+        """Takes the library's roots and every item under it, by the database's own cascade."""
+        self._session.execute(delete(models.Library).where(models.Library.id == library_id))
+
+    def _roots(self, library_id: str) -> list[str]:
+        rows = self._session.execute(
+            select(models.LibraryRoot.path)
+            .where(models.LibraryRoot.library_id == library_id)
+            .order_by(models.LibraryRoot.path)
+        )
+        return list(rows.scalars())
+
+    def _write_roots(self, library_id: str, roots: tuple[str, ...]) -> None:
+        # Deduplicated and ordered, so that two roots given twice are one row and the order a
+        # caller happened to pass them in is not part of the configuration.
+        for path in sorted(set(roots)):
+            self._session.add(models.LibraryRoot(library_id=library_id, path=path))
+        self._session.flush()
+
+    def _require(self, library_id: str) -> models.Library:
+        row = self._session.get(models.Library, library_id)
+        if row is None:
+            raise LookupError(f"no library {library_id}")
+        return row
