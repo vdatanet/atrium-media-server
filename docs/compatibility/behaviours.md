@@ -203,6 +203,40 @@ worth writing before any code.
 
 **Atrium does:** the same four shapes, per endpoint, never normalised into one.
 
+### 1.16 Every non-ASCII character in a body is escaped, and so are seven ASCII ones
+
+**Jellyfin does:** serialise with ASP.NET Core's HTML-safe `JavaScriptEncoder`, which writes every
+non-ASCII character and seven ASCII ones as `\uXXXX` with **uppercase** hex. `28 años después`
+goes out as `28 a\u00F1os despu\u00E9s`; `Abraham's Boys` as `Abraham\u0027s Boys`.
+`[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+
+| Escaped | Left literal |
+|---|---|
+| every non-ASCII character | `/` `=` `:` space `!` `*` `(` `)` `-` `_` |
+| `"` → `\u0022`, `&` → `\u0026`, `'` → `\u0027`, `+` → `\u002B` | |
+| `<` → `\u003C`, `>` → `\u003E`, `` ` `` → `\u0060` | |
+
+Note `"` : JSON's own escape is `\"`, and the reference does not use it.
+
+**How it was measured is the interesting part.** Item names prove only what the library happens to
+contain — a Spanish film catalogue gives `\u00F1` and `\u0027` and says nothing about `<` or a
+backtick. The exact set came from **echoing arbitrary characters back through a validation error**:
+`?limit=a<b>c\`d'e&f+g"h/i=j:k` answers `400` with the value quoted in `errors`, which is the one
+route that puts client-supplied text into a response body.
+
+**Depends on it:** no client can tell. A JSON parser decodes `\u00F1` and `ñ` to the same string,
+so nothing branches on this and Principle I does not require it.
+
+**Atrium does:** the same, in `compat/responses.py`. Not for Principle I but for **Principle VIII**:
+the goldens compare bytes, and a library with accented titles would otherwise differ from the
+reference on nearly every response while being correct in every field. One override in the response
+class is cheaper than an asterisk on every golden and a permanent exception in the differential.
+
+> **The one hard case is a literal.** A *value* containing the six characters `\u00e9` must survive
+> as those six characters while the encoder's own escapes are uppercased, so the rewrite counts
+> backslash parity rather than searching for `\u`. `json.dumps` has already doubled every literal
+> backslash by then, which is what makes the parity exact.
+
 ---
 
 ## 2. Semantics
@@ -626,6 +660,17 @@ media types, so its `JSONResponse` would send a bare `application/json`.
  "errors": {"itemId": ["The value 'not-a-guid' is not valid."]},
  "traceId": "00-0138…-3158…-00"}
 ```
+
+**Two details of the problem-details shape were measured on 2026-08-27** and neither is what the
+natural implementation produces `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`:
+
+- **The content type is `application/json; charset=utf-8`**, not `application/problem+json`. Both
+  ASP.NET Core and every Python framework default to the second for a problem-details body, so
+  matching here means overriding a default rather than accepting one.
+- **The `errors` key is the parameter's *declared* spelling, not the client's.** `Limit=abc`
+  against a route whose parameter is `limit` answers `"errors": {"limit": […]}`. That is the same
+  canonicalisation §1.15 describes, visible from the other side — and it means a server that
+  echoed the client's spelling would differ on exactly the requests a PascalCase client sends.
 
 The split is not arbitrary: the empty ones are produced before the framework's controller pipeline
 runs, the JSON ones by that pipeline, and the third by a controller inside it.

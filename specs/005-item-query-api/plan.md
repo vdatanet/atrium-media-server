@@ -330,11 +330,34 @@ declared parameter of the route are counted per `(route, parameter)` and logged 
 per distinct pair per process — the measurable trail the spec's Tier-3 promise requires. 010 §3.6
 owns turning that into a report; this feature owns making the events exist.
 
+**Two keys no route declares are accepted on every route**, and they are not an exception to the
+rule above so much as its blind spot. `ApiKey` and `api_key` are one of the five authentication
+mechanisms (002 §3.1); `compat/auth.py` reads them straight off the query string, so they appear
+in no route's signature and "matches no declared parameter of the route" is true of both. Left
+alone, the recorder would report `api_key` as an ignored parameter on **every** authenticated
+request a media player makes — and media players are exactly the clients that cannot set headers.
+They are seeded into every route's spelling map, and a test asserts it for every registered route
+rather than for the ones that came to mind.
+
+**Counting is keyed on the route template, not the request path.** `/Items/{itemId}` is one route;
+tallying per concrete path would produce a table as long as the library instead of as long as the
+parameter set.
+
 **Enum-token dropping** (behaviours §1.12): list-of-enum parameters parse through one helper that
 keeps known tokens, drops unknown ones, and records the drop alongside the Tier-3 counter. Scalar
 type failures — `limit=abc`, a malformed GUID — keep failing validation, which the extended
 handler in `compat/errors.py` answers as the reference does: `400`, problem-details body,
-`errors` map, `traceId` (behaviours §1.11).
+`errors` map, `traceId` (behaviours §1.11) — served as `application/json; charset=utf-8` rather
+than the `application/problem+json` both frameworks default to, and keyed on the **declared**
+parameter spelling rather than the client's, both measured at implementation time.
+
+**A fourth fight was found while settling the third**, and it is not scoped to errors: the
+reference escapes every non-ASCII character and seven ASCII ones as `\uXXXX` with uppercase hex
+(behaviours §1.16). It surfaced because the validation body is the first response whose bytes had
+to match exactly, and it turned out to apply to every response there will ever be. It is settled
+in `compat/responses.py`, in the same package and for the same reason as the other three: the
+framework's default is silently different, and the difference is invisible until a golden compares
+bytes.
 
 ### 6.13 The identical 404
 

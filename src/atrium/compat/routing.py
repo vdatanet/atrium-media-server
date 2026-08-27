@@ -108,6 +108,20 @@ class RouteTable:
                 return route.template.format(**matched.groupdict())
         return None
 
+    def template_for(self, path: str) -> str | None:
+        """The declaring template of the route `path` matches - `/Users/{userId}/Items`, not the
+        substituted spelling `canonicalise` returns.
+
+        `compat.query_params` needs the template rather than the path, because a route's declared
+        parameters are a property of the route and every concrete path under a templated one
+        shares them. Returns None when nothing matches, for the same reason `canonicalise` does:
+        "not ours" and "already canonical" must not be confusable.
+        """
+        for route in self.routes:
+            if route.pattern.match(path):
+                return route.template
+        return None
+
     def methods_for(self, path: str) -> frozenset[str]:
         """Every method registered on the routes whose path matches, in any accepted spelling."""
         allowed: set[str] = set()

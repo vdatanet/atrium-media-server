@@ -38,13 +38,17 @@ route no browser was meant to drive. Matching the reference is also the safer be
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Callable, Coroutine
 from typing import Any
 
 from fastapi.exception_handlers import http_exception_handler
+from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import Response
+
+from atrium.compat.responses import AtriumJSONResponse
 
 #: The shape Starlette expects of a handler, spelled out so the registry below type-checks against
 #: what the application factory passes it.
@@ -96,6 +100,102 @@ class AccountUnavailableError(Exception):
     password can never complete.
     `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
     """
+
+
+#: RFC 9457 `type` URIs, as the reference spells them - `tools.ietf.org`, not `iana.org`, and
+#: pointing at RFC 9110's status-code sections. Measured.
+#: `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+PROBLEM_TYPE_BAD_REQUEST = "https://tools.ietf.org/html/rfc9110#section-15.5.1"
+PROBLEM_TYPE_NOT_FOUND = "https://tools.ietf.org/html/rfc9110#section-15.5.5"
+
+#: The reference's own wording, byte for byte.
+VALIDATION_TITLE = "One or more validation errors occurred."
+NOT_FOUND_TITLE = "Not Found"
+
+
+class NotFoundError(Exception):
+    """A handler looked and there was nothing there. Answered with a problem-details `404`.
+
+    Not the same refusal as an unmatched path, which is the **empty** `404` of section 1.11's
+    first table. Same status, different bytes, decided by which layer refused - and 005 AC-8
+    requires an unknown id and an invisible one to be byte-identical, so both go through here.
+    """
+
+
+def trace_id() -> str:
+    """A W3C trace-context identifier, in the shape the reference's `traceId` carries.
+
+    `00-<32 hex>-<16 hex>-00`: version, trace id, parent id, flags. Per request by definition, so
+    behaviours section 1.11 compares it by shape rather than by value and the goldens mask it.
+    """
+    return f"00-{secrets.token_hex(16)}-{secrets.token_hex(8)}-00"
+
+
+def problem_details(
+    status_code: int,
+    title: str,
+    type_uri: str,
+    errors: dict[str, list[str]] | None = None,
+) -> Response:
+    """The second of the three shapes: RFC 9457 problem details as JSON.
+
+    **The keys stay camelCase whatever content profile was negotiated.** They come from the
+    reference's own framework rather than from its API models, so `profile="PascalCase"` does not
+    make them `Type` and `Title` - the negotiated media type is echoed, the key spellings are not
+    touched. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+
+    Key order is the reference's: `type`, `title`, `status`, then `errors` where there is one,
+    then `traceId`. It costs nothing to preserve and a golden compares bytes.
+    """
+    body: dict[str, Any] = {"type": type_uri, "title": title, "status": status_code}
+    if errors is not None:
+        body["errors"] = errors
+    body["traceId"] = trace_id()
+    return AtriumJSONResponse(body, status_code=status_code)
+
+
+def validation_errors(raw: list[Any]) -> dict[str, list[str]]:
+    """The framework's validation failures, keyed and worded as the reference words them.
+
+    The key is the **declared** parameter name rather than the spelling the client sent: a request
+    with `Limit=abc` against a route declaring `limit` comes back keyed `limit`, measured, which
+    is also what `compat.query_params` canonicalisation produces before the binder ever runs.
+
+    ⚠️ **Only the type-mismatch wording is measured** - `The value 'abc' is not valid.` What the
+    reference says for a *missing* required parameter was not measured, so that case carries the
+    framework's own message rather than a guess at the reference's.
+    `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+    """
+    collected: dict[str, list[str]] = {}
+    for error in raw:
+        location = error.get("loc") or ("",)
+        name = str(location[-1])
+        if "input" in error:
+            message = f"The value '{error['input']}' is not valid."
+        else:
+            message = str(error.get("msg", "The value is not valid."))
+        collected.setdefault(name, []).append(message)
+    return collected
+
+
+async def validation_handler(_request: Request, exc: Exception) -> Response:
+    """Replace the framework's `422` with the reference's `400`, status **and** body.
+
+    FastAPI answers an unbindable value with `422 Unprocessable Entity` and
+    `{"detail": [...]}`, which is neither the reference's status nor any of its three shapes. The
+    replacement is global rather than per route, because the one route that forgets is the one a
+    client meets. behaviours sections 1.11 and 1.12: the line is token-versus-type - an
+    unrecognised enum *token* is dropped and answered `200`, a value that cannot parse as its
+    declared *type* is this.
+    """
+    raw = exc.errors() if isinstance(exc, RequestValidationError) else []
+    return problem_details(
+        400, VALIDATION_TITLE, PROBLEM_TYPE_BAD_REQUEST, validation_errors(list(raw))
+    )
+
+
+async def not_found_handler(_request: Request, _exc: Exception) -> Response:
+    return problem_details(404, NOT_FOUND_TITLE, PROBLEM_TYPE_NOT_FOUND)
 
 
 #: What a controller's own refusal says, byte for byte. Measured, and it is the same 25 bytes
@@ -179,6 +279,8 @@ EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     ClientAuthorizationError: client_authorization_handler,
     InvalidCredentialsError: invalid_credentials_handler,
     AccountUnavailableError: account_unavailable_handler,
+    NotFoundError: not_found_handler,
+    RequestValidationError: validation_handler,
     HTTPException: routing_handler,
 }
 
@@ -186,12 +288,17 @@ __all__ = [
     "CONTROLLER_ERROR_BODY",
     "CONTROLLER_ERROR_TYPE",
     "EXCEPTION_HANDLERS",
+    "NOT_FOUND_TITLE",
+    "PROBLEM_TYPE_BAD_REQUEST",
+    "PROBLEM_TYPE_NOT_FOUND",
     "ROUTING_REFUSALS",
+    "VALIDATION_TITLE",
     "AccountUnavailableError",
     "ClientAuthorizationError",
     "ExceptionHandler",
     "ForbiddenError",
     "InvalidCredentialsError",
+    "NotFoundError",
     "UnauthenticatedError",
     "account_unavailable_handler",
     "client_authorization_handler",
@@ -199,6 +306,11 @@ __all__ = [
     "empty_error",
     "forbidden_handler",
     "invalid_credentials_handler",
+    "not_found_handler",
+    "problem_details",
     "routing_handler",
+    "trace_id",
     "unauthenticated_handler",
+    "validation_errors",
+    "validation_handler",
 ]

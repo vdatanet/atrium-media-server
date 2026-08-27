@@ -218,7 +218,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T4 — The three framework fights, once, in `compat/`
 
-- [ ] **Changes:** `compat/query_params.py` — the startup walk building each route's
+- [x] **Changes:** `compat/query_params.py` — the startup walk building each route's
   case-insensitive spelling map; the middleware rewriting incoming keys to their declared
   spellings, values untouched, unmatched keys passing through; the ignored-parameter recorder,
   counting per `(route, parameter)` and logging each distinct pair once per process; the
@@ -239,6 +239,45 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   the whole existing suite green — the `422` replacement is global, and any test that relied on
   one was relying on the delta.
 - **Plan reference:** §6.12; behaviours §1.11, §1.12, §1.15
+- **Done (2026-08-27):** there were **four** fights, and the fourth is the one that matters
+  outside this task.
+
+  Getting the validation `400` byte-exact meant measuring the reference's body, and the body
+  came back **escaped**: `28 años después` is sent as `28 a\u00F1os despu\u00E9s`, and
+  `Abraham's` as `Abraham\u0027s`. ASP.NET Core's HTML-safe `JavaScriptEncoder` escapes every
+  non-ASCII character and seven ASCII ones — `"` `&` `'` `+` `<` `>` `` ` `` — as `\uXXXX` with
+  **uppercase** hex, while leaving `/` `=` `:` and the space alone. Python writes all of them
+  literally. That is a byte difference on **every response containing an accented character**,
+  which in the measured library is most of them.
+
+  No client can tell — a JSON parser decodes both forms identically — so this is not Principle I.
+  It is Principle VIII: the goldens compare bytes. Settled in `compat/responses.py` and recorded
+  as [behaviours §1.16](../../docs/compatibility/behaviours.md#116-every-non-ascii-character-in-a-body-is-escaped-and-so-are-seven-ascii-ones).
+  The blast radius was exactly one golden, `Localization.Cultures.json`, whose `ç` and `ü` now
+  match the reference's bytes rather than Python's.
+
+  **How the escape set was measured is the reusable part.** Item names prove only what the library
+  contains — a Spanish catalogue gives `\u00F1` and says nothing about a backtick. The exact set
+  came from **echoing arbitrary characters through a validation error**: the `errors` map quotes
+  the value back, so `?limit=a<b>c\`d'e&f+g"h/i=j:k` is a request that renders any character you
+  like into a response body.
+
+  **Two more measurements the plan did not have.** The problem-details content type is
+  `application/json; charset=utf-8`, **not** `application/problem+json` — which is what both
+  frameworks default to, so matching means overriding rather than accepting. And the `errors` key
+  is the parameter's **declared** spelling, not the client's: `Limit=abc` against a route
+  declaring `limit` answers `{"limit": [...]}`, which is §1.15's canonicalisation seen from the
+  other side.
+
+  **And the recorder had a blind spot the plan's own sentence created.** "Keys that match no
+  declared parameter of the route" is true of `ApiKey` and `api_key` — one of the five
+  authentication mechanisms, read straight off the query string by `compat/auth.py` and present in
+  no route's signature. Uncorrected, the ignored-parameter tally would have been dominated by
+  `api_key` on every request a media player makes, which is precisely the client that cannot send
+  headers. They are seeded into every route's map, asserted for every registered route.
+
+  Counting is keyed on the route **template**: `/Items/{itemId}` is one route, and tallying per
+  concrete path would make the table as long as the library.
 
 ## T5 — `db/item_queries.py`: one predicate, one count, complete hydration — and the counter that keeps them honest
 
