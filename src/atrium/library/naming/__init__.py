@@ -17,18 +17,30 @@ from atrium.library.naming.clean import (
     is_tag,
 )
 from atrium.library.naming.movies import MovieParse, group, parse_movie
+from atrium.library.naming.music import (
+    PATH_ONLY,
+    AudioParse,
+    MetadataSource,
+    PathOnly,
+    parse_audio,
+)
 from atrium.library.naming.series import SPECIALS, EpisodeParse, parse_episode, season_of_directory
 
 __all__ = [
+    "PATH_ONLY",
     "SPECIALS",
+    "AudioParse",
     "CleanName",
     "EpisodeParse",
+    "MetadataSource",
     "MovieParse",
+    "PathOnly",
     "clean_name",
     "cut_at_release_metadata",
     "from_text",
     "group",
     "is_tag",
+    "parse_audio",
     "parse_episode",
     "parse_movie",
     "season_of_directory",

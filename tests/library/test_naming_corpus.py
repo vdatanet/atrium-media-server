@@ -34,9 +34,7 @@ CORPUS = Path(__file__).resolve().parents[1] / "corpus" / "naming.yaml"
 #: Groups whose parser has not landed. **Each of T10-T13 deletes its own entry**, and `strict=True`
 #: is what makes that mandatory rather than polite: leaving a line here once the parser works turns
 #: every row in the group into a failure.
-AWAITING: dict[str, str] = {
-    "music": "T13 - library/naming/music.py",
-}
+AWAITING: dict[str, str] = {}
 
 #: What a row may put in `expect`. A row asserts only the fields it names, so a row about title
 #: extraction says nothing about season numbers and cannot go stale when something unrelated moves.
