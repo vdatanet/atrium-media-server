@@ -117,6 +117,63 @@ LOCK_OF: Mapping[Field, MetadataField] = {
     Field.PEOPLE: MetadataField.CAST,
 }
 
+
+class PersonKind(StrEnum):
+    """The reference's `PersonKind`, spelled its way `[spec: PersonKind]`.
+
+    All twenty-five members, not only the four 004 produces. A `<type>` inside an `<actor>` element
+    is matched against this vocabulary case-insensitively and falls back to `ACTOR`
+    `[source: MediaBrowser.Controller/Extensions/XmlReaderExtensions.cs @ v10.11.11]`, so a member
+    that is missing here turns a person the reference files as a `Composer` into an actor. Cheaper
+    to write out than to discover from a cast list that reads oddly.
+    """
+
+    UNKNOWN = "Unknown"
+    ACTOR = "Actor"
+    DIRECTOR = "Director"
+    COMPOSER = "Composer"
+    WRITER = "Writer"
+    GUEST_STAR = "GuestStar"
+    PRODUCER = "Producer"
+    CONDUCTOR = "Conductor"
+    LYRICIST = "Lyricist"
+    ARRANGER = "Arranger"
+    ENGINEER = "Engineer"
+    MIXER = "Mixer"
+    REMIXER = "Remixer"
+    CREATOR = "Creator"
+    ARTIST = "Artist"
+    ALBUM_ARTIST = "AlbumArtist"
+    AUTHOR = "Author"
+    ILLUSTRATOR = "Illustrator"
+    PENCILLER = "Penciller"
+    INKER = "Inker"
+    COLORIST = "Colorist"
+    LETTERER = "Letterer"
+    COVER_ARTIST = "CoverArtist"
+    EDITOR = "Editor"
+    TRANSLATOR = "Translator"
+
+
+@dataclass(frozen=True, slots=True)
+class PersonCredit:
+    """One person on one item: who, in what capacity, playing whom, and **where in the list**.
+
+    The order is metadata rather than an accident of insertion (spec section 3.7 rule 2): clients
+    render "starring" from the first few entries, so a cast list in a different order is a
+    different cast list. `sort_order` is `None` when the source did not say - document order is
+    then the order, and the write path assigns positions from it.
+
+    `role` is the character, and it belongs to the *credit* rather than to the person: the same
+    actor is somebody different in every film.
+    """
+
+    name: str
+    kind: PersonKind = PersonKind.ACTOR
+    role: str | None = None
+    sort_order: int | None = None
+
+
 #: What a source found. An **absent key** says "nothing to say"; a key present with an empty value
 #: says "present and empty", which section 3.1 says is not a value. `object` rather than a union
 #: because the value's shape is the field's business: a string for a name, a list for genres, a
@@ -230,6 +287,8 @@ __all__ = [
     "Identity",
     "MetadataField",
     "NoMatch",
+    "PersonCredit",
+    "PersonKind",
     "RefreshMode",
     "Subject",
     "is_value",

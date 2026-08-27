@@ -22,7 +22,7 @@ somebody's metadata?" is in the first line rather than inferred.
 
 | File | What it is for |
 |---|---|
-| `movie-full.nfo` | Every field [plan §6.2](../../../specs/004-metadata-resolution/plan.md#62-sidecars) maps, once. Three actors in billing order; two studios; two tags; both `uniqueid` forms. One genre element reads `Science Fiction / Fantasy` — a single genre containing ` / `, which must **not** be split |
+| `movie-full.nfo` | Every field [plan §6.2](../../../specs/004-metadata-resolution/plan.md#62-sidecars) maps, once. Three actors in billing order; two studios; two tags; both `uniqueid` forms. One genre element reads `Science Fiction / Fantasy`, which the reference **splits** into two genres — T5 measured that, against a plan sentence claiming the reverse |
 | `movie-sparse.nfo` | Title and year only, plus `<plot></plot>` and a whitespace-only `<tagline>`: the two shapes [spec §3.1](../../../specs/004-metadata-resolution/spec.md#31-the-provider-model) says are not values, so the next provider in the chain still gets its turn |
 | `movie-ids.nfo` | Provider identifiers and nothing else — the AC-3 subject, where identification must be skipped entirely |
 | `movie-malformed.nfo` | An unclosed `<title>`. The plain parse-error path |

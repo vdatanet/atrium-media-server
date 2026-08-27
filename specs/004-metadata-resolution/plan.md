@@ -4,7 +4,7 @@ title: Metadata resolution — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7
+amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -321,8 +321,21 @@ nothing else in the feature could supply them** — `lockdata` → `is_locked` a
 `[source: MediaBrowser.XbmcMetadata/Parsers/BaseNfoParser.cs:374-391,434-436 @ v10.11.11]`. Spec
 §3.6 gives locks no HTTP route, so without those two elements AC-10 — "a locked field survives a
 Replace refresh" — had no way to get a lock onto an item at all. Multiple `<genre>` elements are the
-multi-valued form; a single element containing ` / ` is **not** split — the reference's parser
-does not, and inventing a splitter here is how two servers disagree about one file.
+multi-valued form, **and a single element containing `/` is split as well** — one genre per part,
+each trimmed, empties dropped
+`[source: MediaBrowser.XbmcMetadata/Parsers/BaseNfoParser.cs:566-583 @ v10.11.11]`. This section
+said the opposite until T5 read the parser it was citing. Not splitting would give Atrium a genre
+called `Science Fiction / Fantasy` that no reference server has, on a file both of them read; the
+cost of splitting — a genre that legitimately contains a slash becomes two — is the reference's to
+own. The rule applies to `<genre>` and `<credits>` and to nothing else.
+
+Three more leniencies T5 measured, each one a reasonable implementation gets wrong by reasoning:
+a `<year>` at or below **1850** is discarded, so the `<year>0</year>` that generators write for
+"unknown" leaves the year to the next provider; `<premiered>` and its three synonyms are parsed in
+**one exact format** (`yyyy-MM-dd`) and **fill** the year rather than overwriting it; and
+`<director>` and `<writer>` split on `|` or `;` when either is present and on `,` otherwise, which
+is what keeps `Matthew, Jr.` one person in a list written with pipes
+`[source: MediaBrowser.Controller/Extensions/XmlReaderExtensions.cs @ v10.11.11]`.
 
 ### 6.3 Embedded tags
 
