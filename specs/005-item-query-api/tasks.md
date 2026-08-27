@@ -1,9 +1,10 @@
 ---
 feature: 005-item-query-api
 title: Item query API — tasks
-status: Draft
+status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
+accepted: 2026-08-27
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -43,6 +44,28 @@ the artist credit distinction
 ([004's tasks](../004-metadata-resolution/tasks.md#what-this-feature-owes-the-next-ones)) —
 the indexes are leaned on from T5, the folded name and the credit distinction at T6 and T8, the
 image rows at T9, and in each case the lean is the test.
+
+## What the gate changed
+
+This list was reviewed against [`spec.md`](spec.md), [`plan.md`](plan.md) and the files it
+references on 2026-08-27 before being accepted. Five things changed — promises with no task
+holding them, and twice, two accepted documents disagreeing with nothing measured between them:
+
+| The draft said | It was |
+|---|---|
+| AC-1 was claimed where `/UserViews` and `/Items/Latest` land | **A criterion about *every* list endpoint, held one endpoint at a time.** Six tasks each assert their own shape and nothing asserts *every* — [plan §8](plan.md#8-testing-strategy) row 1 says "every list endpoint asserted against its shape", and an endpoint that drifted later would fail no sweep. T17 now carries the roll-up: one parameterised test walking every 005 list route in the surface and asserting its declared shape |
+| T15 matches hints on the folded name, per plan §6.11 | **[Spec §3.10](spec.md#310-get-searchhints--getsearchhints) says name *and sort name*.** The accepted spec and the accepted plan disagree, the draft sided silently with the plan, and neither cites a measurement. T15 now measures which one the reference does — an article-prefixed title searched by its sort form answers it — and amends the losing document in the same change |
+| T13 adds `tools/probe_next_up.py` | **With no row in [`tools/README.md`](../../tools/README.md)** — the exact omission 004's gate caught for `generate_cultures.py`, back for the very next new script. Now in T13's changes |
+| T15 computes the filter summary as "distinct values over the visible items in scope" | **An algorithm no accepted document contains.** [Plan §6.6](plan.md#66-the-four-shapes) defines the shape only, and a task inventing the computation is the plan failing its own test — "an implementer never has to invent a design decision". §6.6 now says it, amended by this gate |
+| T3 seeds "a series with specials and a multi-episode file", quoting plan §8's fixture list | **Plan §8's own row 10 proves NextUp on *three* watched series**, and its fixture paragraph never seeds them — an internal contradiction the draft copied faithfully. T3 now seeds three series, one of them carrying the specials and the multi-episode file; plan §8 is amended to match its own table |
+
+What was checked and held: all sixteen acceptance criteria are claimed by name (mechanically,
+not by reading); every module in [plan §3](plan.md#3-modules) has a task; all seventeen routes
+were already in [`surface.yaml`](../../docs/compatibility/surface.yaml) before this list was
+written; the four things 004 owes this feature exist in `db/models.py` — the folded-name column,
+the pattern-named indexes, the complete `item_images` rows, the credit column and its check
+constraint; `.env` and the live reference are present on the machine that will run T1's probe;
+and no existing test asserts a `422`, so T4's global replacement breaks nothing that was right.
 
 ## Legend
 
@@ -91,8 +114,10 @@ image rows at T9, and in each case the lean is the test.
 - [ ] **Changes:** `tests/fixtures/query.py` — the [plan §8](plan.md#8-testing-strategy) fixture:
   a builder that inserts a known world **through the repositories**, no scan, no filesystem.
   Three libraries (movies, shows, music); an unrestricted user, a user restricted to one library,
-  and a user permitted nothing (AC-9's); 003's awkward names, whitespace artefacts included; a
-  series with specials and a multi-episode file; a compilation with per-track performers, one of
+  and a user permitted nothing (AC-9's); 003's awkward names, whitespace artefacts included;
+  **three series** — NextUp's one-row-per-series rule needs a choice among watched series to
+  mean anything — one of them with specials and a multi-episode file; a compilation with
+  per-track performers, one of
   them nobody's album artist (the revision-0004 shape); case-variant genres; a 100-item paging
   corpus; user data — played series for NextUp, mid-playback positions for Resume, favourites
   for the filters — written against `item_key`, the derived identity.
@@ -297,7 +322,9 @@ image rows at T9, and in each case the lean is the test.
   the first unplayed in `(season, episode)` order after the highest played, specials excluded
   from the chain, series ordered by latest `last_played_date` descending, one row per series by
   a per-series window rather than post-filtering; `api/resume.py` — items whose user data holds
-  a positive position, most recently played first.
+  a positive position, most recently played first; `tools/probe_next_up.py` — the measurement
+  the verification below runs first — with its row in [`tools/README.md`](../../tools/README.md)
+  like every script there.
 - **Depends on:** T3, T5, T9
 - **Verified by:** NextUp's semantics are measured first — `tools/probe_next_up.py` constructs
   played state on the live reference and asks what "next" means there: the
@@ -327,15 +354,20 @@ image rows at T9, and in each case the lean is the test.
 ## T15 — The two other shapes: `GET /Items/Filters` and `GET /Search/Hints`
 
 - [ ] **Changes:** `api/filters.py` — `{Genres, Tags, OfficialRatings, Years}` for a parent:
-  distinct values over the visible items in scope, each list in the reference's order as
-  measured; `api/search.py` — containment on `name_folded`, relevance-ordered per §6.3, over
-  the item types v1 serves; each hit a `SearchHint` with `Id` and `ItemId` both set,
+  the distinct values over the visible items in scope, each list in the reference's order as
+  measured — the computation [plan §6.6](plan.md#66-the-four-shapes) gained at this list's gate;
+  `api/search.py` — containment against the name, and against the sort name if that is what the
+  measurement shows ([spec §3.10](spec.md#310-get-searchhints--getsearchhints) says both,
+  plan §6.11 says the folded name alone, and they cannot both be right), relevance-ordered per
+  §6.3, over the item types v1 serves; each hit a `SearchHint` with `Id` and `ItemId` both set,
   `MatchedTerm` the name that matched, and the type extras resolved from the hydrated item.
 - **Depends on:** T5, T7, T8, T9
 - **Verified by:** both bodies are measured against the live reference before the models
-  freeze — which hint fields actually appear with nulls omitted, and how the filter lists are
-  ordered, neither of which the pinned document can say — recorded in the spec with provenance
-  in this change; AC-14 — the hint shape, not the item shape, with `MatchedTerm` populated;
+  freeze — which hint fields actually appear with nulls omitted, how the filter lists are
+  ordered, and whether a hint matches on the sort name, which an article-prefixed title
+  searched by its sort form answers — recorded in the spec with provenance in this change, and
+  the losing document of the name-versus-sort-name disagreement amended in it too; AC-14 — the
+  hint shape, not the item shape, with `MatchedTerm` populated;
   the filter summary reflects only the parent's visible items for the requesting user; both
   shapes match [plan §6.6](plan.md#66-the-four-shapes)'s models byte-for-byte as goldens.
 - **Plan reference:** §6.6, §6.11; spec §3.7, §3.10
@@ -361,8 +393,10 @@ image rows at T9, and in each case the lean is the test.
 ## T17 — The acceptance map, and Implemented
 
 - [ ] **Changes:** `FEATURE_005` in `tests/conformance/test_acceptance.py`, mapping **all
-  sixteen** criteria of [spec §5](spec.md#5-acceptance-criteria) to named tests;
-  `IMPLEMENTED_FEATURES` gains `"005"` and the interim landed-routes list is deleted;
+  sixteen** criteria of [spec §5](spec.md#5-acceptance-criteria) to named tests; the shape
+  roll-up — one parameterised test walking every 005 list route in the surface and asserting
+  its declared shape, which is what makes AC-1's *every* a property rather than six tasks'
+  habit; `IMPLEMENTED_FEATURES` gains `"005"` and the interim landed-routes list is deleted;
   `specs/README.md`'s table; `spec.md`, `plan.md` and this file to `Implemented` with dates;
   AGENTS.md's where-the-project-is paragraph.
 - **Depends on:** everything above

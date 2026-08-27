@@ -12,8 +12,9 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001, 002, 003 and 004 are implemented.** 005 has an accepted spec and plan, so **the
-next thing is 005's task list**. The other five features are specified only, their specs still
+**Features 001, 002, 003 and 004 are implemented. 005 has passed all three gates** — spec, plan
+and [task list](specs/005-item-query-api/tasks.md) accepted — **so the next thing is code:
+005 T1**, the item-shapes probe. The other five features are specified only, their specs still
 drafts.
 
 **004 owes 005 four things**, written down in

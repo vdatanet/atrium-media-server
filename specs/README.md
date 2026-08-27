@@ -116,16 +116,26 @@ say how it will be proven is not finished.
 | [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | **Implemented** | **Implemented** | **Implemented** |
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Implemented** | **Implemented** | **Implemented** |
 | [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
-| [005](005-item-query-api/) | Item query API | **Accepted** | **Accepted** | — |
+| [005](005-item-query-api/) | Item query API | **Accepted** | **Accepted** | **Accepted** |
 | [006](006-images/) | Images | Draft | — | — |
 | [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001, 002, 003 and 004 are implemented.** 005 has an accepted spec and plan; its task list is
-**the next thing**. The other five specs remain drafts, and their open questions are the standing
-review agenda.
+**001, 002, 003 and 004 are implemented.** 005 has passed all three gates — spec, plan and task
+list accepted — so **the next thing is code: 005 T1**, the item-shapes probe. The other five
+specs remain drafts, and their open questions are the standing review agenda.
+
+**005's task-list gate changed five things**, on 2026-08-27 — the two previous gates' class,
+promises with no task holding them, plus a new one: two accepted documents disagreeing with
+nothing measured between them. AC-1's "every list endpoint" was held one endpoint at a time,
+with no test saying *every*; the spec and the plan disagree about whether search hints match the
+sort name, which is now measured rather than arbitrated; a new probe had no row in
+`tools/README.md` — the exact omission 004's gate caught, back for the very next script; the
+filter summary's computation appeared in no accepted document; and the plan's own fixture
+paragraph seeds one series where its own test table proves NextUp on three watched ones. Each is
+recorded in [005's tasks](005-item-query-api/tasks.md#what-the-gate-changed).
 
 **004's sixteen tasks contradicted eleven things the accepted documents asserted**, which is the
 highest rate any feature has managed and the reason its ordering put measurement first. The three
