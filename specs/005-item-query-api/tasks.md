@@ -149,6 +149,13 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   `imageTypeLimit`, `enableImageTypes` are emission options, not predicates, and belong to the
   builder's context rather than to the query.
 
+  **CI found a third thing, on the interpreter floor.** Asserting that a slotted query refuses an
+  unknown attribute passed on 3.14 and failed on 3.12: a `@dataclass(frozen=True, slots=True)`
+  answers `FrozenInstanceError` on 3.14 and `TypeError: super(type, obj)...` on 3.12, from the
+  generated `__setattr__` reaching a stale `__class__` cell. Reproduced on 3.12.14 with a bare
+  dataclass and no Atrium code in it. Every domain record is frozen-and-slotted, so this is the
+  project's, not this module's — the test now asserts that it raises, not what.
+
   The tests are two tables rather than assertions. The `SortBy` set is compared **whole**, because
   containment would let a well-meaning `Name` member through — a key that would work against
   Atrium and do nothing against the reference. And every field's default is a row, with a test

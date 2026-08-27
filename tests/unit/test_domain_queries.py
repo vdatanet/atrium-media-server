@@ -170,8 +170,17 @@ def test_a_query_is_frozen() -> None:
 def test_a_query_has_no_dict_to_grow_a_field_on() -> None:
     """`slots=True`, like every other domain record. A query that could carry an attribute the
     repository never reads is a query whose predicates are not all in one place.
+
+    **The exception type differs across the interpreters this project supports**, so the assertion
+    is that it raises rather than what it raises. On 3.14 a `@dataclass(frozen=True, slots=True)`
+    answers an unknown attribute with `FrozenInstanceError`; on **3.12 it answers `TypeError:
+    super(type, obj): obj must be an instance or subtype of type`** - the generated `__setattr__`
+    reaching a stale `__class__` cell left by the class being rebuilt for slots. Verified on
+    3.12.14 and 3.14.7, on a bare dataclass with no Atrium code in it. A known field raises
+    `FrozenInstanceError` on both, which is why the frozen test above can be exact and this one
+    cannot.
     """
-    with pytest.raises(AttributeError):
+    with pytest.raises((AttributeError, TypeError)):
         ItemQuery(user=somebody()).parent = "x"  # type: ignore[attr-defined]
 
 
