@@ -47,26 +47,7 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 
 #: The feature these tests police. When 002 lands, it joins this set - deliberately, in the change
 #: that implements it, so that no route can ship ahead of the feature that specifies it.
-IMPLEMENTED_FEATURES = frozenset({"001"})
-
-#: Routes of a feature that is still landing. The check below assumed a feature arrives in one
-#: change; 002 arrives across two - the user routes at T11 and the session routes at T12 - so
-#: "the feature is implemented" is not a state it can use until both have landed. Each task adds
-#: its own routes here on purpose, and T17 collapses the whole list into `IMPLEMENTED_FEATURES`.
-#: All seven are here as of T12; the feature is not *implemented* until its goldens, its acceptance
-#: map and its mechanism table are too, which is what makes the collapse T17's change and not this
-#: one's.
-LANDED_ROUTES: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("POST", "/Users/AuthenticateByName"),
-        ("GET", "/Users/Public"),
-        ("GET", "/Users/Me"),
-        ("GET", "/Users/{userId}"),
-        ("POST", "/Users/Configuration"),
-        ("GET", "/Sessions"),
-        ("POST", "/Sessions/Capabilities/Full"),
-    }
-)
+IMPLEMENTED_FEATURES = frozenset({"001", "002"})
 
 
 def _load_surface_parser() -> Any:
@@ -122,7 +103,7 @@ def tabled_paths(app: FastAPI) -> frozenset[tuple[str, str]]:
 
 
 def test_every_route_this_feature_owns_is_registered(app: FastAPI) -> None:
-    expected = surface_paths(IMPLEMENTED_FEATURES) | LANDED_ROUTES
+    expected = surface_paths(IMPLEMENTED_FEATURES)
     assert expected, "no 001 entries in the surface file; the parser or the file changed shape"
     missing = expected - documented_paths(app)
     assert not missing, f"in surface.yaml and not served: {sorted(missing)}"
@@ -140,11 +121,15 @@ def test_no_route_exists_outside_the_surface(app: FastAPI) -> None:
 def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     """Everything served belongs to a feature that has been implemented.
 
-    A 002 route registered while 002 is unimplemented is in the surface file, so the check above
-    would pass it. This one fails until `IMPLEMENTED_FEATURES` names the feature, or `LANDED_ROUTES`
-    names the route - both lines that get changed on purpose, in the change that implements them.
+    A 003 route registered while 003 is unimplemented is in the surface file, so the check above
+    would pass it. This one fails until `IMPLEMENTED_FEATURES` names the feature - a line that gets
+    changed on purpose, in the change that finishes it.
+
+    002 arrived across two tasks, and for the two changes between them this set was accompanied by
+    an explicit list of the individual routes that had landed. That list is gone now, which is what
+    finishing a feature looks like here.
     """
-    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES) | LANDED_ROUTES
+    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES)
 
 
 def test_an_unlisted_route_fails_the_check(app: FastAPI) -> None:
@@ -185,11 +170,24 @@ def test_the_two_views_of_the_routes_agree(app: FastAPI) -> None:
 
 def test_the_surface_file_and_the_specification_agree_on_001(app: FastAPI) -> None:
     """The four endpoints 001 specifies, named here so a silent removal is not silent."""
-    assert surface_paths(IMPLEMENTED_FEATURES) == {
+    assert surface_paths(frozenset({"001"})) == {
         ("GET", "/System/Info/Public"),
         ("GET", "/System/Info"),
         ("GET", "/System/Ping"),
         ("POST", "/System/Ping"),
+    }
+
+
+def test_the_surface_file_and_the_specification_agree_on_002(app: FastAPI) -> None:
+    """The seven endpoints 002 specifies. Named one by one for the same reason as 001's."""
+    assert surface_paths(frozenset({"002"})) == {
+        ("POST", "/Users/AuthenticateByName"),
+        ("GET", "/Users/Public"),
+        ("GET", "/Users/Me"),
+        ("GET", "/Users/{userId}"),
+        ("POST", "/Users/Configuration"),
+        ("GET", "/Sessions"),
+        ("POST", "/Sessions/Capabilities/Full"),
     }
 
 
