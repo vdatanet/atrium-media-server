@@ -5,6 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-27
 accepted: 2026-08-27
+amended: 2026-08-27 by T1 - section 3.3, OQ-4 and OQ-5
 depends_on: [003]
 ---
 
@@ -99,8 +100,14 @@ providers, and the parse error is reported with the file path so the user can fi
 ### 3.3 Embedded tags
 
 For music, read from the file itself: title, artist, album artist, album, track and disc numbers
-and totals, year, genre, composer, MusicBrainz identifiers, ReplayGain values, and embedded cover
-art.
+and totals, year, genre, composer, MusicBrainz identifiers, the track's replay-gain adjustment, and
+embedded cover art.
+
+**One replay-gain value, not four.** The reference reads the *track gain* and nothing else — not
+track peak, not album gain, not album peak — and serves it as a single number on the item, the
+adjustment in decibels a player applies to level this track against others. The other three
+values have nowhere in the reference's item shape to go, so reading them would be storage no
+response can ever carry (OQ-5, §7).
 
 **Multi-valued tags stay multi-valued.** A track with three artists has three artists, not one
 string containing semicolons. Clients render them as separate links, and joining them destroys
@@ -258,12 +265,20 @@ depend on network availability.
 | OQ-1 | Which `.nfo` dialect the reference accepts, and how it handles fields Kodi writes but Jellyfin ignores | Field coverage in §3.2 | Fixture comparison via the differential harness |
 | OQ-2 | The reference's exact ambiguity threshold for remote matching | Nothing; v1 is deliberately more conservative | Comparison against a real server on a deliberately ambiguous fixture |
 | OQ-4 | Which `ProviderIds` keys clients read | Nothing; all known keys are emitted | Differential harness (010) |
-| OQ-5 | Whether ReplayGain values are exposed anywhere a client reads | Nothing in v1 | Survey of client code |
+
+**OQ-4 has partial evidence and stays open.** The same client reading that resolved OQ-5 found
+**neither client reads `ProviderIds` at all** — no reference to the property, and no reference to
+any provider's name, in either codebase (2026-08-27, by role only). That is evidence about two
+clients, not about the population, and it is the wrong shape to close the question with: it says
+nothing about which keys *other* clients read, and a floor of zero cannot tell us which keys to
+emit. The differential harness (010) still owns the answer, and until then all known keys are
+emitted.
 
 ### Resolved
 
 | # | Question | Answer | Resolved by |
 |---|---|---|---|
+| OQ-5 | Whether ReplayGain values are exposed anywhere a client reads | **One of them is exposed, and no client reads it.** The reference reads exactly one tag — the track gain — strips a trailing unit suffix, and serves the number as `NormalizationGain` on every item `[source: MediaBrowser.Providers/MediaInfo/AudioFileProber.cs:362-375 @ v10.11.11]` `[spec: BaseItemDto]`; a separate opt-in loudness scan, when it has run, overrides that value with one computed from the file `[source: Emby.Server.Implementations/Dto/DtoService.cs:1000-1007 @ v10.11.11]`. Track peak, album gain and album peak reach no response. **Neither surveyed client consumes it**: the music-client has no code path for it and its own scope documents place volume levelling beyond its current version, with a note that it must first establish whether the value arrives over the API at all; the video-client carries the property only because its API layer is generated wholesale from the reference's document, and no hand-written code reads it. So the value is real surface with no observed consumer — which is why §3.3 reads one value rather than four, and why [plan §4](plan.md#4-data-model) stores one number rather than a map | Survey of the two clients of [api-surface-v1 §1](../../docs/compatibility/api-surface-v1.md#1-how-this-set-was-derived), by role, 2026-08-27 |
 | OQ-3 | Does the reference re-normalise genre names, or does its by-name list grow duplicates? | **It folds case into the by-name identity, so the list cannot grow case duplicates** — 97 of 97 live ids reproduce from the case-folded name, and a library carrying `Electronic` and `electronic` on items holds one row for each. §3.7 rule 1 is a reproduction with provenance, not a divergence; the fold's limits are in [behaviours §2.18](../../docs/compatibility/behaviours.md#218-two-spellings-of-one-genre-are-one-item) | `tools/probe_by_name_normalisation.py`, 2026-08-27 |
 
 ## 8. References
