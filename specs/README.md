@@ -115,7 +115,7 @@ say how it will be proven is not finished.
 | [001](001-server-identity-and-discovery/) | Server identity and discovery | **Implemented** | **Implemented** | **Implemented** |
 | [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | **Implemented** | **Implemented** | **Implemented** |
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Implemented** | **Implemented** | **Implemented** |
-| [004](004-metadata-resolution/) | Metadata resolution | **Accepted** | **Accepted** | — |
+| [004](004-metadata-resolution/) | Metadata resolution | **Accepted** | **Accepted** | Draft |
 | [005](005-item-query-api/) | Item query API | **Accepted** | **Accepted** | — |
 | [006](006-images/) | Images | Draft | — | — |
 | [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
@@ -123,11 +123,11 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001, 002 and 003 are implemented. 004 and 005 have passed both gates** — specs and plans were
-accepted on 2026-08-27, with two probes run against the review agenda before the plans were
-written. The next artefact is 004's task list, written against its accepted plan and gated
-itself before T1 begins. The other five specs remain drafts, and their open questions are the
-standing review agenda.
+**001, 002 and 003 are implemented. 004 and 005 have accepted specs and accepted plans** —
+both gates passed on 2026-08-27, with two probes run against the review agenda before the plans
+were written. **004's task list exists in draft** and waits at its own gate; T1 may not start
+until it passes (Principle III). 005's task list follows once 004 is under way. The other five
+specs remain drafts, and their open questions are the standing review agenda.
 
 **002 measured more than it implemented.** Its eighteen tasks contradicted four things the accepted
 specification asserted — a fifth authentication mechanism the surface had never listed, a disabled
