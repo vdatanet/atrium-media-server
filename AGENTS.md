@@ -13,10 +13,10 @@ Guidance for anyone — human or agent — making changes in this repository.
 ## Where the project is
 
 **Features 001, 002 and 003 are implemented. 004 and 005 have accepted specs and accepted
-plans** — so the next artefact is a task list written against
-[004's plan](specs/004-metadata-resolution/plan.md), reviewed at its own gate before T1 begins
-(Principle III); [005's](specs/005-item-query-api/plan.md) follows once 004 is under way. The
-other five features are specified only, their specs still drafts.
+plans, and [004's task list](specs/004-metadata-resolution/tasks.md) is drafted** — so the next
+gate is that list's review, and T1 may not start until it passes (Principle III).
+[005's](specs/005-item-query-api/plan.md) task list follows once 004 is under way. The other
+five features are specified only, their specs still drafts.
 
 **004 inherits three things 003 wrote down for it**, and they are in
 [003's tasks](specs/003-library-configuration-and-scanning/tasks.md#what-this-feature-owes-the-next-ones)
