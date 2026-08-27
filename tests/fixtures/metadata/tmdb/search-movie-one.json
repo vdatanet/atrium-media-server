@@ -1,0 +1,16 @@
+{
+  "page": 1,
+  "total_results": 1,
+  "results": [
+    {
+      "id": 11111,
+      "title": "The Fixture",
+      "original_title": "El Atrezzo",
+      "release_date": "1999-04-23",
+      "overview": "A film that exists so a parser has something to read.",
+      "poster_path": "/poster.jpg",
+      "backdrop_path": "/backdrop.jpg",
+      "vote_average": 7.4
+    }
+  ]
+}

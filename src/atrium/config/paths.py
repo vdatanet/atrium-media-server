@@ -93,8 +93,19 @@ class DataPaths:
         return self.root / "transcodes"
 
     @property
+    def artwork(self) -> Path:
+        """Where artwork downloaded from a provider lands (004 plan section 6.5).
+
+        **Under the data directory, never inside a library root.** That is the structural half of
+        AC-15: a media server that writes into somebody's collection can destroy an irreplaceable
+        library through one bug, and the guarantee is worth more as a place downloads *cannot*
+        reach than as a rule somebody remembers.
+        """
+        return self.root / "metadata" / "artwork"
+
+    @property
     def directories(self) -> tuple[Path, ...]:
-        return (self.root, self.cache, self.logs, self.transcodes)
+        return (self.root, self.cache, self.logs, self.transcodes, self.artwork)
 
     def prepare(self) -> None:
         """Create what is missing and prove the root is writable, or refuse.

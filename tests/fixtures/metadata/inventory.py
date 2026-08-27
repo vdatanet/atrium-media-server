@@ -82,6 +82,11 @@ FILES: dict[str, str] = {
     "nfo/movie-sparse.nfo": "a75362a39f0c68b3bd51f7a29666c4e6",
     "nfo/season.nfo": "45ab0b845123c4a7bb47e61c8016a56f",
     "nfo/tvshow.nfo": "73c5c4e67f22e970bb61f8a45e69e9f0",
+    "tmdb/movie-11111.json": "bc854cfda036a7226bb82cf104cf03c4",
+    "tmdb/search-movie-many.json": "996eed0ceaf1b0ff9d5f07047726d276",
+    "tmdb/search-movie-none.json": "678d7d934e2ed5516d4c94d982d70773",
+    "tmdb/search-movie-one.json": "b4815c72423d85edf96f9f590a63225a",
+    "tmdb/tv-66666.json": "9f7a9c82e216f042b36580be9d5e3bce",
 }
 
 #: No single fixture may exceed this. The largest today is the Ogg template at 3,773 bytes; the
@@ -92,8 +97,17 @@ MAX_FILE_BYTES = 8 * 1024
 MAX_TREE_BYTES = 64 * 1024
 
 #: Text fixtures say what they are in their own bytes, the way 003's generated files do, so a
-#: human who opens one does not have to read this module. These two are documentation and code.
+#: human who opens one does not have to read this module. These are documentation and code.
+#:
+#: **A JSON fixture cannot carry a comment**, and putting one in the payload would change the
+#: shape the parser is being tested against - so a directory of them is described by a `README.md`
+#: beside them instead, and `test_every_text_fixture_says_what_it_is` accepts that. The README
+#: has to actually be there: a directory with neither a banner nor a README still fails.
 NOT_SELF_DESCRIBING = frozenset({"README.md", "inventory.py", "__init__.py"})
+
+#: Extensions that cannot carry a comment, and are therefore described by their directory's
+#: `README.md` rather than by their own first line.
+DESCRIBED_BY_A_README = frozenset({".json"})
 
 #: The phrase every other text fixture carries.
 BANNER = "atrium synthetic fixture"

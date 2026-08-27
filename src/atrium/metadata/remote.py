@@ -360,6 +360,32 @@ class RemoteAccess:
         self._cache.put(self.provider, key, payload, ttl=ttl)
         return Response(payload=payload, cached=False)
 
+    def get_bytes(self, url: str, *, max_bytes: int) -> bytes | None:
+        """Raw bytes from an absolute URL - an image, and nothing else so far.
+
+        **Through the bucket, past the cache.** Through the bucket because it is a request to
+        somebody else's server and the rate is the rate; past the cache because `provider_cache`
+        is a JSON column and a poster is two megabytes of it. Re-downloading is prevented by the
+        content tag instead: a refresh that finds the image already present by tag never calls
+        this at all (plan section 6.5).
+
+        `None` when the reply is not an image-shaped success. Over `max_bytes` is a warning the
+        caller raises, not a truncation: half a poster is worse than none.
+        """
+        self.bucket.take()
+        try:
+            reply = self._client.get(url, follow_redirects=True)
+        except httpx.HTTPError as exc:
+            raise ProviderUnavailableError(f"{self.provider}: {exc}") from exc
+
+        if reply.status_code == httpx.codes.TOO_MANY_REQUESTS:
+            self.bucket.halve()
+            raise RateLimitedError(f"{self.provider}: rate limited")
+        if reply.status_code != httpx.codes.OK:
+            return None
+        raw = reply.content
+        return raw if len(raw) <= max_bytes else raw[: max_bytes + 1]
+
 
 def _request_key(path: str, params: Mapping[str, str] | None) -> str:
     """What identifies a request within one provider.

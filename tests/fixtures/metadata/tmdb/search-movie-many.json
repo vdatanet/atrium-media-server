@@ -1,0 +1,8 @@
+{
+  "page": 1,
+  "total_results": 2,
+  "results": [
+    {"id": 44444, "title": "The Fixture", "release_date": "1999-04-23"},
+    {"id": 55555, "title": "The Fixture", "original_title": "The Fixture", "release_date": "2000-01-01"}
+  ]
+}

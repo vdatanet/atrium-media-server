@@ -494,7 +494,7 @@ it.
 
 ## T12 — `metadata/tmdb.py`
 
-- [ ] **Changes:** identify under the exactly-one rule; fetch mapping to the spec §3.2 field
+- [x] **Changes:** identify under the exactly-one rule; fetch mapping to the spec §3.2 field
   vocabulary; bounded artwork download into the data directory, recorded as `remote`
   associations.
 - **Depends on:** T10, T11
@@ -504,6 +504,24 @@ it.
   20 MB bounds and a re-refresh with tags already present downloads nothing; `enabled()` returns
   the reason when no key is configured.
 - **Plan reference:** §6.5
+- **Done (2026-08-27):** AC-3 holds as **zero requests of any kind**, not merely no search — a
+  carried id has nothing to ask about, so nothing is asked. AC-12 holds in all three shapes.
+  **The recorded fixtures are synthetic and say so.** This repository has no TMDB key and its
+  suite reaches no network, so they were written to TMDB's documented shape rather than captured.
+  They pin the **parser**; they do not pin the **API**, and [plan §8](plan.md#8-testing-strategy)'s
+  opt-in live test at T14 is the thing that can see drift. Recorded in a README beside them rather
+  than left as an impression the word "recorded" would give.
+  Two rules the task did not name and the payloads forced: **only the crew jobs the vocabulary
+  has a kind for** are kept — TMDB's crew runs to hundreds of entries and an item carrying every
+  gaffer is one no client renders usefully — and **the official rating is the configured
+  country's and no other**, skipping an empty certification listed before the real one, because a
+  film carries a rating in forty territories and they do not mean the same thing.
+  Image bytes go **through the bucket and past the JSON cache**: `provider_cache` is a JSON column
+  and a poster is two megabytes of it. Re-downloading is prevented by the content tag instead,
+  which is the bound that keeps the data directory from growing on every scan.
+  `DataPaths` gained `metadata/artwork`, which broke two tests that knew the layout — one listing
+  the root's directories, one deleting them one level deep. Both are updated; the second now
+  deletes trees, since the layout has a nested directory for the first time.
 
 ## T13 — `metadata/musicbrainz.py`
 

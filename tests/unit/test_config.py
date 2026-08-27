@@ -49,8 +49,18 @@ def test_prepare_is_idempotent(paths: DataPaths) -> None:
 
 
 def test_prepare_leaves_nothing_behind(paths: DataPaths) -> None:
-    """The writability probe writes a file; it must not still be there afterwards."""
-    assert sorted(p.name for p in paths.root.iterdir()) == ["cache", "logs", "transcodes"]
+    """The writability probe writes a file; it must not still be there afterwards.
+
+    `metadata` arrived with 004 T12 and holds `artwork`, where a poster downloaded from a provider
+    lands - **under the data directory, never inside a library root**, which is the structural
+    half of AC-15.
+    """
+    assert sorted(one.name for one in paths.root.iterdir()) == [
+        "cache",
+        "logs",
+        "metadata",
+        "transcodes",
+    ]
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX permission bits")

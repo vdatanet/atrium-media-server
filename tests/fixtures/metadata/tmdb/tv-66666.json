@@ -1,0 +1,14 @@
+{
+  "id": 66666,
+  "name": "The Fixture Series",
+  "original_name": "The Fixture Series",
+  "overview": "A series-level payload.",
+  "first_air_date": "2010-09-01",
+  "vote_average": 8.1,
+  "poster_path": "/series-poster.jpg",
+  "genres": [{"id": 18, "name": "Drama"}],
+  "production_companies": [{"id": 3, "name": "Fixture Television"}],
+  "credits": {"cast": [], "crew": []},
+  "images": {"backdrops": [], "logos": []},
+  "release_dates": {"results": []}
+}

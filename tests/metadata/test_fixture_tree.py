@@ -20,6 +20,7 @@ import pytest
 
 from tests.fixtures.metadata.inventory import (
     BANNER,
+    DESCRIBED_BY_A_README,
     FILES,
     MAX_FILE_BYTES,
     MAX_TREE_BYTES,
@@ -39,7 +40,7 @@ def _committed() -> list[Path]:
 
 def test_nothing_is_in_the_tree_that_the_inventory_does_not_declare() -> None:
     """The `.mkv` somebody helpfully added as an example."""
-    found = {str(path.relative_to(TREE)) for path in _committed()} - {"README.md"}
+    found = {str(path.relative_to(TREE)) for path in _committed() if path.name != "README.md"}
     assert found == set(FILES), (
         f"undeclared: {sorted(found - set(FILES))}; missing: {sorted(set(FILES) - found)}. "
         f"Every committed byte under tests/fixtures/metadata is declared in inventory.py - that "
@@ -66,7 +67,12 @@ def test_the_tree_as_a_whole_stays_small() -> None:
 
 
 def test_every_text_fixture_says_what_it_is() -> None:
-    """A human who opens one should not have to read the inventory to know it is synthetic."""
+    """A human who opens one should not have to read the inventory to know it is synthetic.
+
+    A JSON payload cannot carry a comment, and putting one *in* the payload would change the shape
+    the parser is being tested against - so a directory of them is described by a `README.md`
+    beside them. The README has to actually be there.
+    """
     for path in _committed():
         if path.name in NOT_SELF_DESCRIBING:
             continue
@@ -74,6 +80,11 @@ def test_every_text_fixture_says_what_it_is() -> None:
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue  # a container or an image, which cannot carry a sentence
+        if path.suffix in DESCRIBED_BY_A_README:
+            assert (path.parent / "README.md").is_file(), (
+                f"{path.relative_to(TREE)} cannot carry a banner and has no README beside it"
+            )
+            continue
         assert BANNER in text, f"{path.relative_to(TREE)} does not say it is synthetic"
 
 
