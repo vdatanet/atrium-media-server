@@ -925,9 +925,9 @@ message about a `datetime` rather than about a timeout. It is now a wall-clock d
 assertion that says which of the two happened. Fixed here rather than left: a test that fails for a
 reason its own message denies is worse than one that fails.
 
-## T16 — The safety guards and the destructive tests
+## T16 — The safety guards and the destructive tests  ✅
 
-- [ ] **Changes:** the three guards of [plan §6.5](plan.md#65-the-guard-against-a-mass-delete) —
+- [x] **Changes:** the three guards of [plan §6.5](plan.md#65-the-guard-against-a-mass-delete) —
   root readable and a directory; a root that previously yielded files and now yields none aborts;
   removal beyond a configured proportion stops and reports.
 - **Depends on:** T15
@@ -941,6 +941,46 @@ reason its own message denies is worse than one that fails.
   written and proven against the thing they will constrain **before** it can do the damage they
   prevent.
 - **Plan reference:** §6.5, §8.3, §9
+
+### Done — 2026-08-27
+
+**A refusal message promised an escape the code did not provide.** Guards two and three both end by
+telling the operator to *"scan again with removals confirmed"*, and `confirm_removals` only lifted
+guard three. An operator who really had emptied a directory would have followed the instruction in
+the message, been refused again by the same guard, and had no way forward but to delete the library
+— which loses every identifier under it. Found by the test written *for the message*, not for the
+code path. Guard one is still not liftable, and should not be: it refuses a root that is **broken**
+rather than one that is empty, and nobody confirms a broken mount.
+
+**The guards refuse rather than report.** A returned report can be ignored by a caller in a hurry;
+an exception cannot, and it rolls the caller's transaction back on its way out — so "removes
+nothing" is a property of the **transaction**, not of this function remembering to stop before the
+write. Every assertion in the destructive tests reads the database afterwards, never the report.
+
+**Each test removes exactly one guard and asserts the damage that arrives**, which is what the task
+asked for and which is only possible because the guards are three separate functions. A single
+`_check_everything` would have made every one of those tests prove that *some* guard fired.
+
+The middle one is the one worth reading: with guard two removed and the threshold raised out of the
+way, an emptied root makes the scan report **every file in the library** as missing. That count is
+what T17 turns into soft deletions — which is precisely why the guard is written and proven before
+the capability exists.
+
+**They are removed by monkeypatching, not by a flag.** A scanner that shipped an off switch for its
+safety guards would eventually be run with the switch off.
+
+**T15's `test_a_root_that_lost_everything_still_removes_nothing` was rewritten here, and the rewrite
+is the record.** Until the guards existed it asserted that the scan *completed and changed nothing*,
+because the scanner had no removal path to take. It now asserts a refusal before anything is looked
+at, which is a stronger guarantee — and the change is visible in the diff rather than silent.
+
+**`ScanReport.missing` exists because guard three has to count it.** A number computed to make a
+decision and then thrown away is a number nobody can check, and the same count is what T17 acts on.
+It sits beside `removed`, which is still structurally zero.
+
+**Guard three counts file-backed items only.** Containers come and go as their children do, so
+counting them would make a renamed series look like a mass deletion and refuse a scan that was
+doing exactly what it should.
 
 ## T17 — Removal and soft deletion
 
