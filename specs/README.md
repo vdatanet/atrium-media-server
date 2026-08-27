@@ -115,7 +115,7 @@ say how it will be proven is not finished.
 | [001](001-server-identity-and-discovery/) | Server identity and discovery | **Implemented** | **Implemented** | **Implemented** |
 | [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | **Implemented** | **Implemented** | **Implemented** |
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Implemented** | **Implemented** | **Implemented** |
-| [004](004-metadata-resolution/) | Metadata resolution | **Accepted** | **Accepted** | Draft |
+| [004](004-metadata-resolution/) | Metadata resolution | **Accepted** | **Accepted** | **Accepted** |
 | [005](005-item-query-api/) | Item query API | **Accepted** | **Accepted** | — |
 | [006](006-images/) | Images | Draft | — | — |
 | [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
@@ -123,11 +123,16 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001, 002 and 003 are implemented. 004 and 005 have accepted specs and accepted plans** —
-both gates passed on 2026-08-27, with two probes run against the review agenda before the plans
-were written. **004's task list exists in draft** and waits at its own gate; T1 may not start
-until it passes (Principle III). 005's task list follows once 004 is under way. The other five
-specs remain drafts, and their open questions are the standing review agenda.
+**001, 002 and 003 are implemented. 004 has passed all three gates** — spec, plan and task list
+accepted on 2026-08-27 — **so the next thing is code: 004 T1**, the client survey that resolves
+OQ-5 before the schema freezes. 005 has an accepted spec and plan; its task list follows once 004
+is under way. The other five specs remain drafts, and their open questions are the standing
+review agenda.
+
+**004's task-list gate changed three things**, all of the class 003's gate taught — promises
+with no task holding them: AC-1 was only proven in a world with no remote code, the plan's
+opt-in live test had no task, and a new tool had no row in `tools/README.md`. Recorded in
+[004's tasks](004-metadata-resolution/tasks.md#what-the-gate-changed).
 
 **002 measured more than it implemented.** Its eighteen tasks contradicted four things the accepted
 specification asserted — a fifth authentication mechanism the surface had never listed, a disabled

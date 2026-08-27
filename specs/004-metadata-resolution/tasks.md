@@ -1,9 +1,10 @@
 ---
 feature: 004-metadata-resolution
 title: Metadata resolution — tasks
-status: Draft
+status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
+accepted: 2026-08-27
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -23,6 +24,24 @@ somebody's API.
 **The read-only guarantee is a guard, not a finale.** The tree-hash test (AC-15) lands at T10
 with the first end-to-end refresh and runs under every task after it, because a write path into a
 library root is the one failure here that is quiet, and quiet failures get their tests first.
+
+## What the gate changed
+
+This list was reviewed against [`spec.md`](spec.md), [`plan.md`](plan.md) and the files it
+references on 2026-08-27 before being accepted. Three things changed, all of 003's gate's class —
+promises with no task holding them:
+
+| The draft said | It was |
+|---|---|
+| T10 proves AC-1 — a fully-sidecared film refreshes with zero network requests | **Only while there was nothing to prove it against.** T10's world has no remote code, so its zero is vacuous; nothing re-held AC-1 once T12–T14 wired providers, and [plan §6.8](plan.md#68-refresh-orchestration) step 2 never stated the condition that makes it true — remote is consulted only for fields the local pass left wanting. T14 now re-holds AC-1 on the counting transport, and the plan says the clause out loud |
+| Recorded fixtures were the whole provider-test story | **[Plan §8](plan.md#8-testing-strategy) promises an opt-in live test** — one movie, one album, `needs_reference`, never gating CI — and no task delivered it. `tests/conftest.py` even documents the marker with *"Nothing does yet."* Now in T14 |
+| T15 registers the route and the feature set | **`tools/generate_cultures.py` had no row in [`tools/README.md`](../../tools/README.md)** — the table every other script in that directory is held by. Now in T15's changes |
+
+What was checked and held: all sixteen acceptance criteria are claimed by name (mechanically, not
+by reading); every module in [plan §3](plan.md#3-modules) has a task; every file the list points
+at exists — the migration sweep, the `needs_reference` marker, `IMPLEMENTED_FEATURES`, the
+acceptance-map harness — and T1's two client checkouts are present on the machine that will run
+it.
 
 ## Legend
 
@@ -222,25 +241,31 @@ library root is the one failure here that is quiet, and quiet failures get their
 
 ## T14 — Remote refresh end-to-end: modes, failures, and the zero-network rescan
 
-- [ ] **Changes:** `refresh.py` gains the remote steps behind mode and `enabled()` checks;
-  `refresh_pending` set on failure and retried by the next scan; the per-scan report names
-  disabled providers once.
+- [ ] **Changes:** `refresh.py` gains the remote steps behind mode, `enabled()` and
+  fields-still-wanting checks; `refresh_pending` set on failure and retried by the next scan; the
+  per-scan report names disabled providers once; **the opt-in live replay test** — one movie
+  against TMDB, one album against MusicBrainz, `@pytest.mark.needs_reference`, skipped by
+  default, never gating CI ([plan §8](plan.md#8-testing-strategy)) — the first user of the marker
+  `tests/conftest.py` declared for exactly this.
 - **Depends on:** T12, T13
 - **Verified by:** AC-8 — every provider stubbed unreachable, a full scan completes, every item
   keeps its local metadata, pending is set and the next scan retries; AC-9 — no credentials, scan
   completes, the report names what sat out; AC-10 — a locked field survives `Replace` end-to-end;
   AC-12 at integration; **AC-13 — scan, refresh, rescan of the unchanged library: the counting
-  transport shows zero requests**; AC-15 re-run with remote code present — downloads land under
-  the data directory and the library hash has not moved.
-- **Plan reference:** §6.8, §7
+  transport shows zero requests**; **AC-1 re-held now that providers exist** — a fully-sidecared
+  film refreshes with zero requests on the counting transport, which is the §6.8 gate doing its
+  job rather than an accident of T10's empty world; AC-15 re-run with remote code present —
+  downloads land under the data directory and the library hash has not moved.
+- **Plan reference:** §6.8, §7, §8
 
 ## T15 — Cultures: measure, generate, serve
 
 - [ ] **Changes:** measure the live reference's `GET /Localization/Cultures` first and record
   what the shape and the B/T code handling actually are, with provenance, correcting
   [plan §6.9](plan.md#69-cultures) if it guessed wrong; `tools/generate_cultures.py` (3.9 floor,
-  stdlib); `metadata/cultures.py` committed with its source and date in the header;
-  `api/localization.py`; the route registered; `IMPLEMENTED_FEATURES` in
+  stdlib), listed in [`tools/README.md`](../../tools/README.md)'s reference-material table like
+  every other script there; `metadata/cultures.py` committed with its source and date in the
+  header; `api/localization.py`; the route registered; `IMPLEMENTED_FEATURES` in
   `tests/conformance/test_routes.py` gains `"004"` — the line that file's own comment promises.
 - **Depends on:** 002 complete; independent of T3–T14
 - **Verified by:** a golden byte-compare of the response; the routes-against-surface tests green

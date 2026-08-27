@@ -4,6 +4,7 @@ title: Metadata resolution — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
+amended: 2026-08-27 by the tasks gate - section 6.8
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -339,8 +340,12 @@ A refresh processes a batch of item ids after the scan that produced them commit
 
 1. Local sources first, always: sidecar, tags, artwork. Cheap, offline, and they decide what is
    still missing.
-2. Remote providers only where the mode allows, the provider is enabled, and either an id is
-   carried or identification is worth attempting (a subject with a title).
+2. Remote providers only where the mode allows, the provider is enabled, **the local pass left
+   fields wanting that a provider could supply**, and either an id is carried or identification
+   is worth attempting (a subject with a title). The third clause is where AC-1 lives — a
+   fully-sidecared film makes zero network requests because nothing is missing, not because a
+   cache absorbed the fetch — and it was implicit in step 1's "they decide what is still
+   missing" until the tasks gate made it a condition rather than a remark.
 3. Merge (§6.1), then one `apply` per item; writes batched per library like the scan's own.
 
 Remote I/O runs on a small thread pool (four workers) feeding through `metadata.remote`, which
