@@ -26,7 +26,8 @@ what spec section 3.8 forbids.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from enum import StrEnum
 
 from atrium.domain.items import (
     PRODUCED_BY,
@@ -52,11 +53,46 @@ from atrium.library.walker import Candidate
 SPECIALS_NAME = "Specials"
 
 
+class Notice(StrEnum):
+    """What could not be read from a file's name, for a file that became an item anyway.
+
+    The counterpart of `walker.Skip`, and the difference is the whole reason both exist: a skipped
+    file produced **no** item, a noticed one produced a thin one. `library/report.py` keeps them in
+    separate lists for that reason.
+
+    One member, deliberately. A film with no year and a track with no number are how most real
+    files are named, and a category that fires on those buries the one entry that means something.
+    """
+
+    NO_EPISODE_NUMBER = (
+        "no episode number and no date, so it has a title and no place in its season"
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class Noticed:
+    """One scanned file, and what its name did not say."""
+
+    item_id: str
+    relative_path: str
+    reason: Notice
+
+
 @dataclass(frozen=True, slots=True)
 class Resolution:
     """Every item a set of candidates resolves to, containers included."""
 
     items: tuple[Item, ...] = ()
+
+    noticed: tuple[Noticed, ...] = field(default_factory=tuple)
+    """Files that resolved to an item the scan could not fully place.
+
+    Emitted here rather than computed from `items` afterwards, because **only this module can tell
+    the two cases apart**: an `Episode` with no `index_number` is either a name nothing could be
+    read from or a daily show whose episodes are dated, and an `Item` carries no date to
+    distinguish them. A version that looked only at the finished items reported every episode of
+    every daily show as unparseable.
+    """
 
     def of_type(self, item_type: ItemType) -> tuple[Item, ...]:
         return tuple(item for item in self.items if item.type is item_type)
@@ -78,17 +114,23 @@ def resolve(
     """
     collection_folder = _collection_folder(library)
     items: list[Item] = [collection_folder]
+    noticed: list[Noticed] = []
 
     ordered = sorted(candidates, key=lambda candidate: candidate.relative_path)
     if library.collection_type is CollectionType.MOVIES:
         items += _movies(library, collection_folder, ordered)
     elif library.collection_type is CollectionType.TVSHOWS:
-        items += _series(library, collection_folder, ordered)
+        items += _series(library, collection_folder, ordered, noticed)
     else:
         items += _music(library, collection_folder, ordered, source)
 
     _refuse_foreign_types(library, items)
-    return Resolution(items=tuple(sorted(items, key=lambda item: (item.type.value, item.id))))
+    return Resolution(
+        items=tuple(sorted(items, key=lambda item: (item.type.value, item.id))),
+        # Sorted, because the same tree scanned twice has to produce the same report for the same
+        # reason it has to produce the same items (spec section 3.8).
+        noticed=tuple(sorted(noticed, key=lambda one: one.item_id)),
+    )
 
 
 # ----------------------------------------------------------------------------------------------
@@ -125,7 +167,9 @@ def _movies(library: Library, parent: Item, candidates: list[Candidate]) -> list
 # ----------------------------------------------------------------------------------------------
 
 
-def _series(library: Library, parent: Item, candidates: list[Candidate]) -> list[Item]:
+def _series(
+    library: Library, parent: Item, candidates: list[Candidate], noticed: list[Noticed]
+) -> list[Item]:
     items: dict[str, Item] = {}
     episodes: list[Item] = []
 
@@ -151,15 +195,22 @@ def _series(library: Library, parent: Item, candidates: list[Candidate]) -> list
                 )
             )
 
+        episode_id = identity.for_file(
+            ItemType.EPISODE,
+            library.id,
+            candidate.relative_path,
+            case_sensitive=library.case_sensitive_identity,
+        )
+        if parsed.episode is None and parsed.date is None:
+            # A *dated* episode is placed - a daily show is ordered by its date and needs no
+            # number. This one has neither, so 005 will put it somewhere arbitrary within its
+            # season and a user will see episodes out of order with no visible cause.
+            noticed.append(Noticed(episode_id, candidate.relative_path, Notice.NO_EPISODE_NUMBER))
+
         episodes.append(
             _finished(
                 Item(
-                    id=identity.for_file(
-                        ItemType.EPISODE,
-                        library.id,
-                        candidate.relative_path,
-                        case_sensitive=library.case_sensitive_identity,
-                    ),
+                    id=episode_id,
                     type=ItemType.EPISODE,
                     name=parsed.name or _fallback_name(candidate.relative_path),
                     library_id=library.id,
@@ -298,4 +349,4 @@ def _refuse_foreign_types(library: Library, items: list[Item]) -> None:
         )
 
 
-__all__ = ["SPECIALS_NAME", "Resolution", "resolve"]
+__all__ = ["SPECIALS_NAME", "Notice", "Noticed", "Resolution", "resolve"]

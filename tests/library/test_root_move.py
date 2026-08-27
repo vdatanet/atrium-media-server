@@ -36,7 +36,8 @@ from atrium.db.repositories import ItemRepository, LibraryRepository
 from atrium.domain.items import Item, ItemType
 from atrium.domain.library import Library
 from atrium.library import config
-from atrium.library.scan import ScanReport, scan
+from atrium.library.report import ScanReport
+from atrium.library.scan import scan
 from tests.conftest import data_dir
 from tests.fixtures.library import BuiltFixture
 
