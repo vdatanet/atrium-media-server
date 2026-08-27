@@ -153,8 +153,23 @@ filename first, then against the parent directory. A series called `24` must not
 read as an episode number, and this is exactly where naive scanners fail.
 
 **Extras** — trailers, featurettes, deleted scenes, interviews, behind-the-scenes — are recognised
-by suffix and by containing-folder name, and are attached to their parent rather than becoming
-episodes. `[source: Emby.Naming/Common/NamingOptions.cs:160, 697 @ v10.11.11]`
+by suffix and by containing-folder name, and do not become episodes.
+`[source: Emby.Naming/Common/NamingOptions.cs:160, 697 @ v10.11.11]`
+
+**v1 ignores them rather than attaching them**, and this paragraph previously said the opposite of
+§3.2 — that they are "attached to their parent". Two things settle it. This feature produces
+structure and nothing else, and an extra is not structure: it has its own title, its own artwork
+and its own duration, which are 004's and 006's to fetch and 008's to measure. And there is nowhere
+to attach one: an item's files are the parts of the work itself, so filing a trailer among them
+would make it play as part of the film.
+
+An operator loses nothing they can currently see — v1 has no surface that shows extras — and a
+later feature that adds one starts from a rule that says what happens rather than from two
+paragraphs that disagree.
+
+**`Specials` is not an extras directory.** It is an alias for season zero, it sits beside `Extras`
+and `Featurettes` in real libraries, and a scanner that grouped it with them would drop every
+special episode in every series while producing a scan that looks entirely correct.
 
 **A missing season directory is normal.** So is a season directory with no episodes, and an episode
 whose number exceeds any real count. None of these is an error; all of them appear in real
