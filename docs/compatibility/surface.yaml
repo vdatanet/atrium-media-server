@@ -258,7 +258,7 @@ endpoints:
   - path: "/Audio/{itemId}/stream"
     method: GET
     operation: GetAudioStream
-    consumers: [music-client]
+    consumers: [music-client, video-client]
     feature: "008"
     level: L3
   - path: "/Audio/{itemId}/stream.{container}"
