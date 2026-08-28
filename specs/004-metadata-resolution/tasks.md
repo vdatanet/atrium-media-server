@@ -7,7 +7,7 @@ updated: 2026-08-27
 implemented: 2026-08-27
 accepted: 2026-08-27
 plan_status_required: Accepted
-plan_status_actual: Accepted  # at the gate; both are Implemented since 2026-08-27
+plan_status_actual: Implemented
 ---
 
 # 004 — Tasks

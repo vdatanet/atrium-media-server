@@ -8,7 +8,7 @@ accepted: 2026-08-28
 implemented: 2026-08-28
 amended: 2026-08-28 by T9 — §6.6's conditional paragraph (the two promises that cannot both hold) and the `Last-Modified` divergence on a transformed response; and 2026-08-28 by T8 — §5's `accepts_webp` and the row-derived decision AC-8 needs; and 2026-08-28 by T6 — §6.3 step 3's never-upscale cap deleted, measured; and 2026-08-28 by T3 — §5's two exception names gain the `Error` suffix the linter requires; and 2026-08-28 by T1 — §6.3 steps 1 and 5, §6.4's `quality` bullet, §6.8 row 3 discharged, behaviours §1.17 added; and 2026-08-28 at the gate, which measured the six §6.8 edges before accepting — §1, §5, §6.1, §6.3, §6.4, §6.5, §6.6, §6.8, §7, §8, §9, §10; two measurements went back into the spec (AC-6 corrected, AC-15 added) and one into behaviours §1.11 (the fourth error shape)
 spec_status_required: Accepted
-spec_status_actual: Accepted
+spec_status_actual: Implemented
 ---
 
 # 006 — Implementation plan

@@ -6,7 +6,7 @@ created: 2026-08-26
 updated: 2026-08-26
 amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3; by T8 - sections 6.5 and 6.6; by T9 - section 7; by T14 - sections 8.2 and 9; by T15 - sections 8.1 and 9; by T16 - section 8.3
 spec_status_required: Accepted
-spec_status_actual: Accepted
+spec_status_actual: Implemented
 accepted: 2026-08-26
 ---
 

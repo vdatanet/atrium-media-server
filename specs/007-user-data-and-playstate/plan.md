@@ -8,7 +8,7 @@ accepted: 2026-08-28
 implemented: 2026-08-28
 amended: 2026-08-28 at the gate, which measured §6.8's catalogue before accepting — §1's sequencing note, §5's replacement semantics, §6.1's error floor, §6.4 rewritten around the measured session shape, §6.7, §6.8, §7, §9; the playing-session block and AC-21/AC-22 went back into the spec
 spec_status_required: Accepted
-spec_status_actual: Accepted
+spec_status_actual: Implemented
 ---
 
 # 007 — Implementation plan
