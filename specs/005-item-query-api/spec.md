@@ -1,10 +1,11 @@
 ---
 feature: 005-item-query-api
 title: Item query API
-status: Accepted
+status: Implemented
 created: 2026-08-26
 updated: 2026-08-28
 accepted: 2026-08-27
+implemented: 2026-08-28
 amended: 2026-08-28 by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated)
 depends_on: [002, 004]
 ---

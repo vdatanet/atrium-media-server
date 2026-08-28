@@ -1,10 +1,11 @@
 ---
 feature: 005-item-query-api
 title: Item query API — tasks
-status: Accepted
+status: Implemented
 created: 2026-08-27
 updated: 2026-08-28
 accepted: 2026-08-27
+implemented: 2026-08-28
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -839,7 +840,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T17 — The acceptance map, and Implemented
 
-- [ ] **Changes:** `FEATURE_005` in `tests/conformance/test_acceptance.py`, mapping **all
+- [x] **Changes:** `FEATURE_005` in `tests/conformance/test_acceptance.py`, mapping **all
   sixteen** criteria of [spec §5](spec.md#5-acceptance-criteria) to named tests; the shape
   roll-up — one parameterised test walking every 005 list route in the surface and asserting
   its declared shape, which is what makes AC-1's *every* a property rather than six tasks'
@@ -853,30 +854,84 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   `ruff format --check`, `mypy`, `pytest` — green; the definition of done below closed line by
   line.
 - **Plan reference:** §8; 004 T16 is the precedent
+- **Done (2026-08-28):** the map names sixteen criteria, **ten of them at two or three levels**
+  — repository or builder once, the route once more — for 004's recorded reason: a correct rule
+  and a rule the caller actually uses are two claims. The gate's own addition earned its place:
+  the shape roll-up walks the seventeen 005 rows of `surface.yaml` itself, so a list route added
+  to the surface without a row in the roll-up fails by name — AC-1's *every* is a property now,
+  not six tasks' habit. `LANDED_EARLY` is deleted and `"005"` is in `IMPLEMENTED_FEATURES`,
+  which is what finishing looks like in that file, twice over now.
+
+  Worth counting at the close: **four acceptance criteria and two plan algorithms did not
+  survive contact with the measured reference** — AC-11 reversed (specials first), AC-13
+  restated (behaviours §5.3 forbids the drafted containment), AC-14 restated (`MatchedTerm`
+  does not exist on the wire), AC-1's "one representation" split into three widths at T1 — and
+  every correction is in the spec with provenance, in the same change that learned it. The
+  definition of done below is closed line by line.
 
 ---
 
 ## Definition of done
 
-The feature is done when **all** of these hold:
+Closed line by line at T17, on 2026-08-28.
 
-- [ ] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all sixteen
-      — has a passing test, by name, in `FEATURE_005`.
-- [ ] Every endpoint reaches the conformance level [spec §6](spec.md#6-conformance) declares —
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all sixteen
+      — has a passing test, by name, in `FEATURE_005` (T17). Ten are named at more than one
+      level, once where the rule is proved and once where the route is proved to use it.
+- [x] Every endpoint reaches the conformance level [spec §6](spec.md#6-conformance) declares —
       with the L3 debt stated rather than hidden: `GET /Items` and `GET /Items/{itemId}` carry
-      reviewed goldens per item type now and join the differential when 010 lands, which is the
-      debt [plan §8](plan.md#8-testing-strategy) acknowledges and 010 pays.
-- [ ] All seventeen routes are served, `"005"` is in `IMPLEMENTED_FEATURES`, and no route exists
+      sixteen reviewed goldens per item type (T10), placeholder-free because the world is
+      deterministic, and join the differential when 010 lands, which is the debt
+      [plan §8](plan.md#8-testing-strategy) acknowledges and 010 pays.
+- [x] All seventeen routes are served, `"005"` is in `IMPLEMENTED_FEATURES`, and no route exists
       outside [`surface.yaml`](../../docs/compatibility/surface.yaml) — the seventeen rows were
-      in the file before this list was written, so the check is registration, not listing.
-- [ ] The feature ends owning **no state**: no table, no column, no cache
-      ([plan §4](plan.md#4-data-model)). If implementation found a missing index, it arrived as
-      a revision in this feature with its query pattern written down, or it does not exist.
-- [ ] The query counter is green across the suite: no endpoint issues per-item statements.
-- [ ] Anything learned during implementation is back in `spec.md` or `plan.md`, in the same
-      change that learned it.
-- [ ] Every measurement a task took against the reference is in the spec or
-      [`behaviours.md`](../../docs/compatibility/behaviours.md) with provenance — T1's shapes,
-      T11's grouping and exclusions, T12's specials ordering, T13's NextUp semantics, T15's
-      hint fields.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+      in the file before this list was written, so the check was registration, not listing.
+- [x] The feature ends owning **no state**: no table, no column, no cache
+      ([plan §4](plan.md#4-data-model)), and no index was needed — 004's pattern-named indexes
+      carried every query. The one write this feature made is T8's fix to 004's write path,
+      which created the `Year` rows 004 had promised and never made.
+- [x] The query counter is green across the suite: hydration is 15 statements whatever the page
+      size (T9's deliberate move from 9, recorded in the counter test's own docstring), and the
+      route-level parity test holds it over HTTP.
+- [x] Anything learned during implementation is back in `spec.md` or `plan.md` in the same
+      change. The `amended:` lines name **eight** tasks and the gate between them.
+- [x] Every measurement a task took against the reference is in the spec or
+      [`behaviours.md`](../../docs/compatibility/behaviours.md) with provenance — T1's three
+      widths and the `ChannelId` null (behaviours §1.7 amended), T9's by-name row shapes and
+      §5.5 (no BlurHash), T11's grouping and the two configuration keys, T12's specials order,
+      T13's NextUp chain (`tools/probe_next_up.py`, in both `tools/README.md` tables), T14's
+      per-route omissions and §3.1's `/Years` face, T15's hint fields and the name-only match.
+      One thing could not be measured and says so ⚠️ in spec §3.7: whether a played special
+      drives the NextUp chain — no pristine specials existed to play.
+- [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+
+## What this feature owes the next ones
+
+**006** inherits the image surface 005 emits: `ImageTags`, `BackdropImageTags` and the per-type
+parent tags are computed from `item_images` rows alone, and the bytes those tags identify are
+006's to serve — the tag values in the sixteen goldens are the contract. `ImageBlurHashes` is
+the empty map on every row (behaviours §5.5): computing real hashes belongs where the bytes are
+open, and the differential will show the gap on every item until it closes.
+
+**007** owns what the stored user-data columns mean, and 005 built two things on top it should
+know about: a container's `Played`/`UnplayedItemCount` are a **per-page rollup of the subtree**
+computed in hydration (measured, `db/item_queries._rolled`), and `PlayedPercentage` is derived
+from position over runtime at DTO level. If 007 changes what a stored row means, those two are
+where the change surfaces.
+
+**008** has a failing-test-in-waiting: `MediaSources`, `MediaStreams`, `Chapters`, `Width` and
+`Height` are the `UNPROBED` set in `api/item_dto.py`, undeclared on the model on purpose, and
+`test_the_unprobed_five_stay_absent_even_when_asked` asserts the absence — 008's first emission
+breaks that test, which is the intended signal to declare the fields and delete the tripwire.
+
+**009** flips one behaviour by existing: `includeItemTypes=Playlist` narrows to nothing today
+because `Playlist` is a `BaseItemKind` v1 cannot produce (`api/items.py`, `BASE_ITEM_KINDS`) —
+the day playlists exist, that same filter must find them, and `PlaylistItemId` is declared in
+spec §3.2's table waiting for its emitter.
+
+**010** collects the flags this feature raised for the differential: the `userId` guard's `403`
+and the administrator's `404` for an unknown user (both unmeasured, `api/items.py`), the
+specials half of NextUp's chain (⚠️ spec §3.7), the `GenreItems`/`LockedFields` pinned-document
+gap (reference-target §1 — the alias sweep's measured exception empties if the pin moves), and
+OQ-1/OQ-2, whose answers are the ignored-parameter record and the field-by-field diff this
+feature built the events for.

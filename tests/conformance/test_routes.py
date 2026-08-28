@@ -49,34 +49,7 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 #: so that no route can ship ahead of the feature that specifies it - and, just as importantly, so
 #: that a feature marked `Implemented` whose route is not registered fails here rather than in
 #: somebody's client. 004 joined at T15, which is the line this file's own comment promised.
-IMPLEMENTED_FEATURES = frozenset({"001", "002", "004"})
-
-#: 005's routes land across seven tasks (T10-T16), and while they do, the exact-set check below
-#: carries the ones that have landed - the same device 002 used between its two route tasks.
-#: **T17 deletes this set** by putting "005" in `IMPLEMENTED_FEATURES`, which is what finishing
-#: a feature looks like in this file. Every entry must also be in surface.yaml, which
-#: `test_no_route_exists_outside_the_surface` keeps true.
-LANDED_EARLY: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("GET", "/Items"),  # T10
-        ("GET", "/Items/{itemId}"),  # T10
-        ("GET", "/UserViews"),  # T11
-        ("GET", "/Items/Latest"),  # T11
-        ("GET", "/Shows/{seriesId}/Seasons"),  # T12
-        ("GET", "/Shows/{seriesId}/Episodes"),  # T12
-        ("GET", "/Shows/NextUp"),  # T13
-        ("GET", "/UserItems/Resume"),  # T13
-        ("GET", "/Artists"),  # T14
-        ("GET", "/Artists/AlbumArtists"),  # T14
-        ("GET", "/Genres"),  # T14
-        ("GET", "/MusicGenres"),  # T14
-        ("GET", "/Years"),  # T14
-        ("GET", "/Items/Filters"),  # T15
-        ("GET", "/Search/Hints"),  # T15
-        ("GET", "/Items/{itemId}/Similar"),  # T16
-        ("GET", "/Items/{itemId}/InstantMix"),  # T16
-    }
-)
+IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005"})
 
 
 def _load_surface_parser() -> Any:
@@ -154,12 +127,11 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     would pass it. This one fails until `IMPLEMENTED_FEATURES` names the feature - a line that gets
     changed on purpose, in the change that finishes it.
 
-    002 arrived across two tasks, and for the two changes between them this set was accompanied by
-    an explicit list of the individual routes that had landed. That list is gone now, which is what
-    finishing a feature looks like here - and `LANDED_EARLY` is 005 doing the same thing across
-    seven tasks.
+    002 arrived across two tasks and 005 across seven, and for the changes between them this set
+    was accompanied by an explicit list of the individual routes that had landed. Both lists are
+    gone now, which is what finishing a feature looks like here.
     """
-    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES) | LANDED_EARLY
+    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES)
 
 
 def test_an_unlisted_route_fails_the_check(app: FastAPI) -> None:
