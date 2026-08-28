@@ -111,7 +111,7 @@ library is configured.
   Jellyfin. It must be the literal `Jellyfin Server`. The reasoning, and why this does not conflict
   with being honest about what Atrium is, is in
   [reference-target.md §4](../../docs/compatibility/reference-target.md#4-server-identity-what-atrium-tells-clients-it-is).
-  `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
+  `[probe: tools/probe_public_info.py, Jellyfin 10.11.11, 2026-08-28]`
 - `OperatingSystem` is empty because the reference implementation marks the field obsolete and
   never assigns it, leaving its default empty-string value.
   `[source: MediaBrowser.Model/System/PublicSystemInfo.cs:37-38 @ v10.11.11]`

@@ -103,6 +103,34 @@ def run(server: Server) -> Probe:
         status, headers, body = request(server, method, path)
         probe.observe(f"{method} {path}", f"{status}   {describe(headers, body)}   <- {label}")
 
+    # The Allow *ordering* question. /System/Ping's methods are GET and POST, alphabetical in
+    # either convention, so the observation above cannot separate "alphabetical" from
+    # "registration order". The mark pair /UserFavoriteItems/{itemId} serves POST and DELETE,
+    # where the two conventions disagree - src/atrium/compat/errors.py sorts, and behaviours
+    # §1.11 records what the reference actually sends. Needs a token and one item.
+    if server.token:
+        try:
+            rows = server.get("/Items", UserId=server.user_id, Recursive="true", Limit=1).get(
+                "Items", []
+            )
+            if rows:
+                _, mark_headers, _ = server._request(
+                    "PUT", f"/UserFavoriteItems/{rows[0]['Id']}", raw=True
+                )
+                probe.observe(
+                    "PUT /UserFavoriteItems/{itemId}",
+                    f"Allow: {mark_headers.get('Allow', 'absent')}   <- POST+DELETE route, "
+                    "the pair where alphabetical and registration order differ",
+                )
+            else:
+                probe.note("Allow ordering on the mark pair unmeasured: the library is empty.")
+        except ProbeError as exc:
+            probe.note(f"Allow ordering on the mark pair unmeasured: {exc}")
+    else:
+        probe.note(
+            "Allow ordering on the mark pair needs a token; run with credentials to measure it."
+        )
+
     # The finding is stated as the four rules a reimplementation has to reproduce, because the
     # statuses alone do not say which of them is a rule and which is a coincidence.
     insensitive = {"all lowercase", "all uppercase", "mixed case"} <= set(matched)

@@ -55,7 +55,9 @@ with or without a timezone; a missing timezone is read as UTC.
 ### 1.3 Durations and positions are .NET ticks
 
 **Jellyfin does:** expresses `RunTimeTicks`, `PositionTicks`, `PlaybackPositionTicks` and
-`StartPositionTicks` in **ticks of 100 nanoseconds** — 10,000,000 ticks per second.
+`StartPositionTicks` in **ticks of 100 nanoseconds** — 10,000,000 ticks per second. The unit is
+.NET's `TimeSpan` tick: ffprobe's seconds become `TimeSpan.FromSeconds(…).Ticks` at ingestion
+`[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:234 @ v10.11.11]`.
 
 **Depends on it:** every progress bar and resume position.
 
@@ -287,7 +289,7 @@ actually reachable on for that network. ⚠️ **This is a deliberate divergence
 [api-surface-v1.md §3](api-surface-v1.md#3-authentication-users-and-sessions) listed four until
 2026-08-28, when this section's count was carried into it. The fifth is
 `X-Emby-Authorization` carrying a `Token=` component: the reference reads that header and
-`Authorization` with the same grammar, and a token in either authenticates. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]` It is
+`Authorization` with the same grammar, and a token in either authenticates. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` It is
 the historical Emby form and it is what a great many clients send, so a server implementing only
 the documented four would refuse clients that have worked against Jellyfin for years.
 
@@ -712,7 +714,7 @@ happened. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
 |---|---|
 | Unauthenticated request | `401`, **empty body**, `Content-Length: 0`, no `Content-Type`, **no `WWW-Authenticate`** |
 | Path matching no route | `404`, **empty body**, no `Content-Type` |
-| A method the path does not have | `405`, **empty body**, no `Content-Type`, and `Allow` naming every method that path has `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-26]` |
+| A method the path does not have | `405`, **empty body**, no `Content-Type`, and `Allow` naming every method that path has `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-26]`. The order is alphabetical on the one measured pair where alphabetical and registration order differ: `PUT /UserFavoriteItems/{itemId}` answers `Allow: DELETE, POST` `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]` — the order `compat/errors.py`'s sort produces |
 | An item a handler could not find | `404`, **RFC 9457 problem details** as JSON |
 | A malformed value the model binder rejected | `400`, **RFC 9457 problem details** with an `errors` map |
 | A controller that refused the request itself | `4xx`, **`text/plain` with no `charset`**, and the fixed 25-byte body `Error processing request.` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` |
@@ -1108,16 +1110,18 @@ unconditionally, even when the unconditional version looks cleaner.
 share the `GetItemValues` path, which **disables counting when the request has no `limit`**:
 
 ```
-/Artists?UserId=…            -> TotalRecordCount=0  Items=7
-/Artists?UserId=…&limit=500  -> TotalRecordCount=7  Items=7
+/Artists?UserId=…             -> TotalRecordCount=0    Items=684
+/Artists?UserId=…&limit=1000  -> TotalRecordCount=684  Items=684
 ```
 
-`[prior-probe: Jellyfin master, 2026-08-05; upstream jellyfin/jellyfin#17541]`
+`[probe: tools/probe_by_name_counts.py, Jellyfin 10.11.11, 2026-08-28; upstream
+jellyfin/jellyfin#17541]` — first seen on `master` on 2026-08-05, and the probe run settles that
+the pinned line has it too, on all five shared-path endpoints.
 
 `/Years` has its own face of the same defect, measured on the pinned line: without a `limit` it
 answers a count that is neither zero nor the row count — `TotalRecordCount: 9754` beside 97 rows
 on the measured library — so the field is unreliable across the whole family, each route in its
-own way. `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`
+own way. `[probe: tools/probe_by_name_counts.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **Depends on it:** no. Known clients map `Items` and ignore `TotalRecordCount` on these routes —
 precisely because it is unreliable. A client that *paginated* on it would be broken today.
@@ -1190,7 +1194,10 @@ this is the case it was written for.
 
 ### 3.3 Transcoding responses carry no `Content-Length` or `Accept-Ranges` — class C
 
-**Jellyfin does:** streams transcoded output chunked, with no size and no range support.
+**Jellyfin does:** streams transcoded output chunked, with no size and no range support:
+`GetTranscodedFile` forces `Accept-Ranges: none` and sets no `Content-Length` — the transcode is
+written out as ffmpeg produces it
+`[source: Jellyfin.Api/Helpers/FileStreamResponseHelpers.cs:123-135 @ v10.11.11]`.
 
 **Depends on it:** negatively — DLNA renderers refuse a stream with no size, which is why clients
 that cast run a local sizing proxy.
@@ -1359,7 +1366,9 @@ configuration v1 does not have.
 ### 4.3 `DELETE /Items/{itemId}` refuses to delete media
 
 **Jellyfin does:** deletes the item and its files, gated by the user's `EnableContentDeletion`
-policy.
+permission — or, failing that, the per-folder
+`EnableContentDeletionFromFolders` list
+`[source: MediaBrowser.Controller/Entities/BaseItem.cs:829-844 @ v10.11.11]`.
 
 **Depends on it:** a client's delete button. This divergence **is** observable — a user deletes a
 film and finds it still there.

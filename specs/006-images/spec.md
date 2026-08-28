@@ -52,7 +52,7 @@ Items carry `ImageTags`, a map of image type to tag:
 "BackdropImageTags": [ "b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7" ]
 ```
 
-`[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
+`[probe: tools/probe_image_tags.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **Backdrops are a list**, not a map, because an item can have several and they are addressed by
 index.

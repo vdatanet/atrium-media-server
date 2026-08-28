@@ -390,8 +390,9 @@ async def routing_handler(request: Request, exc: Exception) -> Response:
     if exc.status_code == 405:
         allowed = request.app.state.routes.methods_for(request.url.path)
         # Sorted, so two servers built from the same routes advertise the same string
-        # (Principle VII). The one measured case - GET, POST - is alphabetical either way, so
-        # the reference's own ordering rule is unknown rather than reproduced.
+        # (Principle VII) - and alphabetical is what the reference sends on the one measured
+        # pair where alphabetical and registration order differ: PUT /UserFavoriteItems/{itemId}
+        # answers "Allow: DELETE, POST" (behaviours section 1.11, probe_routing 2026-08-28).
         headers = {"Allow": ", ".join(sorted(allowed))} if allowed else None
     return empty_error(exc.status_code, headers)
 

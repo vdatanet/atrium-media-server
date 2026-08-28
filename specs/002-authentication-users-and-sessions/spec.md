@@ -161,7 +161,7 @@ when present.
 |---|---|
 | `User` | The full user object of §3.5 |
 | `SessionInfo` | The session created by this authentication, §3.8. `LastPlaybackCheckIn` is `0001-01-01T00:00:00.0000000Z` for one that has never played anything — .NET's minimum date, not null and not absent `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` |
-| `AccessToken` | 32 lowercase hex characters `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` |
+| `AccessToken` | 32 lowercase hex characters `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` |
 | `ServerId` | The server identity from 001 §3.1 |
 
 **Errors**

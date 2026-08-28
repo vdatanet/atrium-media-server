@@ -132,7 +132,7 @@ Whichever arrives must carry a `DeviceId`, which is what identifies the device f
 > carries no `limit`**, returning `TotalRecordCount: 0` alongside a non-empty `Items`. This is a
 > Jellyfin defect ([#17541](https://github.com/jellyfin/jellyfin/pull/17541)) that Atrium must
 > decide about explicitly — see [behaviours.md](behaviours.md).
-> `[prior-probe: Jellyfin master, 2026-08-05]`
+> `[probe: tools/probe_by_name_counts.py, Jellyfin 10.11.11, 2026-08-28]`
 
 ## 5. User data
 
@@ -192,7 +192,7 @@ content hash used for cache invalidation, so it must change when the image chang
 |---|---|---|---|---|
 | POST | `/Items/{itemId}/PlaybackInfo` | `GetPostedPlaybackInfo` | V | The real negotiation entry point: the client posts a `DeviceProfile`, the server answers with `MediaSources` and a delivery decision |
 | GET | `/Items/{itemId}/PlaybackInfo` | `GetPlaybackInfo` | D | Profile-less variant; some clients still use it |
-| GET | `/Audio/{itemId}/stream` | `GetAudioStream` | M V | With `static=true` for direct play. The video client builds this URL by hand for music, because `/Videos/…` answers `404` for a track `[client-contract: 2026-08-28, §4]` |
+| GET | `/Audio/{itemId}/stream` | `GetAudioStream` | M V | With `static=true` for direct play. The video client builds this URL by hand for music. The contract's lead said `/Videos/…` answers `404` for a track; measured, it does **not** — it serves the track's bytes whole under `Content-Type: video/quicktime` `[probe: tools/probe_video_stream_for_a_track.py, Jellyfin 10.11.11, 2026-08-28]` — so what this route buys the client is a correctly-typed, negotiable stream, not the only route that answers |
 | GET | `/Audio/{itemId}/stream.{container}` | `GetAudioStreamByContainer` | M | |
 | GET | `/Audio/{itemId}/universal` | `GetUniversalAudioStream` | M | Server-decides variant |
 | GET | `/Videos/{itemId}/stream` | `GetVideoStream` | V | |

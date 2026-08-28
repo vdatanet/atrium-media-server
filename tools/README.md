@@ -43,6 +43,10 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_next_up.py`](probe_next_up.py) | What does `/Shows/NextUp` call "next", and do specials take part? | 005 §3.7, plan §6.8 | yes |
 | [`probe_image_tags.py`](probe_image_tags.py) | Is a stale image `tag` an error, and what is the tag derived from? | 006 §3.4, AC-10, OQ-1, OQ-2, OQ-6 | no |
 | [`probe_image_formats.py`](probe_image_formats.py) | What format does a resized image come back in, does a fill box crop, and does a malformed parameter refuse or forgive? Five batteries: the format matrix, the **non-square fill** cells, the **exact `width`/`height`** cells, the **`Accept` negotiation** cells, and which requests come back as the source's own bytes | 006 §3.2, §3.3, AC-6, AC-15, OQ-3, OQ-5; plan §6.3; behaviours §1.17 | no |
+| [`probe_by_name_counts.py`](probe_by_name_counts.py) | Is `TotalRecordCount` really 0 on the by-name endpoints when the request has no `limit`? | behaviours §3.1; 005 §3.9 | no |
+| [`probe_public_info.py`](probe_public_info.py) | What exactly does `/System/Info/Public` return, before any token exists? | 001 §3.1; reference-target §4 | no |
+| [`probe_playback_refusal.py`](probe_playback_refusal.py) | When no source can be played by the profile, is it `200` — and does an `ErrorCode` arrive? | 008 §3, the error table | no |
+| [`probe_video_stream_for_a_track.py`](probe_video_stream_for_a_track.py) | What does `/Videos/{id}/stream` answer when the id names an audio track? | api-surface §4, §8 | no |
 
 ### Running them
 
