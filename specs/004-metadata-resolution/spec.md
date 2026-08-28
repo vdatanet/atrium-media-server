@@ -105,7 +105,9 @@ and totals, year, genre, composer, MusicBrainz identifiers, the track's replay-g
 embedded cover art.
 
 **One replay-gain value, not four.** The reference reads the *track gain* and nothing else — not
-track peak, not album gain, not album peak — and serves it as a single number on the item, the
+track peak, not album gain, not album peak
+`[source: MediaBrowser.Providers/MediaInfo/AudioFileProber.cs:362-375 @ v10.11.11]` — and serves
+it as a single number on the item, the
 adjustment in decibels a player applies to level this track against others. The other three
 values have nowhere in the reference's item shape to go, so reading them would be storage no
 response can ever carry (OQ-5, §7).

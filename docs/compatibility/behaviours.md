@@ -165,8 +165,8 @@ parent. `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`
 
 **What overrides the setting has not been established here.** The configuration cited above is not
 in dispute; something defeats it for these two properties, and identifying it needs a reading of
-the reference's source that this repository cannot currently do — there is no `reference/`
-checkout on the machine that ran the probe. The exception is therefore recorded as a measurement
+the reference's source that had not been taken as of 2026-08-28 — the machine that ran the probe
+had no reference checkout. The exception is therefore recorded as a measurement
 with no mechanism, which is weaker than the rest of this entry and is marked as such.
 
 **Depends on it:** decoders differ. A generated Swift client distinguishes "absent" from "null"
@@ -248,8 +248,11 @@ class is cheaper than an asterisk on every golden and a permanent exception in t
 
 **Jellyfin does:** returns `UserData` on every item without `Fields=UserData` or
 `EnableUserData=true`, and includes `Key` and `ItemId` inside it (Emby does not).
-`[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]` Neither analysed client
-*reads* the pair — the fields are a dialect marker, present to be present
+`[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`
+
+**Depends on it:** the played ticks and progress bars a client draws on every list — the object
+arrives unasked, so clients never learned to ask for it. `Key` and `ItemId` inside it have no
+reader in either analysed client; the pair is a dialect marker, present to be present
 (007 §3.2's survey).
 
 **Atrium does:** the same.
@@ -416,7 +419,11 @@ apart; for a tagged file both servers answer from the tag and agree.
 source says nothing — which for an untagged file is a value the reference does not have.
 [003 §3.5](../../specs/003-library-configuration-and-scanning/spec.md#35-music) states the
 divergence and **OQ-8 holds the decision open**: the evidence that would settle it is how much real
-music carries no readable tag, and nothing can measure that until 004 reads them.
+music carries no readable tag. Half of that moved on 2026-08-27 — 004 T7 built the tag reader, so
+the fraction is measurable against any real library; what it still needs is a library that is not
+this suite's generated silence (003 §7 OQ-8). Until that measurement is taken, the divergence
+stands the way §5's gaps do: observable only in a library holding untagged music, with OQ-8's
+measurement as the mechanism that closes it.
 
 What is already settled is the direction of the tie-break inside that fallback. Since every stem
 Atrium declines to find a number in is a stem it agrees with the reference about, an ambiguous shape
@@ -516,6 +523,10 @@ raised would refuse requests the reference serves.
 `Random`, `AlbumArtist`, `Artist` — a superset of Emby's.
 `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
 
+**Depends on it:** every sort menu a client offers — the tokens are what it may send, and a token
+outside the set is ignored rather than refused (005 §3.3), so a missing member would not error; it
+would return a default order under the name of the one the client asked for.
+
 **Atrium does:** the same set. How `SortName` itself is derived is §2.6.
 
 ### 2.6 `SortName` has two derivations, and three types use the second
@@ -532,7 +543,7 @@ and `S.W.A.T.` becomes `s w a t ` with a trailing one.
 For `Audio`, `Episode` and `Season`: a zero-padded numeric prefix followed by the **raw** name,
 with none of the above applied. Audio pads disc and track to four; Episode pads season to
 **three** and episode to **four**; Season is the number alone.
-`[source: Audio.cs:94-98, Episode.cs:238-242, Season.cs:149-152 @ v10.11.11]`
+`[source: MediaBrowser.Controller/Entities/Audio/Audio.cs:94-98, MediaBrowser.Controller/Entities/TV/Episode.cs:238-242, MediaBrowser.Controller/Entities/TV/Season.cs:149-152 @ v10.11.11]`
 
 **Depends on it:** every ordered list a client draws. This is not a field a client reads and
 compares — it is the order items arrive in, which no client can correct and most will not even
@@ -758,7 +769,10 @@ files body failures under `""` or `"$"` beside `The <parameter> field is require
 One half is a **recorded divergence**: the `"$"` entry's *message* is this parser's, where the
 reference's is .NET's `'n' is an invalid start of a property name. … BytePositionInLine: 1.`
 Reproducing that sentence would mean writing a JSON parser to fail like another one; the key and
-the status match, and no client branches on the text.
+the status match. That no client branches on the text is **assumed**, not surveyed — §3.0.1
+tie-break 1's default would presume a compensation exists, set aside here only because the text
+cannot be matched at any price short of that parser. The differential harness (010) is what would
+surface a client that reads it.
 
 The split is not arbitrary: the empty ones are produced before the framework's controller pipeline
 runs, the JSON ones by that pipeline, and the last two by a controller inside it — the fixed
@@ -1312,7 +1326,8 @@ for this; nothing here waits on one.
 
 ## 4. Deliberate exceptions
 
-Two, and both are listed here so they are never mistaken for oversights.
+Every one of them is listed here so it is never mistaken for an oversight — including §4.4, which
+stays after its 2026-08-28 withdrawal because the record of an exception outlives the exception.
 
 ### 4.1 Atrium identifies as Jellyfin on the fields clients parse
 
@@ -1332,6 +1347,14 @@ log or a bug report finds out what they are really talking to.
 
 See §2.3. Jellyfin's behaviour here is not a contract clients rely on; it is a source of breakage
 they work around. Atrium reports the scheme it is actually reachable on.
+
+The argument that no client can observe the difference: the override fires only **when a
+certificate is configured** (§2.3's measured condition), and v1 terminates no TLS and has no
+certificate configuration — the state in which the reference rewrites the scheme cannot be
+configured on Atrium at all. A v1 deployment is reachable over HTTPS only through something else's
+TLS, and a reference server in that same position holds no certificate of its own either, so its
+override does not fire and the two answers coincide. A client could only see the divergence on a
+configuration v1 does not have.
 
 ### 4.3 `DELETE /Items/{itemId}` refuses to delete media
 
@@ -1614,6 +1637,8 @@ inventing one would be a lie a client renders. Computing one for real belongs to
 path 004 owns (the bytes are already open in Pillow when dimensions are read), needs a stored
 column, and no consumer has asked yet; 010's differential will report the gap on every item, which
 is the mechanism that decides when it closes. Recorded at 005 T9, where the emitter was written.
+
+## 6. Non-improvements
 
 Principle I requires that good ideas which would create a delta get written down and then not done.
 This list exists so they stop being re-proposed.
