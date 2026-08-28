@@ -147,6 +147,7 @@ SPEC_PER_TYPE: dict[str, set[str]] = {
     "SeriesThumbImageTag": {"Episode"},
     "ParentThumbItemId": {"Season", "Episode"},
     "ParentThumbImageTag": {"Season", "Episode"},
+    "ParentBackdropItemId": {"Season", "Episode", "MusicAlbum", "Audio"},
     "ParentBackdropImageTags": {"Season", "Episode", "MusicAlbum", "Audio"},
     "Album": {"Audio"},
     "AlbumId": {"Audio"},

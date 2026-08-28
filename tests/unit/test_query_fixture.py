@@ -367,10 +367,16 @@ def test_two_builds_derive_the_same_world(tmp_path: Path, world: QueryWorld) -> 
 def test_the_images_sit_exactly_where_the_dto_tests_need_them(
     session: OrmSession, world: QueryWorld
 ) -> None:
-    """The first film, the first series and the compilation carry images - **and nothing else
-    does**. The exclusivity is the load-bearing half: the `Parent*` emitters resolve tags through
-    an ancestor walk, and a world where every series had a poster could not tell a walk that
-    works from one that finds something anywhere."""
+    """The first film, the first series, its first episode and the compilation carry images -
+    **and nothing else does**. The exclusivity is the load-bearing half: the `Parent*` emitters
+    resolve tags through an ancestor walk, and a world where every series had a poster could not
+    tell a walk that works from one that finds something anywhere.
+
+    **The episode's own `Primary` arrived with 006 T2** and is the one row here that exists for a
+    criterion rather than for an emitter: 006 AC-14 says an episode carries its series' tags
+    whether or not it has artwork of its own, and until this row no episode in this world had
+    any - so "unconditional" and "falls back when empty" were the same test. It sits under the
+    imaged series on purpose; under an unimaged one it would prove nothing either."""
     by_item: dict[str, set[tuple[str, int]]] = {}
     for row in rows(session, models.ItemImage):
         by_item.setdefault(row.item_id, set()).add((row.image_type, row.image_index))
@@ -383,7 +389,14 @@ def test_the_images_sit_exactly_where_the_dto_tests_need_them(
         ("Backdrop", 1),
     }
     assert by_item[world.album] == {("Primary", 0)}
-    assert set(by_item) == {world.corpus[0], world.series[0].id, world.album}
+    assert by_item[world.imaged_episode] == {("Primary", 0)}
+    assert world.imaged_episode == world.series[0].episodes[0]
+    assert set(by_item) == {
+        world.corpus[0],
+        world.series[0].id,
+        world.imaged_episode,
+        world.album,
+    }
 
 
 def test_the_dated_film_also_carries_the_runtime(session: OrmSession, world: QueryWorld) -> None:

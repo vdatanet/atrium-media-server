@@ -97,6 +97,12 @@ SERIES_THUMB_TAG = "f" * 32
 SERIES_BACKDROP_TAGS = ("b1" * 16, "b2" * 16)
 ALBUM_PRIMARY_TAG = "a1" * 16
 
+#: The first episode of the first series carries a poster **of its own**, under a series that has
+#: one too. 006 AC-14 says inheritance is unconditional - an episode gets its series' tags whether
+#: or not it has artwork - and a world where no episode ever had any cannot tell that from an
+#: emitter that simply falls back. 005 never needed the case; 006 T2 seeds it (006 tasks T2).
+EPISODE_PRIMARY_TAG = "e1" * 16
+
 #: Which of the rated films carries a real `PremiereDate`, and what it is. Older than the film's
 #: own production year on purpose: see `_seed_movies`.
 DATED_OFFSET = 1
@@ -189,6 +195,11 @@ class QueryWorld:
     multi_episode: str
     """The `S01E02-E03` episode on the second series: one item spanning two numbers."""
 
+    imaged_episode: str
+    """The first episode of the first series, which carries a `Primary` **of its own** under a
+    series that has a poster and two backdrops. 006 AC-14's discriminating case: inheritance is
+    unconditional, and an episode with no artwork anywhere cannot tell that from a fallback."""
+
     album: str
     """The compilation."""
 
@@ -253,7 +264,7 @@ def build_query_world(session: OrmSession) -> QueryWorld:
         _add(items, _collection_folder(library))
 
     corpus, awkward = _seed_movies(items, metadata, movies)
-    series, specials_season, multi_episode = _seed_shows(items, metadata, shows)
+    series, specials_season, multi_episode, imaged_episode = _seed_shows(items, metadata, shows)
     album, tracks, album_artist, guest_artist, guest_track = _seed_music(items, metadata, music)
 
     favourites = (corpus[0], album)
@@ -274,6 +285,7 @@ def build_query_world(session: OrmSession) -> QueryWorld:
         series=series,
         specials_season=specials_season,
         multi_episode=multi_episode,
+        imaged_episode=imaged_episode,
         album=album,
         tracks=tracks,
         album_artist=album_artist,
@@ -428,10 +440,11 @@ SERIES_PLAN = (
 
 def _seed_shows(
     items: ItemRepository, metadata: MetadataRepository, library: Library
-) -> tuple[tuple[SeriesHandle, ...], str, str]:
+) -> tuple[tuple[SeriesHandle, ...], str, str, str]:
     handles: list[SeriesHandle] = []
     specials_season = ""
     multi_episode = ""
+    imaged_episode = ""
 
     for offset, (name, season_numbers, carries_the_odd_shapes) in enumerate(SERIES_PLAN):
         series_id = identity.for_name(ItemType.SERIES, library.id, name)
@@ -528,6 +541,30 @@ def _seed_shows(
                 ),
                 refreshed_at=REFRESHED_AT,
             )
+            # ...and its first episode carries one of its own. The discriminating fixture for
+            # AC-14: the episode's row has `ImageTags.Primary` *and* the series' inherited tags
+            # beside it, so an emitter that gated inheritance on the child having nothing would
+            # fail here and nowhere else.
+            imaged_episode = episodes[0]
+            metadata.apply(
+                imaged_episode,
+                MetadataChanges(
+                    values={
+                        Field.IMAGES: [
+                            ImageAssociation(
+                                kind=ImageKind.PRIMARY,
+                                index=0,
+                                source_kind=SourceKind.FILE,
+                                relative_path=f"{name}/Season 01/{name} S01E01.jpg",
+                                width=1920,
+                                height=1080,
+                                tag=EPISODE_PRIMARY_TAG,
+                            )
+                        ]
+                    }
+                ),
+                refreshed_at=REFRESHED_AT,
+            )
 
         # Episode 1 of season 1 is watched, so NextUp has an answer for every series. Episode 2 of
         # season 1 is what it must answer with - and on the second series that is the
@@ -542,7 +579,7 @@ def _seed_shows(
                 next_up=_episode_id(library, name, 1, 2),
             )
         )
-    return tuple(handles), specials_season, multi_episode
+    return tuple(handles), specials_season, multi_episode, imaged_episode
 
 
 def _seed_episodes(

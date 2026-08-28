@@ -6,7 +6,7 @@ created: 2026-08-26
 updated: 2026-08-28
 accepted: 2026-08-27
 implemented: 2026-08-28
-amended: 2026-08-28 by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated)
+amended: 2026-08-28 by 006 T2 - section 3.2 gains `ParentBackdropItemId`, the pair 005 measured and emitted only half of; by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated)
 depends_on: [002, 004]
 ---
 
@@ -117,7 +117,7 @@ registry holds.* `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08
 | `SeasonId` | `Episode` |
 | `SeriesThumbImageTag` | `Episode` — unconfirmed, see below |
 | `ParentThumbItemId`, `ParentThumbImageTag` | `Season`, `Episode` |
-| `ParentBackdropImageTags` | `Season`, `Episode`, `MusicAlbum`, `Audio` |
+| `ParentBackdropItemId`, `ParentBackdropImageTags` | `Season`, `Episode`, `MusicAlbum`, `Audio` |
 | `Album`, `AlbumId`, `AlbumPrimaryImageTag` | `Audio` |
 | `AlbumArtist`, `AlbumArtists`, `Artists`, `ArtistItems` | `MusicAlbum`, `Audio` |
 | `CollectionType` | Library roots |
