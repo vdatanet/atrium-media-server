@@ -124,9 +124,7 @@ async def test_a_finished_chain_answers_nothing_and_specials_never_step_in(
     with_specials = world.series[1]
     for episode in with_specials.episodes:
         if episode != with_specials.watched:
-            mark_played(
-                harness, world.everyone, episode, datetime(2026, 3, 6, tzinfo=UTC)
-            )
+            mark_played(harness, world.everyone, episode, datetime(2026, 3, 6, tzinfo=UTC))
     answered = await client.get("/Shows/NextUp")
     ids = [one["Id"] for one in answered.json()["Items"]]
     assert not set(ids) & set(with_specials.episodes), "the finished series still answered"
@@ -136,9 +134,7 @@ async def test_the_most_recently_played_series_leads(
     harness: Harness, client: httpx.AsyncClient, world: QueryWorld
 ) -> None:
     third = world.series[2]
-    mark_played(
-        harness, world.everyone, third.episodes[1], datetime(2026, 4, 1, tzinfo=UTC)
-    )
+    mark_played(harness, world.everyone, third.episodes[1], datetime(2026, 4, 1, tzinfo=UTC))
     answered = await client.get("/Shows/NextUp")
     assert answered.json()["Items"][0]["SeriesId"] == third.id
 
@@ -171,9 +167,7 @@ async def test_resume_is_the_stored_positions_newest_first(
 ) -> None:
     """AC's ordering half: bump one item's last-played and it must lead."""
     with harness.app.state.sessions.begin() as opened:
-        row = opened.get(
-            models.ItemUserData, (world.everyone.id, world.resumable[0])
-        )
+        row = opened.get(models.ItemUserData, (world.everyone.id, world.resumable[0]))
         assert row is not None
         row.last_played_date = datetime(2026, 4, 2, tzinfo=UTC)
 

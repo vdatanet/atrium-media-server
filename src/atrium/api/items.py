@@ -417,9 +417,71 @@ async def item(
     return built
 
 
+# ------------------------------------------------------------------------------------------------
+# The by-name family (plan section 6.7): five routes, one shape
+# ------------------------------------------------------------------------------------------------
+
+
+def by_name_envelope(
+    request: Request,
+    caller: User,
+    *,
+    route: str,
+    kind: ItemType,
+    credit: str | None = None,
+    omit: frozenset[str] = frozenset(),
+    user_id: str | None,
+    parent_id: str | None,
+    start_index: int,
+    limit: int | None,
+    sort_by: str | None,
+    sort_order: str | None,
+    search_term: str | None,
+) -> BaseItemDtoQueryResult:
+    """One implementation for `/Artists`, `/Artists/AlbumArtists`, `/Genres`, `/MusicGenres`
+    and `/Years` - the same pipeline with the kind pinned, the credit read where the route says,
+    and the route's measured omissions applied (spec section 3.9).
+
+    **The count is always true**, with `limit` and without: the reference's no-`limit` answers
+    are the recorded defect of behaviours section 3.1 - `0` beside a non-empty list on most of
+    the family, and on `/Years` a number that is neither zero nor the row count.
+    """
+    ignored = recorder(request)
+    state = get_state(request)
+
+    with session_scope(get_sessions(request)) as opened:
+        target = effective_user(UserRepository(opened), caller, user_id)
+        repository = ItemQueryRepository(opened)
+        query = ItemQuery(
+            user=target,
+            parent_id=parent_id,
+            search_term=search_term,
+            sort=parse_sort(sort_by, sort_order, ignored, route),
+            start_index=start_index,
+            limit=limit,
+        )
+        try:
+            page = repository.run_by_name(kind, query, credit=credit)
+        except ParentNotFoundError as refused:
+            raise NotFoundError from refused
+
+        context = BuildContext(
+            server_id=state.server_id,
+            width=Width.LIST_ROW,
+            omit=omit,
+            libraries=library_context(LibraryRepository(opened)),
+        )
+        built = build_dtos(page.items, context)
+
+    return BaseItemDtoQueryResult(
+        items=built, total_record_count=page.total, start_index=start_index
+    )
+
+
 __all__ = [
     "BASE_ITEM_KINDS",
     "aggregates_context",
+    "by_name_envelope",
     "effective_user",
     "library_context",
     "parse_fields",

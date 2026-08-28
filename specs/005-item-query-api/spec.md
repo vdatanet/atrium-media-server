@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
 accepted: 2026-08-27
-amended: 2026-08-28 by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured)
+amended: 2026-08-28 by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated)
 depends_on: [002, 004]
 ---
 
@@ -342,8 +342,20 @@ All return the envelope, and all take `parentId`, `userId`, `startIndex`, `limit
 > approved.
 
 `/Artists` versus `/Artists/AlbumArtists` is the distinction from 003 §3.5: every credited artist
-versus only those credited on an album. A compilation-heavy library makes the difference large, and
-a client offering "Artists" and "Album Artists" as separate views needs both to be right.
+versus only those credited on an album. A compilation-heavy library makes the difference large on
+the reference, and a client offering "Artists" and "Album Artists" as separate views needs both
+to be right.
+
+> **In v1 the two routes coincide as row sets, and that is a recorded consequence, not a bug**
+> *(added by T14)*. An artist here is a per-library item created per *album artist*
+> ([behaviours §5.3](../../docs/compatibility/behaviours.md#53-an-artist-in-two-music-libraries-is-two-rows)),
+> so an artist who only ever performs has a name on every track and **no row to list** — the
+> reference, whose artists are by-name rows, lists them. The credit distinction still bites at
+> item level, `artistIds` versus `albumArtistIds`, where T6 measured it. AC-13 states the v1
+> truth below. Two more measured route quirks, reproduced: `/Genres` and `/MusicGenres` rows
+> carry no `UserData`, and the two artist routes no `IsFolder`, where the same rows through
+> `/Items` carry both `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11,
+> 2026-08-28]`.
 
 ### 3.10 `GET /Search/Hints` — `GetSearchHints`
 
@@ -382,8 +394,11 @@ the point of listing it: a query endpoint that owns state is a query endpoint wi
     reference sends it. *(Corrected by T12: the drafted criterion said "last" and the
     measurement said otherwise; see §3.8.)*
 12. `Similar` and `InstantMix` return identical results for identical input on repeated calls.
-13. `/Artists` and `/Artists/AlbumArtists` differ on a compilation fixture, in the expected
-    direction.
+13. The album-credit set is a subset of the any-credit set, the two coincide as row sets for
+    exactly [behaviours §5.3](../../docs/compatibility/behaviours.md#53-an-artist-in-two-music-libraries-is-two-rows)'s
+    reason, and the credit distinction is observable at item level: `artistIds` finds the guest
+    track and `albumArtistIds` does not. *(Restated by T14 — the draft asked the two routes to
+    differ on the compilation, and under §5.3 there is no row that could show the difference.)*
 14. `/Search/Hints` returns the hint shape, not the item shape, and populates `MatchedTerm`.
 15. A Tier 3 parameter is ignored, the response is `200`, and the parameter is recorded in the
     ignored-parameter report.

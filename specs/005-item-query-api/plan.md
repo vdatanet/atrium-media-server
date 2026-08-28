@@ -4,7 +4,7 @@ title: Item query API — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8; by T12 - sections 6.9 and 8; by T13 - section 6.8
+amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8; by T12 - sections 6.9 and 8; by T13 - section 6.8; by T14 - section 6.7
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -344,10 +344,14 @@ design decision.)*
 
 The same pipeline with `kind` pinned: `/Genres` → `Genre` rows, `/MusicGenres` → `MusicGenre`,
 `/Artists` → `MusicArtist` rows holding **any** credit, `/Artists/AlbumArtists` → those holding
-an `album_artist` credit — the credit distinction from 004, which is what makes a
-compilation-heavy fixture separate the two (AC-13). `/Years` → `Year` rows with a visible item
+an `album_artist` credit — the credit distinction from 004. *(Amended by T14: in v1 the two
+artist routes coincide as row sets, behaviours §5.3's consequence — every artist item the
+scanner creates is somebody's album artist — so AC-13 is restated at item level, where the
+distinction measurably bites.)* `/Years` → `Year` rows with a visible item
 carrying that `production_year`. `parentId` scopes the membership `EXISTS`, `searchTerm` matches
-the folded name, and paging and sorting are §6.3's, unchanged.
+the folded name, and paging and sorting are §6.3's, unchanged. Each route applies its measured
+omissions — no `UserData` on the genre family, no `IsFolder` on the artist pair — through the
+builder's one `omit` switch rather than five route-local edits.
 
 **The membership clause lives in §6.1's predicate, not here.** A by-name row *is* an item:
 `/Items?includeItemTypes=Genre` has to give the same answer as `/Genres`, and two predicates in

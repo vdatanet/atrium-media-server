@@ -732,7 +732,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T14 — The by-name endpoints
 
-- [ ] **Changes:** `api/artists.py`, `api/genres.py`, `api/years.py` — five routes over
+- [x] **Changes:** `api/artists.py`, `api/genres.py`, `api/years.py` — five routes over
   `run_by_name`, each taking `parentId`, `userId`, paging, sorting and `searchTerm` with the
   pinned spellings.
 - **Depends on:** T4, T8, T9
@@ -743,6 +743,26 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   compilation, direction asserted; the restricted user's `/Genres` never names a hidden
   library's genre, end to end; all five return the envelope.
 - **Plan reference:** §6.7; spec §3.9
+- **Done (2026-08-28):** five routes over one helper, and **AC-13 as drafted could not be
+  satisfied by any Atrium world** — which is a consequence this project had already recorded and
+  nobody had connected to the criterion. An Atrium `MusicArtist` is a per-library item the
+  scanner creates per *album artist* (behaviours §5.3), so an artist who only ever performs has a
+  name on every credit and **no row to list**, and `/Artists` therefore coincides with
+  `/Artists/AlbumArtists` as a row set, structurally. The strict containment the criterion
+  imagined lives on the reference, whose artists are by-name rows. AC-13 is restated at the level
+  where the distinction measurably bites — `artistIds` finds the guest track, `albumArtistIds`
+  does not — and the coincidence itself is asserted *with its reason*, so the day it breaks,
+  somebody rereads §5.3 rather than shrugging.
+
+  **The per-route omissions were measured before the routes were written**: `/Genres` and
+  `/MusicGenres` rows carry no `UserData`, the two artist routes no `IsFolder`, `/Years` keeps
+  both — while the same rows through `/Items` carry everything. One `omit` switch on the builder
+  context reproduces all three, and a test walks the family asserting each against `/Items`.
+
+  **And behaviours §3.1 turned out to have a face nobody had measured**: `/Years` without a
+  `limit` answers a count that is neither zero nor the row count — `9754` beside 97 rows on the
+  measured library. The entry now carries the measurement; Atrium answers the true count on all
+  five (AC-5, held with and without `limit` across the family).
 
 ## T15 — The two other shapes: `GET /Items/Filters` and `GET /Search/Hints`
 

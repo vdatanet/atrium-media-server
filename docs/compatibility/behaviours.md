@@ -949,6 +949,11 @@ share the `GetItemValues` path, which **disables counting when the request has n
 
 `[prior-probe: Jellyfin master, 2026-08-05; upstream jellyfin/jellyfin#17541]`
 
+`/Years` has its own face of the same defect, measured on the pinned line: without a `limit` it
+answers a count that is neither zero nor the row count — `TotalRecordCount: 9754` beside 97 rows
+on the measured library — so the field is unreliable across the whole family, each route in its
+own way. `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`
+
 **Depends on it:** no. Known clients map `Items` and ignore `TotalRecordCount` on these routes —
 precisely because it is unreliable. A client that *paginated* on it would be broken today.
 
