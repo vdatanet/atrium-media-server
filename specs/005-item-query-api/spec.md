@@ -391,7 +391,9 @@ the point of listing it: a query endpoint that owns state is a query endpoint wi
 1. Every list endpoint except `/Items/Latest` and `/Items/Filters` returns the three-field envelope
    with `StartIndex` present; `/Items/Latest` returns a bare array.
 2. `UserData` is present on every item without `Fields` or `EnableUserData`, and contains `Key` and
-   `ItemId`.
+   `ItemId` — except the measured by-name quirks of criterion 17, whose rows carry none.
+   *(Scoped at the 2026-08-28 audit — M36: as first written, this criterion contradicted the
+   measured `/Genres` behaviour §3.9 records.)*
 3. A field listed as `Fields`-gated in §3.2 is **absent** without the parameter and present with it.
 4. Paging with `startIndex`/`limit` over a fixture of 100 items visits each item exactly once
    across all pages, for every supported `sortBy`.
@@ -401,7 +403,11 @@ the point of listing it: a query endpoint that owns state is a query endpoint wi
 7. `Random` returns a full set with no duplicates within one page.
 8. `/Items/{itemId}` answers `404` identically for unknown and invisible items.
 9. A user seeing no libraries gets an empty `/UserViews` envelope, not an error.
-10. `/Shows/NextUp` returns at most one item per series.
+10. `/Shows/NextUp` returns at most one item per series — the first unplayed episode in
+    `(season, episode)` order after the **highest-numbered** played one, so replaying an early
+    episode moves nothing — and the most recently played series leads. *(Extended at the
+    2026-08-28 audit — M39: the chain rule and the series ordering were measured, implemented
+    and tested with only the one-per-series half stated here.)*
 11. Season 0 sorts **first** — plain index order — in `/Shows/{seriesId}/Seasons`, as the
     reference sends it. *(Corrected by T12: the drafted criterion said "last" and the
     measurement said otherwise; see §3.8.)*
@@ -412,12 +418,39 @@ the point of listing it: a query endpoint that owns state is a query endpoint wi
     track and `albumArtistIds` does not. *(Restated by T14 — the draft asked the two routes to
     differ on the compilation, and under §5.3 there is no row that could show the difference.)*
 14. `/Search/Hints` returns the hint shape, not the item shape — and, like the measured
-    reference, sends no `MatchedTerm`. *(Restated by T15: the draft required populating a field
-    seventeen measured hints never carried; see §3.10.)*
+    reference, sends no `MatchedTerm`, and matches case- and diacritic-insensitively against the
+    **name**, never the sort name. *(Restated by T15: the draft required populating a field
+    seventeen measured hints never carried; see §3.10. The matching clause was folded in at the
+    2026-08-28 audit — M39.)*
 15. A Tier 3 parameter is ignored, the response is `200`, and the parameter is recorded in the
     ignored-parameter report.
 16. Every Tier 1 and Tier 2 parameter measurably narrows or reorders results on a fixture built to
     exercise it.
+
+*(Criteria 17–22 were added at the 2026-08-28 audit — M35 to M41: each is a §3 behaviour that was
+measured, implemented and tested with no criterion covering it, so the acceptance map could never
+name its tests.)*
+
+17. `/Genres` and `/MusicGenres` rows carry no `UserData`, and the two artist routes no
+    `IsFolder`, where the same rows through `/Items` carry both — §3.9's measured route quirks,
+    reproduced; year rows keep their `UserData`.
+18. A bare `/Items/{itemId}` carries everything, unasked: `Fields` has nothing left to add
+    (§3.2).
+19. `/Items/Latest` groups: an episode under its series, a track under its album, a film under
+    itself; a group surfaces as the container only when it holds more than one recent item, a
+    group of one as the item itself; `LatestItemsExcludes` excludes a library, and
+    `HidePlayedInLatest` steers played rows (§3.7).
+20. `/UserItems/Resume` is ordered most recently played first, reports the position it resumes,
+    pages, and is per user; an item played past the completion threshold does not appear,
+    because 007 §3.7's rule cleared its position.
+21. Request handling is §3.3's measured triad: an unrecognised token in an enum-valued parameter
+    is dropped, never `400`; a value that cannot parse as its declared type is the
+    problem-details `400`; a vocabulary type this version cannot produce is a filter that holds
+    and matches nothing; and a `parentId` naming an unknown or invisible item is the same `404`
+    as §3.6's.
+22. An item with no `PremiereDate` sorts at January 1 of its `ProductionYear` under
+    `sortBy=PremiereDate` rather than clumping with the dateless, and a request carrying
+    `searchTerm` is ordered by match quality ahead of whatever `sortBy` asked for (§3.4).
 
 ## 6. Conformance
 

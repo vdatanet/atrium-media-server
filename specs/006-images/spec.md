@@ -225,7 +225,10 @@ not a divergence.
 `imageType` of `Chapter` with an index addresses a chapter thumbnail, for the scrubbing UI of a
 video client.
 
-v1 **serves** chapter images that exist on disk. It does not **extract** them: generating them
+v1 **routes** chapter thumbnails, and nothing in v1 can yet put one on disk — so today every
+chapter request answers the absent-image `404`, an accepted gap recorded in
+[behaviours §5.8](../../docs/compatibility/behaviours.md#58-a-chapter-image-can-never-be-served-in-v1).
+It does not **extract** them: generating them
 means decoding a video at intervals and running a background job over the whole library, and that
 job — trickplay and chapter-image generation — is out of v1 in its own right
 ([roadmap](../../docs/roadmap.md#later-unscheduled),
@@ -270,7 +273,11 @@ The images themselves belong to the user, on disk, and are owned by 004.
 9. `If-Modified-Since` at the `Last-Modified` the server sent answers `304` with an empty body —
    the validator pair measured on the reference, which sends no image etag (§3.4).
 10. A request carrying a **stale** `tag` answers `200` with the current image, not `404`.
-11. An unknown item, an item with no such image, and an out-of-range index all answer `404`.
+11. An unknown item, an item with no such image, and an out-of-range index all answer `404`; an
+    unparseable dimension or quality, and an `imageType` outside the reference's thirteen-member
+    vocabulary, are the validation `400` — a vocabulary member the item merely lacks is the
+    `404` above. *(The `400` rows were folded in at the 2026-08-28 audit — M44: their tests were
+    already filed under this criterion, asserting more than it said.)*
 12. A request with no token answers `200`, and every token mechanism — `?api_key=` included, an
     unknown or malformed token included — is accepted without changing the answer (shared with
     002 AC-3).
@@ -281,6 +288,15 @@ The images themselves belong to the user, on disk, and are owned by 004.
 15. A resized response is WebP when the request's `Accept` offers `image/webp`, and carries
     `Vary: Accept`; an explicit `format` overrides the offer, and a request served verbatim
     ignores it.
+16. Asking for a **dimension** is exact, up as well as down: `width` past the source upscales —
+    `width=4000` of a 2000×3000 source is 4000×6000 — and `width` with `height` together are
+    honoured even against the source's ratio, a deliberate 300×300 distortion included (§3.3).
+    *(Added at the 2026-08-28 audit — M42: the spec itself conceded AC-5 stopped at the box
+    parameters.)*
+17. Three constant headers ride every image response — `Content-Disposition: attachment`,
+    `transferMode.dlna.org: Interactive`, `realTimeInfo.dlna.org: DLNA.ORG_TLAG=*` — and
+    `Cache-Control` is `public` bare on an untagged URL, `public, max-age=31536000` with a tag
+    (§3.2, §3.4). *(Added at the same audit — M43.)*
 
 ## 6. Conformance
 

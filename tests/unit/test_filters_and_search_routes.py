@@ -194,6 +194,16 @@ async def test_matching_is_against_the_name_not_the_sort_name(
     )
 
 
+async def test_matching_folds_case_and_diacritics(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """Section 3.10: matching is case- and diacritic-insensitive, against the name."""
+    found = await client.get("/Search/Hints", params={"searchTerm": "amelie"})
+    assert any(one["Name"] == "Amélie" for one in found.json()["SearchHints"]), (
+        "a lowercase, bare-ASCII fragment must find the accented name"
+    )
+
+
 async def test_relevance_orders_the_hits(client: httpx.AsyncClient, world: QueryWorld) -> None:
     """An exact name match outranks a containment match whatever the default sort says."""
     answered = await client.get("/Search/Hints", params={"searchTerm": "Track 2"})

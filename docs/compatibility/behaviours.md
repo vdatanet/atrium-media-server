@@ -1638,6 +1638,29 @@ path 004 owns (the bytes are already open in Pillow when dimensions are read), n
 column, and no consumer has asked yet; 010's differential will report the gap on every item, which
 is the mechanism that decides when it closes. Recorded at 005 T9, where the emitter was written.
 
+### 5.8 A chapter image can never be served in v1
+
+**Jellyfin does:** generate chapter thumbnails in a background job and serve them at
+`GET .../Images/Chapter/{index}`, advertising each with an `ImageTag` on the gated `Chapters`
+field — 1,311 of 1,354 measured entries carried one
+`[probe: tools/probe_image_tags.py, Jellyfin 10.11.11, 2026-08-28]`. A chapter whose image was
+never generated answers the absent-image `404`.
+
+**Depends on it:** the scrubbing UI of a video client. A client finding no tag draws no thumbnail
+and scrubs blind at that chapter — the same failure mode a reference server that has not finished
+generating them shows anyway.
+
+**Atrium does:** serve the route and the `404`, always. 006 wired the route and the tag emission,
+but the generation job — trickplay and chapter images — is excluded from v1 in its own right
+([roadmap](../roadmap.md)), 004 extracts nothing, and no other v1 code path writes a chapter row;
+`tests/conformance/test_image_routes.py`'s tripwire (`test_no_v1_writer_can_create_a_chapter_row`)
+is what notices when that stops being true. So every chapter request in v1 is the absent-image
+`404`, indistinguishable from a reference that has not generated them yet. **Closing mechanism:**
+the feature that first writes chapter rows — trickplay and chapter-image generation, unscheduled —
+at which point 006 §3.5's route serves them and this entry is withdrawn. Recorded at the
+2026-08-28 audit (H2), which found §3.5 asserting the serving half with nothing able to exhibit
+it — the exact shape of §5.2's history.
+
 ## 6. Non-improvements
 
 Principle I requires that good ideas which would create a delta get written down and then not done.

@@ -438,6 +438,14 @@ because the alternative is a user losing their library's history to a temporaril
 22. During playback the session entry carries `NowPlayingItem` between `DeviceName` and
     `DeviceId`, without `UserData` inside it, and `PlayState` mirrors exactly the last
     report's fields — a progress omitting `CanSeek` reads back `CanSeek: false`.
+23. A container's favourite does not cascade: favouriting a season leaves every episode
+    unfavourited — the flag lands on the container's own row, unlike the played mark of AC-5
+    (§3.3). *(Added at the 2026-08-28 audit — M45: measured, implemented and tested with no
+    criterion pinning the asymmetry.)*
+24. A report binds to the caller's session, never to a session it names: whatever
+    `PlaySessionId` or session identifier a body carries, the playback lands on the
+    authenticated device's `/Sessions` entry and nowhere else (§3.6). *(Added at the same
+    audit — M46, with the discriminating test it lacked.)*
 
 ## 6. Conformance
 

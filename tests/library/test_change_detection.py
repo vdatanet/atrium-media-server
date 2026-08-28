@@ -199,6 +199,47 @@ def test_a_modified_file_keeps_its_identity_and_its_user_data(
         assert stored.play_count == 3
 
 
+def test_a_new_file_on_a_rescan_is_added(engine: Engine, fixture_library: BuiltFixture) -> None:
+    """Spec section 3.8, the first row: add the item. The scan that finds it is incremental."""
+    built = fixture_library.of("movies")
+    library = a_library(engine, fixture_library, "movies")
+    scanned(engine, library)
+    before = items_of(engine, library)
+
+    folder = built.root / "The Late Arrival (2020)"
+    folder.mkdir()
+    (folder / "The Late Arrival (2020).mkv").write_bytes(
+        b"atrium synthetic fixture\n" + b"\0" * 600
+    )
+    scanned(engine, library)
+
+    added = {one.name for key, one in items_of(engine, library).items() if key not in before}
+    assert added == {"The Late Arrival"}
+
+
+def test_a_rename_is_a_delete_plus_an_add(engine: Engine, fixture_library: BuiltFixture) -> None:
+    """Spec section 3.8, the rename row: identity is path-derived, so it changes."""
+    built = fixture_library.of("movies")
+    library = a_library(engine, fixture_library, "movies")
+    scanned(engine, library)
+    [old] = [one for one in items_of(engine, library).values() if one.name == "2 Fast 2 Furious"]
+
+    (built.root / "2 Fast 2 Furious (2003).mkv").rename(
+        built.root / "2 Fast 2 Furious Reloaded (2003).mkv"
+    )
+    scanned(engine, library)
+
+    factory = session_factory(engine)
+    with session_scope(factory) as db:
+        assert old.id not in ItemRepository(db).visible(library.id), (
+            "the old path's item still answers queries after the delete half"
+        )
+    [new] = [
+        one for one in items_of(engine, library).values() if one.name == "2 Fast 2 Furious Reloaded"
+    ]
+    assert new.id != old.id, "a renamed path kept its identity, which path derivation forbids"
+
+
 def test_a_touched_file_is_examined_once_and_then_left_alone(
     engine: Engine, fixture_library: BuiltFixture
 ) -> None:

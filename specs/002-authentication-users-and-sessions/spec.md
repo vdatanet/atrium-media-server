@@ -383,6 +383,14 @@ verbatim.
     same reason a disabled account does — the reference's own answer here is unmeasured (§7, OQ-5),
     and this criterion said `401` until §3.3 was corrected and the two drifted apart.
 11. A password never appears in any log record at any level, and never in an error body.
+12. `GET /Users/Me` returns the caller's §3.5 object in full, configuration and policy included.
+    *(Added at the 2026-08-28 audit — M30: the route was implemented and golden-tested with no
+    criterion naming it.)*
+13. The session lifecycle is observable: exceeding `MaxActiveSessions` evicts the least recently
+    used session and its token; an authenticated request advances `LastActivityDate`, written at
+    the next flush; and `POST /Sessions/Capabilities/Full` answers `204` with no body and
+    **replaces** the previous set rather than merging into it (§3.8). *(Added at the same
+    audit — M29.)*
 
 ## 6. Conformance
 
