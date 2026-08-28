@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
 accepted: 2026-08-27
-amended: 2026-08-28 by T9 - section 3.2
+amended: 2026-08-28 by T9 - section 3.2; by T10 - section 3.3
 depends_on: [002, 004]
 ---
 
@@ -211,6 +211,12 @@ parse as its declared **type** — `limit=abc`, a malformed identifier — is `4
 problem-details shape of behaviours §1.11 `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`.
 This spec previously claimed the first case was a `400`; it is not, and treating it as one would
 have refused requests the reference serves.
+
+One consequence of the drop rule is worth stating, because getting it wrong inverts an answer
+*(added by T10)*: a type token the reference's vocabulary **does** contain but this version cannot
+produce — `Playlist` before 009, `BoxSet` — is a filter that **holds and matches nothing**, not an
+unrecognised token to drop. Dropping it would answer the whole library to a client that asked for
+playlists; the reference, which has such items, filters by them. `[spec: BaseItemKind]`
 
 ### 3.4 Sorting
 

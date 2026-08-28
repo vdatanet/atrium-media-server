@@ -51,6 +51,18 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 #: somebody's client. 004 joined at T15, which is the line this file's own comment promised.
 IMPLEMENTED_FEATURES = frozenset({"001", "002", "004"})
 
+#: 005's routes land across seven tasks (T10-T16), and while they do, the exact-set check below
+#: carries the ones that have landed - the same device 002 used between its two route tasks.
+#: **T17 deletes this set** by putting "005" in `IMPLEMENTED_FEATURES`, which is what finishing
+#: a feature looks like in this file. Every entry must also be in surface.yaml, which
+#: `test_no_route_exists_outside_the_surface` keeps true.
+LANDED_EARLY: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("GET", "/Items"),  # T10
+        ("GET", "/Items/{itemId}"),  # T10
+    }
+)
+
 
 def _load_surface_parser() -> Any:
     """Reuse the parser the surface validator already has, rather than write a second one.
@@ -129,9 +141,10 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
 
     002 arrived across two tasks, and for the two changes between them this set was accompanied by
     an explicit list of the individual routes that had landed. That list is gone now, which is what
-    finishing a feature looks like here.
+    finishing a feature looks like here - and `LANDED_EARLY` is 005 doing the same thing across
+    seven tasks.
     """
-    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES)
+    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES) | LANDED_EARLY
 
 
 def test_an_unlisted_route_fails_the_check(app: FastAPI) -> None:

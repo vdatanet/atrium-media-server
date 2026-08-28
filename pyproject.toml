@@ -110,6 +110,10 @@ select = [
 # Bulgarian; Old Church Slavonic". Wrapping a generated string literal to satisfy a line
 # length would make the file harder to diff for no reader's benefit.
 "src/atrium/metadata/cultures.py" = ["E501"]
+# GetItems declares over thirty query parameters and every one reaches the wire under the pinned
+# document's camelCase spelling - the parameter names ARE the API surface here, and a per-line
+# noqa on each would drown the signature. users.py, with two such names, keeps them inline.
+"src/atrium/api/items.py" = ["N803"]
 # Tests assert on values that would otherwise look like magic numbers, and asserting on a
 # hardcoded test password is the entire point of tests/security.
 "tests/*" = ["N802", "S101", "S105", "S106"]

@@ -552,7 +552,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T10 — `GET /Items` and `GET /Items/{itemId}`
 
-- [ ] **Changes:** `api/items.py` — parameter binding with the pinned document's spellings;
+- [x] **Changes:** `api/items.py` — parameter binding with the pinned document's spellings;
   Tier 1 and Tier 2 into `ItemQuery`; Tier 3 arriving at the recorder; the `userId` guard —
   another user's id from a non-administrator answers the empty `403` through the 002 seam
   ([plan §7](plan.md#7-failure-handling)); [plan §6.13](plan.md#613-the-identical-404)'s
@@ -571,6 +571,42 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   first carries weight end to end. If this task needs something the pipeline cannot say, the fix
   is in the pipeline, not a bespoke query here.
 - **Plan reference:** §6.13, §8; spec §3.3, §3.5
+- **Done (2026-08-28):** both routes, thirty-four bound parameters, sixteen reviewed goldens, and
+  the pipeline held: the route module contains parsing, the choice of shape, and refusals — no
+  SQL, no session, which the T5 import rule enforced the moment this task tried to annotate a
+  helper with one. Helpers take repositories, as the rule's own message says.
+
+  **The drop rule inverts an answer if applied naively, and no document had said so.**
+  `includeItemTypes=Playlist` under behaviours §1.12 alone would *drop* the token — `Playlist` is
+  no `ItemType` of this domain — and dropping the only token un-filters the query: a client asking
+  for playlists would receive **the whole library**. But `Playlist` is a real `BaseItemKind` the
+  reference filters by; only a token that is no kind at all drops. The route carries the
+  reference's kind vocabulary verbatim to tell the two apart — a kind v1 cannot produce keeps the
+  filter and matches nothing, riding T6's empty-means-asked-for-nothing contract. Spec §3.3 and
+  plan §6.12 now say it.
+
+  **The identical `404` is the pipeline's, not a comparison's.** `/Items/{itemId}` is one `ids=`
+  query under the same visibility predicate as every list; unknown and invisible are the same
+  empty page and the same `NotFoundError`, and the AC-8 test masks only the per-request `traceId`.
+  A malformed id never reaches the query — `WireGuid` refuses it into the validation `400` — and a
+  malformed identifier *inside* `ids=` is the same `400` raised by hand in the binder's own error
+  shape, so the measured body falls out of the one handler.
+
+  **Two `userId` decisions are recorded as unmeasured** rather than silently chosen: an
+  administrator naming an unknown user gets the problem-details `404`, and an administrator naming
+  a real one queries with the **named user's visibility** (the tier-1 description, taken
+  literally). The non-administrator refusal is the empty `403` through the 002 seam, as plan §7
+  rows both. The differential owns all three.
+
+  **The battery runs every case twice**, once with the declared spellings and once case-mangled,
+  asserting byte-identical bodies — behaviours §1.15 re-held on a real route, which is what T4's
+  scratch-route test could not do. And the goldens needed **no placeholder at all**: the world is
+  deterministic by construction and `Etag` hashes only pinned clocks, so all sixteen files are
+  byte-stable — the first goldens in the project with nothing masked.
+
+  One consequence for the tasks after this one, recorded in `server.py` too: `items.router` owns
+  `/Items/{itemId}` and sits **last** in `ROUTERS`, so T11's `/Items/Latest` and T15's
+  `/Items/Filters` must register before it or their literals are read as identifiers.
 
 ## T11 — The user's world: `GET /UserViews` and `GET /Items/Latest`
 
