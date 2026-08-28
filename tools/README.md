@@ -47,6 +47,12 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_public_info.py`](probe_public_info.py) | What exactly does `/System/Info/Public` return, before any token exists? | 001 §3.1; reference-target §4; behaviours §1.7 | no |
 | [`probe_playback_refusal.py`](probe_playback_refusal.py) | When no source can be played by the profile, is it `200` — and does an `ErrorCode` arrive? | 008 §3, the error table | no |
 | [`probe_video_stream_for_a_track.py`](probe_video_stream_for_a_track.py) | What does `/Videos/{id}/stream` answer when the id names an audio track? | api-surface §4, §8 | no |
+| [`probe_playback_info.py`](probe_playback_info.py) | Are the negotiation's flags per request, do the body switches and the policy bite, and when does an `ErrorCode` appear? | 008 §3.1–§3.3, OQ-1, OQ-2, OQ-12; behaviours §2.21, §2.22 | only the `--allow-writes` policy battery, which needs an admin and a throwaway user |
+| [`probe_transcode_decision.py`](probe_transcode_decision.py) | What goes into a `TranscodingUrl`, how many variants does the master playlist advertise, and is the accepted stream copied? | 008 §3.3, §3.4, §3.7, OQ-7, OQ-8, OQ-9 | yes — it makes the server encode one segment |
+| [`probe_hls.py`](probe_hls.py) | Is the playlist complete up front and uniform, and are segments sized, byte-stable and served out of order? | 008 §3.7, §6, OQ-3; behaviours §3.3's HLS half | yes — two short sessions |
+| [`probe_universal_audio.py`](probe_universal_audio.py) | Does `/universal` meet a stated ceiling, when is it an empty `200`, and does `enableRedirection` ever fire? | 008 §3.6, OQ-4, AC-19, AC-21; behaviours §3.7, §3.8 | yes — short audio encodes |
+| [`probe_transcode_session.py`](probe_transcode_session.py) | Does production follow the throttle configuration, restart at a seek, and stop on `DELETE /Videos/ActiveEncodings`? | 008 §3.4, §3.8, OQ-6, OQ-10, OQ-11 | yes — about a minute of deliberate encoding |
+| [`probe_range_matrix.py`](probe_range_matrix.py) | What does static delivery answer to each shape of `Range` header, and what does a mismatched container suffix serve? | 008 §3.5, AC-11–AC-14, AC-18; behaviours §2.20 | no |
 
 ### Running them
 
@@ -75,7 +81,22 @@ python3 tools/probe_item_shapes.py
 python3 tools/probe_next_up.py       --allow-writes
 python3 tools/probe_image_tags.py
 python3 tools/probe_image_formats.py
+python3 tools/probe_playback_refusal.py
+python3 tools/probe_playback_info.py --allow-writes
+python3 tools/probe_transcode_decision.py --allow-writes
+python3 tools/probe_hls.py           --allow-writes
+python3 tools/probe_universal_audio.py --allow-writes
+python3 tools/probe_transcode_session.py --allow-writes
+python3 tools/probe_range_matrix.py
 ```
+
+The five playback probes marked `--allow-writes` make the reference **encode**: each starts one
+or two short transcoding sessions, fetches a handful of segments or the first bytes of a
+stream, and stops its sessions on the way out — including on failure. They are the measured
+ground under 008's spec review, and `probe_transcode_session.py` deliberately spends about a
+minute watching the throttle. `_playback.py` is their shared plumbing: every profile is built
+against the source the library actually offers, which is what lets them run against any
+Jellyfin rather than one seeded library.
 
 `probe_item_identity.py` is the one probe here that confirms a `[source: …]` citation from
 **outside** the source: it recomputes each item's id from that item's own reported path and

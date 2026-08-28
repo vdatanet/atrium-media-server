@@ -144,7 +144,10 @@ container is on the `MediaSource`. `[prior-probe: Jellyfin 10.11.11, 2026-06-13]
 `MediaSource`, and a client reading the item-level field expects the list form.
 
 **Atrium does:** the same. ffprobe's `format_name` is passed through verbatim at item level; the
-resolved single container goes on the `MediaSource`.
+resolved single container goes on the `MediaSource` — with 008's measured refinement that the
+resolution happens against a device profile: a **profile-less** `PlaybackInfo` reports the list
+form on the source too `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28]`
+([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)).
 
 ### 1.7 A null property is absent, everywhere, by one setting
 
@@ -505,6 +508,61 @@ their furthest point.
 **Atrium does:** the same. [007 §3.4 and §3.6](../../specs/007-user-data-and-playstate/spec.md)
 carry the full effect tables; the draft of both had the intuitive rules — increment on mark,
 never rewind — and the measurement reversed each.
+
+### 2.20 `static=true` serves the original bytes; the URL's container is only a label
+
+**Jellyfin does:** answers any `static=true` delivery request with the untouched source bytes,
+whatever container the path names: `stream.mp3?static=true` on a FLAC track is `200` with FLAC
+bytes behind `Content-Type: audio/mpeg`, and `stream.mkv?static=true` on an mp4 film is the mp4
+bytes as `video/x-matroska` — byte-identical to the unsuffixed static route, ranges included.
+No error, no remux, no re-encode.
+`[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-28]`
+
+**Depends on it:** a downloading client that names a wrong container still receives, correctly,
+the original file — sniffing tools open it fine and only the label lies. A server that refused
+instead would break that download outright.
+
+**Atrium does:** the same. Static means the source bytes, absolutely; the suffix picks the
+`Content-Type` and nothing else. The
+[008 draft](../../specs/008-playback-negotiation-and-delivery/spec.md#35-delivery-the-rules-that-apply-to-every-route)
+said a mismatch would be an error, and the measurement replaced it.
+
+### 2.21 Playback policy permissions are negotiation-inert
+
+**Jellyfin does:** consult `EnableMediaPlayback` on **no** playback route — its only readers are
+the item DTO's `PlayAccess` property and the remote-control `Play` command `[source:
+MediaBrowser.Controller/Entities/BaseItem.cs:1057,
+Emby.Server.Implementations/Session/SessionManager.cs:1321 @ v10.11.11]` — and treat the three
+processing permissions as one gate: for a video item, `SupportsTranscoding` drops to `false`
+only when `EnableVideoPlaybackTranscoding`, `EnableAudioPlaybackTranscoding` **and**
+`EnablePlaybackRemuxing` are all denied; any single denial changes nothing at negotiation
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28; source:
+Jellyfin.Api/Helpers/MediaInfoHelper.cs:278-293 @ v10.11.11]`. At delivery, a user denied video
+transcoding has the video stream force-copied "regardless of whether it will be compatible or
+not" `[source: MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:7142 @ v10.11.11]`.
+
+**Depends on it:** an operator who denies one permission and observes that clients still play; a
+client that never learned to handle a policy `403` from these routes, because none exists.
+
+**Atrium does:** the same negotiation semantics — the all-three gate, flags rather than errors,
+no invented `403`. The one edge not replicated is delivery-time force-copy into an output that
+violates the negotiated profile: Atrium refuses the step instead, and no client can depend on
+receiving a broken stream ([008 §3.3](../../specs/008-playback-negotiation-and-delivery/spec.md#33-the-decision)).
+
+### 2.22 `SupportsDirectStream` mirrors `SupportsDirectPlay`
+
+**Jellyfin does:** disables its direct-stream option on every negotiation — the source comment
+says "direct-stream http streaming is currently broken" — so the flag never answers
+independently: it is `true` exactly when `SupportsDirectPlay` is
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28; source:
+Jellyfin.Api/Helpers/MediaInfoHelper.cs:251-268 @ v10.11.11]`. A remux answer is expressed as a
+`TranscodingUrl` with the streams copied at delivery, not as the direct-stream flag.
+
+**Depends on it:** a client that branches on `SupportsDirectStream` is, on this version,
+branching on direct play; one that expected an independent remux flag would never see it.
+
+**Atrium does:** the same mirror. Resurrecting the distinction would be a flag no reference
+answer sets, which is a delta a differential would flag on the first negotiation.
 
 ### 2.13 `DeviceId` is mandatory on one route, not on the header
 
@@ -1191,20 +1249,27 @@ real RIFF header, a real length, `Range` support — as decided above, and
 where it is asserted. The reasoning was written while it was fresh and was waiting for the code;
 this is the case it was written for.
 
-### 3.3 Transcoding responses carry no `Content-Length` or `Accept-Ranges` — class C
+### 3.3 Progressive transcoding responses carry no `Content-Length` or `Accept-Ranges` — class C
 
-**Jellyfin does:** streams transcoded output chunked, with no size and no range support:
-`GetTranscodedFile` forces `Accept-Ranges: none` and sets no `Content-Length` — the transcode is
-written out as ffmpeg produces it
-`[source: Jellyfin.Api/Helpers/FileStreamResponseHelpers.cs:123-135 @ v10.11.11]`.
+**Jellyfin does:** streams **progressive** transcoded and remuxed output chunked, with no size
+and no range support: `GetTranscodedFile` forces `Accept-Ranges: none` and sets no
+`Content-Length` — the transcode is written out as ffmpeg produces it
+`[source: Jellyfin.Api/Helpers/FileStreamResponseHelpers.cs:123-135 @ v10.11.11]`. Measured on
+`/Audio/{id}/stream.mp3`, on a resampling `stream.flac`, and on a stream-copy
+`/Videos/{id}/stream.mp4` — chunked, `Accept-Ranges: none`, no length, even where the remux's
+size is knowable. **Its HLS segments are the opposite**, and this entry's first wording missed
+that: a finished segment answers `Content-Length`, `Accept-Ranges: bytes` and byte-identical
+retries, and the playlists carry lengths too
+`[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 **Depends on it:** negatively — DLNA renderers refuse a stream with no size, which is why clients
 that cast run a local sizing proxy.
 
-**Atrium does:** **diverge wherever the size is knowable** — remuxed output whose size is
-computable or which is written somewhere seekable, and every HLS segment, transcoded ones included,
-since a segment is finished before it is served: send `Content-Length` and honour `Range`. Same
-reasoning as §3.2 — a client cannot branch on a response being more correct.
+**Atrium does:** HLS exactly as the reference — sized, range-capable segments are parity now,
+not a divergence — and **diverges on the progressive routes wherever the size is knowable**:
+remuxed output whose size is computable or which is written somewhere seekable sends
+`Content-Length` and honours `Range`. Same reasoning as §3.2 — a client cannot branch on a
+response being more correct.
 
 **The one place Atrium does not diverge** is a progressive re-encode whose final length is unknown
 until the last frame. That answers chunked, exactly as the reference does, because the alternative
@@ -1252,8 +1317,8 @@ as the reference already treats the neighbouring `DOVIWithELHDR10Plus` coexisten
 shape 1 of §3.0.3 — **a client that never declares `DOVIWithHDR10Plus` cannot observe any
 difference at all**, which is what makes the divergence cheap rather than merely justified.
 
-**In scope for v1**, unlike §3.2. Stream copy is remuxing, and remuxing is v1's ceiling
-([008 §3.3](../../specs/008-playback-negotiation-and-delivery/spec.md)). And §3.0.0 applies with
+**In scope for v1**, and it always was — stream copy is remuxing, which no scope change ever
+excluded ([008 §3.3](../../specs/008-playback-negotiation-and-delivery/spec.md)). And §3.0.0 applies with
 force here: Atrium never had this defect, so replicating it would mean writing a bitstream filter
 whose only job is to remove something the client said it wanted.
 
@@ -1329,6 +1394,42 @@ result is *an* order the reference could have produced — on the movie sorts it
 the measured server does produce — so no response is distinguishable from a plausible reference
 response; what changes is only that the order holds still across pages. No upstream issue is known
 for this; nothing here waits on one.
+
+### 3.7 A sample-rate ceiling is answered from the Opus ladder — class B, diverged
+
+**Jellyfin does:** applies the sample-rate ladder Opus needs — `≤8000 → 8000, ≤12000 → 12000,
+≤16000 → 16000, ≤24000 → 24000, else 48000` — to **every** audio re-encode, not only Opus: the
+condition around the ladder is inverted. A `/universal` request with `maxAudioSampleRate=22050`
+is answered at 24 000 Hz, **above the ceiling the client stated**; a `maxAudioSampleRate=44100`
+against a 96 kHz source would land at 48 000 the same way.
+`[probe: tools/probe_universal_audio.py, Jellyfin 10.11.11, 2026-08-28]` The restructure that
+scopes the ladder to Opus is merged upstream in the same change as §3.2's PCM fix, and is in no
+10.11.x.
+
+**Depends on it:** no client benefits from receiving a higher rate than its declared maximum — a
+ceiling is declared because something downstream cannot go above it, and the failure lands at the
+client's decoder, far from the cause. A compensating client would have to resample locally, and
+that compensation survives the fix untouched.
+
+**Atrium does: diverge — honour the ceiling exactly.** The output sample rate is the stated
+ceiling when the source exceeds it, the source's own rate otherwise. Same reasoning as §3.2:
+fixed upstream, and no blind compensation exists that a correct answer would break.
+[008 §3.6 and AC-19](../../specs/008-playback-negotiation-and-delivery/spec.md) carry it.
+
+### 3.8 `/universal` without `audioCodec` answers an empty 200 — class A, diverged
+
+**Jellyfin does:** builds, for a `/universal` request whose `transcodingProtocol` is `http` and
+which names no `audioCodec`, a transcoding profile with no codec in it; the encoder invocation
+dies immediately and the route answers `200` with `Content-Length: 0` and an empty body — every
+retry identical. `[probe: tools/probe_universal_audio.py, Jellyfin 10.11.11, 2026-08-28]`
+
+**Depends on it:** nothing can be built on an empty body behind a `200` — a player fed zero
+bytes errors on its own side. Class A by the same logic as §3.2's symptom 1: whatever a client
+does today, it keeps working when the request succeeds instead.
+
+**Atrium does: diverge — answer the request.** When the client names no codec, the transcoding
+container's own codec is the target, and the response is a real stream. Recorded in
+[008 §3.6](../../specs/008-playback-negotiation-and-delivery/spec.md).
 
 ## 4. Deliberate exceptions
 
