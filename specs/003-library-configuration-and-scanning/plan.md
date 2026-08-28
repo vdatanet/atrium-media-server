@@ -68,6 +68,7 @@ contact with a tidy-minded implementer, which it does by testing for them explic
 src/atrium/
 ├── domain/
 │   ├── items.py          BaseItem and its types — no I/O
+│   ├── library.py        what an operator configured: a name, some roots, a collection type
 │   └── sorting.py        both sort-name derivations
 ├── library/
 │   ├── config.py         library roots and collection types
@@ -80,6 +81,7 @@ src/atrium/
 │   ├── resolver.py       path -> resolved item, per collection type
 │   ├── identity.py       the derivation
 │   ├── scan.py           orchestration, change detection, the safety guard
+│   ├── maintenance.py    the one operation that actually deletes, kept where a scan cannot reach it
 │   └── report.py         progress, and the summary's three categories (§7)
 └── db/
     └── migrations/       revision 0002: items, libraries, user data
@@ -87,6 +89,10 @@ src/atrium/
 
 `library/naming/` is pure: paths in, structured results out, no filesystem access. That is what
 makes the corpus runnable as a plain table test with no fixtures on disk at all.
+
+`domain/library.py` (T7) and `library/maintenance.py` (T17) postdate the accepted tree, and no
+plan drew either until the 2026-08-28 audit (M12 and M13 in
+[the record](../../docs/audits/2026-08-28.md)).
 
 ## 4. Data model
 
@@ -148,7 +154,7 @@ mount. 007 owns the table's contents; 003 owns the guarantee that it survives.
 ```python
 def parse_movie(relative_path: str) -> MovieParse: ...
 def parse_episode(relative_path: str) -> EpisodeParse: ...
-def parse_audio(relative_path: str) -> AudioParse: ...
+def parse_audio(relative_path: str, source: MetadataSource = PATH_ONLY) -> AudioParse: ...
 ```
 
 Each returns a structured result with everything the path can tell us and `None` where it cannot.
@@ -159,10 +165,10 @@ which is what the reference produces too.
 hashing, and [spec §3.6](spec.md#36-identity) describes four different keys going into it:
 
 ```python
-def for_file(item_type, library_id, relative_path, *, case_sensitive=False) -> Guid32: ...
-def for_name(item_type, library_id, name, *, case_sensitive=False) -> Guid32: ...
-def for_season(series_id, season_number) -> Guid32: ...
-def for_library(library_id) -> Guid32: ...
+def for_file(item_type, library_id, relative_path, *, case_sensitive=False) -> str: ...
+def for_name(item_type, library_id, name, *, case_sensitive=False) -> str: ...
+def for_season(series_id, season_number) -> str: ...
+def for_library(library_id) -> str: ...
 ```
 
 **Corrected at T5.** This section previously named a single
@@ -177,10 +183,16 @@ exactly one.
 The hashing itself is **not** in `library/`: `atrium.compat.guids.derive` has done the NUL-joined,
 truncated SHA-256 since 001, and 003 is the first caller its docstring anticipated.
 
-**`domain.sorting.sort_name(item) -> str`** — dispatches on type, §6.2.
+**`domain.sorting.sort_name(item, *, forced=None, rules=DEFAULT_RULES) -> str`** — dispatches on
+type, §6.2; `forced` is 004's explicit sort title (spec §3.7.3), `rules` the configured
+derivation rules.
 
-**`library.scan.scan(library, session, roots=None, source=PATH_ONLY, *, deep=False, ...)
--> ScanReport`** — the orchestrator. The only thing in the feature that writes.
+**`library.scan.scan(library, session, roots=None, source=None, *, deep=False, ...)
+-> ScanReport`** — the orchestrator. The only thing in the feature that writes. *(The accepted
+plan defaulted `source=PATH_ONLY`; the code's default is `None`, which means **read the files**,
+because the quiet default failed silently — the correction the code has carried in a comment
+since, brought back into this line at the 2026-08-28 audit, M20 in
+[the record](../../docs/audits/2026-08-28.md). `PATH_ONLY` is still passable.)*
 
 **Corrected at T18.** This section named a `mode` argument, which reads like a set of scanning
 modes and is one boolean: `deep` decides whether the §6.4 signal is consulted, and nothing else

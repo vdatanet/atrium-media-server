@@ -153,7 +153,7 @@ def resolve(position_ticks: int | None, runtime_ticks: int | None) -> Outcome
 
 def on_start(data: UserItemData, when: datetime) -> UserItemData
     # count += 1, last_played = when, played = False, position untouched (spec §3.6)
-def on_report(data: UserItemData, position_ticks: int | None, runtime: int | None) -> UserItemData
+def on_report(data: UserItemData, position_ticks: int | None, runtime_ticks: int | None) -> UserItemData
     # progress or stop-with-position: resolve and apply; no count change
 def on_stop_without_position(data: UserItemData) -> UserItemData
     # played to the end: count += 1 again, played True, position 0
@@ -183,6 +183,7 @@ class PlayingNow:             # a snapshot; position already extrapolated
     subtitle_stream_index: int | None
     is_muted: bool
     volume_level: int | None
+    runtime_ticks: int | None # the item's, carried so the position cap needs no lookup
     last_check_in: datetime
 
 class NowPlayingRegistry:
@@ -190,7 +191,7 @@ class NowPlayingRegistry:
     def update(self, session_id, report) -> None      # progress; remembers paused-at
     def clear(self, session_id) -> PlayingNow | None  # stop; the final snapshot
     def snapshot(self, session_id) -> PlayingNow | None
-    def reap(self, older_than: timedelta) -> list[tuple[str, PlayingNow]]
+    def reap(self, older_than: timedelta | None = None) -> list[tuple[str, PlayingNow]]
     async def run(self) -> None                       # the sweep loop; commits via callback
 ```
 

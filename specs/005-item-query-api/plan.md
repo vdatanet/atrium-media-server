@@ -148,7 +148,7 @@ promise this contract did not carry.
 
 ```python
 def run(self, query: ItemQuery) -> QueryPage        # .items: tuple[HydratedItem, ...], .total: int
-def run_by_name(self, kind: ItemType, query: ItemQuery) -> QueryPage
+def run_by_name(self, kind: ItemType, query: ItemQuery, *, credit: str | None = None) -> QueryPage
 ```
 
 **A page carries `HydratedItem`, not `Item`.** This paragraph said `list[Item]` until T5 built it,

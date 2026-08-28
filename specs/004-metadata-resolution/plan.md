@@ -93,11 +93,16 @@ src/atrium/
 │   └── cultures.py       the generated culture table for GET /Localization/Cultures
 ├── api/
 │   └── localization.py   GET /Localization/Cultures
-├── db/
-│   └── migrations/       revision 0003: metadata columns, by-name types, join tables, cache
-└── tools/
-    └── generate_cultures.py   regenerates metadata/cultures.py from the ISO 639-2 registry
+└── db/
+    └── migrations/       revision 0003: metadata columns, by-name types, join tables, cache
 ```
+
+And at the repository root, outside `src/`: `tools/generate_cultures.py`, which regenerates
+`metadata/cultures.py` from a measurement of the reference's own `/Localization/Cultures` — not
+from the ISO 639-2 registry, which §6.9's T15 correction shows cannot produce eight of the
+reference's rows. *(The accepted tree hung `tools/` under `src/atrium/` and kept the registry
+caption T15 had already disproven — corrected at the 2026-08-28 audit, M14 in
+[the record](../../docs/audits/2026-08-28.md).)*
 
 `model.py`, `merge.py` and `byname.py`'s fold are pure: values in, values out. That is what makes
 the precedence matrix a table test (§8) rather than an integration suite.
@@ -221,7 +226,7 @@ nothing here. The relation between them is §6.1's first measured point.
 ```python
 def read_nfo(path: Path, kind: ItemType) -> NfoResult          # FieldValues + warnings
 def read_tags(path: Path) -> TagResult                          # FieldValues + warnings + art
-def find_artwork(item_dir: Path, stem: str | None) -> list[ArtworkFile]
+def find_artwork(directory: Path, kind: ItemType, stem: str | None = None) -> ArtworkResult
 ```
 
 **`metadata.tags.TagSource`** — the implementation of 003's `MetadataSource`. Two clauses restated
@@ -236,9 +241,10 @@ including the rule that an empty string is a tag that is present and empty.
 ```python
 class RemoteProvider(Protocol):
     name: str                                        # "Tmdb", "MusicBrainz" — ProviderIds keys
+    def handles(self, kind: ItemType) -> bool        # whether it speaks for this type at all
     def enabled(self) -> bool | str                  # True, or the reason it is not (AC-9)
     def identify(self, subject: Subject) -> Identity | NoMatch | Ambiguous
-    def fetch(self, identity: Identity) -> FieldValues
+    def fetch(self, identity: Identity, kind: ItemType) -> FieldValues
 ```
 
 `identify` is skipped entirely when the subject already carries this provider's id (spec §3.5
@@ -249,7 +255,8 @@ own, which is what makes "no test reaches the network" enforceable by constructi
 **The write path** — `MetadataRepository` in `db/repositories.py`:
 
 ```python
-def apply(self, item_id: str, changes: MetadataChanges) -> None
+def apply(self, item_id: str, changes: MetadataChanges, *,
+          is_locked=None, locked_fields=None, refresh_pending=None, refreshed_at=None) -> None
 def ensure_by_name(self, kind: ItemType, spelling: str) -> str        # folds, reuses, returns id
 def collect_by_name_garbage(self) -> int                              # rows nothing references
 ```

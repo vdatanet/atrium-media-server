@@ -89,6 +89,8 @@ src/atrium/
 │   ├── routing.py       how a path is matched: casing, trailing slash, Allow
 │   ├── profiles.py      which JSON serialisation was asked for, and the conversion
 │   └── middleware.py    Server and X-Response-Time-ms headers
+├── domain/
+│   └── user.py          who is asking — the seam's return type; 002 grows it into the account
 ├── net/
 │   └── address.py       LocalAddress resolution
 └── api/
@@ -96,9 +98,11 @@ src/atrium/
     └── system.py        the three routes of this feature
 ```
 
-Five of those modules are not in the tree this plan was accepted with, and one that was is gone.
+Six of those modules are not in the tree this plan was accepted with, and one that was is gone.
 `registry.py`, `responses.py` and `errors.py` arrived with the tasks that needed them (T7, T12,
-T13); `routing.py` arrived with T17, when the reference turned out to match paths more loosely than
+T13); `domain/user.py` arrived with T13 beside them — the seam's return type made real, which 002
+grew into the account itself, and which no plan's tree drew until the 2026-08-28 audit (M11 in
+[the record](../../docs/audits/2026-08-28.md)); `routing.py` arrived with T17, when the reference turned out to match paths more loosely than
 the framework does; `profiles.py` with T19, when it turned out to have two serialisations.
 `api/router.py` was never written: T15 put the assembly in the application factory, where the list
 of routers reads as one of the decisions the factory makes, and a module whose whole content is
@@ -161,6 +165,7 @@ class AtriumModel(BaseModel):
     model_config = ConfigDict(
         alias_generator=atrium_alias,   # §6.1: generator plus the irregular table
         populate_by_name=True,          # the reference's binder is case-insensitive on input
+        serialize_by_alias=True,        # model_dump() is wire-shaped without the caller asking
         extra="ignore",                 # unknown request properties are ignored, not rejected
     )
 ```
@@ -201,11 +206,16 @@ async def require_user(request: Request) -> User:
 001 ships a version that always raises `401`. 002 replaces the body, not the signature. Tests
 override it through `app.dependency_overrides` to exercise the authenticated path.
 
-**`net.address.resolve_local_address(request, settings) -> str`** — the three tiers of spec §3.4,
-as one pure-ish function taking the request and the settings and returning the string to advertise.
+**`net.address.resolve_local_address(*, settings, request_host, request_scheme, request_port,
+client_address, lookup=address_facing) -> str`** — the three tiers of spec §3.4 as one pure
+function. It never sees a request object: the caller unpacks the four request facts, and `lookup`
+is the one seam with the operating system, injectable so every tier is table-testable. *(The
+accepted plan's `(request, settings)` was corrected at the 2026-08-28 audit — M15 in
+[the record](../../docs/audits/2026-08-28.md).)*
 
-**`lifecycle.Readiness`** — a small object with `ready: bool` and `retry_after: int`. Middleware
-consults it; nothing else does.
+**`lifecycle.Readiness`** — a small object with `ready: bool`, `retry_after_seconds: int` and the
+`message` the 503 carries. Middleware consults it; nothing else does. *(The accepted plan's
+`retry_after` named an attribute that never existed — corrected at the same audit, M16.)*
 
 ## 6. Algorithms
 
