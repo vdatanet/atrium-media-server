@@ -215,7 +215,12 @@ def problem_details(
     return AtriumJSONResponse(body, status_code=status_code)
 
 
-def validation_errors(raw: list[Any]) -> dict[str, list[str]]:
+#: What the reference says about a value inside a body that did not bind. Measured, and the key
+#: it is filed under is the **empty string**.
+BODY_VALUE_INVALID = "The supplied value is invalid."
+
+
+def validation_errors(raw: list[Any], body_parameter: str | None = None) -> dict[str, list[str]]:
     """The framework's validation failures, keyed and worded as the reference words them.
 
     The key is the **declared** parameter name rather than the spelling the client sent: a request
@@ -226,10 +231,32 @@ def validation_errors(raw: list[Any]) -> dict[str, list[str]]:
     reference says for a *missing* required parameter was not measured, so that case carries the
     framework's own message rather than a guess at the reference's.
     `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+
+    **A refusal of the *body* is keyed differently, and 007 T1 measured how.** The reference files
+    the binder's own complaint under `""` (a value inside the body that did not bind) or `"$"`
+    (the text was not JSON at all), *and* names the action parameter the body binds to with
+    `The <parameter> field is required.` - so one failure spells its keys differently on each
+    route. `body_parameter` is that name, read from the route, because the framework here would
+    otherwise key the **model's field**: `item_id`, in snake_case, on the wire.
+    `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`, behaviours section 1.11.
     """
     collected: dict[str, list[str]] = {}
     for error in raw:
-        location = error.get("loc") or ("",)
+        location = tuple(error.get("loc") or ("",))
+        if body_parameter is not None and location and location[0] == "body":
+            # The text failing to parse is `json_invalid`, and its location is `("body", 0)` -
+            # a byte offset rather than a field, so the error's *type* is what tells the two
+            # apart and `len(location)` is not.
+            unparseable = str(error.get("type", "")).startswith("json_")
+            key = "$" if unparseable else ""
+            message = (
+                str(error.get("msg", BODY_VALUE_INVALID)) if unparseable else BODY_VALUE_INVALID
+            )
+            collected.setdefault(key, []).append(message)
+            required = f"The {body_parameter} field is required."
+            if required not in collected.setdefault(body_parameter, []):
+                collected[body_parameter].append(required)
+            continue
         name = str(location[-1])
         if "input" in error:
             message = f"The value '{error['input']}' is not valid."
@@ -239,7 +266,22 @@ def validation_errors(raw: list[Any]) -> dict[str, list[str]]:
     return collected
 
 
-async def validation_handler(_request: Request, exc: Exception) -> Response:
+def body_parameter_of(request: Request) -> str | None:
+    """The name the route's body binds to, which is what the reference's `errors` map names.
+
+    Read off the resolved route rather than guessed: the three reporting routes call theirs
+    `playbackStartInfo`, `playbackProgressInfo` and `playbackStopInfo` after the reference's own
+    parameters, and a route with no body at all answers `None` and keeps the old keying.
+    """
+    route = request.scope.get("route")
+    field = getattr(route, "body_field", None)
+    if field is None:
+        return None
+    name: str | None = getattr(field, "alias", None) or getattr(field, "name", None)
+    return name
+
+
+async def validation_handler(request: Request, exc: Exception) -> Response:
     """Replace the framework's `422` with the reference's `400`, status **and** body.
 
     FastAPI answers an unbindable value with `422 Unprocessable Entity` and
@@ -251,7 +293,10 @@ async def validation_handler(_request: Request, exc: Exception) -> Response:
     """
     raw = exc.errors() if isinstance(exc, RequestValidationError) else []
     return problem_details(
-        400, VALIDATION_TITLE, PROBLEM_TYPE_BAD_REQUEST, validation_errors(list(raw))
+        400,
+        VALIDATION_TITLE,
+        PROBLEM_TYPE_BAD_REQUEST,
+        validation_errors(list(raw), body_parameter_of(request)),
     )
 
 

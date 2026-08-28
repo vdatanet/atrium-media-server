@@ -28,7 +28,30 @@ MediaBrowser.Controller/Entities/Genre.cs:18 @ v10.11.11]`. Reading it off the *
 sweep instead would mark an emptied season played, which is the one shape where the reference
 writes nothing at all.
 
-See specs/007-user-data-and-playstate/spec.md section 3.4 and plan section 6.2.
+## `POST /Sessions/Playing`, `/Sessions/Playing/Progress` and `/Sessions/Playing/Stopped`
+
+`204` from all three, with an empty body, **including for an item id that names nothing**: these
+arrive over unreliable networks from clients that crash, and a report for an item removed
+mid-playback is not worth failing - the client could not act on the failure anyway.
+
+Leniency starts **after the body binds**, which is where the measured floor sits: a body that is
+not JSON, or an `ItemId` that is not a GUID at all, is the validation `400`; a `Stopped` carrying
+a **negative** position is the one refusal past binding, `text/plain` with the fixed
+`Error processing request.` (behaviours section 1.11's controller shape). An *absent* `ItemId`
+binds and skips.
+
+**A report binds to the caller's session, not to a session it names.** Whatever `PlaySessionId`
+a body carries names the playback rather than the session; the session is the authenticated
+device `[source: Jellyfin.Api/Controllers/PlaystateController.cs:199-260 @ v10.11.11]`.
+
+**What each report does to the stored row** is 007 spec section 3.6's effects table, and it lives
+in `domain/playstate.py` rather than here: the play is counted at the **start** (which also sets
+`Played` to false), a position-bearing report resolves through the six-branch rule whether it is a
+progress or a stop, a positionless stop means played-to-the-end and counts a second time, and a
+`Failed: true` stop records nothing at all - though the start that preceded it keeps its effects.
+
+See specs/007-user-data-and-playstate/spec.md sections 3.4, 3.6 and 3.7, and plan sections 6.1
+and 6.2.
 """
 
 from __future__ import annotations
@@ -36,22 +59,37 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 
-from atrium.api.deps import get_sessions, get_state, require_user
+from atrium.api.deps import (
+    get_playing,
+    get_registry,
+    get_sessions,
+    get_state,
+    require_user,
+)
 from atrium.api.item_dto import BuildContext, Width, user_data_dto
 from atrium.api.item_models import UserItemDataDto
 from atrium.api.items import effective_user
 from atrium.compat.dates import WireDateTime, utc_now
-from atrium.compat.errors import NotFoundError
+from atrium.compat.errors import NotFoundError, controller_error
 from atrium.compat.guids import WireGuid
+from atrium.compat.model import AtriumModel
+from atrium.compat.ticks import WireTicks
 from atrium.db.engine import session_scope
-from atrium.db.item_queries import ItemQueryRepository
+from atrium.db.item_queries import HydratedItem, ItemQueryRepository
 from atrium.db.repositories import UserDataRepository, UserRepository
 from atrium.domain.items import FILE_BACKED, IN_THE_TREE, ItemType
-from atrium.domain.playstate import on_mark_played, on_mark_unplayed
+from atrium.domain.playstate import (
+    on_mark_played,
+    on_mark_unplayed,
+    on_report,
+    on_start,
+    on_stop_without_position,
+)
 from atrium.domain.queries import ItemQuery
 from atrium.domain.user import User
+from atrium.users.playing import PlaybackReport
 
 router = APIRouter(tags=["Playstate"])
 
@@ -142,4 +180,223 @@ async def mark_unplayed_item(
     return _mark(request, caller, itemId, userId, played=False)
 
 
-__all__ = ["router"]
+# ------------------------------------------------------------------------------------------------
+# The three reports (007 spec section 3.6)
+# ------------------------------------------------------------------------------------------------
+
+
+class PlaybackStartInfo(AtriumModel):
+    """`[spec: PlaybackStartInfo]`, and **every field is optional** - which is not laxity but the
+    measured shape: the reference binds this body and then reads what is there, so a client that
+    sends four properties is a client that reported four properties."""
+
+    item_id: WireGuid | None = None
+    media_source_id: str | None = None
+    play_session_id: str | None = None
+    play_method: str | None = None
+    position_ticks: WireTicks | None = None
+    can_seek: bool = False
+    is_paused: bool = False
+    is_muted: bool = False
+    volume_level: int | None = None
+    audio_stream_index: int | None = None
+    subtitle_stream_index: int | None = None
+
+
+class PlaybackProgressInfo(PlaybackStartInfo):
+    """`[spec: PlaybackProgressInfo]`: the start's fields, and **`MediaSourceId` is not required**.
+
+    Emby requires it here and Jellyfin does not, so a server that refused without it would
+    silently lose the resume positions of every client written against the Jellyfin dialect
+    `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`.
+    """
+
+
+class PlaybackStopInfo(AtriumModel):
+    """`[spec: PlaybackStopInfo]`. `Failed` is the one field that changes what the report means."""
+
+    item_id: WireGuid | None = None
+    media_source_id: str | None = None
+    play_session_id: str | None = None
+    position_ticks: WireTicks | None = None
+    failed: bool = False
+
+
+def _reported(body: PlaybackStartInfo, item: HydratedItem) -> PlaybackReport:
+    """The wire body as the registry holds it, with the runtime the extrapolation needs."""
+    return PlaybackReport(
+        item_id=item.id,
+        runtime_ticks=item.metadata.runtime_ticks,
+        position_ticks=body.position_ticks,
+        is_paused=body.is_paused,
+        can_seek=body.can_seek,
+        is_muted=body.is_muted,
+        volume_level=body.volume_level,
+        audio_stream_index=body.audio_stream_index,
+        subtitle_stream_index=body.subtitle_stream_index,
+        media_source_id=body.media_source_id,
+        play_method=body.play_method,
+        play_session_id=body.play_session_id,
+    )
+
+
+def record_stop(
+    data: UserDataRepository,
+    user_id: str,
+    item_key: str,
+    position_ticks: int | None,
+    runtime_ticks: int | None,
+) -> None:
+    """Playback ended: at a position, or at the end when none was reported.
+
+    **The reaper calls this too** (plan section 6.5), which is the point of it being a function:
+    "a stop arrived" and "we gave up waiting" resolve through one code path, so they cannot drift
+    apart into two answers for the same viewer.
+    """
+    stored = data.get(user_id, item_key)
+    updated = (
+        on_stop_without_position(stored)
+        if position_ticks is None
+        else on_report(stored, position_ticks, runtime_ticks)
+    )
+    data.put(user_id, item_key, updated)
+
+
+def _found(repository: ItemQueryRepository, user: User, item_id: str | None) -> HydratedItem | None:
+    """The reported item, if this caller can see it. `None` is a `204`, never an error."""
+    if item_id is None:
+        return None
+    page = repository.run(ItemQuery(user=user, ids=(item_id,), limit=1, count=False))
+    return page.items[0] if page.items else None
+
+
+@router.post("/Sessions/Playing", status_code=204)
+async def report_playback_start(
+    request: Request,
+    caller: Annotated[User, Depends(require_user)],
+    playbackStartInfo: PlaybackStartInfo,  # noqa: N803 - the reference's parameter name
+) -> Response:
+    """`ReportPlaybackStart` `[spec: ReportPlaybackStart]`.
+
+    The play is counted **here**, and `Played` goes false with it: starting an item that was
+    watched un-marks it until it completes again. The position the body carries is *not* written -
+    measured, and it is what stops a client restarting playback from destroying its own resume
+    point.
+    """
+    when = utc_now()
+    with session_scope(get_sessions(request)) as opened:
+        found = _found(ItemQueryRepository(opened), caller, playbackStartInfo.item_id)
+        if found is not None:
+            data = UserDataRepository(opened)
+            data.put(caller.id, found.id, on_start(data.get(caller.id, found.id), when))
+            _now_playing(request, found, playbackStartInfo, started=True)
+    _checked_in(request, when)
+    return Response(status_code=204)
+
+
+@router.post("/Sessions/Playing/Progress", status_code=204)
+async def report_playback_progress(
+    request: Request,
+    caller: Annotated[User, Depends(require_user)],
+    playbackProgressInfo: PlaybackProgressInfo,  # noqa: N803
+) -> Response:
+    """`ReportPlaybackProgress` `[spec: ReportPlaybackProgress]`.
+
+    The position resolves through section 3.7's rule like any other, so a progress past the
+    ceiling marks the item played mid-playback - and a progress carrying **no** position leaves
+    the stored one alone while still refreshing the session's check-in and its live `PlayState`.
+    """
+    when = utc_now()
+    with session_scope(get_sessions(request)) as opened:
+        found = _found(ItemQueryRepository(opened), caller, playbackProgressInfo.item_id)
+        if found is not None:
+            if playbackProgressInfo.position_ticks is not None:
+                data = UserDataRepository(opened)
+                data.put(
+                    caller.id,
+                    found.id,
+                    on_report(
+                        data.get(caller.id, found.id),
+                        playbackProgressInfo.position_ticks,
+                        found.metadata.runtime_ticks,
+                    ),
+                )
+            _now_playing(request, found, playbackProgressInfo, started=False)
+    _checked_in(request, when)
+    return Response(status_code=204)
+
+
+@router.post("/Sessions/Playing/Stopped", status_code=204)
+async def report_playback_stopped(
+    request: Request,
+    caller: Annotated[User, Depends(require_user)],
+    playbackStopInfo: PlaybackStopInfo,  # noqa: N803
+) -> Response:
+    """`ReportPlaybackStopped` `[spec: ReportPlaybackStopped]`.
+
+    A negative position is the one refusal past binding, and it is checked before anything is
+    written: `400`, `text/plain`, the fixed sentence. `Failed: true` records nothing - though the
+    `Start` that preceded it counted its play already, which is why "a failed playback leaves no
+    trace" is only half true and the spec says so.
+    """
+    if playbackStopInfo.position_ticks is not None and playbackStopInfo.position_ticks < 0:
+        return controller_error(400)
+
+    when = utc_now()
+    with session_scope(get_sessions(request)) as opened:
+        found = _found(ItemQueryRepository(opened), caller, playbackStopInfo.item_id)
+        if found is not None and not playbackStopInfo.failed:
+            record_stop(
+                UserDataRepository(opened),
+                caller.id,
+                found.id,
+                playbackStopInfo.position_ticks,
+                found.metadata.runtime_ticks,
+            )
+    session_id = _session_id(request)
+    if session_id is not None:
+        get_playing(request).clear(session_id)
+    _checked_in(request, when)
+    return Response(status_code=204)
+
+
+def _now_playing(
+    request: Request, found: HydratedItem, body: PlaybackStartInfo, *, started: bool
+) -> None:
+    """Record what this session is playing - if the request came through a session at all.
+
+    A report can only reach here authenticated, and every mechanism except the query forms carries
+    a device (002 section 3.1), so "no session" is the API-key case: real playback that no
+    `/Sessions` entry represents. It still writes the row; there is simply nothing live to update.
+    """
+    session_id = _session_id(request)
+    if session_id is None:
+        return
+    registry = get_playing(request)
+    report = _reported(body, found)
+    if started:
+        registry.start(session_id, report)
+    else:
+        registry.update(session_id, report)
+
+
+def _session_id(request: Request) -> str | None:
+    """Which session is reporting: the authenticated device's, never the body's."""
+    session_id: str | None = getattr(request.state, "session_id", None)
+    return session_id
+
+
+def _checked_in(request: Request, when: datetime) -> None:
+    """`LastPlaybackCheckIn` advances on every report, flushed with the activity (plan 6.6)."""
+    session_id = _session_id(request)
+    if session_id is not None:
+        get_registry(request).touch_playback(session_id, when)
+
+
+__all__ = [
+    "PlaybackProgressInfo",
+    "PlaybackStartInfo",
+    "PlaybackStopInfo",
+    "record_stop",
+    "router",
+]

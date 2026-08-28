@@ -728,10 +728,19 @@ three spellings, none of them anything the client sent
  "traceId": "00-9c83…-a105…-00"}
 ```
 
-**Atrium gets the shape for free and the keys only deliberately.** A path or query parameter's
-refusal already matches — `compat/errors.validation_errors` keys on the declared name, which is
-the bullet above — while a body's names the model's field (`ItemId`) where the reference names
-its action parameter. Whether to reproduce that per route is 007 T8's decision, recorded there.
+**Atrium gets the shape for free and the keys only deliberately, and it pays for them.** A path
+or query parameter's refusal already matched — `compat/errors.validation_errors` keys on the
+declared name, which is the bullet above. A body's did not, and worse than expected: the framework
+here keys on the **model's Python field**, so the first typed request body in this project answered
+`{"item_id": …}`, snake_case, on the wire (§1.1's exact failure).
+007 T8 reproduces the measured pair instead: the route names its body parameter after the
+reference's (`playbackStartInfo`, `playbackProgressInfo`, `playbackStopInfo`), and the handler
+files body failures under `""` or `"$"` beside `The <parameter> field is required.`
+
+One half is a **recorded divergence**: the `"$"` entry's *message* is this parser's, where the
+reference's is .NET's `'n' is an invalid start of a property name. … BytePositionInLine: 1.`
+Reproducing that sentence would mean writing a JSON parser to fail like another one; the key and
+the status match, and no client branches on the text.
 
 The split is not arbitrary: the empty ones are produced before the framework's controller pipeline
 runs, the JSON ones by that pipeline, and the last two by a controller inside it — the fixed

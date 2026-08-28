@@ -360,7 +360,7 @@ side of five minutes, which is what says the constant is used rather than approx
 
 ## T8 — The three reporting routes: `204` everywhere, and the rule on every position
 
-- [ ] **Changes:** `src/atrium/api/playstate.py` grows `POST /Sessions/Playing`,
+- [x] **Changes:** `src/atrium/api/playstate.py` grows `POST /Sessions/Playing`,
   `/Sessions/Playing/Progress` and `/Sessions/Playing/Stopped` — bodies as `AtriumModel`s with
   every field optional, `ItemId` as `WireGuid | None`, the item resolved through the same visible
   lookup, `204` and an empty body in every case including an id that names nothing. `Start`
@@ -379,6 +379,39 @@ side of five minutes, which is what says the constant is used rather than approx
   branch table runs over T4's items — the hour-long film for the percentage branches, the
   215-second track for the short-runtime one, an episode with no runtime for the unknown case.
 - **Spec reference:** §3.6, §3.7; AC-8, AC-9, AC-10, AC-11, AC-14, AC-17, AC-18, AC-19, AC-21
+
+**Done (2026-08-28).** Twenty-nine tests, and three things the standing guards found before a
+reviewer could.
+
+**The first typed request body in this project answered `{"item_id": …}`.** T1 had measured that a
+body refusal names the binder's key beside the route's body parameter, and the plan had recorded
+reproducing it as this task's decision. What the framework actually produced was worse than the
+gap the plan described: it keys on the **model's Python field**, so the response carried
+snake_case on the wire — [behaviours §1.1](../../docs/compatibility/behaviours.md)'s exact failure,
+in a body nothing had ever sent before, because 002's only body is read with `request.json()` and
+never bound. The routes now name their body parameters `playbackStartInfo`,
+`playbackProgressInfo` and `playbackStopInfo` after the reference's own, and
+`compat/errors.validation_errors` files a body failure under `""` (a value that did not bind) or
+`"$"` (text that is not JSON) beside `The <parameter> field is required.` — measured, byte for
+byte, except the `"$"` *message*, which stays this parser's and is a recorded divergence.
+
+**Two standing guards fired**, both from features that wrote them for their own reasons: the unit
+sweep refused `position_ticks: int` and required `WireTicks` — a body accepting a float would take
+seconds from a client and be wrong by a factor of ten million — and
+`test_a_route_module_writes_no_sql` refused the `Session` type annotation `record_stop` was
+declared with. It takes a `UserDataRepository` now, which is the shape T10's reaper needs anyway:
+a route holds a repository, not a session.
+
+**Three tests were passing for the fixture's reasons rather than the route's**, and the failures
+said so: `world.corpus[1]` and `corpus[2]` carry a seeded resume position, so "the start did not
+write its position" and "the failed stop wrote nothing" were asserting against numbers the world
+had put there. Each now either normalises the row first or asserts *unchanged* rather than zero —
+and the start's test is better for it, because a start over an existing resume point is the case
+that matters.
+
+The branch table runs at the wire on the three runtime shapes T4 gave the world, on both a stop
+and a progress, and the one branch that is stop-only — "no position at all" — is named as such
+rather than skipped silently.
 
 ## T9 — `/Sessions` grows what is playing
 
