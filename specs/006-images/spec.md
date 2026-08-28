@@ -4,7 +4,7 @@ title: Images
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
-amended: 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered; and 2026-08-28 by the plan — §3.2's error row now names the thirteen-member vocabulary the probe distinguishes, `Box` measured `404`; and 2026-08-28 at the plan gate — §3.3 fill covers rather than crops (AC-6 corrected) and negotiates Accept (AC-15 added), §3.2 response constants and invalid tokens, §3.4 Vary, AC-12, OQ-3's missing cell
+amended: 2026-08-28 by T1's probe — §3.2's forgiven-value row, §3.2's parameter table (which still said `fillWidth` crops, three amendments after §3.3 stopped saying it), and the two §3.3 citations the committed script now reproduces; and 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered; and 2026-08-28 by the plan — §3.2's error row now names the thirteen-member vocabulary the probe distinguishes, `Box` measured `404`; and 2026-08-28 at the plan gate — §3.3 fill covers rather than crops (AC-6 corrected) and negotiates Accept (AC-15 added), §3.2 response constants and invalid tokens, §3.4 Vary, AC-12, OQ-3's missing cell
 depends_on: [002, 004, 005]
 ---
 
@@ -93,7 +93,7 @@ for the same reason it stayed out of 005: no analysed client reads it (Principle
 |---|---|
 | `maxWidth`, `maxHeight` | Fit inside the box, preserving aspect ratio |
 | `width`, `height` | Exact dimension |
-| `fillWidth`, `fillHeight` | Fill the box, cropping the overflow |
+| `fillWidth`, `fillHeight` | Cover the box, aspect intact, keeping the overflow — §3.3, and **not** a crop |
 | `quality` | Compression quality, 0–100 |
 | `format` | Requested output format |
 | `tag` | The expected content tag; §3.4 |
@@ -136,7 +136,7 @@ deployment caveat.
 | Unknown item | `404` — and nothing else: §3.2's authentication rule leaves no "may not see" branch on this route |
 | Item exists but has no image of that type | `404` |
 | `imageIndex` out of range | `404` |
-| Unparseable dimension or quality | `400` — measured, against the lenient pattern of behaviours §1.12; a parseable but absurd value (`maxWidth=-100`) is forgiven with `200` instead `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]` |
+| Unparseable dimension or quality | `400` — measured, against the lenient pattern of behaviours §1.12; a parseable but absurd value (`maxWidth=-100`) is forgiven with `200` instead — and *forgiven* is not *ignored*: the reference re-encodes at the source's own size rather than serving the file, which v1 does not reproduce ([behaviours §1.17](../../docs/compatibility/behaviours.md#117-a-forgiven-dimension-re-encodes-a-bare-quality-does-not)) `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]` |
 | `imageType` outside the reference's thirteen-member vocabulary `[spec: ImageType]` | `400` (same probe); a vocabulary member the item merely lacks is the `404` above — `Box`, a member outside §3.2's eight that no item here can ever hold, measured `404` |
 
 ### 3.3 Resizing
@@ -151,9 +151,10 @@ distorted 300×300. `fillWidth`/`fillHeight` do not crop, whatever this section'
 scale to **cover** the box with the aspect intact and the overflow kept — 300×600 asked of the
 same source returns 400×600, not a 300×600 crop — so the delivered size equals the box only when
 the ratios already match, and a box the source cannot cover without upscaling delivers the source
-unchanged `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. The
+unchanged `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`. The
 earlier probe had measured "exactly the box" on a source that was itself square, where covering
-and cropping are indistinguishable.
+and cropping are indistinguishable — the script now finds a source whose sides differ before it
+asks, and reports itself unexercised on a library that has none.
 
 **Format selection**, in order: an explicit `format` if supported; otherwise, **when a transform
 runs and the `Accept` header offers `image/webp`, WebP** — the negotiation every browser
@@ -163,7 +164,7 @@ otherwise the source format — a JPEG poster resizes to JPEG, a PNG logo to PNG
 `format=Png|Jpg|Webp` are each honoured
 `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`. An explicit `format`
 beats the `Accept` offer, and `image/avif` is not negotiated
-`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. A source with no
+`[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`. A source with no
 transparency may additionally be served as JPEG when that is materially smaller. Transparency is
 never discarded **implicitly** — a resized logo keeps its alpha, and a logo silently served as
 JPEG would acquire a white box, immediately visible on any dark client theme. An **explicit**
