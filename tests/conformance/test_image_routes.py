@@ -39,7 +39,7 @@ from atrium.server import create_app
 from tests.conformance.golden import assert_golden
 from tests.conformance.test_auth_mechanisms import mechanisms
 from tests.conftest import data_dir
-from tests.fixtures.images import BACKDROP_SIZES, ImageWorld, build_image_world
+from tests.fixtures.images import BACKDROP_SIZES, SMALL_SIZE, ImageWorld, build_image_world
 
 pytestmark = pytest.mark.conformance
 
@@ -642,3 +642,190 @@ def test_the_never_stored_members_are_the_ones_the_error_matrix_names() -> None:
         "Screenshot",
         "Chapter",
     }
+
+
+# ------------------------------------------------------------------------------------------
+# The resize and format matrix, through the whole stack
+# ------------------------------------------------------------------------------------------
+
+#: `(label, query, the size the reply decodes to)`. The unit half of this table is
+#: `tests/unit/test_image_transform.py`; what these rows add is that the plumbing delivers what
+#: the pure module decided — a route that dropped a parameter on the floor would pass every test
+#: there and fail every one here.
+#:
+#: The source is the 1000x1500 poster, whose 2:3 ratio is what tells a cover from a fit and an
+#: exact box from an aspect-true one.
+WIRE_GEOMETRY = [
+    ("AC-4: maxWidth=300", {"maxWidth": "300"}, (300, 450)),
+    ("maxHeight=300", {"maxHeight": "300"}, (200, 300)),
+    ("AC-6: fill 300x300 covers", {"fillWidth": "300", "fillHeight": "300"}, (300, 450)),
+    (
+        "AC-6: fill 500x1500, off the ratio",
+        {"fillWidth": "500", "fillHeight": "1500"},
+        (1000, 1500),
+    ),
+    ("the distorted exact box", {"width": "300", "height": "300"}, (300, 300)),
+    ("a lone width keeps the ratio", {"width": "300"}, (300, 450)),
+    ("the exact path upscales", {"width": "2000", "height": "3000"}, (2000, 3000)),
+    ("maxWidth caps the exact size afterwards", {"width": "2000", "maxWidth": "500"}, (500, 750)),
+    (
+        "fill composed with maxWidth",
+        {"fillWidth": "500", "fillHeight": "300", "maxWidth": "200"},
+        (200, 300),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "label,query,delivered", WIRE_GEOMETRY, ids=[row[0] for row in WIRE_GEOMETRY]
+)
+async def test_the_resize_matrix_delivers_what_it_decided(
+    client: httpx.AsyncClient,
+    world: ImageWorld,
+    label: str,
+    query: dict[str, str],
+    delivered: tuple[int, int],
+) -> None:
+    answered = await client.get(f"/Items/{world.poster}/Images/Primary", params=query)
+
+    assert answered.status_code == 200, label
+    assert decoded(answered.content).size == delivered, label
+
+
+async def test_ac5_a_box_past_the_source_is_the_source_file_byte_for_byte(
+    client: httpx.AsyncClient, world: ImageWorld
+) -> None:
+    """`maxWidth=2000` of the 400px source. Byte-identical rather than merely the right size,
+    which is what the verbatim path buys and what makes AC-8 and AC-13 true by construction."""
+    answered = await client.get(f"/Items/{world.small}/Images/Primary", params={"maxWidth": "2000"})
+
+    assert answered.content == world.drawn.small
+    assert decoded(answered.content).size == SMALL_SIZE
+
+
+async def test_ac6_a_fill_box_the_source_cannot_cover_returns_it_unchanged(
+    client: httpx.AsyncClient, world: ImageWorld
+) -> None:
+    answered = await client.get(
+        f"/Items/{world.poster}/Images/Primary",
+        params={"fillWidth": "4000", "fillHeight": "6000"},
+    )
+
+    assert answered.content == world.drawn.poster
+
+
+async def test_ac7_a_resized_logo_keeps_its_alpha(
+    client: httpx.AsyncClient, world: ImageWorld
+) -> None:
+    """A logo silently served as JPEG acquires a white box, immediately visible on any dark
+    client theme. Transparency is never discarded implicitly (spec §3.3)."""
+    answered = await client.get(f"/Items/{world.logo}/Images/Logo", params={"maxWidth": "300"})
+    result = decoded(answered.content)
+
+    assert answered.headers["content-type"] == "image/png"
+    assert result.mode == "RGBA"
+    assert result.getchannel("A").getextrema()[0] == 0
+
+
+async def test_ac7_an_explicit_jpg_takes_the_alpha_and_that_is_measured(
+    client: httpx.AsyncClient, world: ImageWorld
+) -> None:
+    """The transparent logo comes back opaque under `format=Jpg` on the reference, so refusing
+    what the client asked for by name would be the real divergence."""
+    answered = await client.get(
+        f"/Items/{world.logo}/Images/Logo", params={"maxWidth": "300", "format": "Jpg"}
+    )
+
+    assert answered.headers["content-type"] == "image/jpeg"
+    assert decoded(answered.content).mode == "RGB"
+
+
+@pytest.mark.parametrize(
+    "asked,expected",
+    [("Png", "image/png"), ("Jpg", "image/jpeg"), ("Webp", "image/webp")],
+)
+async def test_each_encodable_format_is_honoured_by_name(
+    client: httpx.AsyncClient, world: ImageWorld, asked: str, expected: str
+) -> None:
+    answered = await client.get(
+        f"/Items/{world.poster}/Images/Primary", params={"maxWidth": "300", "format": asked}
+    )
+
+    assert answered.headers["content-type"] == expected
+    assert decoded(answered.content).size == (300, 450)
+
+
+async def test_svg_short_circuits_to_the_source_with_the_resize_ignored(
+    client: httpx.AsyncClient, world: ImageWorld
+) -> None:
+    """Measured: an 800px source came back **whole** against `maxWidth=200`. `Svg` is not a
+    fallback like `Bmp` and `Gif` — the resize is ignored rather than applied."""
+    answered = await client.get(
+        f"/Items/{world.poster}/Images/Primary", params={"format": "Svg", "maxWidth": "200"}
+    )
+
+    assert answered.content == world.drawn.poster
+    assert answered.headers["content-type"] == "image/jpeg"
+
+
+# ------------------------------------------------------------------------------------------
+# AC-15: the three negotiation cells
+# ------------------------------------------------------------------------------------------
+
+WEBP_OFFER = "image/webp,image/*;q=0.8,*/*;q=0.5"
+
+
+async def test_ac15_a_resized_response_negotiates_webp_under_vary_accept(
+    client: httpx.AsyncClient, world: ImageWorld
+) -> None:
+    """The finding the plan's own §10 had argued against, until one request reversed it: every
+    browser-based client makes this offer on every poster it loads."""
+    answered = await client.get(
+        f"/Items/{world.poster}/Images/Primary",
+        params={"maxWidth": "300"},
+        headers={"Accept": WEBP_OFFER},
+    )
+
+    assert answered.headers["content-type"] == "image/webp"
+    assert answered.headers["vary"] == "Accept"
+    assert decoded(answered.content).size == (300, 450)
+
+
+async def test_ac15_an_explicit_format_beats_the_offer(
+    client: httpx.AsyncClient, world: ImageWorld
+) -> None:
+    answered = await client.get(
+        f"/Items/{world.poster}/Images/Primary",
+        params={"maxWidth": "300", "format": "Png"},
+        headers={"Accept": WEBP_OFFER},
+    )
+
+    assert answered.headers["content-type"] == "image/png"
+
+
+async def test_ac15_a_verbatim_request_negotiates_nothing(
+    client: httpx.AsyncClient, world: ImageWorld
+) -> None:
+    """The cell the earlier probe was blind to, from the other side: it made the offer only on a
+    request nothing transformed and read the source format back as "no negotiation"."""
+    answered = await client.get(
+        f"/Items/{world.poster}/Images/Primary", headers={"Accept": WEBP_OFFER}
+    )
+
+    assert answered.headers["content-type"] == "image/jpeg"
+    assert answered.content == world.drawn.poster
+    assert answered.headers["vary"] == "Accept", "sent either way, which is what Vary means"
+
+
+async def test_an_avif_offer_is_not_negotiated(
+    client: httpx.AsyncClient, world: ImageWorld
+) -> None:
+    """Measured. A server that negotiated AVIF because it could would be a delta on every client
+    that offers one."""
+    answered = await client.get(
+        f"/Items/{world.poster}/Images/Primary",
+        params={"maxWidth": "300"},
+        headers={"Accept": "image/avif,image/*;q=0.8,*/*;q=0.5"},
+    )
+
+    assert answered.headers["content-type"] == "image/jpeg"

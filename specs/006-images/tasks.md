@@ -582,7 +582,7 @@ classes earlier gates taught, back for the very next feature:
 
 ## T11 — The resize and format matrix on the wire
 
-- [ ] **Changes:** the wire-level half of the T6 matrix — parameterised requests through the
+- [x] **Changes:** the wire-level half of the T6 matrix — parameterised requests through the
   full stack proving the plumbing delivers what the pure module decided, and the negotiation
   criterion: the resized request with `Accept: image/webp` → WebP under `Vary: Accept`; the
   same with `format=Png` → PNG; the verbatim request with the offer → the source format
@@ -594,6 +594,24 @@ classes earlier gates taught, back for the very next feature:
   alpha; `format=Jpg` → opaque JPEG), AC-15 (the three negotiation cells) — each test naming
   the measured cell it reproduces; `format=Svg` → the source verbatim with the resize ignored.
 - **Plan reference:** §6.3, §6.4; spec §3.3, AC-4, AC-5, AC-6, AC-7, AC-15
+- **Done (2026-08-28):** every cell delivered what T6's pure module decided, first time — which
+  is the answer this task exists to get, and it is worth saying that the answer being "nothing
+  broke" is a **finding about the boundary**, not an absence of one. A route that dropped a
+  parameter on the floor, mangled a spelling, or reached for the wrong field of `ImageQuery` would
+  pass every test in `test_image_transform.py` and fail every row here; that none of them did is
+  what plan §3's split buys, measured rather than assumed.
+
+  The rows that carry the most weight are the ones the earlier documents had wrong and T1 and T6
+  corrected: **fill 500×1500 of the 2:3 poster comes back 1000×1500** (neither the box nor the
+  fit), **`width=2000&height=3000` upscales** while `fillWidth=4000&fillHeight=6000` returns the
+  source untouched, and **`maxWidth` caps an exact size afterwards** — `width=2000&maxWidth=500`
+  is 500×750. Each is a cell the reference was asked for directly.
+
+  AC-15's three cells hold on the wire: the resized request with the offer comes back WebP under
+  `Vary: Accept`, the same request with `format=Png` comes back PNG, and the **verbatim** request
+  with the offer comes back JPEG — still carrying `Vary: Accept`, which is what `Vary` means and
+  what the earlier probe's single blind cell had made look like "no negotiation". `image/avif` is
+  offered and not taken, also measured.
 
 ## T12 — The byte-identity trio: rescan, cache hit, cache loss
 
