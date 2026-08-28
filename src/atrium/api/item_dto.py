@@ -80,6 +80,11 @@ class BuildContext:
     #: By item id, from `ItemQueryRepository.aggregates_for`, when the resolved fields need the
     #: subtree numbers. Empty otherwise: the emitters then leave those properties absent.
     aggregates: Mapping[str, ContainerAggregates] = dataclass_field(default_factory=dict)
+    #: Names a route measurably never sends, whatever the tier says. The by-name routes are the
+    #: users: `/Genres` and `/MusicGenres` rows carry no `UserData`, and the two artist routes no
+    #: `IsFolder`, where the same items through `/Items` carry both
+    #: `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
+    omit: frozenset[str] = frozenset()
 
 
 # ------------------------------------------------------------------------------------------------
@@ -549,7 +554,7 @@ def dto_values(one: HydratedItem, ctx: BuildContext) -> dict[str, Any]:
     values into a different class rather than this module growing a per-call null switch.
     """
     values: dict[str, Any] = {}
-    for name in _considered(one.item.type, ctx):
+    for name in _considered(one.item.type, ctx) - ctx.omit:
         value = EMITTERS[name](one, ctx)
         if value is not None:
             values[name] = value

@@ -33,6 +33,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from atrium import REFERENCE_VERSION, __version__
 from atrium import logs as log_setup
 from atrium.api import (
+    artists,
+    genres,
     items,
     localization,
     resume,
@@ -41,6 +43,7 @@ from atrium.api import (
     user_library,
     user_views,
     users,
+    years,
 )
 from atrium.api import sessions as session_routes
 from atrium.compat.errors import EXCEPTION_HANDLERS
@@ -84,6 +87,9 @@ ROUTERS = (
     user_library.router,
     tv_shows.router,
     resume.router,
+    artists.router,
+    genres.router,
+    years.router,
     items.router,
 )
 

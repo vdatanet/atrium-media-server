@@ -66,6 +66,11 @@ LANDED_EARLY: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/Shows/{seriesId}/Episodes"),  # T12
         ("GET", "/Shows/NextUp"),  # T13
         ("GET", "/UserItems/Resume"),  # T13
+        ("GET", "/Artists"),  # T14
+        ("GET", "/Artists/AlbumArtists"),  # T14
+        ("GET", "/Genres"),  # T14
+        ("GET", "/MusicGenres"),  # T14
+        ("GET", "/Years"),  # T14
     }
 )
 
