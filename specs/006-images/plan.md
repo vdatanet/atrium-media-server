@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-28
 updated: 2026-08-28
 accepted: 2026-08-28
-amended: 2026-08-28 at the gate, which measured the six §6.8 edges before accepting — §1, §5, §6.1, §6.3, §6.4, §6.5, §6.6, §6.8, §7, §8, §9, §10; two measurements went back into the spec (AC-6 corrected, AC-15 added) and one into behaviours §1.11 (the fourth error shape)
+amended: 2026-08-28 by T1 — §6.3 steps 1 and 5, §6.4's `quality` bullet, §6.8 row 3 discharged, behaviours §1.17 added; and 2026-08-28 at the gate, which measured the six §6.8 edges before accepting — §1, §5, §6.1, §6.3, §6.4, §6.5, §6.6, §6.8, §7, §8, §9, §10; two measurements went back into the spec (AC-6 corrected, AC-15 added) and one into behaviours §1.11 (the fourth error shape)
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -26,8 +26,9 @@ never-upscale question before any file is opened, and the stored `tag` is alread
 contract 005's goldens pinned.
 
 **Two delivery paths, and the verbatim one is the anchor.** A request that requires no
-transformation — no effective resize, no format change, no `quality` — answers the source bytes
-exactly as they sit on disk. That is what makes AC-8's byte-identity trivial, and it is why the
+transformation — no effective resize and no format change — answers the source bytes
+exactly as they sit on disk. *(`quality` was in that list until T1 measured it out of one: a
+`quality` with nothing to resize comes back byte-identical to the file — §6.3 step 5.)* That is what makes AC-8's byte-identity trivial, and it is why the
 measured "3200px asked of an 800px source returns the source"
 `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]` falls out of the design
 instead of being a special case. Everything else goes through one pure transform (Pillow, already
@@ -201,6 +202,14 @@ From the parsed parameters, in order:
 1. **Drop non-positive dimension values.** `maxWidth=-100` parses and is forgiven with `200`,
    measured `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]` — the lenient
    shape of behaviours §1.12 on the one route whose *unparseable* values refuse (spec §3.2).
+   **The reference forgives it without dropping it**: `maxWidth=-100`, `maxWidth=0` and
+   `fillWidth=-5` each come back re-encoded at the source's own size — 282,225 bytes where the
+   file is 84,351 — measured at T1 (same probe,
+   [behaviours §1.17](../../docs/compatibility/behaviours.md#117-a-forgiven-dimension-re-encodes-a-bare-quality-does-not)).
+   v1 drops the value and stays on the verbatim path, which is a divergence in `Content-Length`
+   and in nothing else: two encoders never agree on bytes, so re-encoding here would deliver a
+   *different* wrong number at the cost of CPU and a generation of quality. The argument is in
+   behaviours §1.17, not here, so a reader who disagrees has one place to argue with.
 2. **`fillWidth`/`fillHeight` present** → scale to **cover** the box, aspect intact, overflow
    kept — there is no crop on this path, whatever this step's draft said *(amended at the gate:
    the draft scaled-and-cropped, and the measurement returned 400×600 for a 300×600 box on a
@@ -215,9 +224,15 @@ From the parsed parameters, in order:
    together with the fill pair, the constraints compose to the tightest aspect-true size — a
    300×300 fill under `maxWidth=200` measured 200×300, which every aspect-preserving reading
    produces; there is nothing left to choose between them.
-5. **No effective change** — the computed target equals the source dimensions, the resolved
-   format equals the source format, and no `quality` was given → **the verbatim path**: the
-   carrier's bytes as they are.
+5. **No effective change** — the computed target equals the source dimensions and the resolved
+   format equals the source format → **the verbatim path**: the carrier's bytes as they are.
+   *(Amended at T1: the draft added "and no `quality` was given", and the measurement removed it.
+   `quality=90` with nothing resized comes back byte-identical to the file; `quality` moves the
+   byte count only once something else has already put the request on the encoder — `quality=10`
+   at `maxWidth=400` measured 4,039 bytes against 119,366 unqualified. A `quality` that
+   transformed on its own would have made Atrium re-encode where the reference does not, on every
+   client that appends one out of habit.* `[probe: tools/probe_image_formats.py, Jellyfin
+   10.11.11, 2026-08-28]`)
 
 EXIF orientation is not applied: 004 stored the header's dimensions, and whether the reference
 rotates on resize is unmeasured — flagged (§6.8) rather than guessed.
@@ -252,7 +267,8 @@ Spec §3.3's rule, operationalised:
   source-format-when-unnegotiated is what the reference measurably does, and one rule fewer.
 - `quality` maps to the encoder's quality for `Jpg` and `Webp` and is ignored for `Png`, whose
   encoder has no lossy knob; values outside 0–100 clamp — `quality=150` measured forgiven with
-  `200`. Absent, the encoder defaults stand — goldens assert headers and dimensions, never
+  `200`. It never puts a request on the encoder by itself (§6.3 step 5, measured at T1).
+  Absent, the encoder defaults stand — goldens assert headers and dimensions, never
   encoder bytes (spec §6).
 - Modes convert minimally: palette and CMYK sources convert to RGB(A) for encoding; an
   RGBA-to-RGB flatten happens only under explicit `Jpg` (above).
@@ -325,9 +341,12 @@ What the sweep could not reach stays owed:
 2. **A disabled account's token** is entailed by the unknown-token result — a route that
    validated anything would have refused that too — and stays on 002's standing list (its OQ-5
    reason: measuring it costs somebody an account) rather than being re-argued here.
-3. **The two cells `probe_image_formats.py` was blind to** — non-square fill and the `Accept`
+3. ~~**The two cells `probe_image_formats.py` was blind to** — non-square fill and the `Accept`
    offer on a transformed request — are owed to the committed probe by the task list, so the
-   next measurement of this route does not depend on this gate's scratch scripts.
+   next measurement of this route does not depend on this gate's scratch scripts.~~ **Paid at
+   T1**, 2026-08-28: the script grew both batteries, confirmed both against this document, and
+   found a third thing nobody had asked for — §6.3 steps 1 and 5, behaviours §1.17. The spec's
+   fill and negotiation citations now name the script.
 
 ## 7. Failure handling
 

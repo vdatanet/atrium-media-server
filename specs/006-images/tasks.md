@@ -67,7 +67,7 @@ classes earlier gates taught, back for the very next feature:
 
 ## T1 — The probe pays its debt: the two blind cells
 
-- [ ] **Changes:** `tools/probe_image_formats.py` grows the two cells the plan gate measured
+- [x] **Changes:** `tools/probe_image_formats.py` grows the two cells the plan gate measured
   with scratch scripts ([plan §6.8](plan.md#68-measured-at-the-gate-and-what-stays-owed)):
   a **non-square fill battery** — the probe finds a poster whose width and height differ, asks
   for a fill box off the source's ratio, one past the source's size, and one beside a `maxWidth`,
@@ -89,6 +89,38 @@ classes earlier gates taught, back for the very next feature:
   in a controlled library and stays owed to 010's differential
   ([plan §6.8](plan.md#68-measured-at-the-gate-and-what-stays-owed) row 1).
 - **Plan reference:** §6.8; spec §3.3, AC-6, AC-15
+- **Done (2026-08-28):** both owed cells confirmed the amended documents — a 500×1500 fill box
+  of a 2000×3000 poster came back **1000×1500**, which is neither the box (a crop) nor the fit
+  (500×750); the composed `fillWidth=500&fillHeight=1500&maxWidth=500` came back 500×750; and a
+  resized request offering `image/webp` came back WebP under `Vary: Accept` while the verbatim
+  one came back JPEG, an explicit `format=Png` beat the offer, and `image/avif` was not
+  negotiated. AC-6 and AC-15 are reproducible from a committed script, and the two spec citations
+  that named the gate's scratch requests now name it. §3.3's fill claim, §3.3's negotiation
+  claim, and §6.8 row 3 are discharged.
+
+  **A third battery came out of writing them, and it was not owed by anybody.** Comparing the
+  delivered payload to the source's *bytes* rather than to a byte **count** — which nobody had
+  done, although the two numbers had been printed four lines apart since the OQ-5 measurement:
+  `source, no parameters → 200 … 800x800 … 84351B` and `maxWidth=-100 → 200 … 800x800 …
+  282225B`. Same status, same dimensions, same format, three times the bytes. **A forgiven
+  parameter is not a dropped one**: `maxWidth=-100`, `maxWidth=0` and `fillWidth=-5` each put the
+  request on the reference's encoder at its own default quality. And the other half of it went
+  against the plan: **`quality=90` with nothing resized is byte-identical to the file**, where
+  plan §6.3 step 5 made a bare `quality` a reason to transform — so Atrium would have re-encoded
+  every poster for the clients that append one out of habit, on a route whose whole cache story
+  is byte-identity. Step 5's clause is deleted, step 1 records the divergence, and
+  [behaviours §1.17](../../docs/compatibility/behaviours.md#117-a-forgiven-dimension-re-encodes-a-bare-quality-does-not)
+  carries the argument: matching the re-encode is not an option, because two encoders never agree
+  on bytes — Atrium can only spend CPU to deliver a *different* wrong `Content-Length`.
+
+  **And one thing that was simply stale.** [spec §3.2](spec.md#32-get-itemsitemidimagesimagetype--getitemimage)'s
+  parameter table still read "Fill the box, cropping the overflow" — three amendments after §3.3
+  stopped saying it and AC-6 was corrected. The gate had fixed the prose and left the table.
+
+  Not measurable from here, unchanged: EXIF orientation (§6.8 row 1, owed to 010) and a disabled
+  account's token (§6.8 row 2, on 002's list). The probe reports the fill battery **unexercised**
+  rather than answered on a library whose posters are all square — the exact sample that produced
+  the wrong answer the first time.
 
 ## T2 — `ParentBackdropItemId`, and inheritance unconditional
 

@@ -1,6 +1,6 @@
 # Measured behaviours
 
-**Last verified: 2026-08-27, against Jellyfin 10.11.11.**
+**Last verified: 2026-08-28, against Jellyfin 10.11.11.**
 
 This is the registry required by Principle V. Every entry has the same three fields:
 
@@ -736,6 +736,48 @@ parameters are ignored rather than rejected — on the argument that rejecting t
 into no answer *and is itself a delta*. That argument was reasoned; this is the evidence.
 
 **Atrium does:** the same, and counts what it ignored (010 §3.6).
+
+### 1.17 A forgiven dimension re-encodes; a bare `quality` does not
+
+**Jellyfin does:** answer an image request that changes nothing with the source file's **own
+bytes** — and a request carrying a *non-positive* dimension with a re-encode at the source's own
+size. On an 800×800 JPEG poster of 84,351 bytes
+`[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`:
+
+| Request | Status | Delivered | Bytes |
+|---|---|---|---|
+| no parameters | `200` | 800×800 JPEG | 84,351 — the file |
+| `maxWidth=800`, `maxWidth=3200` | `200` | 800×800 JPEG | 84,351 — byte-identical to the file |
+| `quality=90`, nothing resized | `200` | 800×800 JPEG | 84,351 — byte-identical |
+| `format=Svg&maxWidth=400` | `200` | 800×800 JPEG | 84,351 — byte-identical, the resize ignored |
+| `maxWidth=-100`, `maxWidth=0`, `fillWidth=-5` | `200` | 800×800 JPEG | **282,225 — re-encoded** |
+
+Two things follow, and neither is reachable by reading §1.12. A parameter that is *forgiven*
+(§1.12's lenient shape, and spec [006 §3.2](../../specs/006-images/spec.md)'s `maxWidth=-100`
+row) is not the same as a parameter that was *never sent*: the forgiven one still puts the request
+on the encoder's path, at the reference's own default quality — which here is three times the
+size of the file it re-encoded. And `quality` alone does **not**: it moves the byte count only
+when something else already triggered a transform (`quality=10` at `maxWidth=400` measured
+4,039 bytes against 119,366 unqualified, same probe).
+
+**How it was found:** by subtracting two numbers that had been printed side by side since the
+OQ-5 measurement on 2026-08-28. The probe reported `maxWidth=-100 → 200 … 282225B` four lines
+below `source, no parameters → 200 … 84351B`; both say `800x800`, both say `image/jpeg`, and
+nothing compared them. The probe now compares payloads to the source's bytes rather than
+eyeballing a size.
+
+**Depends on it:** no client can. The delivered image has the same status, dimensions, format and
+`Content-Type` either way; only `Content-Length` and the pixels' compression differ.
+
+**Atrium does:** serve the source's bytes on **all five** rows, the non-positive one included.
+The bare `quality` and `format=Svg` rows are reproductions. The last row is a deliberate
+divergence, and the argument is that there is no third option: two encoders never agree on bytes,
+so Atrium cannot reproduce 282,225 bytes by re-encoding either — it can only spend CPU to deliver
+a *different* wrong number and a generation of quality loss. Serving the file matches on
+everything a client reads and on the one thing it renders. Recorded rather than assumed, per
+§3.0.3's shape of a safe divergence: same status, same dimensions, same format, no field added or
+removed. [006 plan §6.3](../../specs/006-images/plan.md#63-the-transform-decision) steps 1 and 5
+are written from this measurement.
 
 ### 1.13 The `CamelCase` profile really is camelCase
 
