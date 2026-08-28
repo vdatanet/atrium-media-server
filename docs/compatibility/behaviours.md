@@ -569,11 +569,12 @@ four mechanisms are accepted there; not one of them is required. `[probe: tools/
 handed to an image loader or an external player is exactly what these routes are for, and a client
 that has never sent a token on them is a client a server can break by starting to want one.
 
-**Atrium does:** not decided here. Those routes belong to [006](../../specs/006-images/spec.md) and
-[008](../../specs/008-playback-negotiation-and-delivery/spec.md); what 002 owns is the measurement
-and the fact that a token is *accepted*. The decision is recorded and deferred per §3.0.1
-tie-break 3 — taking it now would be taking it about code nobody writes for months, with the least
-information it will ever have.
+**Atrium does:** for the image routes, the same — decided at 006's spec review, 2026-08-28: a
+token is accepted, none is required, and there is no per-user visibility branch
+([006 §3.2](../../specs/006-images/spec.md#32-get-itemsitemidimagesimagetype--getitemimage)). The
+delivery routes stay undecided until [008](../../specs/008-playback-negotiation-and-delivery/spec.md);
+what 002 owns is the measurement and the fact that a token is *accepted*. Deferring was per §3.0.1
+tie-break 3 — a decision is taken when the feature that owns it is the one being written.
 
 What 002 does record is the consequence, so that whoever takes it takes it knowingly: on the
 reference **an item id is a capability**, and any divergence 006 or 008 chooses is one a client can
