@@ -318,8 +318,15 @@ that short has no meaningful resume point. This is a different rule from row 3, 
 item. Measured, resolving OQ-6: a 215-second track stopped at 50% reads back `Played: true`
 with no position `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`.
 
-**Row 4's second clause is not redundant.** For a long item, 90% can still be minutes from the end;
-stopping in the final second is completion regardless of percentage.
+**Row 4's second clause decides nothing under these thresholds, and the argument once given for
+it pointed the other way.** "For a long item, 90% can still be minutes from the end" is true, and
+it means a position within one second of the end is *far above* 90% — the first clause has already
+fired. Below ten seconds of runtime the first clause can lose, and row 5 marks the item played
+anyway. Checked exhaustively over runtimes from one second to two hours at every boundary
+position: **no report can tell the two rules apart** (`test_the_within_one_second_clause_changes_no_answer_under_these_thresholds`).
+It is reproduced because the reference has it and because a deployment that lowered
+`MinResumeDurationSeconds` would give it something to decide — not because a client can observe
+it. *This paragraph claimed the opposite until T2 implemented the rule.*
 
 **Row 1 matters more than it looks.** Clients send a stop with no position when playback ends
 naturally. Treating that as position zero would leave every finished item unplayed and at the

@@ -38,7 +38,7 @@ class UserItemDataDto(AtriumModel):
 
     `Key` and `ItemId` are both the item's derived identity (plan section 5). For a container,
     `Played` and `UnplayedItemCount` are a statement about the subtree, not this row - see
-    `db.item_queries.UserItemData`. The declared set is exactly the union a live 10.11.11 was
+    `domain.playstate.UserItemData`. The declared set is exactly the union a live 10.11.11 was
     measured sending; `Rating` and `Likes` exist on the reference's schema and are 007's to emit
     when user ratings exist to report.
     `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`
