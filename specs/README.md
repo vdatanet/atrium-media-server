@@ -117,16 +117,47 @@ say how it will be proven is not finished.
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Implemented** | **Implemented** | **Implemented** |
 | [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
-| [006](006-images/) | Images | **Accepted** | **Accepted** | **Accepted** |
+| [006](006-images/) | Images | **Implemented** | **Implemented** | **Implemented** |
 | [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001, 002, 003, 004 and 005 are implemented, and 006 is fully gated: spec, plan and task list
-all accepted** on 2026-08-28 — **the next work is T1**, the first unticked task in
-[006's tasks](006-images/tasks.md). The four specs after it remain drafts, and their open
-questions are the standing review agenda.
+**001 through 006 are implemented**, 006 on 2026-08-28 across thirteen tasks — **the next work
+is a plan for 007**, whose spec is still a draft. The four specs after 006 remain drafts, and
+their open questions are the standing review agenda.
+
+**006's thirteen tasks found something in nine of them, and three were in documents that had
+already been accepted.** The sharpest is T12's: **the image tag could never change.**
+`Field.IMAGES` merged under the rule that keeps whatever an item already has unless the refresh
+mode is `Replace` — and v1 has no refresh route through which anything could ask for `Replace` —
+so an item that had ever been given artwork could never be given different artwork, at any scan
+depth. AC-2's second half was unreachable and client-side cache invalidation with it: a tag that
+cannot change is a poster that can never be corrected. The field is `REDERIVED` now (004's plan
+§6.1 carries the amendment), and the residual limitation is recorded rather than hidden —
+a *default* scan reads an item's artwork only when its media file changed, so a replaced poster
+needs a deep scan
+([behaviours §5.6](../docs/compatibility/behaviours.md#56-a-default-rescan-does-not-notice-a-replaced-poster)).
+
+**T6 deleted a universal the spec had stated three times**: "never upscale" is a property of
+*which parameter was sent*, not of the server. `maxWidth`, `maxHeight` and the fill pair are
+capped at the source; `width` and `height` are honoured past it — `width=4000` of a 2000×3000
+source measured **4000×6000**. Implemented literally, Atrium would have answered a *smaller*
+image than a client asked for by name, on the one path whose entire meaning is "this size".
+
+**T1's probe found what its own output had been printing since the spec review**: a forgiven
+parameter is not a dropped one. `maxWidth=-100` answers `200` at the source's dimensions and
+**three times its bytes** — the reference re-encodes — while a bare `quality` does *not* transform
+at all, where the plan had made it a reason to re-encode every poster for the clients that append
+one out of habit ([behaviours §1.17](../docs/compatibility/behaviours.md)).
+
+And three that are about this repository rather than about Jellyfin: **behaviours §4.4 had been
+withdrawn for three features without anybody saying so** — 005 T4 reversed it and 006's task list
+still cited it as standing (T3); **T5's hostile-path test passed with the containment check
+deleted**, because `../../../../etc/passwd` from a `tmp_path` root reaches nothing, so the
+refusal it asserted was the wrong refusal; and **T8's AC-8 failed against the obvious
+implementation**, because deciding the transform from the file's dimensions rather than the
+row's makes the cache key move whenever the file does.
 
 **006's task-list gate changed four things**, on 2026-08-28 — two of them the exact classes
 earlier gates taught, back for the very next feature. [Spec §6](006-images/spec.md#6-conformance)'s

@@ -49,17 +49,7 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 #: so that no route can ship ahead of the feature that specifies it - and, just as importantly, so
 #: that a feature marked `Implemented` whose route is not registered fails here rather than in
 #: somebody's client. 004 joined at T15, which is the line this file's own comment promised.
-IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005"})
-
-#: The routes 006 has landed while the feature is still being built. **An interim list, deleted at
-#: T13** when `"006"` joins the set above - the device 002 and 005 both used, and the reason this
-#: file's own comment says both lists are gone: finishing a feature is what removes one.
-LANDED_AHEAD_OF_THEIR_FEATURE = frozenset(
-    {
-        ("GET", "/Items/{itemId}/Images/{imageType}"),
-        ("GET", "/Items/{itemId}/Images/{imageType}/{imageIndex}"),
-    }
-)
+IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006"})
 
 
 def _load_surface_parser() -> Any:
@@ -137,20 +127,11 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     would pass it. This one fails until `IMPLEMENTED_FEATURES` names the feature - a line that gets
     changed on purpose, in the change that finishes it.
 
-    002 arrived across two tasks and 005 across seven, and for the changes between them this set
-    was accompanied by an explicit list of the individual routes that had landed. Both lists are
-    gone now, which is what finishing a feature looks like here.
+    002 arrived across two tasks, 005 across seven and 006 across five, and for the changes between
+    them this set was accompanied by an explicit list of the individual routes that had landed. All
+    three lists are gone now, which is what finishing a feature looks like here.
     """
-    served = surface_paths(IMPLEMENTED_FEATURES) | LANDED_AHEAD_OF_THEIR_FEATURE
-    assert documented_paths(app) == served
-
-
-def test_the_interim_list_names_only_routes_the_surface_file_has(app: FastAPI) -> None:
-    """The escape hatch above cannot become one. A route in the interim list and not in
-    `surface.yaml` would be a route with no consumer and no conformance level, admitted by a
-    variable somebody added while finishing something else."""
-    assert surface_paths() >= LANDED_AHEAD_OF_THEIR_FEATURE
-    assert not LANDED_AHEAD_OF_THEIR_FEATURE & surface_paths(IMPLEMENTED_FEATURES)
+    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES)
 
 
 def test_an_unlisted_route_fails_the_check(app: FastAPI) -> None:
@@ -196,6 +177,14 @@ def test_the_surface_file_and_the_specification_agree_on_001(app: FastAPI) -> No
         ("GET", "/System/Info"),
         ("GET", "/System/Ping"),
         ("POST", "/System/Ping"),
+    }
+
+
+def test_the_surface_file_and_the_specification_agree_on_006(app: FastAPI) -> None:
+    """The two endpoints 006 specifies. Named one by one for the same reason as 001's."""
+    assert surface_paths(frozenset({"006"})) == {
+        ("GET", "/Items/{itemId}/Images/{imageType}"),
+        ("GET", "/Items/{itemId}/Images/{imageType}/{imageIndex}"),
     }
 
 
