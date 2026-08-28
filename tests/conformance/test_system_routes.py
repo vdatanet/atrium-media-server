@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """`/System` at the HTTP boundary - the shape a client actually receives.
 
-Acceptance criteria 1, 2, 3, 5 and 6 of specs/001-server-identity-and-discovery/spec.md live here.
-AC-9 moved to test_golden.py, for the reason written where it used to be.
+Acceptance criteria 1, 2, 3, 5 and 6 of specs/001-server-identity-and-discovery/spec.md live
+here, plus AC-7's wire half. AC-9 moved to test_golden.py, for the reason written where it used
+to be.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import httpx
 import pytest
@@ -13,8 +16,10 @@ from fastapi import FastAPI
 
 from atrium import REFERENCE_PRODUCT_NAME, REFERENCE_VERSION, __version__
 from atrium.compat.guids import CANONICAL
+from atrium.config.paths import DataPaths
 from atrium.config.state import ServerState
 from atrium.domain.user import User
+from atrium.server import create_app
 
 pytestmark = pytest.mark.conformance
 
@@ -39,6 +44,26 @@ async def test_public_info_answers_before_anything_is_configured(
 ) -> None:
     """No user, no library, no token. This is the first request every client makes."""
     assert (await client.get("/System/Info/Public")).status_code == 200
+
+
+async def test_a_published_url_is_the_local_address_on_the_wire(tmp_path: Path) -> None:
+    """AC-7 at the HTTP boundary rather than only at the function behind it.
+
+    `test_net_address` proves the tier; this proves the wire: a configured published URL arrives
+    in `/System/Info/Public`'s body verbatim, scheme and non-default port included, whatever
+    host and scheme the request itself used.
+    """
+    paths = DataPaths(tmp_path / "atrium")
+    paths.prepare()
+    paths.config_file.write_text(
+        '[network]\npublished_url = "https://media.example.org:8920"\n', encoding="utf-8"
+    )
+    app = create_app(paths)
+    app.state.readiness.mark_ready()
+    transport = httpx.ASGITransport(app=app, client=("203.0.113.9", 51234))
+    async with httpx.AsyncClient(transport=transport, base_url="http://atrium:8096") as opened:
+        body = (await opened.get("/System/Info/Public")).json()
+    assert body["LocalAddress"] == "https://media.example.org:8920"
 
 
 async def test_public_info_has_exactly_the_seven_fields(client: httpx.AsyncClient) -> None:

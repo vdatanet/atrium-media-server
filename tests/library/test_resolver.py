@@ -120,6 +120,26 @@ def test_a_library_that_produced_a_foreign_type_is_refused() -> None:
         )
 
 
+def test_the_foreign_type_refusal_is_wired_into_resolve(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deleting the guard's call site must fail a test, not only deleting the guard.
+
+    The test above calls the private function directly, so it survives the call in `resolve()`
+    being removed - and the fixture tree can never produce a foreign type through the real
+    dispatch, which is exactly why the guard exists. One branch is made hostile by hand so the
+    refusal has to travel through `resolve()` itself.
+    """
+    from atrium.library import resolver
+
+    def hostile(library: Library, parent: Item, candidates: object) -> list[Item]:
+        return [Item(id="a" * 32, type=ItemType.EPISODE, name="x", library_id=library.id)]
+
+    monkeypatch.setattr(resolver, "_movies", hostile)
+    with pytest.raises(ValueError, match="never resolved as anything else"):
+        resolve(a_library("movies"), [])
+
+
 # ------------------------------------------------------------------------------------------
 # The three shapes
 # ------------------------------------------------------------------------------------------

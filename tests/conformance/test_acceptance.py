@@ -73,6 +73,7 @@ FEATURE_001: dict[int, tuple[str, ...]] = {
     7: (
         "tests.unit.test_net_address:test_a_published_url_is_returned_verbatim",
         "tests.unit.test_net_address:test_a_published_url_beats_everything_else",
+        "tests.conformance.test_system_routes:test_a_published_url_is_the_local_address_on_the_wire",
     ),
     8: ("tests.unit.test_net_address:test_two_requesters_on_two_networks_get_two_answers",),
     9: (
@@ -294,6 +295,7 @@ FEATURE_004: dict[int, tuple[str, ...]] = {
         "tests.metadata.test_artwork:test_the_first_name_of_every_type_wins_when_all_fourteen_are_present",
         "tests.metadata.test_artwork:test_landscape_beats_thumb_which_is_the_opposite_of_the_specs_table",
         "tests.metadata.test_local_refresh:test_local_artwork_becomes_the_right_image_type",
+        "tests.metadata.test_remote_refresh:test_local_artwork_wins_without_asking_the_image_host",
     ),
     8: (
         "tests.metadata.test_remote_refresh:test_with_every_provider_down_the_scan_completes_and_nothing_is_blanked",
