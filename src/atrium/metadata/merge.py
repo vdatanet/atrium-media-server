@@ -105,6 +105,7 @@ class ListRule(StrEnum):
     UNION = "added to what the item already has, case-insensitively distinct"
     ENRICH = "existing entries filled in; none added, none removed"
     ACCUMULATE = "key by key; a key the item already has is not replaced"
+    REDERIVED = "re-read from its one source every time, whatever the item already has"
 
 
 #: The rule for each field that has one. Anything absent is a scalar: one value, replaced or kept.
@@ -115,11 +116,22 @@ class ListRule(StrEnum):
 #:
 #: `UNION` for `STUDIOS` and `TAGS` is the reference's and **not** what plan section 10 argued for.
 #: The argument above is sound and was not ours to apply: Principle I says reproduce.
+#:
+#: **`IMAGES` is `REDERIVED`, and it was `WHOLE` until 006 T12.** Under `WHOLE` it went through the
+#: scalar branch below, which keeps what the item already has unless the mode is `Replace` - so an
+#: item that had ever been given artwork could never be given different artwork. That is right for
+#: a *value* somebody may have curated and wrong for this field: `IMAGES` has exactly **one**
+#: source, the directory walk, so "keep what we have" is not protecting a better answer from a
+#: worse one - it is protecting a stale index of the directory from the directory. The consequence
+#: was 006 AC-2 being unreachable: replacing a poster changed no tag, ever, under any scan, and v1
+#: has no refresh route through which anybody could have asked for `Replace`. The tag is the whole
+#: of client-side cache invalidation (006 spec section 3.1), so a tag that cannot change is a
+#: poster that can never be corrected.
 LIST_RULE: Mapping[Field, ListRule] = {
     Field.GENRES: ListRule.WHOLE,
     Field.ARTISTS: ListRule.WHOLE,
     Field.ALBUM_ARTISTS: ListRule.WHOLE,
-    Field.IMAGES: ListRule.WHOLE,
+    Field.IMAGES: ListRule.REDERIVED,
     Field.STUDIOS: ListRule.UNION,
     Field.TAGS: ListRule.UNION,
     Field.PEOPLE: ListRule.ENRICH,
@@ -305,6 +317,12 @@ def _apply(key: Field, current: object, winner: object, mode: RefreshMode) -> ob
     already gone by the time this runs.
     """
     rule = LIST_RULE.get(key)
+    if rule is ListRule.REDERIVED:
+        # No mode branch at all: the source *is* the truth for this field, so the only question is
+        # whether it says something different from what the row holds. An unchanged directory
+        # produces an equal list and nothing is written, which is what keeps "a rescan of an
+        # unchanged library changes nothing" true (006 AC-2's first half).
+        return winner if winner != current else _UNCHANGED
     if rule is ListRule.UNION:
         return _union(current, winner, mode)
     if rule is ListRule.ENRICH:

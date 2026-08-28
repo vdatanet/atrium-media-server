@@ -5,7 +5,7 @@ status: Implemented
 created: 2026-08-27
 updated: 2026-08-27
 implemented: 2026-08-27
-amended: 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7; by T10 - sections 4, 6.1 and 6.8; by T14 - section 6.8; by T15 - section 6.9
+amended: 2026-08-28 by 006 T12 - section 6.1's list rules gain a fifth, for `IMAGES`; and 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7; by T10 - sections 4, 6.1 and 6.8; by T14 - section 6.8; by T15 - section 6.9
 spec_status_required: Accepted
 spec_status_actual: Accepted  # at the gate; both are Implemented since 2026-08-27
 accepted: 2026-08-27
@@ -300,6 +300,16 @@ this section had wrong and two of which change what T6 builds:
    reference's shape wins: reproducing a list a client will read is Principle I, and the argument
    in §10 was about a design we do not get to choose. T6 implements per-field list behaviour, not
    one rule for all lists.
+
+   *(Amended by 006 T12: there is a **fifth** rule, and it is `IMAGES`'s. Under the whole-replace
+   rule above, `IMAGES` went through the scalar branch — keep what the item already has unless the
+   mode is `Replace` — so an item that had ever been given artwork could never be given different
+   artwork, at any scan depth, and v1 has no refresh route through which anybody could ask for
+   `Replace`. That made 006 AC-2's second half unreachable and client-side cache invalidation with
+   it: a `tag` that cannot change is a poster that can never be corrected. `IMAGES` has exactly
+   **one** source — the directory walk — so "keep what we have" was not protecting a better answer
+   from a worse one; it was protecting a stale index of a directory from the directory. The rule is
+   `ListRule.REDERIVED`: re-read every time, written only when it differs.)*
 3. **A `Runtime` from metadata is discarded for audio and video items.** The reference guards the
    assignment with `target is not Audio && target is not Video`, because a media file's runtime
    comes from probing it. An `.nfo` `<runtime>97</runtime>` on a film therefore changes nothing in
