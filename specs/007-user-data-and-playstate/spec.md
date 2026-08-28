@@ -1,9 +1,10 @@
 ---
 feature: 007-user-data-and-playstate
 title: User data and playstate
-status: Draft
+status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
+accepted: 2026-08-28
 amended: 2026-08-28 at the spec review — the reference's source predicted and the extended probe confirmed four corrections: §3.4 (a bare mark is `max(count, 1)`; only `datePlayed` increments), §3.5 (a container's `PlayedPercentage` is field-gated), §3.6 (rule 2 reversed — reports resolve last-writer-wins, and a play is counted at Start), §3.7 (the rule runs on every position-bearing report, not only stops); §3.8 added and AC-15 corrected by the `--reap` measurement — the reap commits a position extrapolated through the silence; OQ-1 and OQ-3 through OQ-6 answered
 depends_on: [002, 005]
 ---

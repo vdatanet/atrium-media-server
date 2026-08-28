@@ -118,14 +118,32 @@ say how it will be proven is not finished.
 | [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
 | [006](006-images/) | Images | **Implemented** | **Implemented** | **Implemented** |
-| [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
+| [007](007-user-data-and-playstate/) | User data and playstate | **Accepted** | — | — |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001 through 006 are implemented**, 006 on 2026-08-28 across thirteen tasks — **the next work
-is a plan for 007**, whose spec is still a draft. The four specs after 006 remain drafts, and
-their open questions are the standing review agenda.
+**001 through 006 are implemented**, 006 on 2026-08-28 across thirteen tasks — **007's spec is
+`Accepted` and the next work is its plan**. The three specs after 007 remain drafts, and their
+open questions are the standing review agenda.
+
+**007's spec review measured first and corrected four accepted-draft claims**, on 2026-08-28.
+Reading the reference's source predicted all four and the extended `tools/probe_playstate.py`
+confirmed each on the wire: a bare `POST /UserPlayedItems` is **`max(count, 1)`** — only the
+`datePlayed` form increments, so AC-3's "increments" was wrong; **nothing guards against an
+older position** — a progress at 40% then 20% reads back 20%, reversing AC-10, because a
+deliberate seek backwards arrives as exactly that report; **a play is counted at `Start`**,
+which also sets `Played` to *false* on a previously played item, while a positionless stop
+counts a second time; and **the six-branch rule runs on every position-bearing report**, so a
+progress past the ceiling marks played mid-playback. The `--reap` battery answered OQ-4 with
+more than the question asked: the session cleared after 8.6 minutes of silence and the stored
+position was **48.5%, not the reported 40%** — a per-session one-second ticker extrapolates the
+unpaused position in real time and the reap commits the extrapolated value, so AC-15's "last
+position intact" came back 8.6 minutes richer (spec §3.8). Also pinned: strict boundaries at
+tick precision, the cascade that writes leaves and never the container's own row, favourites
+that do not cascade, the field-gated container `PlayedPercentage`, and OQ-1's survey — no
+analysed client reads `UserData.Key`. One question opened: OQ-7, the empty container the
+source reads as vacuously played where 005 shipped unplayed.
 
 **006's thirteen tasks found something in nine of them, and three were in documents that had
 already been accepted.** The sharpest is T12's: **the image tag could never change.**

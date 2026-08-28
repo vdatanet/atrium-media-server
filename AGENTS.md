@@ -12,10 +12,10 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001 through 006 are implemented**, 006 on 2026-08-28 across thirteen tasks — **the
-next work is a plan for [007](specs/007-user-data-and-playstate/spec.md), whose spec is still a
-draft**. The four features after 006 are specified only, their specs still drafts. What 005 and
-006 leave for each of them is written in
+**Features 001 through 006 are implemented**, 006 on 2026-08-28 across thirteen tasks —
+**[007's spec](specs/007-user-data-and-playstate/spec.md) is `Accepted` (2026-08-28, probes
+first) and the next artefact is its plan**. The three features after 007 are specified only,
+their specs still drafts. What 005 and 006 leave for each of them is written in
 [005's tasks](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones) and
 [006's](specs/006-images/tasks.md#what-this-feature-owes-the-next-ones), beside 004's standing
 notes below.
