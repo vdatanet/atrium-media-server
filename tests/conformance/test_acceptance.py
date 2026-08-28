@@ -412,12 +412,97 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
 }
 
 
+#: Feature 006. Nearly every criterion is asserted **twice**, and the pairing is the point rather
+#: than belt and braces: once against the pure module or the service, where the answer is a value,
+#: and once on the wire, where the plumbing has to deliver it. A route that dropped a parameter
+#: would pass the first and fail the second; a decision that was wrong would fail both.
+#:
+#: The three that are asserted once are the ones with only one place to be: AC-3 and AC-9 are
+#: statements about headers, and AC-14 is about a map 005 emits.
+FEATURE_006: dict[int, tuple[str, ...]] = {
+    1: (
+        "tests.conformance.test_image_discovery:test_ac1_a_poster_is_advertised_and_its_absence_is_an_empty_map",
+    ),
+    2: (
+        "tests.conformance.test_image_identity:test_ac2_a_touch_that_changes_no_bytes_changes_no_tag",
+        "tests.conformance.test_image_identity:test_ac2_changing_the_bytes_changes_the_tag",
+        "tests.conformance.test_image_identity:test_the_tag_is_the_content_hash_and_not_something_weaker",
+        # The limitation AC-2 now names: a default scan does not read artwork of an unchanged item.
+        "tests.conformance.test_image_identity:test_a_default_rescan_does_not_notice_an_artwork_only_change",
+    ),
+    3: (
+        "tests.conformance.test_image_routes:test_ac3_the_bytes_come_back_with_a_real_type_and_an_exact_length",
+    ),
+    4: (
+        "tests.unit.test_image_transform:test_ac4_a_resized_poster_decodes_to_the_size_that_was_decided",
+        "tests.unit.test_image_service:test_ac4_a_resized_poster_decodes_to_the_expected_size",
+        "tests.conformance.test_image_routes:test_the_resize_matrix_delivers_what_it_decided",
+    ),
+    5: (
+        "tests.unit.test_image_service:test_ac5_never_upscaling_holds_end_to_end",
+        "tests.conformance.test_image_routes:test_ac5_a_box_past_the_source_is_the_source_file_byte_for_byte",
+    ),
+    6: (
+        "tests.unit.test_image_transform:test_the_delivered_size_is_the_measured_one",
+        "tests.unit.test_image_service:test_ac6_a_fill_box_covers_and_keeps_the_overflow",
+        "tests.conformance.test_image_routes:test_ac6_a_fill_box_the_source_cannot_cover_returns_it_unchanged",
+    ),
+    7: (
+        "tests.unit.test_image_transform:test_ac7_alpha_survives_every_implicit_path",
+        "tests.unit.test_image_transform:test_ac7_an_explicit_jpg_flattens_the_alpha_onto_white",
+        "tests.unit.test_image_service:test_ac7_a_resized_logo_keeps_its_alpha_and_an_explicit_jpg_takes_it",
+        "tests.conformance.test_image_routes:test_ac7_a_resized_logo_keeps_its_alpha",
+        "tests.conformance.test_image_routes:test_ac7_an_explicit_jpg_takes_the_alpha_and_that_is_measured",
+    ),
+    8: (
+        "tests.unit.test_image_service:test_ac8_a_hit_never_recomputes_even_when_the_file_underneath_has_changed",
+        "tests.conformance.test_image_identity:test_ac8_the_same_request_twice_is_byte_identical",
+        "tests.conformance.test_image_identity:test_ac8_a_hit_never_recomputes_even_after_the_file_changes",
+        "tests.conformance.test_image_identity:test_a_rescan_after_that_overwrite_serves_the_new_bytes",
+    ),
+    9: (
+        "tests.conformance.test_image_routes:test_ac9_if_modified_since_at_the_sent_date_is_an_empty_304",
+        "tests.conformance.test_image_routes:test_the_304_carries_the_type_the_200_would_have",
+    ),
+    10: (
+        "tests.conformance.test_image_routes:test_ac10_a_stale_tag_answers_200_with_the_current_image",
+    ),
+    11: (
+        "tests.conformance.test_image_routes:test_ac11_an_unknown_item_is_the_problem_details_404",
+        "tests.conformance.test_image_routes:test_ac11_an_item_that_lacks_the_type_is_the_message_shape",
+        "tests.conformance.test_image_routes:test_ac11_an_index_past_the_last_backdrop_names_the_type_not_the_index",
+        "tests.conformance.test_image_routes:test_ac11_a_type_outside_the_vocabulary_is_the_validation_400",
+        "tests.unit.test_image_service:test_the_two_refusals_are_the_only_thing_raised",
+    ),
+    12: (
+        "tests.conformance.test_image_routes:test_ac12_every_mechanism_is_accepted_and_none_changes_the_answer",
+        "tests.conformance.test_auth_mechanisms:test_a_token_never_changes_the_image_routes_answer",
+    ),
+    13: (
+        "tests.unit.test_image_cache:test_deleting_the_tree_between_operations_loses_nothing_but_time",
+        "tests.unit.test_image_service:test_ac13_deleting_the_cache_between_requests_changes_no_body",
+        "tests.conformance.test_image_identity:test_ac13_deleting_the_whole_cache_changes_no_response_body",
+    ),
+    14: (
+        "tests.conformance.test_image_discovery:test_ac14_an_episode_with_its_own_artwork_still_inherits_its_series",
+        "tests.conformance.test_image_discovery:test_the_inherited_backdrop_id_and_tags_travel_together_on_every_row",
+    ),
+    15: (
+        "tests.conformance.test_image_routes:test_ac15_a_resized_response_negotiates_webp_under_vary_accept",
+        "tests.conformance.test_image_routes:test_ac15_an_explicit_format_beats_the_offer",
+        "tests.conformance.test_image_routes:test_ac15_a_verbatim_request_negotiates_nothing",
+        "tests.unit.test_image_transform:test_the_resolved_format_is_the_measured_one",
+    ),
+}
+
+
 FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "001-server-identity-and-discovery": FEATURE_001,
     "002-authentication-users-and-sessions": FEATURE_002,
     "003-library-configuration-and-scanning": FEATURE_003,
     "004-metadata-resolution": FEATURE_004,
     "005-item-query-api": FEATURE_005,
+    "006-images": FEATURE_006,
 }
 
 

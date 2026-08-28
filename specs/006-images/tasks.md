@@ -1,10 +1,11 @@
 ---
 feature: 006-images
 title: Images — tasks
-status: Accepted
+status: Implemented
 created: 2026-08-28
 updated: 2026-08-28
 accepted: 2026-08-28
+implemented: 2026-08-28
 amended: 2026-08-28 at the gate — T2's fixture note, T9's indexed-form tests and corrected test names; see "What the gate changed"
 plan_status_required: Accepted
 plan_status_actual: Accepted
@@ -661,7 +662,7 @@ classes earlier gates taught, back for the very next feature:
 
 ## T13 — The acceptance map, and Implemented
 
-- [ ] **Changes:** `FEATURE_006` in `tests/conformance/test_acceptance.py`, mapping **all
+- [x] **Changes:** `FEATURE_006` in `tests/conformance/test_acceptance.py`, mapping **all
   fifteen** criteria of [spec §5](spec.md#5-acceptance-criteria) to named tests;
   `IMPLEMENTED_FEATURES` gains `"006"` and T9's interim landed-routes list is deleted;
   `specs/README.md`'s table; `spec.md`, `plan.md` and this file to `Implemented` with dates;
@@ -674,6 +675,24 @@ classes earlier gates taught, back for the very next feature:
   the full local gate — `ruff check`, `ruff format --check`, `mypy`, `pytest` — green; the
   definition of done below closed line by line.
 - **Plan reference:** §8; 005 T17 is the precedent
+- **Done (2026-08-28):** the map went in with **all fifteen** criteria named and nothing had to be
+  written to make one of them true, which is what the twelve tasks before it were for. Nearly every
+  criterion is asserted **twice** — once where the answer is a value (the pure module, the service)
+  and once on the wire — and the pairing is the point rather than belt and braces: a route that
+  dropped a parameter passes the first and fails the second, and a decision that is wrong fails
+  both. The three asserted once are the three with one place to be: AC-3 and AC-9 are statements
+  about headers and AC-14 about a map 005 emits.
+
+  Two entries are worth naming because they are **not** the criterion's happy path.
+  AC-2's list includes `test_a_default_rescan_does_not_notice_an_artwork_only_change`, which pins
+  the limitation the criterion now names rather than the behaviour it asks for — a criterion whose
+  boundary is undocumented is a criterion somebody will later "fix" by accident. And AC-8's
+  includes the rescan test, because "a hit never recomputes" is only safe next to "and a rescan
+  makes it unreachable"; either alone is half a cache story.
+
+  `IMPLEMENTED_FEATURES` gains `"006"` and T9's interim list is deleted, along with the test that
+  guarded it — which is what finishing a feature looks like here, and the third time this file's
+  own docstring has had to be corrected about how many such lists are gone.
 
 ---
 
@@ -681,25 +700,67 @@ classes earlier gates taught, back for the very next feature:
 
 The feature is done when **all** of these hold:
 
-- [ ] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all fifteen
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all fifteen
       — has a passing test, by name, in `FEATURE_006`.
-- [ ] Both routes reach the conformance level [spec §6](spec.md#6-conformance) declares — L2
+- [x] Both routes reach the conformance level [spec §6](spec.md#6-conformance) declares — L2
       throughout, golden **headers and dimensions**, never encoder bytes; the byte-identity
       criteria compare within one run, where the encoder is constant.
-- [ ] Both routes are served, `"006"` is in `IMPLEMENTED_FEATURES`, and no route exists outside
+- [x] Both routes are served, `"006"` is in `IMPLEMENTED_FEATURES`, and no route exists outside
       [`surface.yaml`](../../docs/compatibility/surface.yaml) — the two rows were in the file
       before this list was written, so the check is registration, not listing.
-- [ ] The feature ends owning **no schema**: no table, no column, no migration
+- [x] The feature ends owning **no schema**: no table, no column, no migration
       ([plan §4](plan.md#4-data-model)). The resize cache is files under the data directory,
       disposable by test (AC-13), and nothing else appeared.
-- [ ] The header-set sweep is green across the suite: no image response carries `ETag` or
+- [x] The header-set sweep is green across the suite: no image response carries `ETag` or
       `Accept-Ranges`, every one carries the seven-header contract of
       [plan §6.6](plan.md#66-headers-and-conditional-requests).
-- [ ] The `Chapter` tripwire and the `UNPROBED`-style absences hold: no v1 writer creates a
+- [x] The `Chapter` tripwire and the `UNPROBED`-style absences hold: no v1 writer creates a
       `Chapter` row, and the test that says so is the extension signal.
-- [ ] Anything learned during implementation is back in `spec.md` or `plan.md`, in the same
+- [x] Anything learned during implementation is back in `spec.md` or `plan.md`, in the same
       change that learned it.
-- [ ] Every measurement a task took against the reference is in the spec or
+- [x] Every measurement a task took against the reference is in the spec or
       [`behaviours.md`](../../docs/compatibility/behaviours.md) with provenance — T1's probe
       cells first among them, and the manual-request citations it upgrades.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+- [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+
+## What this feature owes the next ones
+
+**007** inherits nothing from here and is owed one warning: the image routes are the first in this
+project that carry **no authentication dependency at all** (`api/images.py`), so a future change
+that adds a global auth dependency to the application rather than to a router would break them
+silently — `test_ac12_every_mechanism_is_accepted_and_none_changes_the_answer` is what catches it.
+
+**008** gets two things and owes one back. It gets `compat/errors`' fourth shape — the
+JSON-encoded message `404`, already byte-pinned — and the delivery stub in
+`tests/conformance/test_auth_mechanisms.py`, which is now the **last** one: 006 T9 replaced the
+image stub with the real route, and doing so changed the assertion from "every mechanism reaches
+it" to "no mechanism changes the answer". 008 should expect the same when its stub goes. What it
+owes back is `Chapter`: `test_no_v1_writer_can_create_a_chapter_row` fails the day something
+writes one, and that failure is the signal to serve chapter images rather than a test to relax.
+
+**009** is unaffected. Playlist items carry images through their item ids like everything else.
+
+**010** collects five things this feature raised for the differential:
+
+* **EXIF orientation on resize** — the one edge no remote request can reach (plan §6.8 row 1). It
+  needs a planted file in a controlled library.
+* **OQ-4** — whether any client sends `percentPlayed`, `unplayedCount`, `blur`, `backgroundColor`
+  or `foregroundLayer`. The five stay undeclared on purpose and the ignored-parameter recorder
+  counts them per `(route, parameter)`, so the trail exists and only needs reading.
+* **Two recorded divergences**: `Last-Modified` on a transformed response is the carrier's mtime
+  here and the variant's creation time on the reference (spec §3.4), and a forgiven non-positive
+  dimension serves the file here and a re-encode there
+  ([behaviours §1.17](../../docs/compatibility/behaviours.md)). Both are invisible through a
+  parser and visible in `Content-Length`.
+* **[behaviours §5.6](../../docs/compatibility/behaviours.md)** — a default rescan does not notice
+  a replaced poster. Whether the reference does is unmeasured, and measuring it means writing into
+  a library.
+* **The empty-GUID edge** — `/Items/000…0/Images/Primary` is `Guid.Empty` on the reference and
+  answers the controller's `400`; Atrium answers the `404` (spec §3.2).
+
+**The starting inventory this feature leaves behind**, for whatever serves bytes next: `images/`
+owns bytes and imports no HTTP and no SQL, asserted by
+`tests/unit/test_import_directions.py`; the disposable cache under `<data-dir>/cache/images/` is
+keyed on a content tag, so nothing ever needs invalidating; and `tests/fixtures/images.py` draws
+its images rather than checking them in — a poster whose ratio discriminates, a source small
+enough to prove no-upscale, a logo with a real alpha channel, and three backdrops of three sizes.

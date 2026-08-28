@@ -12,15 +12,13 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001 through 005 are implemented, and 006 is fully gated** — spec, plan and task list
-all accepted on 2026-08-28, each gate measuring or checking before flipping a status, and each
-changing something on the way (AC-6 and AC-15 at the plan's, four task corrections at the
-list's) — **the next work is T1 of [006's tasks](specs/006-images/tasks.md)**. The four features
-after it are specified only, their specs still drafts.
-What 005 leaves for
-each of them is written in
-[005's tasks](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones), beside
-004's standing notes below.
+**Features 001 through 006 are implemented**, 006 on 2026-08-28 across thirteen tasks — **the
+next work is a plan for [007](specs/007-user-data-and-playstate/spec.md), whose spec is still a
+draft**. The four features after 006 are specified only, their specs still drafts. What 005 and
+006 leave for each of them is written in
+[005's tasks](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones) and
+[006's](specs/006-images/tasks.md#what-this-feature-owes-the-next-ones), beside 004's standing
+notes below.
 
 **004 owes 005 four things**, written down in
 [004's tasks](specs/004-metadata-resolution/tasks.md#what-this-feature-owes-the-next-ones) rather
@@ -97,6 +95,13 @@ reasoning:
 | 005 T1 | Copy a field table into a registry | **There is no single item representation.** A bare `/Items/{itemId}` carries up to 39 properties a bare list row does not, `/UserViews` is a third width, and `ChannelId` is an explicit `null` on every item — 208 of 208 — against the reference's own null-suppression setting |
 | 005 T12 | Order seasons, specials last | The measurement **reversed the acceptance criterion**: season 0 arrives first, plain index order. "Every client expects it last" was an expectation about clients presented as a fact about the wire — and the fix deleted code, because 003's sort names already produce the measured order |
 | 005 T15 | Emit `MatchedTerm`, match the sort name | Neither exists on the wire. Seventeen measured hints never carried `MatchedTerm`, and the discriminating search — a padded sort form no folded name contains — found nothing, settling a spec-versus-plan disagreement the tasks gate had flagged |
+| 006 T1 | Add two cells to a probe | A third battery nobody asked for, from subtracting two numbers the probe had been printing side by side since the spec review: `maxWidth=-100` answers `200` at the source's size and **three times its bytes**. A forgiven parameter is not a dropped one — and a bare `quality` does not transform at all, where the plan had made it a reason to re-encode every poster |
+| 006 T3 | Implement a measured error shape | The task's own verification cited [behaviours §4.4](docs/compatibility/behaviours.md), an exception **withdrawn three features earlier** by 005 T4 and never marked. Writing the test it asked for would have asserted a raw `ñ` against a response class that escapes it |
+| 006 T5 | Assert a containment check | The hostile-path test **passed with the check deleted**: `../../../../etc/passwd` from a `tmp_path` root reaches nothing, so it refused for the wrong reason. Every case now points at a file that exists |
+| 006 T6 | Write a resize matrix | **"Never upscale" is not a property of the server.** `maxWidth` and the fill pair cap at the source; `width`/`height` are honoured past it — `width=4000` of a 2000×3000 source is 4000×6000. Implemented literally, Atrium would have sent a *smaller* image than a client asked for by name |
+| 006 T8 | Wire four modules together | AC-8 **failed**: deciding the transform from the file's dimensions rather than the row's makes the cache key move whenever the file does, turning every hit into a silent miss |
+| 006 T9 | Serve two routes | [Plan §6.6](specs/006-images/plan.md) asks for two things that cannot both hold — a `304` carrying the `200`'s `Content-Type` cannot also be decided before the payload is known. The reference resolves it and drops the body; measured, including `image/webp` on a negotiated `304` |
+| 006 T12 | Assert three cache criteria | **The image tag could never change.** `Field.IMAGES` merged under "keep what the item has unless the mode is `Replace`", and v1 has no refresh route to ask for `Replace` — so a replaced poster changed no tag at any scan depth, and client-side cache invalidation was unreachable |
 | 006 plan gate | Flip a status line | `fill` never crops — AC-6 reversed on a non-square source, after a square-source probe had measured "exactly the box" — and a resized response negotiates `Accept: image/webp`, the branch the plan's own §10 had just rejected as a delta. Plus a fourth error shape, on the one route that splits its two lookups across two `404` bodies |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
