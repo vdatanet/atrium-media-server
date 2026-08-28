@@ -115,7 +115,11 @@ headers versus for URLs embedded in media players:
 
 `UserData` is returned **on every item by default**, with no `Fields=UserData` needed, and
 Jellyfin's version carries `Key` and `ItemId` inside the object.
-`[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
+`[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`
+
+`MarkPlayedItem` takes an optional `datePlayed` — and it is more than a date: a bare mark sets
+`PlayCount` to `max(count, 1)` while the dated form increments
+([007 §3.4](../../specs/007-user-data-and-playstate/spec.md), same probe).
 
 ## 6. Playlists
 
@@ -190,8 +194,9 @@ lot.
 | POST | `/Sessions/Playing/Progress` | `ReportPlaybackProgress` | M V |
 | POST | `/Sessions/Playing/Stopped` | `ReportPlaybackStopped` | M V |
 
-All three answer `204`. Jellyfin's `Progress` does **not** require `MediaSourceId` (Emby's does).
-`[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
+All three answer `204` — for an unknown `ItemId` too. Jellyfin's `Progress` does **not** require
+`MediaSourceId` (Emby's does), and a play is counted at `Start`, not at the end
+(behaviours §2.19). `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`
 
 ## 10. Deliberately excluded from v1
 
