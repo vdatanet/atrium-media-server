@@ -288,9 +288,17 @@ actually reachable on for that network. ⚠️ **This is a deliberate divergence
 the historical Emby form and it is what a great many clients send, so a server implementing only
 the documented four would refuse clients that have worked against Jellyfin for years.
 
-All five work on an authenticated API route, and on the image and streaming routes too, where the
-query forms are the only practical option.
-`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+**Four of the five are measured on three route classes** — an authenticated API route, an image
+route and a delivery route — and all four authenticate on each.
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` On the image and streaming
+routes the query forms are the only practical option, because those URLs are handed to players and
+image loaders that set no headers.
+
+**The fifth is measured on an authenticated API route and nowhere else.** `mechanisms()` in that
+script sends four, so `X-Emby-Authorization` carrying a `Token=` has never been put to an image or
+a delivery route. It is expected to work there — the reference reads the header with one grammar
+wherever it reads it at all — and an expectation is not a measurement (Principle II). The probe
+owes that call, and §2.10 says *four* because four is what it sends.
 
 When a request carries two that disagree, the order is **not** arbitrary. Measured pair by pair,
 in both directions each time:
@@ -595,7 +603,8 @@ position floor produces a server that keeps resume points for every short item.
 
 **Jellyfin does:** answer `GET /Items/{id}/Images/Primary` and
 `GET /Videos/{id}/stream?static=true` with `200` to a request carrying **no token at all**. All
-four mechanisms are accepted there; not one of them is required. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+four mechanisms the probe sends are accepted there — the fifth of §2.4 has never been put to this
+route class — and not one of them is required. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
 An **invalid** token changes nothing either: an unknown 32-hex token and a malformed one, sent
 through the header, the query and the `MediaBrowser` scheme, each answer the identical `200` —
 the route does not validate what it does not require
