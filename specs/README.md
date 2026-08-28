@@ -118,14 +118,25 @@ say how it will be proven is not finished.
 | [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
 | [006](006-images/) | Images | **Implemented** | **Implemented** | **Implemented** |
-| [007](007-user-data-and-playstate/) | User data and playstate | **Accepted** | — | — |
+| [007](007-user-data-and-playstate/) | User data and playstate | **Accepted** | Draft | — |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
 **001 through 006 are implemented**, 006 on 2026-08-28 across thirteen tasks — **007's spec is
-`Accepted` and the next work is its plan**. The three specs after 007 remain drafts, and their
-open questions are the standing review agenda.
+`Accepted` and its plan is written, awaiting the gate**. The three specs after 007 remain
+drafts, and their open questions are the standing review agenda.
+
+**007's plan stores nothing new**, on 2026-08-28: `item_user_data` has been complete since 003
+— the deliberately absent foreign key *is* the survival guarantee — so the plan is five
+decisions about writers. The measured semantics become pure functions in `domain/playstate.py`;
+live playback state stays in memory with the reference's ticking position computed at read time
+rather than by a per-second timer; the cascade is a write-time sweep over the leaves through
+005's visibility scope; the mark responses are built by the same hydration path as list rows;
+and the controller split mirrors the reference's. Plan §6.8 catalogues what no probe has
+measured — sharpest, the playing session's `NowPlayingItem`: a `BaseItemDto` width nothing has
+captured, which is 005 T1's lesson pointed at `/Sessions` — for the gate to answer before
+accepting.
 
 **007's spec review measured first and corrected four accepted-draft claims**, on 2026-08-28.
 Reading the reference's source predicted all four and the extended `tools/probe_playstate.py`
