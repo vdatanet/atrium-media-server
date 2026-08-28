@@ -299,3 +299,48 @@ def _assert_opens_nothing(module: Path, described: str) -> None:
     }
     reached = sorted((imported | called) & forbidden)
     assert not reached, f"{described} reaches {reached}, and it is pure"
+
+
+# ------------------------------------------------------------------------------------------
+# `images/` knows nothing about HTTP, and owns no SQL
+# ------------------------------------------------------------------------------------------
+
+#: 006 plan section 3 draws the line twice, in both directions: `api/images.py` owns the wire -
+#: headers, `304`, the two error statuses - and `images/` owns bytes. The route rule above already
+#: keeps SQL out of `api/`; this keeps the *framework* out of `images/`, which is the half that
+#: would rot quietly. A resize that reached for a `Request` to read `Accept` would work, pass its
+#: own tests, and make the transform impossible to table-test as values.
+#:
+#: SQL is here too, and for a different reason: the repository is the only reader (005 plan
+#: section 9 row 2). `images/source.py` legitimately imports the repository's **record types** -
+#: what it must not do is build a statement.
+IMAGES_MAY_NOT_IMPORT = ("fastapi", "starlette", "sqlalchemy", "httpx")
+
+
+def image_modules() -> list[Path]:
+    return sorted((PACKAGE / "images").rglob("*.py"))
+
+
+def test_there_are_image_modules_to_check() -> None:
+    assert image_modules(), f"no modules found under {PACKAGE / 'images'}"
+
+
+@pytest.mark.parametrize("module", image_modules(), ids=lambda path: path.name)
+def test_an_image_module_knows_nothing_about_http_or_sql(module: Path) -> None:
+    tree = ast.parse(module.read_text(encoding="utf-8"))
+    imported = {
+        alias.name.split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        node.module.split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module
+    }
+    reached = sorted(imported & set(IMAGES_MAY_NOT_IMPORT))
+    assert not reached, (
+        f"atrium/images/{module.name} imports {reached}. `images/` owns bytes and knows nothing "
+        f"about HTTP (006 plan section 3): a header, a status code or a query parameter belongs "
+        f"in atrium/api/images.py, and a statement belongs in a repository."
+    )

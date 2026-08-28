@@ -289,7 +289,7 @@ classes earlier gates taught, back for the very next feature:
 
 ## T5 — `ImageRepository` and `images/source.py`: from item id to carrier bytes
 
-- [ ] **Changes:** `db/repositories.py` grows `ImageRepository` — the one
+- [x] **Changes:** `db/repositories.py` grows `ImageRepository` — the one
   [plan §6.1](plan.md#61-the-lookup) query: the item (exists, not soft-removed, its
   `library_id`), the `(image_type, index)` row, the library's roots, and the part-zero source
   path for an `embedded` row, returned as a typed record. `images/source.py` — the three
@@ -306,6 +306,33 @@ classes earlier gates taught, back for the very next feature:
   [plan §7](plan.md#7-failure-handling); no reader is added anywhere else — route modules will
   own no SQL, and the repository is the only reader, as everywhere.
 - **Plan reference:** §5, §6.1, §6.2, §7
+- **Done (2026-08-28):** **the hostile-row test passed with the containment check deleted**, on
+  the first path anybody would write. `../../../../etc/passwd` from a `tmp_path` library root
+  reaches nothing — four `..` do not climb out of a pytest temporary directory — so the resolver
+  refused it for the wrong reason and the assertion could not tell that from the right one. Every
+  case now points at a **file that exists** outside the root, and the test asserts that it does
+  before asserting the refusal; with the check removed all three fail. A security test that cannot
+  fail is the class 001 T16 found in a passing golden and 003 T19 in a cited claim.
+
+  **The repository does not raise.** Plan §7 gives this route two `404` bodies, and which one a
+  request gets is a *wire* decision — so `ImageRepository.locate` returns an `ImageLookup` saying
+  what it found and `images/source.py` names the refusal. A repository importing
+  `compat/errors` would be `db/` deciding a wire shape, which is the inversion
+  `architecture.md` §1 exists to prevent; it would also have passed every test in this task.
+
+  **Every way of failing to produce bytes is the *same* refusal, deliberately.** A row whose file
+  was deleted, an embedded row whose art was stripped, and a crafted row that escapes its root are
+  three different logs and one `404`: a client cannot act on the difference, and telling it which
+  would describe the server's filesystem to anyone holding an item id — the id-as-capability
+  consequence of [spec §3.2](spec.md#32-get-itemsitemidimagesimagetype--getitemimage), from the
+  other side.
+
+  **The boundary is now a test, both ways.** `api/` owning no SQL was already asserted; `images/`
+  knowing nothing about HTTP was a sentence in [plan §3](plan.md#3-modules). It is a rule in
+  `tests/unit/test_import_directions.py` now — no `fastapi`, no `starlette`, no `sqlalchemy`, no
+  `httpx` under `images/` — because the version of this that rots quietly is a transform reaching
+  for a `Request` to read `Accept`: it would work, pass its own tests, and make T6's matrix
+  impossible to write as values.
 
 ## T6 — `images/transform.py`: the decision and the formats, pure
 
