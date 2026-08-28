@@ -86,6 +86,17 @@ AWKWARD_NAMES = (
 RATED = 10
 FIRST_YEAR = 1990
 
+#: One hour, in ticks, on the film that also carries a resume position - `PlayedPercentage` is
+#: position over runtime, and a world with positions and no runtimes could never emit one.
+RUNTIME_TICKS = 36_000_000_000
+
+#: The tags of the images this world carries, named so a DTO test asserts values rather than
+#: presence. The first film keeps its original single Primary (tag `"d" * 32`, from T3).
+SERIES_PRIMARY_TAG = "e" * 32
+SERIES_THUMB_TAG = "f" * 32
+SERIES_BACKDROP_TAGS = ("b1" * 16, "b2" * 16)
+ALBUM_PRIMARY_TAG = "a1" * 16
+
 #: Which of the rated films carries a real `PremiereDate`, and what it is. Older than the film's
 #: own production year on purpose: see `_seed_movies`.
 DATED_OFFSET = 1
@@ -242,7 +253,7 @@ def build_query_world(session: OrmSession) -> QueryWorld:
         _add(items, _collection_folder(library))
 
     corpus, awkward = _seed_movies(items, metadata, movies)
-    series, specials_season, multi_episode = _seed_shows(items, shows)
+    series, specials_season, multi_episode = _seed_shows(items, metadata, shows)
     album, tracks, album_artist, guest_artist, guest_track = _seed_music(items, metadata, music)
 
     favourites = (corpus[0], album)
@@ -335,6 +346,9 @@ def _seed_movies(
             # dateless - first or last, either way - puts them in the other order, and a fixture
             # whose dates agreed with its years could not tell the two apart.
             values[Field.PREMIERE_DATE] = DATED_PREMIERE
+            # And a runtime, on the film that also carries a resume position, so
+            # `PlayedPercentage` has both of its inputs on one item (T9).
+            values[Field.RUNTIME] = RUNTIME_TICKS
         metadata.apply(item_id, MetadataChanges(values=values), refreshed_at=REFRESHED_AT)
 
     # One genre, two spellings, on two films. Both reach the same by-name row.
@@ -370,6 +384,14 @@ def _seed_movies(
                     ),
                 ],
                 Field.STUDIOS: ["A Studio"],
+                # The gated scalars and maps, on the same film, so T9's absent-bare-present-asked
+                # battery runs against an item that has a value for every one of them.
+                Field.OVERVIEW: "A film about everything.",
+                Field.TAGLINE: "One line about everything.",
+                Field.ORIGINAL_TITLE: "Roc & Roll",
+                Field.OFFICIAL_RATING: "PG",
+                Field.TAGS: ["blue"],
+                Field.PROVIDER_IDS: {"Imdb": "tt0000001", "Tmdb": "42"},
             }
         ),
         refreshed_at=REFRESHED_AT,
@@ -405,7 +427,7 @@ SERIES_PLAN = (
 
 
 def _seed_shows(
-    items: ItemRepository, library: Library
+    items: ItemRepository, metadata: MetadataRepository, library: Library
 ) -> tuple[tuple[SeriesHandle, ...], str, str]:
     handles: list[SeriesHandle] = []
     specials_season = ""
@@ -460,6 +482,52 @@ def _seed_shows(
 
         if carries_the_odd_shapes:
             multi_episode = _episode_id(library, name, 1, 2)
+
+        if offset == 0:
+            # The first series carries a Primary, a Thumb and two Backdrops - and only the first,
+            # so an emitter that resolves `SeriesPrimaryImageTag` or the `Parent*` walks can be
+            # told apart from one that happens to find nothing everywhere (T9). An episode's row
+            # reads all three kinds off its ancestors.
+            metadata.apply(
+                series_id,
+                MetadataChanges(
+                    values={
+                        Field.IMAGES: [
+                            ImageAssociation(
+                                kind=ImageKind.PRIMARY,
+                                index=0,
+                                source_kind=SourceKind.FILE,
+                                relative_path=f"{name}/poster.jpg",
+                                width=680,
+                                height=1000,
+                                tag=SERIES_PRIMARY_TAG,
+                            ),
+                            ImageAssociation(
+                                kind=ImageKind.THUMB,
+                                index=0,
+                                source_kind=SourceKind.FILE,
+                                relative_path=f"{name}/landscape.jpg",
+                                width=1280,
+                                height=720,
+                                tag=SERIES_THUMB_TAG,
+                            ),
+                            *(
+                                ImageAssociation(
+                                    kind=ImageKind.BACKDROP,
+                                    index=backdrop_index,
+                                    source_kind=SourceKind.FILE,
+                                    relative_path=f"{name}/backdrop{backdrop_index}.jpg",
+                                    width=1920,
+                                    height=1080,
+                                    tag=tag,
+                                )
+                                for backdrop_index, tag in enumerate(SERIES_BACKDROP_TAGS)
+                            ),
+                        ]
+                    }
+                ),
+                refreshed_at=REFRESHED_AT,
+            )
 
         # Episode 1 of season 1 is watched, so NextUp has an answer for every series. Episode 2 of
         # season 1 is what it must answer with - and on the second series that is the
@@ -571,7 +639,22 @@ def _seed_music(
     metadata.apply(
         album_id,
         MetadataChanges(
-            values={Field.ALBUM_ARTISTS: [ALBUM_ARTIST], Field.GENRES: [GENRE_SPELLINGS[0]]}
+            values={
+                Field.ALBUM_ARTISTS: [ALBUM_ARTIST],
+                Field.GENRES: [GENRE_SPELLINGS[0]],
+                # A cover, so a track's `AlbumPrimaryImageTag` has something to point at (T9).
+                Field.IMAGES: [
+                    ImageAssociation(
+                        kind=ImageKind.PRIMARY,
+                        index=0,
+                        source_kind=SourceKind.FILE,
+                        relative_path=f"{ALBUM_ARTIST}/{album_name}/cover.jpg",
+                        width=1000,
+                        height=1000,
+                        tag=ALBUM_PRIMARY_TAG,
+                    )
+                ],
+            }
         ),
         refreshed_at=REFRESHED_AT,
     )

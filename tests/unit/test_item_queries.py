@@ -37,7 +37,13 @@ from atrium.domain.items import ItemType
 from atrium.domain.queries import ItemQuery
 from atrium.library import identity
 from tests.conftest import QueryCounter, data_dir
-from tests.fixtures.query import ALBUM_ARTIST, CORPUS_SIZE, QueryWorld, build_query_world
+from tests.fixtures.query import (
+    ALBUM_ARTIST,
+    CORPUS_SIZE,
+    RUNTIME_TICKS,
+    QueryWorld,
+    build_query_world,
+)
 
 
 @pytest.fixture
@@ -338,6 +344,82 @@ def test_an_item_with_nothing_attached_still_hydrates(
     assert plain.user_data == UserItemData()
 
 
+def test_metadata_arrives_with_the_row(repository: ItemQueryRepository, world: QueryWorld) -> None:
+    """The 004 columns, read back at last - the mapping gap T9 closed. No extra statement: the
+    values ride the row the page already fetched."""
+    page = repository.run(ItemQuery(user=world.everyone, limit=1000))
+    poster = next(one for one in page.items if one.id == world.corpus[0])
+    assert poster.metadata.overview == "A film about everything."
+    assert poster.metadata.original_title == "Roc & Roll"
+    assert poster.metadata.official_rating == "PG"
+    assert poster.metadata.tags == ("blue",)
+    assert poster.metadata.provider_ids == {"Imdb": "tt0000001", "Tmdb": "42"}
+    dated = next(one for one in page.items if one.id == world.corpus[1])
+    assert dated.metadata.runtime_ticks == RUNTIME_TICKS
+    assert dated.metadata.premiere_date is not None
+
+
+def test_an_episode_arrives_with_its_ancestors(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """Parent and grandparent, summarised with their images - what `SeriesName` and the
+    `Parent*` tags are emitted from. Only the first series carries images, so a walk that finds
+    nothing everywhere cannot pass as one that works."""
+    page = repository.run(ItemQuery(user=world.everyone, limit=1000))
+    episode = next(one for one in page.items if one.id == world.series[0].episodes[0])
+    assert episode.parent is not None and episode.parent.id == world.series[0].seasons[0]
+    assert episode.grandparent is not None and episode.grandparent.id == world.series[0].id
+    assert episode.grandparent.name == world.series[0].name
+    assert {image.kind.value for image in episode.grandparent.images} == {
+        "Primary",
+        "Thumb",
+        "Backdrop",
+    }
+    track = next(one for one in page.items if one.id == world.tracks[0])
+    assert track.parent is not None and track.parent.id == world.album
+    assert [link.credit for link in track.parent.artists] == ["album_artist"]
+
+
+def test_a_containers_user_data_is_a_rollup_of_its_subtree(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """One of six episodes watched: five unplayed, not played. A film has no rollup, and the
+    shows library folder rolls up every series at once."""
+    page = repository.run(ItemQuery(user=world.everyone, limit=1000))
+    series = next(one for one in page.items if one.id == world.series[0].id)
+    assert series.user_data.unplayed_count == len(world.series[0].episodes) - 1
+    assert series.user_data.played is False
+
+    film = next(one for one in page.items if one.id == world.corpus[50])
+    assert film.user_data.unplayed_count is None
+
+    episodes = sum(len(handle.episodes) for handle in world.series)
+    folder = next(
+        one
+        for one in page.items
+        if one.item.type is ItemType.COLLECTION_FOLDER and one.item.library_id == world.shows.id
+    )
+    assert folder.user_data.unplayed_count == episodes - len(world.series)
+
+
+def test_aggregates_answer_for_the_containers_asked_about(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """The gated subtree numbers: direct children, recursive files, runtime, latest arrival."""
+    first = world.series[0]
+    movies_folder = identity.for_library(world.movies.id)
+    numbers = repository.aggregates_for([first.id, movies_folder], world.everyone)
+
+    assert numbers[first.id].child_count == len(first.seasons)
+    assert numbers[first.id].recursive_count == len(first.episodes)
+    assert numbers[first.id].date_last_media_added is not None
+
+    assert numbers[movies_folder].child_count == CORPUS_SIZE
+    assert numbers[movies_folder].recursive_count == CORPUS_SIZE
+    # Exactly one film carries a runtime, so the folder's cumulative sum is that runtime.
+    assert numbers[movies_folder].cumulative_runtime_ticks == RUNTIME_TICKS
+
+
 def test_the_statement_count_does_not_grow_with_the_page(
     engine: Engine,
     repository: ItemQueryRepository,
@@ -365,11 +447,14 @@ def test_the_statement_count_is_what_the_plan_says_it_is(
     world: QueryWorld,
     query_counter: QueryCounter,
 ) -> None:
-    """One count, one page, one per related table. Written as a number so that a *new* related
-    table shows up here as a decision rather than as drift."""
+    """One count, one page, one per related table - plus what T9 added, still page-independent:
+    parents and grandparents with their images and artists (four - an episode's row carries its
+    series' name and tags), and the two played-rollup shapes (a container's `UserData` is a
+    statement about its subtree). Written as a number so that a *new* related table shows up
+    here as a decision rather than as drift."""
     with query_counter.watching(engine):
         repository.run(ItemQuery(user=world.everyone, limit=10))
-    assert len(query_counter) == 9, query_counter.report()
+    assert len(query_counter) == 15, query_counter.report()
 
 
 def test_an_empty_page_costs_no_hydration(

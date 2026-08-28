@@ -3,8 +3,9 @@ feature: 005-item-query-api
 title: Item query API
 status: Accepted
 created: 2026-08-26
-updated: 2026-08-27
+updated: 2026-08-28
 accepted: 2026-08-27
+amended: 2026-08-28 by T9 - section 3.2
 depends_on: [002, 004]
 ---
 
@@ -89,24 +90,37 @@ Items are discriminated by `Type` (`Movie`, `Series`, `Season`, `Episode`, `Musi
 |---|---|
 | `Id`, `ServerId`, `Name`, `Type` | |
 | `MediaType` | `Video`, `Audio` or `Unknown` |
-| `IsFolder` | |
+| `IsFolder` | **Absent on a by-name row** — a genre, a music genre or a year carries no `IsFolder`, list row and full body alike `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]` |
 | `LocationType` | `FileSystem` for everything v1 serves |
 | `ChannelId` | **Always, and always `null`** — the one property that survives the null-omission of [behaviours §1.7](../../docs/compatibility/behaviours.md#17-a-null-property-is-absent-everywhere-by-one-setting) |
-| `UserData` | **Always**, with no `Fields` or `EnableUserData` needed. Jellyfin's version carries `Key` and `ItemId` inside it `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` |
+| `UserData` | **Always**, with no `Fields` or `EnableUserData` needed. Jellyfin's version carries `Key` and `ItemId` inside it `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`. On a container, `Played` and `UnplayedItemCount` describe the **subtree**: a series is played exactly when nothing beneath it is left unplayed, and the remainder rides every bare container row `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]` |
 | `ImageTags` | Empty object when the item has no images |
-| `ImageBlurHashes` | `ImageTags`' shape again, a BlurHash per image id. A client rendering placeholders reads it |
+| `ImageBlurHashes` | `ImageTags`' shape again, a BlurHash per image id. A client rendering placeholders reads it. Atrium sends the empty object — an accepted gap, argued in [behaviours §5.5](../../docs/compatibility/behaviours.md#55-no-blurhash-is-computed-so-imageblurhashes-is-always-empty) |
 | `BackdropImageTags` | |
 
-**Present in a list row when the item type has them:**
+**Present in a list row when the item type has them** — the measured matrix, one row per field.
+*The draft grouped these into type families and the measurement disagreed row by row: a `Series`
+list row carries no `ChildCount` (it is gated) and no `IndexNumber`, a `Season` carries the
+series context, and an album carries the artist lists. Rewritten at T9 to say exactly what the
+registry holds.* `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`
 
-| Group | Fields |
+| Field | Types |
 |---|---|
-| Common | `ProductionYear`, `PremiereDate`, `RunTimeTicks`, `OfficialRating`, `CommunityRating` |
-| Episode | `IndexNumber`, `ParentIndexNumber`, `SeriesId`, `SeriesName`, `SeasonId`, `SeriesPrimaryImageTag`, `SeriesThumbImageTag`, `ParentThumbItemId`, `ParentThumbImageTag`, `ParentBackdropImageTags` |
-| Season, Series | `ChildCount`, `IndexNumber` |
-| Audio | `Album`, `AlbumId`, `AlbumArtist`, `AlbumArtists`, `AlbumPrimaryImageTag`, `Artists`, `ArtistItems`, `IndexNumber` (track), `ParentIndexNumber` (disc) |
-| Library roots | `CollectionType` |
-| Playlist entries | `PlaylistItemId` — see 009 |
+| `ProductionYear`, `PremiereDate` | `Movie`, `Series`, `Season`, `Episode`, `MusicAlbum`, `Audio` |
+| `RunTimeTicks` | `Movie`, `Series`, `Episode`, `MusicArtist`, `MusicAlbum`, `Audio` |
+| `OfficialRating` | `Movie`, `Series` |
+| `CommunityRating` | `Movie`, `Series`, `Episode` |
+| `IndexNumber` | `Season`, `Episode`, `Audio` (track) |
+| `ParentIndexNumber` | `Episode`, `Audio` (disc) |
+| `SeriesId`, `SeriesName`, `SeriesPrimaryImageTag` | `Season`, `Episode` |
+| `SeasonId` | `Episode` |
+| `SeriesThumbImageTag` | `Episode` — unconfirmed, see below |
+| `ParentThumbItemId`, `ParentThumbImageTag` | `Season`, `Episode` |
+| `ParentBackdropImageTags` | `Season`, `Episode`, `MusicAlbum`, `Audio` |
+| `Album`, `AlbumId`, `AlbumPrimaryImageTag` | `Audio` |
+| `AlbumArtist`, `AlbumArtists`, `Artists`, `ArtistItems` | `MusicAlbum`, `Audio` |
+| `CollectionType` | Library roots |
+| `PlaylistItemId` | Playlist entries — see 009 |
 
 **Only when a list row asks for them:** `MediaSources`, `MediaStreams`, `Path`, `Etag`,
 `Chapters`, `DateCreated`, `DateLastMediaAdded`, `ProviderIds`, `Tags`, `Taglines`, `ExternalUrls`,

@@ -1368,7 +1368,24 @@ task is a bounded addition, and the precedence above is the whole of the behavio
 The gap is invisible on the default configuration, because the option is off unless an operator
 turns it on.
 
-## 6. Non-improvements
+### 5.5 No BlurHash is computed, so `ImageBlurHashes` is always empty
+
+**Jellyfin does:** send `ImageBlurHashes` on **every item of every response**, unasked — the same
+shape as `ImageTags`, one BlurHash string per image tag, `{}` for an item with no images
+`[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`. The hash is computed when an
+image is processed and stored beside the tag; a client renders it as a blurred placeholder while
+the real image loads.
+
+**Depends on it:** any client that renders placeholders reads it — which is why the property is in
+005 §3.2's always-present set at all. A client finding the map empty renders no placeholder and
+then the real image, so the failure mode is cosmetic latency, never a wrong image.
+
+**Atrium does:** send the empty object, always. The property is present — its absence would be a
+delta on every row of every list — and it is empty because Atrium computes no BlurHash and
+inventing one would be a lie a client renders. Computing one for real belongs to the association
+path 004 owns (the bytes are already open in Pillow when dimensions are read), needs a stored
+column, and no consumer has asked yet; 010's differential will report the gap on every item, which
+is the mechanism that decides when it closes. Recorded at 005 T9, where the emitter was written.
 
 Principle I requires that good ideas which would create a delta get written down and then not done.
 This list exists so they stop being re-proposed.

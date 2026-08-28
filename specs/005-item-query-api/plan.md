@@ -4,7 +4,7 @@ title: Item query API — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - sections 6.6 and 8
+amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -164,10 +164,16 @@ no query of its own, ever. The N+1 ban is a contract here, not a hope: the build
 domain objects and has no session to misuse.
 
 **`api.item_dto.build_dtos(items, ctx) -> list[BaseItemDto]`** — `ctx` carries the resolved
-`Fields` set, the image options, and the parent rows the batch needs (series names, album
-artists), pre-fetched by the repository. `UserData` is always attached (behaviours §2.1) with
-`Key` and `ItemId` set to the item's derived identity — a value the differential allowlist
-already covers alongside every other id.
+`Fields` set, the image options, the libraries' collection types and roots, and — when the
+resolved fields need the subtree numbers — the container aggregates from
+`ItemQueryRepository.aggregates_for`. The ancestor context (series names, the parent image tags,
+an album's artists) rides `HydratedItem` itself rather than `ctx`, summarised as two bounded
+levels per item *(amended by T9: the draft said "parent rows in ctx", which would have made every
+route re-associate rows to items the repository had already associated)*. `UserData` is always
+attached (behaviours §2.1) with `Key` and `ItemId` set to the item's derived identity — a value
+the differential allowlist already covers alongside every other id — and on a container its
+`Played`/`UnplayedItemCount` are the subtree rollup the reference sends on every bare row
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 **`compat.query_params`** exposes one dependency and one middleware, described in §6.12; route
 modules declare parameters with the pinned document's spellings and never see the mechanics.
@@ -306,6 +312,17 @@ Unknown tokens in `fields` are dropped and recorded
 (behaviours §1.12). `enableUserData=false` suppresses `UserData` on request; nothing suppresses
 it by default (behaviours §2.1). `enableImages=false` and `imageTypeLimit`/`enableImageTypes`
 prune the image tag maps the DTO would otherwise carry.
+
+Three gated emitters answer for values 004 never stored, and each is a recorded decision rather
+than a guess *(added by T9)*: **`Etag`** is a 32-hex hash of the item's identity and its two
+change clocks — opaque and stable is all an etag promises, and no client compares etags across
+servers; **`ExternalUrls`** is a table over `ProviderIds` reproducing the reference's measured URL
+patterns, `Tmdb` being the one key whose URL depends on the item's type
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`; and
+**`ImageBlurHashes`** is always the empty map (behaviours §5.5). `MediaSources`, `MediaStreams`,
+`Chapters`, `Width` and `Height` — everything probing a file would fill — stay **undeclared on
+the model**, so the §1 sequencing gap is structural rather than remembered, and a test asserts
+the absence so 008's arrival changes a failing test rather than nothing.
 
 ### 6.6 The four shapes
 

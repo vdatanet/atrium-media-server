@@ -33,6 +33,7 @@ from tests.fixtures.query import (
     FIRST_YEAR,
     GENRE_SPELLINGS,
     RATED,
+    RUNTIME_TICKS,
     SOLO_PERFORMER,
     QueryWorld,
     build_query_world,
@@ -356,3 +357,37 @@ def test_two_builds_derive_the_same_world(tmp_path: Path, world: QueryWorld) -> 
         second_session.rollback()
         second_session.close()
         engine.dispose()
+
+
+# ------------------------------------------------------------------------------------------
+# Images (T9)
+# ------------------------------------------------------------------------------------------
+
+
+def test_the_images_sit_exactly_where_the_dto_tests_need_them(
+    session: OrmSession, world: QueryWorld
+) -> None:
+    """The first film, the first series and the compilation carry images - **and nothing else
+    does**. The exclusivity is the load-bearing half: the `Parent*` emitters resolve tags through
+    an ancestor walk, and a world where every series had a poster could not tell a walk that
+    works from one that finds something anywhere."""
+    by_item: dict[str, set[tuple[str, int]]] = {}
+    for row in rows(session, models.ItemImage):
+        by_item.setdefault(row.item_id, set()).add((row.image_type, row.image_index))
+
+    assert by_item[world.corpus[0]] == {("Primary", 0)}
+    assert by_item[world.series[0].id] == {
+        ("Primary", 0),
+        ("Thumb", 0),
+        ("Backdrop", 0),
+        ("Backdrop", 1),
+    }
+    assert by_item[world.album] == {("Primary", 0)}
+    assert set(by_item) == {world.corpus[0], world.series[0].id, world.album}
+
+
+def test_the_dated_film_also_carries_the_runtime(session: OrmSession, world: QueryWorld) -> None:
+    """On the film that is also resumable, so `PlayedPercentage` has both inputs on one item."""
+    row = session.get(models.Item, world.corpus[1])
+    assert row is not None and row.runtime_ticks == RUNTIME_TICKS
+    assert world.corpus[1] in world.resumable

@@ -28,6 +28,16 @@ from atrium.compat.registry import import_model_modules, iter_models
 
 INDEX = Path(__file__).resolve().parents[2] / "docs" / "compatibility" / "property-names.json"
 
+#: Names the measured reference emits that the **pinned document does not carry**. `GenreItems`
+#: is a real `BaseItemDto` property on the wire - gated behind `fields=Genres` on a list row,
+#: unasked on a full body `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]` -
+#: and it is a declared property of the 10.11.11 document; the pinned 10.11.10 document simply
+#: lacks it, along with `LockedFields`, which nothing here serialises yet. An explicit exception
+#: rather than a regenerated index, because the index's version is the pin (ADR-0004) and moving
+#: it is a decision, not a side effect of a sweep. Recorded in
+#: docs/compatibility/reference-target.md section 1.
+MEASURED_BEYOND_THE_PINNED_DOCUMENT: frozenset[str] = frozenset({"GenreItems"})
+
 
 @pytest.fixture(scope="module")
 def reference_names() -> frozenset[str]:
@@ -43,7 +53,7 @@ def find_problems(
     for model in models:
         for field_name, field in model.model_fields.items():
             alias = field.serialization_alias or field.alias or field_name
-            if alias in reference_names:
+            if alias in reference_names or alias in MEASURED_BEYOND_THE_PINNED_DOCUMENT:
                 continue
             near = difflib.get_close_matches(alias, reference_names, n=1)
             suggestion = f" Did you mean {near[0]!r}?" if near else ""
