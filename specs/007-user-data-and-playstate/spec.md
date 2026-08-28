@@ -224,7 +224,13 @@ reproduced by the probe's playing-session battery at T1 `[probe: tools/probe_pla
   exactly when the last report carried them, and `PositionTicks` advancing between reports
   (§3.8's ticker).
 - **`NowPlayingItem` is an item without `UserData`** — the one measured item shape that omits
-  §3.1's object entirely. The media-derived subset (`MediaStreams`, `Chapters`, `Width`,
+  §3.1's object entirely — **and without fourteen other properties a full item body carries**.
+  Measured against the same playback: the item's 41 properties are exactly a full
+  `/Items/{itemId}` body's 56 minus `Etag`, `CanDelete`, `CanDownload`, `SortName`,
+  `ForcedSortName`, `MediaSources`, `ProductionLocations`, `PlayAccess`, `RemoteTrailers`,
+  `People`, `UserData`, `DisplayPreferencesId`, `Tags`, `LockedFields` and `LockData`. It is a
+  **subtraction from the full body**, not a selection of its own, and nothing in it is absent from
+  that body `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. The media-derived subset (`MediaStreams`, `Chapters`, `Width`,
   `Height`, `HasSubtitles`, `IsHD`, `VideoType`, `Trickplay`, `Container`) and `CriticRating`
   are outside what v1 can yet say, stay absent until the feature that owns them, and are a
   recorded gap the differential will show — 006's `Chapter` shape, not a silent one.
