@@ -118,14 +118,29 @@ say how it will be proven is not finished.
 | [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
 | [006](006-images/) | Images | **Implemented** | **Implemented** | **Implemented** |
-| [007](007-user-data-and-playstate/) | User data and playstate | **Accepted** | **Accepted** | — |
+| [007](007-user-data-and-playstate/) | User data and playstate | **Accepted** | **Accepted** | **Accepted** |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001 through 006 are implemented**, 006 on 2026-08-28 across thirteen tasks — **007's spec and
-plan are both `Accepted`; the next artefact is its task list**. The three specs after 007
-remain drafts, and their open questions are the standing review agenda.
+**001 through 006 are implemented**, 006 on 2026-08-28 across thirteen tasks — **007's three
+artefacts are all `Accepted`; its thirteen tasks are what happens next**. The three specs after
+007 remain drafts, and their open questions are the standing review agenda.
+
+**007's task-list gate changed four things**, on 2026-08-28, and the first is the class 006's
+gate taught, back for the very next feature. **The seeded world has exactly one runtime** —
+`tests/fixtures/query.py` gives one to a single film and to nothing else — so §3.7's rule, which
+is a function of runtime, had one item to run on at route level, and **row 5, the short-item
+branch OQ-6 opened and measured, had no world at all**. **Nothing has ever written
+`last_playback_check_in`**: the plan hands the column to 002's activity flusher, whose `touch`
+writes `last_activity_date` alone, so "the flusher's existing pass writes both columns" is a
+change to make rather than a property to lean on. **OQ-7 belongs to this list**, not to 010 —
+the fixture library can build an empty container, so the empty-subtree answer is a decision to
+take here, and today it lives in a docstring, which is exactly how 006 found an exception
+withdrawn three features earlier. And **AC-16 needs no new test**: 003's own AC-11 already
+plants a favourite and a resume position, deletes the file, rescans and restores it, from the
+other side of the same guarantee. Each is recorded in
+[007's tasks](007-user-data-and-playstate/tasks.md#what-the-gate-changed).
 
 **007's plan gate measured before accepting, and the sharpest answer was an absence**, on
 2026-08-28. The gate ran plan §6.8's four catalogued batteries as hand requests against the

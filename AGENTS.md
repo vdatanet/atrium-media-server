@@ -13,9 +13,10 @@ Guidance for anyone — human or agent — making changes in this repository.
 ## Where the project is
 
 **Features 001 through 006 are implemented**, 006 on 2026-08-28 across thirteen tasks —
-**[007's spec](specs/007-user-data-and-playstate/spec.md) and
-[plan](specs/007-user-data-and-playstate/plan.md) are `Accepted` (2026-08-28, probes first at
-both gates) and the next artefact is its task list**. The three features after 007 are
+**[007's spec](specs/007-user-data-and-playstate/spec.md),
+[plan](specs/007-user-data-and-playstate/plan.md) and
+[tasks](specs/007-user-data-and-playstate/tasks.md) are all `Accepted` (2026-08-28, probes first
+at both gates) and its thirteen tasks are what happens next**. The three features after 007 are
 specified only, their specs still drafts. What 005 and 006 leave for each of them is written in
 [005's tasks](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones) and
 [006's](specs/006-images/tasks.md#what-this-feature-owes-the-next-ones), beside 004's standing
@@ -104,6 +105,7 @@ reasoning:
 | 006 T9 | Serve two routes | [Plan §6.6](specs/006-images/plan.md) asks for two things that cannot both hold — a `304` carrying the `200`'s `Content-Type` cannot also be decided before the payload is known. The reference resolves it and drops the body; measured, including `image/webp` on a negotiated `304` |
 | 006 T12 | Assert three cache criteria | **The image tag could never change.** `Field.IMAGES` merged under "keep what the item has unless the mode is `Replace`", and v1 has no refresh route to ask for `Replace` — so a replaced poster changed no tag at any scan depth, and client-side cache invalidation was unreachable |
 | 006 plan gate | Flip a status line | `fill` never crops — AC-6 reversed on a non-square source, after a square-source probe had measured "exactly the box" — and a resized response negotiates `Accept: image/webp`, the branch the plan's own §10 had just rejected as a delta. Plus a fourth error shape, on the one route that splits its two lookups across two `404` bodies |
+| 007 tasks | Review a thirteen-item list | The fixture world has **one runtime**, so the branch a probe had measured had nowhere to be proven; `last_playback_check_in` has no writer at all; OQ-7 belongs to this list rather than to 010; and AC-16's test was written by 003 |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
 question each, and a plain `urllib` request answers the rest.
