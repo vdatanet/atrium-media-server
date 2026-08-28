@@ -26,10 +26,11 @@ from __future__ import annotations
 import hashlib
 import secrets
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, delete, select, update
+from sqlalchemy import CursorResult, delete, func, select, update
 from sqlalchemy.orm import Session as OrmSession
 
 from atrium.compat.dates import utc_now
@@ -1118,6 +1119,142 @@ class MetadataRepository:
                     tag=image.tag,
                 )
             )
+
+
+# --------------------------------------------------------------------------------------------
+# Images
+# --------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ImageLocation:
+    """One `item_images` row, with everything needed to open the bytes it names.
+
+    A **record, not a row**: the serve path never sees an ORM object, like everywhere else
+    (ADR-0003). It carries the library's roots and, for an `embedded` row, the item's part-zero
+    source path, because those are the two joins the reading needs and a second query for either
+    would be a second chance to disagree with the first.
+    """
+
+    item_id: str
+    item_name: str
+    """Carried because the absent-image refusal names it (behaviours section 1.11), and because
+    the request that fails is the request that already looked the item up."""
+
+    library_roots: tuple[str, ...]
+    """Absolute, in configured order. The `file` reading takes the **first one the relative path
+    exists under**, which is what `metadata/refresh.py` already does for its own root search."""
+
+    image_type: str
+    index: int
+
+    source_kind: SourceKind
+    relative_path: str | None
+    """Null exactly when the row is `embedded` - the schema says so with a check constraint."""
+
+    width: int
+    height: int
+    tag: str
+    """Never null (004 plan section 4). The stored dimensions answer the never-upscale question
+    before a file is opened, and the tag is the cache key's content half."""
+
+    carrier_path: str | None
+    """The item's part-zero source, relative to a root. Only an `embedded` row needs it, and only
+    an item with a source has one."""
+
+
+@dataclass(frozen=True, slots=True)
+class ImageLookup:
+    """What one lookup found: the item's name if it exists, and the image if it has one.
+
+    Two optional fields rather than two exceptions, because **which refusal this becomes is a wire
+    decision** and `db/` does not make those (architecture section 1). `images/source.py` turns
+    this into `ItemNotFoundError` or `ImageNotFoundError`, which are the two `404` bodies the
+    reference actually sends (behaviours section 1.11).
+
+    The invariant is one-directional and asserted by the tests: a `location` implies an
+    `item_name`, and the reverse says nothing.
+    """
+
+    item_name: str | None
+    location: ImageLocation | None
+
+    @property
+    def item_exists(self) -> bool:
+        return self.item_name is not None
+
+
+class ImageRepository:
+    """The one query the image routes need, and the only reader they get.
+
+    Route modules own no SQL (005 plan section 9 row 2, asserted by
+    `tests/unit/test_import_directions.py`), and `images/` owns bytes rather than storage - so
+    everything the serve path knows about the database is this class.
+    """
+
+    def __init__(self, session: OrmSession) -> None:
+        self._session = session
+
+    def locate(self, item_id: str, image_type: str, index: int) -> ImageLookup:
+        """Resolve `(item, type, index)` to what it takes to open the bytes.
+
+        **A soft-removed item is not found**, the same reading 005 serves items under: the world a
+        client browses has no removed items in it, and an image route that disagreed would answer
+        `200` for an item every list says is gone.
+
+        The type is matched case-insensitively, because a path segment is (behaviours section
+        1.14) and this one arrives as a path segment.
+        """
+        item = self._session.get(models.Item, item_id)
+        if item is None or item.removed_at is not None:
+            return ImageLookup(item_name=None, location=None)
+
+        row = self._session.scalars(
+            select(models.ItemImage).where(
+                models.ItemImage.item_id == item_id,
+                func.lower(models.ItemImage.image_type) == image_type.lower(),
+                models.ItemImage.image_index == index,
+            )
+        ).first()
+        if row is None:
+            return ImageLookup(item_name=item.name, location=None)
+
+        return ImageLookup(
+            item_name=item.name,
+            location=ImageLocation(
+                item_id=item_id,
+                item_name=item.name,
+                library_roots=self._roots_of(item.library_id),
+                image_type=row.image_type,
+                index=row.image_index,
+                source_kind=SourceKind(row.source_kind),
+                relative_path=row.relative_path,
+                width=row.width,
+                height=row.height,
+                tag=row.tag,
+                carrier_path=self._carrier_path(item_id),
+            ),
+        )
+
+    def _roots_of(self, library_id: str | None) -> tuple[str, ...]:
+        if library_id is None:
+            return ()
+        return tuple(
+            self._session.scalars(
+                select(models.LibraryRoot.path)
+                .where(models.LibraryRoot.library_id == library_id)
+                .order_by(models.LibraryRoot.path)
+            ).all()
+        )
+
+    def _carrier_path(self, item_id: str) -> str | None:
+        """Part zero, and only part zero: embedded art is read from the file the item's identity
+        derives from, and a two-part film's second part is not a second cover."""
+        return self._session.scalars(
+            select(models.ItemSource.relative_path).where(
+                models.ItemSource.item_id == item_id, models.ItemSource.part_index == 0
+            )
+        ).first()
 
 
 #: Fields 003's scanner derives from a file's name and place, which `values_of` therefore does
