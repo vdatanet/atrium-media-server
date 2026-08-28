@@ -180,6 +180,43 @@ class Server:
         """
         return self._request("POST", path, params=params, body=body, raw=True, raw_body=raw_body)
 
+    def get_streaming(
+        self,
+        path_and_query: str,
+        max_bytes: int,
+        extra_headers: dict[str, str] | None = None,
+    ) -> tuple[int, dict[str, str], bytes]:
+        """GET reading at most `max_bytes` of the body, then closing the connection.
+
+        The delivery probes ask header-sized questions - does this response carry a
+        `Content-Length`, does this body start with the right magic bytes - about responses whose
+        full body is a film. Reading it all to answer would download gigabytes and keep the
+        server encoding for the whole read; closing early is also, deliberately, the same signal
+        a disconnecting client sends, which the reference answers by stopping the work.
+
+        Returns (status, headers, first bytes). Error responses come back the same way.
+        """
+        url = self.base + path_and_query
+        headers = {}
+        if self.token:
+            headers["X-Emby-Token"] = self.token
+        if extra_headers:
+            headers.update(extra_headers)
+        request = urllib.request.Request(url, headers=headers, method="GET")  # noqa: S310
+        try:
+            response = urllib.request.urlopen(request, timeout=self.timeout)  # noqa: S310
+        except urllib.error.HTTPError as exc:
+            payload = exc.read()[:max_bytes]
+            exc.close()
+            return exc.code, dict(exc.headers), payload
+        except urllib.error.URLError as exc:
+            raise ProbeError(f"GET {path_and_query.split('?')[0]} -> {exc.reason}") from exc
+        try:
+            payload = response.read(max_bytes)
+        finally:
+            response.close()
+        return response.status, dict(response.headers), payload
+
     def delete(self, path: str, body: Any = None, **params: Any) -> Any:
         return self._request("DELETE", path, params=params, body=body)
 
