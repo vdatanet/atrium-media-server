@@ -418,9 +418,7 @@ def test_an_ordinary_request_does_not_advance_the_playback_check_in(
     "this session was playing something". A flush that wrote both from one map would make every
     authenticated request look like playback."""
     established = registry.establish(joan, device())
-    registry.touch(
-        established.token.record.token_sha256, established.session.id, clock.advance(60)
-    )
+    registry.touch(established.token.record.token_sha256, established.session.id, clock.advance(60))
     registry.flush()
 
     with factory() as reader:
