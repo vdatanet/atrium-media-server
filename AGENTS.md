@@ -14,9 +14,10 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 **Features 001 through 007 are implemented**, 007 on 2026-08-28 across thirteen tasks —
 **[007](specs/007-user-data-and-playstate/) is implemented** (2026-08-28, thirteen tasks,
-probes first at all three gates). **008's spec and plan are accepted** (2026-08-29, a review
-that wrote and ran the five probes the OQ table had been citing prospectively), so **008's task
-list is next**, and what 007 leaves it is written in
+probes first at all three gates). **008's spec, plan and tasks are all accepted** (2026-08-29 — the spec review wrote and ran
+the five probes the OQ table had been citing prospectively, and the tasks gate found the
+fixture world has no files and CI has no ffmpeg), so **008 T1 is next**, and what 007 leaves
+008 is written in
 [007's tasks](specs/007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones). 009 and 010 remain
 specified only, their specs still drafts. What 005 and 006 leave for each of them is written in
 [005's tasks](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones) and

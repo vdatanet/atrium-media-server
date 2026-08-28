@@ -119,7 +119,7 @@ say how it will be proven is not finished.
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
 | [006](006-images/) | Images | **Implemented** | **Implemented** | **Implemented** |
 | [007](007-user-data-and-playstate/) | User data and playstate | **Implemented** | **Implemented** | **Implemented** |
-| [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Accepted** | **Accepted** | — |
+| [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Accepted** | **Accepted** | **Accepted** |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
@@ -129,7 +129,9 @@ questions had been citing prospectively — all twelve OQs answered, five claims
 policy story, the body's `EnableTranscoding` switch, `static=true` as an error, `enableRedirection`'s
 `302`, and the HLS half of the §3.5 divergence, which measured as parity), and two defects found
 that nobody was looking for (behaviours §3.7 and §3.8: the Opus rate ladder applied to every
-codec, and the codec-less empty `200`). **008's tasks are next**; 009 and 010 remain drafts, and
+codec, and the codec-less empty `200`). **008's fourteen tasks were accepted the same day** —
+their gate found the fixture world has no files behind any item and CI has no ffmpeg, both now
+T1's to fix — so **008 T1 is next**; 009 and 010 remain drafts, and
 their open questions are the standing review agenda
 ([007's tasks](007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones) names
 what 008 inherits).
