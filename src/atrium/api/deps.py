@@ -55,6 +55,7 @@ from atrium.db.engine import session_scope
 from atrium.db.repositories import SessionRepository, TokenRepository, UserRepository
 from atrium.domain.user import User
 from atrium.users.passwords import Passwords
+from atrium.users.playing import NowPlayingRegistry
 from atrium.users.service import Authenticator
 from atrium.users.sessions import SessionRegistry
 
@@ -84,6 +85,12 @@ def get_sessions(request: Request) -> sessionmaker[OrmSession]:
 def get_registry(request: Request) -> SessionRegistry:
     registry: SessionRegistry = request.app.state.registry
     return registry
+
+
+def get_playing(request: Request) -> NowPlayingRegistry:
+    """Live playback per session, which is memory and dies with the process (007 plan 6.4)."""
+    playing: NowPlayingRegistry = request.app.state.playing
+    return playing
 
 
 def get_authenticator(request: Request) -> Authenticator:

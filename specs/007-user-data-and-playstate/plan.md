@@ -229,9 +229,13 @@ Pydantic validation through `compat/errors`' extended handler reproduces the *sh
 free — **and only the shape**: T1's probe read the `errors` keys, and a body failure names the
 binder's own key (`$` or the empty string) beside **the body parameter the route declares**
 (`playbackStartInfo`, `playbackProgressInfo`, `playbackStopInfo`), where
-`compat/errors.validation_errors` keys on the model's field (`ItemId`). Reproducing that is a
-per-route mapping in the handler, and it is T8's decision on the record rather than something
-inherited (behaviours §1.11). `ItemId` binds as `WireGuid | None`, optional like everything
+`compat/errors.validation_errors` keys on the model's field. **T8 measured what that actually
+produced and reproduced the reference instead**: the framework keys on the *Python* field name,
+so the answer was `{"item_id": …}` — snake_case on the wire, behaviours §1.1's exact failure, on
+this project's first typed request body. The routes now name their body parameter after the
+reference's and `validation_errors` files a body failure under `""` or `"$"` beside
+`The <parameter> field is required.`; the `"$"` message stays this parser's and is a recorded
+divergence (behaviours §1.11). `ItemId` binds as `WireGuid | None`, optional like everything
 else, so an *absent* id still skips rather than refuses — measured `204`. A `Stopped` with a **negative** position refuses `400` with behaviours
 §1.11's `text/plain` controller shape — one explicit guard in the route, mapped to the
 existing `compat/errors` body (spec §3.6's error floor). Then:

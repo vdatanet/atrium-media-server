@@ -69,6 +69,7 @@ from atrium.db.engine import create_database_engine, session_factory, verify_con
 from atrium.db.schema import ensure_current
 from atrium.lifecycle import Readiness, ReadinessMiddleware
 from atrium.users import passwords as password_module
+from atrium.users.playing import NowPlayingRegistry
 from atrium.users.service import Authenticator
 from atrium.users.sessions import SessionRegistry
 
@@ -135,6 +136,11 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     # LastActivityDate synchronously would take a SQLite write lock on every authenticated
     # request. plan section 6.5.
     registry = SessionRegistry(sessions)
+
+    # What each session is playing, in memory and nowhere else: it changes several times a minute,
+    # dies with the session, and the reference loses it on restart too. The resume position - the
+    # part that must survive - is a row written per report. 007 plan section 6.4.
+    playing = NowPlayingRegistry()
 
     # The only entry point that verifies a password. It owns the lockout counter, the timing
     # guarantee and session creation, because splitting those across callers is how one of them
@@ -225,6 +231,7 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     app.state.sessions = sessions
     app.state.passwords = passwords
     app.state.registry = registry
+    app.state.playing = playing
     app.state.authenticator = authenticator
     app.state.settings = settings
     app.state.server_state = state
