@@ -112,7 +112,11 @@ FEATURE_002: dict[int, tuple[str, ...]] = {
     3: (
         "tests.conformance.test_auth_mechanisms:test_every_mechanism_authenticates_every_route_class",
         "tests.conformance.test_auth_mechanisms:test_the_precedence_chain_resolves_as_it_was_measured",
-        "tests.conformance.test_auth_mechanisms:test_the_stubs_are_not_asserted_to_demand_a_token",
+        "tests.conformance.test_auth_mechanisms:test_the_stub_is_not_asserted_to_demand_a_token",
+        # Renamed at 006 T9, when the image stub became the real route and its assertion changed
+        # from "every mechanism reaches it" to "no mechanism changes the answer". This map is what
+        # noticed: a rename that left the criterion unasserted fails here rather than quietly.
+        "tests.conformance.test_auth_mechanisms:test_a_token_never_changes_the_image_routes_answer",
         "tests.conformance.test_auth_mechanisms:test_the_query_forms_are_the_only_ones_a_player_can_use",
     ),
     4: (

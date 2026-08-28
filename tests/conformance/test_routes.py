@@ -51,6 +51,16 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 #: somebody's client. 004 joined at T15, which is the line this file's own comment promised.
 IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005"})
 
+#: The routes 006 has landed while the feature is still being built. **An interim list, deleted at
+#: T13** when `"006"` joins the set above - the device 002 and 005 both used, and the reason this
+#: file's own comment says both lists are gone: finishing a feature is what removes one.
+LANDED_AHEAD_OF_THEIR_FEATURE = frozenset(
+    {
+        ("GET", "/Items/{itemId}/Images/{imageType}"),
+        ("GET", "/Items/{itemId}/Images/{imageType}/{imageIndex}"),
+    }
+)
+
 
 def _load_surface_parser() -> Any:
     """Reuse the parser the surface validator already has, rather than write a second one.
@@ -131,7 +141,16 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     was accompanied by an explicit list of the individual routes that had landed. Both lists are
     gone now, which is what finishing a feature looks like here.
     """
-    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES)
+    served = surface_paths(IMPLEMENTED_FEATURES) | LANDED_AHEAD_OF_THEIR_FEATURE
+    assert documented_paths(app) == served
+
+
+def test_the_interim_list_names_only_routes_the_surface_file_has(app: FastAPI) -> None:
+    """The escape hatch above cannot become one. A route in the interim list and not in
+    `surface.yaml` would be a route with no consumer and no conformance level, admitted by a
+    variable somebody added while finishing something else."""
+    assert surface_paths() >= LANDED_AHEAD_OF_THEIR_FEATURE
+    assert not LANDED_AHEAD_OF_THEIR_FEATURE & surface_paths(IMPLEMENTED_FEATURES)
 
 
 def test_an_unlisted_route_fails_the_check(app: FastAPI) -> None:

@@ -469,7 +469,7 @@ classes earlier gates taught, back for the very next feature:
 
 ## T9 — The two routes, the header contract, and the conditional pair
 
-- [ ] **Changes:** `api/images.py` — `GET /Items/{itemId}/Images/{imageType}` and its indexed
+- [x] **Changes:** `api/images.py` — `GET /Items/{itemId}/Images/{imageType}` and its indexed
   form, declared with the pinned spellings (`maxWidth`, `maxHeight`, `width`, `height`,
   `fillWidth`, `fillHeight`, `quality`, `format`, `tag`, and the query `imageIndex` on the
   unindexed route), **no authentication dependency at all**, plain `Response` objects carrying
@@ -505,6 +505,36 @@ classes earlier gates taught, back for the very next feature:
 - **Note:** the routes own parsing and headers only — any logic found here in review belongs in
   `images/` (plan §3's boundary, the review check).
 - **Plan reference:** §6.1, §6.6, §6.7; spec §3.2, §3.4, AC-3, AC-9, AC-10, AC-12
+- **Done (2026-08-28):** **[plan §6.6](plan.md#66-headers-and-conditional-requests) asks for two
+  things that cannot both hold.** "The `304` carries the `200`'s header set minus
+  `Content-Length`" and "the conditional check runs **before** any bytes are read" are
+  incompatible: the `200`'s `Content-Type` is a property of the payload that would have been sent.
+  The reference settles it by doing the work — a conditional request offering `image/webp` on a
+  resized image answers `304` with `Content-Type: image/webp`, and the same request without the
+  offer answers `image/jpeg`. So the answer is resolved and the body is dropped, which after the
+  first request is a cache read rather than an encode. §6.6 is amended with the measurement.
+
+  **One measured header is deliberately not reproduced**, and it took dumping a live response to
+  see it: on a *transformed* response the reference's `Last-Modified` is the **variant's** own
+  creation time, not the carrier's — one second *after* that same response's `Date`, because the
+  value is the cache entry's mtime and the entry had just been written. Atrium sends the carrier's
+  on every path. Recorded in [spec §3.4](spec.md#34-caching-and-conditional-requests) with the
+  argument: both are valid validators, Atrium's survives a cache wipe where the reference's forces
+  a client to re-download every poster, and reproducing it would make the header
+  non-deterministic — the one thing spec §6 pins goldens against.
+
+  **002's image stub could not simply be "replaced".** Its own docstring predicted the swap, and
+  what it did not predict is that the *assertion* had to change: the stub answered `200` to
+  anything, and the real route answers `200` only where there is an image, so "every mechanism
+  reaches it" is not the claim that survives. The claim AC-12 actually makes is **presenting a
+  token never changes the answer** — asserted against the tokenless response, byte for byte, with
+  `traceId` masked because it is per request by definition. The `200` half lives here, where there
+  is an image. The acceptance map is what caught the rename.
+
+  Two smaller ones. The **type vocabulary is thirteen members, and parsing it needs a
+  case-insensitive `BeforeValidator`**: the enum alone would answer `400` to `/images/primary`,
+  which behaviours §1.14 says is the same request. And `_not_modified` takes a whole `ImageReply`
+  rather than a date, which is the shape the first finding forces.
 
 ## T10 — The error matrix on the wire
 

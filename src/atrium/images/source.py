@@ -65,6 +65,23 @@ def require(lookup: ImageLookup, image_type: str) -> ImageLocation:
     return lookup.location
 
 
+def carrier_path(location: ImageLocation, *, data_dir: Path) -> Path:
+    """**Which file** holds this image's bytes, without opening it.
+
+    Split out from `read` because the three readings differ in *where* they look and not in what
+    they do with it, and because the embedded reading needs the carrier twice - once for its
+    clock, once for the picture inside it.
+
+    For an `embedded` row this is the **audio file**, not the picture inside it - the picture has
+    no separate clock, and the file that carries it is what changes when it does.
+    """
+    if location.source_kind is SourceKind.EMBEDDED:
+        return _under_roots(location, _require_path(location, location.carrier_path))
+    if location.source_kind is SourceKind.REMOTE:
+        return _under(location, data_dir, _require_path(location, location.relative_path))
+    return _under_roots(location, _require_path(location, location.relative_path))
+
+
 def read(location: ImageLocation, *, data_dir: Path) -> Carrier:
     """The bytes this row names, whichever of the three readings it takes.
 
@@ -73,11 +90,10 @@ def read(location: ImageLocation, *, data_dir: Path) -> Carrier:
     a row whose art was stripped and a row a test crafted to escape a root, and telling it which
     would describe the server's filesystem to anyone holding an item id.
     """
+    path = carrier_path(location, data_dir=data_dir)
     if location.source_kind is SourceKind.EMBEDDED:
-        return _embedded(location)
-    if location.source_kind is SourceKind.REMOTE:
-        return _remote(location, data_dir)
-    return _file(location)
+        return _embedded(location, path)
+    return _open(location, path)
 
 
 # ------------------------------------------------------------------------------------------
@@ -85,55 +101,47 @@ def read(location: ImageLocation, *, data_dir: Path) -> Carrier:
 # ------------------------------------------------------------------------------------------
 
 
-def _file(location: ImageLocation) -> Carrier:
-    """The first root the relative path exists under.
+def _require_path(location: ImageLocation, relative: str | None) -> str:
+    if relative is None:
+        raise _absent(location, f"a {location.source_kind.value} row with nothing to resolve")
+    return relative
+
+
+def _under_roots(location: ImageLocation, relative: str) -> Path:
+    """The first configured root the relative path exists under.
 
     First-that-exists rather than `roots[0]`: a library may have several roots and an image lives
     under exactly one of them, which is the reading `metadata/refresh.py` already uses. A library
     with one root cannot tell the two apart, so the fixture gives this one two.
     """
-    relative = location.relative_path
-    if relative is None:
-        raise _absent(location, "a file row with no path")
     for root in location.library_roots:
         candidate = _contained(Path(root), relative)
         if candidate is not None and candidate.is_file():
-            return _open(location, candidate)
+            return candidate
     raise _absent(location, f"no configured root holds {relative}")
 
 
-def _remote(location: ImageLocation, data_dir: Path) -> Carrier:
+def _under(location: ImageLocation, base: Path, relative: str) -> Path:
     """Under the data directory, never inside a library root (004 AC-15, `config/paths.py`)."""
-    relative = location.relative_path
-    if relative is None:
-        raise _absent(location, "a remote row with no path")
-    candidate = _contained(data_dir, relative)
+    candidate = _contained(base, relative)
     if candidate is None or not candidate.is_file():
-        raise _absent(location, f"{relative} is not under the data directory")
-    return _open(location, candidate)
+        raise _absent(location, f"{relative} is not a file under {base}")
+    return candidate
 
 
-def _embedded(location: ImageLocation) -> Carrier:
+def _embedded(location: ImageLocation, carrier: Path) -> Carrier:
     """Out of the audio file itself, through the reader the scan used.
 
     Re-extracted per request rather than materialised at scan time: writing it to disk duplicates
     bytes the library already holds, and nothing has measured the tag parse as a problem (plan
     section 10). The transformed variants of it cache like any other source.
     """
-    carrier = location.carrier_path
-    if carrier is None:
-        raise _absent(location, "an embedded row on an item with no source")
-    for root in location.library_roots:
-        candidate = _contained(Path(root), carrier)
-        if candidate is None or not candidate.is_file():
-            continue
-        art = read_tags(candidate).art
-        if art is None:
-            # The row promises a picture and the file has none: the art was stripped since the
-            # scan. A warning rather than a `5xx`, and the next scan drops the row (plan 7).
-            raise _absent(location, f"{candidate} carries no embedded art any more")
-        return Carrier(payload=art.data, last_modified=_mtime(candidate))
-    raise _absent(location, f"no configured root holds {carrier}")
+    art = read_tags(carrier).art
+    if art is None:
+        # The row promises a picture and the file has none: the art was stripped since the scan.
+        # A warning rather than a `5xx`, and the next scan drops the row (plan section 7).
+        raise _absent(location, f"{carrier} carries no embedded art any more")
+    return Carrier(payload=art.data, last_modified=_mtime(carrier))
 
 
 # ------------------------------------------------------------------------------------------
@@ -183,4 +191,4 @@ def _absent(location: ImageLocation, why: str) -> ImageNotFoundError:
     return ImageNotFoundError(location.item_name, location.image_type)
 
 
-__all__ = ["Carrier", "read", "require"]
+__all__ = ["Carrier", "carrier_path", "read", "require"]
