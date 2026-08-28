@@ -1,7 +1,7 @@
 ---
 feature: 006-images
 title: Images
-status: Draft
+status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
 amended: 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered
