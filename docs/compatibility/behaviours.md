@@ -298,7 +298,9 @@ image loaders that set no headers.
 script sends four, so `X-Emby-Authorization` carrying a `Token=` has never been put to an image or
 a delivery route. It is expected to work there — the reference reads the header with one grammar
 wherever it reads it at all — and an expectation is not a measurement (Principle II). The probe
-owes that call, and §2.10 says *four* because four is what it sends.
+now asks it: `mechanisms()` sends all five to every route class from 2026-08-28. Asking is not
+answering — until a run against the reference is recorded here, what is *measured* on those two
+classes is still the four of §2.10.
 
 When a request carries two that disagree, the order is **not** arbitrary. Measured pair by pair,
 in both directions each time:
@@ -603,8 +605,9 @@ position floor produces a server that keeps resume points for every short item.
 
 **Jellyfin does:** answer `GET /Items/{id}/Images/Primary` and
 `GET /Videos/{id}/stream?static=true` with `200` to a request carrying **no token at all**. All
-four mechanisms the probe sends are accepted there — the fifth of §2.4 has never been put to this
-route class — and not one of them is required. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+four mechanisms the 2026-08-26 run sent are accepted there, and not one of them is required. The
+fifth of §2.4 reaches this route class only in a run made after 2026-08-28, when `mechanisms()`
+grew it, and no such run is recorded yet. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
 An **invalid** token changes nothing either: an unknown 32-hex token and a malformed one, sent
 through the header, the query and the `MediaBrowser` scheme, each answer the identical `200` —
 the route does not validate what it does not require

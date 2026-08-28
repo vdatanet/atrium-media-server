@@ -33,7 +33,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_sort_names.py`](probe_sort_names.py) | How does the server derive `SortName` from `Name`? | 003 OQ-3 | yes |
 | [`probe_playlist_move.py`](probe_playlist_move.py) | Does `Move`'s `newIndex` refer to the list before or after removal? | 009 OQ-1 | yes |
 | [`probe_playstate.py`](probe_playstate.py) | What do playback reports and played marks actually do to `UserData`, what does a playing session show, and how does each route refuse? | 007 §3.2–§3.8, OQ-2/3/5/6, AC-21/AC-22 — and OQ-4 with `--reap`, which costs ten minutes of deliberate silence | yes |
-| [`probe_auth_mechanisms.py`](probe_auth_mechanisms.py) | How may a client present a token, and how is a refusal shaped? | 002 §3.1, §3.3, OQ-1, OQ-3 | no |
+| [`probe_auth_mechanisms.py`](probe_auth_mechanisms.py) | How may a client present a token, does `AuthenticateByName` take the client components in either header spelling, and how is a refusal shaped? | 002 §3.1, §3.3, OQ-1, OQ-3; behaviours §2.4, §2.10 | no |
 | [`probe_library_extensions.py`](probe_library_extensions.py) | Which file extensions does the reference admit as items, and which does it ignore? | 003 §3.2, OQ-1 | no |
 | [`probe_music_precedence.py`](probe_music_precedence.py) | What happens when a file's embedded tags contradict its path? | 003 §3.5, OQ-5 | no |
 | [`probe_item_identity.py`](probe_item_identity.py) | What is an item's identifier derived from, and does moving a library root change it? | behaviours §1.4, 003 §3.6 | no |
