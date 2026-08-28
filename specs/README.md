@@ -117,16 +117,29 @@ say how it will be proven is not finished.
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Implemented** | **Implemented** | **Implemented** |
 | [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
-| [006](006-images/) | Images | **Accepted** | **Accepted** | Draft |
+| [006](006-images/) | Images | **Accepted** | **Accepted** | **Accepted** |
 | [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001, 002, 003, 004 and 005 are implemented; 006 is accepted through its plan and its task
-list is written** — thirteen tasks against the accepted plan, measurement first, bytes before
-HTTP — awaiting **the task-list gate, the next artefact**, before T1 begins. The four specs
-after it remain drafts, and their open questions are the standing review agenda.
+**001, 002, 003, 004 and 005 are implemented, and 006 is fully gated: spec, plan and task list
+all accepted** on 2026-08-28 — **the next work is T1**, the first unticked task in
+[006's tasks](006-images/tasks.md). The four specs after it remain drafts, and their open
+questions are the standing review agenda.
+
+**006's task-list gate changed four things**, on 2026-08-28 — two of them the exact classes
+earlier gates taught, back for the very next feature. [Spec §6](006-images/spec.md#6-conformance)'s
+"Indexed form" conformance row had no task holding its **positive** case — every index test in
+the draft was an error test, and nothing asserted that `/Backdrop/1` returns backdrop 1; AC-14's
+discriminating fixture **does not exist** — no seeded episode carries artwork of its own, because
+005 never needed one, so "inheritance does not gate on the child's own images" was a criterion
+with no world to prove it in, 005's fixture lesson one feature later; the draft cited an
+all-routes PascalCase canonicalisation test **that does not exist in that shape** — found by
+opening `tests/unit/test_compat_query_params.py`, not by re-reading the list, which is 003's
+method paying again; and AC-12's "over the mechanism list itself" now names the importable
+enumeration, so "not a copy" is an import rather than an aspiration. Each is recorded in
+[006's tasks](006-images/tasks.md#what-the-gate-changed).
 
 **006's plan gate measured before accepting, and the measurements changed the accepted spec
 twice**, on 2026-08-28. The plan's §6.8 had catalogued the edges no probe had covered; a

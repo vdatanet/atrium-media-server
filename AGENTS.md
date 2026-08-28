@@ -12,10 +12,10 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001 through 005 are implemented, and 006 is accepted through its plan** — spec and
-plan both passed their gates on 2026-08-28, probes first both times, and the plan gate's
-measurements corrected the accepted spec twice on the way (AC-6, AC-15). The 006 task list is
-written, thirteen tasks — **the next artefact is its gate**, before T1 begins. The four features
+**Features 001 through 005 are implemented, and 006 is fully gated** — spec, plan and task list
+all accepted on 2026-08-28, each gate measuring or checking before flipping a status, and each
+changing something on the way (AC-6 and AC-15 at the plan's, four task corrections at the
+list's) — **the next work is T1 of [006's tasks](specs/006-images/tasks.md)**. The four features
 after it are specified only, their specs still drafts.
 What 005 leaves for
 each of them is written in
