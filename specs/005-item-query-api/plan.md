@@ -228,7 +228,7 @@ identical `404` of §6.13 before any query runs.
   and not `EXISTS(NOT played)`: the second finds only items somebody has already touched, which on
   a fresh account is none of them.
 - **`mediaTypes` has no column.** `MediaType` is a property of the item *type*, measured once into
-  `domain.items.MEDIA_TYPE_OF` `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]` — and the
+  `domain.items.MEDIA_TYPE_OF` `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-28]` — and the
   measurement disagrees with anything derived from `FILE_BACKED`: a `MusicAlbum` is `Unknown`,
   which a rule built on *does it hold audio* would call `Audio`.
 - **`genres` matches by name through the identity fold**, not as a string. Two spellings of one
@@ -240,7 +240,7 @@ identical `404` of §6.13 before any query runs.
   rather than reasoned: `artistIds` matches any credit and `albumArtistIds` only `album_artist`.
   On the reference one artist answers 6 items to the other parameter's 2, and a performer who is
   nobody's album artist answers 2 to 0
-  `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`.
+  `[probe: tools/probe_by_name_counts.py, Jellyfin 10.11.11, 2026-08-28]`.
 - **`albumIds` is `parent_id`.** A track's album is its parent; there is no album column, and
   inventing one would be a second home for a fact the tree already states.
 

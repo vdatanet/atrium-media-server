@@ -5,7 +5,7 @@ The two tables here are **measurements**, not preferences. Each row was issued a
 Jellyfin 10.11.11 and carries the status it answered, so a change to the parser that made Atrium
 kinder than the reference fails here rather than being discovered by a client that works against
 one server and not the other.
-`[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
 Pure functions over a request: no server, no database, no I/O.
 """

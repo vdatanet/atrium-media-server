@@ -159,7 +159,8 @@ def test_artist_ids_is_the_superset_and_album_artist_ids_the_subset(
     **Measured, because guessing the direction was possible and wrong.** On the reference,
     `artistIds` answers a superset: "Alan Cook" returns 6 items to `albumArtistIds`' 2, and a
     performer who is nobody's album artist returns 2 to 0.
-    `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]` So `artistIds` matches **any**
+    `[probe: tools/probe_by_name_counts.py, Jellyfin 10.11.11, 2026-08-28]` So `artistIds`
+    matches **any**
     credit — the album's own album-artist row included — and `albumArtistIds` matches that one
     kind.
 

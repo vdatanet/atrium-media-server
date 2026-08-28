@@ -640,7 +640,9 @@ relying on**, not just the one you are looking at.
 
 **`SupportedCommands` is an enum on the reference, and an unknown value is a `400`** carrying RFC
 9457 problem details — the second error shape, and the `errors` map reports `capabilities` as
-missing rather than naming the offending element. Atrium accepts it, which is a **known, argued
+missing rather than naming the offending element. *(Corrected 2026-08-28 by the L2 probe fold:
+the map names both — `$[0]`, the offending element's path, beside `capabilities`; behaviours
+§5.1 carries the measured shape.)* Atrium accepts it, which is a **known, argued
 divergence** in [behaviours §5.1](../../docs/compatibility/behaviours.md): class A in §3.0's terms,
 because the reference fails loudly and nothing can have been built on the failure. It is written up
 beside the *opposite* call in §2.12 — where Atrium does match the reference's strictness — so the

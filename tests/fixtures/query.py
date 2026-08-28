@@ -144,7 +144,8 @@ SOLO_PERFORMER = "Solo Performer"
 #: This is what makes `artistIds` and `albumArtistIds` distinguishable, and the seeded world could
 #: not do it before T6. Measured on the reference, `artistIds` is the superset - "Alan Cook"
 #: answers 6 items to `albumArtistIds`' 2, and a performer who is nobody's album artist answers 2
-#: to 0 `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`. A world where every item's
+#: to 0 `[probe: tools/probe_by_name_counts.py, Jellyfin 10.11.11, 2026-08-28]`. A world where
+#: every item's
 #: performer and album artist are the same person makes the two parameters return identical rows,
 #: and the credit column - the whole of what separates `/Artists` from `/Artists/AlbumArtists` -
 #: goes untested while looking tested.

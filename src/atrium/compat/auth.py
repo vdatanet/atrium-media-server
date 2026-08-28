@@ -9,7 +9,7 @@ Everything here is a **pure function over a request**, so the whole table runs w
 
 ## What was measured, and what the documents had wrong
 
-`[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **There are five mechanisms, not four.** `X-Emby-Authorization` carrying a `Token=` component
 authenticates, exactly as `Authorization` does - the reference reads both header names with the

@@ -207,9 +207,9 @@ with a mechanism attached for closing it.
 **Errors:** `401` unauthenticated. `parentId` naming an unknown or invisible item is `404`. An
 unrecognised **token** in an enum-valued parameter is ignored, never rejected — the filter simply
 drops, measured across `includeItemTypes`, `sortBy`, `fields` and `filters`
-(behaviours §1.12) `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`. A value that cannot
+(behaviours §1.12) `[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`. A value that cannot
 parse as its declared **type** — `limit=abc`, a malformed identifier — is `400`, in the
-problem-details shape of behaviours §1.11 `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`.
+problem-details shape of behaviours §1.11 `[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`.
 This spec previously claimed the first case was a `400`; it is not, and treating it as one would
 have refused requests the reference serves.
 
@@ -268,7 +268,7 @@ One item in full. **This is the Jellyfin route**; the Emby dialect's
 the existence of items a user may not see. The `404` carries the problem-details shape of
 behaviours §1.11, as does the `400` for an identifier that does not parse at all: which of the two
 a caller gets depends only on whether the id is *shaped* like an id
-`[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`.
+`[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 ### 3.6 `GET /UserViews` — `GetUserViews`
 

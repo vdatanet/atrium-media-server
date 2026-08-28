@@ -3,9 +3,9 @@ feature: 002-authentication-users-and-sessions
 title: Authentication, users and sessions
 status: Implemented
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-08-28
 accepted: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6; by T12 - section 3.8; by T18 - AC-3 and AC-10
+amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6; by T12 - section 3.8; by T18 - AC-3 and AC-10. 2026-08-28 by the L2 probe fold - section 3.8: an unknown capabilities property is dropped from the session's echo, not kept
 depends_on: [001]
 ---
 
@@ -58,7 +58,7 @@ closed.
 | Query | `?api_key={token}` |
 
 Listed in the order the reference resolves them. **The second was missing from this specification
-until it was measured** `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]` — the reference reads both header names with the same
+until it was measured** `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` — the reference reads both header names with the same
 grammar of §3.2, and a token in either authenticates. It is the historical Emby form, so a server
 implementing only the other four would refuse clients that have worked against the reference for
 years. Either header may carry the client's identification and the token together, which is what
@@ -76,7 +76,7 @@ client.
     Authorization  >  X-Emby-Authorization  >  X-Emby-Token  >  ?ApiKey= / ?api_key=
 
 measured pair by pair, in both directions each time.
-`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **The image and delivery route classes accept all four and require none.** On the reference an
 image and a static stream answer a request carrying no token at all, so on those two classes the
@@ -96,7 +96,7 @@ login it can never complete, with the user's password correct every time.
 `X-Emby-Authorization: MediaBrowser Client="…", Device="…", DeviceId="…", Version="…"`
 
 **Mandatory on `POST /Users/AuthenticateByName`, and there only.** A header carrying no
-`DeviceId` is served normally on every other route — measured `200`, not a refusal. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+`DeviceId` is served normally on every other route — measured `200`, not a refusal. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 The `Emby` in the name is historical.
 
 | Component | Meaning |
@@ -108,7 +108,7 @@ The `Emby` in the name is historical.
 
 **The header must carry a scheme word**, and it is `MediaBrowser` or `Emby`, matched
 case-insensitively. Without one — or with any other word — nothing is read out of the header at
-all. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+all. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
 Parsing is lenient in some of the ways clients are sloppy and **strict in two the reference is
 strict about**, and the difference was measured rather than assumed:
@@ -160,7 +160,7 @@ when present.
 | Field | Notes |
 |---|---|
 | `User` | The full user object of §3.5 |
-| `SessionInfo` | The session created by this authentication, §3.8. `LastPlaybackCheckIn` is `0001-01-01T00:00:00.0000000Z` for one that has never played anything — .NET's minimum date, not null and not absent `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` |
+| `SessionInfo` | The session created by this authentication, §3.8. `LastPlaybackCheckIn` is `0001-01-01T00:00:00.0000000Z` for one that has never played anything — .NET's minimum date, not null and not absent `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` |
 | `AccessToken` | 32 lowercase hex characters `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` |
 | `ServerId` | The server identity from 001 §3.1 |
 
@@ -208,7 +208,7 @@ wrong, do not tell the user their password is bad". Answering `401` where the re
 
 Returns the users the server shows on login screens: an array of **complete** §3.5 objects,
 `Configuration` and `Policy` included, byte-identical to what an authenticated caller receives.
-`[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **This section previously asserted the opposite** — that the two were omitted, "because this is
 pre-authentication and it must not disclose what a user is allowed to do". The reasoning was sound
@@ -228,7 +228,7 @@ Returned by §3.3, §3.4, §3.6 and §3.7.
 | Field | Type | Notes |
 |---|---|---|
 | `Name` | string | Sent first |
-| `ServerId` | string | **Before `Id`** — the reference's order, not this table's former one `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` |
+| `ServerId` | string | **Before `Id`** — the reference's order, not this table's former one `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` |
 | `Id` | string | 32 hex |
 | `ServerName` | string | |
 | `PrimaryImageTag` | string | Present only when the user has an avatar |
@@ -249,7 +249,7 @@ therefore unverified: nothing can measure where a property that is never sent wo
 
 `[spec: UserDto]`
 
-**Policy in v1.** The reference sends **42** policy properties. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` v1 stores and returns the
+**Policy in v1.** The reference sends **42** policy properties. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` v1 stores and returns the
 whole set so clients see the shape they expect, but **honours eleven of them**:
 
 | Flag | Effect |
@@ -260,8 +260,8 @@ whole set so clients see the shape they expect, but **honours eleven of them**:
 | `EnableAllFolders`, `EnabledFolders` | Which libraries the user sees |
 | `EnableMediaPlayback` | Whether delivery routes answer |
 | `EnableContentDeletion`, `EnableContentDeletionFromFolders` | Whether deletion is permitted |
-| `LoginAttemptsBeforeLockout`, `InvalidLoginAttemptCount` | §3.3. The reference sends **-1** for the first, which is a sentinel and not a count `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` — see §7 OQ-6 |
-| `MaxActiveSessions` | Cap on concurrent sessions; `0` means unlimited, and `0` is what the reference sends `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` |
+| `LoginAttemptsBeforeLockout`, `InvalidLoginAttemptCount` | §3.3. The reference sends **-1** for the first, which is a sentinel and not a count `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` — see §7 OQ-6 |
+| `MaxActiveSessions` | Cap on concurrent sessions; `0` means unlimited, and `0` is what the reference sends `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` |
 | `EnableVideoPlaybackTranscoding`, `EnableAudioPlaybackTranscoding`, `EnablePlaybackRemuxing` | Whether the negotiation may answer this user with a transcode or a remux ([008 §3.3](../008-playback-negotiation-and-delivery/spec.md#33-the-decision)) `[spec: UserPolicy]` |
 
 **The other 28 are stored and echoed unchanged.** **This is a known, bounded gap**, not an oversight: a
@@ -284,7 +284,7 @@ Replaces the authenticated user's configuration: audio and subtitle language pre
 mode, whether missing episodes are displayed, view ordering and exclusions, next-episode autoplay.
 `[spec: UserConfiguration]` The reference sends **16** properties in all, the rest being cast
 receiver, local-password, remembered track selections, played-item hiding, collection view and
-folder grouping. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
+folder grouping. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
 `204` on success. `401` unauthenticated. Unknown properties are ignored, not rejected.
 
@@ -320,13 +320,18 @@ the declared capabilities, and — while something is playing — `NowPlayingIte
 which feature 007 populates. `[spec: SessionInfoDto]`
 
 **`POST /Sessions/Capabilities/Full` answers `204` with no body, and replaces rather than merges.**
-An unknown property is kept; the reference keeps it too. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
+An unknown property is accepted — the `204` — and **dropped from the session's `Capabilities`**;
+Atrium keeps it, which is a recorded divergence and not parity
+([behaviours §5.9](../../docs/compatibility/behaviours.md#59-an-unknown-capabilities-property-survives-into-sessions-here-and-not-there)).
+*(This section said "the reference keeps it too" until the 2026-08-28 run read the echo back:
+the 2026-08-26 measurement saw only the `204`.)*
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
 `SupportsMediaControl` and `SupportsRemoteControl` are `false` in v1. This was argued as honest
 rather than a gap — a client that saw `true` would offer a remote-control UI that does nothing —
 and it is now **measured to be no divergence at all**: the reference reports `false` at the top
 level for a session that posted `SupportsMediaControl: true`, while echoing that `true` back inside
-`Capabilities`. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` The declaration is the client's; the flag is the server's
+`Capabilities`. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` The declaration is the client's; the flag is the server's
 judgement about it. `PlayableMediaTypes` and `SupportedCommands` *are* hoisted from the declaration
 verbatim.
 

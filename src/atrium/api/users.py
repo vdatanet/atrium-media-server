@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """`/Users` - the five routes, and the field order that decides their bytes.
 
-**The field order is the reference's, measured** `[probe: manual request, Jellyfin 10.11.11,
-2026-08-26]`, and it is not the order the specification lists: `ServerId` comes **before** `Id`.
+**The field order is the reference's, measured**
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`, and it is not the order
+the specification lists: `ServerId` comes **before** `Id`.
 No client cares about key order; a golden test comparing bytes does, and so does anything comparing
 two servers directly.
 

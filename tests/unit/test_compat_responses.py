@@ -13,7 +13,7 @@ field.
 The measurement that produced the escape set is worth repeating. Item names only ever proved what
 the corpus happened to contain; the exact set came from echoing arbitrary characters through a
 validation error, which is the one route that puts client text in a response body.
-`[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+`[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`
 """
 
 from __future__ import annotations

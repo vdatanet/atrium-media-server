@@ -33,7 +33,7 @@ on security grounds alone: Argon2id, decided in
 [ADR-0006](../../docs/decisions/0006-password-hashing.md).
 
 **The policy object is two things wearing one name.** The reference's `UserPolicy` carries **42**
-properties `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`; v1 honours **eleven** ([spec §3.5](spec.md#35-the-user-object)). Storing 42
+properties `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`; v1 honours **eleven** ([spec §3.5](spec.md#35-the-user-object)). Storing 42
 typed columns to enforce eleven would be dishonest about which ones mean anything. **The honoured
 ones get real columns; the other 31 are kept in a JSON blob and echoed back unchanged.**
 
@@ -176,7 +176,7 @@ contract no caller could follow — corrected at the 2026-08-28 audit, M18 in
 
 The second was missing from this plan and from the specification until T7 measured it: the
 reference reads both header names with the grammar of §6.3, and a token in either authenticates.
-`[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **The order is the reference's, measured, not ours.** `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` This plan first fixed the
 opposite one — `X-Emby-Token` ahead of `Authorization` — and argued that the order only had to be
@@ -234,7 +234,7 @@ with no security in it.
 ### 6.3 The `X-Emby-Authorization` grammar
 
 `MediaBrowser Client="…", Device="…", DeviceId="…", Version="…"`. Three things this plan said
-about it were wrong, and all three were measured in T7 rather than reasoned about. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+about it were wrong, and all three were measured in T7 rather than reasoned about. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **The scheme word is required**, not "optional in practice": it must be `MediaBrowser` or `Emby`,
 case-insensitively, and without one nothing is read out of the header.

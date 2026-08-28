@@ -35,7 +35,7 @@ class PropertyKeyed:
     Measured: under the CamelCase profile the reference sends `policy.isAdministrator` and
     `configuration.audioLanguagePreference`, so a mapping left alone would send `IsAdministrator`
     where the reference sends `isAdministrator` - on every one of those properties.
-    `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
+    `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
     Annotate the field and the conversion reaches inside it:
 
@@ -96,7 +96,7 @@ class AtriumModel(BaseModel):
         Measured too: `/System/Info` declares `PackageName` and does not send it.
         [source: src/Jellyfin.Extensions/Json/JsonDefaults.cs:33,
         Jellyfin.Server/Extensions/ApiServiceCollectionExtensions.cs:148 @ v10.11.11]
-        [probe: manual request, Jellyfin 10.11.11, 2026-08-26]
+        [probe: tools/probe_public_info.py, Jellyfin 10.11.11, 2026-08-28]
 
         This is a single global rule rather than the per-property judgement
         docs/compatibility/behaviours.md section 1.7 assumed it might be, which is why it belongs

@@ -8,7 +8,7 @@ The reference is an ASP.NET Core application, and its JSON formatter emits
 Starlette appends `charset=utf-8` only to `text/*` media types, so its `JSONResponse` sends a bare
 `application/json`. That is a difference on **every** response in the project, and one nobody would
 find by reading either codebase - it took looking at real traffic.
-`[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
+`[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **And the content type says which serialisation was used.** The reference accepts
 `application/json; profile="PascalCase"` and `profile="CamelCase"`, answers the second in
@@ -43,7 +43,7 @@ from atrium.compat.profiles import JSON_MEDIA_TYPE, current
 #: which are never JSON structure - so they can be replaced across the whole document safely.
 #: Measured by echoing them through a validation error, which is the one route that puts arbitrary
 #: client text in a response body.
-#: `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]` (behaviours section 1.16)
+#: `[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]` (behaviours section 1.16)
 ESCAPED: Mapping[int, str] = {
     ord("&"): "\\u0026",
     ord("'"): "\\u0027",
@@ -106,7 +106,8 @@ class AtriumJSONResponse(JSONResponse):
         every response while being correct in every field. Reproducing it here, once, is cheaper
         than an asterisk on every golden.
 
-        `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]` (behaviours section 1.16)
+        `[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`
+        (behaviours section 1.16)
         """
         text = json.dumps(
             content, ensure_ascii=True, allow_nan=False, indent=None, separators=(",", ":")

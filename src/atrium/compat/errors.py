@@ -3,7 +3,9 @@
 
 Measured against a live 10.11.11 rather than assumed, and the answer is that the reference has
 **four** error shapes, not one.
-`[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+`[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]`
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
+`[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **Empty**, for refusals decided before a handler runs - an unauthenticated request, a path that
 matches no route, a method a path does not have. Status line, `Content-Length: 0`, and nothing
@@ -112,7 +114,7 @@ class AccountUnavailableError(Exception):
 
 #: RFC 9457 `type` URIs, as the reference spells them - `tools.ietf.org`, not `iana.org`, and
 #: pointing at RFC 9110's status-code sections. Measured.
-#: `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+#: `[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`
 PROBLEM_TYPE_BAD_REQUEST = "https://tools.ietf.org/html/rfc9110#section-15.5.1"
 PROBLEM_TYPE_NOT_FOUND = "https://tools.ietf.org/html/rfc9110#section-15.5.5"
 
@@ -203,7 +205,7 @@ def problem_details(
     **The keys stay camelCase whatever content profile was negotiated.** They come from the
     reference's own framework rather than from its API models, so `profile="PascalCase"` does not
     make them `Type` and `Title` - the negotiated media type is echoed, the key spellings are not
-    touched. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+    touched. `[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`
 
     Key order is the reference's: `type`, `title`, `status`, then `errors` where there is one,
     then `traceId`. It costs nothing to preserve and a golden compares bytes.
@@ -230,7 +232,7 @@ def validation_errors(raw: list[Any], body_parameter: str | None = None) -> dict
     ⚠️ **Only the type-mismatch wording is measured** - `The value 'abc' is not valid.` What the
     reference says for a *missing* required parameter was not measured, so that case carries the
     framework's own message rather than a guess at the reference's.
-    `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+    `[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`
 
     **A refusal of the *body* is keyed differently, and 007 T1 measured how.** The reference files
     the binder's own complaint under `""` (a value inside the body that did not bind) or `"$"`
