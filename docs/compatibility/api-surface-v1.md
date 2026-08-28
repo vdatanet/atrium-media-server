@@ -101,8 +101,10 @@ Whichever arrives must carry a `DeviceId`, which is what identifies the device f
 > `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`; that the reference
 > accepts an `Authorization`-only sign-in is not — the probe sets the Emby spelling, and only that,
 > every time it calls this route. The evidence is that a real client signs into real Jellyfin
-> servers that way, which is a third party's observation and therefore a lead, not a measurement:
-> the probe owes this one call.
+> servers that way, which is a third party's observation and therefore a lead, not a measurement.
+> The probe puts the question from 2026-08-28 — it signs in with the components in `Authorization`
+> and reports what comes back — so this paragraph gets its provenance the next time somebody runs
+> it against the reference.
 
 ## 4. Library navigation and queries
 

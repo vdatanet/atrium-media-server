@@ -2,20 +2,34 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """How may a client present a token, which routes require one, and how is a refusal shaped?
 
-Feature 002 rests on four claims that were measured before this repository existed and one that
-was never measured at all. Each decides code that four tasks assert:
+Feature 002 rests on the claims below. Most were measured before this repository existed; two
+calls were added on 2026-08-28, because the documents had run ahead of the measurements and said
+so. Each decides code that four tasks assert:
 
-* **The four mechanisms** - `X-Emby-Token`, `Authorization: MediaBrowser Token="..."`, `?ApiKey=`
-  and `?api_key=` - authenticate every authenticated route
-  `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`. The query forms exist because image loaders and
-  media players are handed URLs and set no headers, so this is measured on an **image route and a
-  delivery route** as well as an API one. Whether those two classes require a token at all is part
-  of the question: a class that answers without one is not evidence that any mechanism works.
+* **The five mechanisms** - `Authorization: MediaBrowser Token="..."`,
+  `X-Emby-Authorization` carrying the same, `X-Emby-Token`, `?ApiKey=` and `?api_key=` -
+  authenticate every authenticated route `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` for the
+  first, third, fourth and fifth; `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]` for
+  the second. The query forms exist because image loaders and media players are handed URLs and
+  set no headers, so this is measured on an **image route and a delivery route** as well as an API
+  one. Whether those two classes require a token at all is part of the question: a class that
+  answers without one is not evidence that any mechanism works.
+
+  **The second is why this list grew on 2026-08-28.** It was measured on an authenticated API
+  route by hand and never put to an image or a delivery route, while behaviours section 2.4 read
+  as though it had been. `mechanisms()` now sends it everywhere the other four go, which is the
+  only way that sentence becomes true rather than expected.
 * **A disabled user is refused with `401`, indistinguishably from a wrong password** - specs/002
   section 3.3 assumes it and OQ-3 says so. A `403` is a different branch in every client: `401`
   means re-authenticate, anything else means show an error and stop.
-* **A missing or unparseable `X-Emby-Authorization` is a `400`** - not a `401`, because a client
-  reading it as one tells the user their password is wrong.
+* **A missing or unparseable client header is a `400`** - not a `401`, because a client reading
+  it as one tells the user their password is wrong.
+* **`AuthenticateByName` takes the client components in either header**, `X-Emby-Authorization`
+  or `Authorization`. Nothing here had ever asked: every call this probe made set the Emby
+  spelling, so the route's requirement was measured for one name and documented for both. A real
+  tvOS client sends only `Authorization`, on every request including this one, and signs into real
+  Jellyfin servers - third-party evidence, which is a lead and not a measurement
+  (api-surface-v1.md section 3).
 * **OQ-1** - whether that header is accepted outside authentication, and whether a request
   carrying it *and* a token behaves differently.
 
@@ -123,20 +137,41 @@ def request(
         raise ProbeError(f"{method} {path} -> {exc.reason}") from exc
 
 
-def authenticate(server: Server, username: str, password: str, header: str | None) -> Any:
-    """POST /Users/AuthenticateByName with exactly the client header given, or none at all."""
+def authenticate(
+    server: Server,
+    username: str,
+    password: str,
+    header: str | None,
+    header_name: str = "X-Emby-Authorization",
+) -> Any:
+    """POST /Users/AuthenticateByName with exactly the client header given, or none at all.
+
+    `header_name` exists because the route accepts the components in either spelling and this
+    probe had only ever sent one of them.
+    """
     headers = {"Content-Type": "application/json"}
     if header:
-        headers["X-Emby-Authorization"] = header
+        headers[header_name] = header
     body = json.dumps({"Username": username, "Pw": password}).encode("utf-8")
     return request(server, "POST", AUTHENTICATE, headers=headers, data=body)
 
 
 def mechanisms(token: str) -> list[tuple[str, dict[str, str], dict[str, str]]]:
-    """The four ways specs/002 section 3.1 says a token may arrive."""
+    """The five ways a token may arrive, in the measured precedence order.
+
+    specs/002 section 3.1 lists four. The fifth - `X-Emby-Authorization` carrying a `Token=` - was
+    measured after that specification was accepted and lives in behaviours section 2.4; the
+    specification still says four, which is an amendment somebody owes and not something this
+    script can fix by omitting the row.
+    """
     return [
-        ("X-Emby-Token header", {"X-Emby-Token": token}, {}),
         ("Authorization: MediaBrowser", {"Authorization": f'MediaBrowser Token="{token}"'}, {}),
+        (
+            "X-Emby-Authorization: MediaBrowser",
+            {"X-Emby-Authorization": f'MediaBrowser Token="{token}"'},
+            {},
+        ),
+        ("X-Emby-Token header", {"X-Emby-Token": token}, {}),
         ("?ApiKey= query", {}, {"ApiKey": token}),
         ("?api_key= query", {}, {"api_key": token}),
     ]
@@ -199,9 +234,9 @@ def find_image_item(server: Server) -> str | None:
 def measure_route_class(
     probe: Probe, server: Server, label: str, path: str, params: dict[str, str], token: str
 ) -> tuple[bool, bool]:
-    """The five requests that say whether a route class is authenticated, and by what.
+    """The six requests that say whether a route class is authenticated, and by what.
 
-    Returns `(refuses_without_a_token, all_four_authenticated)`. The first is measured rather than
+    Returns `(refuses_without_a_token, all_five_authenticated)`. The first is measured rather than
     assumed: a class that answers without a token proves nothing about any mechanism.
     """
     status_none, _, _ = request(server, "GET", path, params=dict(params))
@@ -230,28 +265,29 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
         document="specs/002-authentication-users-and-sessions/spec.md",
         section="sections 3.1 and 3.3, and OQ-1 and OQ-3",
         expectation=(
-            "all four mechanisms authenticate every authenticated route, on an image and a "
-            "delivery route as well as an API one; a disabled user is refused with 401, "
-            "indistinguishably from a wrong password; and a missing or unparseable "
-            "X-Emby-Authorization is a 400 rather than a 401"
+            "all five mechanisms authenticate every authenticated route, on an image and a "
+            "delivery route as well as an API one; AuthenticateByName takes the client components "
+            "in either header spelling; a disabled user is refused with 401, indistinguishably "
+            "from a wrong password; and a missing or unparseable client header is a 400 rather "
+            "than a 401"
         ),
     )
     token = server.token or ""
     disagreements: list[str] = []
 
-    # -- the four mechanisms, by route class ---------------------------------------------------
+    # -- the five mechanisms, by route class ---------------------------------------------------
 
-    api_refuses, api_all_four = measure_route_class(
+    api_refuses, api_all_five = measure_route_class(
         probe, server, f"API {API_ROUTE}", API_ROUTE, {}, token
     )
     if not api_refuses:
         disagreements.append(f"{API_ROUTE} answered without a token, so it authenticates nothing")
-    if not api_all_four:
-        disagreements.append("not all four mechanisms authenticated the API route")
+    if not api_all_five:
+        disagreements.append("not all five mechanisms authenticated the API route")
 
     image_id = find_image_item(server)
     if image_id:
-        refuses, all_four = measure_route_class(
+        refuses, all_five = measure_route_class(
             probe,
             server,
             "image /Items/{id}/Images/Primary",
@@ -259,13 +295,13 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
             {"maxWidth": "1"},
             token,
         )
-        if not all_four:
-            disagreements.append("not all four mechanisms authenticated the image route")
+        if not all_five:
+            disagreements.append("not all five mechanisms authenticated the image route")
         if not refuses:
             probe.note(
                 "the image route answered WITHOUT a token. That is a finding about the reference "
-                "rather than about the mechanisms - AC-3 asserts that all four work on an image "
-                "route, and on a route that authenticates nobody all four trivially do."
+                "rather than about the mechanisms - AC-3 asserts that all five work on an image "
+                "route, and on a route that authenticates nobody all five trivially do."
             )
     else:
         probe.note(
@@ -275,7 +311,7 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
 
     video = find_item(server, IncludeItemTypes="Movie,Episode,Video", MediaTypes="Video")
     if video:
-        refuses, all_four = measure_route_class(
+        refuses, all_five = measure_route_class(
             probe,
             server,
             "delivery /Videos/{id}/stream",
@@ -283,8 +319,8 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
             {"static": "true"},
             token,
         )
-        if not all_four:
-            disagreements.append("not all four mechanisms authenticated the delivery route")
+        if not all_five:
+            disagreements.append("not all five mechanisms authenticated the delivery route")
         if not refuses:
             probe.note(
                 "the delivery route answered WITHOUT a token, which is the same finding as the "
@@ -357,17 +393,33 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
         missing_device = no_device[0]
         probe.observe(f"{AUTHENTICATE}: header without DeviceId", shape(*no_device))
 
+        # The same components, in the other spelling. Every call this probe had ever made set
+        # X-Emby-Authorization, so the route's requirement was measured for one name while
+        # api-surface-v1.md section 3 documents both.
+        other_spelling = authenticate(
+            server, username, password, header=CLIENT_HEADER, header_name="Authorization"
+        )
+        probe.observe(f"{AUTHENTICATE}: client components in Authorization", shape(*other_spelling))
+        if other_spelling[0] >= 400:
+            disagreements.append(
+                f"a sign-in carrying the client components in Authorization answered "
+                f"{other_spelling[0]}, so the route wants the X-Emby-Authorization spelling after "
+                "all - api-surface-v1.md section 3 says either works, and a real tvOS client "
+                "sends only this one"
+            )
+
         if missing_header != 400:
             disagreements.append(
-                f"a missing X-Emby-Authorization answered {missing_header}, not 400"
+                f"a sign-in with no client header at all answered {missing_header}, not 400"
             )
         if missing_device != 400:
             disagreements.append(f"a header without DeviceId answered {missing_device}, not 400")
     else:
         probe.note(
-            "the two 400 paths on AuthenticateByName were NOT measured: sending them needs a "
-            "password, and this run authenticated with a token. Re-run with --username to measure "
-            "them - correct credentials are used, so nothing counts as a failed attempt."
+            "the two 400 paths on AuthenticateByName, and the sign-in through Authorization, "
+            "were NOT measured: sending them needs a password, and this run authenticated with a "
+            "token. Re-run with --username to measure them - correct credentials are used, so "
+            "nothing counts as a failed attempt."
         )
 
     # -- OQ-3: the disabled user ---------------------------------------------------------------
