@@ -241,7 +241,7 @@ classes earlier gates taught, back for the very next feature:
 
 ## T4 — The drawn fixtures and the seeded image world
 
-- [ ] **Changes:** `tests/fixtures/images.py` — the [plan §8](plan.md#8-testing-strategy)
+- [x] **Changes:** `tests/fixtures/images.py` — the [plan §8](plan.md#8-testing-strategy)
   fixture: Pillow draws deterministic images at test time — the 1000×1500 JPEG poster whose 2:3
   ratio discriminates cover from fit and exact from aspect-true, the 400px-wide source for the
   no-upscale case, a PNG logo with an alpha channel, three backdrops of three different sizes so
@@ -258,6 +258,34 @@ classes earlier gates taught, back for the very next feature:
   is deterministic — fixed identifiers, fixed bytes — and the suite stays green with no
   consumer yet.
 - **Plan reference:** §8
+- **Done (2026-08-28):** **the inventory in this task's statement cannot express three of the
+  refusals the next tasks have to prove.** It names the poster, the small source, the logo, the
+  three backdrops and the three `source_kind` readings — and T5's own verification asks for "an
+  unknown, removed or row-less item" and "an embedded row whose art was stripped". An unknown id
+  needs no fixture; the other three do, and none of them was in the list:
+
+  * an item with **no image rows at all**, so "this item exists and has no image of that type" is
+    reachable on an id that is in the table;
+  * a **soft-removed** item, which is the only way to tell `ItemNotFoundError` from
+    `ImageNotFoundError` on an id that exists — an unknown id proves nothing about the split;
+  * a carrier that holds **no picture**, for plan §7's "embedded row whose art was stripped since
+    the scan": the row promises a picture and the file has none, and no other item in the world
+    can say that.
+
+  The 005 gate's fixture lesson twice in one feature: T2 seeded AC-14's discriminating episode,
+  and this seeds three refusals' discriminating items. A world built only from what the *changes*
+  paragraph lists would have sent T5 back here.
+
+  **The drawings are exposed as bytes, not only as files.** T6's module is pure and takes bytes,
+  so `Drawn` is a value the transform tests can use with no database, no library root and no
+  `tmp_path` — the fixture is two things, and only one of them is a world.
+
+  Two smaller things. The poster is **1000×1500 rather than 1000×N**: the ratio is the fixture's
+  whole discriminating power, and 2:3 is what T1 measured the reference on. And the images are a
+  4×6 colour block scaled up with nearest-neighbour rather than a per-pixel loop — a 1.5-megapixel
+  Python loop costs about a second per build, and the assertions here are about dimensions and
+  alpha, not about gradients. Determinism is asserted rather than assumed: two draws are compared
+  byte for byte, and two builds of the whole world are compared by identifier, tag and bytes.
 
 ## T5 — `ImageRepository` and `images/source.py`: from item id to carrier bytes
 
