@@ -690,7 +690,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T13 — The played-state pair: `GET /Shows/NextUp` and `GET /UserItems/Resume`
 
-- [ ] **Changes:** `api/tv_shows.py` completed with NextUp — per series with a played episode,
+- [x] **Changes:** `api/tv_shows.py` completed with NextUp — per series with a played episode,
   the first unplayed in `(season, episode)` order after the highest played, specials excluded
   from the chain, series ordered by latest `last_played_date` descending, one row per series by
   a per-series window rather than post-filtering; `api/resume.py` — items whose user data holds
@@ -708,6 +708,27 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   contributes no row; Resume orders most-recently-played first, and a completed item cannot
   appear because 007 §3.7's rule means a stored position is structurally mid-playback.
 - **Plan reference:** §6.8; spec §3.7
+- **Done (2026-08-28):** the probe ran first and, for once, **confirmed the documents** — with
+  the discriminating case they could not have confirmed themselves. Marking E02 played and then
+  E01 *afterwards* reads E03 back both times: "next" follows the **highest-numbered** played
+  episode, and a rewatch of an early one moves nothing. One row per series and
+  most-recently-played-first held too. The probe writes to answer at all — there is no play
+  state to measure until something is played — so it refuses series whose episodes carry any
+  user data, deletes every mark in `finally`, and verifies the episodes pristine before
+  concluding; `tools/README.md` carries its row in both tables.
+
+  **What the probe could not answer, it says out loud**: the measured library has no pristine
+  specials season, so whether a played special drives the chain is still unmeasured — flagged
+  ⚠️ in spec §3.7 rather than silently assumed, with the rule implemented as specified and a
+  test holding that a finished regular season answers nothing rather than promoting season 0.
+
+  **One deviation from the plan's shape, recorded in §6.8**: the window function it promised
+  became one played-episodes query plus a bounded per-watched-series pass through the pipeline.
+  The pipeline hands hydrated episodes with play state and ancestors attached, and the
+  multi-episode file anchors **as far as it spans** — `S01E02-E03` played means next is E04 —
+  which a window function outside the one reader would have had to reimplement. Resume came out
+  the other way: exactly the one query the plan described, `IsResumable` ordered by
+  `DatePlayed` descending in the envelope, with nothing route-specific but parameter parsing.
 
 ## T14 — The by-name endpoints
 

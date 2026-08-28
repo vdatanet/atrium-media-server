@@ -4,7 +4,7 @@ title: Item query API — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8; by T12 - sections 6.9 and 8
+amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8; by T12 - sections 6.9 and 8; by T13 - section 6.8
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -385,9 +385,15 @@ mid-playback one, so the exclusion the spec names is structural: a position past
 was never stored.
 
 **`/Shows/NextUp`**: for each series with at least one played episode, the first unplayed
-episode in `(season, episode)` order after the highest played one, specials excluded from the
-chain; series ordered by their latest `last_played_date` descending; one row per series by
-construction (AC-10), which the query produces via a per-series window rather than post-filtering.
+episode in `(season, episode)` order after the highest played one — **confirmed by probe**,
+including the discriminating rewatch case
+`[probe: tools/probe_next_up.py, Jellyfin 10.11.11, 2026-08-28]` — specials excluded from the
+chain (still unmeasured; spec §3.7); series ordered by their latest `last_played_date`
+descending; one row per series by construction (AC-10). *(Amended by T13:)* the shape is one
+played-episodes query and one bounded per-watched-series pass through the same pipeline, not the
+window function this sentence first promised — the pipeline hands hydrated episodes with their
+play state, the multi-episode file anchors as far as it spans, and a window function would have
+had to reimplement both outside the one reader.
 
 ### 6.9 Series navigation
 
