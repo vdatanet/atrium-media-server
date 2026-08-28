@@ -2,11 +2,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Which properties does the reference emit per item type, bare and when asked?
 
-Answers 005 spec section 3.2 and the registry plan section 6.5 turns it into. Section 3.2 sorts
-roughly seventy properties into three tiers - always present, present when the type has them, and
-only when asked for through `Fields` - and it assembled them from what two clients *read*, not
-from a measurement of what the reference *sends*. T9 copies that table into code, so a wrong row
-is a field silently absent, or silently present, on every response of an item type.
+Answers 005 spec section 3.2 and the registry plan section 6.5 turns it into. Section 3.2 says
+there is not one item representation but three, and which one a client gets depends on the route
+it asked: a narrow `/Items` list row - twelve properties always present, a per-type group, and
+twenty-five names emitted only when asked for through `Fields` - a bare `/Items/{itemId}` body
+that carries everything and `Fields` has nothing left to add to, and `/UserViews` as a third
+width. T9 copies that claim into code, so a wrong row is a field silently absent, or silently
+present, on every response of an item type.
+
+(Section 3.2 opened with "one representation for every item type" until the 2026-08-27 run of
+this probe measured the three shapes and the documents moved - the spec carries the corrected
+tables, behaviours section 1.7 its two explicit-null survivors, and notes/item-shapes.md the full
+measurement. The expectation below matches the documents as corrected, so the probe flags a
+*change*, not the old hypothesis.)
 
 The confound this probe exists to survive: **the reference omits nulls**
 (behaviours section 1.7), so a property missing from one item's body may be gated, or may simply
@@ -16,13 +24,16 @@ carries, `3/12` is one it sometimes has, and both are different from the `0/12` 
 
 Four bodies per type: a list row bare and one with **every member of the server's own
 `ItemFields` enum** asked for, and the same item from `/Items/{itemId}` both ways. Asking for the
-whole vocabulary rather than the nineteen names section 3.2 happens to list is what makes "gated"
-a measurement instead of a restatement of the claim. The list and the full route are measured
-separately because section 3.2 claims one representation for both, and nothing had checked it.
+whole vocabulary rather than the twenty-five names section 3.2 happens to list is what makes
+"gated" a measurement instead of a restatement of the claim. The list and the full route are
+measured separately because section 3.2 claims they are different shapes, and only a separate
+measurement can catch them collapsing back into one.
 
 It also records every property whose value arrives as an explicit `null`, because behaviours
-section 1.7 says none can: that entry rests on a source citation, and a source citation says what
-the code appears to do.
+section 1.7 names exactly two that survive the reference's null-omission: `ChannelId`, null on
+every item of every type, and `ParentId`, null on the parentless `/UserViews` rows. A third
+survivor, a `ParentId` null outside `/UserViews`, or a `ChannelId` arriving with a value are all
+contradictions.
 
 A type the live library cannot produce is reported as **unmeasured**, never guessed.
 
@@ -45,7 +56,9 @@ from _probe import Probe, ProbeError, Server, main
 #: unlikely to be a coincidence of the library, small enough to stay one request.
 SAMPLE = 12
 
-#: The gated tokens spec section 3.2 lists under "Only when asked for via `Fields`".
+#: The twenty-five names spec section 3.2 lists under "Only when a list row asks for them" -
+#: seven of them moved here from the per-type Common group when the 2026-08-27 run measured them
+#: gated, a token being gated by definition.
 GATED_CLAIM = [
     "MediaSources",
     "MediaStreams",
@@ -64,29 +77,40 @@ GATED_CLAIM = [
     "RecursiveItemCount",
     "ChildCount",
     "SortName",
-    "Width",
-    "Height",
-]
-
-#: Spec section 3.2's "Present when the item type has them" Common group. Six of these are
-#: `ItemFields` tokens, which is the question this list exists to settle: a token is gated by
-#: definition, so a name in both lists is in the wrong one.
-COMMON_CLAIM = [
-    "SortName",
     "Overview",
-    "ProductionYear",
-    "PremiereDate",
-    "RunTimeTicks",
-    "OfficialRating",
-    "CommunityRating",
     "Genres",
     "GenreItems",
     "Studios",
     "People",
     "PrimaryImageAspectRatio",
+    "Width",
+    "Height",
 ]
 
-#: The always-present claim of spec section 3.2, expanded from its first table.
+#: The one gated name that is not an `ItemFields` member. Spec section 3.2's note counts six of
+#: the seven moved names as requestable tokens; this is the seventh, emitted alongside `Genres`
+#: rather than asked for by name.
+NON_TOKEN_GATED = {"GenreItems"}
+
+#: Gated names the notes record arriving bare anyway, and on which types. `ChildCount` rides
+#: every bare `Playlist` row (notes/item-shapes.md section 4 - a two-row sample, recorded as
+#: measured-but-thin).
+UNASKED_ANYWAY: dict[str, set[str]] = {"ChildCount": {"Playlist"}}
+
+#: The five survivors of spec section 3.2's per-type measurement - what is left of the original
+#: twelve-name Common group after the seven gated ones moved out.
+COMMON_CLAIM = [
+    "ProductionYear",
+    "PremiereDate",
+    "RunTimeTicks",
+    "OfficialRating",
+    "CommunityRating",
+]
+
+#: The always-present claim of spec section 3.2 - twelve rows since the 2026-08-27 run added
+#: `ChannelId`, `LocationType` and `ImageBlurHashes`, the three emitted unconditionally that no
+#: tier had. (`IsFolder`'s by-name hole - a genre, music genre or year row carries none - is out
+#: of this probe's reach: it samples `/Items` list rows, not the by-name routes.)
 ALWAYS_CLAIM = [
     "Id",
     "ServerId",
@@ -94,8 +118,11 @@ ALWAYS_CLAIM = [
     "Type",
     "MediaType",
     "IsFolder",
+    "LocationType",
+    "ChannelId",
     "UserData",
     "ImageTags",
+    "ImageBlurHashes",
     "BackdropImageTags",
 ]
 
@@ -336,8 +363,12 @@ def run(server: Server) -> Probe:
         document="specs/005-item-query-api/spec.md",
         section="section 3.2 (and plan section 6.5)",
         expectation=(
-            "one representation for both routes: nine properties always present, a per-type "
-            "group, and nineteen names emitted only when requested through `Fields`"
+            "three shapes, not one, chosen by the route: a narrow /Items list row (twelve "
+            "always-present properties, a per-type group, and twenty-five names only when asked "
+            "for through `Fields` - ChildCount arriving unasked on Playlist alone), a bare "
+            "/Items/{itemId} body that carries everything and `Fields` has nothing left to add "
+            "to, and /UserViews as a third width; ChannelId always an explicit null and "
+            "ParentId explicitly null on the parentless view rows, every other null omitted"
         ),
     )
     contradictions: list[str] = []
@@ -352,16 +383,21 @@ def run(server: Server) -> Probe:
         )
     else:
         ask = sorted(enum)
-        strangers = [n for n in GATED_CLAIM if n not in enum]
-        tail = ": " + ", ".join(strangers) if strangers else ""
+        strangers = sorted(n for n in GATED_CLAIM if n not in enum)
         probe.observe(
             "ItemFields enum",
-            f"{len(enum)} members, all asked for; {len(strangers)} of spec 3.2's gated names "
-            f"are not members{tail}",
+            f"{len(enum)} members, all asked for; gated names that are not members: "
+            + (", ".join(strangers) or "none"),
         )
-        if strangers:
+        unexpected = [n for n in strangers if n not in NON_TOKEN_GATED]
+        if unexpected:
             contradictions.append(
-                "not ItemFields tokens, so requesting them does nothing: " + ", ".join(strangers)
+                "not ItemFields tokens, so requesting them does nothing: " + ", ".join(unexpected)
+            )
+        for name in sorted(NON_TOKEN_GATED - set(strangers)):
+            contradictions.append(
+                f"{name} has become an ItemFields member - section 3.2 records it as the one "
+                "gated name that is not one"
             )
 
     gated = ",".join(ask)
@@ -424,14 +460,24 @@ def run(server: Server) -> Probe:
             + ", ".join(common_absent)
         )
 
-    # -- tier 3: the gated claim ---------------------------------------------------------------
+    # -- tier 3: the gated claim, with its one recorded exception ------------------------------
     for name in GATED_CLAIM:
         if tiers.get(name) not in ("always", "per-type"):
             continue
-        where = ", ".join(
-            f"{p.type_name} {p.bare_ratio(name)}" for p in content if p.bare.get(name, 0)
-        )
+        allowed = UNASKED_ANYWAY.get(name, set())
+        stray = [p for p in content if p.bare.get(name, 0) and p.type_name not in allowed]
+        if not stray:
+            continue
+        where = ", ".join(f"{p.type_name} {p.bare_ratio(name)}" for p in stray)
         contradictions.append(f"{name} claimed gated, present without asking on {where}")
+
+    for name, expected_types in sorted(UNASKED_ANYWAY.items()):
+        for presence in content:
+            if presence.type_name in expected_types and not presence.bare.get(name, 0):
+                contradictions.append(
+                    f"{name} was measured arriving unasked on every bare {presence.type_name} "
+                    f"row and now does not: 0/{presence.sampled}"
+                )
 
     never = [
         n for n in GATED_CLAIM if n not in tiers and not any(n in p.full_asked for p in content)
@@ -441,7 +487,7 @@ def run(server: Server) -> Probe:
             "claimed gated, never appeared even when asked for: " + ", ".join(never)
         )
 
-    # -- one representation, or two? -----------------------------------------------------------
+    # -- the second shape: a full body carries everything, and `Fields` cannot widen it --------
     widest = 0
     widest_type = ""
     for presence in measured:
@@ -461,26 +507,63 @@ def run(server: Server) -> Probe:
         probe.observe(presence.type_name, detail)
         if len(only_full) > widest:
             widest, widest_type = len(only_full), presence.type_name
+        if presence.type_name == "UserViews":
+            # A view's list row is already full-width - that is the third-shape claim, held
+            # against the list-row gates below, so no surplus is expected of its full body.
+            continue
+        if not only_full:
+            contradictions.append(
+                f"a bare /Items/{{itemId}} body of {presence.type_name} adds nothing over a "
+                "bare list row - the full shape has collapsed into the list shape"
+            )
+        leftover = sorted(presence.full_asked - presence.full_bare)
+        if presence.full_asked and leftover:
+            contradictions.append(
+                f"`Fields` still widens a full body of {presence.type_name} - section 3.2 says "
+                "it has nothing left to add: " + ", ".join(leftover)
+            )
     if widest:
-        contradictions.append(
-            f"the two routes are not one representation: bare /Items/{{itemId}} carries up to "
-            f"{widest} properties a bare list row does not ({widest_type}), with no `Fields` asked"
+        probe.observe(
+            "widest full-route surplus",
+            f"{widest} properties over a bare list row ({widest_type}), with no `Fields` asked",
         )
 
-    # -- behaviours 1.7: a null property is absent, everywhere ---------------------------------
+    # -- behaviours 1.7: two properties survive the null-omission, and only two ----------------
     nulls: dict[str, int] = {}
     for presence in measured:
         for name, count in presence.explicit_nulls.items():
             nulls[name] = nulls.get(name, 0) + count
-    if nulls:
-        listed = ", ".join(f"{n} x{c}" for n, c in sorted(nulls.items()))
-        probe.observe("explicit nulls", listed)
+    probe.observe(
+        "explicit nulls", ", ".join(f"{n} x{c}" for n, c in sorted(nulls.items())) or "none at all"
+    )
+
+    channel_null = nulls.get("ChannelId", 0)
+    channel_seen = sum(p.bare.get("ChannelId", 0) + p.asked.get("ChannelId", 0) for p in measured)
+    if not channel_null:
         contradictions.append(
-            "behaviours 1.7 says a null property is absent everywhere; these arrived as an "
-            "explicit null: " + listed
+            "ChannelId never arrived as an explicit null - behaviours 1.7's first survivor "
+            "failed to reproduce"
         )
-    else:
-        probe.observe("explicit nulls", "none - behaviours 1.7 holds across every body fetched")
+    elif channel_null < channel_seen:
+        contradictions.append(
+            f"ChannelId claimed always null, arrived with a value on "
+            f"{channel_seen - channel_null} of {channel_seen} list rows"
+        )
+    astray = [
+        p.type_name
+        for p in measured
+        if p.explicit_nulls.get("ParentId", 0) and p.type_name != "UserViews"
+    ]
+    if astray:
+        contradictions.append(
+            "ParentId arrived as an explicit null outside /UserViews, on: " + ", ".join(astray)
+        )
+    third = sorted(n for n in nulls if n not in ("ChannelId", "ParentId"))
+    if third:
+        contradictions.append(
+            "behaviours 1.7 names ChannelId and ParentId as the only explicit-null survivors; "
+            "these also arrived null: " + ", ".join(third)
+        )
 
     # -- UserData, ImageTags, PrimaryImageAspectRatio ------------------------------------------
     user_data_keys: set[str] = set()
@@ -499,11 +582,6 @@ def run(server: Server) -> Probe:
         "`{}` on " + ", ".join(empty_seen) if empty_seen else "no imageless item sampled",
     )
 
-    aspect = tiers.get("PrimaryImageAspectRatio")
-    probe.observe(
-        "PrimaryImageAspectRatio", f"unasked tier: {aspect}" if aspect else "never emitted"
-    )
-
     if views is not None:
         unasked = sorted({n for n in GATED_CLAIM + COMMON_CLAIM if views.bare.get(n, 0)})
         probe.observe(
@@ -515,11 +593,10 @@ def run(server: Server) -> Probe:
             f"{len(views.bare)} properties unasked, including "
             + (", ".join(unasked) or "nothing section 3.2 gates"),
         )
-        if unasked:
+        if not unasked:
             contradictions.append(
-                "/UserViews is a third shape: it carries unasked "
-                + ", ".join(unasked)
-                + " - names section 3.2 gates or calls per-type on /Items"
+                "/UserViews stopped being a third shape: its rows carry nothing section 3.2 "
+                "gates on /Items, so the route has narrowed to the list shape"
             )
 
     if unmeasured:
@@ -533,8 +610,10 @@ def run(server: Server) -> Probe:
         probe.conclude("; ".join(contradictions), matches_documentation=False)
     else:
         probe.conclude(
-            f"all three tiers hold as spec section 3.2 states them, across {len(measured)} "
-            "measured types",
+            f"the three shapes hold as spec section 3.2 states them, across {len(measured)} "
+            "measured types: the list-row tiers with their one recorded exception, a full body "
+            "`Fields` cannot widen, /UserViews' third width, and behaviours 1.7's two "
+            "explicit-null survivors",
             matches_documentation=True,
         )
     return probe
