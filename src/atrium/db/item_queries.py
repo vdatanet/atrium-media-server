@@ -44,6 +44,7 @@ from atrium.domain.items import (
     ItemType,
     MediaSource,
 )
+from atrium.domain.playstate import UserItemData
 from atrium.domain.queries import Filter, ItemQuery, SortBy, SortOrder
 from atrium.domain.user import User
 from atrium.library.identity import for_by_name
@@ -91,28 +92,6 @@ class ParentNotFoundError(LookupError):
     into a single identical `404`: a client that could tell "no such item" from "not yours" could
     enumerate another user's library one identifier at a time.
     """
-
-
-@dataclass(frozen=True, slots=True)
-class UserItemData:
-    """The requesting user's state for one item. Always present, never null (behaviours 2.1).
-
-    For a container the `played` here is a **rollup, not the stored row**: the reference reports a
-    series as played exactly when nothing under it is left unplayed, and sends the count of what
-    is left as `UnplayedItemCount` on every bare container row
-    `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. `_hydrate`
-    computes both; the stored row still supplies the favourite flag and the position. 007 owns
-    what the stored columns mean; this record is what a response needs.
-    """
-
-    is_favorite: bool = False
-    played: bool = False
-    play_count: int = 0
-    playback_position_ticks: int = 0
-    last_played_date: datetime | None = None
-    #: Visible file-backed descendants without a played row. None for anything that is not a
-    #: tree container, so the DTO can tell "no rollup applies" from "nothing left".
-    unplayed_count: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

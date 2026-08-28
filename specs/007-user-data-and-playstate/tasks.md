@@ -124,7 +124,7 @@ leaving it at 0, and an artist's `Key` measuring the dashed form of its own 32-h
 
 ## T2 — `domain/playstate.py`: every semantic, pure, and the table that proves it
 
-- [ ] **Changes:** new `src/atrium/domain/playstate.py` with the contracts
+- [x] **Changes:** new `src/atrium/domain/playstate.py` with the contracts
   [plan §5](plan.md#5-contracts) declares — `Outcome`, `resolve`, `on_start`, `on_report`,
   `on_stop_without_position`, `on_mark_played`, `on_mark_unplayed`, and the three constants
   `MIN_RESUME_PCT = 5`, `MAX_RESUME_PCT = 90`, `MIN_RESUME_DURATION_SECONDS = 300`. No I/O, no
@@ -140,6 +140,35 @@ leaving it at 0, and an artist's `Key` measuring the dashed form of its own 32-h
   `uv run mypy` and `tests/unit/test_import_directions.py`, which is what says `domain/` imports
   no HTTP and no SQL.
 - **Spec reference:** §3.4, §3.6, §3.7; AC-3, AC-4, AC-12, AC-13, AC-17, AC-18
+
+**Done (2026-08-28).** Forty-three cases, and two things the task statement did not have.
+
+**`UserItemData` moved into the domain.** [Plan §5](plan.md#5-contracts) says these are functions
+"from `UserItemData` to `UserItemData`", and that record lived in `db/item_queries.py` — which
+`domain/` may not import, asserted by `test_a_domain_module_imports_nothing_above_it`. So the
+choice was a second record or the right home, and the record is a domain record: 005 defined it
+inside the query module because 007 did not exist yet to own it. It is now
+`domain/playstate.py`'s, `db/item_queries.py` imports it, and the one docstring that named its old
+home says the new one. No behaviour moved with it.
+
+**Row 4's second clause decides nothing.** [Spec §3.7](spec.md#37-what-a-reported-position-does-to-the-stored-one)
+called the "within one second of the end" clause "not redundant" and explained that a long item's
+90% can still be minutes from its end — which is true and points the *other* way: a position
+within one second of the end of anything longer than ten seconds is far *above* 90%, so the
+percentage clause has already fired, and anything shorter than five minutes is completed by row 5
+regardless. Checked exhaustively over runtimes from one second to two hours at every boundary
+position, **no report distinguishes the rule with the clause from the rule without it**. The
+clause is implemented because the reference has it and because lowering
+`MinResumeDurationSeconds` would give it something to decide; the spec's paragraph now says that
+instead of the reverse.
+
+The rest of the table confirmed the measurements: the strict boundaries at exact ticks — computed
+as integers, because `position / runtime * 100` moves the boundary by a tick on awkward runtimes —
+the count moving at `Start` while `Played` goes false, the `Start` position that is not written,
+`max(count, 1)` against the dated increment, the positionless stop counting twice, and the
+mid-range branch leaving `Played` alone, which is how "played with a resume position" is reachable
+at all. Two sweeps run over every transition: none of them touches the favourite flag, and none
+mutates the record it was given.
 
 ## T3 — `UserDataRepository`: two methods, and the foreign key that stays absent
 
