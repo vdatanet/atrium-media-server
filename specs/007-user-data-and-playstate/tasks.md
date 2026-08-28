@@ -534,7 +534,7 @@ away from. It selects the fullest season now, which is the property the test act
 
 ## T12 — One object, two paths: the mark response is the list row
 
-- [ ] **Changes:** new `tests/conformance/test_user_data_identity.py` — the cross-cutting
+- [x] **Changes:** new `tests/conformance/test_user_data_identity.py` — the cross-cutting
   assertions [plan §8](plan.md#8-testing-strategy) asks for, which are about *agreement* rather
   than about any one route: the serialised `UserData` of a mark response and of the same item in
   a list request compare byte for byte; `Key` and `ItemId` are present on every item of every
@@ -546,6 +546,24 @@ away from. It selects the fullest season now, which is the property the test act
   by-name row, and the two-user matrix: favourite, mark, report and unmark for one user, read
   back for both after each.
 - **Spec reference:** §3.1, §3.2; AC-1, AC-7
+
+**Done (2026-08-28).** Sixteen assertions, no production change, and the one worth stating is what
+the byte comparison covers: a **container's** mark response, where the object carries a rollup the
+stored row does not have and the route has to recompute it after its own sweep. A leaf's would
+have passed against almost any implementation.
+
+Two things the criteria do not say, asserted because the tests would otherwise be weaker than they
+look. AC-1's sweep runs over five list routes **and names its exception**: `/Genres` and the
+artist routes send no `UserData` at all, which 005 measured and declares per route — so "every
+item of every response" has a boundary, and the test says where it is rather than quietly
+excluding it. And AC-7's third case is the **rollup**, not the stored flags: "the columns are per
+user" and "the aggregate is computed from this user's rows" are different sentences that fail
+differently, and the second one failing means everybody's series reads watched the moment anybody
+finishes it.
+
+AC-16 needed nothing here, as [the gate said](#what-the-gate-changed): 003's own AC-11 tests plant
+a favourite and a resume position, delete the file, rescan, restore it and rescan again. T13 names
+them in the map.
 
 ## T13 — The acceptance map, the routes' exact set, and 007 is Implemented
 
