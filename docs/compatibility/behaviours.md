@@ -152,7 +152,7 @@ resolved single container goes on the `MediaSource`.
 its whole JSON pipeline is configured with
 `DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull`. [source: src/Jellyfin.Extensions/Json/JsonDefaults.cs:33, Jellyfin.Server/Extensions/ApiServiceCollectionExtensions.cs:148 @ v10.11.11]
 
-Measured too: `/System/Info` declares `PackageName` in its schema and does not send it. [probe: manual request, Jellyfin 10.11.11, 2026-08-26]
+Measured too: `/System/Info` declares `PackageName` in its schema and does not send it. `[probe: tools/probe_public_info.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **Except that two properties survive it.** `ChannelId` arrives as an explicit `null` on **every
 item of every type**, in list rows and in single-item bodies alike — 208 observations across nine
@@ -210,7 +210,7 @@ worth writing before any code.
 **Jellyfin does:** serialise with ASP.NET Core's HTML-safe `JavaScriptEncoder`, which writes every
 non-ASCII character and seven ASCII ones as `\uXXXX` with **uppercase** hex. `28 años después`
 goes out as `28 a\u00F1os despu\u00E9s`; `Abraham's Boys` as `Abraham\u0027s Boys`.
-`[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+`[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`
 
 | Escaped | Left literal |
 |---|---|
@@ -332,7 +332,7 @@ deterministic. It had to be deterministic **and** the reference's.
 
 **Jellyfin does:** require a scheme word, and it is `MediaBrowser` or `Emby`, compared
 case-insensitively. Anything else — `Bearer`, a made-up word, or no scheme at all — and nothing is
-read out of the header. Within it, one row per variation, all measured: `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+read out of the header. Within it, one row per variation, all measured: `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
 | Variation | Reference |
 |---|---|
@@ -356,7 +356,7 @@ matters — see §6.
 
 **Jellyfin does:** echo `SupportsMediaControl: true` back inside `Capabilities` for a session that
 posted it, while reporting `SupportsMediaControl: false` at the **top level** of the same session.
-`[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` `SupportsRemoteControl` is `false` there too. `PlayableMediaTypes` and
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` `SupportsRemoteControl` is `false` there too. `PlayableMediaTypes` and
 `SupportedCommands`, by contrast, **are** hoisted from the declaration to the top level verbatim.
 
 `POST /Sessions/Capabilities/Full` answers `204` with no body and **replaces** rather than merges —
@@ -438,7 +438,7 @@ what it costs.
 modification time anywhere**. 120 `Movie`, `Episode` and `Audio` items requested with
 `Fields=MediaSources,Path,Etag,DateCreated,DateLastMediaAdded` carried no property whose name
 contains "modif" on the item or on the source; the only time-shaped properties were `DateCreated`,
-`PremiereDate` and `RunTimeTicks`. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]` The
+`PremiereDate` and `RunTimeTicks`. `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-28]` The
 pinned document agrees: `DateModified` exists on `FontFile` and `LogFile` and on nothing else.
 `[spec: components.schemas in the 10.11.10 document]`
 
@@ -509,8 +509,7 @@ never rewind — and the measurement reversed each.
 ### 2.13 `DeviceId` is mandatory on one route, not on the header
 
 **Jellyfin does:** answer `200` on an ordinary authenticated route for a client header carrying no
-`DeviceId` at all, and `400` for one on `POST /Users/AuthenticateByName`. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
-`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+`DeviceId` at all, and `400` for one on `POST /Users/AuthenticateByName`. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **Depends on it:** clients that set the header once and reuse it, minus the component, on routes
 where nothing needs a session.
@@ -682,7 +681,7 @@ matter more.
 
 **Jellyfin does:** stamps every response with the time it took, in fractional milliseconds —
 `X-Response-Time-ms: 2.1329`. Its middleware is registered unconditionally; the two configuration
-flags beside it gate a slow-response *log line*, not the header. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` `[source: Jellyfin.Api/Middleware/ResponseTimeMiddleware.cs:17, Jellyfin.Server/Startup.cs:163 @ v10.11.11]`
+flags beside it gate a slow-response *log line*, not the header. `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]` `[source: Jellyfin.Api/Middleware/ResponseTimeMiddleware.cs:17, Jellyfin.Server/Startup.cs:163 @ v10.11.11]`
 
 **Depends on it:** no known client. It is a diagnostic.
 
@@ -697,7 +696,7 @@ flags beside it gate a slow-response *log line*, not the header. `[probe: manual
 ### 1.10 JSON responses carry `charset=utf-8`
 
 **Jellyfin does:** sends `Content-Type: application/json; charset=utf-8`, as ASP.NET Core's JSON
-formatter does. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
+formatter does. `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **Depends on it:** unlikely — a client parses JSON as UTF-8 regardless. But it is on every response.
 
@@ -708,7 +707,7 @@ media types, so its `JSONResponse` would send a bare `application/json`.
 ### 1.11 There are four error shapes, not one
 
 **Jellyfin does:** answer a refusal in one of several forms, decided by **where** the refusal
-happened. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+happened. `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` `[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`
 
 | Refusal | Shape |
 |---|---|
@@ -731,7 +730,7 @@ happened. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
 ```
 
 **Two details of the problem-details shape were measured on 2026-08-27** and neither is what the
-natural implementation produces `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`:
+natural implementation produces `[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`:
 
 - **The content type is `application/json; charset=utf-8`**, not `application/problem+json`. Both
   ASP.NET Core and every Python framework default to the second for a problem-details body, so
@@ -832,12 +831,12 @@ per-request by definition, so it is compared by shape rather than by value.
 ### 1.12 An unrecognised query value is ignored, not rejected
 
 **Jellyfin does:** answer `200` with a full, unfiltered result for `/Genres?SortBy=NotASortOption`.
-`[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]` The same holds across `/Items`'
+`[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]` The same holds across `/Items`'
 enum-valued parameters — an unrecognised token in `includeItemTypes`, `sortBy`, `fields` or
 `filters` drops that filter and the request succeeds — while a value that cannot parse as its
 declared *type* (`limit=abc`, a malformed id) is a `400` in §1.11's problem-details shape. The
 line is token-versus-type, not parameter-versus-parameter.
-`[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+`[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **Depends on it:** yes, and this is the measurement behind a decision already taken.
 [005 §3.3](../../specs/005-item-query-api/spec.md) accepts a bounded delta — Tier 3 query
@@ -980,7 +979,7 @@ something case-sensitive reads one.
 lowercased `sortby=PremiereDate&sortorder=Descending` reorders `/Items` exactly as the PascalCase
 spelling does. ASP.NET Core's query binding compares parameter names without regard to case, the
 same way §1.14's routing compares path segments.
-`[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+`[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **Depends on it:** the pinned document spells every parameter camelCase (`startIndex`), the
 reference's own clients send PascalCase (`StartIndex`), and both work — so *every* client depends
@@ -1264,7 +1263,7 @@ whose only job is to remove something the client said it wanted.
 
 **Jellyfin does:** answer `GET /Users/Public` with the **whole user object** — `Configuration` and
 `Policy` included — to a caller carrying no token at all, byte-identical to the authenticated
-response. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` All 42 policy properties and all 16 configuration properties, for every
+response. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` All 42 policy properties and all 16 configuration properties, for every
 user not marked hidden, to anybody who can reach the port.
 
 **Depends on it:** unknown, and that is the crux. A login screen needs `Name`, `Id`,
@@ -1343,7 +1342,7 @@ stays after its 2026-08-28 withdrawal because the record of an exception outlive
 Humans see "Atrium" in the `Server` header, the `ServerName` field, the logs and the project page.
 
 **The `Server` header is a measured divergence, not a hypothetical one.** The reference sends
-`Server: Kestrel`. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` Atrium sends `Server: Atrium/<version>`.
+`Server: Kestrel`. `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]` Atrium sends `Server: Atrium/<version>`.
 
 A client cannot usefully branch on it — `Kestrel` identifies a .NET web server, not Jellyfin, and
 the discriminator multi-server clients actually read is `ProductName`. So this is the one header
@@ -1456,8 +1455,10 @@ matters*.
 ### 5.1 `SupportedCommands` is not validated against the reference's enum
 
 The reference binds that field to an enum and answers `400` with RFC 9457 problem details for a
-value it does not know — the whole body is rejected, and the `errors` map reports `capabilities` as
-missing rather than naming the offending element. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
+value it does not know — the whole body is rejected, and the `errors` map names **both** the
+offending element's JSON path and the field — `$[0]` and `capabilities` — for a bad value in the
+first position. *(This entry said the map reported `capabilities` alone until the 2026-08-28 run
+read the body back.)* `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
 Atrium accepts it. v1 acts on **none** of those commands, so reproducing a thirty-value enum in
 order to refuse values no working client sends is cost without a client that benefits — and the
@@ -1669,6 +1670,24 @@ the feature that first writes chapter rows — trickplay and chapter-image gener
 at which point 006 §3.5's route serves them and this entry is withdrawn. Recorded at the
 2026-08-28 audit (H2), which found §3.5 asserting the serving half with nothing able to exhibit
 it — the exact shape of §5.2's history.
+
+### 5.9 An unknown capabilities property survives into `/Sessions` here, and not there
+
+**Jellyfin does:** accept a `POST /Sessions/Capabilities/Full` body carrying a property outside
+its schema — the `204` of [002 §3.8](../../specs/002-authentication-users-and-sessions/spec.md) —
+and **drop that property**: the session's `Capabilities` in `GET /Sessions` echoes the declared
+fields and not the stranger. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
+*(The 2026-08-26 hand-measurement saw the `204` and recorded "kept"; reading the echo back on
+2026-08-28 is what corrected it — the leniency is at the door, not in the echo.)*
+
+**Depends on it:** nothing can. A client that posted an unknown property and read it back finds it
+gone on the reference, so no working client is built on the echo.
+
+**Atrium does:** keep it — the declaration is stored as the document the client posted and echoed
+whole, so a property from a newer client than the schema survives the round trip. The divergence
+is visible only to a client doing exactly what no client of the reference can usefully do.
+**Closing mechanism:** filter the stored declaration to the reference's `ClientCapabilitiesDto`
+members if the differential harness (010) ever shows a client observing the difference.
 
 ## 6. Non-improvements
 

@@ -7,7 +7,8 @@ them into domain objects and hands those out (architecture section 1, ADR-0003).
 
 **Enforcement and storage are structurally separate**, which is the point of the split and the
 reason it is visible in the schema rather than only in the code. The reference's `UserPolicy`
-carries **42** properties `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`; v1 honours
+carries **42** properties `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11,
+2026-08-28]`; v1 honours
 **eleven** of them, and those eleven become **nine columns plus two rows in a join table**, because
 two of the eleven are lists of libraries rather than flags. The other **31** live in `policy_extra`
 and are echoed back untouched. A reader can therefore tell what is enforced from what is merely
@@ -63,7 +64,8 @@ class User(Base):
 
     The nine honoured policy columns are typed and queryable; `policy_extra` holds the rest. The
     reference's default for `login_attempts_before_lockout` is **-1**, which is a sentinel rather
-    than a count `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]` - so this column stores
+    than a count `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` -
+    so this column stores
     the reference's own vocabulary and what -1 means is a question for whoever implements lockout,
     not something this schema decides.
     """
@@ -121,7 +123,8 @@ class User(Base):
         JSON, nullable=False, default=dict, server_default=text("'{}'")
     )
     #: The whole `UserConfiguration` - 16 properties on the reference
-    #: `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`. All of it is a blob: v1 acts on two
+    #: `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`. All of it is
+    #: a blob: v1 acts on two
     #: of them and no query filters on any, so columns would buy nothing (plan section 6.4).
     configuration: Mapped[dict[str, Any]] = mapped_column(
         JSON, nullable=False, default=dict, server_default=text("'{}'")

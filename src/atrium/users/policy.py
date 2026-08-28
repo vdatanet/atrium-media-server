@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The policy document: eleven properties this server acts on, and 31 it carries.
 
-The reference sends **42** policy properties `[probe: manual request, Jellyfin 10.11.11,
-2026-08-26]`. v1 honours eleven of them, and the split is structural rather than conventional -
+The reference sends **42** policy properties
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`. v1 honours eleven of
+them, and the split is structural rather than conventional -
 nine are typed columns, two are the library join table, and the remaining 31 live in a blob that
 nothing in this project ever reads inside. A reader can therefore tell enforcement from storage by
 looking at the schema, and honouring a twelfth means moving a key out of the blob into a column,

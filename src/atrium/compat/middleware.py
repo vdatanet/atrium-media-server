@@ -8,7 +8,8 @@ Jellyfin - `ProductName`, `Version` - because those are the fields multi-server 
 and reading anything else there sends them down an unknown-server path. `Server` is read by people:
 in a `curl` dump, in a proxy log, in a bug report. The reference sends `Server: Kestrel`, so this
 is a measured difference and a deliberate one.
-`[probe: manual request, Jellyfin 10.11.11, 2026-08-26; see docs/compatibility/behaviours.md 4.1]`
+`[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28; see
+docs/compatibility/behaviours.md 4.1]`
 
 `X-Response-Time-ms` is the reference's, on every response, and this project would not have known
 about it without looking at real traffic. Its middleware is registered unconditionally; the two

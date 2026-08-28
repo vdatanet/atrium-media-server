@@ -217,7 +217,13 @@ async def test_posting_replaces_rather_than_merges(client: httpx.AsyncClient, jo
 async def test_an_unknown_property_is_kept_rather_than_rejected(
     client: httpx.AsyncClient, joan: User
 ) -> None:
-    """Measured `204` at the reference, which is the leniency this route does have."""
+    """Measured `204` at the reference, which is the leniency this route does have.
+
+    The round-trip below is Atrium's own behaviour, not parity: the reference answers the same
+    `204` and then drops the stranger from the session's `Capabilities`
+    `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` - the recorded
+    divergence of behaviours section 5.9, observable by no client the reference could have.
+    """
     token = await log_in(client)
     headers = {"X-Emby-Token": token}
     posted = {"PlayableMediaTypes": ["Video"], "SomethingFromANewerClient": {"x": 1}}

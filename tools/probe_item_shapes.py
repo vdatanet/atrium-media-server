@@ -35,6 +35,13 @@ every item of every type, and `ParentId`, null on the parentless `/UserViews` ro
 survivor, a `ParentId` null outside `/UserViews`, or a `ChannelId` arriving with a value are all
 contradictions.
 
+Two item-family claims hand-measured on 2026-08-27 are folded in as well (the L2 pattern of
+docs/audits/2026-08-28.md): **`MediaType` is a property of the item type** - the table
+`domain/items.py` holds as `MEDIA_TYPE_OF`, every container `Unknown` including `MusicAlbum`,
+with a `Playlist`'s value derived from its contents and therefore observed rather than gated -
+and **no property of an item or of a media source carries a modification time** (behaviours
+section 2.17), checked across every body this probe fetches, `MediaSources` entries included.
+
 A type the live library cannot produce is reported as **unmeasured**, never guessed.
 
 Writes: nothing.
@@ -125,6 +132,21 @@ ALWAYS_CLAIM = [
     "ImageBlurHashes",
     "BackdropImageTags",
 ]
+
+#: The `MediaType` each measured type answers - domain/items.py's `MEDIA_TYPE_OF`, keyed by this
+#: probe's type labels. `Playlist` is absent deliberately: its value is derived from its
+#: contents rather than its type (009's problem), so it is observed and not gated.
+MEDIA_TYPE_CLAIM = {
+    "Movie": "Video",
+    "Episode": "Video",
+    "Audio": "Audio",
+    "Series": "Unknown",
+    "Season": "Unknown",
+    "MusicArtist": "Unknown",
+    "MusicAlbum": "Unknown",
+    "Folder": "Unknown",
+    "UserViews": "Unknown",
+}
 
 #: Label -> the `IncludeItemTypes` token that reaches one through `/Items`. `None` means the type
 #: has no `/Items` query that answers and is fetched by the route named in `measure`.
@@ -246,6 +268,8 @@ class Presence:
         self.saw_empty_image_tags = False
         self.explicit_nulls: dict[str, int] = {}
         self.reported_types: set[str] = set()
+        self.media_types: set[str] = set()
+        self.modification_names: set[str] = set()
 
     def count(self, rows: list[dict[str, Any]], into: dict[str, int]) -> None:
         for row in rows:
@@ -253,9 +277,20 @@ class Presence:
                 into[name] = into.get(name, 0) + 1
                 if value is None:
                     self.explicit_nulls[name] = self.explicit_nulls.get(name, 0) + 1
+                if "modif" in name.lower():
+                    self.modification_names.add(name)
+                if name == "MediaSources" and isinstance(value, list):
+                    for source in value:
+                        if isinstance(source, dict):
+                            self.modification_names.update(
+                                key for key in source if "modif" in key.lower()
+                            )
             reported = row.get("Type")
             if isinstance(reported, str):
                 self.reported_types.add(reported)
+            media_type = row.get("MediaType")
+            if isinstance(media_type, str):
+                self.media_types.add(media_type)
             user_data = row.get("UserData")
             if isinstance(user_data, dict):
                 self.user_data_keys.update(user_data)
@@ -368,7 +403,10 @@ def run(server: Server) -> Probe:
             "for through `Fields` - ChildCount arriving unasked on Playlist alone), a bare "
             "/Items/{itemId} body that carries everything and `Fields` has nothing left to add "
             "to, and /UserViews as a third width; ChannelId always an explicit null and "
-            "ParentId explicitly null on the parentless view rows, every other null omitted"
+            "ParentId explicitly null on the parentless view rows, every other null omitted; "
+            "MediaType the per-type constant MEDIA_TYPE_OF tables, a Playlist's being "
+            "content-derived; and no property of an item or a media source carrying a "
+            "modification time"
         ),
     )
     contradictions: list[str] = []
@@ -563,6 +601,34 @@ def run(server: Server) -> Probe:
         contradictions.append(
             "behaviours 1.7 names ChannelId and ParentId as the only explicit-null survivors; "
             "these also arrived null: " + ", ".join(third)
+        )
+
+    # -- MediaType is a property of the item type (domain/items.py's MEDIA_TYPE_OF) ------------
+    observed_media = ", ".join(
+        f"{p.type_name} {'/'.join(sorted(p.media_types)) or '-'}" for p in measured
+    )
+    probe.observe("MediaType per type", observed_media)
+    for presence in measured:
+        claimed = MEDIA_TYPE_CLAIM.get(presence.type_name)
+        if claimed is not None and presence.media_types != {claimed}:
+            contradictions.append(
+                f"{presence.type_name} answered MediaType "
+                f"{'/'.join(sorted(presence.media_types)) or 'nothing'}, and MEDIA_TYPE_OF "
+                f"tables {claimed}"
+            )
+
+    # -- behaviours 2.17: no item and no media source carries a modification time --------------
+    modification_names: set[str] = set()
+    for presence in measured:
+        modification_names.update(presence.modification_names)
+    probe.observe(
+        "properties named *modif*",
+        ", ".join(sorted(modification_names)) or "none, MediaSources entries included",
+    )
+    if modification_names:
+        contradictions.append(
+            "behaviours 2.17 says nothing carries a modification time; observed: "
+            + ", ".join(sorted(modification_names))
         )
 
     # -- UserData, ImageTags, PrimaryImageAspectRatio ------------------------------------------

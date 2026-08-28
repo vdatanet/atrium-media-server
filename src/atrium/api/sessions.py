@@ -2,7 +2,8 @@
 """`/Sessions` - what a device declared about itself, and what the server says about it.
 
 **Twenty-three fields, in the reference's order**, measured rather than guessed
-`[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`. Two of them are worth stopping on:
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`. Two of them are worth
+stopping on:
 
 * `LastPlaybackCheckIn` is **`0001-01-01T00:00:00.0000000Z`** for a session that has never played
   anything - .NET's `DateTime.MinValue`, not null and not absent. Sending nothing there, which is
@@ -16,14 +17,16 @@ nothing. **It is now measured, and it is not a divergence at all**: the referenc
 at the top level even for a session that posted `SupportsMediaControl: true`, while echoing that
 `true` back inside `Capabilities`. The declaration is the client's; the flag is the server's
 judgement about it, and they are different values from the same request.
-`[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`
 
 ## What `POST /Sessions/Capabilities/Full` answers
 
 `204`, with no body, and it **replaces** rather than merges - the route is `Full`. Measured, along
-with two things about what it accepts: an unknown *property* is accepted, and an unknown value in
-`SupportedCommands` is a `400` carrying RFC 9457 problem details, because the reference binds that
-field to an enum. Atrium accepts it; the argument is in behaviours section 5.
+with two things about what it accepts: an unknown *property* is accepted at the door - though the
+reference then drops it from the session's echo, where Atrium keeps it (behaviours section 5.9) -
+and an unknown value in `SupportedCommands` is a `400` carrying RFC 9457 problem details, because
+the reference binds that field to an enum. Atrium accepts it; the argument is in behaviours
+section 5.
 
 See specs/002-authentication-users-and-sessions/spec.md section 3.8.
 """
@@ -318,10 +321,13 @@ async def post_capabilities(
     then does not see them in `/Sessions` has observed a difference, and this is measured to be
     reflected there (spec section 3.8).
 
-    An unknown property is kept rather than rejected, which is what the reference does. An unknown
-    value inside `SupportedCommands` is a `400` there and is accepted here - behaviours section 5
-    carries the argument, which is that reproducing a thirty-value enum to refuse values no working
-    client sends is cost without a client that benefits.
+    An unknown property is kept rather than rejected. The reference also accepts one - the same
+    `204` - and then drops it from the session's `Capabilities`, so the keep is a recorded
+    divergence rather than parity (behaviours section 5.9): nothing can depend on the echo,
+    because no client of the reference ever reads its stranger back. An unknown value inside
+    `SupportedCommands` is a `400` there and is accepted here - behaviours section 5 carries the
+    argument, which is that reproducing a thirty-value enum to refuse values no working client
+    sends is cost without a client that benefits.
     """
     document = await request.json()
     if not isinstance(document, dict):

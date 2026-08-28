@@ -130,7 +130,7 @@ PARENT_OF: Mapping[ItemType, ItemType | None] = {
 #: Measured rather than derived from `FILE_BACKED`, and the two do not agree: an `Audio` file is
 #: `Audio` and a `Movie` is `Video`, but every container is `Unknown` including `MusicAlbum`, which
 #: a rule built on "does it hold audio" would have called `Audio`.
-#: `[probe: manual requests, Jellyfin 10.11.11, 2026-08-27]`
+#: `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-28]`
 #:
 #: **The five by-name types are `Unknown` by default here and were not measured.** No probe asked
 #: what `MediaType` a `Genre` carries; `Unknown` is what every other non-file type answers, and the

@@ -295,7 +295,7 @@ async def test_a_refusal_is_empty_but_not_bare(
     """Empty body, and still every header the reference puts on one.
 
     The reference answers both of these with `Content-Length: 0`, `Server` and
-    `X-Response-Time-ms`. [probe: manual requests, Jellyfin 10.11.11, 2026-08-26]
+    `X-Response-Time-ms`. [probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]
     Here that is a property of middleware order rather than of the handler: the header middleware
     is outermost, so it wraps refusals decided before any route ran.
     """

@@ -2,7 +2,8 @@
 """Eleven properties this server acts on, and 31 it carries.
 
 The set of names below is measured, not invented: it is what the reference sent for a real account
-`[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`. Testing the split against a document of
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`. Testing the split
+against a document of
 three properties would prove the mechanism and nothing about the shape a client actually posts.
 """
 
