@@ -117,17 +117,16 @@ say how it will be proven is not finished.
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Implemented** | **Implemented** | **Implemented** |
 | [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
-| [006](006-images/) | Images | **Accepted** | **Accepted** | — |
+| [006](006-images/) | Images | **Accepted** | **Accepted** | Draft |
 | [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001, 002, 003, 004 and 005 are implemented, and 006 is accepted through its plan** — the spec
-and the plan both passed their gates on 2026-08-28, probes first both times — so **the next
-artefact is 006's task list**, which is written against the accepted plan and gets a gate of its
-own before T1 begins. The four specs after it remain drafts, and their open questions are the
-standing review agenda.
+**001, 002, 003, 004 and 005 are implemented; 006 is accepted through its plan and its task
+list is written** — thirteen tasks against the accepted plan, measurement first, bytes before
+HTTP — awaiting **the task-list gate, the next artefact**, before T1 begins. The four specs
+after it remain drafts, and their open questions are the standing review agenda.
 
 **006's plan gate measured before accepting, and the measurements changed the accepted spec
 twice**, on 2026-08-28. The plan's §6.8 had catalogued the edges no probe had covered; a
