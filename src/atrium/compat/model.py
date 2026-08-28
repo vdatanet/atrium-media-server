@@ -15,7 +15,7 @@ specs/001-server-identity-and-discovery/plan.md section 5.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, model_serializer, model_validator
 from pydantic_core.core_schema import SerializerFunctionWrapHandler
@@ -67,6 +67,18 @@ class AtriumModel(BaseModel):
         extra="ignore",  # unknown request properties are ignored, not rejected
     )
 
+    #: Wire names whose `None` still reaches the body as an explicit `null`.
+    #:
+    #: Empty here and on almost every subclass, because the null-suppression below is global and
+    #: measured (behaviours section 1.7) - but the same measurement found the exception: the
+    #: reference sends `"ChannelId": null` on **every item of every response**, 208 of 208 sampled,
+    #: where its own configuration says a null is omitted
+    #: `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`. What defeats the
+    #: setting there is unestablished; that it is defeated is not. A subclass that must reproduce
+    #: such an exception names the wire spelling here, and the key is emitted in place, profile
+    #: conversion included, rather than re-inserted by hand after serialisation.
+    NULL_KEPT: ClassVar[frozenset[str]] = frozenset()
+
     @model_serializer(mode="wrap")
     def _for_the_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         """Drop null properties and apply the requested serialisation profile.
@@ -91,7 +103,11 @@ class AtriumModel(BaseModel):
         here rather than in a `response_model_exclude_none` on every route - a per-route flag is
         one someone eventually forgets.
         """
-        serialised = {key: value for key, value in handler(self).items() if value is not None}
+        serialised = {
+            key: value
+            for key, value in handler(self).items()
+            if value is not None or key in self.NULL_KEPT
+        }
         if current() is Profile.CAMEL:
             keyed = self._property_keyed()
             return {

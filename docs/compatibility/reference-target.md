@@ -29,6 +29,17 @@ The reasoning for pinning, and for pinning to this particular line rather than `
 > reference version moves" in [conformance.md](conformance.md) is its procedure — step 2 of which
 > needs the differential harness feature 010 delivers. Not decided here.
 
+> **The one measured consequence of the gap so far: two property names** (2026-08-28). The
+> `10.11.11` document declares `BaseItemDto.GenreItems` and `BaseItemDto.LockedFields`; the pinned
+> `10.11.10` document does not, so neither is in `docs/compatibility/property-names.json` — while
+> the running reference **emits** `GenreItems` on the wire (unasked on a full body, behind
+> `fields=Genres` on a list row `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11,
+> 2026-08-27]`). The alias sweep carries it as an explicit measured exception
+> (`tests/conformance/test_aliases.py`, `MEASURED_BEYOND_THE_PINNED_DOCUMENT`) rather than the
+> index being regenerated from the newer document, because the index's version *is* the pin and
+> moving it is the procedure above, not a side effect of a sweep. If the pin ever moves to
+> `10.11.11`, the exception list empties and should be deleted.
+
 `master` (the 12.0.0 line) is explicitly **not** the target. It moves, it has already changed
 behaviours that clients depend on, and no client ships against it.
 

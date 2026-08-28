@@ -3,7 +3,7 @@ feature: 005-item-query-api
 title: Item query API — tasks
 status: Accepted
 created: 2026-08-27
-updated: 2026-08-27
+updated: 2026-08-28
 accepted: 2026-08-27
 plan_status_required: Accepted
 plan_status_actual: Accepted
@@ -489,7 +489,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T9 — The item surface: models, the DTO builder, and the `Fields` registry
 
-- [ ] **Changes:** `api/item_models.py` — `BaseItemDto`, `UserItemDataDto`, `NameGuidPair`, the
+- [x] **Changes:** `api/item_models.py` — `BaseItemDto`, `UserItemDataDto`, `NameGuidPair`, the
   three-field envelope, the filter summary, `SearchHint` and its envelope: all four shapes of
   [plan §6.6](plan.md#66-the-four-shapes), as models. `api/item_dto.py` — `build_dtos(items,
   ctx)`: the [plan §6.5](plan.md#65-the-fields-registry) registry as one data table seeded from
@@ -507,6 +507,48 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   true; the builder takes hydrated domain objects and has no session to misuse, so the counter
   fixture stays green through every later endpoint task.
 - **Plan reference:** §5, §6.5, §6.6
+- **Done (2026-08-28):** the registry is data, the three widths are a parameter of the call site,
+  and AC-2 and AC-3 hold at builder level. **Most of the task was discovering that the builder had
+  nothing to build from.**
+
+  **Hydration carried no metadata and no ancestors.** `HydratedItem` had genres and images and not
+  one of 004's scalar columns — no overview, no year, no rating reached the domain — and an
+  episode had no way to say its series' name. The columns ride the row the page already fetched
+  (a mapping gap, zero new statements); the ancestors are two summarised levels on `HydratedItem`
+  itself, **not** the "parent rows in ctx" plan §5 promised, which would have made every route
+  re-associate rows the repository had already associated. §5 amended. The statement budget moved
+  9 → 15, page-independent, and both counter tests were updated as the decision their docstrings
+  say they exist to force.
+
+  **A container's `UserData` is a statement about its subtree.** Measured: a bare `Series` row
+  carries `UnplayedItemCount`, and a fully-watched season answers `Played: true` with
+  `PlayCount: 0` — the rollup, not the stored row. Hydration now computes both per page (two
+  grouped statements); spec §3.2's `UserData` row says it. And two smaller holes the same
+  measuring pass found: **a by-name row has no `IsFolder`, anywhere**, and `/Genres` rows carry
+  no `UserData` while the same genre through `/Items` does — a per-route omission left for T14
+  to measure against `/Years` and reproduce.
+
+  **T1's own prediction came due one task later.** `GenreItems` is emitted by the server, declared
+  by the 10.11.11 document, and absent from the pinned 10.11.10 document — so the alias sweep
+  refused the field. It is now a measured exception in the sweep with the argument recorded in
+  reference-target §1: the index's version *is* the pin, and regenerating it from the newer
+  document would move the pin as a side effect of a test.
+
+  **`extra="ignore"` eats a typo'd registry name, emitter and all.** `BaseItemDto(**values)` with
+  a key the model does not declare drops it silently — found when `AlbumPrimaryImageTag` had an
+  emitter, a registry row and no field, and every test around it passed. A guard test now compares
+  the emitted names against the model's declared aliases; it caught the bug on its first run.
+
+  **Three emitters answer for values 004 never stored**, each recorded in plan §6.5 rather than
+  guessed: `Etag` as a hash of identity plus the two change clocks, `ExternalUrls` as a measured
+  table over `ProviderIds` (the `Tmdb` URL depends on the item's type), and `ImageBlurHashes` as
+  the always-empty map — an accepted gap with its closing mechanism, behaviours §5.5.
+
+  **And the spec's per-type table was still the draft's.** T1 corrected the always-present set and
+  the Common group and left the type families as written; row by row they were wrong — a `Series`
+  list row carries no `ChildCount` and no `IndexNumber`, a `Season` carries the series context, an
+  album carries the artist lists. §3.2 now holds the measured matrix, and the registry test
+  compares against it verbatim, so the next drift fails by name.
 
 ## T10 — `GET /Items` and `GET /Items/{itemId}`
 

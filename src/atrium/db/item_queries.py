@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import random
 import secrets
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -49,7 +49,6 @@ from atrium.domain.user import User
 from atrium.library.identity import for_by_name
 from atrium.metadata.artwork import ImageAssociation, ImageKind, SourceKind
 from atrium.metadata.byname import fold_for_search
-from atrium.metadata.model import PersonCredit, PersonKind
 
 #: The four container types that have to earn their place. A `Series` with no visible episode is
 #: not offered; the row stays and the user simply never meets it - the closing half of
@@ -96,13 +95,24 @@ class ParentNotFoundError(LookupError):
 
 @dataclass(frozen=True, slots=True)
 class UserItemData:
-    """The requesting user's state for one item. Always present, never null (behaviours 2.1)."""
+    """The requesting user's state for one item. Always present, never null (behaviours 2.1).
+
+    For a container the `played` here is a **rollup, not the stored row**: the reference reports a
+    series as played exactly when nothing under it is left unplayed, and sends the count of what
+    is left as `UnplayedItemCount` on every bare container row
+    `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. `_hydrate`
+    computes both; the stored row still supplies the favourite flag and the position. 007 owns
+    what the stored columns mean; this record is what a response needs.
+    """
 
     is_favorite: bool = False
     played: bool = False
     play_count: int = 0
     playback_position_ticks: int = 0
     last_played_date: datetime | None = None
+    #: Visible file-backed descendants without a played row. None for anything that is not a
+    #: tree container, so the DTO can tell "no rollup applies" from "nothing left".
+    unplayed_count: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +135,47 @@ class NameLink:
 
 
 @dataclass(frozen=True, slots=True)
+class ItemMetadata:
+    """What a refresh resolved for one item - 004's columns, read back for a response.
+
+    A separate record rather than fields on `Item` for T5's reason exactly: these are not
+    properties of the file 003's scanner saw, and putting them on `Item` would hand the scanner
+    ten fields it can never fill. They cost no extra statement - the columns arrive on the row
+    the page already fetched - so this is a mapping gap being closed, not a new query.
+    """
+
+    overview: str | None = None
+    tagline: str | None = None
+    original_title: str | None = None
+    production_year: int | None = None
+    premiere_date: datetime | None = None
+    runtime_ticks: int | None = None
+    official_rating: str | None = None
+    community_rating: float | None = None
+    provider_ids: Mapping[str, str] = field(default_factory=dict)
+    tags: tuple[str, ...] = ()
+    normalization_gain: float | None = None
+    refreshed_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Ancestor:
+    """As much of a parent as a response needs, and no more.
+
+    An episode's row carries `SeriesName`, the series' primary image tag and the nearest thumb; a
+    track's carries its album's name and the album's artists. Those live on the *ancestors*, so a
+    page hydrates its parents and grandparents alongside - the tree is two hops deep (`DESCENT`),
+    so two levels is all of them - and the DTO builder still has no session to misuse.
+    """
+
+    id: str
+    type: ItemType
+    name: str
+    images: tuple[ImageAssociation, ...] = ()
+    artists: tuple[NameLink, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class HydratedItem:
     """One item and everything a response about it needs, with no session behind it.
 
@@ -132,19 +183,42 @@ class HydratedItem:
     library holds and the scanner builds one from a file; genres, credits and another user's play
     state are not properties of the file, and putting them on `Item` would give the scanner five
     fields it can never fill and a reader no way to tell "empty" from "not loaded".
+
+    `people` links carry the person's kind in `credit` and the played character in `role` -
+    the same shape as every other related name, because that is what a response renders.
     """
 
     item: Item
+    metadata: ItemMetadata = field(default_factory=ItemMetadata)
     genres: tuple[NameLink, ...] = ()
     studios: tuple[NameLink, ...] = ()
-    people: tuple[PersonCredit, ...] = ()
+    people: tuple[NameLink, ...] = ()
     artists: tuple[NameLink, ...] = ()
     images: tuple[ImageAssociation, ...] = ()
     user_data: UserItemData = field(default_factory=UserItemData)
+    parent: Ancestor | None = None
+    grandparent: Ancestor | None = None
 
     @property
     def id(self) -> str:
         return self.item.id
+
+
+@dataclass(frozen=True, slots=True)
+class ContainerAggregates:
+    """What a container's subtree adds up to, for the fields a client asks for by name.
+
+    `ChildCount`, `RecursiveItemCount`, `CumulativeRunTimeTicks` and `DateLastMediaAdded` are all
+    statements about a container's descendants, and none of them can be answered by the row alone.
+    They are fetched on demand - `aggregates_for` - rather than on every page, because a bare list
+    row does not carry them (spec section 3.2: all four are gated) and a count nobody asked for is
+    a count the page paid for anyway.
+    """
+
+    child_count: int = 0
+    recursive_count: int = 0
+    cumulative_runtime_ticks: int = 0
+    date_last_media_added: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -495,6 +569,9 @@ class ItemQueryRepository:
 
         The statement count is a property of this method and is asserted by the query counter in
         the suite: a page of one and a page of a hundred cost the same number of round trips.
+        The ancestor and rollup queries below run **unconditionally** for the same reason - a
+        count that depended on what types the page happened to contain would make the counter's
+        equality assertion meaningless.
         """
         if not rows:
             return ()
@@ -507,10 +584,13 @@ class ItemQueryRepository:
         artists = self._grouped(models.ItemArtist, ids)
         images = self._grouped(models.ItemImage, ids)
         user_data = self._user_data(ids, user)
+        ancestors = self._ancestors(rows)
+        rollups = self._rollups(rows, user)
 
         return tuple(
             HydratedItem(
                 item=_item(row, sources.get(row.id, [])),
+                metadata=_metadata(row),
                 genres=tuple(
                     NameLink(name=one.name, item_id=one.genre_item_id)
                     for one in _ordered(genres.get(row.id, []))
@@ -520,11 +600,11 @@ class ItemQueryRepository:
                     for one in _ordered(studios.get(row.id, []))
                 ),
                 people=tuple(
-                    PersonCredit(
+                    NameLink(
                         name=one.name,
-                        kind=PersonKind(one.person_type),
+                        item_id=one.person_item_id,
+                        credit=one.person_type,
                         role=one.role,
-                        sort_order=one.sort_order,
                     )
                     # `sort_order` rather than `position`: the people table spells its document
                     # order differently from the other three, because the credit order *is* the
@@ -536,21 +616,254 @@ class ItemQueryRepository:
                     for one in _ordered(artists.get(row.id, []))
                 ),
                 images=tuple(
-                    ImageAssociation(
-                        kind=ImageKind(one.image_type),
-                        index=one.image_index,
-                        source_kind=SourceKind(one.source_kind),
-                        relative_path=one.relative_path,
-                        width=one.width,
-                        height=one.height,
-                        tag=one.tag,
-                    )
+                    _image(one)
                     for one in sorted(images.get(row.id, []), key=lambda one: one.image_index)
                 ),
-                user_data=user_data.get(row.id, UserItemData()),
+                user_data=_rolled(user_data.get(row.id, UserItemData()), rollups.get(row.id)),
+                parent=ancestors.get(row.id, (None, None))[0],
+                grandparent=ancestors.get(row.id, (None, None))[1],
             )
             for row in rows
         )
+
+    def _ancestors(self, rows: Sequence[models.Item]) -> dict[str, tuple[Ancestor | None, ...]]:
+        """The page's parents and grandparents, summarised - four statements, page-independent.
+
+        Two levels is the whole tree (`DESCENT`), and the summaries carry exactly what a response
+        reads off an ancestor: the name, the image tags, and - for an album - the credits.
+        Ancestors are **not** visibility-filtered: reaching an episode already proved its series
+        visible, and a name the item itself displays is not a disclosure.
+        """
+        parent_ids = sorted({row.parent_id for row in rows if row.parent_id})
+        parents = {
+            one.id: one
+            for one in self._session.execute(
+                select(models.Item).where(models.Item.id.in_(parent_ids))
+            ).scalars()
+        }
+        grand_ids = sorted(
+            {one.parent_id for one in parents.values() if one.parent_id} - set(parents)
+        )
+        grands = {
+            one.id: one
+            for one in self._session.execute(
+                select(models.Item).where(models.Item.id.in_(grand_ids))
+            ).scalars()
+        }
+        everyone = {**parents, **grands}
+        images = self._grouped(models.ItemImage, sorted(everyone))
+        artists = self._grouped(models.ItemArtist, sorted(everyone))
+
+        def summarised(row: models.Item) -> Ancestor:
+            return Ancestor(
+                id=row.id,
+                type=ItemType(row.type),
+                name=row.name,
+                images=tuple(
+                    _image(one)
+                    for one in sorted(images.get(row.id, []), key=lambda one: one.image_index)
+                ),
+                artists=tuple(
+                    NameLink(name=one.name, item_id=one.artist_item_id, credit=one.credit)
+                    for one in _ordered(artists.get(row.id, []))
+                ),
+            )
+
+        summaries = {one_id: summarised(one) for one_id, one in everyone.items()}
+        linked: dict[str, tuple[Ancestor | None, ...]] = {}
+        for row in rows:
+            parent_row = everyone.get(row.parent_id) if row.parent_id else None
+            above = parent_row.parent_id if parent_row is not None else None
+            linked[row.id] = (
+                summaries.get(row.parent_id) if row.parent_id else None,
+                summaries.get(above) if above else None,
+            )
+        return linked
+
+    def _rollups(self, rows: Sequence[models.Item], user: User) -> dict[str, tuple[int, int]]:
+        """`(files, played)` beneath every tree container on the page - two statements.
+
+        The reference reports a container's `UserData` as a statement about its subtree: `Played`
+        exactly when nothing visible beneath is left unplayed, and the remainder as
+        `UnplayedItemCount`, on every bare container row
+        `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. Counted
+        here per page rather than stored, because a stored rollup is a cache with an invalidation
+        problem, and the two grouped statements are page-size-independent.
+
+        A `CollectionFolder`'s subtree is its library (the same fast path as scope); everything
+        else rolls up through the bounded parent chain.
+        """
+        containers = [
+            row
+            for row in rows
+            if ItemType(row.type) in IN_THE_TREE and ItemType(row.type) not in FILE_BACKED
+        ]
+        chained = sorted(
+            row.id for row in containers if ItemType(row.type) is not ItemType.COLLECTION_FOLDER
+        )
+        libraries = {
+            row.library_id: row.id
+            for row in containers
+            if ItemType(row.type) is ItemType.COLLECTION_FOLDER and row.library_id
+        }
+        counted: dict[str, tuple[int, int]] = {row.id: (0, 0) for row in containers}
+
+        def accumulate(container_id: str | None, total: int, played: int) -> None:
+            if container_id in counted:
+                sofar = counted[container_id]
+                counted[container_id] = (sofar[0] + total, sofar[1] + played)
+
+        for level_one, level_two, total, played in self._session.execute(
+            self._files_under_chain(user, chained)
+        ):
+            accumulate(level_one, total, played or 0)
+            accumulate(level_two, total, played or 0)
+
+        for library_id, total, played in self._session.execute(
+            self._files_under_library(user, sorted(libraries))
+        ):
+            accumulate(libraries.get(library_id), total, played or 0)
+
+        return counted
+
+    def _files_under_chain(
+        self, user: User, container_ids: Sequence[str], with_sums: bool = False
+    ) -> Any:
+        """Visible files grouped by their parent *and* grandparent, constrained to the ids given.
+
+        `with_sums` appends the runtime total and the latest arrival, for `aggregates_for`;
+        the rollups leave them off rather than pay for sums nobody asked about.
+        """
+        child = models.Item.__table__.alias("rolled_up")
+        parent = models.Item.__table__.alias("rolled_through")
+        state = models.ItemUserData.__table__.alias("rolled_state")
+        columns: list[Any] = [
+            parent.c.id,
+            parent.c.parent_id,
+            func.count(),
+            func.sum(case((state.c.played, 1), else_=0)),
+        ]
+        if with_sums:
+            columns += [
+                func.sum(func.coalesce(child.c.runtime_ticks, 0)),
+                func.max(child.c.date_created),
+            ]
+        return (
+            select(*columns)
+            .select_from(
+                child.join(parent, child.c.parent_id == parent.c.id).outerjoin(
+                    state,
+                    (state.c.item_key == child.c.id) & (state.c.user_id == user.id),
+                )
+            )
+            .where(child.c.type.in_([one.value for one in FILE_BACKED]))
+            .where(child.c.removed_at.is_(None))
+            .where(self._library_permitted_on(child, user))
+            .where(or_(parent.c.id.in_(container_ids), parent.c.parent_id.in_(container_ids)))
+            .group_by(parent.c.id, parent.c.parent_id)
+        )
+
+    def _files_under_library(
+        self, user: User, library_ids: Sequence[str], with_sums: bool = False
+    ) -> Any:
+        """Visible files grouped by library, for the `CollectionFolder` shapes of both callers."""
+        child = models.Item.__table__.alias("rolled_flat")
+        state = models.ItemUserData.__table__.alias("rolled_flat_state")
+        columns: list[Any] = [
+            child.c.library_id,
+            func.count(),
+            func.sum(case((state.c.played, 1), else_=0)),
+        ]
+        if with_sums:
+            columns += [
+                func.sum(func.coalesce(child.c.runtime_ticks, 0)),
+                func.max(child.c.date_created),
+            ]
+        return (
+            select(*columns)
+            .select_from(
+                child.outerjoin(
+                    state,
+                    (state.c.item_key == child.c.id) & (state.c.user_id == user.id),
+                )
+            )
+            .where(child.c.type.in_([one.value for one in FILE_BACKED]))
+            .where(child.c.removed_at.is_(None))
+            .where(self._library_permitted_on(child, user))
+            .where(child.c.library_id.in_(library_ids))
+            .group_by(child.c.library_id)
+        )
+
+    def aggregates_for(self, ids: Sequence[str], user: User) -> dict[str, ContainerAggregates]:
+        """The gated subtree numbers for the containers a route resolved `Fields` to need.
+
+        Four statements whatever the batch holds: the rows themselves, one grouped count of
+        direct children, and the two rollup shapes with the sums and the latest date attached.
+        On demand rather than in `_hydrate`, because every one of these is a gated field
+        (spec section 3.2) and a bare list row never carries them.
+        """
+        rows = list(
+            self._session.execute(select(models.Item).where(models.Item.id.in_(ids))).scalars()
+        )
+        containers = [
+            row
+            for row in rows
+            if ItemType(row.type) in IN_THE_TREE and ItemType(row.type) not in FILE_BACKED
+        ]
+        chained = sorted(
+            row.id for row in containers if ItemType(row.type) is not ItemType.COLLECTION_FOLDER
+        )
+        libraries = {
+            row.library_id: row.id
+            for row in containers
+            if ItemType(row.type) is ItemType.COLLECTION_FOLDER and row.library_id
+        }
+
+        children: dict[str, int] = {
+            parent_id: counted
+            for parent_id, counted in self._session.execute(
+                select(models.Item.parent_id, func.count())
+                .where(models.Item.parent_id.in_(sorted(row.id for row in containers)))
+                .where(self._visible_to(user))
+                .group_by(models.Item.parent_id)
+            )
+            if parent_id is not None
+        }
+
+        wanted = {row.id for row in containers}
+        recursive: dict[str, tuple[int, int, datetime | None]] = {}
+
+        def accumulate(
+            container_id: str | None, total: int, runtime: int, latest: datetime | None
+        ) -> None:
+            if container_id is None or container_id not in wanted:
+                return
+            count_sofar, runtime_sofar, latest_sofar = recursive.get(container_id, (0, 0, None))
+            newest = max(
+                (when for when in (latest_sofar, latest) if when is not None), default=None
+            )
+            recursive[container_id] = (count_sofar + total, runtime_sofar + runtime, newest)
+
+        for level_one, level_two, total, _played, runtime, latest in self._session.execute(
+            self._files_under_chain(user, chained, with_sums=True)
+        ):
+            accumulate(level_one, total, runtime or 0, latest)
+            accumulate(level_two, total, runtime or 0, latest)
+
+        for library_id, total, _played, runtime, latest in self._session.execute(
+            self._files_under_library(user, sorted(libraries), with_sums=True)
+        ):
+            accumulate(libraries.get(library_id), total, runtime or 0, latest)
+
+        return {
+            row.id: ContainerAggregates(
+                child_count=children.get(row.id, 0),
+                recursive_count=recursive.get(row.id, (0, 0, None))[0],
+                cumulative_runtime_ticks=recursive.get(row.id, (0, 0, None))[1],
+                date_last_media_added=recursive.get(row.id, (0, 0, None))[2],
+            )
+            for row in containers
+        }
 
     def _grouped(self, model: Any, ids: Sequence[str]) -> dict[str, list[Any]]:
         rows = self._session.execute(select(model).where(model.item_id.in_(ids))).scalars()
@@ -917,6 +1230,56 @@ def _ordered(rows: Iterable[Any]) -> list[Any]:
     return sorted(rows, key=lambda one: one.position)
 
 
+def _image(row: Any) -> ImageAssociation:
+    return ImageAssociation(
+        kind=ImageKind(row.image_type),
+        index=row.image_index,
+        source_kind=SourceKind(row.source_kind),
+        relative_path=row.relative_path,
+        width=row.width,
+        height=row.height,
+        tag=row.tag,
+    )
+
+
+def _metadata(row: models.Item) -> ItemMetadata:
+    return ItemMetadata(
+        overview=row.overview,
+        tagline=row.tagline,
+        original_title=row.original_title,
+        production_year=row.production_year,
+        premiere_date=row.premiere_date,
+        runtime_ticks=row.runtime_ticks,
+        official_rating=row.official_rating,
+        community_rating=row.community_rating,
+        provider_ids=dict(row.provider_ids or {}),
+        tags=tuple(row.tags or ()),
+        normalization_gain=row.normalization_gain,
+        refreshed_at=row.metadata_refreshed_at,
+    )
+
+
+def _rolled(stored: UserItemData, rollup: tuple[int, int] | None) -> UserItemData:
+    """A container's user data, restated as a rollup of its subtree.
+
+    The favourite flag, the count and the position stay the stored row's - a favourite series is
+    the user's statement about the series. `played` and the unplayed remainder are the subtree's,
+    which is what the reference reports (see `UserItemData`). An empty subtree is unplayed rather
+    than vacuously played: `Played: true` over nothing would mark an emptied series watched.
+    """
+    if rollup is None:
+        return stored
+    total, played = rollup
+    return UserItemData(
+        is_favorite=stored.is_favorite,
+        played=total > 0 and played >= total,
+        play_count=stored.play_count,
+        playback_position_ticks=stored.playback_position_ticks,
+        last_played_date=stored.last_played_date,
+        unplayed_count=total - played,
+    )
+
+
 def _item(row: models.Item, sources: Sequence[models.ItemSource]) -> Item:
     return Item(
         id=row.id,
@@ -943,7 +1306,10 @@ __all__ = [
     "DESCENT",
     "EARN_THEIR_PLACE",
     "PERFORMER_CREDIT",
+    "Ancestor",
+    "ContainerAggregates",
     "HydratedItem",
+    "ItemMetadata",
     "ItemQueryRepository",
     "NameLink",
     "ParentNotFoundError",

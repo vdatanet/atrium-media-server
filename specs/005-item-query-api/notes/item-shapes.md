@@ -274,3 +274,41 @@ is classified over the nine `/Items` content types; `UserViews` is shown but not
   the pinned 10.11.10 document** (`docs/compatibility/property-names.json`). Not pursued here:
   it is either a difference between 10.11.10 and 10.11.11 or a limit of the extractor's schema
   walk, and either way it belongs to whoever next touches that generator.
+
+---
+
+## Addendum — measured at T9, 2026-08-28
+
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`
+
+T9 turned the tables above into the registry, and four questions the first run had not asked
+needed answers before the emitters could be written.
+
+**A by-name row has no `IsFolder`, anywhere.** A `Genre` from `/Genres` (10 properties bare),
+from `/Items?ids=` (11 — `UserData` joins), and in full (45): `IsFolder` appears in none of
+them, while `LocationType` is `FileSystem` and `MediaType` is `Unknown`. The same holds for
+`MusicGenre` and `Year`. §3.2's always-present table now records the hole.
+
+**`UserData` is per-route on the by-name endpoints, per-item everywhere else.** A genre row from
+`/Genres` carries **no** `UserData`; the same genre through `/Items?ids=` carries it, as does its
+full body, and an artist row from `/Artists` carries it too. So the omission belongs to
+`/Genres`-family routes, not to the by-name types — T14's to measure per route (`/Years`
+unmeasured) and reproduce.
+
+**A container's `UserData` is a rollup.** A bare `Series` list row: `UnplayedItemCount` beside
+the stored keys; a `Season` with everything watched: `UnplayedItemCount: 0, Played: true` with
+`PlayCount: 0`. The played flag is a statement about the subtree, not the stored row, and the
+count rides every bare container row.
+
+**`ExternalUrls` patterns, and the `Etag` shape.** A movie: `IMDb → https://www.imdb.com/title/{id}`,
+`TMDB → https://www.themoviedb.org/movie/{id}`; a series: `.../tv/{id}`; an artist:
+`MusicBrainz Artist → https://musicbrainz.org/artist/{id}`; an album: `MusicBrainz Album →
+/release/{id}`, `MusicBrainz Album Artist → /artist/{id}`, `MusicBrainz Release Group →
+/release-group/{id}` (and `TheAudioDb Album`, whose ids 004 never writes); a track with no ids:
+`[]`, the empty list, not an absent property. `Etag` is 32 lowercase hex on every body sampled.
+
+**And one document gap found by declaring a field:** `GenreItems` is emitted by the server and
+declared by the `10.11.11` document, but the pinned `10.11.10` document — and therefore
+`property-names.json` — does not contain it (`LockedFields` likewise). Recorded in
+[reference-target §1](../../../docs/compatibility/reference-target.md#1-the-pinned-version); the
+alias sweep carries it as a measured exception.
