@@ -52,6 +52,7 @@ from atrium.api import (
     years,
 )
 from atrium.api import sessions as session_routes
+from atrium.api.playstate import record_stop
 from atrium.compat.errors import EXCEPTION_HANDLERS
 from atrium.compat.middleware import ResponseHeadersMiddleware
 from atrium.compat.profiles import ContentProfileMiddleware
@@ -65,11 +66,17 @@ from atrium.compat.routing import RelaxedPathMiddleware, RouteTable
 from atrium.config.paths import ConfigurationError, DataPaths, resolve_data_dir
 from atrium.config.settings import load as load_settings
 from atrium.config.state import load_or_create
-from atrium.db.engine import create_database_engine, session_factory, verify_connection
+from atrium.db.engine import (
+    create_database_engine,
+    session_factory,
+    session_scope,
+    verify_connection,
+)
+from atrium.db.repositories import SessionRepository, UserDataRepository
 from atrium.db.schema import ensure_current
 from atrium.lifecycle import Readiness, ReadinessMiddleware
 from atrium.users import passwords as password_module
-from atrium.users.playing import NowPlayingRegistry
+from atrium.users.playing import NowPlayingRegistry, PlayingNow
 from atrium.users.service import Authenticator
 from atrium.users.sessions import SessionRegistry
 
@@ -140,7 +147,27 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     # What each session is playing, in memory and nowhere else: it changes several times a minute,
     # dies with the session, and the reference loses it on restart too. The resume position - the
     # part that must survive - is a row written per report. 007 plan section 6.4.
-    playing = NowPlayingRegistry()
+    def commit_reaped(session_id: str, stopped: PlayingNow) -> None:
+        """A session that went silent, stopped as though it had said so.
+
+        **Through `record_stop`, which is what a real `Stopped` calls** (007 plan section 6.5):
+        one code path for "a stop arrived" and "we gave up waiting", so the two cannot drift into
+        two answers for the same viewer. The position is the extrapolated one, which is the
+        measured behaviour - a session silent for 8.6 minutes stored 48.5% after reporting 40%.
+        """
+        with session_scope(sessions) as opened:
+            session = SessionRepository(opened).by_id(session_id)
+            if session is None:
+                return
+            record_stop(
+                UserDataRepository(opened),
+                session.user_id,
+                stopped.item_id,
+                stopped.position_ticks,
+                stopped.runtime_ticks,
+            )
+
+    playing = NowPlayingRegistry(commit=commit_reaped)
 
     # The only entry point that verifies a password. It owns the lockout counter, the timing
     # guarantee and session creation, because splitting those across callers is how one of them
@@ -160,12 +187,18 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
             resolved.root,
         )
         flusher = asyncio.create_task(registry.run())
+        # The reaper, on the reference's own cadence: every five minutes, stop the sessions that
+        # have been silent for five. Nothing is committed on a clean shutdown - what a restart
+        # loses is the extrapolation since each session's last report, which is exactly what the
+        # reference's restart loses too (007 spec section 3.8).
+        reaper = asyncio.create_task(playing.run())
         try:
             yield
         finally:
-            flusher.cancel()
-            with suppress(asyncio.CancelledError):
-                await flusher
+            for task in (flusher, reaper):
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
             # The clean-shutdown flush. Without it, stopping a server at the wrong moment would
             # lose activity it had every opportunity to write - which is a different thing from
             # the crash this design already accepts losing thirty seconds to.

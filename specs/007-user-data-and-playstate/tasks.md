@@ -457,7 +457,7 @@ byte for byte.
 
 ## T10 — The reaper: one commit path, shared with the stop that never came
 
-- [ ] **Changes:** `server.py` starts a reaping task beside the activity flusher, sweeping on the
+- [x] **Changes:** `server.py` starts a reaping task beside the activity flusher, sweeping on the
   reference's five-minute cadence for sessions silent past five minutes
   ([plan §6.5](plan.md#65-the-reaper)); the commit goes through **the same function the `Stopped`
   handler uses**, with the extrapolated snapshot position, so "a stop arrived" and "we gave up
@@ -469,6 +469,22 @@ byte for byte.
   a paused session's reaped position is its last reported one; and the reaped outcome is asserted
   equal to an explicit `Stopped` at that same position, which is what says both paths are one.
 - **Spec reference:** §3.8; AC-15
+
+**Done (2026-08-28).** Six tests, no sleeping, and the task statement's own claim is what they
+assert: the reaped stop and the reported one are **one function**, so the fourth test takes the
+position a reap committed, replays it as an explicit `Stopped`, and compares the two rows.
+
+Nothing surprised the implementation, which is the point of T7 and T8 having landed first: the
+commit callback is eight lines because `record_stop` already existed for the `Stopped` route and
+the extrapolation already existed in the registry. The two edges worth a test of their own are
+the ones a reaper written in a hurry gets wrong — a session silent long enough for its
+extrapolated position to drift past the ceiling is marked **played** rather than left resumable
+(the reaped stop resolves through §3.7 like any other), and a session whose device logged out
+mid-playback commits nothing rather than raising, because the row it would be written against
+belongs to nobody.
+
+On a clean shutdown the reaper commits nothing extra, matching the reference: what a restart loses
+is the extrapolation since each session's last report, and that was never in the row anywhere.
 
 ## T11 — Aggregation through mutation, the gated percentage, and OQ-7
 
