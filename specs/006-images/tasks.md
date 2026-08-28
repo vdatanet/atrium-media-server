@@ -430,7 +430,7 @@ classes earlier gates taught, back for the very next feature:
 
 ## T8 — `images/service.py`: the orchestration
 
-- [ ] **Changes:** [plan §5](plan.md#5-contracts)'s one entry point: `ImageQuery` in, `ImageReply`
+- [x] **Changes:** [plan §5](plan.md#5-contracts)'s one entry point: `ImageQuery` in, `ImageReply`
   out — lookup (T5), transform decision (T6), verbatim or cache-through (T7), the carrier's
   mtime as `last_modified`, the two typed refusals mapped and nothing else raised. The verbatim
   path serves the carrier's bytes exactly; the transformed path is cached by resolved key.
@@ -442,6 +442,30 @@ classes earlier gates taught, back for the very next feature:
   source bytes with a warning, not a `5xx`; the refusal split of plan §7 — unknown item versus
   image-absent family — verified by exception type.
 - **Plan reference:** §5, §6.5, §7
+- **Done (2026-08-28):** **AC-8's test failed against the obvious implementation, and the reason
+  is a design decision nothing had spelled out.** The service read the carrier's bytes, described
+  *them*, and decided from that — so overwriting the source file without rescanning changed the
+  source's dimensions, changed the decision, changed the cache **key**, and turned the hit into a
+  silent miss. The second request came back with different bytes, which is exactly what AC-8
+  forbids.
+
+  The decision has to come from the **row**: 004 stored `width` and `height` at association time
+  and [plan §6.1](plan.md#61-the-lookup) already said they answer the resize question before a
+  file is opened — but nothing said *why it matters*, and the reason is not performance. A key
+  derived from the file is a key that moves whenever the file does, and the whole point of the tag
+  being in the key is that a request served from cache is the image **the row still names**. The
+  format and the alpha still come from the bytes, because no row stores either. Plan §5 records it
+  now, with the test that found it.
+
+  **A fallback is never cached**, which the task statement did not say and which the wrong version
+  of this passes every other test on. When a decode fails the source's own bytes come back —
+  writing those under a key claiming "300×450, WebP" would serve a full-size JPEG to every later
+  request for a small WebP, for as long as the file survived. The miss is repeated instead: one
+  decode attempt, and correct.
+
+  `accepts_webp` joins `ImageQuery` and plan §5's listing. The gate added AC-15 after that
+  contract was written and the offer has to reach the decision somehow — as a boolean, so
+  `images/` still parses no HTTP.
 
 ## T9 — The two routes, the header contract, and the conditional pair
 
