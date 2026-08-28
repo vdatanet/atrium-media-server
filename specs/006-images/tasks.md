@@ -538,7 +538,7 @@ classes earlier gates taught, back for the very next feature:
 
 ## T10 — The error matrix on the wire
 
-- [ ] **Changes:** the route-level error handling that closes
+- [x] **Changes:** the route-level error handling that closes
   [spec §3.2](spec.md#32-get-itemsitemidimagesimagetype--getitemimage)'s table:
   `imageType` parsed case-insensitively against the full thirteen-member vocabulary — a
   non-member string is the validation `400`, a member the item lacks is the **string-shape**
@@ -556,6 +556,29 @@ classes earlier gates taught, back for the very next feature:
   a request for each of the five never-stored members → the string `404`, proving the
   vocabulary parse admits them.
 - **Plan reference:** §6.1, §6.4, §7; spec §3.2 errors, §3.5, AC-11
+- **Done (2026-08-28):** **the recorder's convention is `parameter=value`, not `parameter`**, and
+  the plan's "recorded-drop signal" does not say so. `known_tokens` — 005 §6.12's own helper, which
+  drops `format=Banana` one line earlier in the same request's life — records the pair as
+  `("/Items/{itemId}/Images/{imageType}", "format=Banana")`, because what was dropped is the
+  **value**. The transform was recording a bare `"format"`, so one request's two drop paths would
+  have produced two different shapes in one counter, and 010's differential would have read them
+  as two different findings. `Decision.dropped` carries `format=Bmp` now.
+
+  Everything else the matrix asks for was already true when the tests were written, which is what
+  T9 landing the vocabulary parse and the two exception types bought: `Box`, `BoxRear`, `Menu`,
+  `Screenshot` and `Profile` each answer the **string** `404` while `NotAnImageType` answers the
+  problem-details `400` — the difference that proves the parse admits all thirteen members — and
+  an out-of-range index names **the type**, not the index.
+
+  **The tripwire is structural rather than empirical.** "No v1 writer creates a `Chapter` row"
+  written as a scan that finds none would pass for exactly as long as nobody put one in a fixture.
+  It is asserted against the vocabulary the write path *accepts* instead: `apply` takes an
+  `ImageAssociation`, an `ImageAssociation` carries an `ImageKind`, and `ImageKind` is the seven
+  types a local file can be — so the six that can never be written are named in one assertion, and
+  the day that set shrinks this fails.
+
+  Four golden bodies hold the split, with the `traceId` as the one substituted value: it is per
+  request by definition (behaviours §1.11) and everything else in those bodies is fixed.
 
 ## T11 — The resize and format matrix on the wire
 

@@ -211,7 +211,7 @@ def test_an_unencodable_format_is_recorded_as_a_drop() -> None:
     parameter is what gets dropped."""
     decision = decide(spec(image_format=RequestedFormat.BMP, max_width=300), POSTER)
 
-    assert decision.dropped == (FORMAT_PARAMETER,)
+    assert decision.dropped == (f"{FORMAT_PARAMETER}=Bmp",), "the value, not the parameter"
     assert decision.image_format == "JPEG", "the transform still runs (measured)"
     assert decision.target == (300, 450)
 
