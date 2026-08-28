@@ -564,6 +564,10 @@ position floor produces a server that keeps resume points for every short item.
 **Jellyfin does:** answer `GET /Items/{id}/Images/Primary` and
 `GET /Videos/{id}/stream?static=true` with `200` to a request carrying **no token at all**. All
 four mechanisms are accepted there; not one of them is required. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+An **invalid** token changes nothing either: an unknown 32-hex token and a malformed one, sent
+through the header, the query and the `MediaBrowser` scheme, each answer the identical `200` —
+the route does not validate what it does not require
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 **Depends on it:** yes, and in the shape that is hardest to see from inside a client. A bare URL
 handed to an image loader or an external player is exactly what these routes are for, and a client
@@ -638,10 +642,10 @@ formatter does. `[probe: manual request, Jellyfin 10.11.11, 2026-08-26]`
 belongs to the thing that produced the body. Starlette appends `charset=utf-8` only to `text/*`
 media types, so its `JSONResponse` would send a bare `application/json`.
 
-### 1.11 There are three error shapes, not one
+### 1.11 There are four error shapes, not one
 
-**Jellyfin does:** answer a refusal in one of two forms, decided by **where** the refusal happened.
-`[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
+**Jellyfin does:** answer a refusal in one of several forms, decided by **where** the refusal
+happened. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
 
 | Refusal | Shape |
 |---|---|
@@ -651,6 +655,7 @@ media types, so its `JSONResponse` would send a bare `application/json`.
 | An item a handler could not find | `404`, **RFC 9457 problem details** as JSON |
 | A malformed value the model binder rejected | `400`, **RFC 9457 problem details** with an `errors` map |
 | A controller that refused the request itself | `4xx`, **`text/plain` with no `charset`**, and the fixed 25-byte body `Error processing request.` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` |
+| A controller that refused with its own message | `404`, the message as a **JSON-encoded bare string** — `"<item name> does not have an image of type Box"` — `application/json; charset=utf-8` `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]` |
 
 ```json
 {"type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
@@ -674,7 +679,17 @@ natural implementation produces `[probe: manual requests, Jellyfin 10.11.11, 202
   echoed the client's spelling would differ on exactly the requests a PascalCase client sends.
 
 The split is not arbitrary: the empty ones are produced before the framework's controller pipeline
-runs, the JSON ones by that pipeline, and the third by a controller inside it.
+runs, the JSON ones by that pipeline, and the last two by a controller inside it — the fixed
+25-byte body where it refused abstractly, the quoted string where it wrote a message.
+
+**The fourth shape was measured at 006's plan gate**, on 2026-08-28, and it is the shape of the
+image route's own `404`s: an item that exists but lacks the asked-for image type, an
+`imageIndex` past the last backdrop, and a chapter with no thumbnail all answer the bare JSON
+string above — while an *unknown item* on the same route answers the problem-details shape, two
+rows up. One route, two `404` bodies, split by which of the two lookups failed. The string
+carries the item's **display name**, and the route requires no token (§2.10) — so the name
+travels to any caller holding the id, which is the id-as-capability consequence §2.10 records,
+visible from another angle.
 
 **The absent `charset` on the third shape is the reference's, and it is easy to lose.** JSON
 responses carry `charset=utf-8` (§1.10) and this one does not; web frameworks append it to any
@@ -691,7 +706,7 @@ golden response that compares bytes catches this; a test that asserts a status c
 **Depends on it:** a client branching on a body it expects to be JSON. FastAPI's own
 `HTTPException` sends `{"detail": "…"}`, which is neither shape.
 
-**Atrium does:** all three, per refusal. `traceId` is a W3C trace-context identifier and is
+**Atrium does:** all four, per refusal. `traceId` is a W3C trace-context identifier and is
 per-request by definition, so it is compared by shape rather than by value.
 
 > **The empty shapes were documented here and not implemented, for three tasks.** Until 001 had

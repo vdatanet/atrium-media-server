@@ -12,10 +12,10 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001 through 005 are implemented, and 006's spec is accepted and planned** — the
-spec's review gate ran on 2026-08-28, probes first, and its plan was written against the answers
-the same day, still awaiting a gate of its own — **the next artefact is 006's plan acceptance,
-then its task list**. The four features after it are specified only, their specs still drafts.
+**Features 001 through 005 are implemented, and 006 is accepted through its plan** — spec and
+plan both passed their gates on 2026-08-28, probes first both times, and the plan gate's
+measurements corrected the accepted spec twice on the way (AC-6, AC-15) — **the next artefact is
+006's task list**. The four features after it are specified only, their specs still drafts.
 What 005 leaves for
 each of them is written in
 [005's tasks](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones), beside
@@ -96,6 +96,7 @@ reasoning:
 | 005 T1 | Copy a field table into a registry | **There is no single item representation.** A bare `/Items/{itemId}` carries up to 39 properties a bare list row does not, `/UserViews` is a third width, and `ChannelId` is an explicit `null` on every item — 208 of 208 — against the reference's own null-suppression setting |
 | 005 T12 | Order seasons, specials last | The measurement **reversed the acceptance criterion**: season 0 arrives first, plain index order. "Every client expects it last" was an expectation about clients presented as a fact about the wire — and the fix deleted code, because 003's sort names already produce the measured order |
 | 005 T15 | Emit `MatchedTerm`, match the sort name | Neither exists on the wire. Seventeen measured hints never carried `MatchedTerm`, and the discriminating search — a padded sort form no folded name contains — found nothing, settling a spec-versus-plan disagreement the tasks gate had flagged |
+| 006 plan gate | Flip a status line | `fill` never crops — AC-6 reversed on a non-square source, after a square-source probe had measured "exactly the box" — and a resized response negotiates `Accept: image/webp`, the branch the plan's own §10 had just rejected as a delta. Plus a fourth error shape, on the one route that splits its two lookups across two `404` bodies |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
 question each, and a plain `urllib` request answers the rest.

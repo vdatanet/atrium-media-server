@@ -181,7 +181,7 @@ empty `401` an authenticated route sends and from the structured problem documen
 own validation sends. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` A malformed body is the exception and keeps that structured
 shape, because it is rejected before the handler runs. The measured refusals are asserted by
 comparing bytes, since they share one body and only the status tells them apart —
-[behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-three-error-shapes-not-one).
+[behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one).
 
 The split is load-bearing for clients: `401` means "your credentials are wrong, ask again", `403`
 means "this account cannot log in, stop asking", and any other `4xx` means "something else went
