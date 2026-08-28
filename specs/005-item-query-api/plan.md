@@ -4,7 +4,7 @@ title: Item query API — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8; by T12 - sections 6.9 and 8; by T13 - section 6.8; by T14 - section 6.7; by T15 - sections 6.6 and 6.11
+amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8; by T12 - sections 6.9 and 8; by T13 - section 6.8; by T14 - section 6.7; by T15 - sections 6.6 and 6.11; by T16 - section 6.10
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -423,7 +423,10 @@ narrows to the same honest absence.
 this table cited beside them.
 
 **InstantMix**: the pool is visible `Audio` sharing a music genre with the seed (for an artist or
-album seed, the union over its tracks' genres); ordered by `sha256(seed_id ‖ item_id)` — a keyed
+album seed, the union over its tracks' genres — *and for a track seed, its album's genres too*,
+because a music genre lives on the album row where the sidecar put it; added by T16); "sharing"
+is by the **by-name row**, so two spellings of one genre share, and the pool reaches tracks
+through the albums that carry the row. Ordered by `sha256(seed_id ‖ item_id)` — a keyed
 shuffle that is total, stable for a given seed and library (AC-12), and needs no stored state.
 
 Both diverge from the reference into determinism deliberately; the spec argues why that is

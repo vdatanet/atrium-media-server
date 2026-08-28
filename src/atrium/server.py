@@ -36,10 +36,12 @@ from atrium.api import (
     artists,
     filters,
     genres,
+    instant_mix,
     items,
     localization,
     resume,
     search,
+    similar,
     system,
     tv_shows,
     user_library,
@@ -94,6 +96,8 @@ ROUTERS = (
     years.router,
     filters.router,
     search.router,
+    similar.router,
+    instant_mix.router,
     items.router,
 )
 

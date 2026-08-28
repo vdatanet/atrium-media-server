@@ -811,7 +811,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T16 — The deterministic pair: `Similar` and `InstantMix`
 
-- [ ] **Changes:** `api/similar.py` — candidates of the seed's type, visible, not the seed;
+- [x] **Changes:** `api/similar.py` — candidates of the seed's type, visible, not the seed;
   the score `3·|shared genres| + 2·|shared people| + 1·|shared studios|`, descending, then
   `sort_name`, then id, zero-score candidates excluded, the weights constants in one place with
   [plan §6.10](plan.md#610-similar-and-instantmix)'s table cited beside them;
@@ -826,6 +826,16 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   `404`; both diverge from the reference into determinism deliberately, the argument spec §3.7
   already carries.
 - **Plan reference:** §6.10; spec §3.7
+- **Done (2026-08-28):** the quiet task of the feature — the formulas landed as the plan wrote
+  them, the weights are named constants with the §6.10 table cited beside them, and AC-12 holds
+  with the mix's order **recomputed in the test from the same hash**, which is what proves the
+  order a pure function of seed and library rather than a cached accident. Two refinements the
+  plan gained rather than fought: a **track** seed borrows its album's genres — a music genre
+  lives on the album row where the sidecar put it, so a track-seeded mix under the plan's literal
+  wording would always have been empty — and "sharing" is by the **by-name row**, so `sci-fi`
+  and `Sci-Fi` relate two films whatever their spellings say, which is exactly the world's
+  two-spellings fixture doing its job on the Similar side. The guest album, carrying no genre,
+  mixes honestly to nothing rather than to the whole library.
 
 ## T17 — The acceptance map, and Implemented
 
