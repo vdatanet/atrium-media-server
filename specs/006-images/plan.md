@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-28
 updated: 2026-08-28
 accepted: 2026-08-28
-amended: 2026-08-28 by T1 — §6.3 steps 1 and 5, §6.4's `quality` bullet, §6.8 row 3 discharged, behaviours §1.17 added; and 2026-08-28 at the gate, which measured the six §6.8 edges before accepting — §1, §5, §6.1, §6.3, §6.4, §6.5, §6.6, §6.8, §7, §8, §9, §10; two measurements went back into the spec (AC-6 corrected, AC-15 added) and one into behaviours §1.11 (the fourth error shape)
+amended: 2026-08-28 by T3 — §5's two exception names gain the `Error` suffix the linter requires; and 2026-08-28 by T1 — §6.3 steps 1 and 5, §6.4's `quality` bullet, §6.8 row 3 discharged, behaviours §1.17 added; and 2026-08-28 at the gate, which measured the six §6.8 edges before accepting — §1, §5, §6.1, §6.3, §6.4, §6.5, §6.6, §6.8, §7, §8, §9, §10; two measurements went back into the spec (AC-6 corrected, AC-15 added) and one into behaviours §1.11 (the fourth error shape)
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -138,15 +138,18 @@ class ImageReply:
     media_type: str                # from the bytes served, never from a file extension
     last_modified: datetime        # the carrier file's mtime, UTC (§6.6)
 
-def get(query: ImageQuery) -> ImageReply    # raises ImageNotFound
+def get(query: ImageQuery) -> ImageReply    # raises ItemNotFoundError, ImageNotFoundError
 ```
 
 Two refusals, because the measured wire has two `404` bodies *(amended at the gate — the draft
-had one exception mapped to problem details)*: `ItemNotFound` for an unknown or soft-removed item
-— the world 005 serves has no removed items, and this route must not disagree with it — mapping
-to the problem-details `404`; and `ImageNotFound(item_name, image_type)` for an item that exists
-but has no such image — no row, index out of range, a vanished carrier (§7) — mapping to
-behaviours §1.11's fourth shape, the JSON-encoded string that names the item and the type.
+had one exception mapped to problem details)*: `ItemNotFoundError` for an unknown or soft-removed
+item — the world 005 serves has no removed items, and this route must not disagree with it —
+mapping to the problem-details `404`; and `ImageNotFoundError(item_name, image_type)` for an item
+that exists but has no such image — no row, index out of range, a vanished carrier (§7) — mapping
+to behaviours §1.11's fourth shape, the JSON-encoded string that names the item and the type.
+*(Both were spelled without the `Error` suffix until T3, where the linter refused them: every
+exception in `compat/errors.py` carries one, `NotFoundError` included, and a contract name is not
+a reason to exempt a module from the project's own rule.)*
 
 Invariants callers may assume, and tests enforce: the payload is complete (`Content-Length` is
 its length — there is no streaming here; posters are small and 008 owns streaming); the same

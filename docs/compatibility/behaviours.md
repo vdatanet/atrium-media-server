@@ -227,7 +227,10 @@ route that puts client-supplied text into a response body.
 **Depends on it:** no client can tell. A JSON parser decodes `\u00F1` and `ñ` to the same string,
 so nothing branches on this and Principle I does not require it.
 
-**Atrium does:** the same, in `compat/responses.py`. Not for Principle I but for **Principle VIII**:
+**Atrium does:** the same, in `compat/responses.py` — **which reversed §4.4**, an exception taken
+one feature earlier on the argument that the upper-casing could not be done safely. It can: the
+rewrite counts backslash parity rather than searching for `\u`. §4.4 is marked withdrawn and kept
+as the record. Not for Principle I but for **Principle VIII**:
 the goldens compare bytes, and a library with accented titles would otherwise differ from the
 reference on nearly every response while being correct in every field. One override in the response
 class is cheaper than an asterisk on every golden and a permanent exception in the differential.
@@ -690,6 +693,17 @@ rows up. One route, two `404` bodies, split by which of the two lookups failed. 
 carries the item's **display name**, and the route requires no token (§2.10) — so the name
 travels to any caller holding the id, which is the id-as-capability consequence §2.10 records,
 visible from another angle.
+
+**Measured again at 006 T3, byte for byte** `[probe: manual requests via tools/_probe.py,
+Jellyfin 10.11.11, 2026-08-28]`. `GET /Items/{id}/Images/Box` on an item called `#1 to Infinity`
+answers 51 bytes — `"#1 to Infinity does not have an image of type Box"`, the quotes included —
+and `Backdrop/99` and `Chapter/0` answer the same sentence naming **the type, never the index**.
+The name is escaped like every other body (§1.16): `DW Español` goes out as `DW Espa\u00F1ol`.
+One edge is not reproduced: the **all-zeros identifier** is `Guid.Empty` on the reference, which
+resolves to the user's root folder and answers this route the *third* shape — `400`, `text/plain`,
+the fixed 25 bytes — where any other unowned identifier answers problem details. Atrium has no
+root-folder item at all, so the id is simply unknown and answers the `404`; no client sends the
+empty GUID to an image route.
 
 **The absent `charset` on the third shape is the reference's, and it is easy to lose.** JSON
 responses carry `charset=utf-8` (§1.10) and this one does not; web frameworks append it to any
@@ -1259,7 +1273,26 @@ of not diverging is a bug in a new server destroying somebody's library. Revisit
 trash with a retention window to delete into. Specified in
 [009 §3.6](../../specs/009-playlists/spec.md).
 
-### 4.4 Non-ASCII characters are sent as themselves, not as `\uXXXX`
+### 4.4 Non-ASCII characters are sent as themselves, not as `\uXXXX` — **withdrawn 2026-08-28**
+
+> **This exception no longer exists.** It was taken at 004 T15 and **reversed at 005 T4**, which
+> implemented the escaping in `compat/responses.py` and recorded it as §1.16. The reversal never
+> came back here, so for three features this section said Atrium sends the character while the
+> code sent `\u00E7` — and 006's task list cited *this* section as the standing rule for an item
+> name in an error body, which is how it was noticed (006 T3).
+>
+> The two paragraphs below are kept as the record of the decision and of what changed it: the
+> objection was that upper-casing an escape's hex *after the fact* cannot be done safely, because
+> a string legitimately containing `\u00e7` is indistinguishable from an escape. §1.16 answers it
+> — the rewrite counts **backslash parity** rather than searching for `\u`, and `json.dumps` has
+> already doubled every literal backslash by then, which makes the distinction exact. An objection
+> answered by a mechanism is not a standing exception.
+>
+> Measured again on 2026-08-28, on the one body that carries an *item's own name*: an item called
+> `DW Español` comes back from the image route as `"DW Espa\u00F1ol does not have an image of
+> type Box"` `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
+> Atrium's is byte-identical.
+
 
 **Jellyfin does:** escape every non-ASCII character in a JSON body. `Occitan (post 1500);
 Provençal` goes out as `Occitan (post 1500); Proven\u00E7al`, with the hex in **upper case** — the

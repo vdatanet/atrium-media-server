@@ -188,7 +188,7 @@ classes earlier gates taught, back for the very next feature:
 
 ## T3 — The fourth error shape, in `compat/`
 
-- [ ] **Changes:** `compat/errors.py` grows the message-string refusal of
+- [x] **Changes:** `compat/errors.py` grows the message-string refusal of
   [behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one):
   a raisable refusal that serialises as the **JSON-encoded bare string** —
   `"<item name> does not have an image of type <Type>"` — `404`,
@@ -206,6 +206,38 @@ classes earlier gates taught, back for the very next feature:
   id-as-capability consequence, recorded in behaviours §1.11 and §2.10. The test names it so the
   disclosure is a decision with provenance, not an accident.
 - **Plan reference:** §5, §7; behaviours §1.11
+- **Done (2026-08-28):** the shape is the gate's, measured again byte for byte before writing it:
+  `GET /Items/{id}/Images/Box` on an item called `#1 to Infinity` answers **51 bytes** —
+  `"#1 to Infinity does not have an image of type Box"`, quotes included — in
+  `application/json; charset=utf-8`. `Backdrop/99` and `Chapter/0` answer the same sentence, and
+  it names **the type, never the index**, which the task statement did not say and a message
+  built from `f"...{index}"` would have got wrong on the one refusal a client sees most.
+
+  **This task's own verification cited a withdrawn exception.** It asks for a non-ASCII name
+  asserted "under the standing [behaviours §4.4] exception" — send the character itself.
+  §4.4 was taken at 004 T15 and **reversed at 005 T4**, which implemented the reference's
+  escaping in `compat/responses.py` and wrote it up as §1.16; nobody came back to §4.4, so for
+  three features the registry said one thing and the code did the other. The measurement settles
+  it in the reference's favour: `DW Español` comes back `"DW Espa\u00F1ol does not have an image
+  of type Box"`, uppercase hex. Writing the test the task asked for would have asserted a raw
+  `ñ` and failed against Atrium's own response class. §4.4 is now marked **withdrawn** with the
+  date and the argument that answered it, and §1.16 points at what it reversed.
+
+  **And one refusal on this route is not a `404` at all.** The **all-zeros identifier** is
+  `Guid.Empty` on the reference: `/Items/000…0/Images/Primary` answers `400` in the *third*
+  shape — `text/plain`, the fixed 25 bytes — because the empty GUID resolves to the user's root
+  folder, an item v1 does not have. Every other unowned identifier answers problem details, which
+  is what the first measurement of "unknown item" would have contradicted had it been taken with
+  the obvious placeholder id. Recorded in [spec §3.2](spec.md#32-get-itemsitemidimagesimagetype--getitemimage)
+  and behaviours §1.11 as measured and deliberately not reproduced.
+
+  **The plan's two contract names do not lint.** `ItemNotFound` and `ImageNotFound` trip `N818`,
+  which every exception in `compat/errors.py` already obeys — `NotFoundError`,
+  `UnauthenticatedError`, `AccountUnavailableError`. Renamed to `ItemNotFoundError` and
+  `ImageNotFoundError`, and [plan §5](plan.md#5-contracts) is amended rather than the module
+  exempted. `ItemNotFoundError` subclasses `NotFoundError` and needs no handler of its own:
+  Starlette resolves handlers by walking the MRO, so two names reach one shape — which is what
+  plan §7's "verified by exception type" needs and what a bare alias could not give.
 
 ## T4 — The drawn fixtures and the seeded image world
 

@@ -2,7 +2,7 @@
 """What a refusal looks like on the wire.
 
 Measured against a live 10.11.11 rather than assumed, and the answer is that the reference has
-**three** error shapes, not one.
+**four** error shapes, not one.
 `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]`
 
 **Empty**, for refusals decided before a handler runs - an unauthenticated request, a path that
@@ -21,9 +21,17 @@ fixed 25-byte body reading `Error processing request.` Every refusal from
 for an unknown username, the `403` for a disabled account - so the status is the entire difference
 between them. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
 
+**A JSON-encoded bare string**, for a controller that refused *with a message*. The image route's
+own `404`: `"<item name> does not have an image of type <Type>"`, quoted, in
+`application/json; charset=utf-8`. One route, two `404` bodies - an item that does not exist gets
+problem details, an item that exists and lacks the image gets this - split by which of the two
+lookups failed. `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`
+
 The first was implemented in feature 001, because only the first was reachable there. The second
 belongs to the features that raise it; its shape is recorded in
-docs/compatibility/behaviours.md section 1.11 so it does not have to be rediscovered.
+docs/compatibility/behaviours.md section 1.11 so it does not have to be rediscovered. The fourth
+arrived with feature 006 and lives here rather than in `api/images.py` for the reason the whole
+module exists: a shape settled once is a shape no later route can get subtly wrong.
 
 **Both of the framework's own refusals had to be replaced, and one was already documented as
 done.** Starlette raises an `HTTPException` for an unmatched path and for a wrong method, and
@@ -120,6 +128,59 @@ class NotFoundError(Exception):
     first table. Same status, different bytes, decided by which layer refused - and 005 AC-8
     requires an unknown id and an invisible one to be byte-identical, so both go through here.
     """
+
+
+class ItemNotFoundError(NotFoundError):
+    """The item a route was asked about does not exist, or has been removed.
+
+    *(Named `ItemNotFound` by plan section 5. The `Error` suffix is this project's lint rule and
+    every exception beside it obeys one, `NotFoundError` included, so the contract's spelling is
+    amended rather than exempted.)*
+
+    The same wire shape as `NotFoundError`, and a separate name on purpose: the image route has
+    **two** `404`s, and plan section 7 asks for the split to be verified by exception type rather
+    than by reading a body. A service that raises one of these has decided *which* lookup failed,
+    and that decision is the whole difference between the two bodies below.
+
+    Measured: a well-formed identifier nothing owns answers problem details on
+    `/Items/{itemId}/Images/{imageType}`, byte-identical to the same refusal on `/Items/{itemId}`
+    `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
+    """
+
+
+class ImageNotFoundError(Exception):
+    """The item exists and has no image of that type. Answered with the fourth shape.
+
+    *(Plan section 5 spells it `ImageNotFound`; see the note on `ItemNotFoundError` above.)*
+
+    Carries the item's **display name**, which is what the measured message says and therefore
+    what travels to any caller holding an id - the image route requires no token (behaviours
+    section 2.10), so the name is disclosed to whoever can name the item. That is the
+    id-as-capability consequence, recorded in behaviours sections 1.11 and 2.10 and named here so
+    it stays a decision rather than becoming an accident.
+
+    The reference raises it for every way an image can be absent: no row of that type, an
+    `imageIndex` past the last backdrop, a chapter with no thumbnail, and a vocabulary member no
+    item can hold. The message names the **type**, never the index - `Backdrop/99` answers
+    `"… does not have an image of type Backdrop"`
+    `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
+    """
+
+    def __init__(self, item_name: str, image_type: str) -> None:
+        super().__init__(image_absent_message(item_name, image_type))
+        self.item_name = item_name
+        self.image_type = image_type
+
+
+#: The reference's wording, byte for byte, with the two values it interpolates. Measured on four
+#: refusals of three kinds - an absent type, an out-of-range index and a chapter with no
+#: thumbnail - which all produce this one sentence.
+#: `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`
+IMAGE_ABSENT_TEMPLATE = "{name} does not have an image of type {image_type}"
+
+
+def image_absent_message(item_name: str, image_type: str) -> str:
+    return IMAGE_ABSENT_TEMPLATE.format(name=item_name, image_type=image_type)
 
 
 def trace_id() -> str:
@@ -248,6 +309,25 @@ async def account_unavailable_handler(_request: Request, _exc: Exception) -> Res
     return controller_error(403)
 
 
+def message_error(status_code: int, message: str) -> Response:
+    r"""The fourth shape: the message as a JSON-encoded **bare string**.
+
+    A quoted string is a complete JSON document, and that is exactly what the reference sends -
+    `"#1 to Infinity does not have an image of type Box"`, 51 bytes including the quotes, under
+    `application/json; charset=utf-8`. Going through `AtriumJSONResponse` rather than writing the
+    bytes by hand is what makes the escaping and the negotiated profile the same here as
+    everywhere else: an item called `DW Español` comes back as `DW Espa\u00F1ol`, uppercase hex,
+    measured on the reference and produced here by the response class rather than by this
+    function. `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`
+    """
+    return AtriumJSONResponse(message, status_code=status_code)
+
+
+async def image_not_found_handler(_request: Request, exc: Exception) -> Response:
+    message = str(exc) if isinstance(exc, ImageNotFoundError) else NOT_FOUND_TITLE
+    return message_error(404, message)
+
+
 async def routing_handler(request: Request, exc: Exception) -> Response:
     """Answer an unmatched path or an unavailable method as the reference does.
 
@@ -280,6 +360,10 @@ EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     InvalidCredentialsError: invalid_credentials_handler,
     AccountUnavailableError: account_unavailable_handler,
     NotFoundError: not_found_handler,
+    # `ItemNotFoundError` inherits `NotFoundError` and needs no row: Starlette resolves a
+    # handler by walking the exception's MRO, so the subclass finds the base's handler and the
+    # two shapes stay one shape. `ImageNotFoundError` does not inherit it - different shape.
+    ImageNotFoundError: image_not_found_handler,
     RequestValidationError: validation_handler,
     HTTPException: routing_handler,
 }
@@ -288,6 +372,7 @@ __all__ = [
     "CONTROLLER_ERROR_BODY",
     "CONTROLLER_ERROR_TYPE",
     "EXCEPTION_HANDLERS",
+    "IMAGE_ABSENT_TEMPLATE",
     "NOT_FOUND_TITLE",
     "PROBLEM_TYPE_BAD_REQUEST",
     "PROBLEM_TYPE_NOT_FOUND",
@@ -297,7 +382,9 @@ __all__ = [
     "ClientAuthorizationError",
     "ExceptionHandler",
     "ForbiddenError",
+    "ImageNotFoundError",
     "InvalidCredentialsError",
+    "ItemNotFoundError",
     "NotFoundError",
     "UnauthenticatedError",
     "account_unavailable_handler",
@@ -305,7 +392,10 @@ __all__ = [
     "controller_error",
     "empty_error",
     "forbidden_handler",
+    "image_absent_message",
+    "image_not_found_handler",
     "invalid_credentials_handler",
+    "message_error",
     "not_found_handler",
     "problem_details",
     "routing_handler",
