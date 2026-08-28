@@ -150,6 +150,19 @@ class BaseItemDto(AtriumModel):
     media_type: str
 
 
+class UserViewDto(BaseItemDto):
+    """A `/UserViews` row: the same item surface, one more explicit null.
+
+    The reference sends `"ParentId": null` on a view row that hangs off nothing - measured on the
+    rows whose parent is absent, where every other route simply omits the property
+    `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`. Atrium's views all hang
+    off nothing (there is no user root folder item), so the null travels on every row - the same
+    mechanism as `ChannelId`, scoped to the one route whose shape carries it.
+    """
+
+    NULL_KEPT: ClassVar[frozenset[str]] = frozenset({"ChannelId", "ParentId"})
+
+
 class BaseItemDtoQueryResult(AtriumModel):
     """The three-field envelope every list endpoint returns except the two that do not.
 
@@ -159,6 +172,20 @@ class BaseItemDtoQueryResult(AtriumModel):
     """
 
     items: list[BaseItemDto] = Field(default_factory=list)
+    total_record_count: int = 0
+    start_index: int = 0
+
+
+class UserViewQueryResult(AtriumModel):
+    """The envelope again, typed to the view row - a sibling, not a subclass.
+
+    Not cosmetic: pydantic serialises a nested model by the **declared** field's schema, so a
+    `UserViewDto` inside `list[BaseItemDto]` would serialise with the base class's `NULL_KEPT`
+    and the measured `ParentId` null would quietly vanish. The field type is the mechanism, and
+    a subclass could not narrow it - a `list` field is invariant, and mypy is right to say so.
+    """
+
+    items: list[UserViewDto] = Field(default_factory=list)
     total_record_count: int = 0
     start_index: int = 0
 
@@ -215,4 +242,6 @@ __all__ = [
     "SearchHint",
     "SearchHintResult",
     "UserItemDataDto",
+    "UserViewDto",
+    "UserViewQueryResult",
 ]

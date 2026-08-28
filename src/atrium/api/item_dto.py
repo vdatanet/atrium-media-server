@@ -541,13 +541,23 @@ def _considered(item_type: ItemType, ctx: BuildContext) -> frozenset[str]:
     return named | gated
 
 
-def build_dto(one: HydratedItem, ctx: BuildContext) -> BaseItemDto:
+def dto_values(one: HydratedItem, ctx: BuildContext) -> dict[str, Any]:
+    """The wire values, before a model class - for the one route whose rows keep an extra null.
+
+    `/UserViews` emits `"ParentId": null` on its parentless rows (measured; see `UserViewDto`),
+    which is a property of the *model* - `NULL_KEPT` is class-level - so T11 pours the same
+    values into a different class rather than this module growing a per-call null switch.
+    """
     values: dict[str, Any] = {}
     for name in _considered(one.item.type, ctx):
         value = EMITTERS[name](one, ctx)
         if value is not None:
             values[name] = value
-    return BaseItemDto(**values)
+    return values
+
+
+def build_dto(one: HydratedItem, ctx: BuildContext) -> BaseItemDto:
+    return BaseItemDto(**dto_values(one, ctx))
 
 
 def build_dtos(items: Sequence[HydratedItem], ctx: BuildContext) -> list[BaseItemDto]:
@@ -567,4 +577,5 @@ __all__ = [
     "Width",
     "build_dto",
     "build_dtos",
+    "dto_values",
 ]
