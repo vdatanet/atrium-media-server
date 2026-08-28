@@ -7,7 +7,7 @@ updated: 2026-08-28
 accepted: 2026-08-27
 implemented: 2026-08-28
 plan_status_required: Accepted
-plan_status_actual: Accepted
+plan_status_actual: Implemented
 ---
 
 # 005 — Tasks

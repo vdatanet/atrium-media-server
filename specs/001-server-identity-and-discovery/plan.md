@@ -5,7 +5,7 @@ status: Implemented
 created: 2026-08-26
 updated: 2026-08-26
 spec_status_required: Accepted
-spec_status_actual: Accepted
+spec_status_actual: Implemented
 accepted: 2026-08-26
 ---
 

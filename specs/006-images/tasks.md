@@ -8,7 +8,7 @@ accepted: 2026-08-28
 implemented: 2026-08-28
 amended: 2026-08-28 at the gate — T2's fixture note, T9's indexed-form tests and corrected test names; see "What the gate changed"
 plan_status_required: Accepted
-plan_status_actual: Accepted
+plan_status_actual: Implemented
 ---
 
 # 006 — Tasks

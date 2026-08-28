@@ -8,7 +8,7 @@ accepted: 2026-08-28
 implemented: 2026-08-28
 amended: 2026-08-28 at the gate — the fixture's single runtime, the check-in column nobody writes, OQ-7's owner and AC-16's existing tests; see "What the gate changed"
 plan_status_required: Accepted
-plan_status_actual: Accepted
+plan_status_actual: Implemented
 ---
 
 # 007 — Tasks
@@ -581,6 +581,18 @@ them in the map.
   `test_no_route_ships_ahead_of_its_feature` green, which together say the map is complete, the
   criteria count matches the specification and exactly the seven 007 routes are served.
 - **Spec reference:** §5, §6
+
+**Done (2026-08-28).** Twenty-two rows, and the thing the task statement got wrong was a number it
+had repeated four times: this list said **"five routes"** in four places, and there are **seven**,
+because the mark pairs — `/UserPlayedItems/{itemId}` and `/UserFavoriteItems/{itemId}` — are two
+routes each, `POST` and `DELETE`. Nothing caught it until the set was counted against
+[`surface.yaml`](../../docs/compatibility/surface.yaml) rather than against the list's own prose,
+which is the same lesson 006's byte count taught: a number nobody subtracts is a number nobody
+checks. The other row worth recording was already the gate's: AC-16 got no test written here
+because 003's own AC-11 pair — plant a favourite and a resume position, delete, rescan, restore,
+rescan — already proves survival, and T13's job was to *name* them in `FEATURE_007`, not to write
+them again. *(This note was written at the 2026-08-28 audit, which found T13 the only ticked task
+in the repository without one — M25 in [the record](../../docs/audits/2026-08-28.md).)*
 
 ---
 

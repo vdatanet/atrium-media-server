@@ -5,7 +5,7 @@ status: Implemented
 created: 2026-08-26
 updated: 2026-08-26
 plan_status_required: Accepted
-plan_status_actual: Accepted
+plan_status_actual: Implemented
 ---
 
 # 001 — Tasks
