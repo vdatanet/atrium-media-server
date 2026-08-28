@@ -766,7 +766,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T15 — The two other shapes: `GET /Items/Filters` and `GET /Search/Hints`
 
-- [ ] **Changes:** `api/filters.py` — `{Genres, Tags, OfficialRatings, Years}` for a parent:
+- [x] **Changes:** `api/filters.py` — `{Genres, Tags, OfficialRatings, Years}` for a parent:
   the distinct values over the visible items in scope, each list in the reference's order as
   measured — the computation [plan §6.6](plan.md#66-the-four-shapes) gained at this list's gate;
   `api/search.py` — containment against the name, and against the sort name if that is what the
@@ -784,6 +784,30 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   the filter summary reflects only the parent's visible items for the requesting user; both
   shapes match [plan §6.6](plan.md#66-the-four-shapes)'s models byte-for-byte as goldens.
 - **Plan reference:** §6.6, §6.11; spec §3.7, §3.10
+- **Done (2026-08-28):** both measurements the gate ordered came back, and **both went against
+  the spec**.
+
+  **The name-versus-sort-name disagreement is settled: the name wins.** The discriminating item
+  the measurement needed actually existed on the live library — a title whose padded sort form
+  shares no substring with its folded name — and searching by that sort fragment finds
+  **nothing**. Spec §3.10 loses its "and sort name"; plan §6.11's `name_folded` reading was
+  right all along. The corpus' own awkward names hold it at endpoint level: "The Mat" (an
+  article the sort name dropped) finds The Matrix, "00002" (a padding only the sort name has)
+  finds nothing.
+
+  **And `MatchedTerm` does not exist on the wire.** Seventeen measured hints across three terms,
+  not one carrying it — the spec's "populates `MatchedTerm` so a client can highlight it"
+  described the schema, not the wire, and AC-14 required populating a field the reference never
+  sends. AC-14 is restated; Atrium, like the reference, leaves it out. What the measurement
+  *added*: `Artists` travels on every hint (empty list included), `ChannelId`'s explicit null
+  reaches hints too, and the three image-tag pairs resolve through the ancestors — a track's
+  hint carries its album's cover — all of which the hydration already had in hand.
+
+  **The filter summary behaved as the gate's amendment guessed, with two details measured in**:
+  all four keys always (empty lists included), each list **sorted ascending**, and the genres
+  are the items' own spellings — `Acción` and `Action` are two entries, because this list is
+  what items carry and the merged row is `/Genres`' business. `searchTerm` on `/Search/Hints`
+  is the one required parameter in the feature: missing, it is the validation `400`.
 
 ## T16 — The deterministic pair: `Similar` and `InstantMix`
 
