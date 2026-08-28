@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
 accepted: 2026-08-28
-amended: 2026-08-28 at the spec review — the reference's source predicted and the extended probe confirmed four corrections: §3.4 (a bare mark is `max(count, 1)`; only `datePlayed` increments), §3.5 (a container's `PlayedPercentage` is field-gated), §3.6 (rule 2 reversed — reports resolve last-writer-wins, and a play is counted at Start), §3.7 (the rule runs on every position-bearing report, not only stops); §3.8 added and AC-15 corrected by the `--reap` measurement — the reap commits a position extrapolated through the silence; OQ-1 and OQ-3 through OQ-6 answered
+amended: 2026-08-28 at the spec review — the reference's source predicted and the extended probe confirmed four corrections: §3.4 (a bare mark is `max(count, 1)`; only `datePlayed` increments), §3.5 (a container's `PlayedPercentage` is field-gated), §3.6 (rule 2 reversed — reports resolve last-writer-wins, and a play is counted at Start), §3.7 (the rule runs on every position-bearing report, not only stops); §3.8 added and AC-15 corrected by the `--reap` measurement — the reap commits a position extrapolated through the silence; OQ-1 and OQ-3 through OQ-6 answered; and 2026-08-28 at the plan gate, which measured plan §6.8's catalogue — §3.2's second Key calibration (a movie's is its own GUID, dashed), §3.3/§3.4's refusal shapes, §3.6's playing-session block (the NowPlayingItem slot and width, PlayState replaced whole) and error floor (AC-21, AC-22 added), and a Start's position measured unwritten
 depends_on: [002, 005]
 ---
 
@@ -88,7 +88,10 @@ MediaBrowserDto.kt, 2026-08-28]`. The fields exist to be *present* — a dialect
 not to be parsed, and the derivation stays v1's own. For calibration, the reference's own values
 are visibly not item ids — a season measured `Key: "309992001"`, a provider-derived string,
 beside a 32-hex `ItemId` `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]` —
-so clients demonstrably tolerate `Key` values of any shape.
+so clients demonstrably tolerate `Key` values of any shape. A movie and an artist measured the
+other direction at the plan gate: their `Key` **is** the item's own GUID, in dashed form beside
+the 32-hex `ItemId` — one object spelling one identity two ways
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 ### 3.3 Favourites
 
@@ -102,7 +105,11 @@ removed in 10.11 and Atrium does not serve it ([ADR-0004](../../docs/decisions/0
 unmarking twice is `200` both times too — unmarking what was never marked is not an error
 `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`. Clients retry.
 
-`404` for unknown or invisible items. `401` unauthenticated.
+**The refusals, measured at the plan gate** — all four mark routes share them: an unknown or
+invisible item is `404` RFC 9457 problem details; a path `itemId` that is not a GUID at all is
+`400` validation problem details naming the parameter; no token is the empty-body `401`. Each
+is a shape behaviours §1.11 already catalogues — nothing new, and nothing bespoke
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 Any item type may be a favourite — an artist, an album, a series, a single track. **A container's
 favourite does not cascade**: favouriting a season leaves every episode unfavourited, measured —
@@ -199,10 +206,36 @@ it. `[source: Jellyfin.Api/Controllers/PlaystateController.cs:199-260 @ v10.11.1
 
 | Report | Effect on `UserData` | Effect on the session |
 |---|---|---|
-| Start | **`PlayCount` increments and `LastPlayedDate` is set here**, at start — not at the end. `Played` becomes **false**: starting a previously played item un-marks it until it completes again. Position untouched | `NowPlayingItem` and `PlayState` appear (002 §3.8); `LastPlaybackCheckIn` advances |
+| Start | **`PlayCount` increments and `LastPlayedDate` is set here**, at start — not at the end. `Played` becomes **false**: starting a previously played item un-marks it until it completes again. Position untouched — a Start carrying `PositionTicks` at 30% measured the stored position still 0 | `NowPlayingItem` and `PlayState` appear (002 §3.8); `LastPlaybackCheckIn` advances |
 | Progress | The reported position resolves **through §3.7's rule** — a progress past the ceiling marks the item played mid-playback. No count change | `PlayState` updated; `LastPlaybackCheckIn` advances |
 | Stopped, with a position | The position resolves through §3.7's rule. **No count change** — the play was counted at start | `NowPlayingItem` cleared |
 | Stopped, no position | Played to the end: `Played` true, position 0 — and the count increments **a second time**, so a natural start-to-finish viewing without a final position measures `PlayCount: 2` | `NowPlayingItem` cleared |
+
+**What a playing session shows** — measured at the plan gate on a live playback
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`:
+
+- **`NowPlayingItem` takes one slot: between `DeviceName` and `DeviceId`**, the session
+  object's 002-measured order otherwise unchanged.
+- **`PlayState` is the last report, whole — replaced, never merged.** After a Start carrying
+  `CanSeek: true` and `VolumeLevel: 80`, a progress omitting both read back `CanSeek: false`
+  and no `VolumeLevel` at all. The measured playing set, in order: `PositionTicks`, `CanSeek`,
+  `IsPaused`, `IsMuted`, `VolumeLevel`, `AudioStreamIndex`, `SubtitleStreamIndex`,
+  `MediaSourceId`, `PlayMethod`, `RepeatMode`, `PlaybackOrder` — the nullable ones present
+  exactly when the last report carried them, and `PositionTicks` advancing between reports
+  (§3.8's ticker).
+- **`NowPlayingItem` is an item without `UserData`** — the one measured item shape that omits
+  §3.1's object entirely. A measured movie carried 41 properties; the media-derived subset
+  (`MediaStreams`, `Chapters`, `Width`, `Height`, `HasSubtitles`, `IsHD`, `VideoType`,
+  `Trickplay`, `Container`) and `CriticRating` are outside what v1 can yet say, stay absent
+  until the feature that owns them, and are a recorded gap the differential will show —
+  006's `Chapter` shape, not a silent one.
+
+**The reports' error floor, measured** — leniency starts after the body binds: a body that is
+not JSON, or an `ItemId` that is not a GUID at all, is `400` validation problem details; a
+`Stopped` carrying a **negative** position is the one refusal past binding — `400`,
+`text/plain`, the fixed `Error processing request.` body (behaviours §1.11's controller-refusal
+shape). Rule 1's `204` is for a well-formed id that names nothing
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 **Robustness rules, because these arrive over unreliable networks from clients that crash:**
 
@@ -366,6 +399,13 @@ because the alternative is a user losing their library's history to a temporaril
 20. A container's `PlayedPercentage` appears only when the request carries
     `Fields=RecursiveItemCount`; a bare container row carries `UnplayedItemCount` and `Played`
     and no percentage.
+21. A report whose body does not bind — non-JSON, or a non-GUID `ItemId` — answers `400`
+    validation problem details; a `Stopped` with a negative position answers the `text/plain`
+    `400`; a mark for an unknown item answers the problem-details `404` and for a non-GUID
+    path the validation `400`.
+22. During playback the session entry carries `NowPlayingItem` between `DeviceName` and
+    `DeviceId`, without `UserData` inside it, and `PlayState` mirrors exactly the last
+    report's fields — a progress omitting `CanSeek` reads back `CanSeek: false`.
 
 ## 6. Conformance
 
@@ -373,7 +413,7 @@ because the alternative is a user losing their library's history to a temporaril
 |---|---|---|
 | Favourite mark/unmark | **L2** | Round-trip plus idempotency both ways (AC-2) |
 | Played mark/unmark | **L2** | Including the count that does not move (AC-3), the position reset and the cascade (AC-5) |
-| The three reporting endpoints | **L2** | Status, effect on `UserData` (AC-17, AC-18), effect on `/Sessions`, and the reap (AC-15) |
+| The three reporting endpoints | **L2** | Status, effect on `UserData` (AC-17, AC-18), effect on `/Sessions` (AC-22), the error floor (AC-21), and the reap (AC-15) |
 | `UserData` shape | **L3** | Golden plus differential — it appears on every item, so an error is everywhere |
 | Aggregation | **L2** | Fixture mutated between assertions (AC-6), the field-gated percentage (AC-20) |
 | Threshold behaviour | **L2** | Table-driven over position × runtime, on both report types (AC-19) |

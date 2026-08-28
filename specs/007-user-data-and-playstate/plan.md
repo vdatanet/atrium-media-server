@@ -1,9 +1,11 @@
 ---
 feature: 007-user-data-and-playstate
 title: User data and playstate — implementation plan
-status: Draft
+status: Accepted
 created: 2026-08-28
 updated: 2026-08-28
+accepted: 2026-08-28
+amended: 2026-08-28 at the gate, which measured §6.8's catalogue before accepting — §1's sequencing note, §5's replacement semantics, §6.1's error floor, §6.4 rewritten around the measured session shape, §6.7, §6.8, §7, §9; the playing-session block and AC-21/AC-22 went back into the spec
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -56,11 +58,14 @@ returns a `UserItemDataDto`, and it is built by the same code path that fills `U
 the next list request shows. The measured field order (spec §3.1) is 005's declared order; there
 is nothing new to serialise.
 
-**The sequencing note:** `api/sessions.py`'s `PlayState` model was declared by 002 with five
-fields and a docstring saying "Feature 007 fills it". The gate measures what a playing session's
-`PlayState` and `NowPlayingItem` actually carry (§6.8) before T1 writes a line, because
-`NowPlayingItem` is a `BaseItemDto` width this project has never captured — and 005 T1's lesson
-is that there is no single item representation to assume.
+**The sequencing note, paid at the gate:** `api/sessions.py`'s `PlayState` model was declared
+by 002 with five fields and a docstring saying "Feature 007 fills it". The gate measured what a
+playing session actually carries before T1 writes a line — 005 T1's lesson, pointed at
+`/Sessions` — and the measurement earned its keep three times over: `PlayState` is **replaced
+whole by each report**, not merged (a progress omitting `CanSeek` reads back `false`);
+`NowPlayingItem` sits in a specific slot and is the one measured item shape with **no
+`UserData` inside**; and nine of its 41 properties are media-derived facts v1 cannot yet say
+(§6.4). All of it is spec §3.6's playing-session block now.
 
 ## 2. Inherited decisions
 
@@ -188,8 +193,12 @@ class NowPlayingRegistry:
     async def run(self) -> None                       # the sweep loop; commits via callback
 ```
 
-Time is injectable (`now` and `monotonic` callables, like `SessionRegistry`), so the reap and
-the extrapolation are tested without sleeping. The registry holds no database handle; the
+`start` and `update` **replace the whole record** — fields the new report omits are gone,
+because that is what the reference's `PlayState` measurably does *(amended at the gate: the
+draft had left merge-versus-replace to the implementer, which is exactly the decision a plan
+exists to take)*. Time is injectable (`now` and `monotonic` callables, like
+`SessionRegistry`), so the reap and the extrapolation are tested without sleeping. The
+registry holds no database handle; the
 reaper's commit callback is wired in `server.py`, and it routes through the exact function the
 `Stopped` handler uses — one code path for "a stop arrived" and "we gave up waiting", which is
 what the reference does by literally calling its own stop handler.
@@ -213,9 +222,14 @@ All three: authenticate (`require_user` — a report is an API route, tokens req
 everywhere outside images), parse the body as an `AtriumModel` with every field optional
 (unknown properties ignored, `compat/model.py`), resolve the item **by id, visible to the
 caller, not removed** through the 005 lookup. An unknown item answers `204` having recorded
-nothing (spec §3.6 rule 1, measured on a well-formed id that names nothing); what a *malformed*
-`ItemId` string in the body answers is §6.8's to measure before the parse is written, because
-the reference's body binding may refuse where its lookup forgives. Then:
+nothing (spec §3.6 rule 1, measured on a well-formed id that names nothing) — and the gate
+measured where the leniency stops, exactly where the plan had suspected the binding would
+refuse: a non-GUID `ItemId` or a non-JSON body is `400` validation problem details, which
+Pydantic validation through `compat/errors`' extended handler reproduces for free; `ItemId`
+binds as `WireGuid | None`, optional like everything else, so an *absent* id still skips
+rather than refuses. A `Stopped` with a **negative** position refuses `400` with behaviours
+§1.11's `text/plain` controller shape — one explicit guard in the route, mapped to the
+existing `compat/errors` body (spec §3.6's error floor). Then:
 
 | Route | Does |
 |---|---|
@@ -230,8 +244,8 @@ the extrapolation) structural rather than clever.
 ### 6.2 The mark routes
 
 `POST /UserPlayedItems/{itemId}?datePlayed=` parses the date through the wire-date parser
-(`compat/dates`); the item resolves through the same visible-item lookup, `404` problem details
-when it does not (§6.8 measures the reference's body before T1 pins it). A **leaf** applies
+(`compat/dates`); the item resolves through the same visible-item lookup, the measured
+problem-details `404` when it does not. A **leaf** applies
 `on_mark_played` to its own row. A **container** resolves its leaf descendants — one recursive
 scoped query, leaf types only, the caller's visibility — applies the transition to every leaf
 row, and *does not touch its own row* (spec §3.4, measured). `DELETE` is the same sweep with
@@ -256,10 +270,29 @@ reusing the gated code rather than special-casing.
 
 A `snapshot` computes `position = reported + (monotonic_now - reported_at)` in ticks while not
 paused, capped at the item's runtime when known; a paused session's position is frozen at its
-report. `/Sessions` fills `NowPlayingItem` (the 005 DTO builder at the width §6.8 measures) and
-`PlayState` from the snapshot, `LastPlaybackCheckIn` from the report time — a `/Sessions`
-poller watches the position advance between reports exactly as against the reference (spec
-§3.8). No playing session → the empty `PlayState` 002 already sends, absent `NowPlayingItem`.
+report. No playing session → the empty `PlayState` 002 already sends, absent `NowPlayingItem`.
+
+The measured shape (spec §3.6's playing-session block) pins the rest:
+
+- **`SessionInfo` grows `now_playing_item` in the measured slot** — declared between
+  `device_name` and `device_id` in `api/sessions.py`, `None` and therefore absent when nothing
+  plays, so the not-playing 23-field order 002 pinned is untouched.
+- **`PlayState` serialises the snapshot's fields and only those** — the nullable ones
+  (`PositionTicks`, `VolumeLevel`, `AudioStreamIndex`, `SubtitleStreamIndex`,
+  `MediaSourceId`, `PlayMethod`) suppress when the last report omitted them, which together
+  with §5's replace-whole rule reproduces the measured `CanSeek: false` after a bare progress.
+- **`NowPlayingItem` builds through 005's DTO builder with `enable_user_data=False`** — the
+  measured shape has no `UserData` — and a fixed, named field selection derived from the
+  measured 41-property width: the emitters v1 owns (`Path`, `Taglines`, `DateCreated`,
+  `ExternalUrls`, `PrimaryImageAspectRatio`, the images family, the genre/studio family…)
+  emit; the media-derived nine (`MediaStreams`, `Chapters`, `Width`, `Height`,
+  `HasSubtitles`, `IsHD`, `VideoType`, `Trickplay`, `Container`) and `CriticRating` have no
+  v1 source, stay absent, and are the spec's recorded gap — 006's `Chapter` pattern: the
+  route is correct the day 008 gives the emitters data, and the differential sees the gap
+  until then, named rather than silent.
+
+`LastPlaybackCheckIn` reads from the registry (live over stored, §6.6) — a `/Sessions` poller
+watches the position advance between reports exactly as against the reference (spec §3.8).
 
 ### 6.5 The reaper
 
@@ -286,27 +319,32 @@ position, because positions are rows written per report (§6.1).
 The five routes declare their pinned spellings; canonicalisation and `api_key` seeding arrive
 from 005 §6.12's startup walk unchanged. Bodies are Pydantic models with PascalCase aliases and
 every field optional; `datePlayed` is the one query parameter with a value worth parsing, and
-an unparseable one is measured at the gate before its error path is written (§6.8). The
-ignored-parameter recorder keeps counting anything undeclared, as everywhere.
+`datePlayed=banana` measured `400` validation problem details naming the parameter *(the gate
+measured what this sentence had deferred)* — a `WireDateTime`-typed query parameter produces
+exactly that through the extended handler. The ignored-parameter recorder keeps counting
+anything undeclared, as everywhere.
 
 ### 6.8 Measured at the gate, and what stays owed
 
-Catalogued while writing this plan; the gate measures them before accepting, per the habit:
+This section catalogued four batteries while the plan was written; the gate measured all four
+before accepting `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`,
+and the answers are folded into §§6.1–6.7 and back into the spec (§3.2, §3.3, §3.6, AC-21,
+AC-22):
 
-1. **A playing session's wire shape** — start a playback against a pristine item, capture
-   `GET /Sessions` raw: `NowPlayingItem`'s exact property set (a `BaseItemDto` width nothing
-   has measured), `PlayState`'s full field set, `NowPlayingQueue`/`NowPlayingQueueFullItems`,
-   and which of the 23 session fields change. T1 needs this before `to_wire` grows.
-2. **The mark routes' error shapes** — unknown item `404` (problem details or another of
-   behaviours §1.11's four?), malformed `itemId`, tokenless `401`, `datePlayed=banana`.
-3. **Report edges** — a `Stopped` with a negative position (the reference's source throws
-   `ArgumentOutOfRangeException`; what reaches the wire?), a `Progress` with no
-   `PositionTicks` (source: leaves the stored position alone — confirm), a `Start` carrying
-   `PositionTicks` (source: start writes no position — confirm), an `ItemId` that is not a
-   GUID at all (body binding may refuse where the lookup forgives), and a report body that is
-   not JSON.
-4. **A favourite on a by-name item** — an artist, spec §3.3's "any item type", cheap to
-   confirm and cheap to restore.
+1. **A playing session's wire shape** — the `NowPlayingItem` slot and 41-property width, the
+   11-field `PlayState` and its replace-whole semantics, `NowPlayingQueue`/`FullItems` as
+   empty arrays when the client sent none. The sharpest finding was the *absence*:
+   `NowPlayingItem` carries no `UserData`.
+2. **The mark routes' error shapes** — unknown item: problem-details `404`; `itemId=banana`:
+   validation `400` naming the parameter; tokenless: the empty `401`; `datePlayed=banana`:
+   validation `400`, nothing stored. Every one an existing behaviours §1.11 shape.
+3. **Report edges** — a negative-position `Stopped` answers `400` `text/plain`
+   `Error processing request.` (the controller-refusal shape, not a `500`); a positionless
+   `Progress` leaves the stored position alone; a `Start` carrying 30% leaves it at 0; a
+   non-GUID `ItemId` and a non-JSON body refuse `400` validation problem details — binding
+   before leniency, as suspected.
+4. **A favourite on a by-name item** — an artist: `200`, the DTO, restored clean; its `Key`
+   measured as the dashed GUID (spec §3.2's second calibration).
 
 What the sweep cannot reach stays owed: **OQ-7** (the empty container needs a library with
 one — the fixture library can build it, so the task list owns it as an Atrium-side decision
@@ -319,9 +357,11 @@ account nothing here wants to create).
 
 | Failure | Detection | Response | Recovery |
 |---|---|---|---|
-| Mark route: unknown, invisible or removed item | 005 lookup | `404`, the gate-measured body (§6.8) | — |
-| Mark route: malformed `itemId` | Path validation | `404` after the lookup treats it as never-matching, or the measured refusal (§6.8 decides which) | — |
-| Report: unknown, invisible, removed or malformed `ItemId` | Lookup | **`204`**, nothing recorded (spec §3.6 rule 1) | — |
+| Mark route: unknown, invisible or removed item | 005 lookup | Problem-details `404` (measured) | — |
+| Mark route: `itemId` not a GUID | Path validation | Validation `400` naming the parameter (measured) | — |
+| Report: body not JSON, or `ItemId` not a GUID | Body binding | Validation `400` (measured) | — |
+| Report: `Stopped` with a negative position | Route guard | `400` `text/plain` `Error processing request.` (measured; behaviours §1.11's controller shape) | — |
+| Report: well-formed `ItemId` naming nothing — unknown, invisible or removed | Lookup | **`204`**, nothing recorded (spec §3.6 rule 1) | — |
 | Report: `Failed: true` | Body | `204`; registry cleared, row untouched | — |
 | Report: no position on `Progress` | Body | `204`; stored position untouched, registry keeps ticking from its last report | Next positioned report |
 | Reports arriving out of order | — | Not a failure: last writer wins (spec §3.6 rule 2) | — |
@@ -374,12 +414,12 @@ request — the suite still opens no TCP connection.
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| `NowPlayingItem`'s width guessed wrong | High without the gate | High — every `/Sessions` reader | §6.8 row 1 measures before T1; the DTO builder reuses 005's emitters so a wrong width is a wrong *list*, not wrong values |
+| `NowPlayingItem`'s width guessed wrong | ~~High without the gate~~ measured | High — every `/Sessions` reader | §6.8 row 1 measured it at the gate; the DTO builder reuses 005's emitters so a wrong width is a wrong *list*, not wrong values, and the named-gap set is the spec's |
 | The cascade sweeps virtual/soft-removed rows the reference would skip | Low | Medium | The leaf query runs through the 005 visibility scope; a test seeds a soft-removed episode and asserts it untouched |
 | Registry and row disagree during playback (row behind by one report) | Certain, by design | Low — the reference's check-in cadence has the same gap | `/Sessions` reads the registry, list rows read the row — same split as the reference; documented in §6.4 |
 | The reaper commits through a different path than stops and drifts | Low | High | One function, called by both; the reap test asserts the same outcome as an explicit stop at that position |
 | A flood of progress reports makes a write per second per viewer | Medium | Low–medium (SQLite WAL) | Same write rate as the reference's check-ins; measured need decides any batching, not fear (002 §6.5's argument, inverted) |
-| `datePlayed` parsing diverges from the reference's lenient binder | Medium | Low | Gate measurement (§6.8 row 2) pins the error path before it is written |
+| `datePlayed` parsing diverges from the reference's binder | ~~Medium~~ measured | Low | The gate measured the error path (§6.8 row 2): validation `400` naming the parameter, which the typed query parameter produces for free |
 
 ## 10. Alternatives considered
 
