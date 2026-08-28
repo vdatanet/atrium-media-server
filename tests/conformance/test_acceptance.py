@@ -496,6 +496,108 @@ FEATURE_006: dict[int, tuple[str, ...]] = {
 }
 
 
+FEATURE_007: dict[int, tuple[str, ...]] = {
+    1: (
+        "tests.conformance.test_user_data_identity:test_ac1_every_row_carries_user_data_with_key_and_item_id",
+        "tests.conformance.test_user_data_identity:test_ac1_the_single_item_route_carries_them_too",
+    ),
+    2: (
+        "tests.unit.test_favourite_routes:test_ac2_marking_twice_answers_200_twice_and_leaves_one_favourite",
+        "tests.unit.test_favourite_routes:test_ac2_unmarking_twice_answers_200_twice_and_leaves_none",
+    ),
+    3: (
+        "tests.unit.test_domain_playstate:test_ac3_a_bare_mark_is_max_count_one_and_marking_twice_does_not_move_it",
+        "tests.unit.test_domain_playstate:test_ac3_only_the_dated_form_increments_and_its_date_wins",
+        "tests.unit.test_played_mark_routes:test_ac3_marking_played_resets_the_position_and_sets_the_count_to_one",
+        "tests.unit.test_played_mark_routes:test_ac3_marking_twice_leaves_the_count_at_one",
+        "tests.unit.test_played_mark_routes:test_ac3_only_the_dated_form_increments_and_its_date_wins",
+    ),
+    4: (
+        "tests.unit.test_domain_playstate:test_ac4_unmarking_clears_played_the_count_the_position_and_the_date",
+        "tests.unit.test_played_mark_routes:test_ac4_unmarking_clears_all_four_fields",
+    ),
+    5: (
+        "tests.unit.test_played_mark_routes:test_ac5_marking_a_season_writes_every_episode_and_not_the_season",
+        "tests.unit.test_played_mark_routes:test_ac5_the_response_is_the_rollup_the_writes_just_created",
+    ),
+    6: (
+        "tests.conformance.test_user_data_aggregation:test_ac6_the_count_follows_a_mark_an_addition_and_a_removal",
+        "tests.conformance.test_user_data_aggregation:test_removing_the_only_unplayed_episode_makes_the_season_played",
+    ),
+    7: (
+        "tests.conformance.test_user_data_identity:test_ac7_every_write_is_per_user",
+        "tests.conformance.test_user_data_identity:test_ac7_a_second_users_writes_do_not_reach_the_first",
+        "tests.conformance.test_user_data_identity:test_ac7_a_container_rollup_is_per_user_too",
+    ),
+    8: (
+        "tests.unit.test_playback_report_routes:test_ac8_every_report_answers_204_with_an_empty_body",
+    ),
+    9: (
+        "tests.unit.test_playback_report_routes:test_ac9_a_progress_without_a_media_source_or_a_start_still_lands",
+    ),
+    10: (
+        "tests.unit.test_domain_playstate:test_ac10_a_report_older_than_the_stored_position_rewinds_it",
+        "tests.unit.test_playback_report_routes:test_ac10_a_later_report_carrying_an_older_position_rewinds_it",
+    ),
+    11: (
+        "tests.unit.test_playback_report_routes:test_ac11_a_report_for_an_unknown_item_is_204_and_writes_nothing",
+    ),
+    12: (
+        "tests.unit.test_domain_playstate:test_ac12_every_branch_of_the_rule",
+        "tests.unit.test_playback_report_routes:test_ac12_every_branch_of_the_rule_reaches_the_wire",
+    ),
+    13: (
+        "tests.unit.test_domain_playstate:test_ac13_the_first_tick_reaching_the_floor_keeps_its_position",
+        "tests.unit.test_domain_playstate:test_ac13_the_last_tick_not_past_the_ceiling_keeps_its_position",
+    ),
+    14: (
+        "tests.unit.test_playback_report_routes:test_ac14_a_failed_stop_records_nothing_and_the_start_keeps_its_effects",
+    ),
+    15: (
+        "tests.unit.test_session_reaping:test_ac15_a_silent_session_is_reaped_and_keeps_the_viewers_place",
+        "tests.unit.test_now_playing_registry:test_the_reaped_position_carries_the_silence",
+        "tests.unit.test_session_reaping:test_the_reap_and_an_explicit_stop_agree",
+    ),
+    # 003's own AC-11, seen from the other side: it plants a favourite *and* a resume position,
+    # unlinks the file, rescans, restores it and rescans again. The gate found this rather than
+    # writing a second one (see 007's tasks, "What the gate changed").
+    16: (
+        "tests.library.test_removal:test_a_deleted_file_disappears_from_queries_and_its_user_data_survives",
+        "tests.library.test_removal:test_restoring_the_file_revives_the_item_with_the_same_identifier",
+    ),
+    17: (
+        "tests.unit.test_domain_playstate:test_ac17_a_start_counts_the_play_and_un_marks_a_played_item",
+        "tests.unit.test_playback_report_routes:test_ac17_a_start_counts_the_play_sets_the_date_and_clears_played",
+    ),
+    18: (
+        "tests.unit.test_domain_playstate:test_ac18_a_stop_with_a_position_does_not_count_and_one_without_counts_again",
+        "tests.unit.test_playback_report_routes:test_ac18_a_stop_with_a_position_does_not_count_and_one_without_counts_again",
+    ),
+    19: (
+        "tests.unit.test_domain_playstate:test_ac19_a_report_past_the_ceiling_marks_played_and_clears_the_position",
+        "tests.unit.test_playback_report_routes:test_ac19_a_progress_past_the_ceiling_marks_played_mid_playback",
+    ),
+    20: (
+        "tests.conformance.test_user_data_aggregation:test_ac20_a_bare_container_row_carries_no_percentage",
+        "tests.conformance.test_user_data_aggregation:test_ac20_asking_for_recursive_item_count_produces_the_percentage",
+    ),
+    21: (
+        "tests.unit.test_favourite_routes:test_ac21_an_unknown_item_is_the_problem_details_404",
+        "tests.unit.test_favourite_routes:test_ac21_a_path_that_is_not_a_guid_is_the_validation_400",
+        "tests.unit.test_favourite_routes:test_ac21_no_token_is_the_empty_401",
+        "tests.unit.test_played_mark_routes:test_ac21_an_unparseable_date_played_refuses_and_stores_nothing",
+        "tests.unit.test_playback_report_routes:test_ac21_a_stop_with_a_negative_position_is_the_text_plain_400",
+        "tests.unit.test_playback_report_routes:test_ac21_a_body_that_is_not_json_is_the_validation_400",
+        "tests.unit.test_playback_report_routes:test_ac21_an_item_id_that_is_not_a_guid_is_the_validation_400",
+    ),
+    22: (
+        "tests.conformance.test_session_routes:test_ac22_now_playing_sits_between_device_name_and_device_id",
+        "tests.conformance.test_session_routes:test_ac22_the_now_playing_item_carries_no_user_data",
+        "tests.conformance.test_session_routes:test_ac22_play_state_mirrors_exactly_the_last_report",
+    ),
+}
+
+
 FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "001-server-identity-and-discovery": FEATURE_001,
     "002-authentication-users-and-sessions": FEATURE_002,
@@ -503,6 +605,7 @@ FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "004-metadata-resolution": FEATURE_004,
     "005-item-query-api": FEATURE_005,
     "006-images": FEATURE_006,
+    "007-user-data-and-playstate": FEATURE_007,
 }
 
 
