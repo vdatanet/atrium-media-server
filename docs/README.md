@@ -28,6 +28,9 @@ docs/
 ├── roadmap.md                   v1 scope, milestones, explicit non-goals
 ├── architecture.md              Module decomposition and runtime stack
 ├── glossary.md                  The MediaBrowser/Jellyfin vocabulary, defined once
+├── audits/
+│   └── YYYY-MM-DD.md            One audit each: findings kept as open debts, ticked by the pull
+│                                request that resolves them, in the same commit
 ├── compatibility/
 │   ├── reference-target.md      Pinned version, sources of truth, what parity means
 │   ├── api-surface-v1.md        The endpoints v1 serves, with provenance per endpoint
