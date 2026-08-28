@@ -615,7 +615,7 @@ classes earlier gates taught, back for the very next feature:
 
 ## T12 — The byte-identity trio: rescan, cache hit, cache loss
 
-- [ ] **Changes:** the three criteria that need the whole stack and the real scan:
+- [x] **Changes:** the three criteria that need the whole stack and the real scan:
   **AC-2** — 003's scan over a `tmp_path` library twice: touch the poster's mtime without
   changing bytes → the tag is unchanged; change the bytes → the tag changes; **AC-8** — the
   same request twice is byte-identical, and then the source file is overwritten *without
@@ -630,6 +630,34 @@ classes earlier gates taught, back for the very next feature:
 - **Note:** the scan runs here and nowhere else in 006's tests; every other task seeds through
   the repositories (T4), which is 005's discipline for the same reason.
 - **Plan reference:** §6.5; spec AC-2, AC-8, AC-13
+- **Done (2026-08-28):** **AC-2's second half was unreachable, and had been since 004.** "The tag
+  changes when the file changes" is false of every scan at every depth: `Field.IMAGES` merged
+  under the whole-replace rule, which routes through the scalar branch — *keep what the item
+  already has unless the mode is `Replace`* — so an item that had ever been given artwork could
+  never be given different artwork. And v1 has **no refresh route**, so nothing could ask for
+  `Replace` either. Replacing a poster changed no tag, ever, which means a client's cached copy
+  of a corrected poster is valid for ever: the exact failure [spec §3.1](spec.md#31-how-a-client-discovers-an-image)
+  describes, arrived at from the opposite direction.
+
+  The field has its own rule now — `ListRule.REDERIVED`, re-read every time and written only when
+  it differs. The argument is that `IMAGES` has exactly **one** source, the directory walk, so
+  "keep what we have" was never protecting a better answer from a worse one; it was protecting a
+  stale index of a directory from the directory. [004's plan §6.1](../004-metadata-resolution/plan.md)
+  carries the amendment, because the rule is 004's.
+
+  **And the scan still has to look.** Even re-derived, a *default* scan re-examines an item only
+  when its **media** file changed — 003's change-detection signal — so replacing `poster.jpg`
+  beside an untouched film is picked up by a **deep** scan and not before. That is a real
+  user-visible limitation and it is now a test that pins it plus
+  [behaviours §5.6](../../docs/compatibility/behaviours.md#56-a-default-rescan-does-not-notice-a-replaced-poster),
+  with the reason it is a gap rather than a fix: widening the signal means stat-ing dozens of
+  candidate artwork names per item per scan, which is the cost 003's design was written to avoid.
+  Spec AC-2 says so now instead of implying otherwise.
+
+  AC-8 is asserted the honest way — the source overwritten **without** a rescan, so a reply that
+  recomputed would be visibly different — and the loop closes: after a deep rescan the new bytes
+  are served, the old entry is still on disk and **unreachable**, asserted by computing both keys
+  from the two tags rather than by looking for a deletion nothing performs.
 
 ## T13 — The acceptance map, and Implemented
 

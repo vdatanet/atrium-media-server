@@ -1464,6 +1464,36 @@ task is a bounded addition, and the precedence above is the whole of the behavio
 The gap is invisible on the default configuration, because the option is off unless an operator
 turns it on.
 
+### 5.6 A default rescan does not notice a replaced poster
+
+**Jellyfin does:** unmeasured from here — deciding it would mean writing into somebody's library
+and rescanning it, which the probes deliberately never do.
+
+**Atrium does:** re-derive an item's artwork from its directory on every refresh that *reads* the
+directory — and a default scan reads it only when the item's **media file** changed, because
+003's change-detection signal is that file's size and modification time
+([003 plan §6.4](../../specs/003-library-configuration-and-scanning/plan.md)). Replacing
+`poster.jpg` beside an untouched film therefore changes nothing until a **deep** scan runs, and a
+client keeps the old poster until then — correctly, because its `tag` is still the tag of the
+image the server is still serving.
+
+**Depends on it:** nothing can depend on it, but a *user* meets it: they replace a poster, rescan,
+and see no change. The workaround is the documented one — a deep scan is 003's escape hatch for
+exactly this class of change, "a library whose tags were rewritten in place by a tool that
+preserved both size and time".
+
+**Why it is a gap and not a fix:** widening the signal means stat-ing every candidate artwork name
+of every item on every scan — dozens of names per item, which is the cost 003's `_by_name` listing
+was written to avoid. That is a measurement somebody should take before paying it.
+
+> **What was a bug and is fixed:** until 006 T12 the tag could not change *at all*, at any scan
+> depth. `Field.IMAGES` merged under the rule that keeps whatever the item already has unless the
+> mode is `Replace`, so an item that had ever been given artwork could never be given different
+> artwork — and v1 has no refresh route through which anybody could ask for `Replace`. 006 AC-2's
+> second half was unreachable, and the whole of client-side cache invalidation with it. The field
+> is `REDERIVED` now: it has exactly one source, and "keep what we have" was protecting a stale
+> index of a directory from the directory.
+
 ### 5.5 No BlurHash is computed, so `ImageBlurHashes` is always empty
 
 **Jellyfin does:** send `ImageBlurHashes` on **every item of every response**, unasked — the same
