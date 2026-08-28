@@ -17,10 +17,11 @@ Three groups, and each holds something the layers below cannot:
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncIterator, Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import httpx
 import pytest
@@ -335,16 +336,81 @@ async def _bare(client: httpx.AsyncClient) -> dict[str, Any]:
     return dict(answered.json())
 
 
-@pytest.mark.parametrize("position", range(36))
+#: `battery()`'s labels, spelled once at module level so pytest can parametrize by name — the
+#: battery itself needs the `world` fixture and cannot run at collection time. The previous
+#: `range(36)` parametrization padded with a skip: a 37th case would silently never have run,
+#: and a shrunk battery would have skipped quietly forever.
+#: `test_the_battery_matches_its_label_list` keeps this tuple honest in both directions.
+BATTERY_LABELS: Final = (
+    "parentId",
+    "recursive",
+    "startIndex",
+    "limit",
+    "sortBy",
+    "sortOrder",
+    "fields",
+    "includeItemTypes",
+    "excludeItemTypes",
+    "excludeItemIds",
+    "mediaTypes",
+    "searchTerm",
+    "ids",
+    "genres",
+    "genreIds",
+    "studioIds",
+    "artistIds",
+    "albumArtistIds",
+    "albumIds",
+    "personIds",
+    "years",
+    "nameStartsWith",
+    "nameStartsWithOrGreater",
+    "nameLessThan",
+    "minCommunityRating",
+    "filters IsFavorite",
+    "filters IsPlayed",
+    "filters IsUnplayed",
+    "filters IsResumable",
+    "isPlayed",
+    "isFavorite",
+    "enableUserData",
+    "enableImages",
+    "imageTypeLimit",
+    "enableImageTypes",
+    "enableTotalRecordCount",
+)
+
+#: Tier 1/2 parameters AC-16 covers through their own suites rather than this battery: `userId`
+#: scopes every route of the feature and is asserted by the user-world and played-state tests.
+COVERED_ELSEWHERE: Final = frozenset({"userId"})
+
+
+def test_the_battery_matches_its_label_list(world: QueryWorld) -> None:
+    """A case added to `battery()` without a label above would otherwise never run."""
+    assert tuple(label for label, _, _ in battery(world)) == BATTERY_LABELS
+
+
+def test_the_battery_covers_the_specifications_tier_1_and_2() -> None:
+    """Spec section 3.3's "Every Tier 1 and Tier 2 parameter" (AC-16), held against the
+    specification's own tier lists rather than restated by hand: a parameter added to either
+    tier without a battery case fails here, one level below the acceptance map."""
+    spec = Path(__file__).resolve().parents[2] / "specs" / "005-item-query-api" / "spec.md"
+    text = spec.read_text(encoding="utf-8")
+    tiers = text[text.index("**Tier 1") : text.index("**Tier 3")]
+    parameters = set(re.findall(r"`([a-z][A-Za-z]+)`", tiers))
+    exercised = {label.split()[0] for label in BATTERY_LABELS}
+    assert parameters - exercised == COVERED_ELSEWHERE
+    assert exercised <= parameters
+
+
+@pytest.mark.parametrize("label", BATTERY_LABELS)
 async def test_every_parameter_changes_the_answer_and_survives_mangled_casing(
-    client: httpx.AsyncClient, world: QueryWorld, position: int
+    client: httpx.AsyncClient, world: QueryWorld, label: str
 ) -> None:
     """AC-16's endpoint half, and behaviours 1.15 re-held on the real route in the same breath:
     the mangled-casing rerun must produce the byte-identical body, not merely a passing one."""
-    cases = battery(world)
-    if position >= len(cases):
-        pytest.skip("no case at this position")
-    label, params, check = cases[position]
+    cases = {name: (params, check) for name, params, check in battery(world)}
+    params, check = cases[label]
 
     bare = await _bare(client)
     answered = await client.get("/Items", params={**params, "limit": params.get("limit", "1000")})

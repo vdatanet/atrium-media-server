@@ -198,9 +198,15 @@ def test_a_season_is_identified_by_its_series_and_its_number() -> None:
 
 
 def test_a_season_directory_may_be_renamed_without_changing_its_identity() -> None:
-    """`Season 01`, `Season 1` and `Specials` are all directory spellings of the same number."""
-    series = for_name(ItemType.SERIES, LIBRARY, "The Series")
-    assert for_season(series, 0) == for_season(series, 0)
+    """`Season 01`, `Season 1` and `Specials` are all directory spellings of the same number.
+
+    The invariance is the signature: a season's identity is derived from its series and its
+    number alone, so no directory spelling can reach it. Asserted the way
+    `test_no_library_takes_part_in_a_by_name_identity` asserts its exclusion, because the
+    equality this test used to hold compared the function with itself and could not fail.
+    """
+    arguments = for_season.__code__.co_varnames[: for_season.__code__.co_argcount]
+    assert arguments == ("series_id", "season_number")
 
 
 def test_a_season_with_no_number_still_gets_one_identity() -> None:

@@ -479,6 +479,39 @@ def test_nothing_writes_into_a_library_when_a_provider_is_down(
     assert digest(root) == before
 
 
+def test_local_artwork_wins_without_asking_the_image_host(engine: Engine, tmp_path: Path) -> None:
+    """AC-7's "without consulting a provider", held where a provider could have answered.
+
+    `test_local_refresh` holds AC-7 in a world that configures no providers, so its "without
+    consulting" was vacuous — the same shape AC-1's zero had before this file existed. Here the
+    film carries its own poster, TMDB is wired and offering artwork, and the file on disk must
+    win with the image host never asked.
+    """
+    root = tmp_path / "films"
+    folder = a_film(
+        root, "The Fixture", xml="<movie><title>The Fixture</title><year>1999</year></movie>"
+    )
+    (folder / "poster.jpg").write_bytes(POSTER)
+    library = a_library(engine, root, "movies")
+
+    transport = Counting(TMDB_REPLIES)
+    scanned(engine, library, tmdb=transport, artwork_root=tmp_path / "atrium" / "artwork")
+
+    factory = session_factory(engine)
+    with session_scope(factory) as db:
+        primary = [
+            row
+            for row in db.execute(select(models.ItemImage)).scalars()
+            if row.image_type == "Primary"
+        ]
+    assert [(one.source_kind, one.relative_path) for one in primary] == [
+        ("file", "The Fixture/poster.jpg")
+    ]
+    assert transport.asked, "the provider was never consulted at all - this world is vacuous"
+    downloads = [path for path in transport.asked if path.endswith((".jpg", ".png"))]
+    assert downloads == [], f"the provider was asked for artwork: {downloads}"
+
+
 # ----------------------------------------------------------------------------------------------
 # The opt-in live test plan section 8 promised and no task had delivered
 # ----------------------------------------------------------------------------------------------
