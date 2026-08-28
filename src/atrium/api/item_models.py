@@ -122,6 +122,10 @@ class BaseItemDto(AtriumModel):
     people: list[BaseItemPerson] | None = None
     studios: list[NameGuidPair] | None = None
     genre_items: list[NameGuidPair] | None = None
+    #: Before the tags it pairs with, which is the pinned document's own order - and the two are
+    #: emitted from one ancestor walk, so they can never name different items (006 spec section
+    #: 3.1). `ParentLogoItemId` sits between them upstream and stays out here (Principle VI).
+    parent_backdrop_item_id: str | None = None
     parent_backdrop_image_tags: list[str] | None = None
     user_data: UserItemDataDto | None = None
     recursive_item_count: int | None = None

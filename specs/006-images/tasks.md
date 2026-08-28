@@ -124,7 +124,7 @@ classes earlier gates taught, back for the very next feature:
 
 ## T2 — `ParentBackdropItemId`, and inheritance unconditional
 
-- [ ] **Changes:** `api/item_dto.py` — the registry gains `ParentBackdropItemId` beside
+- [x] **Changes:** `api/item_dto.py` — the registry gains `ParentBackdropItemId` beside
   `ParentBackdropImageTags`, same per-type set, emitted from the same nearest-ancestor walk, so
   the id and the tags can never come from different items
   ([spec §3.1](spec.md#31-how-a-client-discovers-an-image); the gap 005 left deliberately and
@@ -149,6 +149,42 @@ classes earlier gates taught, back for the very next feature:
   feature: a criterion's discriminating case is seeded by the task that needs it, not assumed
   of a world built for someone else.
 - **Plan reference:** §1 (the DTO reconciliation); spec §3.1, AC-1, AC-14
+- **Done (2026-08-28):** measured first, and the measurement settled three things the list
+  asserted. The pairing is exact — of 200 sampled episodes, **197 carried both fields and not one
+  carried either alone**; fetching each named owner and comparing its own `BackdropImageTags` to
+  the tags on the inheriting row agreed **12 of 12**. And AC-14's premise turned out to be the
+  reference's ordinary case rather than an edge: **all 200 sampled episodes carried a `Primary`
+  of their own**, every one of them still carrying `SeriesPrimaryImageTag` and `SeriesId`. What
+  005's world could not express is what the reference does on every row it has.
+  `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`
+
+  **The obvious placement was the wrong one.** `item_models.py` declares fields in the pinned
+  document's order, on purpose, and the natural guess — the id after the tags it pairs with —
+  is not what the document says: it orders `GenreItems`, `ParentLogoItemId`,
+  **`ParentBackdropItemId`, `ParentBackdropImageTags`**, `LocalTrailerCount`. The id goes
+  *before*. Getting it wrong would have moved a key on every `Season` and `Episode` row and
+  passed every test in this task, because pydantic serialises in declaration order and nothing
+  here compares against the reference's bytes.
+
+  **A track proved the walk is nearest-first, and an episode could not.** On the reference a
+  track's `ParentBackdropItemId` is its **`MusicArtist`**, not its album — the album carries no
+  backdrops and the artist does, on every sampled track. No sampled season had backdrops of its
+  own, so an episode's owner was its series every time, which nearest-first and topmost-always
+  both produce. `_backdrop_owner` says so in its docstring rather than claiming the distinction
+  was measured where it was not.
+
+  **The row this task adds belongs to an *Implemented* feature's specification.** The property is
+  005's surface, `tests/unit/test_item_dto.py`'s per-type table mirrors 005 §3.2 rather than 006's
+  spec, and the change is incomplete until that matrix says `ParentBackdropItemId` too — so
+  [005's spec](../005-item-query-api/spec.md) is amended in this change and carries its own
+  `amended:` line. A task that only touched 006's documents would have left a shipped feature's
+  specification describing a narrower wire than the server sends.
+
+  The gate's fixture prediction held exactly: no episode in the seeded world carried artwork of
+  its own, so AC-14's precondition had to be built before it could be asserted. Four goldens
+  changed and only four — `Season` and `Episode`, row and full body — which is the review check
+  the task named: `MusicAlbum` and `Audio` are in the per-type set and their ancestors have no
+  backdrops in this world, so the field is correctly absent there.
 
 ## T3 — The fourth error shape, in `compat/`
 

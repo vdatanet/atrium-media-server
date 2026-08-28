@@ -111,6 +111,11 @@ ALWAYS: frozenset[str] = frozenset(
     }
 )
 
+#: The types whose rows carry an inherited backdrop - the id and the tags both, from one walk.
+PARENT_BACKDROP_TYPES: frozenset[ItemType] = frozenset(
+    {ItemType.SEASON, ItemType.EPISODE, ItemType.MUSIC_ALBUM, ItemType.AUDIO}
+)
+
 #: Present on a bare list row when the item is one of these types - the measured matrix, kept to
 #: the fields the spec lists. A type absent from a row means the reference never emits that
 #: property on that type's bare list row, asked-for or not observed.
@@ -158,9 +163,12 @@ PER_TYPE: Mapping[str, frozenset[ItemType]] = {
     "SeriesThumbImageTag": frozenset({ItemType.EPISODE}),
     "ParentThumbItemId": frozenset({ItemType.SEASON, ItemType.EPISODE}),
     "ParentThumbImageTag": frozenset({ItemType.SEASON, ItemType.EPISODE}),
-    "ParentBackdropImageTags": frozenset(
-        {ItemType.SEASON, ItemType.EPISODE, ItemType.MUSIC_ALBUM, ItemType.AUDIO}
-    ),
+    # One set, spelled once, because the pair is a pair: the measured wire carries the id on
+    # exactly the rows that carry the tags - 197 of 200 sampled episodes carried both, and not
+    # one carried either alone `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11,
+    # 2026-08-28]`. Two frozensets that agreed today is two frozensets that can drift.
+    "ParentBackdropItemId": PARENT_BACKDROP_TYPES,
+    "ParentBackdropImageTags": PARENT_BACKDROP_TYPES,
     "Album": frozenset({ItemType.AUDIO}),
     "AlbumId": frozenset({ItemType.AUDIO}),
     "AlbumPrimaryImageTag": frozenset({ItemType.AUDIO}),
@@ -254,6 +262,32 @@ def _first_with(one: HydratedItem, kind: ImageKind) -> Ancestor | None:
         if ancestor is not None and any(image.kind is kind for image in ancestor.images):
             return ancestor
     return None
+
+
+def _backdrop_owner(one: HydratedItem) -> Ancestor | None:
+    """The ancestor whose backdrops this row inherits - named once, read by both emitters.
+
+    `ParentBackdropItemId` and `ParentBackdropImageTags` are one fact told twice, and the whole
+    point of the id is that a client can build a URL for the tags beside it. Resolving the
+    ancestor in two places is how they come to disagree, so they do not: this is the one walk.
+
+    **Nearest, not topmost.** Measured on a track, where the album carries no backdrops and the
+    artist does: the id named the `MusicArtist` and its `BackdropImageTags` were the tags on the
+    row, on every sampled track `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11,
+    2026-08-28]`. No sampled season had backdrops of its own, so an episode's owner was its
+    series every time - which is what nearest-first produces, and does not distinguish it from
+    topmost-always. The distinction stays unmeasured and is called out here rather than claimed.
+    """
+    return _first_with(one, ImageKind.BACKDROP)
+
+
+def _parent_backdrop_tags(one: HydratedItem, ctx: BuildContext) -> list[str] | None:
+    if not ctx.enable_images:
+        return None
+    owner = _backdrop_owner(one)
+    if owner is None:
+        return None
+    return [image.tag for image in owner.images if image.kind is ImageKind.BACKDROP] or None
 
 
 def _tag_of(ancestor: Ancestor | None, kind: ImageKind) -> str | None:
@@ -453,16 +487,10 @@ EMITTERS: Mapping[str, Callable[[HydratedItem, BuildContext], Any]] = {
     "ParentThumbImageTag": lambda one, ctx: (
         _tag_of(_first_with(one, ImageKind.THUMB), ImageKind.THUMB) if ctx.enable_images else None
     ),
-    "ParentBackdropImageTags": lambda one, ctx: (
-        [
-            image.tag
-            for image in getattr(_first_with(one, ImageKind.BACKDROP), "images", ())
-            if image.kind is ImageKind.BACKDROP
-        ]
-        or None
-        if ctx.enable_images
-        else None
+    "ParentBackdropItemId": lambda one, ctx: (
+        getattr(_backdrop_owner(one), "id", None) if ctx.enable_images else None
     ),
+    "ParentBackdropImageTags": _parent_backdrop_tags,
     "Album": lambda one, ctx: getattr(one.parent, "name", None),
     "AlbumId": lambda one, ctx: getattr(one.parent, "id", None),
     "AlbumPrimaryImageTag": lambda one, ctx: (

@@ -4,7 +4,7 @@ title: Images
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
-amended: 2026-08-28 by T1's probe — §3.2's forgiven-value row, §3.2's parameter table (which still said `fillWidth` crops, three amendments after §3.3 stopped saying it), and the two §3.3 citations the committed script now reproduces; and 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered; and 2026-08-28 by the plan — §3.2's error row now names the thirteen-member vocabulary the probe distinguishes, `Box` measured `404`; and 2026-08-28 at the plan gate — §3.3 fill covers rather than crops (AC-6 corrected) and negotiates Accept (AC-15 added), §3.2 response constants and invalid tokens, §3.4 Vary, AC-12, OQ-3's missing cell
+amended: 2026-08-28 by T2 — §3.1's `ParentBackdropItemId` gap closed, and the pairing measured; and 2026-08-28 by T1's probe — §3.2's forgiven-value row, §3.2's parameter table (which still said `fillWidth` crops, three amendments after §3.3 stopped saying it), and the two §3.3 citations the committed script now reproduces; and 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered; and 2026-08-28 by the plan — §3.2's error row now names the thirteen-member vocabulary the probe distinguishes, `Box` measured `404`; and 2026-08-28 at the plan gate — §3.3 fill covers rather than crops (AC-6 corrected) and negotiates Accept (AC-15 added), §3.2 response constants and invalid tokens, §3.4 Vary, AC-12, OQ-3's missing cell
 depends_on: [002, 004, 005]
 ---
 
@@ -71,9 +71,14 @@ series' — and the client needs both the tag and the id of the item that owns i
 every inherited tag travels with an owning id: `AlbumId`, `SeriesId`, or the explicit
 `Parent…ItemId` beside it. On the measured wire `ParentBackdropItemId` pairs with
 `ParentBackdropImageTags` row for row
-`[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]` — 005 §3.2's matrix lists
-only the tags, a gap the plan for this feature must reconcile before AC-14 is provable for
-backdrops. A `ParentLogoImageTag`/`ParentLogoItemId` pair is also on the wire and stays out here
+`[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`, and they are present
+exactly together: of 200 sampled episodes, 197 carried both and none carried either alone, each
+naming the ancestor whose own `BackdropImageTags` the row repeats
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. 005 §3.2's matrix
+listed only the tags — the gap this feature was to reconcile before AC-14 was provable for
+backdrops, **closed at T2**, in 005's own matrix as well as here.
+
+A `ParentLogoImageTag`/`ParentLogoItemId` pair is also on the wire and stays out here
 for the same reason it stayed out of 005: no analysed client reads it (Principle VI,
 [005 notes](../005-item-query-api/notes/item-shapes.md)). `SeriesThumbImageTag` is carried
 **unconfirmed**, exactly as 005 §3.2 records it — never observed across twelve episodes, and
