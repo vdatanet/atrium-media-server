@@ -244,6 +244,13 @@ signs into real Jellyfin servers today, which is evidence that it does — third
 reproducible from here, and therefore exactly the shape of lead that Principle II says to turn into
 a probe rather than into a sentence.
 
+**It was turned into one, the same day.** The probe now signs in with the components in
+`Authorization` and the reference answers `200`
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`, so the corrected
+paragraph in api-surface-v1.md §3 rests on a measurement of this repository's own rather than on
+this client's word. It is the one row of this document that has stopped being third-party
+evidence.
+
 ### 5.2 `GetAudioStream` is tagged with one consumer and has two
 
 [`surface.yaml`](surface.yaml) recorded `consumers: [music-client]` for
