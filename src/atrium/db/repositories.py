@@ -420,10 +420,19 @@ class SessionRepository:
         if row is not None:
             row.capabilities = dict(capabilities)
 
-    def touch(self, session_id: str, when: datetime) -> None:
+    def touch(self, session_id: str, when: datetime, playback: datetime | None = None) -> None:
+        """Advance the activity timestamp, and the playback check-in when one is given.
+
+        Both in one statement because they are flushed together on one pass (007 plan section
+        6.6). `last_playback_check_in` had **no writer at all** until 007: 002 created the column
+        and reflected it back, and nothing ever moved it, so a session that had played something
+        reported `0001-01-01` for ever.
+        """
         row = self._session.get(models.Session, session_id)
         if row is not None:
             row.last_activity_date = when
+            if playback is not None:
+                row.last_playback_check_in = playback
 
     def remove(self, session_id: str) -> None:
         self._session.execute(delete(models.Session).where(models.Session.id == session_id))

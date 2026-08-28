@@ -379,3 +379,69 @@ async def test_the_background_task_flushes_on_its_interval(
 def test_the_default_interval_is_the_one_the_plan_states() -> None:
     """Thirty seconds is the number plan section 6.5 puts a bound on, so it is asserted."""
     assert DEFAULT_FLUSH_SECONDS == 30.0
+
+
+# ------------------------------------------------------------------------------------------
+# The playback check-in (007 T7)
+# ------------------------------------------------------------------------------------------
+
+
+def test_a_playback_check_in_reaches_the_database_on_the_flush_and_not_before(
+    registry: SessionRegistry, factory: sessionmaker[OrmSession], joan: User, clock: Clock
+) -> None:
+    """`last_playback_check_in` had no writer at all before 007: 002 created the column, reflected
+    it back and never moved it, so a session that had played something reported `0001-01-01` for
+    ever. It is flushed on the same pass as activity, for the reason activity is - a write per
+    progress report is the write-per-request the flush exists to avoid."""
+    established = registry.establish(joan, device())
+    later = clock.advance(120)
+    registry.touch(established.token.record.token_sha256, established.session.id, later)
+    registry.touch_playback(established.session.id, later)
+
+    with factory() as reader:
+        stored = SessionRepository(reader).by_id(established.session.id)
+        assert stored is not None and stored.last_playback_check_in is None
+    assert registry.playback_check_in(established.session.id) == later
+
+    assert registry.flush() == 1
+    with factory() as reader:
+        stored = SessionRepository(reader).by_id(established.session.id)
+        assert stored is not None
+        assert stored.last_playback_check_in == later
+        assert stored.last_activity_date == later
+
+
+def test_an_ordinary_request_does_not_advance_the_playback_check_in(
+    registry: SessionRegistry, factory: sessionmaker[OrmSession], joan: User, clock: Clock
+) -> None:
+    """The two columns mean different things: one is "this session made a request", the other is
+    "this session was playing something". A flush that wrote both from one map would make every
+    authenticated request look like playback."""
+    established = registry.establish(joan, device())
+    registry.touch(
+        established.token.record.token_sha256, established.session.id, clock.advance(60)
+    )
+    registry.flush()
+
+    with factory() as reader:
+        stored = SessionRepository(reader).by_id(established.session.id)
+        assert stored is not None and stored.last_playback_check_in is None
+
+
+def test_a_check_in_without_an_activity_entry_is_still_written(
+    registry: SessionRegistry, factory: sessionmaker[OrmSession], joan: User, clock: Clock
+) -> None:
+    """What a restart mid-playback looks like: the registry is empty, the client's next report
+    arrives, and the session it names has no pending activity of its own."""
+    established = registry.establish(joan, device())
+    later = clock.advance(90)
+    registry.touch_playback(established.session.id, later)
+
+    registry.flush()
+    with factory() as reader:
+        stored = SessionRepository(reader).by_id(established.session.id)
+        assert stored is not None and stored.last_playback_check_in == later
+
+
+def test_a_flush_with_nothing_pending_is_still_free(registry: SessionRegistry) -> None:
+    assert registry.flush() == 0

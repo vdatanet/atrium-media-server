@@ -88,6 +88,10 @@ class SessionRegistry:
         #: Session id -> its latest activity. Latest wins, so a busy session costs one entry
         #: rather than one per request.
         self._pending: dict[str, Activity] = {}
+        #: Session id -> its latest playback check-in, flushed on the same pass (007 plan
+        #: section 6.6). Separate from `_pending` because a report advances both and an ordinary
+        #: request advances only activity - one map could not tell them apart.
+        self._checked_in: dict[str, datetime] = {}
 
     # -- activity ----------------------------------------------------------------------------
 
@@ -95,6 +99,31 @@ class SessionRegistry:
         """Record that this session was just used. No I/O."""
         moment = when or self._clock()
         self._pending[session_id] = Activity(token_sha256, session_id, moment)
+
+    def touch_playback(self, session_id: str, when: datetime | None = None) -> None:
+        """Record that this session reported playback. No I/O, flushed with the activity.
+
+        A synchronous write here would be the write-per-request the flush exists to avoid, and
+        what it costs is the same bound 002 stated: an unclean shutdown loses up to one interval
+        of *timestamps*, never a position - positions are rows written per report.
+        """
+        moment = when or self._clock()
+        self._checked_in[session_id] = moment
+        self.touch_session(session_id, moment)
+
+    def touch_session(self, session_id: str, when: datetime) -> None:
+        """Advance activity for a session whose token this caller does not have to hand.
+
+        The report routes have the session id from the request state and not the token hash, and
+        an entry with an empty hash would flush a token update for a token that does not exist.
+        """
+        held = self._pending.get(session_id)
+        if held is not None:
+            self._pending[session_id] = Activity(held.token_sha256, session_id, when)
+
+    def playback_check_in(self, session_id: str) -> datetime | None:
+        """The live value `/Sessions` reports, newer than the stored one between flushes."""
+        return self._checked_in.get(session_id)
 
     def activity(self, session_id: str) -> datetime | None:
         """The live timestamp, which is newer than the stored one between flushes.
@@ -115,21 +144,31 @@ class SessionRegistry:
         Taken and cleared before the write, so a request arriving during it starts a fresh entry
         rather than being dropped by the clear.
         """
-        if not self._pending:
+        if not self._pending and not self._checked_in:
             return 0
         writing, self._pending = self._pending, {}
+        checked_in, self._checked_in = self._checked_in, {}
         try:
             with session_scope(self._sessions) as opened:
                 sessions = SessionRepository(opened)
                 tokens = TokenRepository(opened)
                 for entry in writing.values():
-                    sessions.touch(entry.session_id, entry.when)
+                    sessions.touch(
+                        entry.session_id, entry.when, checked_in.pop(entry.session_id, None)
+                    )
                     tokens.touch(entry.token_sha256, entry.when)
+                # A session that reported playback without an activity entry of its own - the
+                # registry was built after the request that authenticated it, which is what a
+                # restart mid-playback looks like.
+                for session_id, when in checked_in.items():
+                    sessions.touch(session_id, when, when)
         except Exception:
             # Put them back rather than losing them: the next flush retries, and a database that
             # is briefly unavailable costs a delay rather than a gap.
             for session_id, entry in writing.items():
                 self._pending.setdefault(session_id, entry)
+            for session_id, when in checked_in.items():
+                self._checked_in.setdefault(session_id, when)
             logger.exception("could not flush session activity; %d entries kept", len(writing))
             raise
         return len(writing)
