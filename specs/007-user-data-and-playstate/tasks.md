@@ -319,7 +319,7 @@ a hand-parsed date would have silently ignored it or stored the wrong one.
 
 ## T7 — `users/playing.py`: live playback, extrapolated on read, and the column nobody wrote
 
-- [ ] **Changes:** new `src/atrium/users/playing.py` with `PlayingNow` and `NowPlayingRegistry`
+- [x] **Changes:** new `src/atrium/users/playing.py` with `PlayingNow` and `NowPlayingRegistry`
   exactly as [plan §5](plan.md#5-contracts) declares them — `start` and `update` **replace the
   whole record**, `snapshot` computes *last reported + unpaused elapsed, capped at the runtime*,
   `reap(older_than)` returns the stale playing sessions, and `now`/`monotonic` are injected like
@@ -334,6 +334,29 @@ a hand-parsed date would have silently ignored it or stored the wrong one.
   sessions past the threshold. `tests/unit/test_session_registry.py` gains the flush assertion:
   a recorded check-in reaches the database on the flush and not before.
 - **Spec reference:** §3.6, §3.8; plan §6.4, §6.6
+
+**Done (2026-08-28).** Twenty-one tests, none of which sleeps, and the gate's second finding is
+now a writer.
+
+**`last_playback_check_in` has a writer for the first time.** 002 created the column, `to_wire`
+reflected it back and `SessionRepository.upsert` copied it — and nothing ever moved it, so a
+session that had played something reported `0001-01-01T00:00:00.0000000Z` for ever. It is flushed
+on the activity pass, as [plan §6.6](plan.md#66-what-the-session-row-stores) asks, which took two
+things the flusher did not have: a second pending map (one map could not tell "this session made a
+request" from "this session was playing", and writing both from one would make every authenticated
+request look like playback) and a branch for a check-in whose session has no pending activity —
+what a restart mid-playback looks like.
+
+**`start` and `update` are the same operation**, which is the measurement rather than a shortcut:
+`PlayState` is the last report and not an accumulation, so a progress omitting `CanSeek` reads
+back `false`. Writing `update` as a merge is the natural thing to write and would invent a
+`PlayState` no reference server sends.
+
+The extrapolation is arithmetic on two injected clocks — wall for what a client sees, monotonic
+for elapsed, so an NTP step cannot move a position backwards — and its three edges each have a
+test: a paused session is frozen at its report (and is reaped there), the position is capped at
+the runtime, and an unknown runtime is not a cap. The reap threshold is asserted one second either
+side of five minutes, which is what says the constant is used rather than approximated.
 
 ## T8 — The three reporting routes: `204` everywhere, and the rule on every position
 
