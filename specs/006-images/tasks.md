@@ -1,9 +1,11 @@
 ---
 feature: 006-images
 title: Images — tasks
-status: Draft
+status: Accepted
 created: 2026-08-28
 updated: 2026-08-28
+accepted: 2026-08-28
+amended: 2026-08-28 at the gate — T2's fixture note, T9's indexed-form tests and corrected test names; see "What the gate changed"
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -43,6 +45,19 @@ tags already computed from those rows alone, pinned by 005's sixteen goldens
 first-root-that-exists reading in `metadata/refresh.py`; and the parameter canonicalisation,
 `api_key` seeding and ignored-parameter recorder of 005 §6.12, which give this feature its OQ-4
 trail without a line of image code. In each case the lean is a test.
+
+## What the gate changed
+
+This list was reviewed against [`spec.md`](spec.md), [`plan.md`](plan.md) and the files it
+references on 2026-08-28 before being accepted. Four things changed — two of them the exact
+classes earlier gates taught, back for the very next feature:
+
+| The draft said | It was |
+|---|---|
+| Index errors in T10, index goldens in T9 | **[Spec §6](spec.md#6-conformance)'s "Indexed form" conformance row had no task holding its positive case.** Every index test in the draft was an error test — out of range, absent — and nothing asserted that `/Backdrop/1` returns backdrop 1. T9 now holds it, for the path form and the query spelling both, assertible by the three differing sizes T4 draws |
+| AC-14's test runs over the seeded 005 world | **The world cannot express AC-14's precondition.** `tests/fixtures/query.py` seeds images on the first film and the first series only — no episode carries artwork of its own, because 005 never needed one — so "inheritance does not gate on the child's own images" had no discriminating fixture anywhere. T2 now extends the world and its invariant test. The 005 gate's fixture lesson, one feature later |
+| "the existing all-routes canonicalisation test picks the new routes up with PascalCase spellings of every parameter" | **No such test exists in that shape.** The two standing all-routes tests are the table-coverage walk and the `api_key` seeding check; the PascalCase mangling was always per-route (005 §8). T9 now names the two real tests and carries the one-route mangling battery itself — found by opening `tests/unit/test_compat_query_params.py`, not by re-reading the list |
+| AC-12 parameterises "over 002 §3.1's mechanism list itself" | **Executable only once the list has a name.** The enumeration exists — `mechanisms()` in `tests/conformance/test_auth_mechanisms.py` — and T9 now points at it, so "not a copy" is an import, not an aspiration |
 
 ## Legend
 
@@ -90,9 +105,17 @@ trail without a line of image code. In each case the lean is a test.
   ancestor whose rows produced the tags; AC-14's test — an episode **with artwork of its own**
   under a series with poster and backdrops carries `SeriesPrimaryImageTag` + `SeriesId` and the
   paired backdrop fields, proving inheritance does not gate on the child's own images; AC-1
-  reasserted by name for the map (`ImageTags.Primary` present with a poster, `{}` without);
-  `ParentLogoImageTag`/`ParentLogoItemId` asserted **absent** — the pair stays out by
-  Principle VI, and the test is what keeps a later reader from "completing" it.
+  reasserted by name for the map (`ImageTags.Primary` present with a poster, `{}` without —
+  both halves the world already seeds); `ParentLogoImageTag`/`ParentLogoItemId` asserted
+  **absent** — the pair stays out by Principle VI, and the test is what keeps a later reader
+  from "completing" it.
+- **Note (added at the gate):** `tests/fixtures/query.py` seeds images on the first film and the
+  first series only — **no episode carries artwork of its own**, because 005 never needed one.
+  AC-14's precondition does not exist in any fixture, so this task extends the world with an
+  episode holding its own `Primary` under the imaged series, and the invariant test that pins
+  the world's shape grows the same line. The 005 gate's fixture lesson, back for the very next
+  feature: a criterion's discriminating case is seeded by the task that needs it, not assumed
+  of a world built for someone else.
 - **Plan reference:** §1 (the DTO reconciliation); spec §3.1, AC-1, AC-14
 
 ## T3 — The fourth error shape, in `compat/`
@@ -228,14 +251,23 @@ trail without a line of image code. In each case the lean is a test.
 - **Verified by:** the **header-set sweep** — the canonical request battery of
   [plan §8](plan.md#8-testing-strategy), asserting set-equality per response, `ETag` and
   `Accept-Ranges` absent by name; AC-3 (bytes, real `Content-Type`, exact `Content-Length`);
+  **the indexed form and the query spelling each select the backdrop they name** —
+  `/Backdrop/1` and `/Backdrop?imageIndex=1` return the same second backdrop, assertible by the
+  three differing sizes T4 draws *(added at the gate: spec §6's "Indexed form" conformance row
+  had no task holding its positive case — every index test in the draft was an error test)*;
   AC-9 (`304` at the sent `Last-Modified`); AC-10 (a stale `tag` answers `200` with the current
   bytes — the `tag` never reaches selection); AC-12 parameterised **over 002 §3.1's mechanism
-  list itself**, not a copy — no token, every mechanism, an unknown and a malformed token —
-  identical bytes each time, which is the "every" 005's gate taught lists to actually hold;
-  the recorder holds `(route, percentPlayed)` after a decorated request answers `200`
-  unfiltered — OQ-4's trail exists; the existing all-routes canonicalisation test picks the new
-  routes up with `PascalCase` spellings of every parameter; `X-Response-Time-ms` present via
-  the standing sweep.
+  list itself** — the `mechanisms()` enumeration
+  `tests/conformance/test_auth_mechanisms.py` already exports, not a copy — no token, every
+  mechanism, an unknown and a malformed token — identical bytes each time, which is the "every"
+  005's gate taught lists to actually hold; the recorder holds `(route, percentPlayed)` after a
+  decorated request answers `200` unfiltered — OQ-4's trail exists; the two standing all-routes
+  tests pick the new routes up by construction —
+  `test_the_table_covers_every_route_of_the_real_application` and
+  `test_every_route_accepts_the_authentication_parameters` *(corrected at the gate: the draft
+  cited an all-routes PascalCase test that does not exist in that shape)* — and the `PascalCase`
+  mangling battery lands here per 005 §8's pattern: one image route called with every declared
+  parameter's spelling mangled; `X-Response-Time-ms` present via the standing sweep.
 - **Note:** the routes own parsing and headers only — any logic found here in review belongs in
   `images/` (plan §3's boundary, the review check).
 - **Plan reference:** §6.1, §6.6, §6.7; spec §3.2, §3.4, AC-3, AC-9, AC-10, AC-12
