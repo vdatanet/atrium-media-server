@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-28
 updated: 2026-08-28
 accepted: 2026-08-28
-amended: 2026-08-28 by T8 — §5's `accepts_webp` and the row-derived decision AC-8 needs; and 2026-08-28 by T6 — §6.3 step 3's never-upscale cap deleted, measured; and 2026-08-28 by T3 — §5's two exception names gain the `Error` suffix the linter requires; and 2026-08-28 by T1 — §6.3 steps 1 and 5, §6.4's `quality` bullet, §6.8 row 3 discharged, behaviours §1.17 added; and 2026-08-28 at the gate, which measured the six §6.8 edges before accepting — §1, §5, §6.1, §6.3, §6.4, §6.5, §6.6, §6.8, §7, §8, §9, §10; two measurements went back into the spec (AC-6 corrected, AC-15 added) and one into behaviours §1.11 (the fourth error shape)
+amended: 2026-08-28 by T9 — §6.6's conditional paragraph (the two promises that cannot both hold) and the `Last-Modified` divergence on a transformed response; and 2026-08-28 by T8 — §5's `accepts_webp` and the row-derived decision AC-8 needs; and 2026-08-28 by T6 — §6.3 step 3's never-upscale cap deleted, measured; and 2026-08-28 by T3 — §5's two exception names gain the `Error` suffix the linter requires; and 2026-08-28 by T1 — §6.3 steps 1 and 5, §6.4's `quality` bullet, §6.8 row 3 discharged, behaviours §1.17 added; and 2026-08-28 at the gate, which measured the six §6.8 edges before accepting — §1, §5, §6.1, §6.3, §6.4, §6.5, §6.6, §6.8, §7, §8, §9, §10; two measurements went back into the spec (AC-6 corrected, AC-15 added) and one into behaviours §1.11 (the fourth error shape)
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -321,8 +321,30 @@ the probe had not asked to see)*: `Vary: Accept`, `Content-Disposition: attachme
 unmeasured and low-stakes — and compares at whole-second granularity; not earlier than
 `Last-Modified` answers `304` with an empty body and the `200`'s header set minus
 `Content-Length` — measured in full at the gate, `Content-Type` and the DLNA pair included
-(same manual-requests probe). The conditional check runs after the lookup and the carrier `stat`
-but **before** any bytes are read or transformed — a `304` never opens an image.
+(same manual-requests probe).
+
+*(Amended at T9: this paragraph also said the conditional check "runs after the lookup and the
+carrier `stat` but **before** any bytes are read or transformed — a `304` never opens an image".
+That and the sentence before it cannot both hold. The `200`'s `Content-Type` is a property of the
+payload that would have been sent, so a `304` carrying it has to know what that payload is — and
+the reference does exactly that: a conditional request offering `image/webp` on a resized image
+answers `304` with `Content-Type: image/webp`, and the same request without the offer answers
+`image/jpeg` `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. So the
+answer is resolved and the body is dropped, which after the first request is a cache read rather
+than an encode. The refusals still come first: a conditional header cannot turn a `404` into a
+`304`. The lenient parse is measured now too — `If-Modified-Since: banana` answers `200`.)*
+
+**One measured header is deliberately not reproduced: `Last-Modified` on a *transformed*
+response.** The reference sends the variant's own creation time — a resized poster whose source
+file dates from 2026-08-11 came back with `Last-Modified` one second **after** that response's own
+`Date`, because the value is the cache entry's mtime and the entry had just been written
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. Atrium sends the
+**carrier's** mtime on every path, variants included. The argument is behaviours §3.0.3's shape of
+a safe divergence: both are valid validators for the same entity, no client compares a server's
+`Last-Modified` against an expectation, and Atrium's is strictly the more useful one — it survives
+a cache wipe, so a client's stored copy stays valid where the reference's would force a
+re-download of every poster. Reproducing the reference's would also make the header
+**non-deterministic**, which is the one thing spec §6 pins goldens against.
 
 ### 6.7 The wire and the recorder
 

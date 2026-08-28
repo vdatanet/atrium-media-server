@@ -36,6 +36,7 @@ from atrium.api import (
     artists,
     filters,
     genres,
+    images,
     instant_mix,
     items,
     localization,
@@ -88,6 +89,7 @@ ROUTERS = (
     localization.router,
     # The two literal-path item routers land before `items.router`, which owns /Items/{itemId}.
     user_views.router,
+    images.router,
     user_library.router,
     tv_shows.router,
     resume.router,

@@ -6,16 +6,25 @@ failure looks like a bug in the client, which is why this gets its own table rat
 implied by the API route passing: an image loader and an external player are handed a URL and set
 no headers, so the query forms are the only ones they can use.
 
-The image and delivery rows go through **stub routes** carrying the same dependency, because 006
-and 008 do not exist yet. They are replaced rather than duplicated when those features arrive.
+The delivery row goes through a **stub route** carrying the same dependency, because 008 does not
+exist yet. It is replaced rather than duplicated when that feature arrives - which is what
+happened to the image row at 006 T9.
 
-**The stubs assert that a token is accepted, not that one is required.** T1 measured that the
+**The stub asserts that a token is accepted, not that one is required.** T1 measured that the
 reference requires no token on either class, and asserting otherwise here would pin a behaviour
-006 and 008 have not chosen yet.
+008 has not chosen yet.
+
+**The image row is a real route now, and its assertion had to change.** The stub answered `200`
+to anything; the real route answers `200` only when there is an image to serve, so "every
+mechanism reaches it" is no longer the claim that survives. What survives is the claim AC-12
+actually makes: **presenting a token never changes the answer**, whatever the answer is. Asserted
+against the tokenless response, byte for byte. The `200` half - a real image, served to a request
+carrying nothing - is 006's, in `tests/conformance/test_image_routes.py`, where there is an image.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from typing import Annotated
 
@@ -33,14 +42,14 @@ CLIENT_HEADER = 'MediaBrowser Client="Atrium Test", Device="Bench", DeviceId="be
 BOGUS = "0" * 32
 ITEM = "1" * 32
 
-#: The API row is a real route. The other two are the stubs.
+#: The API and image rows are real routes. Delivery is the last stub.
 API_ROUTE = "/Users/Me"
 IMAGE_ROUTE = f"/Items/{ITEM}/Images/Primary"
 DELIVERY_ROUTE = f"/Videos/{ITEM}/stream"
 
+#: The classes where a token is a credential and the answer is `200` with one.
 ROUTE_CLASSES = [
     ("API", API_ROUTE),
-    ("image", IMAGE_ROUTE),
     ("delivery", DELIVERY_ROUTE),
 ]
 
@@ -58,20 +67,32 @@ def mechanisms(token: str) -> list[tuple[str, dict[str, str], dict[str, str]]]:
 
 MECHANISM_NAMES = [name for name, _, _ in mechanisms("x")]
 
+#: `traceId` is per request by definition (behaviours §1.11), so two identical refusals differ in
+#: exactly those 55 bytes. Masked rather than parsed: what is being compared is the wire, and a
+#: comparison that went through `.json()` would stop seeing casing and null-versus-absent.
+_TRACE = re.compile(rb'"traceId":"[^"]*"')
+
+
+def masked(response: httpx.Response) -> bytes:
+    return _TRACE.sub(b'"traceId":"?"', response.content)
+
+
+def same_bytes(first: httpx.Response, second: httpx.Response) -> bool:
+    return masked(first) == masked(second)
+
 
 @pytest.fixture(autouse=True)
 def stub_routes(app: FastAPI) -> Iterator[None]:
-    """An image route and a delivery route, carrying the dependency the real ones will carry.
+    """A delivery route carrying the dependency the real one will carry.
 
     Deliberately **not** in `server.ROUTERS`: a route registered there would be served by every
     instance and would fail 001's "no route exists outside the surface file" check, which is right
     - a stub is a test fixture and not a surface. It reaches the application because the path
     middleware rewrites the paths it knows and passes everything else through untouched.
-    """
 
-    @app.get("/Items/{itemId}/Images/Primary")
-    async def image(itemId: str, user: Annotated[User, Depends(require_user)]) -> dict[str, str]:  # noqa: N803
-        return {"Reached": "image", "For": user.name}
+    The image stub that used to sit beside it is gone: 006 T9 registered the real route, and a
+    stub shadowed by a real route is a test asserting nothing about either.
+    """
 
     @app.get("/Videos/{itemId}/stream")
     async def stream(itemId: str, user: Annotated[User, Depends(require_user)]) -> dict[str, str]:  # noqa: N803
@@ -115,6 +136,26 @@ async def test_every_mechanism_authenticates_every_route_class(
     assert answered.status_code == 200, f"{mechanism} did not authenticate the {route_class} route"
 
 
+@pytest.mark.parametrize("mechanism", MECHANISM_NAMES)
+async def test_a_token_never_changes_the_image_routes_answer(
+    client: httpx.AsyncClient, token: str, mechanism: str
+) -> None:
+    """AC-12's half that does not need an image: **the same answer, whatever arrives.**
+
+    The route reads no token at all (006 plan §1), so every mechanism is accepted trivially - and
+    "accepted" is only visible as "the answer did not change". Compared byte for byte against the
+    tokenless request rather than by status, because a route that started refusing differently per
+    mechanism would keep the status and change the body.
+    """
+    tokenless = await client.get(IMAGE_ROUTE)
+    headers, query = next((h, q) for name, h, q in mechanisms(token) if name == mechanism)
+
+    answered = await client.get(IMAGE_ROUTE, headers=headers, params=query)
+
+    assert answered.status_code == tokenless.status_code
+    assert same_bytes(answered, tokenless)
+
+
 async def test_the_query_forms_are_the_only_ones_a_player_can_use(
     client: httpx.AsyncClient, token: str
 ) -> None:
@@ -124,22 +165,28 @@ async def test_the_query_forms_are_the_only_ones_a_player_can_use(
     supported only the headers would leave browsing working and every poster and stream broken -
     a failure that looks like a bug in the client.
     """
-    for path in (IMAGE_ROUTE, DELIVERY_ROUTE):
-        assert (await client.get(f"{path}?ApiKey={token}")).status_code == 200
-        assert (await client.get(f"{path}?api_key={token}")).status_code == 200
+    assert (await client.get(f"{DELIVERY_ROUTE}?ApiKey={token}")).status_code == 200
+    assert (await client.get(f"{DELIVERY_ROUTE}?api_key={token}")).status_code == 200
+
+    # The image route needs no token, so what a query form must not do here is *break* it.
+    tokenless = await client.get(IMAGE_ROUTE)
+    for query in (f"?ApiKey={token}", f"?api_key={token}"):
+        answered = await client.get(f"{IMAGE_ROUTE}{query}")
+        assert answered.status_code == tokenless.status_code
+        assert same_bytes(answered, tokenless)
 
 
-async def test_the_stubs_are_not_asserted_to_demand_a_token(
+async def test_the_stub_is_not_asserted_to_demand_a_token(
     client: httpx.AsyncClient, token: str
 ) -> None:
     """T1 measured that the reference requires none on either class.
 
-    What these stubs pin is that presenting a token is never a *reason to refuse*. Whether the
-    class demands one is 006's and 008's decision, and asserting it here would take it for them.
+    What the delivery stub pins is that presenting a token is never a *reason to refuse*. Whether
+    the class demands one is 008's decision, and asserting it here would take it for them.
     """
-    with_token = await client.get(IMAGE_ROUTE, headers={"X-Emby-Token": token})
+    with_token = await client.get(DELIVERY_ROUTE, headers={"X-Emby-Token": token})
     assert with_token.status_code == 200
-    assert with_token.json()["Reached"] == "image"
+    assert with_token.json()["Reached"] == "delivery"
 
 
 # --------------------------------------------------------------------------------------------
