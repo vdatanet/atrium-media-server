@@ -248,7 +248,9 @@ class is cheaper than an asterisk on every golden and a permanent exception in t
 
 **Jellyfin does:** returns `UserData` on every item without `Fields=UserData` or
 `EnableUserData=true`, and includes `Key` and `ItemId` inside it (Emby does not).
-`[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
+`[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]` Neither analysed client
+*reads* the pair — the fields are a dialect marker, present to be present
+(007 §3.2's survey).
 
 **Atrium does:** the same.
 
@@ -457,6 +459,29 @@ items of every spelling behind it; a user scrolling `/Genres` sees a list withou
 name, diacritics preserved and distinct ([004 §3.7](../../specs/004-metadata-resolution/spec.md#37-people-genres-and-studios)).
 The ids themselves differ by derivation, as everywhere (§1.4).
 
+### 2.19 A play is counted at start, and reports resolve last-writer-wins
+
+**Jellyfin does:** increments `PlayCount` and sets `LastPlayedDate` when the **start** report
+arrives, not when playback ends — and sets `Played` to *false*, so starting a previously played
+item un-marks it until it completes again. A stop carrying a position adds no further count; a
+stop carrying **none** counts a second time, so a start-to-finish viewing whose stop omits the
+position measures `PlayCount: 2`. The bare mark route is different again: `POST
+/UserPlayedItems` without `datePlayed` is `max(count, 1)` — marking twice stays at one — and
+only the `datePlayed` form increments. And nothing anywhere compares a report's position against
+the stored one: a progress at 40% followed by one at 20% reads back 20%, because a deliberate
+seek backwards arrives as exactly that report.
+`[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`
+`[source: Emby.Server.Implementations/Session/SessionManager.cs:814-832, 1115-1145 @ v10.11.11]`
+`[source: MediaBrowser.Controller/Entities/BaseItem.cs:1893-1927 @ v10.11.11]`
+
+**Depends on it:** any client or script comparing play counts across servers, and every viewer
+who rewinds — a server that "protected" the stored position from older reports would pin them at
+their furthest point.
+
+**Atrium does:** the same. [007 §3.4 and §3.6](../../specs/007-user-data-and-playstate/spec.md)
+carry the full effect tables; the draft of both had the intuitive rules — increment on mark,
+never rewind — and the measurement reversed each.
+
 ### 2.13 `DeviceId` is mandatory on one route, not on the header
 
 **Jellyfin does:** answer `200` on an ordinary authenticated route for a client header carrying no
@@ -543,15 +568,17 @@ so a client built against the wrong one works until a user drags something **dow
 **Atrium does:** the same. This project's specification asserted the opposite until it was
 measured — which is the whole reason the probe was written before the code.
 
-### 2.9 A stop report resolves through six branches, not two thresholds
+### 2.9 A reported position resolves through six branches, not two thresholds
 
 **Jellyfin does:** decides between *discard the position*, *mark played* and *keep it resumable*
-through an ordered rule. A stop with no position counts as played to the end; an unknown runtime
-counts as played; below 5% of runtime the position is discarded; above 90%, or within one second of
-the end, it is played; an item whose **runtime** is under 300 seconds is played rather than
-resumable; otherwise the position is kept. The percentage comparisons are strict at both ends.
-`[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-26]`
-`[source: Emby.Server.Implementations/Library/UserDataManager.cs:296-352 @ v10.11.11]`
+through an ordered rule — **and runs it on every report that carries a position, progress as
+much as stop**: a progress at 95% marks the item played mid-playback. A stop with no position
+counts as played to the end; an unknown runtime counts as played; below 5% of runtime the
+position is discarded; above 90%, or within one second of the end, it is played; an item whose
+**runtime** is under 300 seconds is played rather than resumable; otherwise the position is kept.
+The percentage comparisons are strict at both ends, pinned at tick precision.
+`[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`
+`[source: Emby.Server.Implementations/Library/UserDataManager.cs:296-370 @ v10.11.11]`
 
 **Depends on it:** what appears in "continue watching", which is the most-used row in most clients.
 
@@ -561,6 +588,7 @@ resumable; otherwise the position is kept. The percentage comparisons are strict
 The branch most easily missed is the 300-second one: it is a floor on the **item's runtime**, not
 on the position. A short clip stopped in the middle is *played*, not resumable. Reading it as a
 position floor produces a server that keeps resume points for every short item.
+*(This heading said "a stop report" until 007's review measured the rule firing on progress.)*
 
 ### 2.10 The image and delivery routes accept a token and require none
 

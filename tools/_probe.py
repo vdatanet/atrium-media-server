@@ -162,8 +162,19 @@ class Server:
     def post(self, path: str, body: Any = None, **params: Any) -> Any:
         return self._request("POST", path, params=params, body=body)
 
+    def post_raw(self, path: str, body: Any = None, **params: Any) -> tuple[int, dict, bytes]:
+        """POST returning (status, headers, payload) - for measuring the status itself.
+
+        The parsed variant hides the difference between `200` and `204`, and a probe measuring
+        which one a route answers cannot use a helper that swallows it.
+        """
+        return self._request("POST", path, params=params, body=body, raw=True)
+
     def delete(self, path: str, body: Any = None, **params: Any) -> Any:
         return self._request("DELETE", path, params=params, body=body)
+
+    def delete_raw(self, path: str, body: Any = None, **params: Any) -> tuple[int, dict, bytes]:
+        return self._request("DELETE", path, params=params, body=body, raw=True)
 
     # -- connection --------------------------------------------------------------------------
 

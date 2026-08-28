@@ -32,7 +32,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_query_envelope.py`](probe_query_envelope.py) | What shape does each list endpoint return? | 005 OQ-6 | no |
 | [`probe_sort_names.py`](probe_sort_names.py) | How does the server derive `SortName` from `Name`? | 003 OQ-3 | yes |
 | [`probe_playlist_move.py`](probe_playlist_move.py) | Does `Move`'s `newIndex` refer to the list before or after removal? | 009 OQ-1 | yes |
-| [`probe_playstate.py`](probe_playstate.py) | What does a playback-stopped report do to `UserData`? | 007 OQ-2 | yes |
+| [`probe_playstate.py`](probe_playstate.py) | What do playback reports and played marks actually do to `UserData`? | 007 §3.3–§3.8, OQ-2/3/5/6 — and OQ-4 with `--reap`, which costs ten minutes of deliberate silence | yes |
 | [`probe_auth_mechanisms.py`](probe_auth_mechanisms.py) | How may a client present a token, and how is a refusal shaped? | 002 §3.1, §3.3, OQ-1, OQ-3 | no |
 | [`probe_library_extensions.py`](probe_library_extensions.py) | Which file extensions does the reference admit as items, and which does it ignore? | 003 §3.2, OQ-1 | no |
 | [`probe_music_precedence.py`](probe_music_precedence.py) | What happens when a file's embedded tags contradict its path? | 003 §3.5, OQ-5 | no |
@@ -162,7 +162,7 @@ it quietly: each refuses to run without `--allow-writes`.
 |---|---|---|
 | `probe_sort_names.py` | 15 empty playlists with crafted names | Deletes them, including on failure |
 | `probe_playlist_move.py` | 2 playlists | Deletes them, including on failure |
-| `probe_playstate.py` | Play state on **one** item | Chooses an item with no user data, so restoring it is exact |
+| `probe_playstate.py` | Play state and favourite marks on one long item, one short item and one season's episodes | Chooses only items with no user data at all, so restoring them is exact; sweeps the season's episodes clean including on failure |
 | `probe_next_up.py` | Played marks on a handful of episodes | Chooses series whose episodes carry no user data, deletes every mark including on failure, and verifies the episodes pristine afterwards |
 
 `probe_playstate.py` refuses to run at all if it cannot find a long item with no existing user
