@@ -280,7 +280,7 @@ has had; T13 deletes it.
 
 ## T6 — The played pair: the mark, the date that changes more than the date, and the cascade
 
-- [ ] **Changes:** new `src/atrium/api/playstate.py` — the reference's `PlaystateController` —
+- [x] **Changes:** new `src/atrium/api/playstate.py` — the reference's `PlaystateController` —
   with `POST /UserPlayedItems/{itemId}?datePlayed=` and `DELETE /UserPlayedItems/{itemId}`. A leaf
   applies the transition to its own row; a **container applies it to every leaf descendant and
   never to itself** ([spec §3.4](spec.md#34-played-state), measured). `datePlayed` binds as a
@@ -296,6 +296,26 @@ has had; T13 deletes it.
   immediately; unmarking a season sweeps the same set back; the four refusal shapes answer as
   T1's battery measured them.
 - **Spec reference:** §3.4; AC-3, AC-4, AC-5, AC-21
+
+**Done (2026-08-28).** Twenty tests, and the cascade's branch is a **type** question rather than
+a subtree one.
+
+**"Container" cannot be read off the result of the sweep.** The obvious implementation asks for
+the leaf descendants and, finding none, writes the item's own row — which is right for a film and
+wrong twice over: an **empty season** would get a stored row the reference never writes, and a
+**genre** would get none where the reference writes one. The reference splits on the class: its
+`Folder` subclasses sweep and its plain `BaseItem`s write their own row
+`[source: MediaBrowser.Controller/Entities/Audio/MusicArtist.cs:27,
+MediaBrowser.Controller/Entities/Genre.cs:18 @ v10.11.11]`, and Atrium's `IN_THE_TREE` minus
+`FILE_BACKED` is that same set — `MusicArtist` sweeps through its albums to its tracks, a `Genre`
+writes itself. Both halves have a test, and the docstring on `leaf_descendants` (T4) had already
+warned about exactly this reading.
+
+The measured shape holds end to end: a marked season writes ten episode rows and **none of its
+own**, its response carrying `UnplayedItemCount: 0` and `PlayCount: 0` in the same breath — the
+rollup recomputed after the sweep, in the same transaction — while `datePlayed` is a typed query
+parameter, so `datePlayed=banana` is the measured validation `400` **and stores nothing**, where
+a hand-parsed date would have silently ignored it or stored the wrong one.
 
 ## T7 — `users/playing.py`: live playback, extrapolated on read, and the column nobody wrote
 
