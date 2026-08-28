@@ -28,9 +28,15 @@ import pytest
 from fastapi import FastAPI
 from PIL import Image
 
-from atrium.api.images import CACHE_CONTROL_BARE, CACHE_CONTROL_TAGGED, CONSTANT_HEADERS
+from atrium.api.images import (
+    CACHE_CONTROL_BARE,
+    CACHE_CONTROL_TAGGED,
+    CONSTANT_HEADERS,
+    ImageTypeToken,
+)
 from atrium.config.paths import DataPaths
 from atrium.server import create_app
+from tests.conformance.golden import assert_golden
 from tests.conformance.test_auth_mechanisms import mechanisms
 from tests.conftest import data_dir
 from tests.fixtures.images import BACKDROP_SIZES, ImageWorld, build_image_world
@@ -95,6 +101,13 @@ def names(response: httpx.Response) -> frozenset[str]:
 
 def decoded(payload: bytes) -> Image.Image:
     return Image.open(io.BytesIO(payload))
+
+
+def recorded(app: FastAPI) -> dict[tuple[str, str], int]:
+    """What the server was sent and did not act on, per `(route, parameter)` - the trail 005
+    section 6.12 built and this feature inherits without a line of image code."""
+    counts: dict[tuple[str, str], int] = app.state.ignored_parameters.counts
+    return counts
 
 
 # ------------------------------------------------------------------------------------------
@@ -400,5 +413,232 @@ async def test_an_undeclared_decoration_parameter_is_recorded_and_ignored(
 
     assert answered.status_code == 200
     assert answered.content == world.drawn.poster, "undecorated, which is the declared v1 gap"
-    counts = app.state.ignored_parameters.counts
-    assert ("/Items/{itemId}/Images/{imageType}", "percentPlayed") in counts
+    assert ("/Items/{itemId}/Images/{imageType}", "percentPlayed") in recorded(app)
+
+
+# ------------------------------------------------------------------------------------------
+# AC-11: the error matrix, and the split held by bytes
+# ------------------------------------------------------------------------------------------
+
+#: The `traceId` is per request by definition (behaviours §1.11), so it is the one value a golden
+#: here has to substitute. Everything else in these bodies is fixed.
+TRACE_PLACEHOLDER = "00-<trace>-<span>-00"
+
+
+def traced(response: httpx.Response) -> dict[str, str]:
+    """The placeholder map for a problem-details golden: the one unstable value, by its value."""
+    return {response.json()["traceId"]: TRACE_PLACEHOLDER}
+
+
+async def test_ac11_an_unknown_item_is_the_problem_details_404(
+    client: httpx.AsyncClient, world: ImageWorld, pytestconfig: pytest.Config
+) -> None:
+    """The first of the route's **two** `404` bodies. Measured byte for byte against a live
+    reference at T3, and the split is what behaviours §1.11's fourth shape exists to record."""
+    answered = await client.get(f"/Items/{'f' * 32}/Images/Primary")
+
+    assert answered.status_code == 404
+    assert_golden(
+        "Images.Error.UnknownItem", answered, config=pytestconfig, placeholders=traced(answered)
+    )
+
+
+async def test_a_removed_item_answers_the_same_bytes_as_an_unknown_one(
+    client: httpx.AsyncClient, world: ImageWorld
+) -> None:
+    """The world a client browses has no removed items in it, and this route must not disagree
+    with the lists — the same rule 005 AC-8 states for `/Items/{itemId}`."""
+    unknown = await client.get(f"/Items/{'f' * 32}/Images/Primary")
+    removed = await client.get(f"/Items/{world.removed}/Images/Primary")
+
+    assert removed.status_code == unknown.status_code == 404
+    assert removed.json()["title"] == unknown.json()["title"]
+    assert removed.json()["status"] == unknown.json()["status"] == 404
+
+
+async def test_ac11_an_item_that_lacks_the_type_is_the_message_shape(
+    client: httpx.AsyncClient, world: ImageWorld, pytestconfig: pytest.Config
+) -> None:
+    """The other `404`: a JSON-encoded bare string naming the item and the type. Same status as
+    the one above and not one byte in common, which no test asserting a status could tell."""
+    answered = await client.get(f"/Items/{world.imageless}/Images/Primary")
+
+    assert answered.status_code == 404
+    assert answered.headers["content-type"] == "application/json; charset=utf-8"
+    assert_golden("Images.Error.AbsentType", answered, config=pytestconfig)
+
+
+async def test_ac11_an_index_past_the_last_backdrop_names_the_type_not_the_index(
+    client: httpx.AsyncClient, world: ImageWorld
+) -> None:
+    """Measured: `Backdrop/99` answers "…does not have an image of type **Backdrop**". A message
+    built from the index would read plausibly and differ from the reference on every request."""
+    answered = await client.get(f"/Items/{world.backdrops}/Images/Backdrop/{len(BACKDROP_SIZES)}")
+
+    assert answered.status_code == 404
+    assert answered.json() == "The Backdrops does not have an image of type Backdrop"
+
+
+@pytest.mark.parametrize("member", ["Box", "BoxRear", "Menu", "Screenshot", "Profile"])
+async def test_a_vocabulary_member_v1_never_stores_is_the_message_404(
+    client: httpx.AsyncClient, world: ImageWorld, member: str
+) -> None:
+    """The five members no v1 writer creates. They are `404`s and **not** `400`s, which is what
+    proves the vocabulary parse admits all thirteen: `Box` measured `404` on the reference while a
+    string outside the enum measured `400`
+    `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`.
+    """
+    answered = await client.get(f"/Items/{world.poster}/Images/{member}")
+
+    assert answered.status_code == 404
+    assert answered.json() == f"The Poster does not have an image of type {member}"
+
+
+async def test_ac11_a_type_outside_the_vocabulary_is_the_validation_400(
+    client: httpx.AsyncClient, world: ImageWorld, pytestconfig: pytest.Config
+) -> None:
+    """Keyed on the **declared** spelling, `imageType`, and worded as the reference words it."""
+    answered = await client.get(f"/Items/{world.poster}/Images/NotAnImageType")
+
+    assert answered.status_code == 400
+    assert_golden(
+        "Images.Error.UnknownImageType",
+        answered,
+        config=pytestconfig,
+        placeholders=traced(answered),
+    )
+
+
+@pytest.mark.parametrize("parameter", ["maxWidth", "maxHeight", "width", "height", "quality"])
+async def test_an_unparseable_dimension_or_quality_is_the_validation_400(
+    client: httpx.AsyncClient, world: ImageWorld, parameter: str
+) -> None:
+    """The one measured error path on this route that is **not** lenient (spec §3.2), and the
+    `errors` key is the declared spelling rather than the client's."""
+    answered = await client.get(f"/Items/{world.poster}/Images/Primary?{parameter}=banana")
+
+    assert answered.status_code == 400
+    assert answered.json()["errors"] == {parameter: ["The value 'banana' is not valid."]}
+
+
+async def test_the_dimension_400_is_the_measured_body(
+    client: httpx.AsyncClient, world: ImageWorld, pytestconfig: pytest.Config
+) -> None:
+    answered = await client.get(f"/Items/{world.poster}/Images/Primary?maxWidth=banana")
+
+    assert_golden(
+        "Images.Error.UnparseableDimension",
+        answered,
+        config=pytestconfig,
+        placeholders=traced(answered),
+    )
+
+
+async def test_a_malformed_item_id_is_the_validation_400_keyed_on_item_id(
+    client: httpx.AsyncClient, world: ImageWorld
+) -> None:
+    answered = await client.get("/Items/not-a-guid/Images/Primary")
+
+    assert answered.status_code == 400
+    assert answered.json()["errors"] == {"itemId": ["The value 'not-a-guid' is not valid."]}
+
+
+# ------------------------------------------------------------------------------------------
+# The lenient half: values that parse and are forgiven
+# ------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("value", ["-100", "0"])
+async def test_a_non_positive_dimension_is_forgiven_with_the_image(
+    client: httpx.AsyncClient, world: ImageWorld, value: str
+) -> None:
+    """`maxWidth=-100` answers `200`, measured. A `ge=0` bound on the parameter would manufacture
+    a `400` the reference does not send — which is why the routes declare no range at all."""
+    answered = await client.get(f"/Items/{world.poster}/Images/Primary?maxWidth={value}")
+
+    assert answered.status_code == 200
+    assert answered.content == world.drawn.poster
+
+
+async def test_an_unknown_format_token_is_dropped_recorded_and_answered(
+    client: httpx.AsyncClient, world_app: tuple[FastAPI, ImageWorld, DataPaths]
+) -> None:
+    """behaviours §1.12's shape, on the one parameter of this route that has it. `format=Banana`
+    answers `200` with the value ignored — measured — and the drop is counted, which is what makes
+    the leniency a decision with a trail rather than a silence."""
+    app, world, _paths = world_app
+
+    answered = await client.get(f"/Items/{world.poster}/Images/Primary?format=Banana")
+
+    assert answered.status_code == 200
+    assert answered.content == world.drawn.poster
+    assert ("/Items/{itemId}/Images/{imageType}", "format=Banana") in recorded(app)
+
+
+async def test_a_vocabulary_format_this_build_cannot_encode_falls_back_and_is_recorded(
+    client: httpx.AsyncClient, world_app: tuple[FastAPI, ImageWorld, DataPaths]
+) -> None:
+    """`Bmp` and `Gif` parse — they are members — and fall back to the source format **with the
+    transform still applied**: `format=Bmp` at `maxWidth=200` measured a 200px JPEG out of a JPEG
+    source. Two different drops, one recorder."""
+    app, world, _paths = world_app
+
+    answered = await client.get(f"/Items/{world.poster}/Images/Primary?format=Bmp&maxWidth=300")
+
+    assert answered.status_code == 200
+    assert answered.headers["content-type"] == "image/jpeg"
+    assert decoded(answered.content).size == (300, 450)
+    assert ("/Items/{itemId}/Images/{imageType}", "format=Bmp") in recorded(app)
+
+
+# ------------------------------------------------------------------------------------------
+# Chapter, and the tripwire that says when this feature has to grow
+# ------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", ["Chapter", "Chapter/0", "Chapter/7"])
+async def test_a_chapter_image_answers_the_message_404_today(
+    client: httpx.AsyncClient, world: ImageWorld, path: str
+) -> None:
+    """v1 serves chapter images that exist and never generates them (spec §3.5), and nothing in
+    v1 creates a chapter row — so every chapter request is the absent-image `404`. That is the
+    same wire a client sees from a reference that has not finished generating them."""
+    answered = await client.get(f"/Items/{world.poster}/Images/{path}")
+
+    assert answered.status_code == 404
+    assert answered.json() == "The Poster does not have an image of type Chapter"
+
+
+def test_no_v1_writer_can_create_a_chapter_row() -> None:
+    """**The tripwire.** The day something starts writing `Chapter` rows, this fails — and that
+    failure is the signal to extend this feature rather than a bug to work around.
+
+    Structural rather than empirical: `MetadataRepository.apply` writes an `ImageAssociation`, an
+    `ImageAssociation` carries an `ImageKind`, and `ImageKind` is the seven types a *local file*
+    can be. A test that scanned a library and found no chapter rows would pass for as long as
+    nobody put one in the fixture; this cannot pass once the vocabulary the write path accepts
+    grows a member.
+    """
+    from atrium.metadata.artwork import ImageAssociation, ImageKind
+
+    writable = {kind.value for kind in ImageKind}
+    never_written = {member.value for member in ImageTypeToken} - writable
+
+    assert "Chapter" in never_written
+    assert never_written == {"Chapter", "Box", "BoxRear", "Menu", "Screenshot", "Profile"}
+    assert ImageAssociation.__annotations__["kind"] == "ImageKind"
+
+
+def test_the_never_stored_members_are_the_ones_the_error_matrix_names() -> None:
+    """The five of plan §6.1 plus `Chapter`, which has its own story (spec §3.5). Written as one
+    assertion so a member moving between the two lists cannot happen silently."""
+    from atrium.metadata.artwork import ImageKind
+
+    assert {member.value for member in ImageTypeToken} - {kind.value for kind in ImageKind} == {
+        "Box",
+        "BoxRear",
+        "Menu",
+        "Profile",
+        "Screenshot",
+        "Chapter",
+    }

@@ -295,7 +295,7 @@ def test_an_unencodable_format_is_reported_as_a_drop(
         )
     )
 
-    assert reply.dropped == ("format",)
+    assert reply.dropped == ("format=Bmp",)
     assert reply.media_type == "image/jpeg", "the transform still ran"
 
 

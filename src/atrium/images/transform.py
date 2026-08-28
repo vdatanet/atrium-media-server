@@ -96,8 +96,9 @@ EXTENSIONS: dict[str, str] = {
 #: serve a file it had itself refused to catalogue.
 UNKNOWN_MEDIA_TYPE = "application/octet-stream"
 
-#: The parameter name the drop recorder is given when a `format` token is not encodable
-#: (behaviours section 1.12's pattern, 005 section 6.12's recorder).
+#: The parameter whose value the drop recorder is told about when a `format` token parses and
+#: this build cannot encode it (behaviours section 1.12's pattern, 005 section 6.12's recorder).
+#: Recorded as `format=<value>`, which is the recorder's own convention.
 FORMAT_PARAMETER = "format"
 
 #: The encoder's own defaults stand when no `quality` was given: goldens assert headers and
@@ -280,8 +281,11 @@ def _format_of(spec: TransformSpec, source: Source, dropped: list[str]) -> tuple
     if asked in ENCODABLE:
         return ENCODABLE[RequestedFormat(asked)], False
     if asked is not None:
-        # `Bmp` and `Gif`: vocabulary members this build does not encode. Recorded, not refused.
-        dropped.append(FORMAT_PARAMETER)
+        # `Bmp` and `Gif`: vocabulary members this build does not encode. Recorded, not refused -
+        # and recorded as `format=Bmp` rather than as `format`, because what was dropped is the
+        # **value**. That is 005 section 6.12's own convention, which `known_tokens` follows for
+        # the token it drops one line earlier in the same request's life.
+        dropped.append(f"{FORMAT_PARAMETER}={asked.value}")
         return source.image_format, False
     if spec.accepts_webp and _asks_for_a_resize(spec):
         return "WEBP", False
