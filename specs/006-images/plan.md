@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-28
 updated: 2026-08-28
 accepted: 2026-08-28
-amended: 2026-08-28 by T6 — §6.3 step 3's never-upscale cap deleted, measured; and 2026-08-28 by T3 — §5's two exception names gain the `Error` suffix the linter requires; and 2026-08-28 by T1 — §6.3 steps 1 and 5, §6.4's `quality` bullet, §6.8 row 3 discharged, behaviours §1.17 added; and 2026-08-28 at the gate, which measured the six §6.8 edges before accepting — §1, §5, §6.1, §6.3, §6.4, §6.5, §6.6, §6.8, §7, §8, §9, §10; two measurements went back into the spec (AC-6 corrected, AC-15 added) and one into behaviours §1.11 (the fourth error shape)
+amended: 2026-08-28 by T8 — §5's `accepts_webp` and the row-derived decision AC-8 needs; and 2026-08-28 by T6 — §6.3 step 3's never-upscale cap deleted, measured; and 2026-08-28 by T3 — §5's two exception names gain the `Error` suffix the linter requires; and 2026-08-28 by T1 — §6.3 steps 1 and 5, §6.4's `quality` bullet, §6.8 row 3 discharged, behaviours §1.17 added; and 2026-08-28 at the gate, which measured the six §6.8 edges before accepting — §1, §5, §6.1, §6.3, §6.4, §6.5, §6.6, §6.8, §7, §8, §9, §10; two measurements went back into the spec (AC-6 corrected, AC-15 added) and one into behaviours §1.11 (the fourth error shape)
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -131,6 +131,10 @@ class ImageQuery:                  # parsed and canonical; the route owns parsin
     max_width: int | None = None   # and max_height, width, height, fill_width, fill_height
     quality: int | None = None
     format: str | None = None      # a vocabulary member or None; §6.4 resolves it
+    accepts_webp: bool = False     # the Accept offer, reduced to the token that changes an
+                                   # answer. Added at T8: the gate measured the negotiation
+                                   # (AC-15) after this listing was written, and a boolean is
+                                   # what keeps `images/` from parsing a header
 
 @dataclass(frozen=True)
 class ImageReply:
@@ -154,7 +158,15 @@ a reason to exempt a module from the project's own rule.)*
 Invariants callers may assume, and tests enforce: the payload is complete (`Content-Length` is
 its length — there is no streaming here; posters are small and 008 owns streaming); the same
 query answers byte-identical payloads whether served from cache or recomputed (AC-8, AC-13); the
-service never upscales; alpha never leaves through an implicit path (spec §3.3).
+service never upscales **on the box parameters** (`width`/`height` are exact, T6); alpha never
+leaves through an implicit path (spec §3.3).
+
+**The transform decision is computed from the row's `width`/`height`, never from the file's**
+(§6.1) — and AC-8 is why, not performance. The cache key derives from the decision, so a file that
+changed under a row nothing has rescanned yet answers the *same* key and the same bytes; deciding
+from the bytes on disk turns that hit into a silent miss, which is the exact case AC-8 exists to
+pin. *(T8: found by AC-8's test failing against a service that had described the bytes and decided
+from them.)* The output **format** still comes from the bytes, because no row stores one.
 
 The **`tag` request parameter never reaches the service.** It selects nothing — a stale tag
 serves the current image, measured
