@@ -657,7 +657,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T12 — Series navigation: `GET /Shows/{seriesId}/Seasons` and `/Episodes`
 
-- [ ] **Changes:** `api/tv_shows.py`, first half — Seasons ordered by the specials-last
+- [x] **Changes:** `api/tv_shows.py`, first half — Seasons ordered by the specials-last
   expression, Episodes in `(season, episode)` order scoped by `seasonId` when given; an unknown
   or invisible `seriesId` answering the identical `404`; `DisplayMissingEpisodes` honoured
   trivially and recorded — v1 creates no missing-episode placeholders, so both settings serve
@@ -670,6 +670,23 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   `seasonId` narrows; the multi-episode file appears once with its span; both endpoints
   envelope-shaped.
 - **Plan reference:** §6.9; spec §3.8
+- **Done (2026-08-28):** the task said measure the specials order first because the claim carried
+  no provenance, and **the measurement reversed it**: a live series with a specials season answers
+  `[Specials, Season 1]` — season 0 sorts **first**, plain index order, and the spec's "every
+  client expects it last" was an expectation about clients presented as a fact about the wire.
+  AC-11 is corrected to the measured order (spec §3.8 and §5 amended), and the implementation
+  shrank by the exact amount the wrong claim had cost: plan §6.9's specials-last expression is
+  deleted, because 003's zero-padded sort names already produce the measured order by themselves.
+  The default pipeline ordering *is* the answer.
+
+  Everything else held as written. Unknown and invisible series — and an unknown `seasonId` —
+  are the identical problem-details `404` through the same typed refusal as every scoped query;
+  `seasonId` scopes with its own query while the `season` number narrows in process;
+  `startIndex`/`limit` page with the pre-paging count in the envelope; the `S01E02-E03` item
+  appears once; `isSpecialSeason` filters both ways; and `isMissing` narrows to the placeholders
+  v1 honestly does not have, which is `DisplayMissingEpisodes`' trivial honour written down
+  (plan §6.9). `adjacentTo` and `startItemId` stay undeclared, so a client that sends them lands
+  in the ignored-parameter record rather than being half-served.
 
 ## T13 — The played-state pair: `GET /Shows/NextUp` and `GET /UserItems/Resume`
 

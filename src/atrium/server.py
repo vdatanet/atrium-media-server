@@ -32,7 +32,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from atrium import REFERENCE_VERSION, __version__
 from atrium import logs as log_setup
-from atrium.api import items, localization, system, user_library, user_views, users
+from atrium.api import items, localization, system, tv_shows, user_library, user_views, users
 from atrium.api import sessions as session_routes
 from atrium.compat.errors import EXCEPTION_HANDLERS
 from atrium.compat.middleware import ResponseHeadersMiddleware
@@ -73,6 +73,7 @@ ROUTERS = (
     # The two literal-path item routers land before `items.router`, which owns /Items/{itemId}.
     user_views.router,
     user_library.router,
+    tv_shows.router,
     items.router,
 )
 
