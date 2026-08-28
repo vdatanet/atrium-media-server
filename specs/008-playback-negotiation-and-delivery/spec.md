@@ -121,11 +121,14 @@ right thing.
 | Unknown or invisible item | `404` |
 | Unauthenticated | `401` |
 | User lacks `EnableMediaPlayback` | `403` |
-| No source can be played by this profile | `200` with an `ErrorCode`, **not** a `4xx` |
+| No source can be played by this profile | `200`, **not** a `4xx` — and **no** `ErrorCode`: the refusal is the source's own capability flags |
 
-That last row is the important one. The reference answers `200` with an error code in the body, and
-clients branch on that code to show a useful message. A `4xx` would be read as a transport failure
-and produce the wrong message.
+That last row is the important one, and its first wording did not survive measurement: this table
+said an `ErrorCode` arrives, and none does. A profile that can play nothing gets `200` with
+`SupportsDirectPlay`, `SupportsDirectStream` and `SupportsTranscoding` all `false`, no
+`TranscodingUrl`, and no `ErrorCode` — measured in four request shapes, transcoding allowed and
+forbidden `[probe: tools/probe_playback_refusal.py, Jellyfin 10.11.11, 2026-08-28]`. A `4xx`
+would still be read as a transport failure; what a client actually branches on is the flags.
 
 **`GET /Items/{itemId}/PlaybackInfo`** is the profile-less variant, included by design. Without a
 profile there is nothing to negotiate against, so it returns the sources with their intrinsic

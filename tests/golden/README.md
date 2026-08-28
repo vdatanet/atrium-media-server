@@ -20,6 +20,7 @@ The levels this serves are defined in
 | `Users.Configuration.json` | `POST /Users/Configuration` — **empty**, because a `204` has no body |
 | `Sessions.json` | `GET /Sessions` |
 | `Sessions.Capabilities.Full.json` | `POST /Sessions/Capabilities/Full` — **empty**, for the same reason |
+| `reference-item-shapes.txt` | Not a golden: the **reference's** per-type property table `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-28]`, the external anchor the `Items.*` reviews are held against |
 
 ## Reading one
 

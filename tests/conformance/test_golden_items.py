@@ -12,6 +12,14 @@ tests forbid it (`test_query_fixture.test_two_builds_derive_the_same_world`).
 
 **Reviewed, not just recorded**: each file is a statement about what a client's decoder receives
 - field order included, which is the reference document's order by construction of the models.
+
+**Reviewed against something external**: the review's anchor is
+`tests/golden/reference-item-shapes.txt` - the reference's own per-type property presence,
+captured `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-28]`. Without it these
+files' only non-Atrium anchor was the review itself, which is a golden regenerated from the
+server under test wearing a second hat (the 2026-08-28 audit's M47). Values stay Atrium's own -
+the fixture world and the reference library share no items - but every property a golden carries
+or omits is checkable against that table.
 """
 
 from __future__ import annotations

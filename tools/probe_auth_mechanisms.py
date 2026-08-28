@@ -19,9 +19,11 @@ so. Each decides code that four tasks assert:
   route by hand and never put to an image or a delivery route, while behaviours section 2.4 read
   as though it had been. `mechanisms()` now sends it everywhere the other four go, which is the
   only way that sentence becomes true rather than expected.
-* **A disabled user is refused with `401`, indistinguishably from a wrong password** - specs/002
-  section 3.3 assumes it and OQ-3 says so. A `403` is a different branch in every client: `401`
-  means re-authenticate, anything else means show an error and stop.
+* **A disabled user is refused with `403`, whether the password is right or wrong** - the status
+  is the whole of the difference from an unknown username's `401`; the bodies are identical.
+  (This bullet said `401` until the 2026-08-26 run measured `403` and the documents moved -
+  behaviours section 2.11 carries the client argument. The expectation below matches the
+  documents as corrected, so the probe flags a *change*, not the old hypothesis.)
 * **A missing or unparseable client header is a `400`** - not a `401`, because a client reading
   it as one tells the user their password is wrong.
 * **`AuthenticateByName` takes the client components in either header**, `X-Emby-Authorization`
@@ -60,6 +62,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -267,13 +270,22 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
         expectation=(
             "all five mechanisms authenticate every authenticated route, on an image and a "
             "delivery route as well as an API one; AuthenticateByName takes the client components "
-            "in either header spelling; a disabled user is refused with 401, indistinguishably "
-            "from a wrong password; and a missing or unparseable client header is a 400 rather "
-            "than a 401"
+            "in either header spelling; a disabled account is refused with 403 whether the "
+            "password is right or wrong, its body identical to the unknown-username 401's; and "
+            "a missing or unparseable client header is a 400 rather than a 401"
         ),
     )
     token = server.token or ""
     disagreements: list[str] = []
+
+    # The token's own shape - the value never prints, only the verdict. Discharges the
+    # prior-probe on "AccessToken is 32 lowercase hex" (002 spec section 3.1's table).
+    probe.observe(
+        "AccessToken shape",
+        "32 lowercase hex"
+        if re.fullmatch(r"[0-9a-f]{32}", token)
+        else f"NOT 32 lowercase hex ({len(token)} chars)",
+    )
 
     # -- the five mechanisms, by route class ---------------------------------------------------
 
@@ -440,12 +452,15 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
         )
         probe.observe("OQ-3: same user, wrong password", shape(*wrong))
 
-        if disabled_status != 401:
-            disagreements.append(f"a disabled user answered {disabled_status}, not 401 (OQ-3)")
-        if (right[0], right[2]) != (unknown[0], unknown[2]):
+        if disabled_status != 403:
             disagreements.append(
-                f"a disabled user ({right[0]}) and an unknown username ({unknown[0]}) are "
-                "distinguishable, so a client can tell a disabled account from a rejected one"
+                f"a disabled user answered {disabled_status}, not the measured 403 (OQ-3, "
+                "behaviours section 2.11)"
+            )
+        if right[2] != unknown[2]:
+            disagreements.append(
+                "the disabled-account body differs from the unknown-username body - the status "
+                "is supposed to be the whole of the difference"
             )
         if (right[0], right[2]) != (wrong[0], wrong[2]):
             disagreements.append(
@@ -479,7 +494,8 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
     else:
         probe.conclude(
             "every mechanism measured authenticated every route class measured, and a disabled "
-            "user is refused with 401 indistinguishably from a wrong password",
+            "account is refused with 403 whether the password is right or wrong, its body "
+            "identical to the unknown-username 401's",
             matches_documentation=True,
         )
     return probe

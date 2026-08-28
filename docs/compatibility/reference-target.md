@@ -94,7 +94,10 @@ reproduces the measurement, at which point the citation becomes a plain `[probe:
 | ~~`/Sessions/Playing/Progress` needs no `MediaSourceId`~~ | 2026-06-13 | `tools/probe_playstate.py` (feature 007) | ✅ **discharged 2026-08-26** |
 | PCM/WAV transcoding returns 500 | 2026-08-03 | `tools/probe_pcm_wav.py` (feature 008) | not written |
 | `LocalAddress` gets an HTTPS override | 2026-08-14 | `tools/probe_local_address.py` (feature 001) | not written |
-| `TotalRecordCount` is 0 without `limit` | 2026-08-05 | `tools/probe_by_name_counts.py` (feature 005) | not written |
+| ~~`TotalRecordCount` is 0 without `limit`~~ | 2026-08-05 | `tools/probe_by_name_counts.py` (feature 005) | ✅ **discharged 2026-08-28** |
+| ~~The `/System/Info/Public` payload: seven fields, their order and shapes~~ | 2026-06-13 | `tools/probe_public_info.py` (feature 001) | ✅ **discharged 2026-08-28** — the 2026-08-28 audit (M8) found this claim carried no register row at all |
+| ~~`AccessToken` is 32 lowercase hex~~ | 2026-06-13 | `tools/probe_auth_mechanisms.py` (feature 002) | ✅ **discharged 2026-08-28** — same audit finding: no row until the discharge |
+| ~~`ImageTags` is a map and `BackdropImageTags` a list~~ | 2026-06-13 | `tools/probe_image_tags.py` (feature 006) | ✅ **discharged 2026-08-28** — same audit finding: no row until the discharge |
 
 **Written is not discharged.** A script that exists but has never been pointed at a server has
 proved nothing; the citation changes from `prior-probe` to `probe` only when it has been run and
@@ -161,7 +164,7 @@ against each other, so it is settled here rather than left to the implementation
   "StartupWizardCompleted": true
 }
 ```
-`[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
+`[probe: tools/probe_public_info.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **`ProductName` must be `"Jellyfin Server"` and `Version` must be a real 10.11.x version.** This
 is not cosmetic: `ProductName` is the documented discriminator that multi-server clients use to

@@ -336,7 +336,7 @@ All return the envelope, and all take `parentId`, `userId`, `startIndex`, `limit
 
 > **The `TotalRecordCount` divergence.** The reference disables counting on these endpoints when
 > the request carries no `limit`, returning `TotalRecordCount: 0` beside a non-empty `Items`.
-> `[prior-probe: Jellyfin master, 2026-08-05; upstream jellyfin/jellyfin#17541]`
+> `[probe: tools/probe_by_name_counts.py, Jellyfin 10.11.11, 2026-08-28; upstream jellyfin/jellyfin#17541]`
 >
 > **Atrium always returns the true count.** Argued and recorded in
 > [behaviours §3.1](../../docs/compatibility/behaviours.md#31-totalrecordcount-is-0-on-by-name-endpoints-without-limit--class-b):

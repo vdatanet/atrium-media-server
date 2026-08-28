@@ -1,0 +1,175 @@
+Reference capture: per-type property presence on the wire, measured by
+tools/probe_item_shapes.py against Jellyfin 10.11.11 on 2026-08-28.
+[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-28]
+
+This file is the external anchor the Items.* goldens are reviewed against: the goldens
+are written by --update-golden (captured from the server under test), so without this
+table their only non-Atrium anchor is the human review itself. Shapes only - nothing
+from the reference library's content appears here, and the server line is scrubbed.
+
+The probe's CONTRADICTION footer is against its own pre-005-T1 expectation string, not
+against the current documents: every observation below is what specs/005 section 3.2
+records since T1 rewrote it to the measurement.
+
+Regenerate: python3 tools/probe_item_shapes.py, then replace everything below this
+header and re-check nothing server-identifying leaked in.
+
+  bare presence per type, as present/sampled. `-` is absent from every sampled body.
+
+  property                  tier            Movie       Series       Season      Episode  MusicArtist   MusicAlbum        Audio     Playlist       Folder    UserViews
+  --------------------------------------------------------------------------------------------------------------------------------------------------------------------
+  BackdropImageTags         always          12/12        12/12        12/12        12/12        12/12        12/12        12/12          2/2        12/12          6/6
+  ChannelId                 always          12/12        12/12        12/12        12/12        12/12        12/12        12/12          2/2        12/12          6/6
+  Id                        always          12/12        12/12        12/12        12/12        12/12        12/12        12/12          2/2        12/12          6/6
+  ImageBlurHashes           always          12/12        12/12        12/12        12/12        12/12        12/12        12/12          2/2        12/12          6/6
+  ImageTags                 always          12/12        12/12        12/12        12/12        12/12        12/12        12/12          2/2        12/12          6/6
+  IsFolder                  always          12/12        12/12        12/12        12/12        12/12        12/12        12/12          2/2        12/12          6/6
+  LocationType              always          12/12        12/12        12/12        12/12        12/12        12/12        12/12          2/2        12/12          6/6
+  MediaType                 always          12/12        12/12        12/12        12/12        12/12        12/12        12/12          2/2        12/12          6/6
+  Name                      always          12/12        12/12        12/12        12/12        12/12        12/12        12/12          2/2        12/12          6/6
+  ServerId                  always          12/12        12/12        12/12        12/12        12/12        12/12        12/12          2/2        12/12          6/6
+  Type                      always          12/12        12/12        12/12        12/12        12/12        12/12        12/12          2/2        12/12          6/6
+  UserData                  always          12/12        12/12        12/12        12/12        12/12        12/12        12/12          2/2        12/12          6/6
+  AirDays                   per-type            -        12/12            -            -            -            -            -            -            -            -
+  Album                     per-type            -            -            -            -            -            -        12/12            -            -            -
+  AlbumArtist               per-type            -            -            -            -            -        12/12        12/12            -            -            -
+  AlbumArtists              per-type            -            -            -            -            -        12/12        12/12            -            -            -
+  AlbumId                   per-type            -            -            -            -            -            -        12/12            -            -            -
+  AlbumPrimaryImageTag      per-type            -            -            -            -            -            -        12/12            -            -            -
+  ArtistItems               per-type            -            -            -            -            -        12/12        12/12            -            -            -
+  Artists                   per-type            -            -            -            -            -        12/12        12/12            -            -            -
+  ChildCount                per-type            -            -            -            -            -            -            -          2/2            -          6/6
+  CommunityRating           per-type        12/12        12/12            -        10/12            -            -            -            -            -            -
+  Container                 per-type        12/12            -            -        12/12            -            -        12/12            -            -            -
+  CriticRating              per-type        11/12            -            -            -            -            -            -            -            -            -
+  DisplayOrder              per-type            -        12/12            -            -            -            -            -            -            -            -
+  EndDate                   per-type            -        12/12            -            -            -            -            -            -            -            -
+  HasLyrics                 per-type            -            -            -            -            -            -        12/12            -            -            -
+  HasSubtitles              per-type        11/12            -            -         6/12            -            -            -            -            -            -
+  IndexNumber               per-type            -            -        12/12        12/12            -            -        12/12            -            -            -
+  NormalizationGain         per-type            -            -            -            -            -            -         6/12            -            -            -
+  OfficialRating            per-type        10/12        12/12            -            -            -            -            -            -            -            -
+  ParentBackdropImageTags   per-type            -            -        11/12        12/12            -        10/12        12/12            -         9/12            -
+  ParentBackdropItemId      per-type            -            -        11/12        12/12            -        10/12        12/12            -         9/12            -
+  ParentIndexNumber         per-type            -            -            -        12/12            -            -        12/12            -            -            -
+  ParentLogoImageTag        per-type            -            -         9/12        10/12            -        10/12        12/12            -         9/12            -
+  ParentLogoItemId          per-type            -            -         9/12        10/12            -        10/12        12/12            -         9/12            -
+  ParentThumbImageTag       per-type            -            -        10/12        12/12            -            -            -            -            -            -
+  ParentThumbItemId         per-type            -            -        10/12        12/12            -            -            -            -            -            -
+  PremiereDate              per-type        12/12        12/12        12/12        12/12            -        12/12        12/12            -            -            -
+  ProductionYear            per-type        12/12        12/12        12/12        12/12            -        12/12        12/12            -            -            -
+  RunTimeTicks              per-type        12/12        12/12            -        12/12        12/12        12/12        12/12          2/2            -            -
+  SeasonId                  per-type            -            -            -        12/12            -            -            -            -            -            -
+  SeasonName                per-type            -            -            -        12/12            -            -            -            -            -            -
+  SeriesId                  per-type            -            -        12/12        12/12            -            -            -            -            -            -
+  SeriesName                per-type            -            -        12/12        12/12            -            -            -            -            -            -
+  SeriesPrimaryImageTag     per-type            -            -        12/12        12/12            -            -            -            -            -            -
+  Status                    per-type            -        12/12            -            -            -            -            -            -            -            -
+  VideoType                 per-type        12/12            -            -        12/12            -            -            -            -            -            -
+  AlbumCount                gated               -            -            -            -            -            -            -            -            -            -
+  ArtistCount               gated               -            -            -            -            -            -            -            -            -            -
+  CanDelete                 gated               -            -            -            -            -            -            -            -            -          6/6
+  CanDownload               gated               -            -            -            -            -            -            -            -            -          6/6
+  Chapters                  gated               -            -            -            -            -            -            -            -            -            -
+  CumulativeRunTimeTicks    gated               -            -            -            -            -            -            -            -            -            -
+  DateCreated               gated               -            -            -            -            -            -            -            -            -          6/6
+  DateLastMediaAdded        gated               -            -            -            -            -            -            -            -            -          6/6
+  DisplayPreferencesId      gated               -            -            -            -            -            -            -            -            -          6/6
+  EnableMediaSourceDisplay  gated               -            -            -            -            -            -            -            -            -          6/6
+  EpisodeCount              gated               -            -            -            -            -            -            -            -            -            -
+  Etag                      gated               -            -            -            -            -            -            -            -            -          6/6
+  ExternalUrls              gated               -            -            -            -            -            -            -            -            -          6/6
+  ForcedSortName            gated               -            -            -            -            -            -            -            -            -          1/6
+  GenreItems                gated               -            -            -            -            -            -            -            -            -          6/6
+  Genres                    gated               -            -            -            -            -            -            -            -            -          6/6
+  Height                    gated               -            -            -            -            -            -            -            -            -            -
+  IsHD                      gated               -            -            -            -            -            -            -            -            -            -
+  LocalTrailerCount         gated               -            -            -            -            -            -            -            -            -          6/6
+  LockData                  gated               -            -            -            -            -            -            -            -            -          6/6
+  LockedFields              gated               -            -            -            -            -            -            -            -            -          6/6
+  MediaSources              gated               -            -            -            -            -            -            -            -            -            -
+  MediaStreams              gated               -            -            -            -            -            -            -            -            -            -
+  MovieCount                gated               -            -            -            -            -            -            -            -            -            -
+  MusicVideoCount           gated               -            -            -            -            -            -            -            -            -            -
+  OriginalTitle             gated               -            -            -            -            -            -            -            -            -            -
+  Overview                  gated               -            -            -            -            -            -            -            -            -            -
+  ParentId                  gated               -            -            -            -            -            -            -            -            -          6/6
+  Path                      gated               -            -            -            -            -            -            -            -            -          6/6
+  People                    gated               -            -            -            -            -            -            -            -            -          6/6
+  PlayAccess                gated               -            -            -            -            -            -            -            -            -          6/6
+  PrimaryImageAspectRatio   gated               -            -            -            -            -            -            -            -            -          6/6
+  ProductionLocations       gated               -            -            -            -            -            -            -            -            -            -
+  ProgramCount              gated               -            -            -            -            -            -            -            -            -            -
+  ProviderIds               gated               -            -            -            -            -            -            -            -            -          6/6
+  RecursiveItemCount        gated               -            -            -            -            -            -            -            -            -            -
+  RemoteTrailers            gated               -            -            -            -            -            -            -            -            -          6/6
+  SeriesCount               gated               -            -            -            -            -            -            -            -            -            -
+  SeriesStudio              gated               -            -            -            -            -            -            -            -            -            -
+  SongCount                 gated               -            -            -            -            -            -            -            -            -            -
+  SortName                  gated               -            -            -            -            -            -            -            -            -          6/6
+  SpecialFeatureCount       gated               -            -            -            -            -            -            -            -            -          6/6
+  Studios                   gated               -            -            -            -            -            -            -            -            -          6/6
+  Taglines                  gated               -            -            -            -            -            -            -            -            -          6/6
+  Tags                      gated               -            -            -            -            -            -            -            -            -          6/6
+  TrailerCount              gated               -            -            -            -            -            -            -            -            -            -
+  Trickplay                 gated               -            -            -            -            -            -            -            -            -            -
+  Width                     gated               -            -            -            -            -            -            -            -            -            -
+
+
+probe_item_shapes.py - which properties does the reference emit per item type, bare and when asked?
+
+  version   Jellyfin 10.11.11
+  date      2026-08-28
+
+  ItemFields enum              49 members, all asked for; 0 of spec 3.2's gated names are not members
+  Movie                        12 sampled; bare list row 21 properties, bare /Items/{itemId} 56; the full route adds unasked CanDelete, CanDownload, Chapters, DateCreated, DisplayPreferencesId, EnableMediaSourceDisplay, Etag, ExternalUrls, ForcedSortName, GenreItems, Genres, Height, IsHD, LocalTrailerCount, LockData, LockedFields, MediaSources, MediaStreams, OriginalTitle, Overview, ParentId, Path, People, PlayAccess, PrimaryImageAspectRatio, ProductionLocations, ProviderIds, RemoteTrailers, SortName, SpecialFeatureCount, Studios, Taglines, Tags, Trickplay, Width
+  Series                       12 sampled; bare list row 21 properties, bare /Items/{itemId} 52; the full route adds unasked CanDelete, CanDownload, ChildCount, CumulativeRunTimeTicks, DateCreated, DateLastMediaAdded, DisplayPreferencesId, EnableMediaSourceDisplay, Etag, ExternalUrls, ForcedSortName, GenreItems, Genres, LocalTrailerCount, LockData, LockedFields, OriginalTitle, Overview, ParentId, Path, People, PlayAccess, PrimaryImageAspectRatio, ProviderIds, RecursiveItemCount, RemoteTrailers, SortName, SpecialFeatureCount, Studios, Taglines, Tags
+  Season                       12 sampled; bare list row 24 properties, bare /Items/{itemId} 51; the full route adds unasked CanDelete, CanDownload, ChildCount, DateCreated, DateLastMediaAdded, DisplayPreferencesId, EnableMediaSourceDisplay, Etag, ExternalUrls, GenreItems, Genres, LocalTrailerCount, LockData, LockedFields, ParentId, People, PlayAccess, PrimaryImageAspectRatio, ProviderIds, RecursiveItemCount, RemoteTrailers, SeriesStudio, SortName, SpecialFeatureCount, Studios, Taglines, Tags
+  Episode                      12 sampled; bare list row 32 properties, bare /Items/{itemId} 65; the full route adds unasked CanDelete, CanDownload, Chapters, DateCreated, DisplayPreferencesId, EnableMediaSourceDisplay, Etag, ExternalUrls, ForcedSortName, GenreItems, Genres, Height, IsHD, LocalTrailerCount, LockData, LockedFields, MediaSources, MediaStreams, Overview, ParentId, Path, People, PlayAccess, PrimaryImageAspectRatio, ProviderIds, RemoteTrailers, SeriesStudio, SortName, SpecialFeatureCount, Studios, Taglines, Tags, Trickplay, Width; list-only HasSubtitles
+  MusicArtist                  12 sampled; bare list row 13 properties, bare /Items/{itemId} 52; the full route adds unasked AlbumCount, ArtistCount, CanDelete, CanDownload, ChildCount, CumulativeRunTimeTicks, DateCreated, DateLastMediaAdded, DisplayPreferencesId, EnableMediaSourceDisplay, EpisodeCount, Etag, ExternalUrls, ForcedSortName, GenreItems, Genres, LocalTrailerCount, LockData, LockedFields, MovieCount, MusicVideoCount, Overview, ParentId, Path, People, PlayAccess, PrimaryImageAspectRatio, ProgramCount, ProviderIds, RecursiveItemCount, RemoteTrailers, SeriesCount, SongCount, SortName, SpecialFeatureCount, Studios, Taglines, Tags, TrailerCount
+  MusicAlbum                   12 sampled; bare list row 23 properties, bare /Items/{itemId} 53; the full route adds unasked CanDelete, CanDownload, ChildCount, CumulativeRunTimeTicks, DateCreated, DateLastMediaAdded, DisplayPreferencesId, EnableMediaSourceDisplay, Etag, ExternalUrls, ForcedSortName, GenreItems, Genres, LocalTrailerCount, LockData, LockedFields, Overview, ParentId, Path, People, PlayAccess, PrimaryImageAspectRatio, ProviderIds, RecursiveItemCount, RemoteTrailers, SortName, SpecialFeatureCount, Studios, Taglines, Tags
+  Audio                        12 sampled; bare list row 31 properties, bare /Items/{itemId} 56; the full route adds unasked CanDelete, CanDownload, DateCreated, DisplayPreferencesId, EnableMediaSourceDisplay, Etag, ExternalUrls, GenreItems, Genres, LocalTrailerCount, LockData, LockedFields, MediaSources, MediaStreams, ParentId, Path, People, PlayAccess, PrimaryImageAspectRatio, ProviderIds, RemoteTrailers, SortName, SpecialFeatureCount, Studios, Taglines, Tags; list-only NormalizationGain
+  Playlist                     2 sampled; bare list row 14 properties, bare /Items/{itemId} 41; the full route adds unasked CanDelete, CanDownload, CumulativeRunTimeTicks, DateCreated, DateLastMediaAdded, DisplayPreferencesId, EnableMediaSourceDisplay, Etag, ExternalUrls, GenreItems, Genres, LocalTrailerCount, LockData, LockedFields, ParentId, Path, People, PlayAccess, PrimaryImageAspectRatio, ProviderIds, RecursiveItemCount, RemoteTrailers, SortName, SpecialFeatureCount, Studios, Taglines, Tags
+  Folder                       12 sampled; bare list row 16 properties, bare /Items/{itemId} 38; the full route adds unasked CanDelete, CanDownload, ChildCount, DateCreated, DateLastMediaAdded, DisplayPreferencesId, EnableMediaSourceDisplay, Etag, ExternalUrls, GenreItems, Genres, LocalTrailerCount, LockData, LockedFields, ParentId, Path, People, PlayAccess, ProviderIds, RecursiveItemCount, RemoteTrailers, SortName, SpecialFeatureCount, Studios, Taglines, Tags; list-only ParentBackdropImageTags, ParentBackdropItemId, ParentLogoImageTag, ParentLogoItemId
+  UserViews                    6 sampled; bare list row 40 properties, bare /Items/{itemId} 39; list-only ForcedSortName
+  explicit nulls               ChannelId x208, ParentId x2
+  UserData keys                IsFavorite, ItemId, Key, LastPlayedDate, PlayCount, PlaybackPositionTicks, Played, PlayedPercentage, UnplayedItemCount
+  ImageTags when empty         `{}` on Folder
+  PrimaryImageAspectRatio      unasked tier: gated
+  UserViews rows report Type   CollectionFolder, UserView
+  UserViews shape              40 properties unasked, including ChildCount, DateCreated, DateLastMediaAdded, Etag, ExternalUrls, GenreItems, Genres, ParentId, Path, People, PrimaryImageAspectRatio, ProviderIds, SortName, Studios, Taglines, Tags
+
+  finding: always-present on every content type but absent from the claim: ChannelId,
+  ImageBlurHashes, LocationType; claimed present when the type has them, but emitted only when
+  asked for: SortName, Overview, Genres, GenreItems, Studios, People, PrimaryImageAspectRatio;
+  ChildCount claimed gated, present without asking on Playlist 2/2; the two routes are not one
+  representation: bare /Items/{itemId} carries up to 39 properties a bare list row does not
+  (MusicArtist), with no `Fields` asked; behaviours 1.7 says a null property is absent
+  everywhere; these arrived as an explicit null: ChannelId x208, ParentId x2; /UserViews is a
+  third shape: it carries unasked ChildCount, DateCreated, DateLastMediaAdded, Etag,
+  ExternalUrls, GenreItems, Genres, ParentId, Path, People, PrimaryImageAspectRatio,
+  ProviderIds, SortName, Studios, Taglines, Tags - names section 3.2 gates or calls per-type
+  on /Items
+
+  [probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-28]
+
+  CONTRADICTION
+    specs/005-item-query-api/spec.md section 3.2 (and plan section 6.5) claims: one
+    representation for both routes: nine properties always present, a per-type group, and
+    nineteen names emitted only when requested through `Fields`
+    observed: always-present on every content type but absent from the claim: ChannelId,
+    ImageBlurHashes, LocationType; claimed present when the type has them, but emitted only
+    when asked for: SortName, Overview, Genres, GenreItems, Studios, People,
+    PrimaryImageAspectRatio; ChildCount claimed gated, present without asking on Playlist
+    2/2; the two routes are not one representation: bare /Items/{itemId} carries up to 39
+    properties a bare list row does not (MusicArtist), with no `Fields` asked; behaviours
+    1.7 says a null property is absent everywhere; these arrived as an explicit null:
+    ChannelId x208, ParentId x2; /UserViews is a third shape: it carries unasked ChildCount,
+    DateCreated, DateLastMediaAdded, Etag, ExternalUrls, GenreItems, Genres, ParentId, Path,
+    People, PrimaryImageAspectRatio, ProviderIds, SortName, Studios, Taglines, Tags - names
+    section 3.2 gates or calls per-type on /Items
+
+    Update that section. If this is a behaviour that changed rather than a claim that was
+    always wrong, record it in docs/compatibility/behaviours.md with both dates - a claim
+    that fails to reproduce is not deleted.
+

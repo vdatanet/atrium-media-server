@@ -254,10 +254,15 @@ evidence.
 ### 5.2 `GetAudioStream` is tagged with one consumer and has two
 
 [`surface.yaml`](surface.yaml) recorded `consumers: [music-client]` for
-`GET /Audio/{itemId}/stream`. The tvOS client builds that URL by hand for music playback, because
-`/Videos/…` answers `404` for a track `[client-contract: 2026-08-28, §4]`, so the row now carries
-`video-client` as well, in both the YAML and
-[§8 of the prose table](api-surface-v1.md#8-playback-negotiation-and-delivery).
+`GET /Audio/{itemId}/stream`. The tvOS client builds that URL by hand for music playback
+`[client-contract: 2026-08-28, §4]`, so the row now carries `video-client` as well, in both the
+YAML and [§8 of the prose table](api-surface-v1.md#8-playback-negotiation-and-delivery).
+
+The contract's own *rationale* — that `/Videos/…` answers `404` for a track — did not survive
+measurement: the video route serves the track's bytes whole, under `Content-Type:
+video/quicktime` `[probe: tools/probe_video_stream_for_a_track.py, Jellyfin 10.11.11,
+2026-08-28]`. The client's choice stands anyway, on the correct content type rather than on a
+refusal — and the consumer fact this section exists for is unchanged.
 
 This changes nothing about what v1 serves — the endpoint was in either way — but the consumer list is
 the provenance that [api-surface-v1.md §1](api-surface-v1.md#1-how-this-set-was-derived) rests on,

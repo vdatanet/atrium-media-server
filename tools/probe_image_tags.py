@@ -116,6 +116,29 @@ def run(server: Server) -> Probe:
         raise ProbeError("no item on this server carries a Primary image; nothing can be measured")
     probe.observe("items with a Primary tag", f"{len(items)} in a page of {PAGE}")
 
+    # The containers' own shapes - 006 spec section 3.1's example: a map for ImageTags, a list
+    # for BackdropImageTags. Observed here so the example's citation is re-runnable. The page
+    # above cannot answer the backdrop half: it asks with EnableImageTypes=Primary, which prunes
+    # BackdropImageTags out of its own response - so the backdrop question gets an unpruned page.
+    maps = sum(1 for item in items if isinstance(item.get("ImageTags"), dict))
+    probe.observe("ImageTags is a map", f"{maps} of {len(items)}")
+    unpruned = (
+        server.get(
+            "/Items",
+            userId=server.user_id,
+            IncludeItemTypes="Movie,Series",
+            Recursive="true",
+            Limit="24",
+        )
+        or {}
+    ).get("Items") or []
+    with_backdrops = [item for item in unpruned if item.get("BackdropImageTags")]
+    lists = sum(1 for item in with_backdrops if isinstance(item["BackdropImageTags"], list))
+    probe.observe(
+        "BackdropImageTags is a list",
+        f"{lists} of {len(with_backdrops)} carrying one, in an unpruned page of {len(unpruned)}",
+    )
+
     # -- OQ-1: what the tag is derived from, as far as read-only access can tell ------------
 
     shaped = 0
