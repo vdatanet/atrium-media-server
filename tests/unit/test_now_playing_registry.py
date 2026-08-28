@@ -169,7 +169,7 @@ def test_a_session_silent_past_the_threshold_is_reaped(
 ) -> None:
     registry.start(SESSION, report(position_ticks=HOUR * 40 // 100))
     clocks.advance(SILENCE_THRESHOLD.total_seconds() + 60)
-    [(session_id, playing)] = registry.reap()
+    [(session_id, _playing)] = registry.reap()
     assert session_id == SESSION
     assert registry.snapshot(SESSION) is None
 
@@ -201,7 +201,8 @@ def test_a_session_still_reporting_is_not_reaped(
 def test_the_threshold_is_the_reference_s_five_minutes(
     registry: NowPlayingRegistry, clocks: Clocks
 ) -> None:
-    """One second either side of it, which is what says the constant is used and not approximated."""
+    """One second either side of it, which is what says the constant is used rather than
+    approximated."""
     registry.start(SESSION, report())
     clocks.advance(SILENCE_THRESHOLD.total_seconds() - 1)
     assert registry.reap() == []
