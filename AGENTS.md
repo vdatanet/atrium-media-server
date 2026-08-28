@@ -12,8 +12,10 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001 through 005 are implemented.** The other five features are specified only, their
-specs still drafts — **the next gate is 006's spec review**, probes first. What 005 leaves for
+**Features 001 through 005 are implemented, and 006's spec is accepted** — its review gate ran
+on 2026-08-28, probes first, and resolved five of its six open questions. The four features
+after it are specified only, their specs still drafts — **the next artefact is 006's plan**.
+What 005 leaves for
 each of them is written in
 [005's tasks](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones), beside
 004's standing notes below.

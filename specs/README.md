@@ -117,15 +117,33 @@ say how it will be proven is not finished.
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Implemented** | **Implemented** | **Implemented** |
 | [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
-| [006](006-images/) | Images | Draft | — | — |
+| [006](006-images/) | Images | **Accepted** | — | — |
 | [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001, 002, 003, 004 and 005 are implemented.** The other five specs remain drafts, and their
-open questions are the standing review agenda — **the next gate is 006's spec review**, probes
-first, as every gate so far has taught.
+**001, 002, 003, 004 and 005 are implemented, and 006's spec is accepted.** The four specs after
+it remain drafts, and their open questions are the standing review agenda — **the next artefact
+is 006's plan**, written for the first time against a spec whose open questions were measured
+before a line of it exists.
+
+**006's spec gate ran probes first, and both halves moved the document**, on 2026-08-28. The
+review found the exact class 005's gate named — two documents disagreeing with a measurement
+between them: §3.2 required authentication while 002 AC-3, the criterion it claimed to share,
+records the measured opposite. The decision behaviours §2.10 had deferred to 006 is now taken
+the way every prior collision resolved — a token accepted, none required, an item id a
+capability. Two new probes answered five of the six open questions the same day, and the
+sharpest finding was one no reading could reach: the reference sends **no `ETag` and no
+`Accept-Ranges` on an image response** — `Last-Modified`/`If-Modified-Since` is the validator
+pair it actually serves, so §3.4 and AC-9 now assert the pair that exists. The rest of the
+measurement: a stale `tag` serves the current image byte-identically (AC-10 is a reproduction),
+an unparseable dimension is `400` — the one measured error path that is **not** lenient, where
+behaviours §1.12 would have predicted forgiveness — an explicit `format=Jpg` on a transparent
+logo is honoured and discards the alpha, and chapters advertise `ImageTag` per `Chapters` entry.
+OQ-4 stays open for 010's differential harness. The record is
+[006's spec](006-images/spec.md) itself: every answer went back in with its citation, in the
+same change.
 
 **005's seventeen tasks kept the measured-first habit paying**, and the pattern sharpened: this
 time the documents lost *acceptance criteria*, not only claims. AC-11 was **reversed** — season
