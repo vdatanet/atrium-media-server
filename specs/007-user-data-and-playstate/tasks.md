@@ -245,7 +245,7 @@ episodes on the first series, and **no runtime at all** on the other two series,
 
 ## T5 — The favourite pair: two routes, idempotent both ways, no cascade
 
-- [ ] **Changes:** `src/atrium/api/user_library.py` grows `POST` and
+- [x] **Changes:** `src/atrium/api/user_library.py` grows `POST` and
   `DELETE /UserFavoriteItems/{itemId}` — the reference's `UserLibraryController`, which is why
   they are here and not in `api/playstate.py` ([plan §3](plan.md#3-modules)). Each resolves the
   item through the 005 visible-item lookup, writes **one row — the item's own, container or
@@ -258,6 +258,25 @@ episodes on the first series, and **no runtime at all** on the other two series,
   problem-details `404`, a non-GUID path the validation `400`, no token the empty `401`; and the
   response body's `UserData` equals the same item's `UserData` in a `GET /Items/{itemId}`.
 - **Spec reference:** §3.3; AC-2, AC-21
+
+**Done (2026-08-28).** Thirteen tests, and the shape the other three write routes inherit.
+
+**The response is re-read, not patched.** The route writes one row and then resolves the item
+again through `ItemQueryRepository.run` — the same call `GET /Items/{itemId}` makes — and hands
+the `HydratedItem` to `item_dto.user_data_dto`, the function the `UserData` emitter itself is.
+That function was `_user_data` and is public now, which is the whole of what "the mark response
+cannot drift from the next list row" costs: one rename, and a test comparing the two bodies.
+
+Nothing surprised the implementation, which is worth saying plainly rather than inventing a
+finding: [T1's probe](../../tools/probe_playstate.py) had already measured every refusal this
+route makes, and each landed on a shape `compat/errors` has served since 002 — the problem-details
+`404` (identical for an unknown item and an invisible one), the validation `400` naming `itemId`
+with the reference's exact wording, and the empty `401`. The one thing worth a test of its own is
+what the route must **not** do: a favourite on an item in mid-playback leaves the position and the
+count where they were, and a favourite on a season leaves every episode unfavourited.
+
+`test_no_route_ships_ahead_of_its_feature` grows `INTERIM_007`, the fourth such list this project
+has had; T13 deletes it.
 
 ## T6 — The played pair: the mark, the date that changes more than the date, and the cascade
 

@@ -51,6 +51,17 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 #: somebody's client. 004 joined at T15, which is the line this file's own comment promised.
 IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006"})
 
+#: 007 arrives across three tasks - the favourite pair (T5), the played pair (T6) and the three
+#: reporting routes (T8) - and the exact-set check below has to stay meaningful in between, so
+#: the routes that have landed are listed here and the list is deleted at T13 when `"007"` joins
+#: the set above. 002, 005 and 006 each used exactly this device.
+INTERIM_007 = frozenset(
+    {
+        ("POST", "/UserFavoriteItems/{itemId}"),
+        ("DELETE", "/UserFavoriteItems/{itemId}"),
+    }
+)
+
 
 def _load_surface_parser() -> Any:
     """Reuse the parser the surface validator already has, rather than write a second one.
@@ -128,10 +139,10 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     changed on purpose, in the change that finishes it.
 
     002 arrived across two tasks, 005 across seven and 006 across five, and for the changes between
-    them this set was accompanied by an explicit list of the individual routes that had landed. All
-    three lists are gone now, which is what finishing a feature looks like here.
+    them this set was accompanied by an explicit list of the individual routes that had landed.
+    Those three lists are gone; `INTERIM_007` is the fourth, and it goes the same way at T13.
     """
-    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES)
+    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES) | INTERIM_007
 
 
 def test_an_unlisted_route_fails_the_check(app: FastAPI) -> None:
