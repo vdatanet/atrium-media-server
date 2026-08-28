@@ -59,6 +59,8 @@ INTERIM_007 = frozenset(
     {
         ("POST", "/UserFavoriteItems/{itemId}"),
         ("DELETE", "/UserFavoriteItems/{itemId}"),
+        ("POST", "/UserPlayedItems/{itemId}"),
+        ("DELETE", "/UserPlayedItems/{itemId}"),
     }
 )
 
