@@ -34,10 +34,12 @@ from atrium import REFERENCE_VERSION, __version__
 from atrium import logs as log_setup
 from atrium.api import (
     artists,
+    filters,
     genres,
     items,
     localization,
     resume,
+    search,
     system,
     tv_shows,
     user_library,
@@ -90,6 +92,8 @@ ROUTERS = (
     artists.router,
     genres.router,
     years.router,
+    filters.router,
+    search.router,
     items.router,
 )
 

@@ -202,27 +202,40 @@ class QueryFiltersLegacy(AtriumModel):
 class SearchHint(AtriumModel):
     """One search hit, flattened - **not** an item (spec section 3.10, AC-14).
 
-    `ItemId` and `Id` are both set; `MatchedTerm` is what matched, so a client can highlight it.
-    The declared set is spec section 3.10's; T15 measures which of them a live server actually
-    sends and amends there.
+    The declared set and its order are the measured wire: `Artists` travels on **every** hint,
+    empty list included, and `ChannelId` is the same explicit null every item body carries.
+    `MatchedTerm` stays declared and was **never observed** - seventeen hints across three terms
+    arrived without it - so nothing here emits it; the spec records the contradiction.
+    `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`
     """
+
+    NULL_KEPT: ClassVar[frozenset[str]] = frozenset({"ChannelId"})
 
     item_id: str
     id: str
     name: str
     matched_term: str | None = None
+    index_number: int | None = None
+    production_year: int | None = None
+    parent_index_number: int | None = None
     primary_image_tag: str | None = None
     thumb_image_tag: str | None = None
+    thumb_image_item_id: str | None = None
     backdrop_image_tag: str | None = None
+    backdrop_image_item_id: str | None = None
     type: str
     is_folder: bool | None = None
     run_time_ticks: WireTicks | None = None
     media_type: str | None = None
     series: str | None = None
     album: str | None = None
+    album_id: str | None = None
     album_artist: str | None = None
+    artists: list[str] = Field(default_factory=list)
     song_count: int | None = None
     episode_count: int | None = None
+    channel_id: str | None = None
+    primary_image_aspect_ratio: float | None = None
 
 
 class SearchHintResult(AtriumModel):

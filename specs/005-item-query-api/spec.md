@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
 accepted: 2026-08-27
-amended: 2026-08-28 by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated)
+amended: 2026-08-28 by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated)
 depends_on: [002, 004]
 ---
 
@@ -363,11 +363,21 @@ Included by design: the music-client searches through `/Items?searchTerm=`, but 
 what most clients use and its response shape is **not** the item envelope.
 
 Returns `{"SearchHints": [...], "TotalRecordCount": n}`, where a hint is a flattened summary —
-`ItemId`, `Id`, `Name`, `MatchedTerm`, `Type`, `MediaType`, image tags, and type-specific extras
-like `Series`, `Album`, `AlbumArtist`, `SongCount`, `EpisodeCount`. `[spec: SearchHint]`
+`ItemId`, `Id`, `Name`, `Type`, `MediaType`, the image tag pairs (primary, thumb and backdrop,
+each resolved through the item's ancestors — a track's hint carries its album's cover), and
+type-specific extras like `Series`, `Album`, `AlbumId`, `AlbumArtist`. **`Artists` travels on
+every hint, empty list included, and `ChannelId` is the same explicit null every item carries.**
+`[spec: SearchHint]` `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`
 
-Matching is case- and diacritic-insensitive, against name and sort name, and `MatchedTerm` reports
-what matched so a client can highlight it.
+**Matching is case- and diacritic-insensitive, against the name** — *(corrected by T15: this
+sentence said "against name and sort name", the plan said the folded name alone, and the
+measurement picked the plan's side. The discriminating item existed on the live library — a
+title whose padded sort form shares no substring with its folded name — and searched by that
+sort fragment, the reference finds nothing.)* **`MatchedTerm` was never observed**: seventeen
+measured hints across three terms arrived without it, so the claim that it "reports what matched
+so a client can highlight it" described the schema, not the wire. It stays in the schema and
+Atrium, like the reference, does not send it. `[probe: manual requests via tools/_probe.py,
+Jellyfin 10.11.11, 2026-08-28]`
 
 ## 4. Data the feature owns
 
@@ -399,7 +409,9 @@ the point of listing it: a query endpoint that owns state is a query endpoint wi
     reason, and the credit distinction is observable at item level: `artistIds` finds the guest
     track and `albumArtistIds` does not. *(Restated by T14 — the draft asked the two routes to
     differ on the compilation, and under §5.3 there is no row that could show the difference.)*
-14. `/Search/Hints` returns the hint shape, not the item shape, and populates `MatchedTerm`.
+14. `/Search/Hints` returns the hint shape, not the item shape — and, like the measured
+    reference, sends no `MatchedTerm`. *(Restated by T15: the draft required populating a field
+    seventeen measured hints never carried; see §3.10.)*
 15. A Tier 3 parameter is ignored, the response is `200`, and the parameter is recorded in the
     ignored-parameter report.
 16. Every Tier 1 and Tier 2 parameter measurably narrows or reorders results on a fixture built to

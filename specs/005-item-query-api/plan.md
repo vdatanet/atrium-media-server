@@ -4,7 +4,7 @@ title: Item query API — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8; by T12 - sections 6.9 and 8; by T13 - section 6.8; by T14 - section 6.7
+amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8; by T12 - sections 6.9 and 8; by T13 - section 6.8; by T14 - section 6.7; by T15 - sections 6.6 and 6.11
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -338,7 +338,10 @@ and `Years` over the §6.1-visible items in scope, `parentId` and `includeItemTy
 like any query, each list ordered as the reference orders it — which T15 measures before the
 model freezes. *(Added by the tasks gate, 2026-08-27: the shape was defined here and the
 computation nowhere, which is this plan failing its own §10 test — a task was about to invent a
-design decision.)*
+design decision.)* *(T15's measurement:)* all four keys always, empty lists included, **sorted
+ascending**, and the genres are the items' own spellings — two spellings are two entries, this
+list never merges into the by-name row
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 ### 6.7 By-name endpoints
 
@@ -428,10 +431,14 @@ invisible (spec §3.7).
 
 ### 6.11 Search hints
 
-`/Search/Hints` matches `name_folded` by containment, relevance-ordered per §6.3, over the item
-types v1 serves; each hit becomes a `SearchHint` — `Id` and `ItemId` both set, `MatchedTerm` the
-name that matched, and the type extras (`Series`, `Album`, `AlbumArtist`, counts) resolved from
-the hydrated item. The shape is the fourth envelope, never `BaseItemDto` (AC-14).
+`/Search/Hints` matches `name_folded` by containment — **the reading the measurement upheld**
+against spec §3.10's "and sort name" *(settled by T15; the discriminating search found nothing)*
+— relevance-ordered per §6.3, over the item types v1 serves; each hit becomes a `SearchHint` —
+`Id` and `ItemId` both set, the image tag pairs resolved through the hydrated ancestors (a
+track's hint carries its album's cover), and the type extras (`Series`, `Album`, `AlbumId`,
+`AlbumArtist`, `Artists` always) from the same hydration. `MatchedTerm` is never sent — the
+measured wire never carries it, whatever this paragraph first said. The shape is the fourth
+envelope, never `BaseItemDto` (AC-14).
 
 ### 6.12 Parameter plumbing
 
