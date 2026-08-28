@@ -338,7 +338,14 @@ def _backdrop_tags(one: HydratedItem, ctx: BuildContext) -> list[str] | None:
     return tags
 
 
-def _user_data(one: HydratedItem, ctx: BuildContext) -> UserItemDataDto | None:
+def user_data_dto(one: HydratedItem, ctx: BuildContext) -> UserItemDataDto | None:
+    """The `UserData` object, for a row and for a mark response both.
+
+    **Public because 007's mark routes answer exactly this**, and answering it any other way is
+    how a mark response and the next list row start disagreeing about the same item
+    (007 plan section 6.3). `PlayedPercentage` is position over runtime here, which is the leaf
+    reading; a container's is a fraction of children and is gated on `Fields`.
+    """
     if not ctx.enable_user_data:
         return None
     data = one.user_data
@@ -457,7 +464,7 @@ EMITTERS: Mapping[str, Callable[[HydratedItem, BuildContext], Any]] = {
     "LocationType": lambda one, ctx: "FileSystem",
     #: Always None; `BaseItemDto.NULL_KEPT` turns that into the measured explicit null.
     "ChannelId": lambda one, ctx: None,
-    "UserData": _user_data,
+    "UserData": user_data_dto,
     "ImageTags": _image_tags,
     #: The empty map, always: no BlurHash is computed and none is invented (behaviours 5.5).
     "ImageBlurHashes": lambda one, ctx: {} if ctx.enable_images else None,
@@ -611,4 +618,5 @@ __all__ = [
     "build_dto",
     "build_dtos",
     "dto_values",
+    "user_data_dto",
 ]
