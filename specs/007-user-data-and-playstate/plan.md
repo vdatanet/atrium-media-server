@@ -225,9 +225,14 @@ caller, not removed** through the 005 lookup. An unknown item answers `204` havi
 nothing (spec §3.6 rule 1, measured on a well-formed id that names nothing) — and the gate
 measured where the leniency stops, exactly where the plan had suspected the binding would
 refuse: a non-GUID `ItemId` or a non-JSON body is `400` validation problem details, which
-Pydantic validation through `compat/errors`' extended handler reproduces for free; `ItemId`
-binds as `WireGuid | None`, optional like everything else, so an *absent* id still skips
-rather than refuses. A `Stopped` with a **negative** position refuses `400` with behaviours
+Pydantic validation through `compat/errors`' extended handler reproduces the *shape* of for
+free — **and only the shape**: T1's probe read the `errors` keys, and a body failure names the
+binder's own key (`$` or the empty string) beside **the body parameter the route declares**
+(`playbackStartInfo`, `playbackProgressInfo`, `playbackStopInfo`), where
+`compat/errors.validation_errors` keys on the model's field (`ItemId`). Reproducing that is a
+per-route mapping in the handler, and it is T8's decision on the record rather than something
+inherited (behaviours §1.11). `ItemId` binds as `WireGuid | None`, optional like everything
+else, so an *absent* id still skips rather than refuses — measured `204`. A `Stopped` with a **negative** position refuses `400` with behaviours
 §1.11's `text/plain` controller shape — one explicit guard in the route, mapped to the
 existing `compat/errors` body (spec §3.6's error floor). Then:
 
@@ -327,9 +332,10 @@ anything undeclared, as everywhere.
 ### 6.8 Measured at the gate, and what stays owed
 
 This section catalogued four batteries while the plan was written; the gate measured all four
-before accepting `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`,
-and the answers are folded into §§6.1–6.7 and back into the spec (§3.2, §3.3, §3.6, AC-21,
-AC-22):
+before accepting, and **007 T1 folded all four into `tools/probe_playstate.py`**, so every claim
+below is now reproducible by one command `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]` rather than by a scratch script that
+no longer exists. The answers are folded into §§6.1–6.7 and back into the spec (§3.2, §3.3,
+§3.6, AC-21, AC-22):
 
 1. **A playing session's wire shape** — the `NowPlayingItem` slot and 41-property width, the
    11-field `PlayState` and its replace-whole semantics, `NowPlayingQueue`/`FullItems` as
