@@ -298,15 +298,18 @@ The measured shape (spec §3.6's playing-session block) pins the rest:
   (`PositionTicks`, `VolumeLevel`, `AudioStreamIndex`, `SubtitleStreamIndex`,
   `MediaSourceId`, `PlayMethod`) suppress when the last report omitted them, which together
   with §5's replace-whole rule reproduces the measured `CanSeek: false` after a bare progress.
-- **`NowPlayingItem` builds through 005's DTO builder with `enable_user_data=False`** — the
-  measured shape has no `UserData` — and a fixed, named field selection derived from the
-  measured 41-property width: the emitters v1 owns (`Path`, `Taglines`, `DateCreated`,
-  `ExternalUrls`, `PrimaryImageAspectRatio`, the images family, the genre/studio family…)
-  emit; the media-derived nine (`MediaStreams`, `Chapters`, `Width`, `Height`,
-  `HasSubtitles`, `IsHD`, `VideoType`, `Trickplay`, `Container`) and `CriticRating` have no
-  v1 source, stay absent, and are the spec's recorded gap — 006's `Chapter` pattern: the
-  route is correct the day 008 gives the emitters data, and the differential sees the gap
-  until then, named rather than silent.
+- **`NowPlayingItem` builds through 005's DTO builder at `Width.FULL` with
+  `enable_user_data=False` and `omit=NOT_IN_NOW_PLAYING`** *(amended at T9, which measured the
+  property list rather than the count)*. The shape is a **subtraction**: the measured 41
+  properties are a full `/Items/{itemId}` body's 56 minus a named fifteen, so 005's existing
+  `omit` mechanism expresses it exactly and no bespoke selection is needed. Five of the fifteen
+  are properties v1 emits today; the other ten name properties no v1 emitter produces, and they
+  are declared anyway as a **tripwire** — 008 adds `MediaSources`, and this set is what keeps it
+  out of a session entry the reference does not put it in. The media-derived nine
+  (`MediaStreams`, `Chapters`, `Width`, `Height`, `HasSubtitles`, `IsHD`, `VideoType`,
+  `Trickplay`, `Container`) and `CriticRating` have no v1 source, stay absent, and are the spec's
+  recorded gap — 006's `Chapter` pattern: the route is correct the day 008 gives the emitters
+  data, and the differential sees the gap until then, named rather than silent.
 
 `LastPlaybackCheckIn` reads from the registry (live over stored, §6.6) — a `/Sessions` poller
 watches the position advance between reports exactly as against the reference (spec §3.8).

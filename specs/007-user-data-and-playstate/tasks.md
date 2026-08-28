@@ -415,7 +415,7 @@ rather than skipped silently.
 
 ## T9 — `/Sessions` grows what is playing
 
-- [ ] **Changes:** `src/atrium/api/sessions.py` — `PlayState` grows the six measured fields with
+- [x] **Changes:** `src/atrium/api/sessions.py` — `PlayState` grows the six measured fields with
   `PositionTicks` **first**, the eleven in the measured order, the nullable ones suppressed when
   the last report omitted them; `SessionInfo` grows `now_playing_item` **between `device_name` and
   `device_id`**, absent when nothing plays; `to_wire` reads the snapshot and the live check-in
@@ -431,6 +431,29 @@ rather than skipped silently.
   reads back `CanSeek: false`; and a second `/Sessions` read seconds later shows the position
   advanced without a report in between.
 - **Spec reference:** §3.6, §3.8; AC-22
+
+**Done (2026-08-28).** Measured before implementing, and the measurement replaced the design.
+
+**`NowPlayingItem` is a subtraction, not a selection.** [Plan §6.4](plan.md#64-extrapolation-and-what-sessions-shows)
+asked for "a fixed, named field selection derived from the measured 41-property width", which is
+a list somebody has to keep right. Reading the actual property list against a full
+`/Items/{itemId}` body of the same item — 41 against 56 — showed the two are nested: **every
+property `NowPlayingItem` carries, the full body carries**, and the difference is exactly fifteen
+names. So the shape is 005's `Width.FULL` minus `NOT_IN_NOW_PLAYING`, expressed through the
+`omit` mechanism 005 already had, and the spec's "an item without `UserData`" understated it by
+fourteen.
+
+Ten of those fifteen name properties no v1 emitter produces, and they are declared anyway,
+because that is what makes the set a **tripwire**: 008 adds `MediaSources`, and this is what keeps
+it out of a session entry the reference does not put it in — 006's `Chapter` pattern, one feature
+later.
+
+The rest is wiring the two live reads (`PlayState` from the registry, `LastPlaybackCheckIn` live
+over stored) and one query per *playing user* rather than per session — resolved through **that
+session's own user**, not the caller's, because an administrator reading `/Sessions` sees what
+other people are playing and their visibility is theirs. The idle entry is untouched: nulls are
+suppressed, so `NowPlayingItem` is absent and the twenty-three fields 002 pinned still compare
+byte for byte.
 
 ## T10 — The reaper: one commit path, shared with the stop that never came
 

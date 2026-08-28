@@ -16,7 +16,9 @@ from fastapi import FastAPI
 
 from atrium.compat.guids import new_id
 from atrium.db.repositories import UserRepository
+from atrium.domain.playstate import TICKS_PER_SECOND
 from atrium.domain.user import User
+from tests.fixtures.query import RUNTIME_TICKS, QueryWorld, build_query_world
 
 PASSWORD = "correct horse battery staple"
 CLIENT_HEADER = 'MediaBrowser Client="Atrium Test", Device="Bench", DeviceId="bench-1", Version="1"'
@@ -244,3 +246,164 @@ async def test_an_unknown_command_is_accepted_here_and_refused_there(
 
 async def test_capabilities_needs_a_token(client: httpx.AsyncClient) -> None:
     assert (await client.post("/Sessions/Capabilities/Full", json={})).status_code == 401
+
+
+# --------------------------------------------------------------------------------------------
+# What a playing session shows (007 AC-22)
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def world(app: FastAPI) -> QueryWorld:
+    """The 005 world, so a session has something real to be playing.
+
+    Its users are seeded without passwords - 005 never logged one in - and these tests need a real
+    session rather than an overridden dependency, because a report binds to the **authenticated
+    device**. So the unrestricted user gets one here.
+    """
+    with app.state.sessions.begin() as opened:
+        built = build_query_world(opened)
+        UserRepository(opened).set_password_hash(
+            built.everyone.id, app.state.passwords.hash(PASSWORD)
+        )
+        return built
+
+
+async def playing_session(
+    client: httpx.AsyncClient, token: str, item_id: str, **report: object
+) -> dict:
+    """Start playback as the logged-in device, and read that session back."""
+    body = {"ItemId": item_id, "PositionTicks": 0, "CanSeek": True, "VolumeLevel": 80}
+    body.update(report)
+    answered = await client.post("/Sessions/Playing", json=body, headers={"X-Emby-Token": token})
+    assert answered.status_code == 204
+    entries = json.loads((await client.get("/Sessions", headers={"X-Emby-Token": token})).content)
+    return next(one for one in entries if one.get("NowPlayingItem"))
+
+
+async def test_ac22_now_playing_sits_between_device_name_and_device_id(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """The measured slot. Everything else about the order is 002's and unchanged."""
+    token = await log_in(client, world.everyone.name)
+    entry = await playing_session(client, token, world.corpus[1])
+    keys = list(entry)
+    assert keys[keys.index("DeviceName") + 1] == "NowPlayingItem"
+    assert keys[keys.index("NowPlayingItem") + 1] == "DeviceId"
+
+
+async def test_ac22_the_now_playing_item_carries_no_user_data(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """The one measured item shape that omits `UserData` entirely - and fourteen other properties
+    a full item body carries, which is what `NOT_IN_NOW_PLAYING` names."""
+    token = await log_in(client, world.everyone.name)
+    entry = await playing_session(client, token, world.corpus[1])
+    playing = entry["NowPlayingItem"]
+    assert "UserData" not in playing
+    assert not {"Etag", "SortName", "People", "Tags"} & set(playing)
+    assert playing["Id"] == world.corpus[1]
+    assert playing["RunTimeTicks"] == RUNTIME_TICKS
+
+
+async def test_ac22_play_state_mirrors_exactly_the_last_report(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """A progress omitting `CanSeek` and `VolumeLevel` reads back `CanSeek: false` and no volume:
+    the report replaces the state whole, and merging would invent one no reference server sends."""
+    token = await log_in(client, world.everyone.name)
+    entry = await playing_session(client, token, world.corpus[1], CanSeek=True, VolumeLevel=80)
+    assert entry["PlayState"]["CanSeek"] is True
+    assert entry["PlayState"]["VolumeLevel"] == 80
+
+    await client.post(
+        "/Sessions/Playing/Progress",
+        json={"ItemId": world.corpus[1], "PositionTicks": RUNTIME_TICKS // 4},
+        headers={"X-Emby-Token": token},
+    )
+    entries = json.loads((await client.get("/Sessions", headers={"X-Emby-Token": token})).content)
+    state = next(one for one in entries if one.get("NowPlayingItem"))["PlayState"]
+    assert state["CanSeek"] is False
+    assert "VolumeLevel" not in state
+    assert state["PositionTicks"] >= RUNTIME_TICKS // 4
+
+
+async def test_the_play_state_field_order_is_the_measured_one(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    token = await log_in(client, world.everyone.name)
+    entry = await playing_session(
+        client,
+        token,
+        world.corpus[1],
+        IsMuted=False,
+        AudioStreamIndex=1,
+        SubtitleStreamIndex=-1,
+        MediaSourceId=world.corpus[1],
+        PlayMethod="DirectPlay",
+    )
+    assert list(entry["PlayState"]) == [
+        "PositionTicks",
+        "CanSeek",
+        "IsPaused",
+        "IsMuted",
+        "VolumeLevel",
+        "AudioStreamIndex",
+        "SubtitleStreamIndex",
+        "MediaSourceId",
+        "PlayMethod",
+        "RepeatMode",
+        "PlaybackOrder",
+    ]
+
+
+async def test_the_position_advances_between_reports(
+    app: FastAPI, client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """A `/Sessions` poller watches the position move without a report arriving, which is what the
+    reference's per-second ticker looks like from the outside. The registry's monotonic clock is
+    stepped by hand rather than slept through."""
+    elapsed = [1000.0]
+    app.state.playing._monotonic = lambda: elapsed[0]
+    token = await log_in(client, world.everyone.name)
+    entry = await playing_session(client, token, world.corpus[1], PositionTicks=RUNTIME_TICKS // 2)
+    before = entry["PlayState"]["PositionTicks"]
+
+    elapsed[0] += 30
+    entries = json.loads((await client.get("/Sessions", headers={"X-Emby-Token": token})).content)
+    after = next(one for one in entries if one.get("NowPlayingItem"))["PlayState"]["PositionTicks"]
+    assert after == before + 30 * TICKS_PER_SECOND
+
+
+async def test_the_entry_goes_back_to_twenty_three_fields_when_playback_stops(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """`NowPlayingItem` is absent rather than null, so an idle session is byte-identical to what
+    002 pinned - which is why growing the model moved no golden."""
+    token = await log_in(client, world.everyone.name)
+    await playing_session(client, token, world.corpus[1])
+    await client.post(
+        "/Sessions/Playing/Stopped",
+        json={"ItemId": world.corpus[1], "PositionTicks": RUNTIME_TICKS // 2},
+        headers={"X-Emby-Token": token},
+    )
+    [entry] = json.loads((await client.get("/Sessions", headers={"X-Emby-Token": token})).content)
+    assert "NowPlayingItem" not in entry
+    assert entry["PlayState"] == {
+        "CanSeek": False,
+        "IsPaused": False,
+        "IsMuted": False,
+        "RepeatMode": "RepeatNone",
+        "PlaybackOrder": "Default",
+    }
+
+
+async def test_the_playback_check_in_advances_live(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """Read through the registry, like `LastActivityDate`: a client that just reported must not be
+    told its own session has never played anything, which is what the stored column says until the
+    next flush."""
+    token = await log_in(client, world.everyone.name)
+    entry = await playing_session(client, token, world.corpus[1])
+    assert entry["LastPlaybackCheckIn"] != "0001-01-01T00:00:00.0000000Z"
