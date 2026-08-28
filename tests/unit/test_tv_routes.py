@@ -131,9 +131,7 @@ async def test_the_whole_series_arrives_in_season_episode_order(
 ) -> None:
     with_specials = world.series[1]
     answered = await client.get(f"/Shows/{with_specials.id}/Episodes")
-    pairs = [
-        (one["ParentIndexNumber"], one["IndexNumber"]) for one in answered.json()["Items"]
-    ]
+    pairs = [(one["ParentIndexNumber"], one["IndexNumber"]) for one in answered.json()["Items"]]
     assert pairs == sorted(pairs), "episodes out of (season, episode) order"
     assert pairs[0][0] == 0, "the specials episodes lead, like their season"
 
@@ -147,9 +145,7 @@ async def test_the_multi_episode_file_appears_once(
     assert ids.count(world.multi_episode) == 1
 
 
-async def test_season_id_scopes_to_one_season(
-    client: httpx.AsyncClient, world: QueryWorld
-) -> None:
+async def test_season_id_scopes_to_one_season(client: httpx.AsyncClient, world: QueryWorld) -> None:
     plain = world.series[0]
     answered = await client.get(
         f"/Shows/{plain.id}/Episodes", params={"seasonId": plain.seasons[1]}

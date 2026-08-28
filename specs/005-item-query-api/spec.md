@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
 accepted: 2026-08-27
-amended: 2026-08-28 by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed)
+amended: 2026-08-28 by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured)
 depends_on: [002, 004]
 ---
 
@@ -282,10 +282,19 @@ A user with no permitted libraries gets an empty envelope, not an error.
 |---|---|---|
 | `GET /Items/Latest` | **Bare array** of recently added items, grouped upward | Honours `LatestItemsExcludes` and `HidePlayedInLatest` from the stored configuration (002 §3.6); grouping rule below |
 | `GET /UserItems/Resume` | Items with a resume position | Ordered most-recently-played first; excludes items played past the completion threshold (007 §3.7) |
-| `GET /Shows/NextUp` | The next unwatched episode per series | One item per series, never several |
+| `GET /Shows/NextUp` | The next unwatched episode per series | One item per series, never several; "next" measured below |
 | `GET /Items/{itemId}/Similar` | Related items | v1 scores on shared genres, people and studios. Deterministic |
 | `GET /Items/{itemId}/InstantMix` | A radio-style queue from a seed | Deterministic for a given seed and library |
 | `GET /Items/Filters` | `{Genres, Tags, OfficialRatings, Years}` for a parent | `[spec: QueryFiltersLegacy]` |
+
+**NextUp's chain, measured** *(provenance added by T13 — the claim below predates its probe)*:
+"next" is the first unplayed episode in `(season, episode)` order after the
+**highest-numbered** played one — playing an early episode again moves nothing, which the probe
+discriminated directly by marking E02 and then E01, in that order of time, and reading E03 back
+both times. One row per series; the most recently played series first
+`[probe: tools/probe_next_up.py, Jellyfin 10.11.11, 2026-08-28]`. ⚠️ The **specials exclusion
+is still unmeasured**: the measured library had no pristine specials season to play, the probe
+says so in its own output, and the rule stands as specified until a library can answer it.
 
 **The Latest grouping rule, measured** *(added by T11 — the plan's first wording said an episode
 always surfaces as its series, and one response disproved it)*: recent items group under their

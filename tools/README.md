@@ -40,6 +40,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_by_name_normalisation.py`](probe_by_name_normalisation.py) | Does the reference fold case when a genre name becomes an item, or does the list grow duplicates? | 004 §3.7, OQ-3 | no |
 | [`probe_sort_stability.py`](probe_sort_stability.py) | What breaks a tie under each `SortBy`, and does paging hold once one is broken? | 005 §3.4, OQ-3 | no |
 | [`probe_item_shapes.py`](probe_item_shapes.py) | Which properties does the reference emit per item type, bare and when asked? | 005 §3.2, plan §6.5; behaviours §1.7 | no |
+| [`probe_next_up.py`](probe_next_up.py) | What does `/Shows/NextUp` call "next", and do specials take part? | 005 §3.7, plan §6.8 | yes |
 
 ### Running them
 
@@ -65,6 +66,7 @@ python3 tools/probe_item_identity.py
 python3 tools/probe_by_name_normalisation.py
 python3 tools/probe_sort_stability.py
 python3 tools/probe_item_shapes.py
+python3 tools/probe_next_up.py       --allow-writes
 ```
 
 `probe_item_identity.py` is the one probe here that confirms a `[source: …]` citation from
@@ -149,7 +151,7 @@ message, it names the section to change. `2` the question could not be answered 
 
 ### Writes
 
-Three of the four cannot answer their question without writing, and they say so rather than doing
+Four of the probes cannot answer their question without writing, and they say so rather than doing
 it quietly: each refuses to run without `--allow-writes`.
 
 | Probe | What it creates | Cleanup |
@@ -157,6 +159,7 @@ it quietly: each refuses to run without `--allow-writes`.
 | `probe_sort_names.py` | 15 empty playlists with crafted names | Deletes them, including on failure |
 | `probe_playlist_move.py` | 2 playlists | Deletes them, including on failure |
 | `probe_playstate.py` | Play state on **one** item | Chooses an item with no user data, so restoring it is exact |
+| `probe_next_up.py` | Played marks on a handful of episodes | Chooses series whose episodes carry no user data, deletes every mark including on failure, and verifies the episodes pristine afterwards |
 
 `probe_playstate.py` refuses to run at all if it cannot find a long item with no existing user
 data. It will not overwrite a real resume position, because it could not put one back exactly.
