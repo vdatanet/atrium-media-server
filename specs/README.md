@@ -117,16 +117,28 @@ say how it will be proven is not finished.
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Implemented** | **Implemented** | **Implemented** |
 | [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
-| [006](006-images/) | Images | **Accepted** | — | — |
+| [006](006-images/) | Images | **Accepted** | Draft | — |
 | [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001, 002, 003, 004 and 005 are implemented, and 006's spec is accepted.** The four specs after
-it remain drafts, and their open questions are the standing review agenda — **the next artefact
-is 006's plan**, written for the first time against a spec whose open questions were measured
-before a line of it exists.
+**001, 002, 003, 004 and 005 are implemented; 006's spec is accepted and its plan is written**,
+awaiting a gate of its own — the first plan drafted against a spec whose open questions were
+measured before a line of the plan existed. The four specs after it remain drafts, and their open
+questions are the standing review agenda. The task list may not start until the plan is accepted
+(Principle III).
+
+**Writing 006's plan changed one row of the accepted spec**, on 2026-08-28. §3.2's error table
+read "`imageType` outside §3.2's set → `400`", and the measurement it cites distinguishes the
+reference's thirteen-member **vocabulary** from an item's holdings: a string outside the
+vocabulary is `400`, while `Box` — a member outside §3.2's eight — measured `404`. Implemented
+literally, the eight-member reading would have manufactured a `400` where the reference answers
+`404`, on the first request any probing client sends for a type this server does not carry. The
+row now names the vocabulary. The plan's §6.8 lists the six edges no probe has measured — an
+invalid token on the tokenless route, the format-vocabulary collision, both-axes resizing, the
+error bodies, the `304`'s headers, the query-spelling index — each owed a measurement task before
+its code lands.
 
 **006's spec gate ran probes first, and both halves moved the document**, on 2026-08-28. The
 review found the exact class 005's gate named — two documents disagreeing with a measurement

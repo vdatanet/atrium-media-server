@@ -4,7 +4,7 @@ title: Images
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
-amended: 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered
+amended: 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered; and 2026-08-28 by the plan — §3.2's error row now names the thirteen-member vocabulary the probe distinguishes, `Box` measured `404`
 depends_on: [002, 004, 005]
 ---
 
@@ -83,8 +83,9 @@ for the same reason it stayed out of 005: no analysed client reads it (Principle
 
 **Consumers:** music-client, video-client.
 
-`imageType` is one of `Primary`, `Backdrop`, `Thumb`, `Logo`, `Banner`, `Art`, `Disc`, `Chapter`.
-`[spec: ImageType]` The indexed form `.../{imageIndex}` addresses one of several.
+`imageType` is one of `Primary`, `Backdrop`, `Thumb`, `Logo`, `Banner`, `Art`, `Disc`, `Chapter`
+— the eight of the reference's thirteen `ImageType` members an item here can ever hold
+`[spec: ImageType]`. The indexed form `.../{imageIndex}` addresses one of several.
 
 **Request parameters** v1 honours:
 
@@ -128,7 +129,7 @@ image response, and a poster is not a seek target
 | Item exists but has no image of that type | `404` |
 | `imageIndex` out of range | `404` |
 | Unparseable dimension or quality | `400` — measured, against the lenient pattern of behaviours §1.12; a parseable but absurd value (`maxWidth=-100`) is forgiven with `200` instead `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]` |
-| `imageType` outside §3.2's set | `400` (same probe); a type in the set that the item merely lacks is the `404` above |
+| `imageType` outside the reference's thirteen-member vocabulary `[spec: ImageType]` | `400` (same probe); a vocabulary member the item merely lacks is the `404` above — `Box`, a member outside §3.2's eight that no item here can ever hold, measured `404` |
 
 ### 3.3 Resizing
 
