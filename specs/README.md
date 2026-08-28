@@ -118,14 +118,29 @@ say how it will be proven is not finished.
 | [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
 | [006](006-images/) | Images | **Implemented** | **Implemented** | **Implemented** |
-| [007](007-user-data-and-playstate/) | User data and playstate | **Accepted** | Draft | — |
+| [007](007-user-data-and-playstate/) | User data and playstate | **Accepted** | **Accepted** | — |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001 through 006 are implemented**, 006 on 2026-08-28 across thirteen tasks — **007's spec is
-`Accepted` and its plan is written, awaiting the gate**. The three specs after 007 remain
-drafts, and their open questions are the standing review agenda.
+**001 through 006 are implemented**, 006 on 2026-08-28 across thirteen tasks — **007's spec and
+plan are both `Accepted`; the next artefact is its task list**. The three specs after 007
+remain drafts, and their open questions are the standing review agenda.
+
+**007's plan gate measured before accepting, and the sharpest answer was an absence**, on
+2026-08-28. The gate ran plan §6.8's four catalogued batteries as hand requests against the
+live reference: a playing session's `NowPlayingItem` — a `BaseItemDto` width nothing had ever
+captured — carries 41 properties and **no `UserData`**, sits between `DeviceName` and
+`DeviceId`, and includes nine media-derived properties v1 cannot yet emit, now a named gap in
+the spec rather than a silent one; `PlayState` is **replaced whole by each report** — a
+progress omitting `CanSeek` reads back `false` — where the draft plan had left merge-or-replace
+to the implementer; the error shapes all landed on behaviours §1.11's existing taxonomy
+(problem-details `404`, validation `400`, the `text/plain` controller refusal for a negative
+position, the empty `401`); a `Start` carrying 30% leaves the stored position at 0; and a
+movie's `UserData.Key` measured as the item's own GUID **in dashed form** beside the 32-hex
+`ItemId` — one object spelling one identity two ways. Spec §3.6 gained the playing-session
+block and AC-21/AC-22; nothing measured contradicted the plan's structure, and the plan moved
+to `Accepted` the same day.
 
 **007's plan stores nothing new**, on 2026-08-28: `item_user_data` has been complete since 003
 — the deliberately absent foreign key *is* the survival guarantee — so the plan is five
