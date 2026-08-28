@@ -12,9 +12,10 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001 through 005 are implemented, and 006's spec is accepted** — its review gate ran
-on 2026-08-28, probes first, and resolved five of its six open questions. The four features
-after it are specified only, their specs still drafts — **the next artefact is 006's plan**.
+**Features 001 through 005 are implemented, and 006's spec is accepted and planned** — the
+spec's review gate ran on 2026-08-28, probes first, and its plan was written against the answers
+the same day, still awaiting a gate of its own — **the next artefact is 006's plan acceptance,
+then its task list**. The four features after it are specified only, their specs still drafts.
 What 005 leaves for
 each of them is written in
 [005's tasks](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones), beside
