@@ -264,10 +264,18 @@ response (`UnplayedItemCount: 0` the instant the season is marked) requires it.
 ### 6.3 One item's `UserData`, on demand
 
 The mark responses need what 005 computes per page for one item: stored row, subtree rollup
-when the item is a container, `PlayedPercentage` from position over runtime for a leaf.
-`ItemQueryRepository` grows `user_data_for(item_id, user)` reusing `_user_data` and the rollup
-query so the DTO built here is byte-identical to the same item's `UserData` in the next list
-response — asserted by a test, not by discipline. The mark response never carries a container
+when the item is a container, `PlayedPercentage` from position over runtime for a leaf. The DTO
+built here must be byte-identical to the same item's `UserData` in the next list response —
+asserted by a test, not by discipline.
+
+**Which is why there is no `user_data_for(item_id, user)`** *(amended at T4, which was the task
+that would have written it)*. A method answering a `UserItemData` answers the stored row and the
+rollup and **not the runtime**, so the caller would still compute `PlayedPercentage` itself — a
+second place where position-over-runtime is spelled out, which is the exact drift this section
+exists to prevent. The mark routes instead resolve the item through `ItemQueryRepository.run` with
+its id, the same call `GET /Items/{itemId}` makes, and hand the `HydratedItem` to the same DTO
+builder a list row goes through. Identity is then structural rather than asserted, and the cost is
+one hydration per mark — a route that has already written a row. The mark response never carries a container
 `PlayedPercentage` (spec §3.5's field-gating: this path has no `Fields`), which falls out of
 reusing the gated code rather than special-casing.
 
