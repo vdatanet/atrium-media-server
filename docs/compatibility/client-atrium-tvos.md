@@ -88,7 +88,7 @@ client. Four are surface rows; the other three are the interesting ones:
 | `/Items/{id}/Images/{kind}` | `GetItemImage` (006, implemented) |
 | `/Items/{id}/Images/Chapter/{index}` | `GetItemImageByIndex` (006, implemented) — but see [§4.4](#44-chapter-images-are-served-never-generated) |
 | `/Videos/{id}/stream?static=true` | `GetVideoStream` (008, Draft) |
-| `/Audio/{id}/stream?static=true` | `GetAudioStream` (008, Draft) — tagged with the wrong consumer, [§5.2](#52-getaudiostream-is-tagged-with-one-consumer-and-has-two) |
+| `/Audio/{id}/stream?static=true` | `GetAudioStream` (008, Draft) — its consumer list was one name short until this document, [§5.2](#52-getaudiostream-is-tagged-with-one-consumer-and-has-two) |
 | ~~`/Users/{id}/Images/Primary`~~ | **Not in v1, and must not be.** The contract marks it a defect in the client — the route does not exist in 10.11 — and asks that it not be served. It is not, and neither is its replacement `GET /UserImage`, which no analysed client calls |
 | `/Videos/{id}/{sourceId}/Subtitles/{index}/Stream.vtt` | Not in v1 — [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
 | `/Videos/{id}/Trickplay/{width}/tiles.m3u8` | Not in v1, and the client has parked the feature `[client-contract: 2026-08-28]`. Agreed on both sides |
@@ -211,24 +211,30 @@ client already tolerates it, so this is a degradation and not a break — record
 "missing" is not later confused with "broken", and so the decision to add extraction, if it is ever
 taken, has this client's name attached to it.
 
-## 5. Two corrections this trace forces on our own documents
+## 5. Two corrections this trace forced on our own documents
 
-Neither is a code change. Both are places where a document in this repository says something that
-this client's existence contradicts.
+**Both were applied on 2026-08-28**, in the change that carries this line. Neither was a code
+change: both were places where a document in this repository said something that this client's
+existence contradicts, while the server did the right thing already.
 
 ### 5.1 `X-Emby-Authorization` is not the only spelling `AuthenticateByName` accepts
 
-[api-surface-v1.md §3](api-surface-v1.md#3-authentication-users-and-sessions) says the route
-*"requires the `X-Emby-Authorization` header"*, and repeats it below the table as **mandatory**. The
-client sends that header **never, on any request, including sign-in** — the device-identifying
+[api-surface-v1.md §3](api-surface-v1.md#3-authentication-users-and-sessions) said the route
+*"requires the `X-Emby-Authorization` header"*, and repeated it below the table as **mandatory**.
+The client sends that header **never, on any request, including sign-in** — the device-identifying
 components travel in `Authorization: MediaBrowser Client="…", Device="…", DeviceId="…", Version="…"`
-and nowhere else `[client-contract: 2026-08-28, §2]`.
+and nowhere else `[client-contract: 2026-08-28, §2]`. A server built from that sentence refuses this
+client at the login screen, and the refusal reads to a user like a wrong password.
 
-Atrium is fine: [`api/users.py:141`](../../src/atrium/api/users.py) reads either header name, and
+Atrium was fine: [`api/users.py:141`](../../src/atrium/api/users.py) reads either header name, and
 [behaviours §2.4](behaviours.md#24-there-are-five-authentication-mechanisms-and-one-of-them-wins)
-already establishes that the reference reads both with the same grammar. What is wrong is the prose,
-and two error strings in [`compat/auth.py:137`](../../src/atrium/compat/auth.py) that name only the
-Emby spelling — a `400` whose message points at a header the client was never going to send.
+already establishes that the reference reads both with the same grammar. What was wrong was the
+prose, now corrected to *a client-identification header in either spelling, carrying a `DeviceId`*.
+
+**One thing was left alone deliberately.** Two error strings in
+[`compat/auth.py:137`](../../src/atrium/compat/auth.py) still name only the Emby spelling — a `400`
+whose message points at a header the client was never going to send. That is code, and its wording
+travels to a client, so it is a change for whoever next opens 002, not a documentation edit.
 
 **And there is a measurement hiding in this.** Whether the *reference* accepts an
 `Authorization`-only sign-in was never probed: `tools/probe_auth_mechanisms.py` sets
@@ -240,17 +246,20 @@ a probe rather than into a sentence.
 
 ### 5.2 `GetAudioStream` is tagged with one consumer and has two
 
-[`surface.yaml`](surface.yaml) records `consumers: [music-client]` for `GET /Audio/{itemId}/stream`.
-The tvOS client builds that URL by hand for music playback, because `/Videos/…` answers `404` for a
-track `[client-contract: 2026-08-28, §4]`. The row should carry `video-client` as well.
+[`surface.yaml`](surface.yaml) recorded `consumers: [music-client]` for
+`GET /Audio/{itemId}/stream`. The tvOS client builds that URL by hand for music playback, because
+`/Videos/…` answers `404` for a track `[client-contract: 2026-08-28, §4]`, so the row now carries
+`video-client` as well, in both the YAML and
+[§8 of the prose table](api-surface-v1.md#8-playback-negotiation-and-delivery).
 
-This changes nothing about what v1 serves — the endpoint is in either way — but the consumer list is
+This changes nothing about what v1 serves — the endpoint was in either way — but the consumer list is
 the provenance that [api-surface-v1.md §1](api-surface-v1.md#1-how-this-set-was-derived) rests on,
 and a row whose consumers are understated is a row that looks droppable when it is not.
 
-Counting the same way in the other direction: 33 rows of `surface.yaml` carry `video-client`, and
-this client in fact touches **34** — the thirty operations of its §3, plus the two image routes,
-plus `GetVideoStream` and `GetAudioStream`. The missing row is that one.
+Counting the same way in the other direction: 33 rows of `surface.yaml` carried `video-client`
+before this change and the client touches **34** — the thirty operations of its §3, plus the two
+image routes, plus `GetVideoStream` and `GetAudioStream`. The thirty-fourth was this row, and the
+count now agrees.
 
 ## 6. What this document does not do
 

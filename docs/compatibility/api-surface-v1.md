@@ -53,27 +53,56 @@ grounds, and the `D` tag below marks the ones that did.
 
 | Method | Path | Operation | Used by | Notes |
 |---|---|---|---|---|
-| POST | `/Users/AuthenticateByName` | `AuthenticateUserByName` | M V | Requires the `X-Emby-Authorization` header; body is `{"Username","Pw"}` |
+| POST | `/Users/AuthenticateByName` | `AuthenticateUserByName` | M V | Requires a client-identification header — either spelling, see below; body is `{"Username","Pw"}` |
 | GET | `/Users/Me` | `GetCurrentUser` | V | Resolves the token to a user |
 | GET | `/Users/{userId}` | `GetUserById` | M | |
 | POST | `/Users/Configuration` | `UpdateUserConfiguration` | V | Per-user display/playback preferences |
 | POST | `/Sessions/Capabilities/Full` | `PostFullCapabilities` | D | Clients that support remote control post here after login; accepting and storing it costs nothing and its absence is visible in `/Sessions` |
 | GET | `/Sessions` | `GetSessions` | V | |
 
-Authentication mechanisms Atrium must accept — all four, because clients pick different ones for
+Authentication mechanisms Atrium must accept — all five, because clients pick different ones for
 headers versus for URLs embedded in media players:
 
-| Mechanism | Form |
-|---|---|
-| Header | `X-Emby-Token: {token}` |
-| Header | `Authorization: MediaBrowser Token="{token}"` |
-| Query | `?ApiKey={token}` |
-| Query | `?api_key={token}` |
+| Mechanism | Form | Measured |
+|---|---|---|
+| Header | `Authorization: MediaBrowser Token="{token}"` | `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` |
+| Header | `X-Emby-Authorization: MediaBrowser Token="{token}"` | `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]` |
+| Header | `X-Emby-Token: {token}` | `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` |
+| Query | `?ApiKey={token}` | `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` |
+| Query | `?api_key={token}` | `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` |
 
-`[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
+**The rows are in precedence order, and that order is measured, not chosen** — pair by pair, in
+both directions
+([behaviours §2.4](behaviours.md#24-there-are-five-authentication-mechanisms-and-one-of-them-wins)).
+It matters for the client that sets a header once when the connection is built and assembles image
+and streaming URLs from a template: when two of them disagree, the earlier row wins.
 
-`X-Emby-Authorization: MediaBrowser Client="…", Device="…", DeviceId="…", Version="…"` is
-**mandatory** on `AuthenticateByName` and identifies the device for session tracking.
+> ⚠️ **This table listed four until 2026-08-28.** The fifth — the historical Emby spelling carrying
+> a token — is what a great many clients send, and a server implementing only the documented four
+> refuses clients that have worked against Jellyfin for years. It was measured on 2026-08-26 and
+> `compat/auth.py` has read it since; only this table had not caught up.
+
+**`AuthenticateByName` requires a client-identification header, and accepts either spelling of
+it.** `X-Emby-Authorization: MediaBrowser Client="…", Device="…", DeviceId="…", Version="…"` is the
+historical form; `Authorization` carries the same grammar and the reference reads both header names
+with it ([behaviours §2.4](behaviours.md#24-there-are-five-authentication-mechanisms-and-one-of-them-wins)).
+Whichever arrives must carry a `DeviceId`, which is what identifies the device for session tracking
+([002 §3.2](../../specs/002-authentication-users-and-sessions/spec.md)).
+
+> ⚠️ **This paragraph said `X-Emby-Authorization` was mandatory until 2026-08-28, and a real client
+> does not send it at all.** The tvOS client puts `Client`, `Device`, `DeviceId` and `Version` in
+> `Authorization` and sets the Emby spelling on no request, sign-in included
+> `[client-contract: 2026-08-28, §2]` — so a server built from the old sentence would refuse it, at
+> the login screen, in a way that reads to a user like a wrong password
+> ([client-atrium-tvos §5.1](client-atrium-tvos.md#51-x-emby-authorization-is-not-the-only-spelling-authenticatebyname-accepts)).
+> Atrium already accepted both, so nothing about the server changed with this correction.
+>
+> **And one half of it is still unmeasured.** That an *absent* header answers `400` is
+> `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`; that the reference
+> accepts an `Authorization`-only sign-in is not — the probe sets the Emby spelling, and only that,
+> every time it calls this route. The evidence is that a real client signs into real Jellyfin
+> servers that way, which is a third party's observation and therefore a lead, not a measurement:
+> the probe owes this one call.
 
 ## 4. Library navigation and queries
 
@@ -162,7 +191,7 @@ content hash used for cache invalidation, so it must change when the image chang
 |---|---|---|---|---|
 | POST | `/Items/{itemId}/PlaybackInfo` | `GetPostedPlaybackInfo` | V | The real negotiation entry point: the client posts a `DeviceProfile`, the server answers with `MediaSources` and a delivery decision |
 | GET | `/Items/{itemId}/PlaybackInfo` | `GetPlaybackInfo` | D | Profile-less variant; some clients still use it |
-| GET | `/Audio/{itemId}/stream` | `GetAudioStream` | M | With `static=true` for direct play |
+| GET | `/Audio/{itemId}/stream` | `GetAudioStream` | M V | With `static=true` for direct play. The video client builds this URL by hand for music, because `/Videos/…` answers `404` for a track `[client-contract: 2026-08-28, §4]` |
 | GET | `/Audio/{itemId}/stream.{container}` | `GetAudioStreamByContainer` | M | |
 | GET | `/Audio/{itemId}/universal` | `GetUniversalAudioStream` | M | Server-decides variant |
 | GET | `/Videos/{itemId}/stream` | `GetVideoStream` | V | |

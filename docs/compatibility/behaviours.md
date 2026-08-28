@@ -280,8 +280,9 @@ actually reachable on for that network. ⚠️ **This is a deliberate divergence
 
 ### 2.4 There are five authentication mechanisms, and one of them wins
 
-**Jellyfin does:** accept **five**, not the four
-[api-surface-v1.md §3](api-surface-v1.md#3-authentication-users-and-sessions) lists. The fifth is
+**Jellyfin does:** accept **five**.
+[api-surface-v1.md §3](api-surface-v1.md#3-authentication-users-and-sessions) listed four until
+2026-08-28, when this section's count was carried into it. The fifth is
 `X-Emby-Authorization` carrying a `Token=` component: the reference reads that header and
 `Authorization` with the same grammar, and a token in either authenticates. `[probe: manual requests, Jellyfin 10.11.11, 2026-08-26]` It is
 the historical Emby form and it is what a great many clients send, so a server implementing only
