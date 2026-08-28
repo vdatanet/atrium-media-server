@@ -32,7 +32,12 @@ and the task list refused to let the provenance depend on scripts nobody committ
   about a server that negotiates. The offer now rides a *transformed* request, a verbatim one, and
   one carrying an explicit `format`, plus `image/avif` for the format that is not negotiated.
 
-A **third** battery came out of writing those two, and it was not owed by anybody: comparing the
+Two more batteries arrived from the tasks that leaned on this one. **The exact-dimension
+battery** was added at T6, when the transform froze: "never upscale" had been written as a
+property of the server, and it is a property of *which parameter was sent* - every box parameter
+is capped at the source and `width`/`height` are not.
+
+And a **third** came out of writing the first two, owed by nobody: comparing the
 delivered payload to the source's own bytes rather than to a byte *count*. The answer had been in
 this probe's own output since the OQ-5 trial - `maxWidth=-100` returns 200, the source's
 dimensions, the source's format and three times the source's bytes - and nobody had subtracted
@@ -413,6 +418,59 @@ def accept_battery(
     )
 
 
+def exact_battery(
+    probe: Probe, verdicts: Verdicts, server: Server, path: str, width: int, height: int
+) -> None:
+    """Does `width`/`height` stop at the source, or go past it? (006 spec section 3.3, plan 6.3)
+
+    Added at T6, when the transform froze. "Never upscale" was written as a property of the
+    server, and it is a property of **which parameter was sent**: every box parameter is capped
+    at the source and the exact pair is not. A cap on this path would have made Atrium answer a
+    smaller image than the client asked for by name, on the one path whose whole meaning is
+    "exactly this size".
+    """
+    cells = [
+        (f"width={width * 2} alone", {"width": str(width * 2)}, (width * 2, height * 2)),
+        (f"height={height * 2} alone", {"height": str(height * 2)}, (width * 2, height * 2)),
+        (
+            f"width={width + 500}&height={height // 3}  (distorted, one axis up)",
+            {"width": str(width + 500), "height": str(height // 3)},
+            (width + 500, height // 3),
+        ),
+        (
+            f"width={width * 2}&maxWidth={width // 2}  (the box caps it afterwards)",
+            {"width": str(width * 2), "maxWidth": str(width // 2)},
+            (width // 2, height // 2),
+        ),
+    ]
+
+    disagreed = []
+    for label, params, expected in cells:
+        status, headers, payload = fetch(server, path, params)
+        _kind, got_width, got_height, _alpha = sniff(payload)
+        probe.observe(label, described(status, headers, payload))
+        holds = status == 200 and close((got_width, got_height), expected)
+        probe.observe(
+            f"  expected {expected[0]}x{expected[1]}", "yes" if holds else "NO - the rule does not"
+        )
+        if not holds:
+            disagreed.append(
+                f"{label.split('  ')[0]} -> {got_width}x{got_height}, "
+                f"not {expected[0]}x{expected[1]}"
+            )
+
+    verdicts.record(
+        "exact",
+        not disagreed,
+        (
+            "width/height are honoured past the source, and a box parameter caps the result "
+            "afterwards"
+            if not disagreed
+            else "; ".join(disagreed)
+        ),
+    )
+
+
 def verbatim_battery(
     probe: Probe,
     verdicts: Verdicts,
@@ -488,8 +546,9 @@ def run(server: Server) -> Probe:
         expectation=(
             "an unparseable dimension or quality is refused with 400 (section 3.2); a fill box "
             "covers and keeps the overflow rather than cropping (AC-6); a transformed response "
-            "negotiates image/webp and a verbatim one does not (AC-15); and a request that "
-            "changes nothing serves the source's own bytes (plan section 6.3 step 5)"
+            "negotiates image/webp and a verbatim one does not (AC-15); a request that "
+            "changes nothing serves the source's own bytes (plan section 6.3 step 5); and "
+            "width/height are exact rather than capped at the source (plan section 6.3 step 3)"
         ),
     )
     verdicts = Verdicts()
@@ -578,6 +637,7 @@ def run(server: Server) -> Probe:
         same = "the baseline poster" if shaped_id == poster else "another item"
         probe.observe("fill source", f"{shaped_width}x{shaped_height}, {same}")
         fill_battery(probe, verdicts, server, shaped_path, shaped_width, shaped_height)
+        exact_battery(probe, verdicts, server, shaped_path, shaped_width, shaped_height)
 
     # -- AC-15: the Accept offer, on a request that transforms --------------------------------
 

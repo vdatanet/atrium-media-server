@@ -4,7 +4,7 @@ title: Images
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
-amended: 2026-08-28 by T3 — §3.2's error table: the two `404` bodies named, the index message measured, the empty-GUID edge recorded; and 2026-08-28 by T2 — §3.1's `ParentBackdropItemId` gap closed, and the pairing measured; and 2026-08-28 by T1's probe — §3.2's forgiven-value row, §3.2's parameter table (which still said `fillWidth` crops, three amendments after §3.3 stopped saying it), and the two §3.3 citations the committed script now reproduces; and 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered; and 2026-08-28 by the plan — §3.2's error row now names the thirteen-member vocabulary the probe distinguishes, `Box` measured `404`; and 2026-08-28 at the plan gate — §3.3 fill covers rather than crops (AC-6 corrected) and negotiates Accept (AC-15 added), §3.2 response constants and invalid tokens, §3.4 Vary, AC-12, OQ-3's missing cell
+amended: 2026-08-28 by T6 — §3.3's never-upscale rule scoped to the box parameters, the exact `width`/`height` path measured upscaling; and 2026-08-28 by T3 — §3.2's error table: the two `404` bodies named, the index message measured, the empty-GUID edge recorded; and 2026-08-28 by T2 — §3.1's `ParentBackdropItemId` gap closed, and the pairing measured; and 2026-08-28 by T1's probe — §3.2's forgiven-value row, §3.2's parameter table (which still said `fillWidth` crops, three amendments after §3.3 stopped saying it), and the two §3.3 citations the committed script now reproduces; and 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered; and 2026-08-28 by the plan — §3.2's error row now names the thirteen-member vocabulary the probe distinguishes, `Box` measured `404`; and 2026-08-28 at the plan gate — §3.3 fill covers rather than crops (AC-6 corrected) and negotiates Accept (AC-15 added), §3.2 response constants and invalid tokens, §3.4 Vary, AC-12, OQ-3's missing cell
 depends_on: [002, 004, 005]
 ---
 
@@ -146,9 +146,20 @@ deployment caveat.
 
 ### 3.3 Resizing
 
-**Never upscale.** A request for 600px from a 400px source returns 400px. Upscaling costs CPU and
-bytes to deliver a blurrier image than the original. The reference agrees: 3200px asked of an
-800px source returns the source `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`.
+**Never upscale — asking for a *box*.** A request for a 600px box from a 400px source returns
+400px. Upscaling costs CPU and bytes to deliver a blurrier image than the original. The reference
+agrees: 3200px asked of an 800px source returns the source
+`[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`, and a `fillWidth`/
+`fillHeight` box the source cannot cover returns it unchanged too (same probe).
+
+**Asking for a *dimension* is different, and the reference honours it past the source.**
+`width`/`height` are exact, up as well as down: `width=4000` of a 2000×3000 source returns
+**4000×6000**, `width=2500&height=1000` returns exactly that, and `width=4000&maxWidth=1000`
+returns 1000×1500 — the exact size, fitted afterwards by the box parameter
+`[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`. So the rule is a
+property of *which parameter was sent*, not of the server: `maxWidth`, `maxHeight`, `fillWidth`
+and `fillHeight` mean **at most**, and `width`/`height` mean **exactly**. AC-5 is the first
+sentence and stays as it is; a client asking for a dimension gets the dimension it named.
 
 **Aspect ratio is preserved** on every path but one: `width` and `height` sent **together** are
 honoured exactly even against the source's ratio — 300×300 asked of a 2000×3000 source is a

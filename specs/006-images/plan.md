@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-28
 updated: 2026-08-28
 accepted: 2026-08-28
-amended: 2026-08-28 by T3 — §5's two exception names gain the `Error` suffix the linter requires; and 2026-08-28 by T1 — §6.3 steps 1 and 5, §6.4's `quality` bullet, §6.8 row 3 discharged, behaviours §1.17 added; and 2026-08-28 at the gate, which measured the six §6.8 edges before accepting — §1, §5, §6.1, §6.3, §6.4, §6.5, §6.6, §6.8, §7, §8, §9, §10; two measurements went back into the spec (AC-6 corrected, AC-15 added) and one into behaviours §1.11 (the fourth error shape)
+amended: 2026-08-28 by T6 — §6.3 step 3's never-upscale cap deleted, measured; and 2026-08-28 by T3 — §5's two exception names gain the `Error` suffix the linter requires; and 2026-08-28 by T1 — §6.3 steps 1 and 5, §6.4's `quality` bullet, §6.8 row 3 discharged, behaviours §1.17 added; and 2026-08-28 at the gate, which measured the six §6.8 edges before accepting — §1, §5, §6.1, §6.3, §6.4, §6.5, §6.6, §6.8, §7, §8, §9, §10; two measurements went back into the spec (AC-6 corrected, AC-15 added) and one into behaviours §1.11 (the fourth error shape)
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -219,10 +219,15 @@ From the parsed parameters, in order:
    2000×3000 source — spec §3.3, AC-6 corrected)*. The scale is capped at 1, and a box the
    source cannot cover delivers the source unchanged (measured). A lone fill axis scales that
    axis, aspect intact (measured).
-3. **`width`/`height` present** → each given axis is honoured exactly after the never-upscale
-   cap; a lone axis scales the other by aspect ratio; both at once honour both, distorting when
-   they disagree — 300×300 measured of the same 2000×3000 source *(the gate measured what this
-   step had flagged)*.
+3. **`width`/`height` present** → each given axis is honoured **exactly, with no never-upscale
+   cap at all**; a lone axis scales the other by aspect ratio; both at once honour both,
+   distorting when they disagree — 300×300 measured of the same 2000×3000 source *(the gate
+   measured what this step had flagged)*. *(Amended at T6: the draft said "after the
+   never-upscale cap", and the measurement says there is none on this path. `width=4000` of that
+   source returns **4000×6000**, `width=2500&height=1000` returns exactly that, and
+   `width=4000&maxWidth=1000` returns 1000×1500 — the exact size, capped afterwards by step 4.
+   Never-upscaling belongs to the box parameters; `width`/`height` mean exactly.
+   `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`)*
 4. **`maxWidth`/`maxHeight` present** → fit inside the box, aspect preserved (measured). Sent
    together with the fill pair, the constraints compose to the tightest aspect-true size — a
    300×300 fill under `maxWidth=200` measured 200×300, which every aspect-preserving reading

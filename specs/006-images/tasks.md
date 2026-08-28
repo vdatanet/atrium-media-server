@@ -336,7 +336,7 @@ classes earlier gates taught, back for the very next feature:
 
 ## T6 — `images/transform.py`: the decision and the formats, pure
 
-- [ ] **Changes:** the [plan §6.3](plan.md#63-the-transform-decision) decision and
+- [x] **Changes:** the [plan §6.3](plan.md#63-the-transform-decision) decision and
   [§6.4](plan.md#64-format-selection) format resolution as one pure module: drop non-positive
   values; fill **covers** with the overflow kept, clamped at 1, the source verbatim past the
   clamp; `width`/`height` exact per axis, both at once distorting; `max` fits; the
@@ -356,6 +356,39 @@ classes earlier gates taught, back for the very next feature:
   format per (source, `format`, offer) triple — with the provenance cited beside the cells it
   reproduces; mypy strict; the module imports neither HTTP nor the database.
 - **Plan reference:** §6.3, §6.4; spec §3.3, AC-4–7 (unit half)
+- **Done (2026-08-28):** **"Never upscale" is not a property of the server.** It is a property of
+  *which parameter was sent*, and the spec stated it as a universal for three amendments. Measured
+  on a 2000×3000 poster
+  `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`:
+
+  | Asked | Delivered |
+  |---|---|
+  | `maxWidth=4000` | 2000×3000 — the source |
+  | `fillWidth=4000&fillHeight=6000` | 2000×3000 — the source |
+  | `width=4000` | **4000×6000** |
+  | `height=6000` | **4000×6000** |
+  | `width=2500&height=1000` | **2500×1000** |
+  | `width=4000&maxWidth=1000` | 1000×1500 — the exact size, capped *afterwards* |
+
+  A box parameter means **at most**; `width`/`height` mean **exactly**. The plan's step 3 said
+  "honoured exactly after the never-upscale cap" and there is no cap on that path — so a literal
+  implementation would have answered a *smaller* image than a client asked for by name, on the one
+  path whose entire meaning is "this size". Found by writing the matrix row for it and checking
+  the row against the reference rather than against the sentence it came from. Spec §3.3 and plan
+  §6.3 step 3 are amended, and the probe grew an **exact battery** so the claim is reproducible
+  rather than a session's scratch requests.
+
+  The last cell settles the composition order too: `width=4000&maxWidth=1000` → 1000×1500 means
+  step 4 caps step 3's result, which is what the module does. `fillWidth=500&width=300` → 300×450
+  says the exact pair *replaces* a fill rather than composing with it — also measured, also what
+  the module does, and neither was in any document.
+
+  Everything else held as documented: the fill cover rule, the negotiation triple, `Svg`'s
+  short-circuit, `Bmp`/`Gif` falling back mid-transform with a recorded drop, `quality` clamping
+  and being ignored for PNG, and a bare `quality` not transforming at all (T1's finding, now a
+  test). The decode-failure path is asserted twice — a truncated file and Pillow's own
+  decompression-bomb guard — because plan §7 says both answer the source bytes and only one of
+  them is an exception type anybody would think to catch.
 
 ## T7 — `images/cache.py`: the disposable store
 
