@@ -1,10 +1,11 @@
 ---
 feature: 007-user-data-and-playstate
 title: User data and playstate — tasks
-status: Accepted
+status: Implemented
 created: 2026-08-28
 updated: 2026-08-28
 accepted: 2026-08-28
+implemented: 2026-08-28
 amended: 2026-08-28 at the gate — the fixture's single runtime, the check-in column nobody writes, OQ-7's owner and AC-16's existing tests; see "What the gate changed"
 plan_status_required: Accepted
 plan_status_actual: Accepted
@@ -367,7 +368,7 @@ side of five minutes, which is what says the constant is used rather than approx
   applies `on_start` and registers; `Progress` applies `on_report` only when a position arrives;
   `Stopped` branches on `Failed`, then on whether a position came, and clears the registry. The
   one guard past binding is the negative position, answering behaviours §1.11's `text/plain`
-  refusal. The interim route list grows to the full five.
+  refusal. The interim route list grows to the full seven.
 - **Depends on:** T6, T7
 - **Verified by:** new `tests/unit/test_playback_report_routes.py` — all three answer `204` with
   an empty body; a `Progress` with no `MediaSourceId` and no `Start` before it lands its position;
@@ -567,7 +568,7 @@ them in the map.
 
 ## T13 — The acceptance map, the routes' exact set, and 007 is Implemented
 
-- [ ] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_007` — twenty-two rows,
+- [x] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_007` — twenty-two rows,
   AC-16's naming 003's two existing removal tests; `IMPLEMENTED_FEATURES` in
   `tests/conformance/test_routes.py` gains `"007"` and the interim list is deleted;
   `spec.md`, `plan.md` and this file are marked `Implemented`; `specs/README.md`'s status table
@@ -578,7 +579,7 @@ them in the map.
   mypy && uv run pytest` — with `test_every_implemented_feature_has_a_map`,
   `test_the_specification_still_has_the_criteria_this_map_expects` and
   `test_no_route_ships_ahead_of_its_feature` green, which together say the map is complete, the
-  criteria count matches the specification and exactly the five 007 routes are served.
+  criteria count matches the specification and exactly the seven 007 routes are served.
 - **Spec reference:** §5, §6
 
 ---
@@ -587,20 +588,74 @@ them in the map.
 
 The feature is done when **all** of these hold:
 
-- [ ] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
-      twenty-two — has a passing test, by name, in `FEATURE_007`.
-- [ ] Every endpoint reaches the level [spec §6](spec.md#6-conformance) declares, and the
-      `UserData` shape's L3 is the goldens 005 already pins plus the byte comparison of T12.
-- [ ] The five routes are served, `"007"` is in `IMPLEMENTED_FEATURES`, and no route exists
-      outside [`surface.yaml`](../../docs/compatibility/surface.yaml) — the five rows were in the
-      file before this list was written, so the check is registration, not listing.
-- [ ] The feature ends owning **no schema**: no table, no column, no migration
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
+      twenty-two — has a passing test, by name, in `FEATURE_007`. AC-16's two are 003's, which is
+      what the gate found instead of a task.
+- [x] Every endpoint reaches the level [spec §6](spec.md#6-conformance) declares, and the
+      `UserData` shape's L3 is the goldens 005 already pins plus the byte comparison of T12 —
+      which runs on a **container**, where the object carries a rollup the stored row does not.
+- [x] The seven routes are served — the mark pairs are two routes each — `"007"` is in
+      `IMPLEMENTED_FEATURES`, and no route exists outside
+      [`surface.yaml`](../../docs/compatibility/surface.yaml). The seven rows were in the file
+      before this list was written, so the check is registration, not listing. *(This list said
+      "five" in four places until T13 counted them against the surface file.)*
+- [x] The feature ends owning **no schema**: no table, no column, no migration
       ([plan §4](plan.md#4-data-model)), and `item_user_data` still has no foreign key to `items`.
-- [ ] Nothing about live playback is persisted: a restart empties `/Sessions`' playback and costs
+      What it *did* change is who writes what was already there — including
+      `last_playback_check_in`, which had no writer at all before T7.
+- [x] Nothing about live playback is persisted: a restart empties `/Sessions`' playback and costs
       at most the extrapolation since each session's last report.
-- [ ] Anything learned during implementation is back in `spec.md` or `plan.md`, in the same change
-      that learned it.
-- [ ] Every measurement a task took against the reference is in the spec or
+- [x] Anything learned during implementation is back in `spec.md` or `plan.md`, in the same change
+      that learned it — the clause that decides nothing (T2), the method that was not written
+      (T4), the body-error keys (T8), the fifteen properties (T9), OQ-7 (T11).
+- [x] Every measurement a task took against the reference is in the spec or
       [`behaviours.md`](../../docs/compatibility/behaviours.md) with provenance — T1's four
       batteries first among them, and the manual-request citations they upgrade.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+- [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+
+## What this feature owes the next ones
+
+**008** inherits the most, and one of its inheritances is a tripwire.
+
+* **`NOT_IN_NOW_PLAYING`** (`api/sessions.py`) names fifteen properties a `NowPlayingItem` does not
+  carry, ten of which no v1 emitter produces yet. `MediaSources` is one of them: the day 008 emits
+  it, that set is what keeps it out of a session entry the reference does not put it in. It is
+  006's `Chapter` pattern with a different name.
+* **`record_stop`** (`api/playstate.py`) is the one place a stop resolves, and the reaper already
+  shares it. A delivery feature that learns when a stream ends should call it rather than write a
+  second resolution.
+* **The reports' `PlaySessionId` is not read.** 008 owns transcoding sessions and will want it;
+  today the routes bind it, hold it in the registry and act on none of it.
+* **The nine media-derived properties** the differential will show absent on `NowPlayingItem` —
+  `MediaStreams`, `Chapters`, `Width`, `Height`, `HasSubtitles`, `IsHD`, `VideoType`, `Trickplay`,
+  `Container` — are 008's to fill, and the route is correct the day they exist.
+
+**009** gets the played and favourite semantics unchanged: a playlist's items carry their own user
+data through their own ids, and nothing here special-cases a playlist. What it should not do is add
+a second write path — `domain/playstate.py` is where a transition lives, and a playlist that marked
+items played by writing rows itself would be the fork [plan §1](plan.md#1-approach) exists to
+prevent.
+
+**010** collects four things:
+
+* **[behaviours §5.7](../../docs/compatibility/behaviours.md)** — an empty *library* reads
+  `Played: false` here and vacuously played in the reference's source. The only shape where the
+  question is askable, and measuring it means a server with an empty library, which is a
+  differential's job rather than a probe's (OQ-7).
+* **The `"$"` message** in a body-binding refusal is this parser's, not .NET's
+  ([behaviours §1.11](../../docs/compatibility/behaviours.md)). The keys and the status match; the
+  sentence does not, and a differential will show it on the first malformed body.
+* **`NowPlayingItem`'s width is the item's, not the shape's** — two movies measured 41 and 40
+  properties, the difference being a null `IsHD`. A differential that compares property *counts*
+  will report a difference that is only the item talking.
+* **The paused-session ticker freeze** is cited from the reference's source and not measured on the
+  wire: it costs another ten minutes of deliberate silence against a paused session
+  ([plan §6.8](plan.md#68-measured-at-the-gate-and-what-stays-owed)).
+
+**The starting inventory this feature leaves behind:** every user-data transition is a pure
+function in `domain/playstate.py` with no clock and no I/O, and the table that proves them is
+`tests/unit/test_domain_playstate.py`; live playback is `users/playing.py` and is never persisted;
+`UserDataRepository` is two methods and `item_user_data` still has no foreign key; and the fixture
+world now carries **three runtime shapes** — an hour-long film, a 215-second track and episodes
+with no runtime at all — which is what any future rule about durations needs to be provable in.
+

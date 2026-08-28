@@ -1,10 +1,11 @@
 ---
 feature: 007-user-data-and-playstate
 title: User data and playstate — implementation plan
-status: Accepted
+status: Implemented
 created: 2026-08-28
 updated: 2026-08-28
 accepted: 2026-08-28
+implemented: 2026-08-28
 amended: 2026-08-28 at the gate, which measured §6.8's catalogue before accepting — §1's sequencing note, §5's replacement semantics, §6.1's error floor, §6.4 rewritten around the measured session shape, §6.7, §6.8, §7, §9; the playing-session block and AC-21/AC-22 went back into the spec
 spec_status_required: Accepted
 spec_status_actual: Accepted
@@ -336,7 +337,7 @@ position, because positions are rows written per report (§6.1).
 
 ### 6.7 Parameter and body plumbing
 
-The five routes declare their pinned spellings; canonicalisation and `api_key` seeding arrive
+The seven routes declare their pinned spellings; canonicalisation and `api_key` seeding arrive
 from 005 §6.12's startup walk unchanged. Bodies are Pydantic models with PascalCase aliases and
 every field optional; `datePlayed` is the one query parameter with a value worth parsing, and
 `datePlayed=banana` measured `400` validation problem details naming the parameter *(the gate
@@ -425,7 +426,7 @@ runs 003's scan-delete-rescan machinery with a favourite planted first.
 | 20 | Season row bare vs `Fields=RecursiveItemCount` — percentage absent/present |
 
 Cross-cutting: the mark-response-equals-list-row test (§6.3) requests the same item both ways
-and compares the serialised `UserData` byte for byte; the L0 surface test picks the five routes
+and compares the serialised `UserData` byte for byte; the L0 surface test picks the seven routes
 from `surface.yaml` unchanged; the PascalCase sweep and the auth-mechanism matrix cover the new
 routes by construction; and the acceptance map grows its 007 rows when the feature flips to
 Implemented (003 T21's lesson). Every gate measurement in §6.8 is a `tools/` probe or a hand

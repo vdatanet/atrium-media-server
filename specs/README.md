@@ -118,14 +118,50 @@ say how it will be proven is not finished.
 | [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
 | [006](006-images/) | Images | **Implemented** | **Implemented** | **Implemented** |
-| [007](007-user-data-and-playstate/) | User data and playstate | **Accepted** | **Accepted** | **Accepted** |
+| [007](007-user-data-and-playstate/) | User data and playstate | **Implemented** | **Implemented** | **Implemented** |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001 through 006 are implemented**, 006 on 2026-08-28 across thirteen tasks — **007's three
-artefacts are all `Accepted`; its thirteen tasks are what happens next**. The three specs after
-007 remain drafts, and their open questions are the standing review agenda.
+**001 through 007 are implemented**, 007 on 2026-08-28 across thirteen tasks. The three specs
+after 007 remain drafts, and their open questions are the standing review agenda — **008 is the
+next feature, and 007 leaves it a tripwire rather than a gap**
+([007's tasks](007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones)).
+
+**007's thirteen tasks found something in seven of them, and two were features that did not
+exist.** The sharpest is T11's: **the container `PlayedPercentage` had never been implemented.**
+`PlayedPercentage` was position-over-runtime for every item — the *leaf* reading — so AC-20's
+first half ("a bare container row carries no percentage") passed because there was no percentage
+to gate. The second half was unreachable. T8's is the same class seen from the wire: **this
+project's first typed request body answered `{"item_id": …}`**, snake_case, because the framework
+keys validation errors on the model's Python field — behaviours §1.1's exact failure, in a body
+nothing had ever sent, since 002's only body is read with `request.json()` and never bound. The
+routes now name their body parameters after the reference's and the handler files a body failure
+under `""` or `"$"` beside `The <parameter> field is required.`, measured byte for byte.
+
+**Three findings came from measuring rather than reasoning.** T1's probe run found that
+`NowPlayingItem`'s **width is the item's, not the shape's** — two movies measured 41 and 40
+properties, the difference being a null `IsHD` — which is a false positive waiting for 010's
+differential if it compares counts. T9 measured the property *list* rather than the count and
+replaced the plan's design with it: the shape is a **subtraction**, a full item body minus a named
+fifteen, so 005's existing `omit` mechanism expresses it exactly and `MediaSources` is already
+excluded for the day 008 emits it. And T2, implementing the six-branch rule, found that
+**row 4's second clause decides nothing** under the reference's own thresholds: "within one second
+of the end" implies "past 90%" for anything longer than ten seconds, and anything shorter is
+completed by the runtime floor — the spec's paragraph explaining why the clause was *not*
+redundant had the arithmetic backwards.
+
+**And two were about this repository rather than about Jellyfin**: `last_playback_check_in` had
+**no writer at all** — 002 created the column, reflected it back and never moved it, so a session
+that had played something reported `0001-01-01` for ever (T7) — and three of T8's route tests were
+passing for the *fixture's* reasons rather than the route's, because the seeded films carry a
+resume position and "nothing was written" was reading numbers the world had put there.
+
+**OQ-7 was resolved with an answer the question did not anticipate** (T11): for four of the five
+container types it cannot be asked at all, because an empty `Series`, `Season`, `MusicArtist` or
+`MusicAlbum` does not earn its place and is not offered. The one exemption is a library folder,
+where Atrium reads `Played: false` and the reference's source reads vacuously played —
+[behaviours §5.7](../docs/compatibility/behaviours.md), owed to 010.
 
 **007's task-list gate changed four things**, on 2026-08-28, and the first is the class 006's
 gate taught, back for the very next feature. **The seeded world has exactly one runtime** —
