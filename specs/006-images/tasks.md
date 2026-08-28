@@ -392,7 +392,7 @@ classes earlier gates taught, back for the very next feature:
 
 ## T7 — `images/cache.py`: the disposable store
 
-- [ ] **Changes:** the [plan §4](plan.md#4-data-model) layout —
+- [x] **Changes:** the [plan §4](plan.md#4-data-model) layout —
   `<data-dir>/cache/images/<k[:2]>/<k>.<ext>`, the key a hash over item, type, index, tag and
   the canonical transform tuple **with the resolved output format inside** so a negotiated WebP
   and a bare JPEG are two entries; reads recover the `Content-Type` from the extension; writes
@@ -405,6 +405,28 @@ classes earlier gates taught, back for the very next feature:
   format change and only then; deleting the tree between operations loses nothing but time
   (AC-13's unit half).
 - **Plan reference:** §4, §6.5, §7
+- **Done (2026-08-28):** **"warn once per process" cannot be written as "warn once per process"
+  and stay testable.** A module-level flag is one that every test after the first sees already
+  set, so the assertion that there is exactly *one* warning passes or fails depending on test
+  order — and the fix, a reset hook, is test-only API in production code. The counter is per
+  `ImageCache` instead, and the application builds exactly one: the same guarantee, reachable by a
+  test that constructs its own.
+
+  **Two of these tests cannot fail as root**, and say so rather than passing. Taking a permission
+  away and expecting it to bite is a green test proving nothing under a user that ignores
+  permission bits — the class of "a test that compares Atrium against itself" (001 T16). Both are
+  skipped with the reason named.
+
+  **The key is the *decision*, not the request**, which fell out rather than being designed:
+  `maxWidth=300` and `width=300` deliver the same 300×450 of a 2:3 source, so they are **one**
+  entry. A key built from the request's parameters would cache a grid twice because two clients
+  spell one size differently — and would still miss the case that matters, since the resolved
+  format is not a request parameter at all when `Accept` decided it.
+
+  The rest held as planned: the tag inside the key makes a stale entry unreachable rather than
+  wrong, a negotiated WebP and a bare JPEG are two files, eight concurrent writes of one key
+  converge on one intact entry with nothing left beside it, and deleting the tree costs a
+  recompute.
 
 ## T8 — `images/service.py`: the orchestration
 
