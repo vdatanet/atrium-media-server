@@ -42,7 +42,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_item_shapes.py`](probe_item_shapes.py) | Which properties does the reference emit per item type, bare and when asked? | 005 §3.2, plan §6.5; behaviours §1.7 | no |
 | [`probe_next_up.py`](probe_next_up.py) | What does `/Shows/NextUp` call "next", and do specials take part? | 005 §3.7, plan §6.8 | yes |
 | [`probe_image_tags.py`](probe_image_tags.py) | Is a stale image `tag` an error, and what is the tag derived from? | 006 §3.4, AC-10, OQ-1, OQ-2, OQ-6 | no |
-| [`probe_image_formats.py`](probe_image_formats.py) | What format does a resized image come back in, does a fill box crop, and does a malformed parameter refuse or forgive? Four batteries: the format matrix, the **non-square fill** cells, the **`Accept` negotiation** cells, and which requests come back as the source's own bytes | 006 §3.2, §3.3, AC-6, AC-15, OQ-3, OQ-5; plan §6.3; behaviours §1.17 | no |
+| [`probe_image_formats.py`](probe_image_formats.py) | What format does a resized image come back in, does a fill box crop, and does a malformed parameter refuse or forgive? Five batteries: the format matrix, the **non-square fill** cells, the **exact `width`/`height`** cells, the **`Accept` negotiation** cells, and which requests come back as the source's own bytes | 006 §3.2, §3.3, AC-6, AC-15, OQ-3, OQ-5; plan §6.3; behaviours §1.17 | no |
 
 ### Running them
 
