@@ -142,9 +142,12 @@ separate, dangerous capability gated by user policy.
 | GET | `/Items/{itemId}/Images/{imageType}` | `GetItemImage` | M V |
 | GET | `/Items/{itemId}/Images/{imageType}/{imageIndex}` | `GetItemImageByIndex` | V |
 
-Both accept `maxWidth`, `maxHeight`, `quality` and `tag`, and require authentication — typically
-via `?api_key=` because these URLs are handed to image loaders that do not set headers.
-`[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
+Both accept `maxWidth`, `maxHeight`, `quality` and `tag`. They accept a token — typically
+`?api_key=`, because these URLs are handed to image loaders that do not set headers — and require
+none: the reference answers `200` with no token at all, which corrected this paragraph's earlier
+"require authentication"
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+([behaviours §2.10](behaviours.md#210-the-image-and-delivery-routes-accept-a-token-and-require-none)).
 
 Items advertise available images through `ImageTags`, e.g. `{"Primary": "<32 hex>"}`. The tag is a
 content hash used for cache invalidation, so it must change when the image changes and only then.

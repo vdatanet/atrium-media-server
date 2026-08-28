@@ -3,8 +3,9 @@ feature: 006-images
 title: Images
 status: Draft
 created: 2026-08-26
-updated: 2026-08-26
-depends_on: [004, 005]
+updated: 2026-08-28
+amended: 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered
+depends_on: [002, 004, 005]
 ---
 
 # 006 — Images
@@ -64,9 +65,19 @@ are none, so a client can distinguish "no images" from "field not requested".
 
 Items also carry **inherited** tags so a list can render without a second request per item:
 `AlbumPrimaryImageTag`, `SeriesPrimaryImageTag`, `SeriesThumbImageTag`,
-`ParentThumbImageTag` with `ParentThumbItemId`, and `ParentBackdropImageTags`. An episode without
-its own artwork is rendered with its season's or series' — and the client needs both the tag and
-the id of the item that owns it.
+`ParentThumbImageTag` with `ParentThumbItemId`, and `ParentBackdropImageTags` with
+`ParentBackdropItemId`. An episode without its own artwork is rendered with its season's or
+series' — and the client needs both the tag and the id of the item that owns it, which is why
+every inherited tag travels with an owning id: `AlbumId`, `SeriesId`, or the explicit
+`Parent…ItemId` beside it. On the measured wire `ParentBackdropItemId` pairs with
+`ParentBackdropImageTags` row for row
+`[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]` — 005 §3.2's matrix lists
+only the tags, a gap the plan for this feature must reconcile before AC-14 is provable for
+backdrops. A `ParentLogoImageTag`/`ParentLogoItemId` pair is also on the wire and stays out here
+for the same reason it stayed out of 005: no analysed client reads it (Principle VI,
+[005 notes](../005-item-query-api/notes/item-shapes.md)). `SeriesThumbImageTag` is carried
+**unconfirmed**, exactly as 005 §3.2 records it — never observed across twelve episodes, and
+"gated" and "no sampled series had a Thumb" are indistinguishable from outside.
 
 ### 3.2 `GET /Items/{itemId}/Images/{imageType}` — `GetItemImage`
 
@@ -91,33 +102,52 @@ Declared upstream but **not implemented in v1**: `percentPlayed`, `unplayedCount
 analysed client uses them, and a client that sends one receives the undecorated image — a visible
 difference, recorded here rather than discovered later.
 
-**Authentication is required**, and in practice comes as `?api_key=` because these URLs are handed
-to image loaders that do not set headers (002 §3.1). An image route that only accepted headers
-would leave browsing working and every poster broken.
+**A token is accepted here, and none is required.** The reference answers this route `200` with no
+token at all, all of 002 §3.1's mechanisms accepted and not one of them demanded
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` — the measurement 002
+recorded and deferred to this feature
+([behaviours §2.10](../../docs/compatibility/behaviours.md#210-the-image-and-delivery-routes-accept-a-token-and-require-none)).
+Atrium does the same, and takes the recorded consequence knowingly: **an item id is a capability**
+on this route. The alternative breaks the clients the route exists for — these URLs are handed to
+image loaders and external players that set no headers and not always a query either; a server
+that starts wanting a token here leaves browsing working and every poster broken. In practice a
+well-behaved client still appends `?api_key=` (002 §3.1). There is no per-user visibility branch:
+a tokenless request carries no user to filter for, and filtering only the requests that do carry
+one would make presenting a token a reason to refuse, which 002 AC-3 forbids.
 
-**Response — 200:** the image bytes, with the real `Content-Type`, a `Content-Length`, and
-`Accept-Ranges: bytes`.
+**Response — 200:** the image bytes, with the real `Content-Type` and a `Content-Length`. The
+draft promised `Accept-Ranges: bytes` too; the measured reference sends no such header on an
+image response, and a poster is not a seek target
+`[probe: tools/probe_image_tags.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 **Errors**
 
 | Condition | Status |
 |---|---|
-| Unknown item, or one the user may not see | `404` |
+| Unknown item | `404` — and nothing else: §3.2's authentication rule leaves no "may not see" branch on this route |
 | Item exists but has no image of that type | `404` |
 | `imageIndex` out of range | `404` |
-| Unparseable dimension or quality | `400` |
+| Unparseable dimension or quality | `400` — measured, against the lenient pattern of behaviours §1.12; a parseable but absurd value (`maxWidth=-100`) is forgiven with `200` instead `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]` |
+| `imageType` outside §3.2's set | `400` (same probe); a type in the set that the item merely lacks is the `404` above |
 
 ### 3.3 Resizing
 
 **Never upscale.** A request for 600px from a 400px source returns 400px. Upscaling costs CPU and
-bytes to deliver a blurrier image than the original.
+bytes to deliver a blurrier image than the original. The reference agrees: 3200px asked of an
+800px source returns the source `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 **Aspect ratio is preserved** except under `fillWidth`/`fillHeight`, which crop centred.
 
-**Format selection**, in order: an explicit `format` if supported; otherwise the source format,
-except that a source with no transparency may be served as JPEG when that is materially smaller.
-Transparency is never discarded — a logo served as JPEG acquires a white box, which is immediately
-visible on any dark client theme.
+**Format selection**, in order: an explicit `format` if supported; otherwise the source format —
+which is what the reference does: a JPEG poster resizes to JPEG, a PNG logo to PNG, and
+`format=Png|Jpg|Webp` are each honoured
+`[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`. A source with no
+transparency may additionally be served as JPEG when that is materially smaller. Transparency is
+never discarded **implicitly** — a resized logo keeps its alpha, and a logo silently served as
+JPEG would acquire a white box, immediately visible on any dark client theme. An **explicit**
+`format=Jpg` wins over that rule, because it does on the measured reference — the transparent
+logo comes back opaque (same probe) — and refusing what the client asked for by name would be
+the real divergence.
 
 **Resized results are cached on disk**, keyed by item, image type, index, tag and the full
 parameter set. The cache is disposable: deleting it costs CPU, never correctness. It lives outside
@@ -129,10 +159,13 @@ The contract with the client:
 
 | Mechanism | Behaviour |
 |---|---|
-| `ETag` | Sent on every image response, derived from the tag and the parameters |
-| `If-None-Match` | Matching etag answers `304` with no body |
-| `Cache-Control` | Long-lived and immutable when the request carried a `tag` |
-| `Last-Modified` / `If-Modified-Since` | Honoured |
+| `Last-Modified` / `If-Modified-Since` | The validator pair the reference actually serves: every image response carries `Last-Modified`, and `If-Modified-Since` at that date answers `304` with no body `[probe: tools/probe_image_tags.py, Jellyfin 10.11.11, 2026-08-28]` |
+| `Cache-Control` | `public` without a `tag` on the URL; `public, max-age=31536000` with one (same probe) — only the tag makes the URL immutable |
+| `ETag` / `If-None-Match` | **Not sent by the measured reference.** The draft promised an etag on every response; no analysed client needs one where the tag-in-URL mechanism exists, so v1 mirrors the reference rather than inventing a second validator (same probe) |
+
+One caveat the probe prints itself: the deployment measured answers through a caching
+intermediary (an `Age` header), so the header rows describe that deployment; the
+status-and-bytes findings are unaffected.
 
 **The `tag` parameter makes a URL immutable.** A request carrying the tag it expects can be cached
 indefinitely, because the URL changes when the image does. A request without one is still correct
@@ -140,7 +173,10 @@ but cannot be cached as aggressively.
 
 **A stale `tag` is not an error.** A client asking for an image by a tag the item no longer has
 receives the *current* image with a `200` — not a `404`. The client is behind, not wrong, and
-failing here empties a user's grid during a refresh.
+failing here empties a user's grid during a refresh. Measured: the reference answers a stale tag
+`200`, byte-identical to the untagged request
+`[probe: tools/probe_image_tags.py, Jellyfin 10.11.11, 2026-08-28]` — AC-10 is a reproduction,
+not a divergence.
 
 ### 3.5 Chapter images
 
@@ -150,10 +186,18 @@ video client.
 v1 **serves** chapter images that exist on disk. It does not **extract** them: generating them
 means decoding a video at intervals and running a background job over the whole library, and that
 job — trickplay and chapter-image generation — is out of v1 in its own right
-([roadmap](../../docs/roadmap.md#out-of-scope-and-why)). The arrival of transcoding does not change
+([roadmap](../../docs/roadmap.md#later-unscheduled),
+[api-surface §10](../../docs/compatibility/api-surface-v1.md#10-deliberately-excluded-from-v1)).
+The arrival of transcoding does not change
 this; a decode on demand for one client is not a sweep over every item. An item whose chapters have
 no images answers `404` per chapter, which is what a client already handles for a server that has
 not finished generating them.
+
+A client learns that a chapter *has* an image from the `Chapters` field (gated, 005 §3.2): each
+entry carries an `ImageTag` when its image exists — 1,311 of 1,354 measured entries did — and
+`GET .../Images/Chapter/{index}` serves the corresponding thumbnail
+`[probe: tools/probe_image_tags.py, Jellyfin 10.11.11, 2026-08-28]`. An entry without the tag is
+a chapter whose image was never generated, and answers `404` as above.
 
 ## 4. Data the feature owns
 
@@ -176,13 +220,16 @@ The images themselves belong to the user, on disk, and are owned by 004.
 6. `fillWidth`/`fillHeight` return exactly those dimensions, cropped centred.
 7. An image with transparency is never served in a format that discards it.
 8. A second identical request is served from cache and is byte-identical to the first.
-9. `If-None-Match` with the current etag answers `304` with an empty body.
+9. `If-Modified-Since` at the `Last-Modified` the server sent answers `304` with an empty body —
+   the validator pair measured on the reference, which sends no image etag (§3.4).
 10. A request carrying a **stale** `tag` answers `200` with the current image, not `404`.
 11. An unknown item, an item with no such image, and an out-of-range index all answer `404`.
-12. Authentication via `?api_key=` works on this route (shared with 002 AC-3).
+12. A request with no token answers `200`, and every token mechanism — `?api_key=` included — is
+    accepted without changing the answer (shared with 002 AC-3).
 13. Deleting the entire resize cache changes no response body.
-14. An episode without its own artwork carries its series' tag **and** the id of the item that owns
-    it.
+14. An episode carries its series' `Primary` tag **and** the id of the item that owns it, whether
+    or not the episode has artwork of its own — inheritance is unconditional on the wire, and
+    falling back to it is the client's decision, not the server's.
 
 ## 6. Conformance
 
@@ -199,16 +246,23 @@ across library versions, and a test that breaks when an encoder is upgraded teac
 
 ## 7. Open questions
 
-| # | Question | Blocks | Resolved by |
+Five of the six were measured at the spec review, on 2026-08-28, and the answers are folded into
+the sections they blocked:
+
+| # | Question | Answer | Measured by |
 |---|---|---|---|
-| OQ-1 | How the reference derives its image tags — content hash or something weaker | Nothing; a content hash is at least as good | `tools/probe_image_tags.py` |
-| OQ-2 | Does the reference `404` or serve the current image for a stale `tag`? §3.4 assumes serve | AC-10, which may be a divergence | `tools/probe_image_tags.py` |
-| OQ-3 | The reference's format-selection rule, especially transparency handling | §3.3, if a client compares bytes | `tools/probe_image_formats.py` |
-| OQ-4 | Does any client send `percentPlayed`, `blur` or `foregroundLayer`? | The declared gap in §3.2 | Differential harness (010) |
+| OQ-1 | How the reference derives its image tags — content hash or something weaker | **Weaker**: 0 of 12 tags reproduce as MD5 of the image bytes in either GUID spelling, and every tag is stable across requests. Blocks nothing — change-when-changed is all the contract needs, and a content hash delivers it | `tools/probe_image_tags.py`, 2026-08-28 |
+| OQ-2 | Does the reference `404` or serve the current image for a stale `tag`? §3.4 assumes serve | **Serves the current image**, `200` and byte-identical to the untagged request — AC-10 is a reproduction | `tools/probe_image_tags.py`, 2026-08-28 |
+| OQ-3 | The reference's format-selection rule, especially transparency handling | **Source format survives a resize**; `format=Png\|Jpg\|Webp` each honoured — `Jpg` on a transparent logo included, which comes back opaque; alpha survives every implicit path. §3.3 rewritten from this | `tools/probe_image_formats.py`, 2026-08-28 |
+| OQ-4 | Does any client send `percentPlayed`, `blur` or `foregroundLayer`? | Open — the declared gap in §3.2 stands until the differential harness says otherwise | Differential harness (010) |
+| OQ-5 | Whether an unparseable dimension is refused with `400` or ignored, and what an `imageType` outside §3.2's set answers | **`400` for both** — the one measured error path that is not lenient; a parseable but absurd `maxWidth=-100` is forgiven with `200` | `tools/probe_image_formats.py`, 2026-08-28 |
+| OQ-6 | How chapters advertise their images — an image tag per `Chapters` entry, or something else | **`ImageTag` per `Chapters` entry** — 1,311 of 1,354 measured entries carried one — served by the indexed `Chapter` route | `tools/probe_image_tags.py`, 2026-08-28 |
 
 ## 8. References
 
 - [docs/compatibility/api-surface-v1.md §7](../../docs/compatibility/api-surface-v1.md#7-images)
+- [behaviours §2.10](../../docs/compatibility/behaviours.md#210-the-image-and-delivery-routes-accept-a-token-and-require-none) — the measurement behind §3.2's authentication rule
 - [specs/004 §3.4](../004-metadata-resolution/spec.md) — which file becomes which image
 - [specs/005 §3.2](../005-item-query-api/spec.md) — where tags are advertised
+- [specs/005 notes/item-shapes.md](../005-item-query-api/notes/item-shapes.md) — the measured inherited-tag pairs of §3.1
 - `[spec: GetItemImage, GetItemImageByIndex, ImageType]`

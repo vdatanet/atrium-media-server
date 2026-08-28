@@ -41,6 +41,8 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_sort_stability.py`](probe_sort_stability.py) | What breaks a tie under each `SortBy`, and does paging hold once one is broken? | 005 §3.4, OQ-3 | no |
 | [`probe_item_shapes.py`](probe_item_shapes.py) | Which properties does the reference emit per item type, bare and when asked? | 005 §3.2, plan §6.5; behaviours §1.7 | no |
 | [`probe_next_up.py`](probe_next_up.py) | What does `/Shows/NextUp` call "next", and do specials take part? | 005 §3.7, plan §6.8 | yes |
+| [`probe_image_tags.py`](probe_image_tags.py) | Is a stale image `tag` an error, and what is the tag derived from? | 006 §3.4, AC-10, OQ-1, OQ-2, OQ-6 | no |
+| [`probe_image_formats.py`](probe_image_formats.py) | What format does a resized image come back in, and does a malformed parameter refuse or forgive? | 006 §3.2, §3.3, OQ-3, OQ-5 | no |
 
 ### Running them
 
@@ -67,6 +69,8 @@ python3 tools/probe_by_name_normalisation.py
 python3 tools/probe_sort_stability.py
 python3 tools/probe_item_shapes.py
 python3 tools/probe_next_up.py       --allow-writes
+python3 tools/probe_image_tags.py
+python3 tools/probe_image_formats.py
 ```
 
 `probe_item_identity.py` is the one probe here that confirms a `[source: …]` citation from
