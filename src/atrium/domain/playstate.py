@@ -64,6 +64,9 @@ class UserItemData:
     #: Visible file-backed descendants without a played row. None for anything that is not a
     #: tree container, so the DTO can tell "no rollup applies" from "nothing left".
     unplayed_count: int | None = None
+    #: How many there are in total, which is the other half of the fraction a container's
+    #: `PlayedPercentage` is. Set with `unplayed_count` and never stored.
+    total_count: int | None = None
 
 
 class Outcome(Enum):

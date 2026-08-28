@@ -351,7 +351,16 @@ def user_data_dto(one: HydratedItem, ctx: BuildContext) -> UserItemDataDto | Non
     data = one.user_data
     percentage: float | None = None
     runtime = one.metadata.runtime_ticks
-    if data.playback_position_ticks > 0 and runtime:
+    if data.total_count is not None:
+        # **A container's percentage is a fraction of its children, and it is field-gated.** A
+        # bare container row carries `UnplayedItemCount` and `Played` and no percentage at all;
+        # asking for `Fields=RecursiveItemCount` is what produces one - measured, and it is the
+        # same token that produces the counts beside it
+        # `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`.
+        if "RecursiveItemCount" in ctx.fields and data.total_count > 0:
+            played_children = data.total_count - (data.unplayed_count or 0)
+            percentage = played_children / data.total_count * 100
+    elif data.playback_position_ticks > 0 and runtime:
         percentage = data.playback_position_ticks / runtime * 100
     return UserItemDataDto(
         played_percentage=percentage,

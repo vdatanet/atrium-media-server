@@ -1287,6 +1287,7 @@ def _rolled(stored: UserItemData, rollup: tuple[int, int] | None) -> UserItemDat
         playback_position_ticks=stored.playback_position_ticks,
         last_played_date=stored.last_played_date,
         unplayed_count=total - played,
+        total_count=total,
     )
 
 

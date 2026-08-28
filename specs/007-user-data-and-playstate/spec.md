@@ -174,10 +174,16 @@ removed, a user marks a child directly — and a drifted count is visible on eve
 Where derivation is too slow, the plan may cache it, but the specified behaviour is that a client
 can never observe a stale aggregate.
 
-> ⚠️ **OQ-7.** An **empty** container: the reference's source reads it as vacuously played —
-> zero unplayed of zero — where 005 shipped `Played: false` over an empty subtree, arguing an
-> emptied series must not read watched. The measured library has no empty container to ask, so
-> which answer the wire gives is unmeasured and the divergence, if it is one, is unrecorded.
+**OQ-7 is resolved, and the answer is that the question mostly cannot be asked.** A `Series`,
+`Season`, `MusicArtist` or `MusicAlbum` with nothing visible beneath it is **not offered at all**
+— it does not earn its place ([behaviours §5.2](../../docs/compatibility/behaviours.md)), so
+there is no row for a client to read a flag off and the vacuous-played question never reaches the
+wire. The one container that *is* exempt is a library folder, because an empty library must stay
+in a sidebar, and that is where the answer lives: an empty library reads `Played: false` with
+`UnplayedItemCount: 0` here, where the reference's source reads a childless folder as vacuously
+played. Recorded as a divergence
+([behaviours §5.7](../../docs/compatibility/behaviours.md)) and owed to 010's differential,
+which is the only thing that can measure it without creating a library on somebody's server.
 
 ### 3.6 Playback reporting
 
@@ -445,9 +451,7 @@ because the alternative is a user losing their library's history to a temporaril
 
 ## 7. Open questions
 
-| # | Question | Blocks | Resolved by |
-|---|---|---|---|
-| OQ-7 | Is an empty container vacuously played, as the reference's source reads, where 005 shipped unplayed? | §3.5's aggregate on the one subtree shape the measured library lacks | A library with an empty season — the fixture library, or 010's differential |
+None. OQ-7, the last one open, was resolved at T11.
 
 ### Resolved
 
@@ -459,6 +463,7 @@ because the alternative is a user losing their library's history to a temporaril
 | OQ-4 | How long the reference waits before reaping a silent session | **A five-minute sweep for sessions silent past five minutes — measured at 8.6 — and it commits the position extrapolated through the silence, not the last reported one.** §3.8, AC-15 corrected | `tools/probe_playstate.py --reap` and source, 2026-08-28 |
 | OQ-5 | Does the reference count a play at start, at stop, or at the threshold? | **At start** — and a second time on a positionless stop. §3.6's effects table | `tools/probe_playstate.py`, 2026-08-28 |
 | OQ-6 | Whether row 5 fires as the source reads — a short item stopped mid-way marked played | **It fires**: a 215-second track stopped at 50% is played with no position | `tools/probe_playstate.py`, 2026-08-28 |
+| OQ-7 | Is an empty container vacuously played, where 005 shipped unplayed? | **Unaskable for four of the five container types** — an empty one is not offered at all — and `Played: false` for the fifth, an empty library. §3.5, behaviours §5.7 | 007 T11, 2026-08-28 |
 
 ## 8. References
 
