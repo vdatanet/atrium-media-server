@@ -99,7 +99,7 @@ a template, and they disagree precisely when one is stale.
 
 **A third error shape.** Every refusal from `AuthenticateByName` — `400`, `401`, `403` — is 25 bytes
 of `text/plain` with no charset, reading `Error processing request.`
-[behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-three-error-shapes-not-one)
+[behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one)
 said there were two. The same status carries different bytes depending on which layer refused, so
 four of this feature's acceptance criteria would have passed while sending the wrong body, had they
 been written against status codes.
@@ -499,7 +499,7 @@ appends `; charset=utf-8` to any `text/*` media type, and the reference sends **
 on this shape — unlike its JSON, which does carry the charset. The natural way to write the handler
 produced a difference on every refusal in feature 002, and it took a test comparing the *header*
 rather than the body to see it. `controller_error` now sets the header directly, and
-[behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-three-error-shapes-not-one)
+[behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one)
 says why.
 
 **An account with no password is not an account with an empty one.** It is opened by sending

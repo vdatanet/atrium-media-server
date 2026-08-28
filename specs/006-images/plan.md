@@ -1,9 +1,11 @@
 ---
 feature: 006-images
 title: Images — implementation plan
-status: Draft
+status: Accepted
 created: 2026-08-28
 updated: 2026-08-28
+accepted: 2026-08-28
+amended: 2026-08-28 at the gate, which measured the six §6.8 edges before accepting — §1, §5, §6.1, §6.3, §6.4, §6.5, §6.6, §6.8, §7, §8, §9, §10; two measurements went back into the spec (AC-6 corrected, AC-15 added) and one into behaviours §1.11 (the fourth error shape)
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -42,9 +44,11 @@ framework upgrade that starts adding either must fail a test, not ship a delta.
 **No authentication code runs on these routes at all.** The spec's rule — a token accepted, none
 required, no per-user branch (§3.2, behaviours §2.10) — is implemented by absence: the routes
 declare no dependency and never read the token, so every mechanism is "accepted" trivially and an
-item id is the capability the spec says it is. The one edge no probe has measured — a request
-carrying an *invalid* token — is exactly where "never reads" and "validates when present"
-diverge, and §6.8 owes it a measurement before the route freezes.
+item id is the capability the spec says it is. The one edge where "never reads" and "validates
+when present" diverge — a request carrying an *invalid* token — was measured at the gate: unknown
+and malformed tokens, through every mechanism, answer the identical `200`
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. "Never reads" is
+what the reference does too.
 
 **The sequencing gap is named, not papered over.** `Chapter` is wired generically and answers
 `404` for every request in v1, structurally: no v1 writer creates a `Chapter` row — 004's tables
@@ -105,8 +109,9 @@ not schema:
 ```
 
 The `tag` in the key means a changed image never serves a stale variant — its old entries become
-unreachable garbage rather than wrong answers. The extension is the output format, so a cache hit
-recovers its `Content-Type` without sniffing. Writes are tmp-file-plus-atomic-rename in the same
+unreachable garbage rather than wrong answers. The transform tuple carries the **resolved** output
+format, so a negotiated WebP and a bare JPEG of the same geometry are two entries (§6.4). The
+extension is the output format, so a cache hit recovers its `Content-Type` without sniffing. Writes are tmp-file-plus-atomic-rename in the same
 directory, so concurrent identical requests converge on identical bytes and a crash leaves no
 half-written entry. Unbounded in v1 and disposable by contract (spec §4): deleting it costs CPU,
 which AC-13's test proves, and eviction is future work an operator does with `rm` until measured
@@ -135,10 +140,12 @@ class ImageReply:
 def get(query: ImageQuery) -> ImageReply    # raises ImageNotFound
 ```
 
-`ImageNotFound` covers every `404` of spec §3.2's table plus the two conditions the spec folds
-into "unknown item": a soft-removed item — the world 005 serves has no removed items, and this
-route must not disagree with it — and a row whose carrier file is gone (§7). The route maps it to
-the problem-details `404`.
+Two refusals, because the measured wire has two `404` bodies *(amended at the gate — the draft
+had one exception mapped to problem details)*: `ItemNotFound` for an unknown or soft-removed item
+— the world 005 serves has no removed items, and this route must not disagree with it — mapping
+to the problem-details `404`; and `ImageNotFound(item_name, image_type)` for an item that exists
+but has no such image — no row, index out of range, a vanished carrier (§7) — mapping to
+behaviours §1.11's fourth shape, the JSON-encoded string that names the item and the type.
 
 Invariants callers may assume, and tests enforce: the payload is complete (`Content-Length` is
 its length — there is no streaming here; posters are small and 008 owns streaming); the same
@@ -159,7 +166,8 @@ One repository query resolves everything the request needs: the item (exists, no
 `library_id`), the `(image_type, index)` row, the library's roots, and — for an `embedded` row —
 the part-zero source path. The unindexed form is index 0; the pinned document also declares an
 `imageIndex` *query* parameter on the unindexed route `[spec: GetItemImage]`, honoured as the
-index and flagged in §6.8 (no probe has exercised the query spelling).
+index — measured at the gate on an item whose backdrops differ: `?imageIndex=1` returns backdrop
+1's bytes `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 **`imageType` parses against the full thirteen-member reference vocabulary
 `[spec: ImageType]`, not §3.2's eight.** The measurement behind the spec's error row makes the
@@ -193,14 +201,20 @@ From the parsed parameters, in order:
 1. **Drop non-positive dimension values.** `maxWidth=-100` parses and is forgiven with `200`,
    measured `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]` — the lenient
    shape of behaviours §1.12 on the one route whose *unparseable* values refuse (spec §3.2).
-2. **`fillWidth`/`fillHeight` present** → scale to cover the box and crop centred, exact
-   dimensions out (measured). The scale factor is capped at 1 — §3.3's never-upscale is stated
-   absolutely — so a box larger than the source crops without enlarging; that half is unmeasured
-   and flagged (§6.8).
+2. **`fillWidth`/`fillHeight` present** → scale to **cover** the box, aspect intact, overflow
+   kept — there is no crop on this path, whatever this step's draft said *(amended at the gate:
+   the draft scaled-and-cropped, and the measurement returned 400×600 for a 300×600 box on a
+   2000×3000 source — spec §3.3, AC-6 corrected)*. The scale is capped at 1, and a box the
+   source cannot cover delivers the source unchanged (measured). A lone fill axis scales that
+   axis, aspect intact (measured).
 3. **`width`/`height` present** → each given axis is honoured exactly after the never-upscale
-   cap; a lone axis scales the other by aspect ratio. Both axes at once honour both — the aspect
-   ratio goes if they disagree — which no probe has exercised; flagged (§6.8).
-4. **`maxWidth`/`maxHeight` present** → fit inside the box, aspect preserved (measured).
+   cap; a lone axis scales the other by aspect ratio; both at once honour both, distorting when
+   they disagree — 300×300 measured of the same 2000×3000 source *(the gate measured what this
+   step had flagged)*.
+4. **`maxWidth`/`maxHeight` present** → fit inside the box, aspect preserved (measured). Sent
+   together with the fill pair, the constraints compose to the tightest aspect-true size — a
+   300×300 fill under `maxWidth=200` measured 200×300, which every aspect-preserving reading
+   produces; there is nothing left to choose between them.
 5. **No effective change** — the computed target equals the source dimensions, the resolved
    format equals the source format, and no `quality` was given → **the verbatim path**: the
    carrier's bytes as they are.
@@ -214,21 +228,32 @@ Spec §3.3's rule, operationalised:
 
 - **Explicit `format`, one of the three measured** — `Jpg`, `Png`, `Webp` — is encoded as asked,
   `Jpg` on a transparent source included: the alpha is flattened, measured behaviour, onto white
-  — the matte colour is the one part the probe could not see and the differential will (§6.8).
-- **`Bmp`, `Gif` and `Svg`** parse — they are vocabulary members `[spec: ImageFormat]` — and fall
-  back to the source format, recorded through the drop recorder (behaviours §1.12's pattern).
-  Unmeasured against the reference; flagged (§6.8). `Svg` cannot be encoded from a raster at all,
-  so its fallback is permanent; the other two are promotable if the differential shows the
-  reference honouring them.
-- **A `format` value outside the vocabulary** is the one place two measured patterns collide —
-  enum values elsewhere drop (behaviours §1.12), unparseable values here refuse (spec §3.2) — so
-  it is measured before the parameter's parse is written (§6.8), not decided by taste.
-- **No `format`** → the source format survives, measured. The spec permits serving an opaque
-  source as JPEG "when materially smaller"; v1 does not take the option — source-format-always is
-  what the reference measurably does, and one rule fewer.
+  — the matte colour is the one part no remote request can see and the differential will.
+- **`Bmp` and `Gif`** parse — they are vocabulary members `[spec: ImageFormat]` — and fall back
+  to the source format **with the transform still applied**: `format=Bmp` at `maxWidth=200`
+  measured a 200px JPEG out of a JPEG source *(the gate measured what this bullet had guessed)*.
+  The fallback is recorded through the drop recorder (behaviours §1.12's pattern), promotable if
+  the differential ever shows the reference encoding them.
+- **`Svg` short-circuits the whole request**: the source bytes verbatim, the resize ignored — an
+  800px source measured back whole against `maxWidth=200` *(measured at the gate; the draft had
+  it falling back like the other two)*. Reproduced as measured: `format=Svg` routes to the
+  verbatim path.
+- **A `format` value outside the vocabulary drops** — `format=Banana` measured `200` with the
+  value ignored, so behaviours §1.12's pattern wins the collision this bullet used to flag
+  against spec §3.2's dimension refusals, and the parse is written lenient.
+- **No `format`, a transform running, and `Accept` offering `image/webp`** → **WebP out**, with
+  `Vary: Accept` on every image response either way (spec §3.3, AC-15) *(added at the gate: the
+  draft rejected content negotiation in §10 and the measurement reversed it — the earlier
+  probe's offer rode a request nothing transformed, and the verbatim path negotiates nothing)*.
+  The offer is read as the `image/webp` token's presence in the header; `image/avif` measured
+  un-negotiated; an explicit `format` beats the offer (measured).
+- **No `format` otherwise** → the source format survives, measured. The spec permits serving an
+  opaque source as JPEG "when materially smaller"; v1 does not take the option —
+  source-format-when-unnegotiated is what the reference measurably does, and one rule fewer.
 - `quality` maps to the encoder's quality for `Jpg` and `Webp` and is ignored for `Png`, whose
-  encoder has no lossy knob; values outside 0–100 clamp. Absent, the encoder defaults stand —
-  goldens assert headers and dimensions, never encoder bytes (spec §6).
+  encoder has no lossy knob; values outside 0–100 clamp — `quality=150` measured forgiven with
+  `200`. Absent, the encoder defaults stand — goldens assert headers and dimensions, never
+  encoder bytes (spec §6).
 - Modes convert minimally: palette and CMYK sources convert to RGB(A) for encoding; an
   RGBA-to-RGB flatten happens only under explicit `Jpg` (above).
 
@@ -246,18 +271,22 @@ allowed to never be there.
 The `200` header set, explicit and complete: `Content-Type` from the payload, `Content-Length`,
 `Last-Modified` — the carrier file's mtime in RFC 1123 form, the only truthful clock this feature
 has (items and sources carry no wire modification time, behaviours §2.17, and the reference
-demonstrably serves this pair) — and `Cache-Control`: `public` bare, `public, max-age=31536000`
+demonstrably serves this pair) — `Cache-Control`: `public` bare, `public, max-age=31536000`
 when the URL carries a `tag`, both values measured verbatim
-`[probe: tools/probe_image_tags.py, Jellyfin 10.11.11, 2026-08-28]`. `X-Response-Time-ms` arrives
-from 001's middleware like everywhere else. **No `ETag`, no `Accept-Ranges`** (spec §3.4) — and
-§8's header sweep asserts the set exactly, absences included.
+`[probe: tools/probe_image_tags.py, Jellyfin 10.11.11, 2026-08-28]` — and the four constants the
+gate's full dump added to this paragraph *(the draft's set was the deployment's minus everything
+the probe had not asked to see)*: `Vary: Accept`, `Content-Disposition: attachment`,
+`transferMode.dlna.org: Interactive`, `realTimeInfo.dlna.org: DLNA.ORG_TLAG=*` (spec §3.2, §3.4)
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
+`X-Response-Time-ms` arrives from 001's middleware like everywhere else. **No `ETag`, no
+`Accept-Ranges`** (spec §3.4) — and §8's header sweep asserts the set exactly, absences included.
 
 `If-Modified-Since` parses leniently — an unparseable date is ignored, the ordinary HTTP reading,
 unmeasured and low-stakes — and compares at whole-second granularity; not earlier than
-`Last-Modified` answers `304` with an empty body and the same `Last-Modified`/`Cache-Control`
-pair. The probe measured the `304` and its emptiness; the reply's exact header set is flagged
-(§6.8). The conditional check runs after the lookup and the carrier `stat` but **before** any
-bytes are read or transformed — a `304` never opens an image.
+`Last-Modified` answers `304` with an empty body and the `200`'s header set minus
+`Content-Length` — measured in full at the gate, `Content-Type` and the DLNA pair included
+(same manual-requests probe). The conditional check runs after the lookup and the carrier `stat`
+but **before** any bytes are read or transformed — a `304` never opens an image.
 
 ### 6.7 The wire and the recorder
 
@@ -277,20 +306,28 @@ Unparseable declared values — `maxWidth=banana`, `quality=banana` — fail val
 non-lenient path). **No range constraints on the dimension parameters**: `-100` must parse and be
 forgiven (§6.3 step 1), so a `ge=0` bound would manufacture a `400` the reference does not send.
 
-### 6.8 Measured before the route freezes
+### 6.8 Measured at the gate, and what stays owed
 
-The edges no probe has covered, each owed a measurement in the task list before its code lands —
-the habit AGENTS.md records is that these are found by asking, not by reasoning:
+This section listed six edges no probe had covered. The gate measured them before accepting the
+plan `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`, and the
+answers are folded into §§6.1–6.6 and back into the spec: invalid tokens change nothing (§1
+stands as written), `format` outside the vocabulary drops while `Bmp`/`Gif` fall back
+mid-transform and `Svg` goes verbatim, both-axes `width`+`height` distorts, **fill covers and
+never crops** (AC-6 corrected), a transformed response **negotiates `Accept: image/webp`**
+(AC-15 added — the finding the draft's own §10 had argued against), the error bodies split into
+problem details and behaviours §1.11's fourth shape, the `304`'s header set is the `200`'s minus
+`Content-Length`, and the query-spelling `imageIndex` selects the backdrop it names.
 
-1. An **invalid or disabled-account token** on the image route: `200`-ignoring or a refusal —
-   decides whether §1's "no authentication code at all" survives contact.
-2. **`format` outside the vocabulary** (the §6.4 collision), and `Bmp`/`Gif`/`Svg` inside it.
-3. **`width`+`height` both present**; a **fill box larger than the source**; **EXIF orientation**
-   on resize.
-4. The **error-body shapes** on this route — the `400` and both `404`s are assumed
-   problem-details per behaviours §1.11, and no image probe has looked at a body yet.
-5. The **`304`'s exact header set**.
-6. The **query-spelling `imageIndex`** on the unindexed route.
+What the sweep could not reach stays owed:
+
+1. **EXIF orientation** on resize needs a planted file in a controlled library — a task with the
+   fixture library, or 010's differential, owns it.
+2. **A disabled account's token** is entailed by the unknown-token result — a route that
+   validated anything would have refused that too — and stays on 002's standing list (its OQ-5
+   reason: measuring it costs somebody an account) rather than being re-argued here.
+3. **The two cells `probe_image_formats.py` was blind to** — non-square fill and the `Accept`
+   offer on a transformed request — are owed to the committed probe by the task list, so the
+   next measurement of this route does not depend on this gate's scratch scripts.
 
 ## 7. Failure handling
 
@@ -298,8 +335,9 @@ the habit AGENTS.md records is that these are found by asking, not by reasoning:
 |---|---|---|---|
 | Malformed `itemId`, unparseable dimension or `quality` | Validation | Problem-details `400` (measured status; body §6.8) | Client fixes the request |
 | `imageType` outside the vocabulary | Route validation | `400` (measured) | — |
-| Unknown, removed or invisible-to-nobody item; no row; index out of range | §6.1 lookup | Problem-details `404`, one shape for all | — |
-| Row exists, carrier file missing or unreadable | The open fails | Same `404`, plus a structured warning naming the path | The next scan removes or re-associates the row |
+| Unknown or soft-removed item | §6.1 lookup | Problem-details `404` (measured) | — |
+| Item found, image absent: no row, index out of range, a vocabulary member v1 never stores, a chapter without a thumbnail | §6.1 lookup | `404`, behaviours §1.11's fourth shape — the JSON string naming the item and the type, the measured split of one route's two lookups | — |
+| Row exists, carrier file missing or unreadable | The open fails | The absent-image `404` above, plus a structured warning naming the path | The next scan removes or re-associates the row |
 | Decode fails at transform time — corrupt since scan, or Pillow's decompression-bomb guard | Pillow raises | Serve the **source bytes verbatim**, with a warning: a full-size poster beats a hole in the grid, and the bytes were good enough to associate | Operator sees the log; rescan heals |
 | Cache unwritable, disk full | `OSError` on write | Compute and serve; warn once per process | Free space; the cache rebuilds itself |
 | Embedded row whose art was stripped since the scan | Extraction returns none | `404` plus warning | Next scan drops the row |
@@ -309,9 +347,9 @@ the habit AGENTS.md records is that these are found by asking, not by reasoning:
 ## 8. Testing strategy
 
 Fixtures are **generated, not checked in**: Pillow draws deterministic images at test time — a
-1000×1500 JPEG poster, a 400px-wide one for the no-upscale case, a PNG logo with alpha, three
-backdrops, and an off-centre colour-quadrant image that makes centred cropping assertible by
-pixel. Rows are seeded through the repositories with the files placed under a `tmp_path` library
+1000×1500 JPEG poster, whose 2:3 ratio is what discriminates cover from fit and exact from
+aspect-true, a 400px-wide one for the no-upscale case, a PNG logo with alpha, and three
+backdrops of three different sizes so index selection is assertible by dimensions. Rows are seeded through the repositories with the files placed under a `tmp_path` library
 root — no scan runs, 003 and 004 proved that half — except AC-2's test, which runs the real scan
 twice on purpose. Embedded-art fixtures reuse 004's tag-writing helpers.
 
@@ -322,19 +360,21 @@ twice on purpose. Embedded-art fixtures reuse 004's tag-writing helpers.
 | 3 | `GET .../Images/Primary`: the bytes, `Content-Type` from content, `Content-Length` exact |
 | 4 | `maxWidth=300` on 1000×1500 → decoded reply is 300×450 |
 | 5 | `maxWidth=2000` on the 400px source → byte-identical to the source file |
-| 6 | `fillWidth`/`fillHeight` → exact box; the quadrant fixture proves the crop is centred |
+| 6 | Fill 300×300 of the 1000×1500 poster → 300×450, cover with the overflow kept; a box past the source → the source verbatim; `width=300&height=300` → the distorted exact box beside it |
 | 7 | The PNG logo resized → PNG, alpha intact; with `format=Jpg` → JPEG, opaque (explicit wins) |
 | 8 | Same request twice → byte-identical; then overwrite the source file *without rescanning* and request again → still the first bytes, proving the hit never recomputed |
 | 9 | `If-Modified-Since` at the sent `Last-Modified` → `304`, empty body |
 | 10 | A stale `tag` → `200`, current bytes |
-| 11 | Unknown item, absent type, out-of-range index → three problem-details `404`s; `Box` → `404`; a non-member string → `400` |
-| 12 | Parameterised over 002 §3.1's mechanisms plus no token: `200` every time, identical bytes |
+| 11 | Unknown item → the problem-details `404`; absent type, out-of-range index and `Box` → the string-shape `404` naming item and type (behaviours §1.11's split, held by golden bodies); a non-member string → `400` |
+| 12 | Parameterised over 002 §3.1's mechanisms plus no token, an unknown and a malformed token included: `200` every time, identical bytes |
 | 13 | Delete `cache/images/` between requests → same body bytes |
 | 14 | An episode *with its own artwork* under a series with poster and backdrops: `SeriesPrimaryImageTag` + `SeriesId` present, `ParentBackdropImageTags` + `ParentBackdropItemId` paired row for row |
+| 15 | The resized request with `Accept: image/webp` → WebP with `Vary: Accept`; the same with `format=Png` → PNG (explicit wins); the un-transformed request with the offer → source format |
 
 Cross-cutting: a **header-set sweep** asserts the exact set on every `200` and `304` this suite
-produces — `ETag` and `Accept-Ranges` absent, `Cache-Control` values verbatim — so a framework
-upgrade that adds a header fails a test instead of shipping a delta. The resize matrix of spec §6
+produces — `ETag` and `Accept-Ranges` absent; `Cache-Control` values verbatim; `Vary: Accept`,
+`Content-Disposition: attachment` and the two DLNA constants present (§6.6) — so a framework
+upgrade that adds or drops a header fails a test instead of shipping a delta. The resize matrix of spec §6
 is table-driven over §6.3's branches. Goldens store **headers and dimensions, never encoder
 bytes** (spec §6); the byte-identity ACs (8, 13) compare within one run, where the encoder is
 constant. `Chapter` answers `404` today by construction, and the test that pins it is the tripwire
@@ -353,7 +393,7 @@ or a hand request, never a test.
 | CPU-bound transforms stall the event loop | Medium | Medium | Sync-`def` routes run in the framework's threadpool; the cache bounds repeat cost; pool tuning waits for a measurement, not a fear |
 | Unbounded cache growth | Medium | Low — disk, disposable | AC-13 proves deleting is free; eviction is recorded future work |
 | A crafted row escapes a root | Low | High | §6.2's containment check, with a hostile-row test proving the refusal |
-| The §6.8 edges land wrong by assumption | Medium | Medium | Each is a named measurement task before its code — the list is the mitigation |
+| The §6.8 leftovers land wrong by assumption | Low | Medium | The list shrank to what a remote request cannot reach; EXIF and the probe's two owed cells are named task-list items |
 | mtime granularity makes `304` flap around an edit | Low | Low | Whole-second compare; the tag mechanism, not the validator, carries real invalidation |
 
 ## 10. Alternatives considered
@@ -368,10 +408,14 @@ every image response. The tag-in-URL mechanism already gives clients immutabilit
 it, and spec §3.4 records the reference sending none. A non-improvement in the behaviours §6
 sense: good idea, wrong project.
 
-**Content negotiation on `Accept`.** Serving WebP to browsers that advertise it is the modern
-nicety — and §3.3's format rule is parameter-driven only. A server that varies on `Accept` where
-the reference does not is observably different to any client that sends the header. Out by
-Principle I.
+**Ignoring `Accept`.** The draft of this paragraph rejected content negotiation — §3.3's rule
+read as parameter-driven only, and a server that varies where the reference does not is a delta —
+which was the right argument pointed at the wrong server. Measured at the gate, the reference
+**does** negotiate: a transformed response comes back WebP when the header offers it, under a
+`Vary: Accept` it sends on every image response. The rejected alternative was the delta — every
+browser-based client makes the offer on every poster it loads. The measured rule lives in §6.4;
+this paragraph stays as the record of a rejection reversed by one request, which is what §10
+exists to catch.
 
 **Deriving `Last-Modified` from the database.** No image row stores a timestamp, items carry no
 modification time at all (behaviours §2.17), and inventing a column would add schema for a value

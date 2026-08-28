@@ -117,17 +117,39 @@ say how it will be proven is not finished.
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Implemented** | **Implemented** | **Implemented** |
 | [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
-| [006](006-images/) | Images | **Accepted** | Draft | — |
+| [006](006-images/) | Images | **Accepted** | **Accepted** | — |
 | [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001, 002, 003, 004 and 005 are implemented; 006's spec is accepted and its plan is written**,
-awaiting a gate of its own — the first plan drafted against a spec whose open questions were
-measured before a line of the plan existed. The four specs after it remain drafts, and their open
-questions are the standing review agenda. The task list may not start until the plan is accepted
-(Principle III).
+**001, 002, 003, 004 and 005 are implemented, and 006 is accepted through its plan** — the spec
+and the plan both passed their gates on 2026-08-28, probes first both times — so **the next
+artefact is 006's task list**, which is written against the accepted plan and gets a gate of its
+own before T1 begins. The four specs after it remain drafts, and their open questions are the
+standing review agenda.
+
+**006's plan gate measured before accepting, and the measurements changed the accepted spec
+twice**, on 2026-08-28. The plan's §6.8 had catalogued the edges no probe had covered; a
+manual-request sweep answered them, and two answers contradicted accepted documents. **AC-6 was
+corrected** — `fillWidth`/`fillHeight` do not crop: they scale to cover and keep the overflow,
+300×600 asked of a 2000×3000 source returning 400×600. The earlier probe had measured "exactly
+the box" on a source that was itself square, where covering and cropping are indistinguishable —
+the second acceptance criterion this project has reversed by measurement, 005 AC-11's class.
+**AC-15 was added** — a transformed response negotiates `Accept: image/webp` under a
+`Vary: Accept` sent on every image response. The plan's own §10 had rejected content negotiation
+as a delta, and the measurement reversed the rejection: the earlier probe's offer rode a request
+nothing transformed, which negotiates nothing, so every browser-based client was quietly owed
+WebP posters no document promised. The sweep also found a **fourth error shape**
+([behaviours §1.11](../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one)):
+the route's absent-image `404`s answer a JSON-encoded string naming the item — on a tokenless
+route — while its unknown-item `404` stays problem details, one route splitting its two lookups
+across two shapes. The rest confirmed the plan as drafted: invalid tokens change nothing,
+`format=Banana` drops, `Svg` short-circuits to the verbatim path, both-axes resizing distorts,
+the `304` is the `200`'s header set minus `Content-Length`, and `?imageIndex` selects the
+backdrop it names. Every answer is folded into [the spec](006-images/spec.md),
+[the plan](006-images/plan.md) and behaviours §1.11, with EXIF orientation the one edge a remote
+request cannot reach.
 
 **Writing 006's plan changed one row of the accepted spec**, on 2026-08-28. §3.2's error table
 read "`imageType` outside §3.2's set → `400`", and the measurement it cites distinguishes the

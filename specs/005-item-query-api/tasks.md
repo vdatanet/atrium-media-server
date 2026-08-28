@@ -225,7 +225,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   counting per `(route, parameter)` and logging each distinct pair once per process; the
   list-of-enum helper keeping known tokens and dropping-and-recording unknown ones.
   `compat/errors.py` grows the problem-details shape of
-  [behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-three-error-shapes-not-one):
+  [behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one):
   the validation `400` — status **and** body — where the framework answers `422`, and a
   problem-details `404` for handlers to raise. Both wired into the application factory.
 - **Depends on:** nothing

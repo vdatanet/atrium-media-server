@@ -4,7 +4,7 @@ title: Images
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
-amended: 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered; and 2026-08-28 by the plan — §3.2's error row now names the thirteen-member vocabulary the probe distinguishes, `Box` measured `404`
+amended: 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered; and 2026-08-28 by the plan — §3.2's error row now names the thirteen-member vocabulary the probe distinguishes, `Box` measured `404`; and 2026-08-28 at the plan gate — §3.3 fill covers rather than crops (AC-6 corrected) and negotiates Accept (AC-15 added), §3.2 response constants and invalid tokens, §3.4 Vary, AC-12, OQ-3's missing cell
 depends_on: [002, 004, 005]
 ---
 
@@ -108,6 +108,9 @@ token at all, all of 002 §3.1's mechanisms accepted and not one of them demande
 `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` — the measurement 002
 recorded and deferred to this feature
 ([behaviours §2.10](../../docs/compatibility/behaviours.md#210-the-image-and-delivery-routes-accept-a-token-and-require-none)).
+An **invalid** token is not a refusal either: unknown and malformed tokens, sent through the
+header, the query and the `MediaBrowser` scheme, each answer the identical `200`
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
 Atrium does the same, and takes the recorded consequence knowingly: **an item id is a capability**
 on this route. The alternative breaks the clients the route exists for — these URLs are handed to
 image loaders and external players that set no headers and not always a query either; a server
@@ -119,7 +122,12 @@ one would make presenting a token a reason to refuse, which 002 AC-3 forbids.
 **Response — 200:** the image bytes, with the real `Content-Type` and a `Content-Length`. The
 draft promised `Accept-Ranges: bytes` too; the measured reference sends no such header on an
 image response, and a poster is not a seek target
-`[probe: tools/probe_image_tags.py, Jellyfin 10.11.11, 2026-08-28]`.
+`[probe: tools/probe_image_tags.py, Jellyfin 10.11.11, 2026-08-28]`. Three constant headers ride
+every image response, `304`s included: `Content-Disposition: attachment`,
+`transferMode.dlna.org: Interactive` and `realTimeInfo.dlna.org: DLNA.ORG_TLAG=*` — plus the
+`Vary: Accept` that §3.3's negotiation implies
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`, all under §3.4's
+deployment caveat.
 
 **Errors**
 
@@ -137,12 +145,25 @@ image response, and a poster is not a seek target
 bytes to deliver a blurrier image than the original. The reference agrees: 3200px asked of an
 800px source returns the source `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`.
 
-**Aspect ratio is preserved** except under `fillWidth`/`fillHeight`, which crop centred.
+**Aspect ratio is preserved** on every path but one: `width` and `height` sent **together** are
+honoured exactly even against the source's ratio — 300×300 asked of a 2000×3000 source is a
+distorted 300×300. `fillWidth`/`fillHeight` do not crop, whatever this section's draft said: they
+scale to **cover** the box with the aspect intact and the overflow kept — 300×600 asked of the
+same source returns 400×600, not a 300×600 crop — so the delivered size equals the box only when
+the ratios already match, and a box the source cannot cover without upscaling delivers the source
+unchanged `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. The
+earlier probe had measured "exactly the box" on a source that was itself square, where covering
+and cropping are indistinguishable.
 
-**Format selection**, in order: an explicit `format` if supported; otherwise the source format —
-which is what the reference does: a JPEG poster resizes to JPEG, a PNG logo to PNG, and
+**Format selection**, in order: an explicit `format` if supported; otherwise, **when a transform
+runs and the `Accept` header offers `image/webp`, WebP** — the negotiation every browser
+triggers, `Vary: Accept` on the response, invisible to the earlier probe because it made the
+offer only on a request nothing transformed, and a request served verbatim negotiates nothing;
+otherwise the source format — a JPEG poster resizes to JPEG, a PNG logo to PNG, and
 `format=Png|Jpg|Webp` are each honoured
-`[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`. A source with no
+`[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]`. An explicit `format`
+beats the `Accept` offer, and `image/avif` is not negotiated
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. A source with no
 transparency may additionally be served as JPEG when that is materially smaller. Transparency is
 never discarded **implicitly** — a resized logo keeps its alpha, and a logo silently served as
 JPEG would acquire a white box, immediately visible on any dark client theme. An **explicit**
@@ -163,6 +184,7 @@ The contract with the client:
 | `Last-Modified` / `If-Modified-Since` | The validator pair the reference actually serves: every image response carries `Last-Modified`, and `If-Modified-Since` at that date answers `304` with no body `[probe: tools/probe_image_tags.py, Jellyfin 10.11.11, 2026-08-28]` |
 | `Cache-Control` | `public` without a `tag` on the URL; `public, max-age=31536000` with one (same probe) — only the tag makes the URL immutable |
 | `ETag` / `If-None-Match` | **Not sent by the measured reference.** The draft promised an etag on every response; no analysed client needs one where the tag-in-URL mechanism exists, so v1 mirrors the reference rather than inventing a second validator (same probe) |
+| `Vary: Accept` | On every image response, `304` included — the consequence of §3.3's WebP negotiation `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]` |
 
 One caveat the probe prints itself: the deployment measured answers through a caching
 intermediary (an `Age` header), so the header rows describe that deployment; the
@@ -218,19 +240,25 @@ The images themselves belong to the user, on disk, and are owned by 004.
 4. `maxWidth=300` on a 1000px-wide source returns a 300px-wide image with the aspect ratio
    preserved.
 5. `maxWidth=2000` on a 400px-wide source returns 400px — no upscaling.
-6. `fillWidth`/`fillHeight` return exactly those dimensions, cropped centred.
+6. `fillWidth`/`fillHeight` scale to cover the box with the aspect ratio intact and the overflow
+   kept — 300×600 of a 2000×3000 source is 400×600, never a crop — and a box the source cannot
+   cover without upscaling returns the source unchanged.
 7. An image with transparency is never served in a format that discards it.
 8. A second identical request is served from cache and is byte-identical to the first.
 9. `If-Modified-Since` at the `Last-Modified` the server sent answers `304` with an empty body —
    the validator pair measured on the reference, which sends no image etag (§3.4).
 10. A request carrying a **stale** `tag` answers `200` with the current image, not `404`.
 11. An unknown item, an item with no such image, and an out-of-range index all answer `404`.
-12. A request with no token answers `200`, and every token mechanism — `?api_key=` included — is
-    accepted without changing the answer (shared with 002 AC-3).
+12. A request with no token answers `200`, and every token mechanism — `?api_key=` included, an
+    unknown or malformed token included — is accepted without changing the answer (shared with
+    002 AC-3).
 13. Deleting the entire resize cache changes no response body.
 14. An episode carries its series' `Primary` tag **and** the id of the item that owns it, whether
     or not the episode has artwork of its own — inheritance is unconditional on the wire, and
     falling back to it is the client's decision, not the server's.
+15. A resized response is WebP when the request's `Accept` offers `image/webp`, and carries
+    `Vary: Accept`; an explicit `format` overrides the offer, and a request served verbatim
+    ignores it.
 
 ## 6. Conformance
 
@@ -238,7 +266,7 @@ The images themselves belong to the user, on disk, and are owned by 004.
 |---|---|---|
 | `GET /Items/{itemId}/Images/{imageType}` | **L2** | Golden headers and byte-length assertions against fixture images |
 | Indexed form | **L2** | Fixture with three backdrops |
-| Resize matrix | **L2** | Table-driven over the parameter combinations of §3.2 |
+| Resize matrix | **L2** | Table-driven over the parameter combinations of §3.2, the `Accept` offer included |
 | Cache and conditional requests | **L2** | Request pairs asserting `304` and cache-hit identity |
 | Tag stability | **L2** | Rescan comparison (AC-2) |
 
@@ -254,7 +282,7 @@ the sections they blocked:
 |---|---|---|---|
 | OQ-1 | How the reference derives its image tags — content hash or something weaker | **Weaker**: 0 of 12 tags reproduce as MD5 of the image bytes in either GUID spelling, and every tag is stable across requests. Blocks nothing — change-when-changed is all the contract needs, and a content hash delivers it | `tools/probe_image_tags.py`, 2026-08-28 |
 | OQ-2 | Does the reference `404` or serve the current image for a stale `tag`? §3.4 assumes serve | **Serves the current image**, `200` and byte-identical to the untagged request — AC-10 is a reproduction | `tools/probe_image_tags.py`, 2026-08-28 |
-| OQ-3 | The reference's format-selection rule, especially transparency handling | **Source format survives a resize**; `format=Png\|Jpg\|Webp` each honoured — `Jpg` on a transparent logo included, which comes back opaque; alpha survives every implicit path. §3.3 rewritten from this | `tools/probe_image_formats.py`, 2026-08-28 |
+| OQ-3 | The reference's format-selection rule, especially transparency handling | **Source format survives a resize**; `format=Png\|Jpg\|Webp` each honoured — `Jpg` on a transparent logo included, which comes back opaque; alpha survives every implicit path. §3.3 rewritten from this — and the plan gate added the cell this probe was blind to: a **resized** response negotiates `Accept: image/webp` (§3.3, AC-15) | `tools/probe_image_formats.py`, 2026-08-28; manual requests, 2026-08-28 |
 | OQ-4 | Does any client send `percentPlayed`, `blur` or `foregroundLayer`? | Open — the declared gap in §3.2 stands until the differential harness says otherwise | Differential harness (010) |
 | OQ-5 | Whether an unparseable dimension is refused with `400` or ignored, and what an `imageType` outside §3.2's set answers | **`400` for both** — the one measured error path that is not lenient; a parseable but absurd `maxWidth=-100` is forgiven with `200` | `tools/probe_image_formats.py`, 2026-08-28 |
 | OQ-6 | How chapters advertise their images — an image tag per `Chapters` entry, or something else | **`ImageTag` per `Chapters` entry** — 1,311 of 1,354 measured entries carried one — served by the indexed `Chapter` route | `tools/probe_image_tags.py`, 2026-08-28 |
