@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
 accepted: 2026-08-27
-amended: 2026-08-28 by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7
+amended: 2026-08-28 by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed)
 depends_on: [002, 004]
 ---
 
@@ -309,8 +309,12 @@ client — it cannot tell a stable ranking from a lucky one — so this costs no
 Episodes accept a `seasonId` to scope them, and both honour `DisplayMissingEpisodes` from the
 user's configuration.
 
-**Season 0 is "Specials"** and sorts after the numbered seasons, not before — its number would
-place it first, and every client expects it last.
+**Season 0 is "Specials" and it sorts first, in plain index order** *(corrected by T12's
+measurement — this section claimed the opposite, "every client expects it last", with nothing
+behind it)*. A live series with a specials season answers `[Specials, Season 1]`
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`, and Principle I
+settles which order Atrium sends: the reference's. Where a client *shows* its user the specials
+is the client's own re-sort, invisible to this API.
 
 ### 3.9 By-name endpoints
 
@@ -365,7 +369,9 @@ the point of listing it: a query endpoint that owns state is a query endpoint wi
 8. `/Items/{itemId}` answers `404` identically for unknown and invisible items.
 9. A user seeing no libraries gets an empty `/UserViews` envelope, not an error.
 10. `/Shows/NextUp` returns at most one item per series.
-11. Season 0 sorts last in `/Shows/{seriesId}/Seasons`.
+11. Season 0 sorts **first** — plain index order — in `/Shows/{seriesId}/Seasons`, as the
+    reference sends it. *(Corrected by T12: the drafted criterion said "last" and the
+    measurement said otherwise; see §3.8.)*
 12. `Similar` and `InstantMix` return identical results for identical input on repeated calls.
 13. `/Artists` and `/Artists/AlbumArtists` differ on a compilation fixture, in the expected
     direction.

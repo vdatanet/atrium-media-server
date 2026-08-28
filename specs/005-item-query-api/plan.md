@@ -4,7 +4,7 @@ title: Item query API — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8
+amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8; by T12 - sections 6.9 and 8
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -391,12 +391,16 @@ construction (AC-10), which the query produces via a per-series window rather th
 
 ### 6.9 Series navigation
 
-`/Shows/{seriesId}/Seasons` orders by `(index_number = 0), index_number` — the specials-last rule
-as an expression, because season 0's *sort name* (003's zero-padded prefix) would place it first
-and AC-11 says last. `/Shows/{seriesId}/Episodes` scopes by `seasonId` when given, otherwise the
-series' episodes in `(season, episode)` order. `DisplayMissingEpisodes` is honoured trivially in
-v1: 004 creates no missing-episode placeholders, so both settings serve the same rows — recorded
-here so nobody hunts for a bug when a client toggles it.
+`/Shows/{seriesId}/Seasons` orders by the index, **specials first** — *(corrected by T12: this
+paragraph carried a specials-last expression built for the drafted AC-11, and the measurement
+reversed the criterion, spec §3.8)*. No expression is needed at all: season 0's sort name
+(003's zero-padded prefix) places it first, which **is** the measured wire order, so the default
+ordering serves it. `/Shows/{seriesId}/Episodes` scopes by `seasonId` (its own query, and an
+unknown one is the identical `404`) or by the `season` number, otherwise the series' episodes
+arrive in `(season, episode)` order — again 003's sort names verbatim. `DisplayMissingEpisodes`
+is honoured trivially in v1: 004 creates no missing-episode placeholders, so both settings serve
+the same rows — recorded here so nobody hunts for a bug when a client toggles it; `isMissing`
+narrows to the same honest absence.
 
 ### 6.10 Similar and InstantMix
 
@@ -509,7 +513,7 @@ these tests; 003 already proved scanning.
 | 8 | Unknown and invisible ids: byte-identical `404` bodies |
 | 9 | The restricted user with nothing visible: empty `/UserViews` envelope |
 | 10 | NextUp on a fixture with three watched series: one row each, correct episodes |
-| 11 | Season 0 sorts last in `/Shows/{id}/Seasons` |
+| 11 | Season 0 sorts first — index order, as measured — in `/Shows/{id}/Seasons` |
 | 12 | `Similar` and `InstantMix` twice: identical bodies |
 | 13 | `/Artists` ⊋ `/Artists/AlbumArtists` on the compilation fixture, in that direction |
 | 14 | `/Search/Hints` shape, `MatchedTerm` populated |
