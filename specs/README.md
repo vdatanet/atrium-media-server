@@ -116,16 +116,27 @@ say how it will be proven is not finished.
 | [002](002-authentication-users-and-sessions/) | Authentication, users and sessions | **Implemented** | **Implemented** | **Implemented** |
 | [003](003-library-configuration-and-scanning/) | Library configuration and scanning | **Implemented** | **Implemented** | **Implemented** |
 | [004](004-metadata-resolution/) | Metadata resolution | **Implemented** | **Implemented** | **Implemented** |
-| [005](005-item-query-api/) | Item query API | **Accepted** | **Accepted** | **Accepted** |
+| [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
 | [006](006-images/) | Images | Draft | — | — |
 | [007](007-user-data-and-playstate/) | User data and playstate | Draft | — | — |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001, 002, 003 and 004 are implemented.** 005 has passed all three gates — spec, plan and task
-list accepted — so **the next thing is code: 005 T1**, the item-shapes probe. The other five
-specs remain drafts, and their open questions are the standing review agenda.
+**001, 002, 003, 004 and 005 are implemented.** The other five specs remain drafts, and their
+open questions are the standing review agenda — **the next gate is 006's spec review**, probes
+first, as every gate so far has taught.
+
+**005's seventeen tasks kept the measured-first habit paying**, and the pattern sharpened: this
+time the documents lost *acceptance criteria*, not only claims. AC-11 was **reversed** — season
+0 sorts first on the measured wire, not last as the spec argued clients expect — AC-13 was
+restated because a consequence already recorded in behaviours §5.3 makes the drafted containment
+structurally unsatisfiable in Atrium, and AC-14 required populating `MatchedTerm`, a field
+seventeen measured hints never carried. T1 had already split "one item representation" into
+three route-dependent widths, T11's measurement overturned the Latest grouping rule (a group of
+one surfaces as the item, not its container), and T13's probe confirmed the NextUp chain with
+the one discriminating case reading could not settle. Each Done note in
+[005's tasks](005-item-query-api/tasks.md) records one.
 
 **005's task-list gate changed five things**, on 2026-08-27 — the two previous gates' class,
 promises with no task holding them, plus a new one: two accepted documents disagreeing with

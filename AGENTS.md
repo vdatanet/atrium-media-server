@@ -12,10 +12,11 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001, 002, 003 and 004 are implemented. 005 has passed all three gates** — spec, plan
-and [task list](specs/005-item-query-api/tasks.md) accepted — **so the next thing is code:
-005 T1**, the item-shapes probe. The other five features are specified only, their specs still
-drafts.
+**Features 001 through 005 are implemented.** The other five features are specified only, their
+specs still drafts — **the next gate is 006's spec review**, probes first. What 005 leaves for
+each of them is written in
+[005's tasks](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones), beside
+004's standing notes below.
 
 **004 owes 005 four things**, written down in
 [004's tasks](specs/004-metadata-resolution/tasks.md#what-this-feature-owes-the-next-ones) rather
@@ -89,6 +90,9 @@ reasoning:
 | 004 T5 | Parse a sidecar | Plan §6.2 said the reference does **not** split a genre on ` / ` and cited the parser that does. Not splitting would have given Atrium a genre no reference server has — on a file both of them read, which is the exact disagreement the sentence was written to prevent |
 | 004 T10 | Wire the pieces together | The scan and the refresh were **fighting over one column**: every rescan re-derived a name from the filename, every refresh restored the sidecar's, for ever, with every item reported as updated. And the path-derived name turned out to be merged **last**, not third — without which AC-1 is unreachable |
 | 004 T15 | Generate a culture table | Plan §6.9's source was wrong three ways. The registry it named has 508 rows to the reference's 192, lists 24 languages' codes in the opposite order, and **cannot produce eight rows the reference has at all** |
+| 005 T1 | Copy a field table into a registry | **There is no single item representation.** A bare `/Items/{itemId}` carries up to 39 properties a bare list row does not, `/UserViews` is a third width, and `ChannelId` is an explicit `null` on every item — 208 of 208 — against the reference's own null-suppression setting |
+| 005 T12 | Order seasons, specials last | The measurement **reversed the acceptance criterion**: season 0 arrives first, plain index order. "Every client expects it last" was an expectation about clients presented as a fact about the wire — and the fix deleted code, because 003's sort names already produce the measured order |
+| 005 T15 | Emit `MatchedTerm`, match the sort name | Neither exists on the wire. Seventeen measured hints never carried `MatchedTerm`, and the discriminating search — a padded sort form no folded name contains — found nothing, settling a spec-versus-plan disagreement the tasks gate had flagged |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
 question each, and a plain `urllib` request answers the rest.

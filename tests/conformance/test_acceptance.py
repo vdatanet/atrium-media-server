@@ -340,11 +340,80 @@ FEATURE_004: dict[int, tuple[str, ...]] = {
 }
 
 
+#: 005's sixteen. Several criteria are named twice - once where the rule is proved at
+#: repository or builder level and once where the route is proved to use it - for 004's recorded
+#: reason: a correct rule and a rule the caller actually uses are two claims. AC-11 and AC-13
+#: map to tests that assert the *measured* wire, which reversed one drafted criterion and
+#: restated another; the spec carries both corrections with provenance.
+FEATURE_005: dict[int, tuple[str, ...]] = {
+    1: (
+        "tests.conformance.test_shapes:test_every_005_route_answers_its_declared_shape",
+        "tests.unit.test_user_world_routes:test_latest_is_a_bare_array",
+    ),
+    2: (
+        "tests.unit.test_item_dto:test_ac2_user_data_is_on_every_item_with_key_and_item_id",
+        "tests.unit.test_items_route:test_ac2_every_list_row_carries_user_data_with_key_and_item_id",
+    ),
+    3: (
+        "tests.unit.test_item_dto:test_ac3_a_gated_field_is_absent_bare_and_present_when_asked",
+        "tests.unit.test_items_route:test_ac3_gated_fields_are_absent_bare_and_present_asked_over_http",
+    ),
+    4: (
+        "tests.unit.test_item_ordering:test_paging_reassembles_the_unpaged_list_exactly",
+        "tests.unit.test_item_ordering:test_paging_the_whole_world_reassembles_it_too",
+        "tests.unit.test_items_route:test_ac4_paging_over_http_visits_every_movie_exactly_once",
+    ),
+    5: (
+        "tests.unit.test_item_by_name:test_the_count_is_true_with_and_without_a_limit",
+        "tests.unit.test_by_name_routes:test_ac5_the_count_is_true_with_and_without_limit",
+    ),
+    6: ("tests.unit.test_item_ordering:test_the_awkward_names_sort_the_way_003_derived_them",),
+    7: (
+        "tests.unit.test_item_ordering:test_random_returns_the_whole_set_with_no_duplicates",
+        "tests.unit.test_item_ordering:test_a_random_page_has_no_duplicates_either",
+    ),
+    8: (
+        "tests.unit.test_items_route:test_ac8_unknown_and_invisible_ids_answer_byte_identical_404s",
+    ),
+    9: (
+        "tests.unit.test_item_queries:test_the_user_permitted_nothing_sees_nothing",
+        "tests.unit.test_user_world_routes:test_ac9_a_user_permitted_nothing_gets_the_empty_envelope",
+    ),
+    10: (
+        "tests.unit.test_played_state_routes:test_ac10_one_row_per_series_and_each_is_the_right_episode",
+        "tests.unit.test_played_state_routes:test_the_chain_follows_the_highest_played_episode_not_the_latest_click",
+    ),
+    11: ("tests.unit.test_tv_routes:test_ac11_season_zero_sorts_first_as_measured",),
+    12: (
+        "tests.unit.test_deterministic_pair_routes:test_ac12_similar_answers_identically_on_repeated_calls",
+        "tests.unit.test_deterministic_pair_routes:test_the_mix_is_the_keyed_shuffle_of_the_shared_genre_pool",
+        "tests.unit.test_deterministic_pair_routes:test_two_seeds_shuffle_differently_but_each_stably",
+    ),
+    13: (
+        "tests.unit.test_item_by_name:test_any_credit_strictly_contains_the_album_credit",
+        "tests.unit.test_item_filters:test_artist_ids_is_the_superset_and_album_artist_ids_the_subset",
+        "tests.unit.test_by_name_routes:test_ac13_the_two_artist_routes_coincide_for_the_recorded_reason",
+    ),
+    14: (
+        "tests.unit.test_filters_and_search_routes:test_ac14_the_hint_shape_is_not_the_item_shape",
+        "tests.unit.test_filters_and_search_routes:test_matching_is_against_the_name_not_the_sort_name",
+    ),
+    15: (
+        "tests.unit.test_items_route:test_ac15_a_tier_3_parameter_is_ignored_answered_and_recorded",
+    ),
+    16: (
+        "tests.unit.test_item_filters:test_a_predicate_selects_something_and_less_than_everything",
+        "tests.unit.test_items_route:test_every_parameter_changes_the_answer_and_survives_mangled_casing",
+    ),
+}
+
+
 FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "001-server-identity-and-discovery": FEATURE_001,
     "002-authentication-users-and-sessions": FEATURE_002,
     "003-library-configuration-and-scanning": FEATURE_003,
     "004-metadata-resolution": FEATURE_004,
+    "005-item-query-api": FEATURE_005,
 }
 
 

@@ -1,9 +1,10 @@
 ---
 feature: 005-item-query-api
 title: Item query API — implementation plan
-status: Accepted
+status: Implemented
 created: 2026-08-27
-updated: 2026-08-27
+updated: 2026-08-28
+implemented: 2026-08-28
 amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8; by T12 - sections 6.9 and 8; by T13 - section 6.8; by T14 - section 6.7; by T15 - sections 6.6 and 6.11; by T16 - section 6.10
 spec_status_required: Accepted
 spec_status_actual: Accepted
