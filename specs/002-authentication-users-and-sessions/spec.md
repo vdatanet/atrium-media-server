@@ -169,9 +169,9 @@ when present.
 | Condition | Status |
 |---|---|
 | Unknown username | `401` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` |
-| Wrong password on an enabled account | `401` — ⚠️ **assumed**, not measured; see §7 OQ-5 |
+| Wrong password on an enabled account | `401` — v1's own decision; the reference's answer is unmeasured and held by §7 OQ-5 |
 | **Disabled account** | **`403`** — whether the password is right or wrong `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` |
-| Locked out by failed attempts | `403` — ⚠️ the reference's answer is **not measured**; see §7 OQ-5 |
+| Locked out by failed attempts | `403` — v1's own decision; the reference's answer is unmeasured and held by §7 OQ-5 |
 | Missing or unparseable `X-Emby-Authorization` | `400` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` |
 | Malformed body | `400` |
 
@@ -403,7 +403,7 @@ verbatim.
 | OQ-2 | The reference's token inactivity window, and whether it is observable | The expiry row of §3.8. v1 defaults to no inactivity expiry | A probe holding a token idle |
 | OQ-4 | Are `HasConfiguredPassword` and `HasConfiguredEasyPassword` read by any client? | Nothing; honest values are sent | Differential harness (010) |
 | OQ-6 | What `LoginAttemptsBeforeLockout = -1` means. It is what the reference sends, so it is what most accounts carry, and it is a sentinel rather than a threshold | §3.3's lockout rule, which reads it as a count | A probe against a throwaway account, alongside OQ-5 |
-| OQ-5 | The refusals a probe will not send at a real installation: an enabled account given a **wrong password**, an account **locked out** by failed attempts, a **live token whose user was disabled** after it was issued, and a **`403` for insufficient permission** — the account available to measure with is an administrator, and an administrator lacks no permission | The assumed rows of §3.3; the `403` v1 answers a locked-out account with; and the **shape** of both `403`s, which v1 sends empty by analogy with the measured empty `401` | `tools/probe_auth_mechanisms.py` against a **throwaway enabled, non-administrator** account somebody is willing to lock |
+| OQ-5 | The refusals a probe will not send at a real installation: an enabled account given a **wrong password**, an account **locked out** by failed attempts, a **live token whose user was disabled** after it was issued, and a **`403` for insufficient permission** — the account available to measure with is an administrator, and an administrator lacks no permission | The two rows §3.3 states as v1's own decision; the `403` v1 answers a locked-out account with; and the **shape** of both `403`s, which v1 sends empty by analogy with the measured empty `401` | `tools/probe_auth_mechanisms.py` against a **throwaway enabled, non-administrator** account somebody is willing to lock |
 
 **Why OQ-5 is not simply measured.** Each of them needs a real account to fail against, and
 failing against one moves a lockout counter that no probe can reset — on somebody's own server, for

@@ -92,7 +92,9 @@ invalidation. Advertised in `ImageTags`.
 
 **`X-Emby-Authorization`** — the header carrying client identity on authentication:
 `MediaBrowser Client="…", Device="…", DeviceId="…", Version="…"`. The `Emby` in the name is
-historical; Jellyfin requires it.
+historical; the reference reads this header and `Authorization` with the same grammar and accepts
+either spelling, and the one route that demands client identity requires one of the two
+([behaviours §2.4](compatibility/behaviours.md#24-there-are-five-authentication-mechanisms-and-one-of-them-wins)).
 
 ## Project vocabulary
 

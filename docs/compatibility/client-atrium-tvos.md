@@ -166,8 +166,8 @@ extraction and conversion 008 excluded — and it is a scope decision for 008 wh
 Draft, not something to settle here.
 
 Until it is settled, this belongs in [behaviours §5](behaviours.md#5-accepted-gaps-in-v1) as a gap
-wider than the burn-in row currently records: that row says subtitles are *"delivered as files"*,
-and in v1 as specified, they are not delivered at all.
+wider than the burn-in row records as of 2026-08-28: that row says subtitles are *"delivered as
+files"*, and in v1 as specified, they are not delivered at all.
 
 ### 4.3 The track indices in a `TranscodingUrl`'s query are unspecified
 

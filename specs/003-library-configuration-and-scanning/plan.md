@@ -251,9 +251,10 @@ escape hatch exists, and neither pretends to be the other.
 **"Restore it on copy" is not a worry about exotic filesystems, it is the ordinary case.** `cp -p`,
 `rsync -a` and an unpacked archive all put the modification time back, and a tag editor rewriting a
 header in place can leave the size alone. Measured on an ordinary local filesystem: writing new
-bytes of the same length and restoring the time yields a byte-for-byte identical signal
-`[probe: local measurement, macOS APFS, 2026-08-27]`. That is what `deep` is for, and
-`tests/library/test_change_detection.py` reproduces it rather than describing it.
+bytes of the same length and restoring the time yields a byte-for-byte identical signal —
+measured on macOS APFS on 2026-08-27, and reproduced by `tests/library/test_change_detection.py`,
+which is the right citation for a local-filesystem fact: the `[probe:]` form names measurements of
+the reference. That is what `deep` is for.
 
 **What "examine" means here is exactly one thing: asking the §5 metadata seam what is embedded in
 the file.** Everything else a scan does reads paths, which is free. So the signal gates

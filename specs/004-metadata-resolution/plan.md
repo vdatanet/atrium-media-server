@@ -557,7 +557,7 @@ if the response stops having the shape the table was built from.
 **One divergence the byte-compare found**, and it is not this endpoint's: the reference escapes
 every non-ASCII character as `\uXXXX` and Atrium sends the character. Both are the same JSON
 string; the argument is in
-[behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx).
+[behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx--withdrawn-2026-08-28).
 
 ## 7. Failure handling
 

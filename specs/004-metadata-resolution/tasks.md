@@ -615,7 +615,7 @@ it.
   `\u00E7` and Atrium sends `ç`. Same JSON string, every parser agrees — and matching it means
   re-encoding every body and upper-casing each escape's hex, a substitution that is unsafe on a
   string containing a literal backslash. Recorded as a deliberate exception with that argument in
-  [behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx),
+  [behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx--withdrawn-2026-08-28),
   and it belongs to `compat/responses.py` for every endpoint at once if 010 ever finds a client
   that reads raw bytes. **This is the first response in the project to contain a non-ASCII
   character at all**, which is why nothing had noticed.
@@ -640,7 +640,7 @@ it.
   list was written and are recorded rather than quietly satisfied: the feature needed **two more
   schema revisions** after T4, and the golden for `/Localization/Cultures` is parse-identical to
   the reference's rather than byte-identical — a divergence argued in
-  [behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx)
+  [behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx--withdrawn-2026-08-28)
   rather than hidden by a comparison that would not have seen it.
 
 ---
@@ -656,7 +656,7 @@ Closed line by line at T16, on 2026-08-27.
 - [x] `GET /Localization/Cultures` reaches **L2** with a reviewed golden, and no route exists
       outside `docs/compatibility/surface.yaml` (T15). The golden is the whole 192-row list, and
       it is parse-identical to the live reference's — the sixteen bytes it differs by are
-      [behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx).
+      [behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx--withdrawn-2026-08-28).
 - [x] The lock matrix holds twice: at engine level (T6) and end-to-end through `Replace` (T14),
       the second time against a provider that would have overwritten the field.
 - [x] **No file inside any library root is created, modified or deleted** — the AC-15 tree hash,

@@ -2,8 +2,9 @@
 #
 # Generated companion to docs/compatibility/api-surface-v1.md. Every entry is validated
 # against the pinned Jellyfin OpenAPI document by tools/extract_v1_surface.py, and the
-# route-registration test asserts that the server exposes exactly these routes and no others
-# (Principle VI).
+# route-registration test asserts that the server exposes exactly the entries of implemented
+# features, and no others (Principle VI) — entries belonging to features whose specs are still
+# draft are listed here and not yet served.
 #
 # consumers: the real clients observed calling this endpoint. An empty list means the
 #            endpoint is included by design; see the Notes column in the prose document.

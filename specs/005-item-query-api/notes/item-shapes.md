@@ -90,7 +90,7 @@ reach a library root, so nothing about these rows could have been measured throu
 
 This one is not about 005.
 
-[behaviours §1.7](../../docs/compatibility/behaviours.md#17-a-null-property-is-absent-everywhere-by-one-setting)
+[behaviours §1.7](../../../docs/compatibility/behaviours.md#17-a-null-property-is-absent-everywhere-by-one-setting)
 says the reference omits *any* property whose value is null — *"Not per-property and not a
 judgement"* — and cites the one line of JSON configuration that does it.
 

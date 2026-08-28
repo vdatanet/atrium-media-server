@@ -201,7 +201,7 @@ classes earlier gates taught, back for the very next feature:
 - **Verified by:** byte-level tests pin both shapes, the split included: one route raising each
   exception under a test app answers the measured bytes — the string's quoting exact, the
   content type exact; a non-ASCII item name serialises under the standing
-  [behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx)
+  [behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx--withdrawn-2026-08-28)
   exception, asserted so nobody re-fights it per route.
 - **Note:** the shape carries the item's display name onto a tokenless route — the
   id-as-capability consequence, recorded in behaviours §1.11 and §2.10. The test names it so the
