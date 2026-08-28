@@ -28,19 +28,28 @@ from atrium.db.engine import create_database_engine, session_factory
 from atrium.db.repositories import (
     SessionRepository,
     TokenRepository,
+    UserDataRepository,
     UserRepository,
     normalise_name,
     token_digest,
 )
+from atrium.domain.playstate import UserItemData
 from atrium.domain.session import AccessToken, IssuedToken, Session
 from atrium.domain.user import User
 from tests.conftest import data_dir
 
 #: Where a returned type is allowed to come from. `types` is `NoneType`; `atrium.domain` is the
 #: point of the module.
-ALLOWED_MODULES = {"builtins", "datetime", "types", "atrium.domain.user", "atrium.domain.session"}
+ALLOWED_MODULES = {
+    "builtins",
+    "datetime",
+    "types",
+    "atrium.domain.user",
+    "atrium.domain.session",
+    "atrium.domain.playstate",
+}
 
-REPOSITORIES = (UserRepository, TokenRepository, SessionRepository)
+REPOSITORIES = (UserRepository, TokenRepository, SessionRepository, UserDataRepository)
 
 
 @pytest.fixture
@@ -380,3 +389,99 @@ def test_revoking_a_device_leaves_no_working_token(
     assert tokens.revoke_device(joan.id, "phone") == 1
     assert tokens.resolve(first.secret) is None
     assert tokens.resolve(second.secret) is not None
+
+
+# ------------------------------------------------------------------------------------------
+# User data (007 T3)
+# ------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def user_data(session: OrmSession) -> UserDataRepository:
+    return UserDataRepository(session)
+
+
+@pytest.fixture
+def jordi(users: UserRepository) -> User:
+    """A second account. Every claim about "per user" needs one to be a claim at all."""
+    return users.add(User(id=new_id(), name="jordi"))
+
+
+def test_a_user_with_no_row_reads_the_default_rather_than_nothing(
+    user_data: UserDataRepository, joan: User
+) -> None:
+    """Absence is a state: never played, never favourited, no position. A `None` here would make
+    every caller decide what that means, and one of them would decide differently."""
+    assert user_data.get(joan.id, new_id()) == UserItemData()
+
+
+def test_a_written_row_round_trips_every_stored_column(
+    user_data: UserDataRepository, joan: User
+) -> None:
+    item_key = new_id()
+    written = UserItemData(
+        is_favorite=True,
+        played=True,
+        play_count=3,
+        playback_position_ticks=12_345_670_000,
+        last_played_date=datetime(2026, 8, 28, 9, 30, tzinfo=UTC),
+    )
+    user_data.put(joan.id, item_key, written)
+    assert user_data.get(joan.id, item_key) == written
+
+
+def test_writing_twice_replaces_rather_than_duplicating(
+    user_data: UserDataRepository, session: OrmSession, joan: User
+) -> None:
+    """The primary key is `(user, item_key)`, so a second write is an update. A repository that
+    added a row instead would be caught by the key here rather than by a user seeing two states."""
+    item_key = new_id()
+    user_data.put(joan.id, item_key, UserItemData(played=True, play_count=1))
+    user_data.put(joan.id, item_key, UserItemData(play_count=2))
+    stored = user_data.get(joan.id, item_key)
+    assert (stored.played, stored.play_count) == (False, 2)
+    rows = session.query(models.ItemUserData).filter_by(item_key=item_key).all()
+    assert len(rows) == 1
+
+
+def test_two_users_hold_one_items_state_independently(
+    user_data: UserDataRepository, joan: User, jordi: User
+) -> None:
+    """AC-7 at the storage layer: two people watching the same file share nothing."""
+    item_key = new_id()
+    user_data.put(joan.id, item_key, UserItemData(played=True, play_count=1))
+    assert user_data.get(jordi.id, item_key) == UserItemData()
+    user_data.put(jordi.id, item_key, UserItemData(is_favorite=True))
+    assert user_data.get(joan.id, item_key).played is True
+    assert user_data.get(jordi.id, item_key).is_favorite is True
+
+
+def test_the_rollup_is_not_stored(user_data: UserDataRepository, joan: User) -> None:
+    """`unplayed_count` is computed per page from the subtree and has no column. Passing a
+    rolled-up record through `put` must not invent one - a stored aggregate is the cache
+    spec section 3.5 forbids, and this is where somebody would add it."""
+    item_key = new_id()
+    user_data.put(joan.id, item_key, UserItemData(played=True, unplayed_count=4))
+    assert user_data.get(joan.id, item_key).unplayed_count is None
+
+
+def test_a_row_survives_the_item_it_describes(
+    user_data: UserDataRepository, session: OrmSession, joan: User
+) -> None:
+    """The absent foreign key, asserted rather than trusted: `item_key` names an item that has
+    never existed, and the write succeeds. Under a cascade this row could not be written at all,
+    and a slow-mounting share would delete a user's history (003 spec section 3.8)."""
+    user_data.put(joan.id, new_id(), UserItemData(is_favorite=True))
+    session.flush()
+
+
+def test_deleting_the_user_takes_their_rows_with_them(
+    user_data: UserDataRepository, session: OrmSession, joan: User
+) -> None:
+    """The one cascade there *is*: the user. Their data is theirs, and an account that is gone
+    leaves nothing behind to be restored to somebody else with the same identifier."""
+    item_key = new_id()
+    user_data.put(joan.id, item_key, UserItemData(played=True))
+    session.delete(session.get(models.User, joan.id))
+    session.flush()
+    assert session.query(models.ItemUserData).filter_by(item_key=item_key).all() == []

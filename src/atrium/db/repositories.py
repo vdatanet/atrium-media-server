@@ -38,6 +38,7 @@ from atrium.compat.guids import new_id
 from atrium.db import models
 from atrium.domain.items import BY_NAME, CollectionType, Item, ItemType, MediaSource
 from atrium.domain.library import Library
+from atrium.domain.playstate import UserItemData
 from atrium.domain.session import AccessToken, IssuedToken, Session
 from atrium.domain.sorting import sort_name
 from atrium.domain.user import LibraryAccess, User
@@ -1119,6 +1120,64 @@ class MetadataRepository:
                     tag=image.tag,
                 )
             )
+
+
+# --------------------------------------------------------------------------------------------
+# User data
+# --------------------------------------------------------------------------------------------
+
+
+class UserDataRepository:
+    """One user's state for one item, read and written by the item's **derived identity**.
+
+    Two methods, because that is all a writer needs: the transitions in `domain/playstate.py`
+    decide what a row becomes, and this decides where it lives. Everything about *which* items a
+    cascade touches is the query layer's, which already knows what a user can see.
+
+    **`item_key` is not a foreign key, and a writer is exactly who would add one.** The column
+    references nothing on purpose (003 spec section 3.8, and the argument is on
+    `models.ItemUserData`): the row outliving the item is the guarantee that a network share
+    mounting slowly does not delete a user's favourites and resume positions. Referential hygiene
+    here buys nothing - the key is derived from the path, so it is restored the moment the file
+    is - and costs a user's history, permanently, with a rescan as the only symptom.
+
+    Absence is a state rather than a gap: a user who has never touched an item has no row, and
+    `get` answers the default record instead of `None` so that no caller has to decide what
+    "never played" means a second time.
+    """
+
+    def __init__(self, session: OrmSession) -> None:
+        self._session = session
+
+    def get(self, user_id: str, item_key: str) -> UserItemData:
+        row = self._session.get(models.ItemUserData, (user_id, item_key))
+        if row is None:
+            return UserItemData()
+        return UserItemData(
+            is_favorite=row.is_favorite,
+            played=row.played,
+            play_count=row.play_count,
+            playback_position_ticks=row.playback_position_ticks,
+            last_played_date=row.last_played_date,
+        )
+
+    def put(self, user_id: str, item_key: str, data: UserItemData) -> None:
+        """Upsert the five stored columns, and only those.
+
+        `unplayed_count` is not written here and has no column: it is a **rollup** the query layer
+        computes per page from the subtree (005 plan section 5). Storing it would be the cached
+        aggregate spec section 3.5 forbids, and this is the method where somebody would add it.
+        """
+        row = self._session.get(models.ItemUserData, (user_id, item_key))
+        if row is None:
+            row = models.ItemUserData(user_id=user_id, item_key=item_key)
+            self._session.add(row)
+        row.is_favorite = data.is_favorite
+        row.played = data.played
+        row.play_count = data.play_count
+        row.playback_position_ticks = data.playback_position_ticks
+        row.last_played_date = data.last_played_date
+        self._session.flush()
 
 
 # --------------------------------------------------------------------------------------------

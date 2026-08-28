@@ -172,7 +172,7 @@ mutates the record it was given.
 
 ## T3 — `UserDataRepository`: two methods, and the foreign key that stays absent
 
-- [ ] **Changes:** `src/atrium/db/repositories.py` grows `UserDataRepository` with `get` (the
+- [x] **Changes:** `src/atrium/db/repositories.py` grows `UserDataRepository` with `get` (the
   default row when absent — absence is a state, not a gap) and `put` (upsert), returning and
   taking the domain record rather than an ORM row (ADR-0003). Its docstring carries the argument
   the model's already does, pointed at writers: the missing foreign key is
@@ -183,6 +183,23 @@ mutates the record it was given.
   rather than duplicating; and two users' rows for one `item_key` are independent. Plus the
   standing `tests/unit/test_db_schema.py`: no migration appeared.
 - **Spec reference:** §4; plan §4, §5
+
+**Done (2026-08-28).** Two methods, and the tests are mostly about what the class must *not*
+grow.
+
+**The sweep had never been extended.** `tests/unit/test_repositories.py` opens with a walk over
+every public method of every repository asserting that no ORM row escapes `db/` — and its
+`REPOSITORIES` tuple had held the same three classes since 002, so `LibraryRepository`,
+`ItemRepository` and `MetadataRepository` are all outside it. `UserDataRepository` is in it now,
+with `atrium.domain.playstate` in the allowed-module set; the three older ones are a separate
+change and are noted here rather than smuggled in.
+
+Four of the seven tests assert absences rather than behaviour, because that is where this table
+gets damaged: a `put` carrying a rolled-up `unplayed_count` stores nothing (a stored aggregate is
+the cache [spec §3.5](spec.md#35-aggregation) forbids, and `put` is where somebody would add it);
+a row can be written for an `item_key` no item has ever had, which is the missing foreign key
+asserted rather than trusted; deleting the user *does* take their rows, which is the one cascade
+there is; and two users' rows for one key stay independent (AC-7's floor).
 
 ## T4 — The query layer's two additions, and the world that can prove them
 
