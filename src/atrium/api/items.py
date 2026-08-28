@@ -1,0 +1,417 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""`GET /Items` and `GET /Items/{itemId}`: the endpoint everything else is built on.
+
+What is left at route level is exactly what the plan promised would be left (plan section 1):
+parameter parsing into an `ItemQuery`, the choice of response shape, and the refusals. The
+repository owns the SQL, the builder owns the body, and `compat/` owns the three wire fights -
+this module contains none of them.
+
+**The parameters are the pinned document's, spelling and tier alike** (spec section 3.3).
+Tier 1 and 2 bind below; a tier 3 parameter never reaches a signature, so it lands in the
+ignored-parameter recorder by construction - `compat.query_params` counts what no route
+declared. Enum-valued parameters drop unrecognised tokens and keep the rest (behaviours
+section 1.12); a value that cannot parse as its declared *type* - `limit=abc`, a malformed
+identifier - is the validation `400` (behaviours section 1.11).
+
+**One subtlety in `includeItemTypes` the drop rule does not cover**: `Playlist` is a real
+`BaseItemKind` this version cannot produce, and `Nonsense` is not a kind at all. The reference
+filters by the first (zero rows here) and ignores the second (the filter vanishes). Telling them
+apart takes the reference's own vocabulary, `BASE_ITEM_KINDS` below `[spec: BaseItemKind]` - a
+kind v1 cannot produce keeps the filter and matches nothing, an unknown token is dropped and
+recorded.
+
+**The identical `404`** (plan section 6.13): `/Items/{itemId}` resolves the id through the same
+pipeline as every list - one `ids=` query under the same visibility predicate - so "no such
+item" and "not yours" are one empty page and one `NotFoundError`, byte-identical on the wire by
+construction. An id that does not parse as an identifier never reaches the query: `WireGuid`
+refuses it into the validation `400`, which is the other measured refusal (spec section 3.5).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.exceptions import RequestValidationError
+
+from atrium.api.deps import get_sessions, get_state, require_user
+from atrium.api.item_dto import GATED, BuildContext, LibraryContext, Width, build_dto, build_dtos
+from atrium.api.item_models import BaseItemDto, BaseItemDtoQueryResult
+from atrium.compat.errors import ForbiddenError, NotFoundError
+from atrium.compat.guids import WireGuid, normalise, require_canonical
+from atrium.compat.query_params import IgnoredParameters, known_tokens
+from atrium.db.engine import session_scope
+from atrium.db.item_queries import (
+    ContainerAggregates,
+    HydratedItem,
+    ItemQueryRepository,
+    ParentNotFoundError,
+    QueryPage,
+)
+from atrium.db.repositories import LibraryRepository, UserRepository
+from atrium.domain.items import ItemType
+from atrium.domain.queries import Filter, ItemQuery, SortBy, SortOrder
+from atrium.domain.user import User
+
+router = APIRouter()
+
+#: The reference's item-kind vocabulary, verbatim `[spec: BaseItemKind]`. Membership decides
+#: whether an unmatched `includeItemTypes` token narrows to nothing (a real kind v1 cannot
+#: produce) or vanishes (not a kind at all) - see the module docstring.
+BASE_ITEM_KINDS: frozenset[str] = frozenset(
+    {
+        "AggregateFolder",
+        "Audio",
+        "AudioBook",
+        "BasePluginFolder",
+        "Book",
+        "BoxSet",
+        "Channel",
+        "ChannelFolderItem",
+        "CollectionFolder",
+        "Episode",
+        "Folder",
+        "Genre",
+        "ManualPlaylistsFolder",
+        "Movie",
+        "LiveTvChannel",
+        "LiveTvProgram",
+        "MusicAlbum",
+        "MusicArtist",
+        "MusicGenre",
+        "MusicVideo",
+        "Person",
+        "Photo",
+        "PhotoAlbum",
+        "Playlist",
+        "PlaylistsFolder",
+        "Program",
+        "Recording",
+        "Season",
+        "Series",
+        "Studio",
+        "Trailer",
+        "TvChannel",
+        "TvProgram",
+        "UserRootFolder",
+        "UserView",
+        "Video",
+        "Year",
+    }
+)
+
+#: `fields` tokens this version resolves, lowercased for the case-insensitive match every value
+#: gets (behaviours section 1.12). The registry's gated map is the authority on which token
+#: gates which property; this is its token set, inverted for lookup.
+_FIELD_TOKENS: Mapping[str, str] = {token.lower(): token for token in set(GATED.values())}
+
+#: The gated names whose emitters read `ctx.aggregates` - the batch pays for the subtree
+#: queries only when one of these was actually asked for (plan section 6.5).
+_AGGREGATE_FIELDS = frozenset(
+    {"ChildCount", "RecursiveItemCount", "CumulativeRunTimeTicks", "DateLastMediaAdded"}
+)
+
+_KINDS_BY_FOLD = {member.value.lower(): member for member in ItemType}
+_REFERENCE_KINDS_BY_FOLD = {kind.lower() for kind in BASE_ITEM_KINDS}
+
+
+# ------------------------------------------------------------------------------------------------
+# Parameter parsing
+# ------------------------------------------------------------------------------------------------
+
+
+def _split(raw: str | None) -> list[str]:
+    """The reference's list syntax: one query value, comma-separated, blanks dropped."""
+    if raw is None:
+        return []
+    return [token.strip() for token in raw.split(",") if token.strip()]
+
+
+def _invalid(parameter: str, value: str) -> RequestValidationError:
+    """A value that cannot parse as its declared type, in the binder's own error shape, so the
+    global handler answers the measured `400` with the parameter's declared spelling as the key."""
+    return RequestValidationError(
+        [{"loc": ("query", parameter), "msg": "value is not valid", "input": value}]
+    )
+
+
+def _guid_list(raw: str | None, parameter: str) -> tuple[str, ...] | None:
+    """Identifiers, canonicalised. A malformed one is a type failure, not a droppable token
+    (behaviours section 1.12's line), measured on the item route and reproduced here."""
+    tokens = _split(raw)
+    if not tokens:
+        return None
+    canonical: list[str] = []
+    for token in tokens:
+        try:
+            canonical.append(require_canonical(normalise(token)))
+        except ValueError as refused:
+            raise _invalid(parameter, token) from refused
+    return tuple(canonical)
+
+
+def _int_list(raw: str | None, parameter: str) -> tuple[int, ...] | None:
+    tokens = _split(raw)
+    if not tokens:
+        return None
+    numbers: list[int] = []
+    for token in tokens:
+        try:
+            numbers.append(int(token))
+        except ValueError as refused:
+            raise _invalid(parameter, token) from refused
+    return tuple(numbers)
+
+
+def _kinds(
+    raw: str | None, parameter: str, ignored: IgnoredParameters, route: str
+) -> frozenset[ItemType] | None:
+    """`includeItemTypes`/`excludeItemTypes`: three answers per token, not two.
+
+    A type of this domain filters; a `BaseItemKind` this version cannot produce keeps the filter
+    and can match nothing - `frozenset()` means "asked, and nothing qualifies" (the repository's
+    empty-versus-None contract from T6); a token that is no kind at all drops and is recorded.
+    """
+    tokens = _split(raw)
+    if not tokens:
+        return None
+    kept: set[ItemType] = set()
+    askable = False
+    for token in tokens:
+        member = _KINDS_BY_FOLD.get(token.lower())
+        if member is not None:
+            kept.add(member)
+            askable = True
+        elif token.lower() in _REFERENCE_KINDS_BY_FOLD:
+            askable = True
+        else:
+            ignored.record(route, f"{parameter}={token}")
+    if kept:
+        return frozenset(kept)
+    return frozenset() if askable else None
+
+
+def _sort(
+    sort_by: str | None, sort_order: str | None, ignored: IgnoredParameters, route: str
+) -> tuple[tuple[SortBy, SortOrder], ...]:
+    """The comma list zipped with its orders; a missing order is `Ascending` (plan section 6.3)."""
+    keys = known_tokens(_split(sort_by), SortBy, route=route, parameter="sortBy", ignored=ignored)
+    orders = known_tokens(
+        _split(sort_order), SortOrder, route=route, parameter="sortOrder", ignored=ignored
+    )
+    return tuple(
+        (key, orders[position] if position < len(orders) else SortOrder.ASCENDING)
+        for position, key in enumerate(keys)
+    )
+
+
+def _fields(raw: str | None, ignored: IgnoredParameters, route: str) -> frozenset[str]:
+    """The `ItemFields` tokens v1 resolves; anything else - a token of the reference's enum this
+    version does not emit included - is dropped and recorded, which is the same measurable trail
+    the tier 3 parameters leave (spec section 3.3)."""
+    kept: set[str] = set()
+    for token in _split(raw):
+        canonical = _FIELD_TOKENS.get(token.lower())
+        if canonical is not None:
+            kept.add(canonical)
+        else:
+            ignored.record(route, f"fields={token}")
+    return frozenset(kept)
+
+
+def _recorder(request: Request) -> IgnoredParameters:
+    ignored: IgnoredParameters = request.app.state.ignored_parameters
+    return ignored
+
+
+# ------------------------------------------------------------------------------------------------
+# Shared resolution
+# ------------------------------------------------------------------------------------------------
+
+
+def _effective_user(users: UserRepository, caller: User, user_id: str | None) -> User:
+    """Whose visibility and user data apply (spec section 3.3, tier 1 `userId`).
+
+    A non-administrator naming anybody else gets the empty `403` through the 002 seam
+    (plan section 7 - unmeasured against the reference, flagged for the differential). An
+    administrator naming nobody that exists gets the problem-details `404`; that case is
+    likewise unmeasured, and recorded in the T10 Done note rather than silently chosen.
+    """
+    if user_id is None or user_id == caller.id:
+        return caller
+    if not caller.is_administrator:
+        raise ForbiddenError("userId names another user and the caller is no administrator")
+    target = users.by_id(user_id)
+    if target is None:
+        raise NotFoundError
+    return target
+
+
+def _libraries(libraries: LibraryRepository) -> dict[str, LibraryContext]:
+    """The context the folder rows and `Path` emitters read. One small query; a server has tens
+    of libraries at most (plan section 10 argued the same about `/UserViews`)."""
+    return {
+        library.id: LibraryContext(
+            collection_type=library.collection_type.value, roots=tuple(library.roots)
+        )
+        for library in libraries.all()
+    }
+
+
+def _aggregates(
+    repository: ItemQueryRepository,
+    page: QueryPage,
+    target: User,
+    fields: frozenset[str],
+    width: Width,
+) -> Mapping[str, ContainerAggregates]:
+    """The subtree numbers, fetched only when an emitter will read them."""
+    if width is not Width.FULL and not (fields & _AGGREGATE_FIELDS):
+        return {}
+    return repository.aggregates_for([one.id for one in page.items], target)
+
+
+# ------------------------------------------------------------------------------------------------
+# The routes
+# ------------------------------------------------------------------------------------------------
+
+
+@router.get("/Items")
+async def items(
+    request: Request,
+    caller: Annotated[User, Depends(require_user)],
+    userId: WireGuid | None = None,
+    parentId: WireGuid | None = None,
+    recursive: bool = False,
+    startIndex: int = 0,
+    limit: int | None = None,
+    sortBy: str | None = None,
+    sortOrder: str | None = None,
+    fields: str | None = None,
+    includeItemTypes: str | None = None,
+    excludeItemTypes: str | None = None,
+    excludeItemIds: str | None = None,
+    mediaTypes: str | None = None,
+    searchTerm: str | None = None,
+    ids: str | None = None,
+    genres: str | None = None,
+    genreIds: str | None = None,
+    studioIds: str | None = None,
+    artistIds: str | None = None,
+    albumArtistIds: str | None = None,
+    albumIds: str | None = None,
+    personIds: str | None = None,
+    years: str | None = None,
+    nameStartsWith: str | None = None,
+    nameStartsWithOrGreater: str | None = None,
+    nameLessThan: str | None = None,
+    minCommunityRating: float | None = None,
+    filters: str | None = None,
+    isPlayed: bool | None = None,
+    isFavorite: bool | None = None,
+    enableUserData: bool = True,
+    enableImages: bool = True,
+    imageTypeLimit: int | None = None,
+    enableImageTypes: str | None = None,
+    enableTotalRecordCount: bool = True,
+) -> BaseItemDtoQueryResult:
+    """`GetItems` `[spec: GetItems]`: tier 1 and 2 bound, tier 3 recorded, four shapes away."""
+    route = "/Items"
+    ignored = _recorder(request)
+    state = get_state(request)
+
+    query_sort = _sort(sortBy, sortOrder, ignored, route)
+    asked_fields = _fields(fields, ignored, route)
+
+    with session_scope(get_sessions(request)) as opened:
+        target = _effective_user(UserRepository(opened), caller, userId)
+        query = ItemQuery(
+            user=target,
+            parent_id=parentId,
+            recursive=recursive,
+            include_types=_kinds(includeItemTypes, "includeItemTypes", ignored, route),
+            exclude_types=_kinds(excludeItemTypes, "excludeItemTypes", ignored, route),
+            media_types=frozenset(_split(mediaTypes)) or None,
+            ids=_guid_list(ids, "ids"),
+            exclude_ids=_guid_list(excludeItemIds, "excludeItemIds"),
+            search_term=searchTerm,
+            name_starts_with=nameStartsWith,
+            name_starts_with_or_greater=nameStartsWithOrGreater,
+            name_less_than=nameLessThan,
+            genres=tuple(_split(genres)) or None,
+            genre_ids=_guid_list(genreIds, "genreIds"),
+            studio_ids=_guid_list(studioIds, "studioIds"),
+            artist_ids=_guid_list(artistIds, "artistIds"),
+            album_artist_ids=_guid_list(albumArtistIds, "albumArtistIds"),
+            album_ids=_guid_list(albumIds, "albumIds"),
+            person_ids=_guid_list(personIds, "personIds"),
+            years=_int_list(years, "years"),
+            filters=frozenset(
+                known_tokens(
+                    _split(filters), Filter, route=route, parameter="filters", ignored=ignored
+                )
+            ),
+            is_played=isPlayed,
+            is_favorite=isFavorite,
+            min_community_rating=minCommunityRating,
+            sort=query_sort,
+            start_index=startIndex,
+            limit=limit,
+            count=enableTotalRecordCount,
+        )
+        repository = ItemQueryRepository(opened)
+        try:
+            page = repository.run(query)
+        except ParentNotFoundError as refused:
+            # One exception for "no such item" and "not yours", one 404 for both (plan 6.13).
+            raise NotFoundError from refused
+
+        context = BuildContext(
+            server_id=state.server_id,
+            width=Width.LIST_ROW,
+            fields=asked_fields,
+            enable_user_data=enableUserData,
+            enable_images=enableImages,
+            image_type_limit=imageTypeLimit,
+            enable_image_types=frozenset(_split(enableImageTypes)) or None,
+            libraries=_libraries(LibraryRepository(opened)),
+            aggregates=_aggregates(repository, page, target, asked_fields, Width.LIST_ROW),
+        )
+        built = build_dtos(page.items, context)
+
+    return BaseItemDtoQueryResult(
+        items=built, total_record_count=page.total, start_index=startIndex
+    )
+
+
+@router.get("/Items/{itemId}")
+async def item(
+    request: Request,
+    caller: Annotated[User, Depends(require_user)],
+    itemId: WireGuid,
+    userId: WireGuid | None = None,
+) -> BaseItemDto:
+    """`GetItem` `[spec: GetItem]`: one item, everything, unasked (spec section 3.2)."""
+    state = get_state(request)
+
+    with session_scope(get_sessions(request)) as opened:
+        target = _effective_user(UserRepository(opened), caller, userId)
+        repository = ItemQueryRepository(opened)
+        page = repository.run(ItemQuery(user=target, ids=(itemId,), limit=1, count=False))
+        if not page.items:
+            # The identical 404: an unknown id and an invisible one are the same empty page,
+            # so the two bodies cannot differ even by accident (AC-8).
+            raise NotFoundError
+        found: HydratedItem = page.items[0]
+        context = BuildContext(
+            server_id=state.server_id,
+            width=Width.FULL,
+            libraries=_libraries(LibraryRepository(opened)),
+            aggregates=repository.aggregates_for([found.id], target),
+        )
+        built = build_dto(found, context)
+    return built
+
+
+__all__ = ["BASE_ITEM_KINDS", "router"]

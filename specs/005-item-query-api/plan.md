@@ -4,7 +4,7 @@ title: Item query API — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5
+amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; 2026-08-28 by T10 - section 6.12
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -439,7 +439,12 @@ tallying per concrete path would produce a table as long as the library instead 
 parameter set.
 
 **Enum-token dropping** (behaviours §1.12): list-of-enum parameters parse through one helper that
-keeps known tokens, drops unknown ones, and records the drop alongside the Tier-3 counter. Scalar
+keeps known tokens, drops unknown ones, and records the drop alongside the Tier-3 counter.
+The type parameters are the one three-way case *(added by T10)*: a token of the reference's
+`BaseItemKind` vocabulary that this version cannot produce keeps the filter and matches nothing
+— an empty set means "asked for nothing", `None` means "did not ask" (§6.2) — while a token that
+is no kind at all drops and is recorded. `api/items.py` carries the vocabulary verbatim with its
+`[spec: BaseItemKind]` provenance; spec §3.3 states the observable half. Scalar
 type failures — `limit=abc`, a malformed GUID — keep failing validation, which the extended
 handler in `compat/errors.py` answers as the reference does: `400`, problem-details body,
 `errors` map, `traceId` (behaviours §1.11) — served as `application/json; charset=utf-8` rather
