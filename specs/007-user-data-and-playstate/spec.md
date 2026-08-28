@@ -91,7 +91,7 @@ beside a 32-hex `ItemId` `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2
 so clients demonstrably tolerate `Key` values of any shape. A movie and an artist measured the
 other direction at the plan gate: their `Key` **is** the item's own GUID, in dashed form beside
 the 32-hex `ItemId` — one object spelling one identity two ways
-`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
+`[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]` (the by-name battery, T1).
 
 ### 3.3 Favourites
 
@@ -109,7 +109,7 @@ unmarking twice is `200` both times too — unmarking what was never marked is n
 invisible item is `404` RFC 9457 problem details; a path `itemId` that is not a GUID at all is
 `400` validation problem details naming the parameter; no token is the empty-body `401`. Each
 is a shape behaviours §1.11 already catalogues — nothing new, and nothing bespoke
-`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
+`[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]` (the refusal battery, T1).
 
 Any item type may be a favourite — an artist, an album, a series, a single track. **A container's
 favourite does not cascade**: favouriting a season leaves every episode unfavourited, measured —
@@ -211,8 +211,8 @@ it. `[source: Jellyfin.Api/Controllers/PlaystateController.cs:199-260 @ v10.11.1
 | Stopped, with a position | The position resolves through §3.7's rule. **No count change** — the play was counted at start | `NowPlayingItem` cleared |
 | Stopped, no position | Played to the end: `Played` true, position 0 — and the count increments **a second time**, so a natural start-to-finish viewing without a final position measures `PlayCount: 2` | `NowPlayingItem` cleared |
 
-**What a playing session shows** — measured at the plan gate on a live playback
-`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`:
+**What a playing session shows** — measured at the plan gate on a live playback and
+reproduced by the probe's playing-session battery at T1 `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`:
 
 - **`NowPlayingItem` takes one slot: between `DeviceName` and `DeviceId`**, the session
   object's 002-measured order otherwise unchanged.
@@ -224,18 +224,30 @@ it. `[source: Jellyfin.Api/Controllers/PlaystateController.cs:199-260 @ v10.11.1
   exactly when the last report carried them, and `PositionTicks` advancing between reports
   (§3.8's ticker).
 - **`NowPlayingItem` is an item without `UserData`** — the one measured item shape that omits
-  §3.1's object entirely. A measured movie carried 41 properties; the media-derived subset
-  (`MediaStreams`, `Chapters`, `Width`, `Height`, `HasSubtitles`, `IsHD`, `VideoType`,
-  `Trickplay`, `Container`) and `CriticRating` are outside what v1 can yet say, stay absent
-  until the feature that owns them, and are a recorded gap the differential will show —
-  006's `Chapter` shape, not a silent one.
+  §3.1's object entirely. The media-derived subset (`MediaStreams`, `Chapters`, `Width`,
+  `Height`, `HasSubtitles`, `IsHD`, `VideoType`, `Trickplay`, `Container`) and `CriticRating`
+  are outside what v1 can yet say, stay absent until the feature that owns them, and are a
+  recorded gap the differential will show — 006's `Chapter` shape, not a silent one.
+- **Its width is the item's, not the shape's.** Two movies measured **41 and 40 properties**,
+  the difference being `IsHD` — null on one of them, and nulls are omitted globally (§3.1's
+  emitter, behaviours §1.9). "Forty-one properties" was one item's width read as a constant; a
+  differential that compares property *counts* between two servers would report a difference
+  that is only the item talking `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 **The reports' error floor, measured** — leniency starts after the body binds: a body that is
 not JSON, or an `ItemId` that is not a GUID at all, is `400` validation problem details; a
 `Stopped` carrying a **negative** position is the one refusal past binding — `400`,
 `text/plain`, the fixed `Error processing request.` body (behaviours §1.11's controller-refusal
-shape). Rule 1's `204` is for a well-formed id that names nothing
-`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
+shape). Rule 1's `204` is for a well-formed id that names nothing.
+
+**And the binder's refusal names two things, one of them per route:** the failure itself — `$`
+carrying the parser's message and byte position when the text is not JSON, the **empty string**
+carrying `The supplied value is invalid.` when it parses but a value does not bind — beside the
+name of the body the route declares, which is `playbackStartInfo`, `playbackProgressInfo` or
+`playbackStopInfo`, saying that field is required. So one failure spells its `errors` keys three
+ways across the three routes `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]` (behaviours §1.11). *This is the half of the plan
+gate's "the extended handler reproduces it for free" that is not free: a path parameter's
+refusal already matches, a body's does not.*
 
 **Robustness rules, because these arrive over unreliable networks from clients that crash:**
 

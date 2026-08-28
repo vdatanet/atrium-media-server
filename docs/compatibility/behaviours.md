@@ -709,6 +709,29 @@ natural implementation produces `[probe: manual requests, Jellyfin 10.11.11, 202
   canonicalisation §1.15 describes, visible from the other side — and it means a server that
   echoed the client's spelling would differ on exactly the requests a PascalCase client sends.
 
+**A refusal of the *body* names two keys, and one of them is per route.** The `errors` map above
+holds a parameter name because a parameter was what failed. When the **body** fails, the map holds
+the binder's own key — `"$"` with the JSON parser's message and byte position when the text is not
+JSON, the **empty string** with `The supplied value is invalid.` when it parses and a value inside
+it does not bind — **beside the name of the action parameter the route declares**, saying that
+field is required. Measured across 007's three reporting routes, where that name is
+`playbackStartInfo`, `playbackProgressInfo` and `playbackStopInfo` respectively: one failure,
+three spellings, none of them anything the client sent
+`[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`.
+
+```json
+{"type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+ "title": "One or more validation errors occurred.", "status": 400,
+ "errors": {"": ["The supplied value is invalid."],
+            "playbackProgressInfo": ["The playbackProgressInfo field is required."]},
+ "traceId": "00-9c83…-a105…-00"}
+```
+
+**Atrium gets the shape for free and the keys only deliberately.** A path or query parameter's
+refusal already matches — `compat/errors.validation_errors` keys on the declared name, which is
+the bullet above — while a body's names the model's field (`ItemId`) where the reference names
+its action parameter. Whether to reproduce that per route is 007 T8's decision, recorded there.
+
 The split is not arbitrary: the empty ones are produced before the framework's controller pipeline
 runs, the JSON ones by that pipeline, and the last two by a controller inside it — the fixed
 25-byte body where it refused abstractly, the quoted string where it wrote a message.

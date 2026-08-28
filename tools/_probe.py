@@ -106,6 +106,7 @@ class Server:
         body: Any = None,
         extra_headers: dict[str, str] | None = None,
         raw: bool = False,
+        raw_body: bytes | None = None,
     ) -> Any:
         url = self.base + path
         if params:
@@ -120,7 +121,13 @@ class Server:
             headers.update(extra_headers)
 
         data = None
-        if body is not None:
+        if raw_body is not None:
+            # Bytes exactly as given, so a probe can measure what a *malformed* body answers.
+            # `json.dumps` would turn "{not json" into the valid JSON string '"{not json"', which
+            # binds differently and would measure a different refusal than the one asked about.
+            data = raw_body
+            headers["Content-Type"] = "application/json"
+        elif body is not None:
             data = json.dumps(body).encode("utf-8")
             headers["Content-Type"] = "application/json"
 
@@ -162,13 +169,16 @@ class Server:
     def post(self, path: str, body: Any = None, **params: Any) -> Any:
         return self._request("POST", path, params=params, body=body)
 
-    def post_raw(self, path: str, body: Any = None, **params: Any) -> tuple[int, dict, bytes]:
+    def post_raw(
+        self, path: str, body: Any = None, raw_body: bytes | None = None, **params: Any
+    ) -> tuple[int, dict, bytes]:
         """POST returning (status, headers, payload) - for measuring the status itself.
 
         The parsed variant hides the difference between `200` and `204`, and a probe measuring
-        which one a route answers cannot use a helper that swallows it.
+        which one a route answers cannot use a helper that swallows it. `raw_body` sends bytes
+        verbatim, which is the only way to ask what an unparseable body answers.
         """
-        return self._request("POST", path, params=params, body=body, raw=True)
+        return self._request("POST", path, params=params, body=body, raw=True, raw_body=raw_body)
 
     def delete(self, path: str, body: Any = None, **params: Any) -> Any:
         return self._request("DELETE", path, params=params, body=body)

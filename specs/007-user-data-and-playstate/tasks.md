@@ -69,7 +69,7 @@ references on 2026-08-28 before being accepted. Four things changed, and the fir
 
 ## T1 — The probe pays the gate's debt: four batteries, one script
 
-- [ ] **Changes:** `tools/probe_playstate.py` grows the four batteries the plan gate ran as hand
+- [x] **Changes:** `tools/probe_playstate.py` grows the four batteries the plan gate ran as hand
   requests ([plan §6.8](plan.md#68-measured-at-the-gate-and-what-stays-owed)): a **playing-session
   battery** that starts a playback and reads `/Sessions` back — the `NowPlayingItem` slot between
   `DeviceName` and `DeviceId`, its property width, the absence of `UserData` inside it, and
@@ -89,6 +89,38 @@ references on 2026-08-28 before being accepted. Four things changed, and the fir
   `plan.md` are grep-checkable: no `manual requests via tools/_probe.py` remains for a claim this
   script now measures.
 - **Spec reference:** §3.2, §3.3, §3.6, AC-21, AC-22
+
+**Done (2026-08-28).** Four batteries, one run, and the debt is paid: every claim the plan gate
+took with a scratch script is now `python3 tools/probe_playstate.py --allow-writes`. Two of them
+came back with more than the question asked.
+
+**`NowPlayingItem`'s width is the item's, not the shape's.** Two runs picked two different movies
+and measured **41 and 40 properties** — the difference being `IsHD`, null on one of them and
+therefore omitted like every null. [Spec §3.6](spec.md#36-playback-reporting) had recorded "a
+measured movie carried 41 properties" as if it were the shape's width; it is one item's, and 010's
+differential comparing property *counts* would have reported a difference that was only the item
+talking. The spec now says so.
+
+**The plan's "reproduces for free" is half free.** The gate had measured that a non-JSON body and
+a non-GUID `ItemId` answer `400` validation problem details and stopped there. Read at the key
+level, the reference's `errors` map names **two** things: the binder's own key — `"$"` with the
+parser's byte position, or the **empty string** with `The supplied value is invalid.` — beside
+**the body parameter the route declares**, which is `playbackStartInfo`, `playbackProgressInfo`
+or `playbackStopInfo`. One failure, three spellings, none of them anything the client sent, where
+`compat/errors.validation_errors` keys on the model's field (`ItemId`). A path parameter's
+refusal already matches byte for byte (`itemId`, `The value 'banana' is not valid.`); a body's
+does not. Recorded in [behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one)
+with the body, amended in [plan §6.1](plan.md#61-the-report-routes), and the reproduction is now
+an explicit T8 decision rather than an inherited assumption.
+
+Everything else confirmed the accepted documents: the `NowPlayingItem` slot between `DeviceName`
+and `DeviceId`, no `UserData` inside it, `PlayState` replaced whole (`CanSeek: false` and no
+`VolumeLevel` after a progress omitting both), the position advancing +2.0s over two seconds of
+silence, the four mark refusals on behaviours §1.11's existing shapes, the negative-position
+`text/plain` `400`, a positionless `Progress` leaving the stored position alone, a `Start` at 30%
+leaving it at 0, and an artist's `Key` measuring the dashed form of its own 32-hex `ItemId`.
+`tools/_probe.py` grew one thing to make this possible: `raw_body`, because `json.dumps` turns
+`{not json` into a valid JSON *string* and measures a different refusal than the one asked about.
 
 ## T2 — `domain/playstate.py`: every semantic, pure, and the table that proves it
 

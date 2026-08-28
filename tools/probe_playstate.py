@@ -42,6 +42,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from datetime import datetime, timezone
@@ -59,6 +60,27 @@ SHORT_RUNTIME_BOUNDS = (60, 290)
 SEASON_MAX_EPISODES = 24
 
 REFERENCE_DEFAULTS = "MinResumePct=5, MaxResumePct=90, MinResumeDurationSeconds=300"
+
+#: The nine properties a measured `NowPlayingItem` carries that are derived from the media file
+#: itself. v1 has no source for any of them, so the differential will show them absent until the
+#: feature that owns them lands - a named gap rather than a silent one (spec section 3.6).
+MEDIA_DERIVED = (
+    "MediaStreams",
+    "Chapters",
+    "Width",
+    "Height",
+    "HasSubtitles",
+    "IsHD",
+    "VideoType",
+    "Trickplay",
+    "Container",
+)
+
+#: A GUID that parses and names nothing, versus a string that is not a GUID at all. The two
+#: refuse differently, and the difference is the whole of the reports' error floor: leniency
+#: starts *after* the body binds.
+GHOST = uuid.uuid4().hex
+NOT_A_GUID = "banana"
 
 
 def pristine(item: dict) -> bool:
@@ -607,6 +629,275 @@ def reap_battery(server: Server, probe: Probe, trials: Trials) -> None:
     trials.reset()
 
 
+def refusal(status: int, headers: dict, payload: bytes) -> str:
+    """One line naming the *shape* of a refusal, not just its status.
+
+    behaviours section 1.11 catalogues four of them and the whole point of this battery is which
+    one arrives, so a status alone would measure the least interesting half.
+    """
+    kind = (headers.get("Content-Type") or "").split(";")[0].strip()
+    text = payload.decode("utf-8", "replace")
+    if not text:
+        return f"{status}, empty body ({kind or 'no content type'})"
+    if kind.endswith("problem+json") or text.lstrip().startswith("{"):
+        try:
+            document = json.loads(text)
+        except ValueError:
+            return f"{status} {kind} {text[:60]!r}"
+        if isinstance(document, dict) and "errors" in document:
+            # `repr` rather than the bare name: one of the measured keys is the empty string,
+            # which a plain join renders as nothing at all.
+            named = ", ".join(repr(key) for key in document["errors"])
+            return f"{status} validation problem details naming {named}"
+        if isinstance(document, dict):
+            return f"{status} problem details, title={document.get('title')!r}"
+    return f"{status} {kind} {text[:40]!r}"
+
+
+def tokenless(server: Server, method, *args, **kwargs):
+    """The same request with no token at all. Restored even if it raises."""
+    held, server.token = server.token, None
+    try:
+        return method(*args, **kwargs)
+    finally:
+        server.token = held
+
+
+def own_playing_session(server: Server, item_id: str) -> dict | None:
+    """The caller's own session, if the reference thinks it is playing this item.
+
+    A report binds to the authenticated device rather than to anything the body names
+    (spec section 3.6), which is exactly what makes this findable: it is *our* session.
+    """
+    for session in server.get("/Sessions") or []:
+        playing = session.get("NowPlayingItem") or {}
+        if playing.get("Id") == item_id and session.get("UserId") == server.user_id:
+            return session
+    return None
+
+
+def find_pristine_artist(server: Server) -> dict | None:
+    """A by-name item nobody has favourited - the one item kind whose Key had two calibrations."""
+    found = server.get("/Artists", Limit=40, UserId=server.user_id)
+    for artist in found.get("Items", []):
+        if pristine(artist):
+            return artist
+    return None
+
+
+def playing_session_battery(probe: Probe, server: Server, trials: Trials, findings: Findings):
+    """What /Sessions shows while something plays: the slot, the width, and what is absent.
+
+    This is 005 T1's lesson pointed at /Sessions. `NowPlayingItem` is a `BaseItemDto` whose width
+    nothing had ever captured, and the sharpest thing about it turned out to be an absence.
+    """
+    trials.reset()
+    started, _, _ = server.post_raw(
+        "/Sessions/Playing",
+        body={
+            "ItemId": trials.item_id,
+            "MediaSourceId": trials.item_id,
+            "PlaySessionId": uuid.uuid4().hex,
+            "PositionTicks": 0,
+            "PlayMethod": "DirectPlay",
+            "CanSeek": True,
+            "IsPaused": False,
+            "IsMuted": False,
+            "VolumeLevel": 80,
+            "AudioStreamIndex": 1,
+            "SubtitleStreamIndex": -1,
+        },
+    )
+    session = own_playing_session(server, trials.item_id)
+    if session is None:
+        probe.note(
+            f"the Start answered {started} and no session of this user reports the item as "
+            "playing; the playing-session battery could not run"
+        )
+        trials.reset()
+        return
+
+    keys = list(session)
+    where = keys.index("NowPlayingItem")
+    follows = keys[where + 1] if where + 1 < len(keys) else "the end"
+    probe.observe("NowPlayingItem's slot", f"after {keys[where - 1]}, before {follows}")
+    playing = session["NowPlayingItem"]
+    probe.observe("NowPlayingItem width", f"{len(playing)} properties")
+    carries_user_data = "UserData" in playing
+    probe.observe(
+        "  it carries UserData",
+        "YES - the spec says it does not" if carries_user_data else "no",
+    )
+    findings.check(
+        not carries_user_data,
+        "spec 3.6: NowPlayingItem is the one measured item shape with no UserData",
+    )
+    present = [name for name in MEDIA_DERIVED if name in playing]
+    probe.observe(
+        "  media-derived properties v1 cannot emit",
+        f"{len(present)} of {len(MEDIA_DERIVED)} present: {', '.join(present) or 'none'}",
+    )
+    probe.observe("PlayState, as the Start left it", ", ".join(session.get("PlayState") or {}))
+
+    # The whole question: does a report that omits a field clear it, or leave the old value?
+    server.post_raw(
+        "/Sessions/Playing/Progress",
+        body={"ItemId": trials.item_id, "PositionTicks": trials.ticks(20), "IsPaused": False},
+    )
+    after = own_playing_session(server, trials.item_id) or {}
+    state = after.get("PlayState") or {}
+    replaced = state.get("CanSeek") is False and "VolumeLevel" not in state
+    probe.observe("PlayState after a progress omitting CanSeek and VolumeLevel", ", ".join(state))
+    probe.observe(
+        "  replaced whole rather than merged",
+        f"yes - CanSeek={state.get('CanSeek')}, VolumeLevel "
+        f"{'absent' if 'VolumeLevel' not in state else state.get('VolumeLevel')}"
+        if replaced
+        else f"NO - CanSeek={state.get('CanSeek')}, VolumeLevel={state.get('VolumeLevel')}",
+    )
+    findings.check(
+        replaced,
+        "plan section 5: PlayState is replaced whole by each report, never merged",
+    )
+
+    ticking = state.get("PositionTicks")
+    time.sleep(2)
+    later = (own_playing_session(server, trials.item_id) or {}).get("PlayState") or {}
+    moved = (later.get("PositionTicks") or 0) - (ticking or 0)
+    probe.observe(
+        "  the position advances between reports",
+        f"{'yes' if moved > 0 else 'NO'} - {moved / TICKS_PER_SECOND:+.1f}s over 2s of silence",
+    )
+
+    trials.stop(ticks=trials.ticks(20))
+    probe.observe(
+        "NowPlayingItem after the Stopped",
+        "cleared" if own_playing_session(server, trials.item_id) is None else "STILL PLAYING",
+    )
+    trials.reset()
+
+
+def refusal_battery(probe: Probe, server: Server, trials: Trials) -> None:
+    """The mark routes' four refusals. Every one should land on an existing behaviours shape."""
+    probe.observe(
+        "POST /UserPlayedItems, unknown item",
+        refusal(*server.post_raw(f"/UserPlayedItems/{GHOST}")),
+    )
+    probe.observe(
+        "POST /UserPlayedItems, itemId that is not a GUID",
+        refusal(*server.post_raw(f"/UserPlayedItems/{NOT_A_GUID}")),
+    )
+    probe.observe(
+        "POST /UserFavoriteItems, unknown item",
+        refusal(*server.post_raw(f"/UserFavoriteItems/{GHOST}")),
+    )
+    probe.observe(
+        "DELETE /UserFavoriteItems, unknown item",
+        refusal(*server.delete_raw(f"/UserFavoriteItems/{GHOST}")),
+    )
+    probe.observe(
+        "POST /UserPlayedItems, no token",
+        refusal(*tokenless(server, server.post_raw, f"/UserPlayedItems/{trials.item_id}")),
+    )
+    probe.observe(
+        "POST /UserPlayedItems?datePlayed=banana",
+        refusal(*server.post_raw(f"/UserPlayedItems/{trials.item_id}", datePlayed="banana")),
+    )
+    probe.observe(
+        "  and it stored nothing",
+        "yes" if pristine({"UserData": trials.read()}) else "NO - the mark landed anyway",
+    )
+    trials.reset()
+
+
+def report_edge_battery(probe: Probe, server: Server, trials: Trials, findings: Findings) -> None:
+    """Where the reports' leniency starts, and what a well-formed report does not do.
+
+    Rule 1 answers 204 for an id that names nothing - but a body that cannot *bind* refuses
+    before any of that, and the difference is invisible from the spec's robustness rules alone.
+    """
+    probe.observe(
+        "Stopped with a negative position",
+        refusal(
+            *server.post_raw(
+                "/Sessions/Playing/Stopped",
+                body={"ItemId": trials.item_id, "PositionTicks": -1},
+            )
+        ),
+    )
+    # Both binder failures on all three routes, because the *keys* differ per route: the
+    # reference names its own action parameter in the errors dictionary, so this is where a
+    # reproduction stops being free (plan section 6.1).
+    for path in ("/Sessions/Playing", "/Sessions/Playing/Progress", "/Sessions/Playing/Stopped"):
+        unparseable = refusal(*server.post_raw(path, raw_body=b"{not json"))
+        unbindable = refusal(
+            *server.post_raw(path, body={"ItemId": NOT_A_GUID, "PositionTicks": 1000})
+        )
+        probe.observe(f"{path}, a body that is not JSON", unparseable)
+        probe.observe("  the same route, an ItemId that is not a GUID", unbindable)
+
+    trials.reset()
+    trials.start()
+    trials.progress(trials.ticks(40))
+    before = trials.read().get("PlaybackPositionTicks")
+    status, _, _ = server.post_raw(
+        "/Sessions/Playing/Progress", body={"ItemId": trials.item_id, "IsPaused": True}
+    )
+    after = trials.read().get("PlaybackPositionTicks")
+    probe.observe(
+        f"a Progress carrying no position ({status})",
+        f"stored position {'unchanged' if after == before else f'moved to {after}'}",
+    )
+    findings.check(
+        after == before,
+        "plan section 6.1: a positionless Progress leaves the stored position alone",
+    )
+
+    trials.reset()
+    server.post_raw(
+        "/Sessions/Playing",
+        body={"ItemId": trials.item_id, "PositionTicks": trials.ticks(30)},
+    )
+    started = trials.read()
+    probe.observe("a Start carrying 30%", described(started, trials.runtime))
+    findings.check(
+        started.get("PlaybackPositionTicks") == 0,
+        "spec 3.6: a Start's position is not written - the row stays where it was",
+    )
+    trials.reset()
+
+
+def by_name_favourite_battery(probe: Probe, server: Server) -> None:
+    """A favourite on an artist: Key's second calibration, on the item kind that has no file."""
+    artist = find_pristine_artist(server)
+    if artist is None:
+        probe.note("no artist without user data; the by-name favourite battery did not run")
+        return
+    item_id = artist["Id"]
+    try:
+        status, _, payload = server.post_raw(f"/UserFavoriteItems/{item_id}")
+        document = json.loads(payload or b"{}")
+        probe.observe(
+            f"POST /UserFavoriteItems on {artist['Name'][:30]!r} ({status})",
+            f"IsFavorite={document.get('IsFavorite')}",
+        )
+        key, reported = document.get("Key"), document.get("ItemId")
+        probe.observe(
+            "  Key beside ItemId",
+            f"Key={key!r} ItemId={reported!r} - "
+            + (
+                "the item's own GUID, dashed"
+                if key and key.replace("-", "") == (reported or "")
+                else "not the item id"
+            ),
+        )
+    finally:
+        server.delete_raw(f"/UserFavoriteItems/{item_id}")
+        restored = server.get(f"/Items/{item_id}", UserId=server.user_id)
+        if not pristine(restored):
+            probe.note(f"artist {item_id} was NOT restored; clear its favourite by hand")
+
+
 def run(server: Server, args) -> Probe:
     probe = Probe(
         script="probe_playstate.py",
@@ -647,6 +938,10 @@ def run(server: Server, args) -> Probe:
         bisection_battery(probe, trials)
         short_item_battery(server, probe, findings)
         cascade_battery(server, probe, findings)
+        playing_session_battery(probe, server, trials, findings)
+        refusal_battery(probe, server, trials)
+        report_edge_battery(probe, server, trials, findings)
+        by_name_favourite_battery(probe, server)
         if args.reap:
             reap_battery(server, probe, trials)
     finally:
