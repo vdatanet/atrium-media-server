@@ -203,10 +203,7 @@ there is; and two users' rows for one key stay independent (AC-7's floor).
 
 ## T4 — The query layer's two additions, and the world that can prove them
 
-- [ ] **Changes:** `src/atrium/db/item_queries.py` grows `user_data_for(item_id, user)` —
-  the stored row plus the container rollup for one item, built from `_user_data`, `_rollups` and
-  `_rolled` so a mark response can never drift from the next list row
-  ([plan §6.3](plan.md#63-one-items-userdata-on-demand)) — and `leaf_descendants(item_id, user)`,
+- [x] **Changes:** `src/atrium/db/item_queries.py` grows `leaf_descendants(item_id, user)`,
   the cascade's target set: one recursive scoped query through the existing visibility scope,
   file-backed types only, never the container's own row
   ([plan §6.2](plan.md#62-the-mark-routes)). `tests/fixtures/query.py` gains what the gate found
@@ -216,11 +213,35 @@ there is; and two users' rows for one key stay independent (AC-7's floor).
 - **Verified by:** `uv run pytest tests/unit/test_item_queries.py tests/unit/test_query_fixture.py -q`
   — `leaf_descendants` of a season is its episodes, of a series is every episode through its
   seasons, of a film is empty, and a soft-removed episode and another user's invisible library are
-  both absent from it; `user_data_for` on a container returns the rollup and on a leaf the stored
-  row. The fixture's invariant test asserts the short track's runtime is under
+  both absent from it. The fixture's invariant test asserts the short track's runtime is under
   `MIN_RESUME_DURATION_SECONDS` and the film's is over it, so the two branches cannot silently
   become the same case.
 - **Spec reference:** §3.4, §3.5; plan §6.2, §6.3
+
+**Done (2026-08-28).** One query method, not two, and the fixture change turned out to pin
+something 005 never had.
+
+**`user_data_for` was not written, and [plan §6.3](plan.md#63-one-items-userdata-on-demand) now
+says why.** A method answering a `UserItemData` answers the stored row and the rollup and **not
+the runtime** — so a mark route holding one would still have to compute `PlayedPercentage` from
+position over runtime itself, which is a second place that expression is spelled out and exactly
+the drift §6.3 exists to prevent. The mark routes will instead resolve the item through
+`ItemQueryRepository.run` — the same call `GET /Items/{itemId}` makes — and hand the
+`HydratedItem` to the same DTO builder a list row goes through, so the identity is structural
+rather than asserted. The plan is amended in this change rather than in a follow-up.
+
+**`CumulativeRunTimeTicks` had no golden coverage at all.** Giving the first series' episodes and
+the first track a runtime rewrote eight goldens, and the diff is not only the two `RunTimeTicks`
+that were asked for: `CumulativeRunTimeTicks` appears for the first time on the season, the
+series, the album and the artist. It was absent from every golden in the repository, because
+nothing under a container had a runtime for it to sum — a 005 emitter with a golden-shaped hole
+in it, closed by a fixture change made for another reason.
+
+The world now answers three runtime shapes that the resolution rule needs and had one of: the
+215-second track the probe measured OQ-6 on (the only item under the floor, asserted against
+`MIN_RESUME_DURATION_SECONDS` itself rather than a number written twice), forty-five-minute
+episodes on the first series, and **no runtime at all** on the other two series, which keeps row
+2's "the runtime is unknown" reachable in the same world.
 
 ## T5 — The favourite pair: two routes, idempotent both ways, no cascade
 

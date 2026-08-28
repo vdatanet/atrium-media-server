@@ -396,6 +396,37 @@ class ItemQueryRepository:
             frontier = select(further.c.id).where(further.c.parent_id.in_(frontier))
         return select(node.c.id).where(or_(*clauses))
 
+    def leaf_descendants(self, item_id: str, user: User) -> tuple[str, ...]:
+        """The file-backed items beneath `item_id` that this user can see - the cascade's targets.
+
+        Marking a container played marks its leaves and **never its own row** (spec section 3.4,
+        measured), so this answers exactly the set a mark writes and nothing else: no seasons, no
+        albums, no by-name rows, and nothing soft-removed or in a library the caller's policy does
+        not permit. The visibility clause is the one every query uses, which is what makes "the
+        caller's own scope" true rather than intended - the reference passes its user into its own
+        sweep for the same reason.
+
+        **A leaf answers the empty tuple, and so does an empty container.** A caller must branch on
+        the item's *type* rather than on whether this came back empty: the two mean opposite
+        things, and reading emptiness as "then write the item's own row" would mark an emptied
+        season played on the one shape where the reference writes nothing at all.
+
+        Raises `ParentNotFoundError` when the item is unknown or invisible, which is the same
+        refusal every scoped query makes, so a mark cannot tell a caller that an item exists.
+        """
+        parent = self._require_visible(item_id, user)
+        leaves = (
+            select(models.Item.id)
+            .where(self._visible_to(user))
+            .where(models.Item.type.in_([kind.value for kind in FILE_BACKED]))
+        )
+        if ItemType(parent.type) is ItemType.COLLECTION_FOLDER:
+            # The same fast path the scope has: everything under a library carries its id.
+            leaves = leaves.where(models.Item.library_id == parent.library_id)
+        else:
+            leaves = leaves.where(models.Item.id.in_(self._descendants(parent.id)))
+        return tuple(self._session.execute(leaves).scalars())
+
     def _require_visible(self, item_id: str, user: User) -> models.Item:
         found = self._session.execute(
             select(models.Item).where(models.Item.id == item_id).where(self._visible_to(user))

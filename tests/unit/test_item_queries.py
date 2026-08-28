@@ -24,7 +24,7 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session as OrmSession
 
 from atrium.config.paths import DataPaths
-from atrium.db import schema
+from atrium.db import models, schema
 from atrium.db.engine import create_database_engine, session_factory
 from atrium.db.item_queries import (
     EARN_THEIR_PLACE,
@@ -471,3 +471,80 @@ def test_an_empty_page_costs_no_hydration(
     assert page.items == ()
     assert page.total > 0
     assert len(query_counter) == 2, query_counter.report()
+
+
+# ------------------------------------------------------------------------------------------
+# The cascade's target set (007 T4)
+# ------------------------------------------------------------------------------------------
+
+
+def test_a_seasons_leaves_are_its_episodes(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    handle = world.series[0]
+    season = handle.seasons[0]
+    under = set(repository.leaf_descendants(season, world.everyone))
+    assert under, "a season with episodes answered nothing"
+    assert under < set(handle.episodes), "a season answered episodes of another season"
+    assert season not in under, "the container's own row is in the set that gets written"
+
+
+def test_a_series_reaches_its_episodes_through_its_seasons(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """Two hops, which is what makes "mark the series watched" work at all - and no seasons in
+    the answer, because a season's own row is never written (spec section 3.4)."""
+    handle = world.series[0]
+    under = set(repository.leaf_descendants(handle.id, world.everyone))
+    assert under == set(handle.episodes)
+    assert not under & set(handle.seasons)
+
+
+def test_a_library_folder_reaches_everything_beneath_it(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """The `CollectionFolder` fast path: every item under a library carries its id."""
+    under = set(repository.leaf_descendants(identity.for_library(world.shows.id), world.everyone))
+    assert under == {episode for handle in world.series for episode in handle.episodes}
+
+
+def test_a_leaf_has_no_leaves(repository: ItemQueryRepository, world: QueryWorld) -> None:
+    """A film answers nothing, and so would an empty season - which is why a caller branches on
+    the item's type rather than on this being empty."""
+    assert repository.leaf_descendants(world.corpus[0], world.everyone) == ()
+
+
+def test_the_album_reaches_its_tracks_and_not_its_artist(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    assert set(repository.leaf_descendants(world.album, world.everyone)) == set(world.tracks)
+
+
+def test_a_removed_episode_is_not_a_target(
+    repository: ItemQueryRepository, session: OrmSession, world: QueryWorld
+) -> None:
+    """Plan section 9's risk row: a cascade that swept soft-removed rows would write state for
+    items no query can see, and the user would find them played if the file ever came back."""
+    handle = world.series[0]
+    gone = handle.episodes[0]
+    row = session.get(models.Item, gone)
+    assert row is not None
+    row.removed_at = datetime(2026, 8, 1, tzinfo=UTC)
+    session.flush()
+    assert gone not in repository.leaf_descendants(handle.id, world.everyone)
+
+
+def test_the_set_is_the_callers_own_scope(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """A user whose policy excludes the shows library cannot reach its season at all - the same
+    refusal every scoped query makes, so a mark cannot tell a caller that an item exists."""
+    with pytest.raises(ParentNotFoundError):
+        repository.leaf_descendants(world.series[0].seasons[0], world.restricted)
+
+
+def test_an_unknown_item_is_the_same_refusal(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    with pytest.raises(ParentNotFoundError):
+        repository.leaf_descendants("0" * 32, world.everyone)

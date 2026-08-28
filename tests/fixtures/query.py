@@ -86,6 +86,16 @@ AWKWARD_NAMES = (
 RATED = 10
 FIRST_YEAR = 1990
 
+#: **Forty-five minutes, on every episode of the first series** (007 T4). Until this feature the
+#: whole world had exactly one runtime - the film below - and 007's resolution rule is a function
+#: of runtime, so every branch of it had one item to run on and the short-item branch had none.
+EPISODE_RUNTIME_TICKS = 2700 * 10_000_000
+
+#: **215 seconds, on the first track**: the runtime the probe measured OQ-6 against, and under the
+#: reference's 300-second floor - so a stop halfway through it is *played*, not resumable, which
+#: is the one branch of spec section 3.7 no long item can exhibit.
+SHORT_RUNTIME_TICKS = 215 * 10_000_000
+
 #: One hour, in ticks, on the film that also carries a resume position - `PlayedPercentage` is
 #: position over runtime, and a world with positions and no runtimes could never emit one.
 RUNTIME_TICKS = 36_000_000_000
@@ -204,6 +214,11 @@ class QueryWorld:
     """The compilation."""
 
     tracks: tuple[str, ...]
+
+    short_track: str
+    """The first track, and the only item in the world whose runtime is under the resume floor:
+    `SHORT_RUNTIME_TICKS`. Spec section 3.7 row 5 has no other world to be proven in."""
+
     album_artist: str
     """The `MusicArtist` item for `ALBUM_ARTIST`."""
 
@@ -288,6 +303,7 @@ def build_query_world(session: OrmSession) -> QueryWorld:
         imaged_episode=imaged_episode,
         album=album,
         tracks=tracks,
+        short_track=tracks[0],
         album_artist=album_artist,
         guest_artist=guest_artist,
         guest_track=guest_track,
@@ -497,6 +513,16 @@ def _seed_shows(
             multi_episode = _episode_id(library, name, 1, 2)
 
         if offset == 0:
+            # **Runtimes, on the first series' episodes only.** 007's resolution rule is a
+            # function of runtime and every branch of it needs one; keeping the other two series
+            # runtime-free keeps the "unknown runtime" branch (row 2) reachable in the same world.
+            for episode_id in episodes:
+                metadata.apply(
+                    episode_id,
+                    MetadataChanges(values={Field.RUNTIME: EPISODE_RUNTIME_TICKS}),
+                    refreshed_at=REFRESHED_AT,
+                )
+
             # The first series carries a Primary, a Thumb and two Backdrops - and only the first,
             # so an emitter that resolves `SeriesPrimaryImageTag` or the `Parent*` walks can be
             # told apart from one that happens to find nothing everywhere (T9). An episode's row
@@ -715,11 +741,17 @@ def _seed_music(
             )
         )
         _add(items, track)
+        values: dict[Field, object] = {
+            Field.ARTISTS: [performer],
+            Field.ALBUM_ARTISTS: [ALBUM_ARTIST],
+        }
+        if number == 1:
+            # The short item, and the only one: a track under the 300-second floor is played when
+            # it is stopped halfway rather than left resumable (spec section 3.7 row 5, OQ-6).
+            values[Field.RUNTIME] = SHORT_RUNTIME_TICKS
         metadata.apply(
             track.id,
-            MetadataChanges(
-                values={Field.ARTISTS: [performer], Field.ALBUM_ARTISTS: [ALBUM_ARTIST]}
-            ),
+            MetadataChanges(values=values),
             refreshed_at=REFRESHED_AT,
         )
         tracks.append(track.id)

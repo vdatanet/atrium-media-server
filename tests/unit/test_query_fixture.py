@@ -24,16 +24,19 @@ from atrium.config.paths import DataPaths
 from atrium.db import models, schema
 from atrium.db.engine import create_database_engine, session_factory
 from atrium.domain.items import CollectionType, ItemType
+from atrium.domain.playstate import MIN_RESUME_DURATION_SECONDS, TICKS_PER_SECOND
 from atrium.library import identity
 from tests.conftest import data_dir
 from tests.fixtures.query import (
     ALBUM_ARTIST,
     AWKWARD_NAMES,
     CORPUS_SIZE,
+    EPISODE_RUNTIME_TICKS,
     FIRST_YEAR,
     GENRE_SPELLINGS,
     RATED,
     RUNTIME_TICKS,
+    SHORT_RUNTIME_TICKS,
     SOLO_PERFORMER,
     QueryWorld,
     build_query_world,
@@ -404,3 +407,42 @@ def test_the_dated_film_also_carries_the_runtime(session: OrmSession, world: Que
     row = session.get(models.Item, world.corpus[1])
     assert row is not None and row.runtime_ticks == RUNTIME_TICKS
     assert world.corpus[1] in world.resumable
+
+
+def test_the_short_track_is_the_only_item_under_the_resume_floor(
+    session: OrmSession, world: QueryWorld
+) -> None:
+    """007 section 3.7 row 5 is about the *runtime*, and it needs a world with one to fire in.
+
+    Asserted against the domain's own constant rather than against a number written twice: a
+    change to `MIN_RESUME_DURATION_SECONDS` that left this fixture alone would silently turn the
+    short-item branch into the ordinary one, and every test of it would keep passing.
+    """
+    floor = MIN_RESUME_DURATION_SECONDS * TICKS_PER_SECOND
+    short = session.get(models.Item, world.short_track)
+    assert short is not None and short.runtime_ticks == SHORT_RUNTIME_TICKS
+    assert 0 < SHORT_RUNTIME_TICKS < floor, "the short track is not short enough to fire row 5"
+
+    under = [
+        row.id
+        for row in session.query(models.Item).all()
+        if row.runtime_ticks and row.runtime_ticks < floor
+    ]
+    assert under == [world.short_track]
+
+
+def test_the_first_series_episodes_are_long_enough_for_the_percentage_branches(
+    session: OrmSession, world: QueryWorld
+) -> None:
+    """And the other two series carry no runtime at all, which keeps row 2 - "the runtime is
+    unknown" - reachable in the same world as the branches that need one."""
+    floor = MIN_RESUME_DURATION_SECONDS * TICKS_PER_SECOND
+    for episode_id in world.series[0].episodes:
+        row = session.get(models.Item, episode_id)
+        assert row is not None and row.runtime_ticks == EPISODE_RUNTIME_TICKS
+    assert floor < EPISODE_RUNTIME_TICKS
+
+    for handle in world.series[1:]:
+        for episode_id in handle.episodes:
+            row = session.get(models.Item, episode_id)
+            assert row is not None and row.runtime_ticks is None
