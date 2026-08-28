@@ -4,7 +4,7 @@ title: Item query API — implementation plan
 status: Accepted
 created: 2026-08-27
 updated: 2026-08-27
-amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; 2026-08-28 by T10 - section 6.12
+amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8
 spec_status_required: Accepted
 spec_status_actual: Accepted
 accepted: 2026-08-27
@@ -369,8 +369,15 @@ that could have been written and forgotten.
 ### 6.8 Discovery endpoints
 
 **`/Items/Latest`**: visible file-backed items, `date_created` descending, the user's
-latest-items exclusions from 002 §3.6 applied, grouped upward — an episode surfaces as its
-series, a track as its album, each group once, newest first — and returned as the bare array.
+latest-items exclusions from 002 §3.6 applied, grouped upward, and returned as the bare array.
+*(Corrected by T11's measurement — this paragraph first said an episode always surfaces as its
+series.)* A group surfaces as its container only when it holds **more than one** recent item; a
+group of one is the item itself, and `groupItems=false` switches grouping off (spec §3.7).
+`HidePlayedInLatest` — default true, measured — keeps played items out of the pool unless the
+caller's `isPlayed` overrides it. Grouping collapses an unknown number of rows per entry, so the
+route pages the repository — a fixed page size, first-seen order, until `limit` groups exist or
+the world runs out — and then fetches the surfacing containers through the same pipeline, so a
+container row arrives with the rollups every container row has.
 
 **`/UserItems/Resume`**: items whose user data holds `playback_position_ticks > 0`, most recently
 played first. 007's six-branch rule (007 §3.7) already guarantees a stored position is a

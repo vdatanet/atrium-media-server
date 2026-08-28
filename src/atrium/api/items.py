@@ -29,7 +29,7 @@ refuses it into the validation `400`, which is the other measured refusal (spec 
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
@@ -47,7 +47,6 @@ from atrium.db.item_queries import (
     HydratedItem,
     ItemQueryRepository,
     ParentNotFoundError,
-    QueryPage,
 )
 from atrium.db.repositories import LibraryRepository, UserRepository
 from atrium.domain.items import ItemType
@@ -121,7 +120,7 @@ _REFERENCE_KINDS_BY_FOLD = {kind.lower() for kind in BASE_ITEM_KINDS}
 # ------------------------------------------------------------------------------------------------
 
 
-def _split(raw: str | None) -> list[str]:
+def split_csv(raw: str | None) -> list[str]:
     """The reference's list syntax: one query value, comma-separated, blanks dropped."""
     if raw is None:
         return []
@@ -136,10 +135,10 @@ def _invalid(parameter: str, value: str) -> RequestValidationError:
     )
 
 
-def _guid_list(raw: str | None, parameter: str) -> tuple[str, ...] | None:
+def parse_guid_list(raw: str | None, parameter: str) -> tuple[str, ...] | None:
     """Identifiers, canonicalised. A malformed one is a type failure, not a droppable token
     (behaviours section 1.12's line), measured on the item route and reproduced here."""
-    tokens = _split(raw)
+    tokens = split_csv(raw)
     if not tokens:
         return None
     canonical: list[str] = []
@@ -151,8 +150,8 @@ def _guid_list(raw: str | None, parameter: str) -> tuple[str, ...] | None:
     return tuple(canonical)
 
 
-def _int_list(raw: str | None, parameter: str) -> tuple[int, ...] | None:
-    tokens = _split(raw)
+def parse_int_list(raw: str | None, parameter: str) -> tuple[int, ...] | None:
+    tokens = split_csv(raw)
     if not tokens:
         return None
     numbers: list[int] = []
@@ -164,7 +163,7 @@ def _int_list(raw: str | None, parameter: str) -> tuple[int, ...] | None:
     return tuple(numbers)
 
 
-def _kinds(
+def parse_kinds(
     raw: str | None, parameter: str, ignored: IgnoredParameters, route: str
 ) -> frozenset[ItemType] | None:
     """`includeItemTypes`/`excludeItemTypes`: three answers per token, not two.
@@ -173,7 +172,7 @@ def _kinds(
     and can match nothing - `frozenset()` means "asked, and nothing qualifies" (the repository's
     empty-versus-None contract from T6); a token that is no kind at all drops and is recorded.
     """
-    tokens = _split(raw)
+    tokens = split_csv(raw)
     if not tokens:
         return None
     kept: set[ItemType] = set()
@@ -192,13 +191,15 @@ def _kinds(
     return frozenset() if askable else None
 
 
-def _sort(
+def parse_sort(
     sort_by: str | None, sort_order: str | None, ignored: IgnoredParameters, route: str
 ) -> tuple[tuple[SortBy, SortOrder], ...]:
     """The comma list zipped with its orders; a missing order is `Ascending` (plan section 6.3)."""
-    keys = known_tokens(_split(sort_by), SortBy, route=route, parameter="sortBy", ignored=ignored)
+    keys = known_tokens(
+        split_csv(sort_by), SortBy, route=route, parameter="sortBy", ignored=ignored
+    )
     orders = known_tokens(
-        _split(sort_order), SortOrder, route=route, parameter="sortOrder", ignored=ignored
+        split_csv(sort_order), SortOrder, route=route, parameter="sortOrder", ignored=ignored
     )
     return tuple(
         (key, orders[position] if position < len(orders) else SortOrder.ASCENDING)
@@ -206,12 +207,12 @@ def _sort(
     )
 
 
-def _fields(raw: str | None, ignored: IgnoredParameters, route: str) -> frozenset[str]:
+def parse_fields(raw: str | None, ignored: IgnoredParameters, route: str) -> frozenset[str]:
     """The `ItemFields` tokens v1 resolves; anything else - a token of the reference's enum this
     version does not emit included - is dropped and recorded, which is the same measurable trail
     the tier 3 parameters leave (spec section 3.3)."""
     kept: set[str] = set()
-    for token in _split(raw):
+    for token in split_csv(raw):
         canonical = _FIELD_TOKENS.get(token.lower())
         if canonical is not None:
             kept.add(canonical)
@@ -220,7 +221,7 @@ def _fields(raw: str | None, ignored: IgnoredParameters, route: str) -> frozense
     return frozenset(kept)
 
 
-def _recorder(request: Request) -> IgnoredParameters:
+def recorder(request: Request) -> IgnoredParameters:
     ignored: IgnoredParameters = request.app.state.ignored_parameters
     return ignored
 
@@ -230,7 +231,7 @@ def _recorder(request: Request) -> IgnoredParameters:
 # ------------------------------------------------------------------------------------------------
 
 
-def _effective_user(users: UserRepository, caller: User, user_id: str | None) -> User:
+def effective_user(users: UserRepository, caller: User, user_id: str | None) -> User:
     """Whose visibility and user data apply (spec section 3.3, tier 1 `userId`).
 
     A non-administrator naming anybody else gets the empty `403` through the 002 seam
@@ -248,7 +249,7 @@ def _effective_user(users: UserRepository, caller: User, user_id: str | None) ->
     return target
 
 
-def _libraries(libraries: LibraryRepository) -> dict[str, LibraryContext]:
+def library_context(libraries: LibraryRepository) -> dict[str, LibraryContext]:
     """The context the folder rows and `Path` emitters read. One small query; a server has tens
     of libraries at most (plan section 10 argued the same about `/UserViews`)."""
     return {
@@ -259,9 +260,9 @@ def _libraries(libraries: LibraryRepository) -> dict[str, LibraryContext]:
     }
 
 
-def _aggregates(
+def aggregates_context(
     repository: ItemQueryRepository,
-    page: QueryPage,
+    items: Sequence[HydratedItem],
     target: User,
     fields: frozenset[str],
     width: Width,
@@ -269,7 +270,7 @@ def _aggregates(
     """The subtree numbers, fetched only when an emitter will read them."""
     if width is not Width.FULL and not (fields & _AGGREGATE_FIELDS):
         return {}
-    return repository.aggregates_for([one.id for one in page.items], target)
+    return repository.aggregates_for([one.id for one in items], target)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -318,38 +319,38 @@ async def items(
 ) -> BaseItemDtoQueryResult:
     """`GetItems` `[spec: GetItems]`: tier 1 and 2 bound, tier 3 recorded, four shapes away."""
     route = "/Items"
-    ignored = _recorder(request)
+    ignored = recorder(request)
     state = get_state(request)
 
-    query_sort = _sort(sortBy, sortOrder, ignored, route)
-    asked_fields = _fields(fields, ignored, route)
+    query_sort = parse_sort(sortBy, sortOrder, ignored, route)
+    asked_fields = parse_fields(fields, ignored, route)
 
     with session_scope(get_sessions(request)) as opened:
-        target = _effective_user(UserRepository(opened), caller, userId)
+        target = effective_user(UserRepository(opened), caller, userId)
         query = ItemQuery(
             user=target,
             parent_id=parentId,
             recursive=recursive,
-            include_types=_kinds(includeItemTypes, "includeItemTypes", ignored, route),
-            exclude_types=_kinds(excludeItemTypes, "excludeItemTypes", ignored, route),
-            media_types=frozenset(_split(mediaTypes)) or None,
-            ids=_guid_list(ids, "ids"),
-            exclude_ids=_guid_list(excludeItemIds, "excludeItemIds"),
+            include_types=parse_kinds(includeItemTypes, "includeItemTypes", ignored, route),
+            exclude_types=parse_kinds(excludeItemTypes, "excludeItemTypes", ignored, route),
+            media_types=frozenset(split_csv(mediaTypes)) or None,
+            ids=parse_guid_list(ids, "ids"),
+            exclude_ids=parse_guid_list(excludeItemIds, "excludeItemIds"),
             search_term=searchTerm,
             name_starts_with=nameStartsWith,
             name_starts_with_or_greater=nameStartsWithOrGreater,
             name_less_than=nameLessThan,
-            genres=tuple(_split(genres)) or None,
-            genre_ids=_guid_list(genreIds, "genreIds"),
-            studio_ids=_guid_list(studioIds, "studioIds"),
-            artist_ids=_guid_list(artistIds, "artistIds"),
-            album_artist_ids=_guid_list(albumArtistIds, "albumArtistIds"),
-            album_ids=_guid_list(albumIds, "albumIds"),
-            person_ids=_guid_list(personIds, "personIds"),
-            years=_int_list(years, "years"),
+            genres=tuple(split_csv(genres)) or None,
+            genre_ids=parse_guid_list(genreIds, "genreIds"),
+            studio_ids=parse_guid_list(studioIds, "studioIds"),
+            artist_ids=parse_guid_list(artistIds, "artistIds"),
+            album_artist_ids=parse_guid_list(albumArtistIds, "albumArtistIds"),
+            album_ids=parse_guid_list(albumIds, "albumIds"),
+            person_ids=parse_guid_list(personIds, "personIds"),
+            years=parse_int_list(years, "years"),
             filters=frozenset(
                 known_tokens(
-                    _split(filters), Filter, route=route, parameter="filters", ignored=ignored
+                    split_csv(filters), Filter, route=route, parameter="filters", ignored=ignored
                 )
             ),
             is_played=isPlayed,
@@ -374,9 +375,11 @@ async def items(
             enable_user_data=enableUserData,
             enable_images=enableImages,
             image_type_limit=imageTypeLimit,
-            enable_image_types=frozenset(_split(enableImageTypes)) or None,
-            libraries=_libraries(LibraryRepository(opened)),
-            aggregates=_aggregates(repository, page, target, asked_fields, Width.LIST_ROW),
+            enable_image_types=frozenset(split_csv(enableImageTypes)) or None,
+            libraries=library_context(LibraryRepository(opened)),
+            aggregates=aggregates_context(
+                repository, page.items, target, asked_fields, Width.LIST_ROW
+            ),
         )
         built = build_dtos(page.items, context)
 
@@ -396,7 +399,7 @@ async def item(
     state = get_state(request)
 
     with session_scope(get_sessions(request)) as opened:
-        target = _effective_user(UserRepository(opened), caller, userId)
+        target = effective_user(UserRepository(opened), caller, userId)
         repository = ItemQueryRepository(opened)
         page = repository.run(ItemQuery(user=target, ids=(itemId,), limit=1, count=False))
         if not page.items:
@@ -407,11 +410,24 @@ async def item(
         context = BuildContext(
             server_id=state.server_id,
             width=Width.FULL,
-            libraries=_libraries(LibraryRepository(opened)),
+            libraries=library_context(LibraryRepository(opened)),
             aggregates=repository.aggregates_for([found.id], target),
         )
         built = build_dto(found, context)
     return built
 
 
-__all__ = ["BASE_ITEM_KINDS", "router"]
+__all__ = [
+    "BASE_ITEM_KINDS",
+    "aggregates_context",
+    "effective_user",
+    "library_context",
+    "parse_fields",
+    "parse_guid_list",
+    "parse_int_list",
+    "parse_kinds",
+    "parse_sort",
+    "recorder",
+    "router",
+    "split_csv",
+]

@@ -610,7 +610,7 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
 
 ## T11 — The user's world: `GET /UserViews` and `GET /Items/Latest`
 
-- [ ] **Changes:** `api/user_views.py` — the libraries after policy, each with
+- [x] **Changes:** `api/user_views.py` — the libraries after policy, each with
   `CollectionType`, the empty envelope for a user permitted nothing; `api/user_library.py` —
   the bare array, visible file-backed recency grouped upward — an episode surfaces as its
   series, a track as its album, each group once, newest first — and the user's latest-items
@@ -625,6 +625,35 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   ([behaviours §1.8](../../docs/compatibility/behaviours.md#18-get-itemslatest-returns-a-bare-array));
   a new episode surfaces its series once; an excluded library's items are absent from Latest.
 - **Plan reference:** §6.8; spec §3.6, §3.7
+- **Done (2026-08-28):** the task ordered the measurement first, and **the measurement overturned
+  the plan's grouping rule in one response**: an episode does *not* always surface as its series.
+  A group surfaces as its container only when it holds more than one recent item — the measured
+  list carried a `Series` beside a lone `Episode`, and a lone `Audio` beside grouped
+  `MusicAlbum`s. Implemented as measured, and the world's guest album — one track — is exactly
+  the singleton the rule needs, so the test that holds it asserts both shapes in one body.
+  Spec §3.7 and plan §6.8 corrected.
+
+  **The exclusion key came with a sibling nothing had named.** `LatestItemsExcludes` is the
+  measured key — view identifiers, so the match is against the derived folder identity — and
+  beside it sat `HidePlayedInLatest`, `true` on a configuration never edited, which is why every
+  entry in the measured Latest was unplayed. Ignoring it would have made Atrium's Latest show
+  played items the reference hides, on every default account, for ever. Both keys are honoured
+  from the stored configuration; exclusions bite only the unscoped request, because a client that
+  named a view by `parentId` asked for that view. `isPlayed=true` overrides the hiding, measured.
+
+  **`ParentId` is an explicit null on a view row**, and pydantic nearly swallowed it: a
+  `UserViewDto` inside `list[BaseItemDto]` serialises with the *declared* class's schema, so the
+  subclass's `NULL_KEPT` never runs. `UserViewQueryResult` types its rows to the view class — a
+  sibling envelope rather than a subclass, because a `list` field is invariant and mypy said so
+  before a test had to.
+
+  **Grouping cannot know its fetch size**, so the route pages the repository — fixed page size,
+  first-seen order, until `limit` groups exist or the world runs out — and the containers that
+  surface are fetched through the same pipeline, arriving with the rollups every container row
+  carries. The shared parameter parsing moved to public names in `api/items.py` rather than being
+  duplicated; the three `GetUserViews` parameters v1 has nothing to act on
+  (`includeExternalContent`, `presetViews`, `includeHidden`) stay undeclared on purpose, so a
+  client that sends them shows up in the ignored-parameter record instead of being half-honoured.
 
 ## T12 — Series navigation: `GET /Shows/{seriesId}/Seasons` and `/Episodes`
 

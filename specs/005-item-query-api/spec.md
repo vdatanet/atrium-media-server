@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
 accepted: 2026-08-27
-amended: 2026-08-28 by T9 - section 3.2; by T10 - section 3.3
+amended: 2026-08-28 by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7
 depends_on: [002, 004]
 ---
 
@@ -280,12 +280,23 @@ A user with no permitted libraries gets an empty envelope, not an error.
 
 | Endpoint | Returns | Rule that matters |
 |---|---|---|
-| `GET /Items/Latest` | **Bare array** of recently added items | Honours the user's latest-items exclusions from 002 §3.6 |
+| `GET /Items/Latest` | **Bare array** of recently added items, grouped upward | Honours `LatestItemsExcludes` and `HidePlayedInLatest` from the stored configuration (002 §3.6); grouping rule below |
 | `GET /UserItems/Resume` | Items with a resume position | Ordered most-recently-played first; excludes items played past the completion threshold (007 §3.7) |
 | `GET /Shows/NextUp` | The next unwatched episode per series | One item per series, never several |
 | `GET /Items/{itemId}/Similar` | Related items | v1 scores on shared genres, people and studios. Deterministic |
 | `GET /Items/{itemId}/InstantMix` | A radio-style queue from a seed | Deterministic for a given seed and library |
 | `GET /Items/Filters` | `{Genres, Tags, OfficialRatings, Years}` for a parent | `[spec: QueryFiltersLegacy]` |
+
+**The Latest grouping rule, measured** *(added by T11 — the plan's first wording said an episode
+always surfaces as its series, and one response disproved it)*: recent items group under their
+container — an episode under its **series**, a track under its album, a film under itself — and a
+group surfaces as **the container only when it holds more than one recent item; a group of one
+surfaces as the item itself**. One measured response carried a `Series` beside a lone `Episode`
+and a lone `Audio` beside grouped `MusicAlbum`s, newest first, each group once
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. Both steering keys
+were measured by name on a live configuration: `LatestItemsExcludes` (view identifiers; applied
+to the unscoped request) and `HidePlayedInLatest`, `true` on a configuration never edited, which
+keeps played items out unless the caller's own played filter asks for them.
 
 **Similar and InstantMix are deterministic on purpose.** The reference's are not obviously so, and
 a non-deterministic endpoint cannot be tested at L2 or compared at L3. Determinism is invisible to a
