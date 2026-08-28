@@ -4,7 +4,7 @@ title: Images
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-28
-amended: 2026-08-28 by T2 — §3.1's `ParentBackdropItemId` gap closed, and the pairing measured; and 2026-08-28 by T1's probe — §3.2's forgiven-value row, §3.2's parameter table (which still said `fillWidth` crops, three amendments after §3.3 stopped saying it), and the two §3.3 citations the committed script now reproduces; and 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered; and 2026-08-28 by the plan — §3.2's error row now names the thirteen-member vocabulary the probe distinguishes, `Box` measured `404`; and 2026-08-28 at the plan gate — §3.3 fill covers rather than crops (AC-6 corrected) and negotiates Accept (AC-15 added), §3.2 response constants and invalid tokens, §3.4 Vary, AC-12, OQ-3's missing cell
+amended: 2026-08-28 by T3 — §3.2's error table: the two `404` bodies named, the index message measured, the empty-GUID edge recorded; and 2026-08-28 by T2 — §3.1's `ParentBackdropItemId` gap closed, and the pairing measured; and 2026-08-28 by T1's probe — §3.2's forgiven-value row, §3.2's parameter table (which still said `fillWidth` crops, three amendments after §3.3 stopped saying it), and the two §3.3 citations the committed script now reproduces; and 2026-08-28 at the spec review — §3.1, §3.2, §3.4, §3.5, AC-12, AC-14, OQ-5, OQ-6; and by the two probes the same day — §3.2 response and errors, §3.3, §3.4 validators, §3.5 discovery, AC-9, OQ-1/2/3/5/6 answered; and 2026-08-28 by the plan — §3.2's error row now names the thirteen-member vocabulary the probe distinguishes, `Box` measured `404`; and 2026-08-28 at the plan gate — §3.3 fill covers rather than crops (AC-6 corrected) and negotiates Accept (AC-15 added), §3.2 response constants and invalid tokens, §3.4 Vary, AC-12, OQ-3's missing cell
 depends_on: [002, 004, 005]
 ---
 
@@ -138,9 +138,9 @@ deployment caveat.
 
 | Condition | Status |
 |---|---|
-| Unknown item | `404` — and nothing else: §3.2's authentication rule leaves no "may not see" branch on this route |
-| Item exists but has no image of that type | `404` |
-| `imageIndex` out of range | `404` |
+| Unknown item | `404` — and nothing else: §3.2's authentication rule leaves no "may not see" branch on this route. Byte-identical to `/Items/{itemId}`'s own refusal for the same id, measured; the **all-zeros identifier** is the one exception and is not reproduced — it is the reference's empty GUID, resolves to a user root folder v1 does not have, and answers `400` in the controller's plain-text shape instead `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]` |
+| Item exists but has no image of that type | `404`, and a **different body**: the message shape of [behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one), naming the item and the type |
+| `imageIndex` out of range | The same `404` and the same message, which names **the type, not the index** — `Backdrop/99` answers "…does not have an image of type Backdrop" `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]` |
 | Unparseable dimension or quality | `400` — measured, against the lenient pattern of behaviours §1.12; a parseable but absurd value (`maxWidth=-100`) is forgiven with `200` instead — and *forgiven* is not *ignored*: the reference re-encodes at the source's own size rather than serving the file, which v1 does not reproduce ([behaviours §1.17](../../docs/compatibility/behaviours.md#117-a-forgiven-dimension-re-encodes-a-bare-quality-does-not)) `[probe: tools/probe_image_formats.py, Jellyfin 10.11.11, 2026-08-28]` |
 | `imageType` outside the reference's thirteen-member vocabulary `[spec: ImageType]` | `400` (same probe); a vocabulary member the item merely lacks is the `404` above — `Box`, a member outside §3.2's eight that no item here can ever hold, measured `404` |
 
