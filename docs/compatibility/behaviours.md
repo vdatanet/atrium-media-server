@@ -294,13 +294,17 @@ route and a delivery route — and all four authenticate on each.
 routes the query forms are the only practical option, because those URLs are handed to players and
 image loaders that set no headers.
 
-**The fifth is measured on an authenticated API route and nowhere else.** `mechanisms()` in that
-script sends four, so `X-Emby-Authorization` carrying a `Token=` has never been put to an image or
-a delivery route. It is expected to work there — the reference reads the header with one grammar
-wherever it reads it at all — and an expectation is not a measurement (Principle II). The probe
-now asks it: `mechanisms()` sends all five to every route class from 2026-08-28. Asking is not
-answering — until a run against the reference is recorded here, what is *measured* on those two
-classes is still the four of §2.10.
+**The fifth is measured on the API route, and on the other two classes it cannot be.**
+`mechanisms()` sent four until 2026-08-28 and sends all five since, to every route class. The run
+that followed settles the class that requires a token: on `GET /Users/Me`, which refuses a request
+carrying none with `401`, **all five answer `200`**
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`.
+
+On the image and delivery routes that same run answers `200` for all five **and for no token at
+all**, so the fifth's `200` there distinguishes nothing (§2.10). That is not a shortcoming of the
+probe: it is the most a route requiring nothing can be asked. "All five work everywhere" is
+therefore measured where it can be, and untestable where it cannot, for as long as those two
+classes require no token.
 
 When a request carries two that disagree, the order is **not** arbitrary. Measured pair by pair,
 in both directions each time:
@@ -605,9 +609,11 @@ position floor produces a server that keeps resume points for every short item.
 
 **Jellyfin does:** answer `GET /Items/{id}/Images/Primary` and
 `GET /Videos/{id}/stream?static=true` with `200` to a request carrying **no token at all**. All
-four mechanisms the 2026-08-26 run sent are accepted there, and not one of them is required. The
-fifth of §2.4 reaches this route class only in a run made after 2026-08-28, when `mechanisms()`
-grew it, and no such run is recorded yet. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+five mechanisms are accepted there — four measured on 2026-08-26 `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`
+and the fifth on 2026-08-28, once `mechanisms()` sent it `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` —
+and **not one of them is required**, which makes the count the least interesting half of this
+section. A route that answers `200` to a request carrying nothing accepts every mechanism
+trivially and proves nothing about any of them; what it proves is the sentence in the heading.
 An **invalid** token changes nothing either: an unknown 32-hex token and a malformed one, sent
 through the header, the query and the `MediaBrowser` scheme, each answer the identical `200` —
 the route does not validate what it does not require

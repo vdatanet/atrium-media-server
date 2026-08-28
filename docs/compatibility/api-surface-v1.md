@@ -97,14 +97,13 @@ Whichever arrives must carry a `DeviceId`, which is what identifies the device f
 > ([client-atrium-tvos §5.1](client-atrium-tvos.md#51-x-emby-authorization-is-not-the-only-spelling-authenticatebyname-accepts)).
 > Atrium already accepted both, so nothing about the server changed with this correction.
 >
-> **And one half of it is still unmeasured.** That an *absent* header answers `400` is
-> `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`; that the reference
-> accepts an `Authorization`-only sign-in is not — the probe sets the Emby spelling, and only that,
-> every time it calls this route. The evidence is that a real client signs into real Jellyfin
-> servers that way, which is a third party's observation and therefore a lead, not a measurement.
-> The probe puts the question from 2026-08-28 — it signs in with the components in `Authorization`
-> and reports what comes back — so this paragraph gets its provenance the next time somebody runs
-> it against the reference.
+> **Both halves are measured now.** That an *absent* client header answers `400`
+> `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`, and that a sign-in
+> carrying the components in `Authorization` — with no Emby spelling anywhere on the request —
+> answers `200` with the ordinary authentication result
+> `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`. What was a third
+> party's observation is now a measurement of this repository's own, which is the whole of what
+> Principle II asks of a lead.
 
 ## 4. Library navigation and queries
 
