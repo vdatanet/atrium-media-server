@@ -131,7 +131,7 @@ class ImageQuery:                  # parsed and canonical; the route owns parsin
     index: int = 0
     max_width: int | None = None   # and max_height, width, height, fill_width, fill_height
     quality: int | None = None
-    format: str | None = None      # a vocabulary member or None; §6.4 resolves it
+    image_format: RequestedFormat | None = None   # a vocabulary member or None; §6.4 resolves it
     accepts_webp: bool = False     # the Accept offer, reduced to the token that changes an
                                    # answer. Added at T8: the gate measured the negotiation
                                    # (AC-15) after this listing was written, and a boolean is

@@ -141,7 +141,8 @@ that irreversibility is a decision, not an oversight.
 
 ## 5. Contracts
 
-**`users.service.authenticate(username, password, client_info) -> AuthResult`** — the only entry
+**`users.service.Authenticator.authenticate(username, password, info, remote_end_point=None) ->
+AuthResult`** — the only entry
 point that verifies a password. It owns the lockout counter, the timing guarantee of §6.2 and
 session creation, because splitting those across callers is how one of them gets forgotten.
 
@@ -150,7 +151,7 @@ point of defining it early.
 
 ```python
 async def require_user(request: Request) -> User:
-    """Resolve any of the four token mechanisms to a user, or raise 401."""
+    """Resolve any of the five token mechanisms to a user, or refuse."""
 ```
 
 **`compat.auth.extract_token(request) -> str | None`** and
@@ -159,8 +160,11 @@ request and a header, with no I/O, so the five mechanisms and the grammar are ta
 without a server. The `| None` is T7's correction: an unreadable header is not this function's
 error to raise, because whether it matters depends on the route (§6.3).
 
-**`users.sessions.SessionRegistry`** — the in-memory activity layer, with `touch(token)`,
-`snapshot()` and `flush()`.
+**`users.sessions.SessionRegistry`** — the in-memory activity layer, with
+`touch(token_sha256, session_id, when=None)`, `snapshot()` and `flush()`; 007 grew it
+`touch_playback` and `touch_session`. *(The accepted plan's one-argument `touch(token)` was a
+contract no caller could follow — corrected at the 2026-08-28 audit, M18 in
+[the record](../../docs/audits/2026-08-28.md).)*
 
 ## 6. Algorithms
 

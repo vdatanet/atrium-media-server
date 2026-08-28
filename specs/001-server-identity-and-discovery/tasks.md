@@ -187,7 +187,7 @@ is a documented cost rather than a surprise.
 
 ## T6 — `compat/guids.py`: identifiers  ✅
 
-- [x] **Changes:** `Guid32` validated against `^[0-9a-f]{32}$`; generation from `secrets.token_hex(16)`; the deterministic derivation helper 003 will use.
+- [x] **Changes:** `WireGuid` — this statement called it `Guid32`, a name that never shipped — validated against `^[0-9a-f]{32}$`; generation from `secrets.token_hex(16)`; the deterministic derivation helper 003 will use.
 - **Depends on:** T2
 - **Verified by:** rejection tests for uppercase, dashes, wrong length; the derivation helper returns the same value for the same key across processes.
 - **Plan reference:** §6.3
