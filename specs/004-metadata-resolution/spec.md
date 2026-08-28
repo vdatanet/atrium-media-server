@@ -260,6 +260,13 @@ Static data. Authenticated, `200`, no parameters.
 15. No file inside any library root is created, modified or deleted by any operation in this
     feature.
 16. No test in this feature's suite reaches the network.
+17. `GET /Localization/Cultures` answers `200` for an authenticated caller with the generated
+    table, each row carrying its two- and three-letter codes and display name, golden body byte
+    for byte (§3.8). *(Added at the 2026-08-28 audit — M33: an entire endpoint with no
+    criterion, whose golden test could appear nowhere in the acceptance map.)*
+18. A cast keeps its billing order and its roles from source to storage: the first rows are what
+    a client shows as "starring", so the order is part of the metadata, not an accident of
+    insertion (§3.7 rule 2). *(Added at the same audit — M34.)*
 
 ## 6. Conformance
 

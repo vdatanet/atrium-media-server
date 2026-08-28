@@ -465,6 +465,14 @@ looking for something that is not missing.
     restores the association.
 12. A root that cannot be read fails the scan for that library and removes nothing.
 13. Sort ordering matches the table in §3.7 for the fixture's awkward names.
+14. An incremental rescan notices exactly what changed: a modified file — size or time of
+    change — is re-inspected and keeps its identity and its user data; a file that appears is
+    added; a renamed file is a delete plus an add, because identity is path-derived (§3.8).
+    *(Added at the 2026-08-28 audit — M31: of §3.8's change table only the deletion row had a
+    criterion.)*
+15. An explicit sort title from metadata replaces the §3.7 derivation entirely, for every type —
+    the overriding three included — and is lowercased and digit-padded but not article-stripped
+    (§3.7.3). *(Added at the same audit — M32.)*
 
 ## 6. Conformance
 

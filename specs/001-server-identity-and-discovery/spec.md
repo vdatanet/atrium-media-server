@@ -293,6 +293,13 @@ Everything else in these responses is derived at request time.
     returns the same bytes; two trailing slashes do not. A path matching no route and a method a
     path does not have are both refused with an empty body, and the second carries an `Allow`
     header naming **every** method that path has.
+12. While the server is starting, **every** route answers `503` with `Retry-After` in full
+    integer seconds, a `Message` header saying why, and a `text/html` body — never JSON (§3.5).
+    *(Added at the 2026-08-28 audit — M27: the whole of §3.5 was implemented and tested with no
+    criterion covering it.)*
+13. With no published URL and the server configured to derive the address from the request, the
+    request's own host and scheme come back in `LocalAddress`, with the port omitted when it is
+    the scheme's default (§3.4 tier 2). *(Added at the same audit — M28.)*
 
 ## 6. Conformance
 

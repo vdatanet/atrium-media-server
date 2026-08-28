@@ -328,6 +328,33 @@ async def test_ac22_play_state_mirrors_exactly_the_last_report(
     assert state["PositionTicks"] >= RUNTIME_TICKS // 4
 
 
+async def test_a_report_lands_on_the_callers_session_whatever_it_names(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """AC-24, spec section 3.6: a report binds to the caller's session, never to one it names.
+
+    The body claims a `PlaySessionId` and an `Id` that exist nowhere. The playback must land on
+    the authenticated device's entry, and no entry may exist under the claimed identifier — a
+    server that trusted the body would let one device write another's play state.
+    """
+    token = await log_in(client, world.everyone.name, device="honest-device")
+    bogus = new_id()
+    await client.post(
+        "/Sessions/Playing",
+        json={
+            "ItemId": world.corpus[1],
+            "PositionTicks": 0,
+            "PlaySessionId": bogus,
+            "Id": bogus,
+        },
+        headers={"X-Emby-Token": token},
+    )
+    entries = (await client.get("/Sessions", headers={"X-Emby-Token": token})).json()
+    playing = [one for one in entries if one.get("NowPlayingItem")]
+    assert [one["DeviceId"] for one in playing] == ["honest-device"]
+    assert all(one["Id"] != bogus for one in entries)
+
+
 async def test_the_play_state_field_order_is_the_measured_one(
     client: httpx.AsyncClient, world: QueryWorld
 ) -> None:

@@ -93,6 +93,17 @@ FEATURE_001: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_routes:test_a_method_the_path_does_not_have_is_an_empty_405",
         "tests.conformance.test_routes:test_allow_lists_every_method_the_path_has",
     ),
+    12: (
+        "tests.unit.test_lifecycle:test_a_request_while_starting_is_refused",
+        "tests.unit.test_lifecycle:test_the_gate_is_server_wide",
+        "tests.unit.test_lifecycle:test_retry_after_is_full_seconds",
+        "tests.unit.test_lifecycle:test_the_message_header_says_why",
+        "tests.unit.test_lifecycle:test_the_body_is_html_not_json",
+    ),
+    13: (
+        "tests.unit.test_net_address:test_the_request_host_is_used_when_configured",
+        "tests.unit.test_net_address:test_the_default_port_is_omitted",
+    ),
 }
 
 
@@ -161,6 +172,17 @@ FEATURE_002: dict[int, tuple[str, ...]] = {
         "tests.security.test_no_password_in_logs:test_a_wrong_password_is_not_logged_either",
         "tests.security.test_no_password_in_logs:test_a_refusal_does_not_echo_the_attempt_into_its_body",
         "tests.security.test_no_password_in_logs:test_the_password_does_not_reach_a_log_through_the_route",
+    ),
+    12: (
+        "tests.conformance.test_golden_users:test_current_user",
+        "tests.conformance.test_golden_users:test_current_user_under_the_camel_case_profile",
+    ),
+    13: (
+        "tests.unit.test_session_registry:test_the_least_recently_used_session_is_the_one_evicted",
+        "tests.unit.test_session_registry:test_an_evicted_session_loses_its_token_too",
+        "tests.unit.test_session_registry:test_a_flush_writes_both_the_session_and_the_token",
+        "tests.conformance.test_session_routes:test_posting_replaces_rather_than_merges",
+        "tests.conformance.test_golden_users:test_post_capabilities_answers_with_no_body",
     ),
 }
 
@@ -250,6 +272,16 @@ FEATURE_003: dict[int, tuple[str, ...]] = {
         "tests.library.test_scan:test_a_scanned_film_carries_the_base_sort_name",
         "tests.library.test_scan:test_a_scanned_episode_and_season_carry_the_override_sort_names",
         "tests.library.test_scan:test_a_scanned_track_keeps_its_raw_name_in_its_sort_name",
+    ),
+    14: (
+        "tests.library.test_change_detection:test_only_the_modified_file_is_examined",
+        "tests.library.test_change_detection:test_a_modified_file_keeps_its_identity_and_its_user_data",
+        "tests.library.test_change_detection:test_a_new_file_on_a_rescan_is_added",
+        "tests.library.test_change_detection:test_a_rename_is_a_delete_plus_an_add",
+    ),
+    15: (
+        "tests.unit.test_sorting:test_an_explicit_sort_title_is_lowercased_and_padded_but_keeps_its_articles",
+        "tests.unit.test_sorting:test_an_explicit_sort_title_replaces_the_override_too",
     ),
 }
 
@@ -343,6 +375,11 @@ FEATURE_004: dict[int, tuple[str, ...]] = {
         "tests.metadata.test_remote_door:test_the_suites_network_guard_is_still_watching",
         "tests.metadata.test_remote_door:test_no_module_under_metadata_constructs_a_client_except_this_one",
     ),
+    17: ("tests.conformance.test_golden:test_cultures",),
+    18: (
+        "tests.metadata.test_nfo:test_the_cast_keeps_its_billing_order_and_its_roles",
+        "tests.metadata.test_write_path:test_a_cast_keeps_its_order_and_its_roles",
+    ),
 }
 
 
@@ -388,6 +425,7 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
     10: (
         "tests.unit.test_played_state_routes:test_ac10_one_row_per_series_and_each_is_the_right_episode",
         "tests.unit.test_played_state_routes:test_the_chain_follows_the_highest_played_episode_not_the_latest_click",
+        "tests.unit.test_played_state_routes:test_the_most_recently_played_series_leads",
     ),
     11: ("tests.unit.test_tv_routes:test_ac11_season_zero_sorts_first_as_measured",),
     12: (
@@ -403,6 +441,7 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
     14: (
         "tests.unit.test_filters_and_search_routes:test_ac14_the_hint_shape_is_not_the_item_shape",
         "tests.unit.test_filters_and_search_routes:test_matching_is_against_the_name_not_the_sort_name",
+        "tests.unit.test_filters_and_search_routes:test_matching_folds_case_and_diacritics",
     ),
     15: (
         "tests.unit.test_items_route:test_ac15_a_tier_3_parameter_is_ignored_answered_and_recorded",
@@ -410,6 +449,40 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
     16: (
         "tests.unit.test_item_filters:test_a_predicate_selects_something_and_less_than_everything",
         "tests.unit.test_items_route:test_every_parameter_changes_the_answer_and_survives_mangled_casing",
+        "tests.unit.test_items_route:test_the_battery_matches_its_label_list",
+        "tests.unit.test_items_route:test_the_battery_covers_the_specifications_tier_1_and_2",
+    ),
+    17: (
+        "tests.unit.test_by_name_routes:test_genre_rows_carry_no_user_data_and_year_rows_do",
+        "tests.unit.test_by_name_routes:test_artist_rows_carry_no_is_folder",
+    ),
+    18: (
+        "tests.unit.test_item_dto:test_full_width_emits_the_gated_fields_unasked",
+        "tests.unit.test_items_route:test_the_item_route_emits_everything_unasked",
+    ),
+    19: (
+        "tests.unit.test_user_world_routes:test_a_group_of_several_surfaces_as_its_container_and_a_singleton_as_itself",
+        "tests.unit.test_user_world_routes:test_each_group_appears_once_and_newest_first",
+        "tests.unit.test_user_world_routes:test_an_excluded_library_contributes_nothing_unscoped",
+        "tests.unit.test_user_world_routes:test_played_items_stay_out_by_default_and_come_back_when_asked",
+        "tests.unit.test_user_world_routes:test_hide_played_in_latest_false_lets_played_items_in",
+    ),
+    20: (
+        "tests.unit.test_played_state_routes:test_resume_is_the_stored_positions_newest_first",
+        "tests.unit.test_played_state_routes:test_resume_reports_the_position_it_resumes",
+        "tests.unit.test_played_state_routes:test_resume_pages_and_narrows",
+        "tests.unit.test_played_state_routes:test_resume_is_per_user",
+    ),
+    21: (
+        "tests.unit.test_items_route:test_an_unrecognised_sort_token_drops_and_is_recorded",
+        "tests.unit.test_items_route:test_a_real_kind_this_version_cannot_produce_narrows_to_nothing",
+        "tests.unit.test_items_route:test_a_malformed_id_inside_a_list_parameter_is_a_400_too",
+        "tests.unit.test_user_world_routes:test_an_unknown_parent_is_the_problem_details_404",
+    ),
+    22: (
+        "tests.unit.test_item_ordering:test_a_year_with_no_date_sorts_at_january_the_first",
+        "tests.unit.test_item_ordering:test_the_dateless_and_yearless_do_not_displace_the_dated",
+        "tests.unit.test_item_ordering:test_a_search_is_ordered_by_match_quality_first",
     ),
 }
 
@@ -474,6 +547,8 @@ FEATURE_006: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_image_routes:test_ac11_an_item_that_lacks_the_type_is_the_message_shape",
         "tests.conformance.test_image_routes:test_ac11_an_index_past_the_last_backdrop_names_the_type_not_the_index",
         "tests.conformance.test_image_routes:test_ac11_a_type_outside_the_vocabulary_is_the_validation_400",
+        "tests.conformance.test_image_routes:test_an_unparseable_dimension_or_quality_is_the_validation_400",
+        "tests.conformance.test_image_routes:test_the_dimension_400_is_the_measured_body",
         "tests.unit.test_image_service:test_the_two_refusals_are_the_only_thing_raised",
     ),
     12: (
@@ -494,6 +569,15 @@ FEATURE_006: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_image_routes:test_ac15_an_explicit_format_beats_the_offer",
         "tests.conformance.test_image_routes:test_ac15_a_verbatim_request_negotiates_nothing",
         "tests.unit.test_image_transform:test_the_resolved_format_is_the_measured_one",
+    ),
+    16: (
+        "tests.unit.test_image_transform:test_the_delivered_size_is_the_measured_one",
+        "tests.conformance.test_image_routes:test_the_resize_matrix_delivers_what_it_decided",
+    ),
+    17: (
+        "tests.conformance.test_image_routes:test_the_header_set_on_a_bare_200_is_exactly_the_measured_one",
+        "tests.conformance.test_image_routes:test_the_header_set_holds_across_the_whole_request_battery",
+        "tests.conformance.test_image_routes:test_a_tagged_url_is_immutable_and_only_a_tagged_one",
     ),
 }
 
@@ -596,6 +680,10 @@ FEATURE_007: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_session_routes:test_ac22_now_playing_sits_between_device_name_and_device_id",
         "tests.conformance.test_session_routes:test_ac22_the_now_playing_item_carries_no_user_data",
         "tests.conformance.test_session_routes:test_ac22_play_state_mirrors_exactly_the_last_report",
+    ),
+    23: ("tests.unit.test_favourite_routes:test_a_favourite_does_not_cascade_to_the_children",),
+    24: (
+        "tests.conformance.test_session_routes:test_a_report_lands_on_the_callers_session_whatever_it_names",
     ),
 }
 
