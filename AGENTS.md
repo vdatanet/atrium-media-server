@@ -168,6 +168,7 @@ scripted edit that will silently not happen.
 | Know what a Jellyfin term means | [docs/glossary.md](docs/glossary.md) |
 | Know how a behaviour gets proven | [docs/compatibility/conformance.md](docs/compatibility/conformance.md) |
 | Know what comes next | [docs/roadmap.md](docs/roadmap.md) |
+| Know what the last audit found, and what is still open | [docs/audits/](docs/audits/) |
 
 ## Contributing a fix upstream
 
