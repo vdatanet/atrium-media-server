@@ -1537,6 +1537,29 @@ task is a bounded addition, and the precedence above is the whole of the behavio
 The gap is invisible on the default configuration, because the option is off unless an operator
 turns it on.
 
+### 5.7 An empty library reads unplayed, where the reference's source reads it as played
+
+**Jellyfin does:** decide a folder's played state by asking whether anything beneath it is
+unplayed, which for a folder with no children at all is vacuously **true** - zero unplayed of zero
+`[source: MediaBrowser.Controller/Entities/Folder.cs:1798-1840 @ v10.11.11]`. Unmeasured on the
+wire: the measured library has no empty library in it, and creating one means writing into
+somebody's server, which the probes deliberately never do.
+
+**Atrium does:** answer `Played: false` with `UnplayedItemCount: 0`. The rollup reads
+`total > 0 and played >= total`, so nothing under it means nothing watched.
+
+**Depends on it:** no client branches on it, and a *user* sees it as a tick on an empty section -
+which is the argument for the divergence rather than against it. A library that reads "watched"
+before anything has been added to it is a poster with a tick on it and nothing behind the tick.
+
+**Why the question is this narrow:** it can only be asked of a library. A `Series`, `Season`,
+`MusicArtist` or `MusicAlbum` with nothing visible beneath it is not offered at all
+(section 5.2's closing half), so an empty one of those has no row for a client to read a flag off.
+`CollectionFolder` is the one exemption - an empty library stays in a sidebar - and it is
+therefore the only shape where "vacuously played" is observable at all. **010 owns the
+measurement**: a differential against a server with an empty library is the one way to settle it
+without writing into a real one (007 spec section 3.5, OQ-7).
+
 ### 5.6 A default rescan does not notice a replaced poster
 
 **Jellyfin does:** unmeasured from here — deciding it would mean writing into somebody's library

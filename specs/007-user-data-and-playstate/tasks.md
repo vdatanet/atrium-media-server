@@ -488,7 +488,7 @@ is the extrapolation since each session's last report, and that was never in the
 
 ## T11 — Aggregation through mutation, the gated percentage, and OQ-7
 
-- [ ] **Changes:** no production change is expected to the rollup — 005 computes it — so this task
+- [x] **Changes:** ~~no production change is expected to the rollup — 005 computes it — so this task~~
   is the criterion and the one decision left open. New
   `tests/conformance/test_user_data_aggregation.py` mutates the world between assertions, and
   **OQ-7 is decided**: an empty container answers `Played: false` here, where the reference's
@@ -504,6 +504,33 @@ is the extrapolation since each session's last report, and that was never in the
   while `Fields=RecursiveItemCount` carries it; and an empty season answers `Played: false` with
   `UnplayedItemCount: 0`.
 - **Spec reference:** §3.5; AC-6, AC-20, OQ-7
+
+**Done (2026-08-28).** The task said "no production change is expected". There was one, and it was
+the criterion itself.
+
+**AC-20's percentage did not exist.** `PlayedPercentage` was position-over-runtime for every item,
+which is the *leaf* reading; a container's is a fraction of its children, and nothing computed it
+at any `Fields` setting. The criterion's first half — a bare container row carries no percentage —
+passed for the wrong reason: there was no percentage to gate. `UserItemData` grows `total_count`
+beside `unplayed_count` (the other half of a fraction), `_rolled` fills it, and
+`item_dto.user_data_dto` emits `played / total * 100` **only when the request carries
+`Fields=RecursiveItemCount`**, which is the measured gate.
+
+**OQ-7 is resolved, and the question mostly cannot be asked.** A `Series`, `Season`,
+`MusicArtist` or `MusicAlbum` with nothing visible beneath it is **not offered at all** — 005's
+"a container earns its place" ([behaviours §5.2](../../docs/compatibility/behaviours.md)) removes
+it — so there is no row for a client to read a vacuous `Played` off. The one exemption is a
+library folder, because an empty library must stay in a sidebar, and that is where the whole
+question lives: Atrium answers `Played: false` with `UnplayedItemCount: 0` where the reference's
+source reads a childless folder as played. Recorded as
+[behaviours §5.7](../../docs/compatibility/behaviours.md) with the argument — a tick on an empty
+section — and handed to 010, which is the only thing that can measure it without creating a
+library on somebody's server.
+
+**And a fixture that would have asserted nothing.** AC-6's test picks "a season numbered 1" from
+the scanned shows library, and the fixture has three series, two of which have a single episode in
+their first season — so two runs in three it was mutating a season it could not take an episode
+away from. It selects the fullest season now, which is the property the test actually needs.
 
 ## T12 — One object, two paths: the mark response is the list row
 
