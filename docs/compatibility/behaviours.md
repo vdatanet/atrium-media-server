@@ -1463,6 +1463,42 @@ would state `ffffffff`. There is no chunked form of that container to be faithfu
 is *send the size when it is known*, plus *produce somewhere seekable when the body would
 otherwise lie about it* — see §3.2.
 
+**And the pipe costs a container its own self-description, which is this feature's one divergence
+pointing the wrong way.** Everything above is Atrium being *more* correct than the reference; this
+is the opposite, and it was found by an audit of a first-party client rather than by a probe. The
+reference produces progressive output to a **file** — `state.OutputFilePath`, served by a
+`ProgressiveFileStream` over that path as it grows `[source:
+Jellyfin.Api/Helpers/FileStreamResponseHelpers.cs:133,165 @ v10.11.11]` — and Atrium produces to a
+pipe for everything outside `NEEDS_SEEKING`. ffmpeg reserves the frame a container describes itself
+in and seeks back to fill it at the end; to a pipe it cannot, so it writes none:
+
+| Container | To a file | To a pipe |
+|---|---|---|
+| `mp3` | A reserved frame right after the ID3 tag, carrying an `Info` tag at byte 65, a frame count, and the encoder string `Lavc` | **No `Xing` and no `Info` frame anywhere** — the first audio frame follows the ID3 tag directly, and the two bodies differ by exactly one frame (417 bytes at 128 kbps) |
+| `flac` | `STREAMINFO` with the sample count and the stream's MD5; `ffprobe` reads `3.000000` | `total_samples = 0` and an all-zero MD5; `ffprobe` reads the duration as `N/A` |
+
+*(Both measured locally with ffmpeg 9.0.1, 2026-08-29, encoding the same three seconds twice — this
+is a property of the muxer and of where Atrium points it, not a claim about Jellyfin.)*
+
+**Depends on it:** yes, and concretely. A gapless music client reads the MP3 header frame to trim
+the encoder's padding, and its table has four branches — a complete header, a blank one from a
+recognised encoder, a blank one from an unrecognised encoder, and an `m4a` packet table. *No header
+frame at all* is a fifth case it does not have, so no branch fires and the user hears a microcut at
+every track change
+([client-embeat-mobile §5.3](client-embeat-mobile.md#53-a-piped-mp3-carries-no-xing-frame-which-is-not-the-blank-one-the-client-measured),
+traced from that client's own source on 2026-08-29).
+
+**Atrium does:** nothing yet, and this row is the record that it is a **parity gap and not an
+improvement** — the fix moves towards the reference and needs no Principle I argument, unlike the
+sizing divergence above. `NEEDS_SEEKING` correctly did not catch it: its rule is *a body that would
+lie about its own length*, and a piped MP3 does not lie, it omits. **Closing mechanism:** produce
+the progressive re-encode somewhere seekable and stream the result, which is the same lever §3.2
+already pulls for `wav` — and which is entangled with two asks that are *not* parity (an honest
+`Content-Length` on a capped stream, and caching a chunked transcode), so it is one decision rather
+than three. The claim that the reference's own progressive MP3 carries a *blank* Xing frame is a
+third-party measurement and a **lead**: it decides whether the target is "blank, like the reference"
+or better than it, and no probe here has checked it.
+
 ### 3.4 HDR10+ metadata stripped from clients that asked for it — class B, no compensation
 
 The second worked example, and it is the one where the heuristic gives the wrong answer and the
@@ -1893,13 +1929,14 @@ undocumented bug.
 | **Item fields outside the observed union omitted** ([005 §3.2](../../specs/005-item-query-api/spec.md)) | A field absent that the reference sends | The differential's key-set pass, which exists mainly for this |
 | **Policy flags stored but unenforced** ([002 §3.5](../../specs/002-authentication-users-and-sessions/spec.md)) | A restriction that does not restrict | All of them gate features v1 lacks; each is enforced in the change that adds its feature |
 | **Image decoration parameters ignored** ([006 §3.2](../../specs/006-images/spec.md)) | `percentPlayed`, `blur`, `foregroundLayer` have no effect | Implement if the differential shows a client sending them |
-| **No subtitle burn-in** ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)) | Subtitles delivered as files; a client that can only take them painted into the frame shows none | The subtitle work in a later version. Transcoding itself is **in** v1 as of 2026-08-27, so the older "cannot play this" gap is closed |
+| **No subtitle delivery at all** ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)) | Embedded tracks survive a direct play or an on-device remux, because they are inside the bytes the client is reading. Anything delivered over **server HLS** — remux or transcode — carries none: the master announces one variant and no `#EXT-X-MEDIA` tag, and `EnableSubtitlesInManifest` is not a field of the profile model. An **external sidecar** file is not reachable on any path | [011](../../specs/011-subtitle-delivery/), end to end: emit `IsTextSubtitleStream`, bind `EnableSubtitlesInManifest`, extract and serve WebVTT, announce the tracks. *This row read "subtitles delivered as files" until 008 was implemented and nothing delivered one; the correction was owed from 2026-08-28* |
+| **A media source with no stored inspection is skipped** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | The source keeps `Id`, a `Container` inferred from its path and `Size`, and carries `RunTimeTicks: null`, `Bitrate: null` and `MediaStreams: []`. On `PlaybackInfo` the whole annotation is skipped, so it answers the model's default `SupportsDirectPlay: true` **with no `TranscodingUrl`** — a client that refuses direct play has nowhere to go, and one that takes it silently loses everything read off the streams. It happens whenever a file is in the library and nothing has opened it: a scan from before 008, a file added since, a probe that failed | A rescan, which is not something a client can ask for — so the real mechanism is a decision about what an un-inspected source should advertise, routed by both client traces to the feature after 010 |
 | **`Path`-derived identifiers differ from the reference's** ([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters)) | Nothing — ids are opaque | Not a gap to close; a deliberate design choice |
 | **A container that has lost every file is still returned** ([003 §3.8](../../specs/003-library-configuration-and-scanning/spec.md#38-scanning-and-change-detection)) | An empty series or album in a library, with nothing under it | A query-time filter in 005: a container with no visible children is not offered. See §5.2 |
 | **No loudness scan** ([004 §3.3](../../specs/004-metadata-resolution/spec.md#33-embedded-tags)) | On a server whose operator enabled the reference's opt-in scan, `NormalizationGain` absent where it would have a computed value. Tag-carried gains are unaffected | 008, which brings the decoder the scan needs. See §5.4 |
 | **A stream carries no `DisplayTitle` and no `Localized*` names** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A track picker with nothing to label its rows: the reference sends one localised string per stream — `Español - MP3 - Stereo - Predeterminado` on a Spanish server — and Atrium sends none | The localisation the strings are assembled from. An English-only approximation would differ from the reference on **every** track rather than be absent on it, which is the worse of the two |
 | **A stream carries no `IsAVC`, `TimeBase` or `NalLengthSize`** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Three properties absent on every stream | Columns migration 0006 does not have; they arrive with the migration that adds them, and nothing in v1 reads them |
-| **`HasSubtitles` counts only the streams inside the container** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A film whose only subtitles are `.srt` files beside it reads as having none, where the reference reads `true` | Sidecar subtitle discovery, which v1 does not do at all — the same work that closes the burn-in row above |
+| **`HasSubtitles` counts only the streams inside the container** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A film whose only subtitles are `.srt` files beside it reads as having none, where the reference reads `true` | Sidecar subtitle discovery, which v1 does not do at all — the same work that closes the delivery row above |
 | **A multi-part film answers one media source per part** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Two sources on one item, where the reference answers one source, a `PartCount` and a separate route for the rest | Not a gap to close on its own: it follows from 003 §3.3 modelling the parts as one item's sources, and closing it means changing that model or adding `GET /Videos/{id}/AdditionalParts` to the surface |
 
 The difference between this section and §4 is intent. §4 says *we thought about it and chose

@@ -1,13 +1,14 @@
 ---
 feature: 008-playback-negotiation-and-delivery
 title: Playback negotiation and delivery — tasks
-status: Accepted
+status: Implemented
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent; and 2026-08-29 by T7 — httpx's ASGI transport cannot drop a connection, so AC-26 needed a client written for it and the `TranscodeManager` this list names does not exist until T11; a `StreamPlan` states every ceiling and passing them all to the encoder is what breaks it; `StreamPlan` gained `bit_depth`; and the `mediaSourceId` `500` is decided as behaviours §3.9; and 2026-08-29 by T8 — the codec-less hole is not a codec-less transcoding profile but a streaming request inferring a codec from a path with no extension, so behaviours §3.8's divergence is narrower than it read; synthesising the device profile *exactly* as the reference does scopes its ceilings to the direct-play containers and would have honoured none of them; AC-19's bit-depth clause is a copy refusal rather than an output target; `transcodingProtocol` must not be typed; and this route's three refusals are none of the `stream` pair's; and 2026-08-29 by T9 — the two WAV prior-probe claims both moved when the battery was written: symptom 1 has two causes rather than one, and symptom 2 comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3; a WAV states its length inside the body and cannot be produced to a pipe at all, so "a `Content-Length` computed from sample count" is a file's size instead; the wav container has to name its own codec, because the muxer accepts a FLAC stream and writes a real RIFF header over it; and behaviours §3.8's "with or without a `transcodingContainer`" is container-dependent; and 2026-08-29 by T10 — both of §3.7's cadence numbers were attributed to the wrong thing, and the fixture T1 built for this task answers 3.003 s rather than the 3.004 s this list told it to make a golden of: the scaling divides by the rate the request carries at 32-bit precision, and 6.0 s is the copy default's equal grid rather than the source's keyframes, which a copy follows only for a container the operator has permitted on-demand extraction for; the playlist routes require a token where the four `stream` routes require none; and the `/universal` HLS handoff this task was to land cannot be, because its master playlist names an audio `main.m3u8` that is on no surface; and 2026-08-29 by T11 — a segment's index is ffmpeg's `-start_number` and the URI's `runtimeTicks` is where production starts, so "restart at `plan_segments()[index]`" names the wrong number; the supervised set is two modules rather than three, because the manager starts everything through the ledger; a segment carries a `Last-Modified` where the progressive routes carry none; the reference states the scaled cadence only to its playlist and the unscaled integer to its encoder, which is behaviours §3.10; and the segment route's six refusals split across two shapes by where they happen; and 2026-08-29 by T12 — the stop route's key is the play session alone and the `deviceId` it requires decides nothing, so `stop(device_id, play_session_id)` would have leaked an encoder for every client that respells its device; the well-formed call does *not* remove the session's `TranscodingInfo`, which the spec had asserted in both directions and no probe had separated from the completion percentage going null; the kill timer is 60 000 ms because the job is not progressive, measured at 58 s and 60 s; and the unread `stderr` pipe T11 handed on had to be drained by block rather than by line, because `readline` gives up on an over-long line and stops reading; and 2026-08-29 by T13 — `SegmentKeepSeconds` is a distance behind the client rather than a file age, so this list's "aged produced segments" and AC-29's "older than the configured window" both named a rule the reference has not got: measured, segment 29 went and segment 33 stayed on one 720-second window, forty-five seconds after both were produced; the delivery half of the policy rule is per stream and reached only from a video request, so `/universal` consults no permission and `EnablePlaybackRemuxing` has no delivery-time reader at all; and the reference's own refusal beside the force-copy is unreachable, because the same permission has already rewritten the codec to a copy
+implemented: 2026-08-29
+amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent; and 2026-08-29 by T7 — httpx's ASGI transport cannot drop a connection, so AC-26 needed a client written for it and the `TranscodeManager` this list names does not exist until T11; a `StreamPlan` states every ceiling and passing them all to the encoder is what breaks it; `StreamPlan` gained `bit_depth`; and the `mediaSourceId` `500` is decided as behaviours §3.9; and 2026-08-29 by T8 — the codec-less hole is not a codec-less transcoding profile but a streaming request inferring a codec from a path with no extension, so behaviours §3.8's divergence is narrower than it read; synthesising the device profile *exactly* as the reference does scopes its ceilings to the direct-play containers and would have honoured none of them; AC-19's bit-depth clause is a copy refusal rather than an output target; `transcodingProtocol` must not be typed; and this route's three refusals are none of the `stream` pair's; and 2026-08-29 by T9 — the two WAV prior-probe claims both moved when the battery was written: symptom 1 has two causes rather than one, and symptom 2 comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3; a WAV states its length inside the body and cannot be produced to a pipe at all, so "a `Content-Length` computed from sample count" is a file's size instead; the wav container has to name its own codec, because the muxer accepts a FLAC stream and writes a real RIFF header over it; and behaviours §3.8's "with or without a `transcodingContainer`" is container-dependent; and 2026-08-29 by T10 — both of §3.7's cadence numbers were attributed to the wrong thing, and the fixture T1 built for this task answers 3.003 s rather than the 3.004 s this list told it to make a golden of: the scaling divides by the rate the request carries at 32-bit precision, and 6.0 s is the copy default's equal grid rather than the source's keyframes, which a copy follows only for a container the operator has permitted on-demand extraction for; the playlist routes require a token where the four `stream` routes require none; and the `/universal` HLS handoff this task was to land cannot be, because its master playlist names an audio `main.m3u8` that is on no surface; and 2026-08-29 by T11 — a segment's index is ffmpeg's `-start_number` and the URI's `runtimeTicks` is where production starts, so "restart at `plan_segments()[index]`" names the wrong number; the supervised set is two modules rather than three, because the manager starts everything through the ledger; a segment carries a `Last-Modified` where the progressive routes carry none; the reference states the scaled cadence only to its playlist and the unscaled integer to its encoder, which is behaviours §3.10; and the segment route's six refusals split across two shapes by where they happen; and 2026-08-29 by T12 — the stop route's key is the play session alone and the `deviceId` it requires decides nothing, so `stop(device_id, play_session_id)` would have leaked an encoder for every client that respells its device; the well-formed call does *not* remove the session's `TranscodingInfo`, which the spec had asserted in both directions and no probe had separated from the completion percentage going null; the kill timer is 60 000 ms because the job is not progressive, measured at 58 s and 60 s; and the unread `stderr` pipe T11 handed on had to be drained by block rather than by line, because `readline` gives up on an over-long line and stops reading; and 2026-08-29 by T13 — `SegmentKeepSeconds` is a distance behind the client rather than a file age, so this list's "aged produced segments" and AC-29's "older than the configured window" both named a rule the reference has not got: measured, segment 29 went and segment 33 stayed on one 720-second window, forty-five seconds after both were produced; the delivery half of the policy rule is per stream and reached only from a video request, so `/universal` consults no permission and `EnablePlaybackRemuxing` has no delivery-time reader at all; and the reference's own refusal beside the force-copy is unreachable, because the same permission has already rewritten the codec to a copy; and 2026-08-29 by T14 — the definition of done's "no other response differs observably from the measured reference" was false when it was written down: a progressive re-encode produced to a pipe loses the frame the container describes itself in, which is a fourth delivery divergence and is now recorded as behaviours §3.3's last paragraph. Two acceptance criteria were also wrong rather than merely unproven (AC-6, AC-11) and two were mapped to tests that proved less than their names — the advertised `Size` against the served bytes, and `audioStreamIndex` against the audio that came back
 plan_status_required: Accepted
-plan_status_actual: Accepted
+plan_status_actual: Implemented
 ---
 
 # 008 — Tasks
@@ -1036,7 +1037,7 @@ half of the download position the throttle stays ahead of and the deletion pass 
 
 ## T14 — The acceptance map, the exact route set, and 008 is Implemented
 
-- [ ] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_008` — thirty-one
+- [x] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_008` — thirty-one
   rows, each naming its test; `IMPLEMENTED_FEATURES` gains `"008"` and `INTERIM_008` is
   deleted; `spec.md`, `plan.md` and this file are marked `Implemented`; `specs/README.md`'s
   table and narrative, `docs/roadmap.md` and `AGENTS.md`'s "where the project is" say so; and
@@ -1054,31 +1055,218 @@ half of the download position the throttle stays ahead of and the deletion pass 
   file, not against this list's prose (007 T13's lesson).
 - **Spec reference:** §5, §6
 
+**Done (2026-08-29).** **The definition of done below said "no other response differs observably
+from the measured reference", and that was false on the day it was written.** There is a fourth
+delivery divergence, it is the only one in this feature that runs *away* from the reference, and
+nothing in this repository recorded it.
+
+**A progressive re-encode produced to a pipe loses the frame its container describes itself in.**
+Measured here rather than taken from the client contract that reported it: the same three seconds
+through `libmp3lame` written to a file carries an `Info` frame at byte 65 and the encoder string
+`Lavc` at 185, and written to `pipe:` carries neither — the two bodies differ by 417 bytes, which
+is one frame at 128 kbps. The same pipe leaves a FLAC's `STREAMINFO` declaring `total_samples = 0`
+with an all-zero MD5, which `ffprobe` reads back as no duration at all against `3.000000` for the
+identical encode to a file. ffmpeg reserves that frame and seeks back to fill it in; to a pipe it
+cannot, so it writes none. The reference produces progressive output to a *file* and streams it as
+it grows, so **its** body has the frame and ours does not — a parity gap, not an improvement, and
+the one place a fix would move towards the reference rather than away from it. `NEEDS_SEEKING`
+correctly did not catch it: its rule is "a body that would lie about its own length", and a piped
+MP3 does not lie, it omits. Recorded as the last paragraph of
+[behaviours §3.3](../../docs/compatibility/behaviours.md#33-progressive-transcoding-responses-carry-no-content-length-or-accept-ranges--class-c),
+and the definition of done says four rather than three.
+
+**Two acceptance criteria said something the tests that prove them contradict**, which is what
+putting a criterion and its test on one line is for. **AC-11 needed a measurement to settle**:
+"every delivery route whose body has a known size answers `Accept-Ranges: bytes`" is false of the
+two playlist routes, and `probe_hls.py` grew a header-name battery to say so — the reference's
+master answers `Content-Length, Content-Type, Expires` and its media playlist `Content-Length,
+Content-Type`, neither with a range unit, where its segments carry both `[probe: tools/probe_hls.py,
+Jellyfin 10.11.11, 2026-08-29]`. Implemented as the criterion read it, Atrium would have sent a
+header the reference does not send on the one delivery family a client parses as text. **AC-6
+needed only a reading**: it derived `SupportsTranscoding` from the negotiated answer, where §3.3
+and T4's measurement both have it as a property of the *profile* — one accepting profile with a
+transcoding entry and the same profile without one are both direct play, and only the first says
+`true`.
+
+**Two more criteria were mapped to tests that proved less than their names**, the failure this
+project keeps meeting, and both are now written and both were proven able to fail by breaking the
+code underneath them. **Nothing had ever compared `MediaSources[].Size` with the bytes a delivery
+route serves**: the size is stated beside the inspection and the stream route stats the file again
+on arrival, and every golden here carries a fixture size, so the two numbers had never met — while
+a client reads that field as the length of what it is about to fetch and bounds every range request
+with it. And **nothing proved `audioStreamIndex` changes the produced audio**: only the negotiated
+URL's *spelling* of it was asserted. Sabotaging it to find out where it is read turned up two
+readers, of which a client can observe one: `_audio_stream` in `api/delivery.py` decides the
+**codec fallback**, and `Switches.audio_stream_index` decides the **mapping** — a change to the
+first passes every test in the repository. The fixture matrix has one audio track per file, so the
+test builds a two-track sibling the way T10 built its Matroska one.
+
+**And two halves of two more were unasserted for one reason**: every segment test in
+`test_hls_segments.py` uses a re-encoding query, so AC-16's *"whether it was remuxed or
+re-encoded"* and AC-22's *"identical segment bytes"* were each proven over half their subject. One
+copied segment, fetched twice, closes both.
+
+**The client contracts left six behaviours entries owed and three of them are this feature's.**
+[§5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)'s subtitle row said subtitles are
+"delivered as files" and v1 delivers none at all — owed since 2026-08-28, and a feature marked
+`Implemented` over it would have been exactly the false claim this map exists to catch; §5 gains a
+row for a media source with **no stored inspection**, which 008 ships and neither client can ask a
+rescan for; and §3.3 gains the pipe's cost above. The other three are not 008's and are named in
+"what this feature owes the next ones" with their owners: subtitle delivery itself and
+`SubtitleStreamIndex` are [011](../011-subtitle-delivery/)'s, and behaviours §4.2's missing sentence
+about an operator who publishes an HTTPS URL is 001's field and a deployment-guidance change.
+
+The rest of the definition of done was as it said. The eleven routes are served and counted against
+[`surface.yaml`](../../docs/compatibility/surface.yaml) rather than against this list's prose, all
+five owed readings carry their citations, and `INTERIM_008` is gone the way its four predecessors
+went.
+
 ---
 
 ## Definition of done
 
 The feature is done when **all** of these hold:
 
-- [ ] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
       thirty-one — has a passing test, by name, in `FEATURE_008`.
-- [ ] Every endpoint reaches the level [spec §6](spec.md#6-conformance) declares: the four L3
+- [x] Every endpoint reaches the level [spec §6](spec.md#6-conformance) declares: the four L3
       routes carry goldens (per profile class, per constraint class, headers and the range
       matrix), and transcoded output is asserted against the profile it was negotiated for —
-      never byte-compared with the reference.
-- [ ] The eleven routes are served, `"008"` is in `IMPLEMENTED_FEATURES`, `INTERIM_008` is
+      never byte-compared with the reference. **The differential half of L3 is
+      [010](../010-conformance-harness/)'s**, as it is for every feature before this one; what
+      it will be asked is below.
+- [x] The eleven routes are served, `"008"` is in `IMPLEMENTED_FEATURES`, `INTERIM_008` is
       gone, and no route exists outside
       [`surface.yaml`](../../docs/compatibility/surface.yaml).
-- [ ] Every ffmpeg the server can start is owned by a session in the `TranscodeManager`, with
+- [x] Every ffmpeg the server can start is owned by a session in the `TranscodeManager`, with
       a stop route, a ping timeout, a disconnect path and a shutdown sweep each proven by a
       test — and scratch space survives none of them.
-- [ ] The three delivery divergences ship as behaviours records them (§2.20 static bytes,
-      §3.7 the honoured ceiling, §3.8 the answered codec-less request), and no other response
-      differs observably from the measured reference.
-- [ ] The owed readings are paid with citations in place: the `ETag` derivation (T3), the
+- [x] The **four** delivery divergences ship as behaviours records them (§2.20 static bytes,
+      §3.7 the honoured ceiling, §3.8 the answered codec-less request, and §3.3's last
+      paragraph — a progressive re-encode produced to a pipe carries no MP3 `Xing`/`Info` frame
+      and no completed FLAC `STREAMINFO`, where the reference's file-backed body carries both),
+      and no other response differs observably from the measured reference. **This bullet said
+      three and it was wrong when it was written**: the fourth is the only divergence in this
+      feature that runs away from the reference rather than towards it, and T14 found it by
+      checking the sentence rather than by trusting it.
+- [x] The owed readings are paid with citations in place: the `ETag` derivation (T3), the
       cadence rule (T10), the kill-timer constants (T12), the WAV prior-probes upgraded (T9),
       and the negotiation error table's first two rows cited (T5).
-- [ ] Anything learned during implementation is back in `spec.md`, `plan.md` or
+- [x] Anything learned during implementation is back in `spec.md`, `plan.md` or
       [`behaviours.md`](../../docs/compatibility/behaviours.md) in the same change that
       learned it, with provenance.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+- [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+
+---
+
+## What this feature owes the next ones
+
+**010** collects the most, because a differential is the only thing that can ask most of these.
+Every row is a place where a request answered here and a request answered there differ on purpose,
+or where nothing has yet compared them:
+
+* **The progressive-remux sizing divergence.** A remux whose size is knowable answers
+  `Content-Length` and honours `Range` here; the reference answers chunked with
+  `Accept-Ranges: none`
+  ([behaviours §3.3](../../docs/compatibility/behaviours.md#33-progressive-transcoding-responses-carry-no-content-length-or-accept-ranges--class-c)).
+  A differential comparing headers will flag it on the first remuxed request, and the entry is the
+  answer.
+* **The piped re-encode's missing self-description**, the same section's last paragraph and the one
+  divergence pointing the wrong way: no `Xing`/`Info` frame on a progressive MP3, no completed
+  `STREAMINFO` on a progressive FLAC. A differential over *bodies* will not see it — spec §6
+  declines to byte-compare produced media — so it is a **named** comparison rather than one the
+  harness finds: parse the first frames of both servers' progressive MP3 and compare the header
+  frame's presence, not the bytes after it.
+* **The delivery-time policy refusal** ([behaviours §2.21](../../docs/compatibility/behaviours.md#221-playback-policy-permissions-are-negotiation-inert)).
+  On any account with a denied playback-processing permission, a video delivery that would
+  re-encode the denied stream is **refused** here and **force-copied** there — the reference
+  rewrites the codec to a copy two calls before the refusal it also carries, which is why that
+  refusal is unreachable upstream. A differential run as a restricted user sees a `500` in the
+  third error shape where the reference sends bytes, and this is the row to check it against.
+* **behaviours §3.7 and §3.8's divergent answers** — a sample-rate ceiling met exactly rather than
+  from the Opus ladder, and a codec-less `/universal` transcode answered with a real stream rather
+  than an empty `200`. Both narrow: §3.8's difference exists only where a client names a
+  transcoding container and no codec (T8).
+* **behaviours §3.9, §3.10, §3.11** — an unparseable `mediaSourceId` answered `400` where the
+  reference answers `500`; a segment whose declared duration is the duration it holds, where the
+  reference declares the scaled cadence and produces the unscaled one; and a stopped transcode that
+  drops its `TranscodingInfo`, where the reference leaves the object in place less two keys until
+  playback is reported stopped. `TranscodingInfo` is eleven properties here and thirteen there, the
+  two missing being the ones read out of the encoder's progress output.
+* **`BANDWIDTH` in the master playlist is this server's own encoder target**, where the reference
+  advertises a rate scaled between the input and output codecs (T10). With one variant nothing
+  selects on it, so it is a number a differential will report and no client reads.
+* **A multi-part film answers one media source per part**, where the reference answers one source, a
+  `PartCount` and a separate `GET /Videos/{id}/AdditionalParts` that is not on the surface (T3,
+  [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)). No library
+  reachable from here has one, so a differential needs a fixture built for it.
+* **OQ-5, which was moved here at the spec review**: which `/universal` parameters clients actually
+  send. It is a question about clients, and the harness is where clients are watched.
+* **The four stream properties v1 does not emit** — the localised `DisplayTitle` family, `IsAVC`,
+  `TimeBase` and `NalLengthSize` — will be a key-set difference on every stream of every item.
+
+**011 — [subtitle delivery](../011-subtitle-delivery/)** takes the two findings the video client's
+own table grouped, and 008 leaves it three things:
+
+* **`SubtitleStreamIndex` is not a delivery parameter at all.** It binds on the `PlaybackInfo` body
+  and on the playstate reports and appears nowhere in `api/delivery.py`, so a delivery request
+  carrying it is dropped in silence ([behaviours §1.12](../../docs/compatibility/behaviours.md#112-an-unrecognised-query-value-is-ignored-not-rejected)).
+  It costs nothing today only because there is no subtitle to select, and it will not announce
+  itself the day there is: whoever announces the tracks owns this line.
+* **The master playlist announces one variant and no `#EXT-X-MEDIA` tag**, and
+  `EnableSubtitlesInManifest` is not a field of the profile model, so it is dropped on arrival. The
+  manifest is the only lever that reaches the video client, and it costs the WebVTT extraction 008
+  excluded.
+* **[behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)'s subtitle row is
+  corrected but not closed.** It now says what v1 does — embedded tracks survive a direct play or an
+  on-device remux because they are inside the bytes, server HLS carries none, and a sidecar file is
+  unreachable — and 011 is the mechanism named in it.
+
+**009 — playlists** inherits almost nothing, and the one thing it must not do is add a second
+negotiation. A playlist's items are items: they negotiate through `POST /Items/{itemId}/PlaybackInfo`
+and deliver through the same eleven routes, and a queue that built its own `TranscodingUrl` would be
+the fork the ladder was made pure to prevent. The one operation the music client calls that is
+outside the 55 — `POST /Items/{itemId}`, how it renames a playlist — is
+[handed to 009's spec review](../../docs/compatibility/client-embeat-mobile.md#7-where-these-findings-go),
+not promoted here.
+
+**A feature whose first act is a measurement session** — the one the two client traces route their
+remaining findings to — inherits four things 008 measured and did not act on, plus one it shipped:
+
+* **A media source with no stored inspection is skipped whole**, keeps the model's default
+  `SupportsDirectPlay: true` and gets no `TranscodingUrl`: a dead end for the video client and four
+  silently absent features for the music one. Shipped by 008 and now recorded as a §5 gap; the
+  branch decision is not.
+* **`transcodingProtocol` is compared case-insensitively on `/universal` and case-sensitively on the
+  video path**, so a profile spelling its protocol `"Hls"` gets a progressive URL. Whether the
+  reference binds that property to an enum — .NET matches enum names case-insensitively — is one
+  `PlaybackInfo` request away and decides whether this is a gap or a nicety.
+* **`GET /Sessions` declares no `deviceId`**, so the parameter is dropped and an administrator
+  matching on `NowPlayingItem.Id` alone can read another device's `TranscodingInfo` as its own.
+  Whether the reference filters on it, and how it behaves for a non-administrator, is unmeasured.
+* **The fMP4 initialisation segment restarts a running encoder** — faithfully, which is the
+  expensive kind: `media/sessions.py`'s first restart branch is `index == INITIALISATION_INDEX`
+  with no condition, so every resumed fMP4 playback pays for a wasted transcode start. A
+  [behaviours §3.0](../../docs/compatibility/behaviours.md#30-how-the-decision-is-made) decision,
+  taken on a probe.
+* **Where a progressive re-encode is produced** — the pipe — is one question the music client asks
+  three ways: the missing `Xing` frame, an honest `Content-Length` on a capped stream, and caching a
+  transcode on a client-supplied `PlaySessionId`. Only the first is a parity gap; the other two are
+  Principle I questions and are recorded as such.
+
+**Two things are owed to nobody in this list, and they should not be lost.** The audio HLS pair —
+`/Audio/{itemId}/master.m3u8` and `/main.m3u8` — is what `/universal` with
+`transcodingProtocol=hls` needs before it can answer anything, and adding it is a surface decision
+under AGENTS.md's "Adding an endpoint" procedure, spec first (T10). And **the audio-bitrate default
+table** T5 left owed is still owed: a stream reporting no bitrate takes no share of the cap here,
+where the reference substitutes a default keyed on the target codec and the channel count, so
+`AudioBitrate` is absent from the `TranscodingUrl` and `VideoBitrate` is the whole cap. T8 and T9
+each established it was not theirs.
+
+**The starting inventory this feature leaves behind:** the whole ladder is one pure function in
+`media/decision.py` with a fifty-six-row table behind it and no I/O; command construction is
+`media/ffmpeg.py` and every process the server can start is owned by a `ProductionLedger` a sweep
+enforces (`tests/unit/test_import_directions.py`); playlists and segment boundaries are arithmetic
+in `media/hls.py` with no process behind them; and the fixture world is **real media** —
+`tests/fixtures/media.py`'s matrix, generated bit-exactly and scanned by the real 003 pipeline, so
+"the delivered bytes" is a measurement rather than a fixture's word.

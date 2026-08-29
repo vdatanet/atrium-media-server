@@ -14,7 +14,7 @@ This file is the map, and it fails three ways:
 It asserts that the tests **exist**, not that they pass; the suite they are in does that. What it
 protects is the *mapping*, which is the part that rots quietly.
 
-**It was written for one feature and now carries four.** 002 T18 turned one specification path and
+**It was written for one feature and now carries eight.** 002 T18 turned one specification path and
 one map into a table of them, betting that adding 003 would then be one entry and one dictionary
 rather than a third copy of this file. It was: nothing below changed shape for 003, and the diff
 that added it is a dictionary and a line in `FEATURES`. That is the whole of what the restructure
@@ -692,6 +692,194 @@ FEATURE_007: dict[int, tuple[str, ...]] = {
 }
 
 
+#: 008's map is the first that carries a **marker**. Half of these tests need ffmpeg and ffprobe
+#: on the machine, so on a run with `-m "not ffmpeg"` the criterion is mapped and deselected -
+#: which is why the checks below assert that the names *exist*, not that they ran. Deselection is
+#: visible; a criterion nothing names is not.
+#:
+#: Two rows here are the ones an audit found missing rather than wrong, and both are the failure
+#: this repository keeps meeting - a test that proves less than its name suggests. AC-14 had a
+#: `Content-Length` asserted on one route and a `Size` asserted in a golden, and nothing that put
+#: the two numbers side by side; AC-8's `audioStreamIndex` was asserted as a string in a URL and
+#: never as a property of the audio that came back.
+FEATURE_008: dict[int, tuple[str, ...]] = {
+    1: (
+        "tests.unit.test_media_decision:test_every_rung_of_the_ladder",
+        "tests.conformance.test_playback_info:test_ac1_no_profile_at_all_answers_direct_play",
+        "tests.conformance.test_playback_info:test_ac1_an_empty_profile_object_answers_the_opposite",
+        # "Absent" is a property of the device, not of the body (T5): a bare `POST` from a device
+        # that has posted its capabilities is negotiated against those, so the criterion's first
+        # half is only true of a device that has said nothing.
+        "tests.conformance.test_playback_info:test_a_post_with_no_profile_falls_back_to_the_devices_stored_one",
+    ),
+    2: (
+        "tests.unit.test_media_decision:test_every_rung_of_the_ladder",
+        "tests.conformance.test_playback_info:test_ac2_a_profile_that_accepts_the_source_answers_direct_play",
+    ),
+    3: (
+        "tests.unit.test_media_decision:test_every_rung_of_the_ladder",
+        "tests.conformance.test_playback_info:test_ac3_a_rejected_container_answers_a_url_with_both_streams_copied",
+    ),
+    4: (
+        "tests.unit.test_media_decision:test_every_rung_of_the_ladder",
+        "tests.conformance.test_playback_info:test_ac4_a_rejected_codec_answers_a_url_and_not_an_error",
+    ),
+    5: (
+        "tests.unit.test_media_decision:test_every_rung_of_the_ladder",
+        "tests.unit.test_media_decision:test_a_refusal_carries_no_reasons_because_it_carries_no_url",
+        "tests.conformance.test_playback_info:test_ac5_a_profile_that_can_play_nothing_is_flags_and_no_error_code",
+        "tests.conformance.test_playback_info:test_a_media_source_id_naming_nothing_is_the_one_error_code",
+    ),
+    6: (
+        "tests.unit.test_media_decision:test_supports_transcoding_is_about_the_profile_not_about_the_answer",
+        "tests.conformance.test_playback_info:test_ac6_supports_transcoding_is_about_the_profile_and_not_the_answer",
+    ),
+    7: (
+        "tests.unit.test_media_decision:test_ac7_a_refused_audio_track_costs_an_audio_encode_and_not_a_video_one",
+        "tests.conformance.test_playback_info:test_ac7_an_accepted_video_beside_a_rejected_audio_copies_the_video",
+        "tests.conformance.test_progressive_delivery:test_ac7_the_accepted_video_stream_is_copied_while_the_audio_is_re_encoded",
+        "tests.conformance.test_hls_segments:test_ac7_a_mixed_plan_copies_the_video_and_re_encodes_the_audio",
+    ),
+    8: (
+        "tests.conformance.test_progressive_delivery:test_ac8_a_ceiling_below_the_source_is_honoured_on_the_delivered_bytes",
+        # The parameter that reaches the encoder's stream mapping and had only ever been asserted
+        # as a string in the negotiated URL. T14 wrote it, and proved it can fail by taking the
+        # parameter out of the ladder's switches.
+        "tests.conformance.test_progressive_delivery:test_ac8_audio_stream_index_changes_the_audio_that_is_produced",
+        "tests.conformance.test_hls_segments:test_ac7_a_mixed_plan_copies_the_video_and_re_encodes_the_audio",
+    ),
+    9: (
+        "tests.unit.test_media_decision:test_ac9_nothing_is_upscaled",
+        "tests.unit.test_media_decision:test_ac9_a_ceiling_below_the_source_is_the_ceiling",
+        "tests.unit.test_media_ffmpeg:test_ac9_no_scale_filter_appears_when_the_plan_is_the_size_the_source_already_is",
+        "tests.conformance.test_progressive_delivery:test_ac9_a_720p_source_under_a_1080p_ceiling_is_delivered_at_720p",
+    ),
+    10: (
+        "tests.conformance.test_progressive_delivery:test_ac10_a_start_position_begins_production_there",
+        "tests.conformance.test_hls_segments:test_ac10_a_segment_near_the_end_produces_nothing_before_it",
+    ),
+    # The criterion's boundary is a row of this map too: the two playlist routes are sized and
+    # carry no range unit, on both servers, which is why the last name here asserts an absence.
+    11: (
+        "tests.conformance.test_static_delivery:test_the_response_carries_the_measured_header_set_and_no_more",
+        "tests.conformance.test_universal_audio:test_the_direct_play_answer_carries_exactly_the_measured_header_set",
+        "tests.conformance.test_progressive_delivery:test_ac15_a_remux_carries_a_length_and_a_range_unit",
+        "tests.conformance.test_hls_segments:test_a_segment_arrives_sized_and_labelled",
+        "tests.conformance.test_hls_playlists:test_ac11_a_playlist_is_sized_and_carries_no_range_unit",
+    ),
+    12: (
+        "tests.unit.test_compat_ranges:test_the_measured_matrix",
+        "tests.conformance.test_static_delivery:test_ac12_a_mid_file_range_is_exactly_those_bytes",
+        "tests.conformance.test_hls_segments:test_a_segment_honours_a_range",
+    ),
+    13: (
+        "tests.unit.test_compat_ranges:test_the_measured_matrix",
+        "tests.unit.test_compat_ranges:test_a_zero_byte_body_can_satisfy_nothing",
+        "tests.conformance.test_static_delivery:test_ac13_an_unsatisfiable_range_is_a_416_with_nothing_in_it",
+    ),
+    14: (
+        "tests.conformance.test_static_delivery:test_ac14_no_range_is_the_whole_file_with_its_length",
+        # The join nothing made until T14: the `Size` the negotiation advertises, the
+        # `Content-Length` the delivery route sends, and the bytes on the wire, from three
+        # independent reads of one file.
+        "tests.conformance.test_static_delivery:test_ac14_the_size_the_negotiation_advertises_is_the_body_the_route_serves",
+        "tests.conformance.test_static_delivery:test_ac14_a_track_advertises_its_own_size_too",
+    ),
+    15: (
+        "tests.conformance.test_progressive_delivery:test_ac15_a_remux_carries_a_length_and_a_range_unit",
+        "tests.conformance.test_progressive_delivery:test_ac15_a_remux_honours_a_mid_file_range",
+    ),
+    16: (
+        "tests.conformance.test_hls_segments:test_a_segment_arrives_sized_and_labelled",
+        "tests.conformance.test_hls_segments:test_ac16_and_ac22_a_copied_segment_is_sized_and_identical_twice",
+    ),
+    17: (
+        "tests.conformance.test_progressive_delivery:test_ac17_a_re_encode_is_chunked_with_no_length",
+        "tests.conformance.test_progressive_delivery:test_a_range_on_a_chunked_answer_is_ignored_whatever_shape_it_has",
+    ),
+    18: (
+        "tests.conformance.test_static_delivery:test_ac18_a_wrong_container_changes_the_label_and_nothing_else",
+        "tests.conformance.test_static_delivery:test_the_suffixed_and_unsuffixed_routes_answer_the_same_bytes",
+        "tests.conformance.test_wav_delivery:test_a_static_wav_request_is_still_the_source_bytes",
+    ),
+    19: (
+        "tests.conformance.test_universal_audio:test_ac19_a_sample_rate_ceiling_is_answered_at_the_ceiling",
+        "tests.conformance.test_universal_audio:test_ac19_a_channel_ceiling_below_the_source_is_honoured_too",
+        "tests.unit.test_universal_profile:test_every_stated_ceiling_becomes_one_unscoped_audio_condition",
+        "tests.unit.test_media_decision:test_a_sample_rate_ceiling_is_honoured_exactly_rather_than_from_the_opus_ladder",
+    ),
+    20: (
+        "tests.conformance.test_wav_delivery:test_ac20_the_suffixed_route_answers_a_real_wav",
+        "tests.conformance.test_wav_delivery:test_ac20_the_container_parameter_answers_the_same_wav",
+        "tests.conformance.test_wav_delivery:test_ac20_universal_with_a_wav_transcoding_container_answers_a_real_wav",
+        "tests.conformance.test_wav_delivery:test_ac20_a_mid_file_range_on_a_wav_answer_is_honoured",
+        "tests.unit.test_media_ffmpeg:test_a_self_sizing_container_is_refused_to_a_pipe_rather_than_left_to_lie",
+    ),
+    21: (
+        "tests.conformance.test_universal_audio:test_ac21_a_satisfied_constraint_set_is_the_file_with_no_location",
+    ),
+    22: (
+        "tests.conformance.test_hls_playlists:test_ac22_the_playlist_is_complete_and_sized_before_any_segment_exists",
+        "tests.conformance.test_hls_playlists:test_ac22_the_same_request_twice_is_the_same_list",
+        "tests.unit.test_hls_planning:test_an_equal_grid_is_uniform_with_a_short_tail",
+        "tests.conformance.test_hls_segments:test_ac16_and_ac22_a_copied_segment_is_sized_and_identical_twice",
+    ),
+    23: ("tests.conformance.test_hls_segments:test_ac23_the_same_segment_twice_is_the_same_bytes",),
+    24: ("tests.conformance.test_hls_segments:test_ac24_a_segment_out_of_order_is_served",),
+    25: (
+        "tests.unit.test_transcode_lifecycle:test_ac25_the_stop_route_kills_exactly_the_named_session",
+        "tests.unit.test_transcode_lifecycle:test_a_stop_leaves_the_remux_beside_it_alone",
+    ),
+    26: (
+        "tests.conformance.test_progressive_delivery:test_ac26_a_disconnected_client_stops_the_encoder",
+        "tests.unit.test_transcode_lifecycle:test_ac29_a_session_unpinged_past_the_timeout_dies_with_its_scratch",
+        "tests.unit.test_transcode_lifecycle:test_a_session_pinged_inside_the_timeout_survives_the_sweep",
+    ),
+    27: (
+        "tests.unit.test_transcode_throttle:test_ac27_production_runs_to_the_end_when_throttling_is_off",
+        "tests.unit.test_transcode_throttle:test_ac27_production_pauses_at_the_gap_and_resumes_on_the_next_fetch",
+        "tests.unit.test_transcode_throttle:test_the_gap_is_measured_from_the_furthest_segment_the_client_took",
+        "tests.unit.test_transcode_throttle:test_the_shipped_configuration_has_both_features_off",
+    ),
+    28: (
+        "tests.conformance.test_media_shapes:test_ac28_the_item_carries_the_demuxer_list_and_the_source_resolves_it",
+        "tests.conformance.test_static_delivery:test_ac28_item_container_is_the_list_and_the_source_is_the_single_form",
+        "tests.conformance.test_static_delivery:test_ac28_the_two_forms_agree_wherever_the_stored_string_is_one_name",
+        "tests.unit.test_media_info:test_the_source_container_is_derived_per_response",
+    ),
+    29: (
+        "tests.unit.test_transcode_lifecycle:test_ac29_a_session_unpinged_past_the_timeout_dies_with_its_scratch",
+        "tests.unit.test_transcode_lifecycle:test_shutdown_stops_everything_and_leaves_the_scratch_root_empty",
+        "tests.unit.test_transcode_lifecycle:test_an_orphan_a_crash_left_behind_is_cleared_at_startup",
+        "tests.unit.test_transcode_throttle:test_ac29_segments_a_window_behind_the_client_are_removed_while_it_plays",
+        "tests.unit.test_transcode_throttle:test_ac29_nothing_is_deleted_until_the_client_has_fetched_past_the_window",
+        "tests.unit.test_transcode_throttle:test_ac29_a_deleted_segment_is_produced_again_when_it_is_asked_for",
+    ),
+    30: (
+        "tests.unit.test_transcode_lifecycle:test_ac30_a_play_session_id_from_a_negotiation_is_accepted",
+    ),
+    31: (
+        "tests.unit.test_media_decision:test_ac31_a_video_policy_needs_all_three_denials",
+        "tests.unit.test_media_decision:test_ac31_an_audio_item_turns_on_the_audio_permission_alone",
+        "tests.conformance.test_playback_info:test_ac31_one_denied_permission_negotiates_exactly_as_a_permitted_user",
+        "tests.conformance.test_playback_info:test_ac31_all_three_denied_is_flags_down_and_no_error_code",
+        # The delivery half, which T13 measured as per stream and video-only: the rule table is
+        # the unit file's and the two wire shapes are the segment route's.
+        "tests.unit.test_transcode_throttle:test_ac31_the_delivery_gate_is_per_stream",
+        "tests.unit.test_transcode_throttle:test_ac31_an_account_denied_everything_is_refused_before_anything_is_planned",
+        "tests.conformance.test_hls_segments:test_ac31_a_denied_re_encode_is_refused_rather_than_force_copied",
+        "tests.conformance.test_hls_segments:test_ac31_a_denial_over_a_stream_that_is_copied_anyway_changes_nothing",
+    ),
+    32: (
+        "tests.conformance.test_static_delivery:test_a_delivery_route_requires_no_token",
+        "tests.conformance.test_static_delivery:test_the_credential_check_can_still_fail",
+        "tests.conformance.test_universal_audio:test_ac32_universal_refuses_without_a_token_where_stream_does_not",
+        "tests.conformance.test_hls_playlists:test_the_playlists_require_a_token_where_their_siblings_require_none",
+        "tests.conformance.test_hls_segments:test_the_segment_route_requires_a_token",
+    ),
+}
+
+
 FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "001-server-identity-and-discovery": FEATURE_001,
     "002-authentication-users-and-sessions": FEATURE_002,
@@ -700,6 +888,7 @@ FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "005-item-query-api": FEATURE_005,
     "006-images": FEATURE_006,
     "007-user-data-and-playstate": FEATURE_007,
+    "008-playback-negotiation-and-delivery": FEATURE_008,
 }
 
 

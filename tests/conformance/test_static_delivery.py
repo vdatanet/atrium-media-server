@@ -525,3 +525,68 @@ async def test_ac28_the_two_forms_agree_wherever_the_stored_string_is_one_name(
 
     assert document["Container"] == "mkv"
     assert document["MediaSources"][0]["Container"] == "mkv"
+
+
+# ------------------------------------------------------------------------------------------
+# The advertised size and the served body, joined - which nothing did until T14
+# ------------------------------------------------------------------------------------------
+
+
+async def test_ac14_the_size_the_negotiation_advertises_is_the_body_the_route_serves(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """AC-14 across the two routes that state a length, rather than inside each of them.
+
+    `MediaSources[].Size` and the delivery route's `Content-Length` are **two independent stats of
+    one file**: the negotiation reads the size beside the inspection it assembles from, and the
+    stream route stats the file again when the request arrives. Every golden in this repository
+    carries a fixture size, so the two numbers had never been compared with each other - and a
+    client reads that field as the byte length of what it is about to fetch and bounds every range
+    request it makes with it.
+
+    The last two requests are what makes this more than an equality: the byte the advertised size
+    names as the last one really is the last one, and one past it is refused rather than answered
+    with a shorter body.
+    """
+    item_id, payload, size = film(served, DIRECT_PLAY)
+
+    negotiated = await client.get(f"/Items/{item_id}/PlaybackInfo")
+    assert negotiated.status_code == 200, negotiated.text
+    advertised = negotiated.json()["MediaSources"][0]["Size"]
+
+    answered = await client.get(f"/Videos/{item_id}/stream", params={"static": "true"})
+
+    assert answered.status_code == 200
+    assert advertised == size
+    assert int(answered.headers["Content-Length"]) == advertised
+    assert len(answered.content) == advertised
+
+    last = await client.get(
+        f"/Videos/{item_id}/stream",
+        params={"static": "true"},
+        headers={"Range": f"bytes={advertised - 1}-{advertised - 1}"},
+    )
+    assert last.status_code == 206
+    assert last.content == payload[-1:]
+
+    past = await client.get(
+        f"/Videos/{item_id}/stream",
+        params={"static": "true"},
+        headers={"Range": f"bytes={advertised}-"},
+    )
+    assert past.status_code == 416
+    assert past.headers["Content-Range"] == f"bytes */{advertised}"
+
+
+async def test_ac14_a_track_advertises_its_own_size_too(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The same pairing on the audio route, so the film's agreement cannot be a property of one
+    container - and on the entry whose size no other test in this file reads."""
+    item_id, _, size = film(served, HIGH_RATE_AUDIO)
+
+    negotiated = await client.get(f"/Items/{item_id}/PlaybackInfo")
+    answered = await client.get(f"/Audio/{item_id}/stream", params={"static": "true"})
+
+    assert negotiated.json()["MediaSources"][0]["Size"] == size
+    assert int(answered.headers["Content-Length"]) == size

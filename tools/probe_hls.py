@@ -174,6 +174,10 @@ def _record(probe: Probe, label: str, playlists) -> None:
         f"{playlists.master_headers.get('Expires')}, {len(playlists.master)} characters, "
         f"{playlists.master.count(chr(13))} carriage returns",
     )
+    probe.observe(
+        f"{label}: master header names",
+        ", ".join(sorted(playlists.master_headers)),
+    )
     header = playlists.main.split("#EXTINF", 1)[0]
     probe.observe(f"{label}: media playlist header", header.replace("\n", " | "))
     first_entry = "\n".join(playlists.main.splitlines()[5:7])
@@ -185,6 +189,10 @@ def _record(probe: Probe, label: str, playlists) -> None:
         f"{playlists.main_headers.get('Expires')}, {len(playlists.main)} characters, "
         f"{playlists.main.count(chr(13))} carriage returns, ends "
         f"{playlists.main[-20:]!r}",
+    )
+    probe.observe(
+        f"{label}: media header names",
+        ", ".join(sorted(playlists.main_headers)),
     )
 
 

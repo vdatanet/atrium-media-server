@@ -33,6 +33,14 @@ claim — throttling, session teardown, bounded scratch space — is owed in the
 advertising a capability and failing at delivery time is worse than not having it
 ([008 §3.3](../specs/008-playback-negotiation-and-delivery/spec.md#33-the-decision)).
 
+**It shipped on 2026-08-29**, across
+[008](../specs/008-playback-negotiation-and-delivery/tasks.md)'s fourteen tasks, and every
+consequence that paragraph names is in with it: one supervised encoder per play session with a
+stop route, a ping timeout, a disconnect path and a shutdown sweep; throttling and produced-segment
+deletion behind the reference's own operator switches, both off as shipped; and scratch space that
+survives none of them. The **Subtitles** row above is the one v1 promise 008 did not deliver — it
+was never 008's to deliver and had no owning feature until 011 was opened on the same day.
+
 ### Out of scope, and why
 
 | Not in v1 | Reason |

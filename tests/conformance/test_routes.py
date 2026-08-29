@@ -49,37 +49,7 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 #: so that no route can ship ahead of the feature that specifies it - and, just as importantly, so
 #: that a feature marked `Implemented` whose route is not registered fails here rather than in
 #: somebody's client. 004 joined at T15, which is the line this file's own comment promised.
-IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007"})
-
-#: 008 arrives across eight tasks - the negotiation pair (T5), static delivery (T6), progressive
-#: (T7), the two audio specials (T8, T9), the playlists and segments (T10, T11) and the stop route
-#: (T12) - and the exact-set check below has to stay meaningful in between, so the routes that have
-#: landed are listed here. It is deleted at T14, when `"008"` joins the set above. 002, 005, 006
-#: and 007 each used exactly this device, and all four lists are gone.
-#:
-#: **One route on this list is knowingly incomplete, and T10 did not complete it.**
-#: `/Audio/{itemId}/universal` with `transcodingProtocol=hls` answers a master playlist on the
-#: reference whose single variant URI is a relative `main.m3u8` - which resolves to
-#: `/Audio/{itemId}/main.m3u8`, a path this project's surface does not carry and no accepted spec
-#: describes. Serving that master would advertise a route that answers nothing, which is Principle
-#: VI's plausible-looking stub; adding the audio playlist pair is a surface decision under the
-#: "Adding an endpoint" procedure and not an implementation detail. The refusal therefore stands,
-#: with the reason now measured rather than deferred (`api/universal_audio.py`).
-INTERIM_008 = frozenset(
-    {
-        ("POST", "/Items/{itemId}/PlaybackInfo"),
-        ("GET", "/Items/{itemId}/PlaybackInfo"),
-        ("GET", "/Audio/{itemId}/stream"),
-        ("GET", "/Audio/{itemId}/stream.{container}"),
-        ("GET", "/Audio/{itemId}/universal"),
-        ("GET", "/Videos/{itemId}/stream"),
-        ("GET", "/Videos/{itemId}/stream.{container}"),
-        ("GET", "/Videos/{itemId}/master.m3u8"),
-        ("GET", "/Videos/{itemId}/main.m3u8"),
-        ("GET", "/Videos/{itemId}/hls1/{playlistId}/{segmentId}.{container}"),
-        ("DELETE", "/Videos/ActiveEncodings"),
-    }
-)
+IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007", "008"})
 
 
 def _load_surface_parser() -> Any:
@@ -157,12 +127,22 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     would pass it. This one fails until `IMPLEMENTED_FEATURES` names the feature - a line that gets
     changed on purpose, in the change that finishes it.
 
-    002 arrived across two tasks, 005 across seven, 006 across five and 007 across three, and for
-    the changes between them this set was accompanied by an explicit list of the individual routes
-    that had landed. Those four lists are gone; `INTERIM_008` is the fifth, and it goes the same
-    way at T14.
+    002 arrived across two tasks, 005 across seven, 006 across five, 007 across three and 008
+    across eight, and for the changes between them this set was accompanied by an explicit list of
+    the individual routes that had landed. All five lists are gone: `INTERIM_008` was deleted at
+    008 T14, in the change that put `"008"` in the set above, and what it was holding open - the
+    eleven routes of `surface.yaml` - is now counted against the file.
+
+    **One route 008 serves is knowingly narrower than the reference's**, and it is recorded here
+    because nothing else in this file would say so: `/Audio/{itemId}/universal` with
+    `transcodingProtocol=hls` answers a master playlist on the reference whose single variant URI
+    resolves to `/Audio/{itemId}/main.m3u8`, a path this surface does not carry. Serving that
+    master would advertise a route that answers nothing, which is Principle VI's plausible-looking
+    stub, so the request is refused instead (`api/universal_audio.py`, 008 T10). Adding the audio
+    playlist pair is a surface decision under AGENTS.md's "Adding an endpoint" procedure, and it
+    is on 008's list of what it owes the features after it.
     """
-    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES) | INTERIM_008
+    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES)
 
 
 def test_an_unlisted_route_fails_the_check(app: FastAPI) -> None:

@@ -12,20 +12,19 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001 through 007 are implemented**, 007 on 2026-08-28 across thirteen tasks —
-**[007](specs/007-user-data-and-playstate/) is implemented** (2026-08-28, thirteen tasks,
-probes first at all three gates). **008's spec, plan and tasks are all accepted** (2026-08-29 — the spec review wrote and ran
-the five probes the OQ table had been citing prospectively, and the tasks gate found the
-fixture world has no files and CI has no ffmpeg), and **008 is being implemented task by task** —
-the first unticked line of
-[008's tasks](specs/008-playback-negotiation-and-delivery/tasks.md) is always what is next, which
-is a sentence that cannot go stale the way "T1 is next" did. What 007 leaves
-008 is written in
-[007's tasks](specs/007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones). 009 and 010 remain
-specified only, their specs still drafts. What 005 and 006 leave for each of them is written in
-[005's tasks](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones) and
-[006's](specs/006-images/tasks.md#what-this-feature-owes-the-next-ones), beside 004's standing
-notes below.
+**Features 001 through 008 are implemented** — **[008](specs/008-playback-negotiation-and-delivery/)
+landed on 2026-08-29 across fourteen tasks**, spec, plan and tasks all accepted the same day and
+every one of the fourteen finding something the documents had wrong. Playback is therefore in: the
+negotiation, the four `stream` routes, `/universal`, the HLS playlists and segments, and a
+supervised encoder per play session. **009, 010 and 011 are specified only, their specs still
+drafts**, so the next gate is 009's spec review. What each implemented feature leaves the ones
+after it is written at the end of its own task list rather than here, so it cannot go stale:
+[008's](specs/008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
+is the longest, and 010 collects most of it;
+[007's](specs/007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones),
+[005's](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones) and
+[006's](specs/006-images/tasks.md#what-this-feature-owes-the-next-ones) stand beside it, with 004's
+standing notes below.
 
 **004 owes 005 four things**, written down in
 [004's tasks](specs/004-metadata-resolution/tasks.md#what-this-feature-owes-the-next-ones) rather
@@ -119,6 +118,7 @@ reasoning:
 | 008 T7 | Stream a remux and a re-encode | **The test client cannot hang up.** httpx's ASGI transport drives the app to completion and buffers the body, so every "streaming" test here is a buffered one and AC-26's disconnect had to be written at the ASGI boundary. Plus the rule the fixtures found: a stream plan states *every* ceiling, so passing them all asks `libmp3lame` for 96 kHz — a ceiling equal to the source is not an instruction |
 | 008 T8 | Synthesise a profile the reference's own way | **Its own way honours no ceiling.** The controller scopes its codec profile to the *direct-play* containers, which are the ones it will never transcode into — the ceiling reaches the encoder only through a second path outside the profile — so a faithful transcription would have answered a 22 050 Hz request at the source's 96 kHz. And the empty `200` beside it is not a codec-less profile: that profile defaults to mp3 and negotiates fine, while the request behind it infers a codec from a URL with no extension |
 | 008 T6 | Serve the original bytes, refusing without a token | **The four `stream` routes require none** — no token, an unknown token and `?api_key=` are one `200`, where `/universal` alone answers `401`. 002's accepted spec had said so three days earlier and the task list still said the opposite; implemented as written, every bare URL handed to an external player would have broken. Plus a `404` in the *third* error shape, where the same identifier is problem details one route away |
+| 008 T14 | Write the acceptance map and flip three status lines | **Two criteria said something their own tests contradict, and two more were mapped to tests that proved less than their names.** `SupportsTranscoding` follows the *profile*, not the answer; *"every delivery route whose body has a known size answers `Accept-Ranges: bytes`"* is false of the two playlists, measured on both servers. Nothing had ever compared the `Size` a negotiation advertises with the bytes the route serves, and `audioStreamIndex` was asserted as a string in a URL and never as a property of the audio that came back. And the definition of done's *"no other response differs observably"* was false: a progressive re-encode produced to a **pipe** carries no MP3 header frame and no completed FLAC `STREAMINFO` — a fourth divergence, and the only one pointing away from the reference |
 | 008 T9 | Answer two broken WAV routes and pay a prior-probe debt | **Both prior-probe claims moved when the probe was finally written.** The `500` has two causes, not one — a `wav` extension inferred as a *codec* never reaches the PCM bug at all — and the headerless body comes from the **transcoding** container, so the acceptance criterion's `Container=wav` named a request that answers mp3 on both servers. And the divergence has no chunked form: a WAV states its length inside the body, so a piped one says `ffffffff` |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
