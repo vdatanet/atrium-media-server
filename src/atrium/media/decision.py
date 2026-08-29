@@ -924,6 +924,36 @@ def _may_process(policy: PlaybackPolicy, *, is_video: bool) -> bool:
     )
 
 
+def refused_by_policy(decision: Decision, policy: PlaybackPolicy, *, is_video: bool) -> bool:
+    """Whether this account may not have *this* plan produced for it, at delivery.
+
+    Not the negotiation gate above, which is one all-or-nothing question about the item's kind.
+    The reference's delivery-time reading is **per stream**: the video stream is forced to a copy
+    when `EnableVideoPlaybackTranscoding` is denied and the audio stream when
+    `EnableAudioPlaybackTranscoding` is, each against its own permission and each "regardless of
+    whether it will be compatible or not" `[source:
+    MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:7136-7166 @ v10.11.11]`. Atrium
+    refuses the same two steps instead of copying a stream the profile rejected, which is the one
+    non-replicated edge of behaviours section 2.21: no client can depend on being handed an
+    output it said it could not decode.
+
+    **`EnablePlaybackRemuxing` is not read here, because the reference never reads it at
+    delivery** - its only readers are the negotiation's all-three gate and the item DTO. A copy
+    is what a denied user is *given*, so refusing one would be inventing an enforcement the
+    reference has nowhere.
+    """
+    if not _may_process(policy, is_video=is_video):
+        return True
+    forbidden = (
+        (decision.video, policy.enable_video_transcoding),
+        (decision.audio, policy.enable_audio_transcoding),
+    )
+    return any(
+        plan is not None and plan.action is StreamAction.ENCODE and not permitted
+        for plan, permitted in forbidden
+    )
+
+
 NOTHING_PLAYABLE: Final = Decision(
     outcome=Outcome.NONE,
     reasons=(),
@@ -1091,4 +1121,5 @@ __all__ = [
     "TranscodingProfile",
     "ceiling",
     "decide",
+    "refused_by_policy",
 ]

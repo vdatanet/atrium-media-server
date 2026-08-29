@@ -22,7 +22,7 @@ its five refusals in one run.
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 
 import httpx
@@ -473,6 +473,70 @@ async def test_the_segment_route_requires_a_token(
 
     assert answered.status_code == 401
     assert answered.content == b""
+
+
+# ------------------------------------------------------------------------------------------
+# AC-31, the delivery half: a re-encode this account may not have
+# ------------------------------------------------------------------------------------------
+
+
+def _denying(**permissions: bool) -> Callable[[Request], User]:
+    """The viewer, with some of the three playback permissions denied in the stored policy."""
+
+    def resolve(request: Request) -> User:
+        request.state.session_id = SESSION_ID
+        request.state.token_sha256 = None
+        return User(
+            id=VIEWER_ID, name="viewer", enable_all_folders=True, policy_extra=dict(permissions)
+        )
+
+    return resolve
+
+
+async def test_ac31_a_denied_re_encode_is_refused_rather_than_force_copied(
+    client: httpx.AsyncClient,
+    served: tuple[FastAPI, ScannedMediaWorld],
+    media_paths: DataPaths,
+) -> None:
+    """The one edge behaviours section 2.21 does not replicate, at the one route that reaches it.
+
+    The reference copies the video stream instead, "regardless of whether it will be compatible
+    or not" `[source: MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:7136-7145 @
+    v10.11.11]` - an hevc-only client handed h264 - and Atrium refuses the step. Asserted with
+    the scratch directory as well as with the status, because "never bytes that violate the
+    negotiated profile" is a claim about what was *not* produced.
+    """
+    item = served[1].of(LONG_TAKE)
+    uris, _durations = await segment_uris(client, item.id, **REENCODE_QUERY)
+    served[0].dependency_overrides[require_user] = _denying(EnableVideoPlaybackTranscoding=False)
+
+    answered = await client.get(uris[0], headers=HEADERS)
+
+    assert answered.status_code == 500
+    assert answered.headers["Content-Type"] == "text/plain"
+    assert answered.content == CONTROLLER_ERROR_BODY
+    assert scratch_files(media_paths) == []
+
+
+async def test_ac31_a_denial_over_a_stream_that_is_copied_anyway_changes_nothing(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """`EnablePlaybackRemuxing` has no delivery-time reader on either server, and the audio
+    permission decides nothing about a plan whose audio is re-encoded by nobody's request.
+
+    The negotiation's own rule is the same shape - a single denial moves nothing - so a client
+    whose account is missing one permission plays exactly as a permitted one does.
+    """
+    item = served[1].of(LONG_TAKE)
+    uris, _durations = await segment_uris(client, item.id, **MIXED_QUERY)
+    served[0].dependency_overrides[require_user] = _denying(
+        EnablePlaybackRemuxing=False, EnableVideoPlaybackTranscoding=False
+    )
+
+    answered = await client.get(uris[0], headers=HEADERS)
+
+    assert answered.status_code == 200, answered.text
+    assert answered.content[:1] == b"G"
 
 
 async def test_a_playlist_id_nothing_named_still_answers_the_segment(

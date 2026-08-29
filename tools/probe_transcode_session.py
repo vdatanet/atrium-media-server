@@ -24,6 +24,16 @@ and, since 008 T12, the **kill-timer battery**: how long a session nobody pings 
 the stop route actually keys on, and what the session carries afterwards - the three readings
 plan section 6.8 left owed to the task that builds the sweep.
 
+and, since 008 T13, the **segment-deletion battery**: what `SegmentKeepSeconds` is a window
+of. The specification and the task list both read it as a file age; the reference deletes the
+segments whose *index* falls below `(downloadPositionSeconds - SegmentKeepSeconds) /
+segmentSeconds` `[source:
+MediaBrowser.Controller/MediaEncoding/TranscodingSegmentCleaner.cs:100-113 @ v10.11.11]`, so
+nothing goes at all until the client has fetched past the window and then what goes is decided
+by position rather than by when the file was written. The battery produces two segments either
+side of that boundary, leaves the session alone for two of the cleaner's ticks, and asks for
+both again.
+
 and, since 008 T11, the **segment battery**: what
 `GET /Videos/{itemId}/hls1/{playlistId}/{segmentId}.{container}` answers, since that is the
 route T11 lands and plan section 6.8 left its refusal shapes owed to the task that lands it.
@@ -88,6 +98,13 @@ PROGRESSIVE_PING_TIMEOUT_SECONDS = 10
 #: while it was waiting, so a second period is a shape this run should still call a pass.
 KILL_WATCH_SECONDS = 190
 KILL_POLL_SECONDS = 3
+
+#: How long the segment-deletion battery leaves a session alone. The reference's cleaner runs on
+#: a twenty-second timer and delays its own deletion by 1.5 s `[source:
+#: MediaBrowser.Controller/MediaEncoding/TranscodingSegmentCleaner.cs:51,111 @ v10.11.11]`, so
+#: this is two of its ticks - and under the sixty-second kill timer, which is what keeps the
+#: session alive to be asked afterwards.
+DELETION_WATCH_SECONDS = 45
 
 
 def transcoding_info(server: Server) -> dict[str, Any] | None:
@@ -378,6 +395,146 @@ def _refusals(first: str, sessions: set[str]) -> list[tuple]:
 
 
 # --------------------------------------------------------------------------------------------
+# The segment-deletion battery (008 T13)
+# --------------------------------------------------------------------------------------------
+
+
+def with_session(uri: str, device: str, play_session_id: str) -> str:
+    """One segment URI addressed to a chosen device and play session.
+
+    Unlike `freshened`, every row of this battery must land in the **same** transcode directory:
+    what is being measured is which of the files already in it survive, so the device and the
+    play session are fixed for the whole row rather than made new for each request. The device is
+    the probe's own, because the completion percentage this battery reads is reported against the
+    device's session and a device that never authenticated has no session to report on.
+    """
+    head, _, query = uri.partition("?")
+    pairs = []
+    for name, value in urllib.parse.parse_qsl(query, keep_blank_values=True):
+        lowered = name.lower()
+        if lowered == "deviceid":
+            value = device
+        elif lowered == "playsessionid":
+            value = play_session_id
+        pairs.append((name, value))
+    return f"{head}?&{urllib.parse.urlencode(pairs)}"
+
+
+def timed_fetch(server: Server, uri: str) -> tuple[int, float, int]:
+    """One segment, and how long it took - which is how a deleted file makes itself visible.
+
+    A segment already on disk is served without starting anything; a segment that is *not* there
+    and lies behind the producing index restarts production. So the same request answers in
+    milliseconds or in seconds depending on whether the file still exists, and the completion
+    percentage falls back to the restart position in the second case.
+    """
+    started = time.monotonic()
+    status, _headers, body = server.get_streaming(uri, SEGMENT_BYTES)
+    return status, time.monotonic() - started, len(body)
+
+
+def deletion_battery(
+    server: Server, probe: Probe, source: VideoSource, sessions: set[str], keep: int | None
+) -> list[bool]:
+    """Is `SegmentKeepSeconds` a file age or a distance behind the client?
+
+    Both documents said age - "aged produced segments", "produced segments older than the
+    configured window" - and the reference deletes by **index**, computed from the furthest
+    position the client has fetched: `[0 .. (downloadSeconds - keepSeconds) / segmentSeconds]`
+    `[source: MediaBrowser.Controller/MediaEncoding/TranscodingSegmentCleaner.cs:100-113 @
+    v10.11.11]`. The two rules only disagree observably in one place, and this is it: two
+    segments produced seconds apart, on either side of that boundary, watched over one window in
+    which nothing is requested at all.
+
+    Needs a server with the feature enabled, and says so rather than asserting the other half
+    when it is off - the same rule the throttle observation follows.
+    """
+    checks: list[bool] = []
+    if keep is None:
+        probe.observe(
+            "segment deletion",
+            "not measured: EnableSegmentDeletion is off on this server, or its configuration "
+            "is not readable by this account",
+        )
+        return checks
+
+    duration_seconds = source.runtime_ticks / 10_000_000
+    if duration_seconds < keep + 300:
+        probe.observe(
+            "segment deletion",
+            f"not measured: the picked source is {duration_seconds:.0f}s and the keep window is "
+            f"{keep}s, so no client position can get a whole window behind itself",
+        )
+        return checks
+
+    _status, data = negotiate(server, source.item_id, video_profile(source))
+    url = data["MediaSources"][0].get("TranscodingUrl")
+    if not url:
+        raise ProbeError("the codec-rejecting profile produced no TranscodingUrl")
+    sessions.add(data["PlaySessionId"])
+    lists = fetch_playlists(server, source.item_id, url)
+    cadence = lists.durations[0]
+
+    # A client that has fetched a segment ending well past the window, and the two segments its
+    # position puts on either side of the boundary.
+    far_index = int((keep + 90) / cadence)
+    ending = (far_index + 1) * cadence
+    segment_seconds = round(cadence)
+    boundary = int((ending - keep) // segment_seconds)
+    doomed, survivor = boundary - 1, boundary + 3
+    play_session_id = uuid.uuid4().hex
+    sessions.add(play_session_id)
+
+    def fetch(index: int) -> tuple[int, float, int]:
+        return timed_fetch(server, with_session(lists.segments[index], DEVICE_ID, play_session_id))
+
+    for index in (doomed, survivor, far_index):
+        status, _elapsed, _size = fetch(index)
+        if status != 200:
+            raise ProbeError(f"the deletion battery's segment {index} answered {status}")
+    probe.observe(
+        "produced, then the client stops",
+        f"segments {doomed} and {survivor} are on disk, and the furthest fetched segment "
+        f"{far_index} ends {ending:.0f}s in against a {keep}s window - so the reference's own "
+        f"arithmetic puts the boundary at index {boundary}",
+    )
+
+    before = [fetch(survivor), fetch(doomed)]
+    settled = completion(server)
+    probe.observe(
+        "before the cleaner has ticked",
+        f"segment {survivor} in {before[0][1]:.2f}s, segment {doomed} in {before[1][1]:.2f}s; "
+        f"completion {'?' if settled is None else f'{settled:.1f}%'}",
+    )
+    checks.append(all(status == 200 and elapsed < 1 for status, elapsed, _size in before))
+
+    time.sleep(DELETION_WATCH_SECONDS)
+    kept_status, kept_elapsed, _size = fetch(survivor)
+    after_survivor = completion(server)
+    gone_status, gone_elapsed, _size = fetch(doomed)
+    time.sleep(2)
+    after_doomed = completion(server)
+    probe.observe(
+        f"after {DELETION_WATCH_SECONDS}s with nothing requested",
+        f"segment {survivor} in {kept_elapsed:.2f}s (completion "
+        f"{'?' if after_survivor is None else f'{after_survivor:.1f}%'}), segment {doomed} in "
+        f"{gone_elapsed:.2f}s (completion "
+        f"{'?' if after_doomed is None else f'{after_doomed:.1f}%'})",
+    )
+    checks.append(kept_status == 200 and kept_elapsed < 1)
+    checks.append(gone_status == 200 and gone_elapsed > kept_elapsed * 3)
+    # The second signal, and the decisive one: serving a file that is there restarts nothing,
+    # so the completion percentage only falls when the file had to be produced again.
+    checks.append(
+        after_survivor is not None
+        and after_doomed is not None
+        and after_doomed < after_survivor / 2
+    )
+    stop_encoding(server, play_session_id)
+    return checks
+
+
+# --------------------------------------------------------------------------------------------
 # The kill-timer battery (008 T12)
 # --------------------------------------------------------------------------------------------
 
@@ -571,7 +728,9 @@ def run(server: Server) -> Probe:
             "a playSessionId nothing issued stops nothing; and a segment is a finished file "
             "served with a Content-Length, a Last-Modified and an honoured Range, identical "
             "when re-requested inside its session, served out of order, and refused with the "
-            "third error shape except where the framework's own binding refuses first"
+            "third error shape except where the framework's own binding refuses first; and "
+            "with segment deletion enabled, the produced segment a whole keep-window behind "
+            "the client's furthest fetch is gone while the one just inside it is not"
         ),
     )
 
@@ -601,13 +760,18 @@ def run(server: Server) -> Probe:
 
         # OQ-10: stop fetching; where does production go?
         throttling = None
+        keep: int | None = None
         try:
             config = server.get("/System/Configuration/encoding")
             throttling = bool(config.get("EnableThrottling"))
             gap = max(int(config.get("ThrottleDelaySeconds") or 180), 60)
+            deleting = bool(config.get("EnableSegmentDeletion"))
+            if deleting:
+                keep = max(int(config.get("SegmentKeepSeconds") or 720), 20)
             probe.observe(
                 "server encoding configuration",
-                f"EnableThrottling={throttling}, ThrottleDelaySeconds={gap}",
+                f"EnableThrottling={throttling}, ThrottleDelaySeconds={gap}, "
+                f"EnableSegmentDeletion={deleting}, SegmentKeepSeconds={keep}",
             )
         except ProbeError:
             gap = THROTTLE_GAP_SECONDS
@@ -682,6 +846,10 @@ def run(server: Server) -> Probe:
         # session row, and a dozen jobs encoding beside it would be a dozen chances for one of
         # them to report over the row this is reading.
         checks += kill_battery(server, probe, source, started_sessions)
+
+        # 008 T13's, and it goes here for the same reason the one above does: it watches one
+        # session's completion percentage, so it must be the only job running while it does.
+        checks += deletion_battery(server, probe, source, started_sessions, keep)
 
         # 008 T11's battery, last because it starts a dozen sessions of its own and the
         # observation above is about a server with one.

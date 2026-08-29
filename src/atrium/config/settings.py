@@ -120,6 +120,40 @@ class ProviderSettings(BaseModel):
     metadata_country: str = "US"
 
 
+class EncodingSettings(BaseModel):
+    """What the operator decides about produced output (008 spec sections 3.4 and 3.8).
+
+    Four knobs, the reference's own names and the reference's own defaults `[source:
+    MediaBrowser.Model/Configuration/EncodingOptions.cs:22-25 @ v10.11.11]`. **Both features are
+    off as shipped**, which is the reference's choice and not a cautious reading of it: an
+    operator who turns one on in Jellyfin and moves to Atrium finds the same knob under the same
+    name, and one who has never touched either sees the same unbounded production.
+
+    **Neither number is used raw.** The reference floors the throttle gap at 60 seconds and the
+    keep window at 20, at the point of use rather than at validation `[source:
+    MediaBrowser.Controller/MediaEncoding/TranscodingThrottler.cs:118,
+    MediaBrowser.Controller/MediaEncoding/TranscodingSegmentCleaner.cs:98 @ v10.11.11]`, so a
+    configured 5 behaves as the floor rather than as a refusal to start. `media/sessions.py`
+    applies both floors for the same reason: a value an operator can write into Jellyfin's own
+    configuration page must not stop this server from booting.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Pause production once it leads the last-requested position. Off as shipped.
+    enable_throttling: bool = False
+
+    #: How far ahead production may run before it pauses, floored at 60 where it is used.
+    throttle_delay_seconds: int = Field(default=180, ge=0)
+
+    #: Remove produced segments behind the client while the session lives. Off as shipped.
+    enable_segment_deletion: bool = False
+
+    #: **Seconds of media behind the furthest-fetched position**, not a file age - measured, and
+    #: the two are not the same rule (008 spec section 3.8). Floored at 20 where it is used.
+    segment_keep_seconds: int = Field(default=720, ge=0)
+
+
 class Settings(BaseModel):
     """The whole of `config.toml`, plus the data directory it was found in."""
 
@@ -132,6 +166,7 @@ class Settings(BaseModel):
     passwords: PasswordSettings = Field(default_factory=PasswordSettings)
     authentication: AuthenticationSettings = Field(default_factory=AuthenticationSettings)
     providers: ProviderSettings = Field(default_factory=ProviderSettings)
+    encoding: EncodingSettings = Field(default_factory=EncodingSettings)
 
 
 def _describe(error: ValidationError, path: Path) -> str:
@@ -174,6 +209,7 @@ __all__ = [
     "DEFAULT_PORT",
     "DEFAULT_SERVER_NAME",
     "AuthenticationSettings",
+    "EncodingSettings",
     "NetworkSettings",
     "PasswordSettings",
     "ProviderSettings",

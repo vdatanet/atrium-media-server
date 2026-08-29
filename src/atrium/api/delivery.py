@@ -76,6 +76,7 @@ from atrium.compat.ranges import RangeAnswer, negotiate_range
 from atrium.db.engine import session_scope
 from atrium.db.repositories import MediaFileRepository, MediaProbeRepository
 from atrium.domain.media import DeliveredFile, InspectedStream, MediaInspection, StreamKind
+from atrium.domain.user import User
 from atrium.media import ffmpeg
 from atrium.media.decision import (
     CodecKind,
@@ -86,13 +87,16 @@ from atrium.media.decision import (
     DeviceProfile,
     MediaKind,
     Outcome,
+    PlaybackPolicy,
     ProfileCondition,
     Switches,
     TranscodingProfile,
     decide,
+    refused_by_policy,
 )
 from atrium.media.info import source_id
 from atrium.media.labels import label_for
+from atrium.users.policy import playback_permissions
 
 #: How much is read from disk at a time. Large enough that a film is not a million syscalls, small
 #: enough that a cancelled response stops promptly - a client that seeks abandons the body it was
@@ -591,6 +595,40 @@ def inspection_of(request: Request, found: DeliveredFile) -> MediaInspection:
     return stored
 
 
+def policy_of(user: User) -> PlaybackPolicy:
+    """The three permissions that shape what may be produced for this account.
+
+    One reader for the negotiation (`api/media_info.py`) and for the delivery routes that have a
+    user to read: the negotiation's answer and the delivery's refusal have to come from the same
+    three values, or a client is told `SupportsTranscoding: true` and then refused.
+    """
+    permitted = playback_permissions(user)
+    return PlaybackPolicy(
+        enable_video_transcoding=permitted.video_transcoding,
+        enable_audio_transcoding=permitted.audio_transcoding,
+        enable_remuxing=permitted.remuxing,
+    )
+
+
+def refuse_forbidden_production(
+    decision: Decision, policy: PlaybackPolicy, *, is_video: bool
+) -> None:
+    """Stop a delivery whose plan re-encodes a stream this account may not have re-encoded.
+
+    **The `500` the route already has for "nothing could be produced", not an invented `403`.**
+    The spec's first draft had a policy `403` on these routes; the gate measured that no playback
+    route consults `EnableMediaPlayback` at all and struck it, and inventing one here for a
+    different permission would put the same fiction back one row down. What a client sees is the
+    third error shape, which is what every other unproducible request on this route answers.
+
+    The reference answers neither - it copies the stream instead, which is the divergence
+    argued in behaviours section 2.21 - so what is chosen here is a shape this route already
+    sends rather than a status it never does.
+    """
+    if refused_by_policy(decision, policy, is_video=is_video):
+        raise DeliveryProductionError
+
+
 def decide_delivery(
     source: MediaInspection,
     parameters: DeliveryParameters,
@@ -654,9 +692,12 @@ def decide_delivery(
         audio_stream_index=parameters.audio_stream_index,
         max_audio_channels=parameters.max_audio_channels,
     )
-    # No policy gate here: these routes take no user at all (behaviours section 2.10), so there is
-    # no account whose permissions could be read. The delivery half of AC-31 belongs to T13, which
-    # is the task that decides what a session does with the policy it was negotiated under.
+    # **No policy reaches the ladder here**, on either family of caller. The four `stream` routes
+    # have no user to read one from (behaviours section 2.10); the HLS routes have one and gate
+    # the *production* instead (`refuse_forbidden_production`), because the policy changes this
+    # answer only when all three permissions are denied - which is the case that refusal already
+    # catches, and gating the ladder as well would make a playlist answer differently for an
+    # account the reference answers identically for.
     return decide(source, profile, switches, is_video=is_video), container
 
 
@@ -876,10 +917,12 @@ __all__ = [
     "decide_delivery",
     "inspection_of",
     "locate",
+    "policy_of",
     "produce",
     "produced_response",
     "production_ledger",
     "ranged_file",
+    "refuse_forbidden_production",
     "source_response",
     "static_response",
     "video_parameters",

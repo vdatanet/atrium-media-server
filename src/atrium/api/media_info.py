@@ -56,6 +56,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 from pydantic import Field, ValidationError
 
+from atrium.api.delivery import policy_of
 from atrium.api.deps import get_sessions, require_user
 from atrium.api.item_dto import VIDEO_TYPES, LibraryContext
 from atrium.api.items import effective_user, library_context
@@ -73,7 +74,6 @@ from atrium.domain.user import User
 from atrium.media import decision as ladder
 from atrium.media import info as media_info
 from atrium.media import urls
-from atrium.users.policy import playback_permissions
 
 router = APIRouter(tags=["MediaInfo"])
 
@@ -313,16 +313,6 @@ def _switches(body: PlaybackInfoDto, *, names_this_source: bool) -> ladder.Switc
     )
 
 
-def _policy_of(user: User) -> ladder.PlaybackPolicy:
-    """The three permissions that shape a negotiation, out of the account's whole policy."""
-    permitted = playback_permissions(user)
-    return ladder.PlaybackPolicy(
-        enable_video_transcoding=permitted.video_transcoding,
-        enable_audio_transcoding=permitted.audio_transcoding,
-        enable_remuxing=permitted.remuxing,
-    )
-
-
 def _stored_profile(request: Request) -> DeviceProfileDto | None:
     """The profile this device posted to `/Sessions/Capabilities/Full`, if it posted one.
 
@@ -475,7 +465,7 @@ def _negotiation(
 
     play_session_id = new_id()
     decided_against = None if profile is None else profile_of(profile)
-    policy = _policy_of(target)
+    policy = policy_of(target)
     for wire, inspection in zip(sources, probes, strict=True):
         if inspection is None:
             # Nothing has opened this file, so there is nothing to negotiate against and the

@@ -569,9 +569,21 @@ processing permissions as one gate: for a video item, `SupportsTranscoding` drop
 only when `EnableVideoPlaybackTranscoding`, `EnableAudioPlaybackTranscoding` **and**
 `EnablePlaybackRemuxing` are all denied; any single denial changes nothing at negotiation
 `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28; source:
-Jellyfin.Api/Helpers/MediaInfoHelper.cs:278-293 @ v10.11.11]`. At delivery, a user denied video
-transcoding has the video stream force-copied "regardless of whether it will be compatible or
-not" `[source: MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:7142 @ v10.11.11]`.
+Jellyfin.Api/Helpers/MediaInfoHelper.cs:278-293 @ v10.11.11]`. At delivery it reads two of the
+three, **per stream**: a user denied video transcoding has the video stream force-copied
+"regardless of whether it will be compatible or not", and one denied audio transcoding has the
+audio stream force-copied the same way `[source:
+MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:7136-7166 @ v10.11.11]`.
+
+Two limits on that, both of which decide what a faithful reimplementation may do (008 T13). The
+force-copy is reached **only from a video request** `[source:
+Jellyfin.Api/Helpers/StreamingHelpers.cs:198 @ v10.11.11]`, so an audio-only delivery consults
+neither permission and re-encodes for a denied account exactly as for a permitted one. And the
+reference's own delivery-time *refusal* — "User does not have access to video transcoding",
+raised when a video job's output codec is not a copy `[source:
+MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:385-393 @ v10.11.11]` — **cannot
+fire**, because the same permission on the same user has already rewritten that codec to `copy`
+two calls earlier. The refusal is unreachable code; the force-copy is the behaviour.
 
 **Depends on it:** an operator who denies one permission and observes that clients still play; a
 client that never learned to handle a policy `403` from these routes, because none exists.
@@ -580,6 +592,12 @@ client that never learned to handle a policy `403` from these routes, because no
 no invented `403`. The one edge not replicated is delivery-time force-copy into an output that
 violates the negotiated profile: Atrium refuses the step instead, and no client can depend on
 receiving a broken stream ([008 §3.3](../../specs/008-playback-negotiation-and-delivery/spec.md#33-the-decision)).
+The refusal is scoped to where the reference would have copied — the two streams of a video
+delivery, each against its own permission — so an audio delivery and a plan that copies the
+stream a denial names are both served exactly as a permitted account's are, and
+`EnablePlaybackRemuxing` changes nothing at delivery on either server. It is answered with the
+`500` that route already gives anything it cannot produce, not with a new status: a policy
+`4xx` on a playback route is the fiction 008's gate removed.
 
 ### 2.22 `SupportsDirectStream` mirrors `SupportsDirectPlay`
 

@@ -56,8 +56,10 @@ from atrium.api.delivery import (
     decide_delivery,
     inspection_of,
     locate,
+    policy_of,
     production_ledger,
     ranged_file,
+    refuse_forbidden_production,
     video_parameters,
 )
 from atrium.api.deps import get_paths, require_user
@@ -180,9 +182,13 @@ async def get_hls_video_segment(
     `runtimeTicks` and `actualSegmentLengthTicks` are **required**, which is the one refusal on
     this route that is not the third error shape: a segment URI stripped of its query answers the
     framework's problem details, where the same treatment of `main.m3u8` answers a playlist.
-    `actualSegmentLengthTicks` is otherwise unread here - the reference records it as the
-    download position its throttle measures against, which is 008 T13's knob rather than this
-    task's.
+    Together they are the **download position** both operator knobs measure against: their sum is
+    the end of the furthest segment this client has asked for, which is what the throttle stays
+    ahead of and what segment deletion falls behind (008 T13, `media/sessions.py`).
+
+    **This is the one delivery route with a user and a re-encode**, so it is where the delivery
+    half of AC-31 lands: a plan that re-encodes a stream the caller's policy forbids is refused
+    rather than force-copied into an output the negotiated profile rejects.
 
     `playlistId` decides nothing, in the reference and here: it is in the path because the URI
     shape has a slot for it, and a playlist nobody named still answers the segment.
@@ -193,6 +199,9 @@ async def get_hls_video_segment(
         # position is therefore this refusal, not the `404`.
         raise DeliverySegmentRequestError
     negotiated = _negotiate(request, itemId, parameters, segmentContainer, segmentLength)
+    refuse_forbidden_production(
+        negotiated.decision, policy_of(caller), is_video=negotiated.found.is_video
+    )
     manager = transcode_manager(request)
     session = manager.obtain(
         SessionKey(
@@ -214,6 +223,7 @@ async def get_hls_video_segment(
             ),
             index=segmentId,
             start_ticks=runtimeTicks,
+            length_ticks=actualSegmentLengthTicks,
         )
     except ffmpeg.ProductionError as error:
         # An encoder that never started and one that stopped short of the requested segment are
@@ -289,7 +299,14 @@ def _planned(
     segment_container: str | None,
     segment_length: int | None,
 ) -> tuple[MediaInspection, Decision, tuple[hls.Segment, ...]]:
-    """The negotiation plus the cuts, which is what the two playlist routes render."""
+    """The negotiation plus the cuts, which is what the two playlist routes render.
+
+    **The caller's policy reaches neither of them**, and that is a decision rather than an
+    omission: a playlist produces nothing, the reference refuses neither playlist nor segment,
+    and a server that refused a playlist would differ from it on a request that costs nothing
+    either way. The refusal belongs where the re-encode would have happened, which is the
+    segment route.
+    """
     negotiated = _negotiate(request, item_id, parameters, segment_container, segment_length)
     keyframes = (
         negotiated.inspection.video_keyframes
