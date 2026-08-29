@@ -122,6 +122,7 @@ say how it will be proven is not finished.
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Accepted** | **Accepted** | **Accepted** |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
+| [011](011-subtitle-delivery/) | Subtitle delivery | Draft | — | — |
 
 **001 through 007 are implemented**, 007 on 2026-08-28 across thirteen tasks. **008's spec and
 plan were accepted on 2026-08-29** at a review that wrote and ran the five probes its open
@@ -131,10 +132,44 @@ policy story, the body's `EnableTranscoding` switch, `static=true` as an error, 
 that nobody was looking for (behaviours §3.7 and §3.8: the Opus rate ladder applied to every
 codec, and the codec-less empty `200`). **008's fourteen tasks were accepted the same day** —
 their gate found the fixture world has no files behind any item and CI has no ffmpeg, both now
-T1's to fix — so **008 T1 is next**; 009 and 010 remain drafts, and
+T1's to fix — so **008 T1 is next**; 009, 010 and 011 remain drafts, and
 their open questions are the standing review agenda
 ([007's tasks](007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones) names
 what 008 inherits).
+
+**011 was opened on 2026-08-29 for a promise, not for a new idea.** An audit of the two
+first-party clients found requirements nothing owns, and the sharpest is one the
+[roadmap](../docs/roadmap.md#out-of-scope-and-why) has made since before 001: its exclusion row
+excludes subtitle *burn-in* and says in the same sentence that **v1 delivers subtitle files**.
+Nothing does. 008 §2 excluded subtitle extraction, conversion and delivery — correctly, for a
+feature about deciding a play method — and the feature order ran 001 to 010 with no row to catch
+what 008 put down, so the promise fell between two features rather than being descoped by either.
+[011's spec](011-subtitle-delivery/spec.md) is a draft with **twelve open questions and no
+measurements of its own**, which is 008's shape before its gate.
+
+**Its scope argument is the roadmap's *"008 is one feature, not two"* read backwards.** The two
+client traces
+([tvOS](../docs/compatibility/client-atrium-tvos.md#6-where-these-findings-go),
+[music](../docs/compatibility/client-embeat-mobile.md#7-where-these-findings-go)) both close by
+routing every finding to *"the feature that comes after 010"* — which is this one — while insisting,
+correctly, that **none of them is an 008 defect or an amendment to it**: 008's code does what 008's
+documents say, and a specification silent about a case is not one that is wrong about it. *An
+earlier draft of 011 §2.1 called four of them amendments owed to 008, 007 and 002, and the client
+documents landing on `main` overturned it.* But a destination is not a scope: each trace then
+decomposes its findings into a grouping table whose rows are visibly different shapes — a 009 scope
+decision, an amendment to 001, a sentence of prose, a test that *"can be written today"*. Eleven
+findings do not become one feature by sharing a date. 011 therefore takes the two the video client's
+own table had already grouped and sized — *"§4.2 + §4.3 — subtitle delivery, end to end. The largest
+of them"* — and hands the rest on at the size their own documents measured: a source with no
+inspection that still advertises direct play, `"Hls"` not selecting HLS where `"hls"` does, a
+session list that takes no `deviceId`, an initialisation segment that restarts production, and the
+one question about where a progressive re-encode is produced that the music client asks three ways.
+Four of those are one probe away from being specifiable and none can be specified before its probe,
+so they are a feature whose first act is a measurement session, taking its number on the day that
+session runs. **The ordering finding is 005's**, and its own document says the cheap answer is a
+test rather than three new sort keys: the album play queue is correctly ordered only as a side
+effect of [behaviours §2.6](../docs/compatibility/behaviours.md#26-sortname-has-two-derivations-and-three-types-use-the-second)'s
+sort-name derivation, and nothing states the dependency.
 
 **007's thirteen tasks found something in seven of them, and two were features that did not
 exist.** The sharpest is T11's: **the container `PlayedPercentage` had never been implemented.**
