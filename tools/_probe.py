@@ -107,6 +107,7 @@ class Server:
         extra_headers: dict[str, str] | None = None,
         raw: bool = False,
         raw_body: bytes | None = None,
+        send_token: bool = True,
     ) -> Any:
         url = self.base + path
         if params:
@@ -115,7 +116,7 @@ class Server:
                 url += "?" + urllib.parse.urlencode(clean, doseq=True)
 
         headers = {"Accept": "application/json"}
-        if self.token:
+        if self.token and send_token:
             headers["X-Emby-Token"] = self.token
         if extra_headers:
             headers.update(extra_headers)
@@ -225,8 +226,18 @@ class Server:
     def delete(self, path: str, body: Any = None, **params: Any) -> Any:
         return self._request("DELETE", path, params=params, body=body)
 
-    def delete_raw(self, path: str, body: Any = None, **params: Any) -> tuple[int, dict, bytes]:
-        return self._request("DELETE", path, params=params, body=body, raw=True)
+    def delete_raw(
+        self, path: str, body: Any = None, send_token: bool = True, **params: Any
+    ) -> tuple[int, dict, bytes]:
+        """DELETE returning (status, headers, payload).
+
+        `send_token=False` sends no credential at all, which is `get_streaming`'s rule for the
+        same reason: whether a route *requires* a token is a question about the route, and 008
+        has already found the answer to be the surprising one twice.
+        """
+        return self._request(
+            "DELETE", path, params=params, body=body, raw=True, send_token=send_token
+        )
 
     # -- connection --------------------------------------------------------------------------
 

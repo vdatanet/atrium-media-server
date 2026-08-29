@@ -50,7 +50,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import shutil
+from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -58,6 +60,16 @@ from typing import Final
 
 from atrium.domain.media import InspectedStream, MediaInspection, StreamKind
 from atrium.media.decision import Decision, StreamAction, StreamPlan
+
+logger = logging.getLogger("atrium.media")
+
+#: How many of an encoder's last diagnostic lines are kept. Bounded because the point is the
+#: reason it stopped, and a build that fails on every frame would otherwise be held whole in
+#: memory for the length of a film.
+STDERR_LINES_KEPT: Final = 20
+
+#: How much of it is read at a time, and the longest run without a newline that is kept.
+STDERR_BLOCK_BYTES: Final = 4096
 
 #: How ffmpeg is invoked before anything else is said to it. `-nostdin` because the server has no
 #: terminal to hand it, and a build that waits on stdin waits for ever.
@@ -605,6 +617,54 @@ class Production:
 
     argv: tuple[str, ...]
     process: asyncio.subprocess.Process
+    complaints: deque[str] = field(default_factory=lambda: deque(maxlen=STDERR_LINES_KEPT))
+    """The encoder's last words, filled by `drain` while it runs.
+
+    **A pipe nobody reads is a pipe that fills**, and a process blocked writing into a full one
+    never exits: it stops producing, the request waiting on its output waits for ever, and the
+    kill paths of 008 T12 arrive at a process that cannot be reaped by asking it nicely. At
+    `-loglevel error` an encode that goes well says nothing at all, which is exactly why the
+    hazard survived three tasks - it needs an encode that goes *badly*, over a film's length,
+    to show itself.
+    """
+
+    reader: asyncio.Task[None] | None = None
+    """The task doing that reading, cancelled when the production is finished."""
+
+    async def drain(self) -> None:
+        """Read the diagnostic stream to its end, keeping the tail.
+
+        **By block rather than by line**, which is the difference between draining a pipe and
+        appearing to. `readline` refuses a line longer than its stream's limit and gives up on
+        the reader, so a process that shouts without newlines - a progress meter separated by
+        carriage returns, a build with one enormous message - would leave the pipe unread from
+        that moment on, which is the exact hazard this method exists to remove. Measured by
+        `tests/unit/test_transcode_lifecycle.py`, which hung against the first version.
+
+        Losing the connection to a process being killed is the normal case rather than an error,
+        so a read that fails ends the drain instead of raising into a task nobody awaits.
+        """
+        stream = self.process.stderr
+        if stream is None:
+            return
+        pending = b""
+        with contextlib.suppress(Exception):
+            while True:
+                block = await stream.read(STDERR_BLOCK_BYTES)
+                if not block:
+                    break
+                *finished, pending = (pending + block).split(b"\n")
+                for line in finished:
+                    self._record(line)
+                # A "line" nothing has ended: keep its tail and drop the rest, so an encoder
+                # that never writes a newline cannot grow this without bound either.
+                pending = pending[-STDERR_BLOCK_BYTES:]
+        self._record(pending)
+
+    def _record(self, line: bytes) -> None:
+        said = line.decode("utf-8", "replace").strip()
+        if said:
+            self.complaints.append(said)
 
     async def stop(self) -> None:
         """Kill it if it is still running, and reap it if the caller is still allowed to wait.
@@ -642,11 +702,16 @@ class ProductionLedger:
     live: set[Production] = field(default_factory=set)
 
     async def start(self, argv: Sequence[str], *, to_pipe: bool) -> Production:
-        """Launch one, recorded from the moment it exists.
+        """Launch one, recorded from the moment it exists, with its diagnostics being read.
 
         `shell=False` by construction - `create_subprocess_exec` takes an argument vector, and
         every element of it came from `command()`'s own tables rather than from a client's
         string.
+
+        **The reader is started here rather than left to the caller**, because a caller that
+        forgot would not fail: it would hang, once, on the one encode long and noisy enough to
+        fill the pipe. Every process this ledger holds therefore has exactly one drain, started
+        in the same statement that makes the process reachable.
         """
         process = await asyncio.create_subprocess_exec(
             *argv,
@@ -654,18 +719,35 @@ class ProductionLedger:
             stderr=asyncio.subprocess.PIPE,
         )
         running = Production(argv=tuple(argv), process=process)
+        running.reader = asyncio.create_task(running.drain())
         self.live.add(running)
         return running
 
     async def finish(self, running: Production) -> None:
-        """Forget it, then stop it. Safe to call twice.
+        """Forget it, then stop it, then say why it stopped if it had something to say.
 
         Discarded **before** the stop, because the stop may be cancelled halfway and a ledger that
         still listed a process nobody is waiting for would say the server is producing when it is
         not - which is the one thing this set exists to answer.
+
+        The complaint is logged only for an encoder that failed on its own: a killed one exits on
+        a signal, which is what every stop path here produces and not a fault to report.
         """
         self.live.discard(running)
         await running.stop()
+        reader = running.reader
+        running.reader = None
+        if reader is not None:
+            reader.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await reader
+        if running.process.returncode is not None and running.process.returncode > 0:
+            logger.warning(
+                "%s exited %s: %s",
+                running.argv[0],
+                running.process.returncode,
+                " / ".join(running.complaints) or "no reason given",
+            )
 
     async def shutdown(self) -> None:
         for running in list(self.live):
@@ -689,6 +771,8 @@ __all__ = [
     "PREAMBLE",
     "RAW_SAMPLE_CODECS",
     "SEGMENT_FORMATS",
+    "STDERR_BLOCK_BYTES",
+    "STDERR_LINES_KEPT",
     "TICKS_PER_SECOND",
     "VIDEO_ENCODERS",
     "Output",

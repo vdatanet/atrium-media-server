@@ -77,6 +77,7 @@ INTERIM_008 = frozenset(
         ("GET", "/Videos/{itemId}/master.m3u8"),
         ("GET", "/Videos/{itemId}/main.m3u8"),
         ("GET", "/Videos/{itemId}/hls1/{playlistId}/{segmentId}.{container}"),
+        ("DELETE", "/Videos/ActiveEncodings"),
     }
 )
 

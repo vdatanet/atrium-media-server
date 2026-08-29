@@ -58,8 +58,43 @@ request asks for a different audio track restarts with the *new* one. A manager 
 first request's answer would keep producing the track the client just changed away from.
 
 Segments stay on disk for the life of the session, which is what makes AC-23 structural rather
-than a promise: the same request twice reads one file. Clearing them is 008 T12's, together with
-the ping timeout this module's `ping` feeds and the stop route that ends a session on demand.
+than a promise: the same request twice reads one file.
+
+## How a session ends, and what goes with it (008 T12)
+
+Three ways, and all three end in the same place - the process stopped and the session's scratch
+directory removed:
+
+| The end | Who decides |
+|---|---|
+| `DELETE /Videos/ActiveEncodings` | The client, when the viewer stops (`api/hls_segment.py`) |
+| Nothing has asked for a segment in a minute | `sweep`, on the reference's own kill timer |
+| The server is going down | `shutdown`, from the application's lifespan |
+
+**The kill timer is a minute, and it is a minute because the job is not progressive.** The
+reference keeps one number per job and picks it by that single property - 10 000 ms for a
+progressive stream, 60 000 ms for everything else `[source:
+MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:153-160 @ v10.11.11]` - and every
+job a session here owns is an HLS one, because the progressive routes die with their response
+instead. Measured end to end rather than only read: an HLS session whose client fetched one
+segment and then went quiet stopped 58 s and 60 s later on two runs `[probe:
+tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+**The stop route matches on the play session and on nothing else.** `deviceId` is mandatory at
+the binder and then decides nothing: the reference selects by `playSessionId` whenever one was
+given `[source: MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:203-205 @
+v10.11.11]`, and a `DELETE` carrying a device nothing owns still stopped the named session
+`[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`. So `stop` takes the
+play session alone; a manager that had required both to match would have leaked an encoder for
+every client that spells its device differently between the negotiation and the stop.
+
+**What the scratch root holds is not all session-scoped**, which is why there are two clearing
+paths rather than one. A session owns a *directory* named for its key; a remux owns a *file*
+named for the command that produced it (`api/delivery.py`), deliberately global because spec
+section 3.4 makes a remux byte-identical for everyone who asks for it. Ending one session must
+therefore remove one directory and never touch the files beside it, while startup and shutdown
+clear the root whole - the reference deletes every file under the transcode path when it starts
+`[source: MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:717-736 @ v10.11.11]`.
 
 See specs/008-playback-negotiation-and-delivery/spec.md sections 3.4, 3.7 and 3.8, and plan
 sections 5 and 6.7.
@@ -69,6 +104,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
+import shutil
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -77,7 +114,9 @@ from typing import Final
 
 from atrium.domain.media import MediaInspection
 from atrium.media import ffmpeg, hls
-from atrium.media.decision import Decision
+from atrium.media.decision import Decision, StreamAction
+
+logger = logging.getLogger("atrium.media")
 
 #: How often a waiting request looks again. The reference polls at 100 ms; this is finer because
 #: the fixture films are seconds long and a whole segment can appear inside one of its ticks.
@@ -88,6 +127,24 @@ POLL_SECONDS: Final = 0.02
 #: reach it, and anything further is treated as a seek `[source:
 #: Jellyfin.Api/Controllers/DynamicHlsController.cs:1497 @ v10.11.11]`.
 GAP_SECONDS_ALLOWED: Final = 24
+
+#: How long a session survives with nobody asking it for anything. The reference's own kill timer
+#: for a non-progressive job, read at the tag and then measured on a live one - 58 s and 60 s from
+#: the last segment to the job's disappearance, on two runs `[source:
+#: MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:153-160 @ v10.11.11]` `[probe:
+#: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`.
+PING_TIMEOUT_SECONDS: Final = 60
+
+#: The reference's other kill timer, for a progressive job. Recorded rather than used: nothing in
+#: this registry is progressive, because a progressive response owns its encoder for exactly as
+#: long as the response lasts and stops it in a `finally` (`api/delivery.py`, AC-26). It is here
+#: so the next reader can see that the 60 above is a choice between two numbers.
+PROGRESSIVE_PING_TIMEOUT_SECONDS: Final = 10
+
+#: How often the sweep looks. Sixth of the timeout, so a session dies inside a timeout plus a
+#: tick rather than inside two of them - the reference's timer fires per job and this is one loop
+#: for all of them, which is the shape 007's session reaper already uses.
+SWEEP_INTERVAL_SECONDS: Final = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +189,59 @@ class SegmentPlan:
     computed from. Three where the cadence is 3.004: the reference divides by its own integer."""
 
 
+@dataclass(frozen=True, slots=True)
+class TranscodingReport:
+    """What a session is producing, in the terms `/Sessions` states it in.
+
+    The reference reports this from the *request's* streaming state on every progress tick and
+    hangs it off the device's session `[source:
+    MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:344-368 @ v10.11.11]`, so it is
+    the last request's answer rather than the session's founding one - the same rule that makes
+    `SegmentPlan` per request here.
+
+    **Two of the reference's thirteen properties are missing on purpose**, and they are the two
+    it drops itself the moment a job stops: `Framerate` and `CompletionPercentage` come from
+    parsing the encoder's progress output, which Atrium does not do - it runs its encoders at
+    `-loglevel error` and reads their diagnostics only to say why one failed. The shape without
+    them is a shape the reference sends, measured on a session whose job had just been killed
+    `[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`; the argument is
+    in behaviours section 3.11.
+    """
+
+    container: str
+    video_codec: str | None
+    audio_codec: str | None
+    video_direct: bool
+    audio_direct: bool
+    bitrate: int | None
+    width: int | None
+    height: int | None
+    audio_channels: int | None
+    reasons: tuple[str, ...]
+
+    @classmethod
+    def of(cls, decision: Decision, container: str) -> TranscodingReport:
+        """The report a request carrying this decision produces.
+
+        `bitrate` is the two streams added up, which is what the reference reports when ffmpeg
+        has not yet said a real one: the output's total rather than either half of it.
+        """
+        video, audio = decision.video, decision.audio
+        rates = [plan.bitrate for plan in (video, audio) if plan is not None and plan.bitrate]
+        return cls(
+            container=container,
+            video_codec=video.codec if video is not None else None,
+            audio_codec=audio.codec if audio is not None else None,
+            video_direct=video is not None and video.action is StreamAction.COPY,
+            audio_direct=audio is not None and audio.action is StreamAction.COPY,
+            bitrate=sum(rates) if rates else None,
+            width=video.width if video is not None else None,
+            height=video.height if video is not None else None,
+            audio_channels=audio.channels if audio is not None else None,
+            reasons=decision.reasons,
+        )
+
+
 @dataclass(slots=True, eq=False)
 class TranscodeSession:
     """One playback session's scratch directory and the process filling it."""
@@ -141,6 +251,8 @@ class TranscodeSession:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     running: ffmpeg.Production | None = None
     last_ping: float = 0.0
+    report: TranscodingReport | None = None
+    """What the last request through this session asked to be produced, for `/Sessions`."""
 
     @property
     def producing(self) -> bool:
@@ -163,33 +275,70 @@ class TranscodeManager:
         ledger: ffmpeg.ProductionLedger,
         *,
         clock: Callable[[], float] = time.monotonic,
+        ping_timeout: float = PING_TIMEOUT_SECONDS,
+        sweep_interval: float = SWEEP_INTERVAL_SECONDS,
     ) -> None:
         self._scratch = scratch
         self._ledger = ledger
         self._clock = clock
+        self._ping_timeout = ping_timeout
+        self._sweep_interval = sweep_interval
         self._sessions: dict[SessionKey, TranscodeSession] = {}
 
     @property
     def sessions(self) -> tuple[TranscodeSession, ...]:
-        """Every live session, for the tests and for 008 T12's sweep."""
+        """Every live session, for the tests and for the sweep."""
         return tuple(self._sessions.values())
 
     def obtain(self, key: SessionKey) -> TranscodeSession:
-        """The session this request belongs to, created if this is its first request."""
+        """The session this request belongs to, created if this is its first request.
+
+        Pinged on creation rather than left at zero: a session exists because a request just
+        asked for it, and a sweep that saw the sentinel would reap a session younger than its
+        own first segment.
+        """
         existing = self._sessions.get(key)
         if existing is not None:
             return existing
         session = TranscodeSession(key=key, scratch=self._scratch / key.digest)
         self._sessions[key] = session
+        self.ping(session)
         return session
 
     def ping(self, session: TranscodeSession) -> None:
         """Mark the session as still wanted. Called by every request that reaches it.
 
-        The clock is injectable so that 008 T12's kill-timer test can move time rather than
-        spend it - `SessionRegistry`'s shape, for the same reason.
+        The clock is injectable so that the kill-timer test can move time rather than spend it -
+        `SessionRegistry`'s shape, for the same reason.
         """
         session.last_ping = self._clock()
+
+    def reporting(self, device_id: str) -> TranscodingReport | None:
+        """What this device is having produced for it, or `None` when nothing is.
+
+        The reference hangs one report on the device's session and overwrites it per progress
+        tick `[source: Emby.Server.Implementations/Session/SessionManager.cs:1866-1875 @
+        v10.11.11]`, so where a device has two live sessions the newest wins - the same answer
+        the last writer would have left there.
+
+        **A blank device names nothing**, which is the reference's own guard rather than a
+        defensive one `[source:
+        MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:344-346 @ v10.11.11]`: a
+        delivery request may arrive with no `deviceId` at all, and matching its session against
+        every stored session that happens to have no device either would report one viewer's
+        transcode on another's row.
+        """
+        wanted = device_id.strip().casefold()
+        if not wanted:
+            return None
+        live = [
+            session
+            for session in self._sessions.values()
+            if session.report is not None and session.key.device_id.strip().casefold() == wanted
+        ]
+        if not live:
+            return None
+        return max(live, key=lambda session: session.last_ping).report
 
     async def segment(
         self, session: TranscodeSession, plan: SegmentPlan, *, index: int, start_ticks: int
@@ -201,6 +350,7 @@ class TranscodeManager:
         requested segment are one answer on the reference too.
         """
         self.ping(session)
+        session.report = TranscodingReport.of(plan.decision, plan.container)
         extension = hls.segment_extension(plan.container)
         target = session.scratch / f"{index}{extension}"
 
@@ -210,15 +360,102 @@ class TranscodeManager:
                     await self._begin(session, plan, index=index, start_ticks=start_ticks)
         return await self._settled(session, target, index, extension)
 
-    async def shutdown(self) -> None:
-        """Stop every session's encoder. Called from the application's lifespan.
+    # -- the kill paths ----------------------------------------------------------------------
 
-        The scratch is left where it is: clearing it wholesale, at shutdown and at startup, is
-        008 T12's, together with the sweep that reclaims a session nobody is asking about.
+    async def stop(self, play_session_id: str) -> bool:
+        """End every session a client named, and say whether there was one.
+
+        **The play session is the whole key**, which is the measured rule rather than the
+        signature the plan first wrote: the route takes a `deviceId` too and it decides nothing.
+        `False` for an id nothing owns, and the route answers `204` regardless - the reference's
+        fire-and-forget contract, and the only sane one for a stop a client sends while its
+        player is already tearing down.
+        """
+        wanted = play_session_id.casefold()
+        matched = [
+            session
+            for session in self._sessions.values()
+            if session.key.play_session_id.casefold() == wanted
+        ]
+        for session in matched:
+            await self._discard(session)
+        return bool(matched)
+
+    async def sweep(self) -> int:
+        """End every session nobody has asked about for a timeout. Returns how many.
+
+        Reads the injected clock rather than sleeping, so the kill-timer test moves time instead
+        of spending it.
+        """
+        cutoff = self._clock() - self._ping_timeout
+        stale = [session for session in self._sessions.values() if session.last_ping <= cutoff]
+        for session in stale:
+            await self._discard(session)
+        return len(stale)
+
+    async def run(self) -> None:
+        """Sweep on the interval until cancelled, started by the application factory.
+
+        A failure is logged rather than allowed to kill the task: nothing else would restart it,
+        and the sessions the failed pass did not reach are still stale on the next one. 007's
+        playback reaper is the same loop for the same reason.
+        """
+        while True:
+            await asyncio.sleep(self._sweep_interval)
+            try:
+                await self.sweep()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("sweeping idle transcode sessions failed; retrying next sweep")
+
+    async def shutdown(self) -> None:
+        """Stop every session's encoder and clear the scratch root. From the lifespan.
+
+        The root rather than the sessions' directories, because a remux file belongs to no
+        session and there is nobody left to serve it to.
         """
         for session in list(self._sessions.values()):
             await self._halt(session)
         self._sessions.clear()
+        self.clear_scratch()
+
+    def clear_scratch(self) -> None:
+        """Empty the scratch root of everything, whoever wrote it.
+
+        Called at startup as well as at shutdown, because a server that was killed rather than
+        stopped left a directory per session it was serving and a file per remux it had produced,
+        and neither is reachable again: a session's name includes a play session id no client
+        will send twice, and a remux's name includes a change signal that a restart has no reason
+        to reproduce. The reference deletes every file under this path when it starts, and leaves
+        the directories `[source:
+        MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:717-736 @ v10.11.11]`; the
+        directories go too here, which no client can observe and an operator's `du` can.
+        """
+        if not self._scratch.exists():
+            return
+        for entry in sorted(self._scratch.iterdir()):
+            try:
+                if entry.is_dir() and not entry.is_symlink():
+                    shutil.rmtree(entry, ignore_errors=True)
+                else:
+                    entry.unlink(missing_ok=True)
+            except OSError:
+                # A file the operator has open, or a permission this process does not have.
+                # Reclaiming what can be reclaimed beats refusing to start over one entry.
+                logger.warning("could not clear the scratch entry %s", entry)
+
+    async def _discard(self, session: TranscodeSession) -> None:
+        """Stop one session and take its scratch directory with it.
+
+        **The directory, never the root.** A remux output lives beside these as a file named for
+        the command that produced it, shared by every request that asks for the same thing (spec
+        section 3.4), and a stop that cleared the root would throw away work belonging to
+        sessions it was not asked about.
+        """
+        await self._halt(session)
+        self._sessions.pop(session.key, None)
+        shutil.rmtree(session.scratch, ignore_errors=True)
 
     # -- production ------------------------------------------------------------------------
 
@@ -353,9 +590,13 @@ class TranscodeManager:
 
 __all__ = [
     "GAP_SECONDS_ALLOWED",
+    "PING_TIMEOUT_SECONDS",
     "POLL_SECONDS",
+    "PROGRESSIVE_PING_TIMEOUT_SECONDS",
+    "SWEEP_INTERVAL_SECONDS",
     "SegmentPlan",
     "SessionKey",
     "TranscodeManager",
     "TranscodeSession",
+    "TranscodingReport",
 ]
