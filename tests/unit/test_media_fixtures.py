@@ -30,6 +30,7 @@ from atrium.domain.items import ItemType
 from tests.fixtures.media import (
     DIRECT_PLAY,
     FILMS,
+    HIGH_RANGE,
     HIGH_RATE_AUDIO,
     LONG_TAKE,
     MATRIX,
@@ -95,6 +96,18 @@ def test_a_generated_file_probes_to_its_declaration(
     assert video["height"] == entry.height
     assert entry.frame_rate is not None
     assert Fraction(str(video["r_frame_rate"])) == Fraction(entry.frame_rate)
+    assert video["pix_fmt"] == entry.pixel_format
+    # Both directions on the transfer, because it is the whole of what makes a file HDR to
+    # either server: a declared one has to arrive, and an undeclared one has to be **absent**.
+    # A colour bars source states a matrix of its own whether or not the matrix declares one, so
+    # the other two fields are checked only where they were asked for.
+    assert video.get("color_transfer") == entry.color_transfer  # type: ignore[attr-defined]
+    for field, declared in (
+        ("color_primaries", entry.color_primaries),
+        ("color_space", entry.color_space),
+    ):
+        if declared is not None:
+            assert video.get(field) == declared  # type: ignore[attr-defined]
 
 
 def test_the_matrix_is_a_matrix() -> None:
@@ -106,6 +119,14 @@ def test_the_matrix_is_a_matrix() -> None:
     assert REJECTED_VIDEO.video_codec not in {
         one.video_codec for one in MATRIX if one is not REJECTED_VIDEO
     }, "the step-3 entry is the only one whose video codec nothing else has"
+
+    assert [one.key for one in MATRIX if one.color_transfer is not None] == [HIGH_RANGE.key], (
+        "the SDR-entrance branch needs exactly one HDR source, and needs every other entry to "
+        "be standard range so a master with two variants is attributable to this one file"
+    )
+    assert HIGH_RANGE.audio_codec != DIRECT_PLAY.audio_codec, (
+        "an entrance stands beside a stream copy, so the audio has to be the rejected half"
+    )
 
     assert REJECTED_CONTAINER.video_codec == DIRECT_PLAY.video_codec
     assert REJECTED_CONTAINER.demuxers != DIRECT_PLAY.demuxers, (

@@ -39,7 +39,9 @@ from atrium.media.labels import MEDIA_TYPES
 from atrium.server import create_app
 from tests.conformance.test_golden import STATE
 from tests.fixtures.media import (
+    HIGH_RANGE,
     LONG_TAKE,
+    REJECTED_AUDIO,
     BuiltMedia,
     ScannedMediaWorld,
     build_scanned_media_world,
@@ -90,6 +92,33 @@ REENCODE = {
             "Container": "ts",
             "Type": "Video",
             "VideoCodec": "hevc",
+            "AudioCodec": "aac",
+            "Protocol": "hls",
+            "Context": "Streaming",
+            "MinSegments": 1,
+            "BreakOnNonKeyFrames": True,
+        }
+    ],
+    "CodecProfiles": [],
+    "ContainerProfiles": [],
+    "SubtitleProfiles": [],
+}
+
+#: The profile that takes the video and refuses the audio, which is the only way to reach a
+#: **stream copy** over HLS - and the SDR entrance stands beside a copy and never beside a
+#: re-encode. Named for what it does rather than for the entry it is used on: `high_range` and
+#: `rejected_audio` are the same h264-in-mp4-with-ac3 shape, and that is what makes the two
+#: comparable.
+COPY_THE_VIDEO = {
+    "MaxStreamingBitrate": 120_000_000,
+    "DirectPlayProfiles": [
+        {"Container": "mp4", "Type": "Video", "VideoCodec": "h264", "AudioCodec": "flac"}
+    ],
+    "TranscodingProfiles": [
+        {
+            "Container": "ts",
+            "Type": "Video",
+            "VideoCodec": "h264",
             "AudioCodec": "aac",
             "Protocol": "hls",
             "Context": "Streaming",
@@ -273,8 +302,13 @@ async def test_the_re_encode_cadence_is_the_rounding_rule_over_the_fixtures_own_
 async def test_the_master_carries_one_variant_and_the_whole_forwarded_query(
     client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
 ) -> None:
-    """One `#EXT-X-STREAM-INF`, never a ladder - and its URI is the query verbatim, `?&` doubling
-    included, because that is what carries the negotiation to the next hop."""
+    """One `#EXT-X-STREAM-INF` for a **standard-range** negotiation, never a ladder - and its URI
+    is the query verbatim, `?&` doubling included, because that is what carries the negotiation
+    to the next hop.
+
+    The range qualifier is the whole of what the spec's first answer was missing: it read as a
+    property of the route and is a property of the source, and the test below is the other half.
+    """
     item = served[1].of(LONG_TAKE)
     answered = await client.post(
         f"/Items/{item.id}/PlaybackInfo", json={"DeviceProfile": REENCODE}, headers=HEADERS
@@ -299,6 +333,61 @@ async def test_the_master_carries_one_variant_and_the_whole_forwarded_query(
     assert master.headers["Expires"] == "0"
     assert master.headers["Content-Type"] == MEDIA_TYPES["m3u8"]
     assert master.headers["Content-Length"] == str(len(master.content))
+
+
+async def test_an_hdr_copy_grows_a_second_variant_and_a_standard_range_one_does_not(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """Both halves of the branch in one test, on **two files that differ only in colour**.
+
+    `high_range` and `rejected_audio` are the same h264-in-mp4-beside-ac3 shape, negotiated with
+    the same profile and copied the same way; the only thing that moves is the source's transfer
+    characteristics. So the second `#EXT-X-STREAM-INF` is attributable to that and to nothing
+    else - which is exactly what the measurement OQ-7 was answered from could not establish,
+    because it had one file and never looked at its range.
+    """
+    hdr = served[1].of(HIGH_RANGE)
+    sdr = served[1].of(REJECTED_AUDIO)
+
+    masters = {}
+    for key, item in (("hdr", hdr), ("sdr", sdr)):
+        answered = await client.post(
+            f"/Items/{item.id}/PlaybackInfo",
+            json={"DeviceProfile": COPY_THE_VIDEO},
+            headers=HEADERS,
+        )
+        assert answered.status_code == 200, answered.text
+        source = answered.json()["MediaSources"][0]
+        assert source["TranscodingUrl"], f"{key}: the audio rejection planned no transcode"
+        masters[key] = await client.get(source["TranscodingUrl"], headers=HEADERS)
+
+    sdr_lines = masters["sdr"].text.splitlines()
+    assert len(sdr_lines) == 3, "a standard-range copy still answers exactly one variant"
+
+    lines = masters["hdr"].text.splitlines()
+    assert len(lines) == 5
+    assert "VIDEO-RANGE=PQ" in lines[1], "the copy is labelled by the source's own transfer"
+    assert "VIDEO-RANGE=SDR" in lines[3], "the entrance is a re-encode, and those are always SDR"
+    # The entrance is offered at the copy's own rate, so nothing selects on bandwidth: the client
+    # is meant to choose by colour range.
+    for field in ("BANDWIDTH=", "AVERAGE-BANDWIDTH=", "RESOLUTION=", "FRAME-RATE="):
+        assert _field(lines[1], field) == _field(lines[3], field)
+    assert 'CODECS="avc1.42400D' in lines[3], (
+        "level 13 rather than the default 41, because this source *is* h264: the negotiated URL "
+        "writes its stream-option triplet qualified by the source's codec, and the entrance "
+        "looks it up under the target's - which here are the same codec, so it finds it. "
+        "`High 10` is not one of the three profiles the reference names, so both servers fall "
+        "back to constrained baseline's `4240`"
+    )
+    assert "VideoCodec=h264" in lines[4]
+    assert lines[4].endswith("&AllowVideoStreamCopy=false")
+    assert "?&" not in lines[4], "the entrance's address is rewritten, so the doubling goes"
+    assert masters["hdr"].headers["Content-Length"] == str(len(masters["hdr"].content))
+
+
+def _field(line: str, name: str) -> str:
+    """One `#EXT-X-STREAM-INF` attribute, for comparing two variant lines field by field."""
+    return line.split(name, 1)[1].split(",", 1)[0]
 
 
 # ------------------------------------------------------------------------------------------

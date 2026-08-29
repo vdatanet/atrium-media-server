@@ -59,7 +59,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import PurePosixPath
 from typing import Final
@@ -86,6 +86,13 @@ COPY_SEGMENT_SECONDS: Final = 6
 #: tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]`. Every other container gets the equal grid,
 #: because the reference's only metadata-based keyframe reader is the Matroska one.
 KEYFRAME_EXTRACTION_EXTENSIONS: Final[tuple[str, ...]] = ("mkv",)
+
+#: What the SDR entrance beside an HDR stream copy re-encodes to. The reference appends this one
+#: unconditionally and two more - hevc and av1 - only where the operator has permitted those
+#: encoders, and both permissions ship off `[source:
+#: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:218-268,
+#: MediaBrowser.Model/Configuration/EncodingOptions.cs:57-58 @ v10.11.11]`.
+SDR_ENTRANCE_CODEC: Final = "h264"
 
 #: What every segment URI in a media playlist begins with, and what the segment route's path
 #: therefore has to spell: `hls1/{playlistId}/{segmentId}.{container}` with the playlist named
@@ -286,37 +293,125 @@ def master_playlist(
     frame_rate: float | None,
     options: Mapping[str, str] | None = None,
 ) -> str:
-    """The master playlist: **exactly one variant**, never a ladder.
+    """The master playlist: one variant for the negotiation, and an SDR entrance beside an
+    HDR stream copy.
 
-    The reference builds several in three cases v1 cannot reach - an HDR source offered an SDR
-    entrance, an HEVC level 5.1 source offered a level 5.0 one, and adaptive bitrate streaming,
-    which it disables for a local caller, for a copy and for anything with no requested video
-    bitrate `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:212-315 @ v10.11.11]`. Every
-    measured answer carried one `#EXT-X-STREAM-INF` `[probe: tools/probe_hls.py, Jellyfin
-    10.11.11, 2026-08-29]`.
+    **"Exactly one variant" was wrong, and wrong about a branch nothing had reached.** OQ-7 was
+    answered from a run against the library's first film, which is standard range in almost any
+    library - so the entrance branch could not fire, and its absence was written down as the
+    shape of the route. Measured against an HDR source, the reference appends an **h264 SDR
+    entrance** whenever the video is stream-copied and the source's own range is HDR, at the
+    same `BANDWIDTH` as the copy so that a client selects on colour rather than on rate
+    `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:251-268 @ v10.11.11]`, `[probe:
+    tools/probe_transcode_decision.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+    **Two more entrances exist there and cannot exist here**, and both are the same absence: the
+    reference offers an hevc or an av1 entrance beside the h264 one when the copied codec is
+    that codec *and the operator has permitted that encoder*, and those two permissions ship
+    `false` `[source: MediaBrowser.Model/Configuration/EncodingOptions.cs:57-58 @ v10.11.11]`.
+    Atrium has neither knob, so it answers what a stock reference answers; the measured
+    three-variant master came from a server whose operator had turned `AllowHevcEncoding` on.
+    See behaviours section 5.10.
+
+    The remaining two multi-variant cases are still unreachable: an HEVC level 5.1 copy offered
+    a level 5.0 entrance, and adaptive bitrate streaming, which the reference disables for a
+    local caller, for a copy and for anything with no requested video bitrate `[source:
+    Jellyfin.Api/Helpers/DynamicHlsHelper.cs:271-314 @ v10.11.11]`.
 
     **`BANDWIDTH` is what this server plans to produce**, which is the sum of the two stream
     plans' bitrates. The reference reports the same thing about itself - its `OutputVideoBitrate`
     is both what it advertises here and what it passes to the encoder - but it arrives at that
     number through a codec-efficiency scaling this project does not have, so an h264 re-encode of
     an hevc source is advertised higher there than here. The alternative would be advertising a
-    rate the encoder is not aiming at, and with one variant there is nothing for a client to
-    choose between on it.
+    rate the encoder is not aiming at, and the entrance is deliberately not a rung of a ladder:
+    it carries the copy's own number, so nothing selects on it.
     """
     bandwidth = _bandwidth(video, audio)
-    fields = [f"BANDWIDTH={bandwidth}", f"AVERAGE-BANDWIDTH={bandwidth}"]
-    fields += _video_range(video, source_video)
     lowered = {name.lower(): value for name, value in (options or {}).items()}
-    codecs = _codecs(video, audio, source_video, lowered)
+    # `RESOLUTION` and `FRAME-RATE` describe the output's size and rate, and an entrance changes
+    # neither - so they are computed once, from the copy, and repeated verbatim. The reference
+    # reaches the same place by reading them off a state whose only mutation is the output codec.
+    shape = _shape(video, source_video, frame_rate)
+
+    lines = ["#EXTM3U"]
+    lines += _variant(
+        bandwidth,
+        _video_range(video, source_video),
+        _codecs(video, audio, source_video, lowered),
+        shape,
+        f"main.m3u8{query}",
+    )
+    if video is not None and _entrance_applies(video, source_video):
+        entrance = replace(video, action=StreamAction.ENCODE, codec=SDR_ENTRANCE_CODEC)
+        lines += _variant(
+            bandwidth,
+            # A re-encode is SDR whatever it came from, which is the whole point of the entrance.
+            ["VIDEO-RANGE=SDR"],
+            _codecs(entrance, audio, source_video, lowered),
+            shape,
+            f"main.m3u8?{_entrance_query(query, SDR_ENTRANCE_CODEC)}",
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _variant(
+    bandwidth: int, video_range: list[str], codecs: str, shape: list[str], uri: str
+) -> list[str]:
+    """One `#EXT-X-STREAM-INF` and the `main.m3u8` line beneath it, in the measured field order."""
+    fields = [f"BANDWIDTH={bandwidth}", f"AVERAGE-BANDWIDTH={bandwidth}", *video_range]
     if codecs:
         fields.append(f'CODECS="{codecs}"')
+    return ["#EXT-X-STREAM-INF:" + ",".join([*fields, *shape]), uri]
+
+
+def _shape(
+    video: StreamPlan | None, source: InspectedStream | None, frame_rate: float | None
+) -> list[str]:
+    fields = []
     if video is not None and video.width and video.height:
         fields.append(f"RESOLUTION={video.width}x{video.height}")
-    rate = _frame_rate(video, source_video, frame_rate)
+    rate = _frame_rate(video, source, frame_rate)
     if rate is not None:
         fields.append(f"FRAME-RATE={rate}")
-    lines = ["#EXTM3U", "#EXT-X-STREAM-INF:" + ",".join(fields), f"main.m3u8{query}"]
-    return "\n".join(lines) + "\n"
+    return fields
+
+
+def _entrance_applies(video: StreamPlan, source: InspectedStream | None) -> bool:
+    """Whether an SDR entrance stands beside this variant: a stream copy, of an HDR source.
+
+    Nothing about the *client* enters this - the reference asks only what it is about to send.
+    A re-encode already produces SDR and has nothing to offer an entrance beside.
+    """
+    return (
+        source is not None
+        and video.action is StreamAction.COPY
+        and source.video_range is VideoRange.HDR
+    )
+
+
+def _entrance_query(query: str, codec: str) -> str:
+    """The entrance's address: this negotiation's query with the codec named and the copy off.
+
+    Written by rewriting the pairs rather than by re-encoding a parsed mapping, which is what the
+    reference does and would round-trip differently on a value nothing here sends (a `+` for a
+    space, a repeated key). Two things move, and both were measured: `VideoCodec` is replaced
+    **in place**, keeping the parameter order the negotiation wrote, and `AllowVideoStreamCopy`
+    is appended at the end because the negotiated URL does not carry one. The leading empty pair
+    of the reference's own `?&DeviceId=` doubling does not survive - it is not a parameter, and
+    the reference's re-serialisation drops it too `[probe: tools/probe_transcode_decision.py,
+    Jellyfin 10.11.11, 2026-08-29]`.
+    """
+    pairs = [pair for pair in query.lstrip("?").split("&") if pair]
+    written = {"VideoCodec": codec, "AllowVideoStreamCopy": "false"}
+    rewritten = []
+    for pair in pairs:
+        name = pair.split("=", 1)[0]
+        # Case-sensitive, as the reference's own dictionary is: a differently cased spelling is a
+        # different key there, and both then reach the wire.
+        value = written.pop(name, None)
+        rewritten.append(pair if value is None else f"{name}={value}")
+    rewritten += [f"{name}={value}" for name, value in written.items()]
+    return "&".join(rewritten)
 
 
 def _bandwidth(video: StreamPlan | None, audio: StreamPlan | None) -> int:
@@ -473,6 +568,7 @@ __all__ = [
     "ENCODE_SEGMENT_SECONDS",
     "FMP4_CONTAINER",
     "KEYFRAME_EXTRACTION_EXTENSIONS",
+    "SDR_ENTRANCE_CODEC",
     "SEGMENT_PREFIX",
     "TICKS_PER_SECOND",
     "Segment",

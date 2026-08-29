@@ -94,8 +94,8 @@ specification section, a document line or a source line.
 | §1 `DeviceProfile.TranscodingProfiles[].Protocol` selects HLS | Compared case-sensitively against `"hls"` ([`media/urls.py:202`](../../src/atrium/media/urls.py), [`:236`](../../src/atrium/media/urls.py)) where `/universal` normalises ([`api/universal_audio.py:267`](../../src/atrium/api/universal_audio.py)) | 🟠 [§4.6](#46-two-spellings-of-hls-and-only-one-of-them-selects-hls) |
 | §2 `Range` must answer `206`, never `200` | [`compat/ranges.py:87-140`](../../src/atrium/compat/ranges.py): a well-formed `bytes=lo-hi` inside the file is `PARTIAL_CONTENT`, always — one of the three obligations of [§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect) | ✅ |
 | §2 `static=true` is the original container bytes | [behaviours §2.20](behaviours.md#220-statictrue-serves-the-original-bytes-the-urls-container-is-only-a-label), implemented at 008 T6 — one of the three obligations of [§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect) | ✅ |
-| §3 The master carries `VIDEO-RANGE`, `CODECS`, `FRAME-RATE` | [`media/hls.py:306-319`](../../src/atrium/media/hls.py) writes all three | ✅ |
-| §3 The master announces subtitle tracks | One `#EXT-X-STREAM-INF` and nothing else — no `#EXT-X-MEDIA` tag exists anywhere in `src/` | 🔴 [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
+| §3 The master carries `VIDEO-RANGE`, `CODECS`, `FRAME-RATE` | [`media/hls.py:357-364`](../../src/atrium/media/hls.py) writes all three, on every variant | ✅ |
+| §3 The master announces subtitle tracks | `#EXT-X-STREAM-INF` lines and nothing else — no `#EXT-X-MEDIA` tag exists anywhere in `src/`, and no variant carries a `SUBTITLES` attribute | 🔴 [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
 | §3 `…/Subtitles/{index}/Stream.vtt` when the manifest carries none | Not a row of [`surface.yaml`](surface.yaml), and L0 forbids serving what is not listed | 🔴 [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
 | §3 `AudioStreamIndex`/`SubtitleStreamIndex` overridden on the stream URL | The audio half is a delivery parameter and is honoured ([`api/delivery.py:166`](../../src/atrium/api/delivery.py), [`:625`](../../src/atrium/api/delivery.py)); the subtitle half is not one at all | 🟠 [§4.3](#43-the-clients-track-override-works-for-audio-and-is-dropped-for-subtitles) |
 | §3 `GET /Sessions?deviceId=…` for copy verification | The route takes no `deviceId` ([`api/sessions.py:287-293`](../../src/atrium/api/sessions.py)) | 🟠 [§4.4](#44-get-sessions-takes-no-deviceid-and-the-client-sends-one) |
@@ -322,11 +322,13 @@ is that it is now four facts about merged code rather than three about specifica
 - `GetSubtitle` is not among the 55, and [008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)
   excludes *"subtitle extraction, conversion and delivery as a separate route"*. `Stream.vtt` is
   not a row of [`surface.yaml`](surface.yaml), and L0 forbids serving a route that is not listed;
-- **the master playlist announces one variant and nothing else.**
-  [`media/hls.py:306-319`](../../src/atrium/media/hls.py) writes `#EXTM3U`, one
-  `#EXT-X-STREAM-INF` and one URI. No `#EXT-X-MEDIA` tag is written anywhere in `src/` — the only
-  match for that prefix is `#EXT-X-MEDIA-SEQUENCE`, which is a different tag in a different
-  playlist;
+- **the master playlist announces no subtitle track.**
+  [`media/hls.py:336-354`](../../src/atrium/media/hls.py) writes `#EXTM3U` and one
+  `#EXT-X-STREAM-INF` per variant — one, or two where an HDR source is stream-copied and the
+  second is its standard-range entrance ([008 §3.7](../../specs/008-playback-negotiation-and-delivery/spec.md#37-video-delivery),
+  corrected 2026-08-30) — and nothing else. No `#EXT-X-MEDIA` tag is written anywhere in `src/`
+  and no variant carries a `SUBTITLES` attribute; the only match for that prefix is
+  `#EXT-X-MEDIA-SEQUENCE`, which is a different tag in a different playlist;
 - **`EnableSubtitlesInManifest` is not a field of the profile model.**
   [`api/media_info.py:134-152`](../../src/atrium/api/media_info.py) declares eleven properties of a
   `TranscodingProfile` and that is not one of them, so `extra="ignore"`
