@@ -5,6 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
+amended: 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -391,6 +392,14 @@ of colour bars and a tone. The matrix the tests need: `mp4/h264+aac` (direct pla
 one file with an accepted video track beside a rejected audio track (AC-7), a `flac` at 96 kHz
 (AC-19), a multi-keyframe file long enough to segment. CI installs ffmpeg for the suite; the
 fixtures stay seconds long because every transcode test spends real CPU (spec §6).
+
+**Generation is bit-exact**, which is what makes the cached directory safe to reuse between runs:
+two builds of one entry compare byte for byte, so a rebuilt tree is the same tree. It is not free —
+the flags belong with the *output*, or Matroska writes a random segment identifier and the wall
+clock at an unchanged file size, which the `(size, mtime_ns)` change signal cannot see (T1). The
+cache is named after a digest of the matrix and the ffmpeg version line, because produced bytes are
+a function of the encoder: a different ffmpeg is a different fixture, and gets a different
+directory rather than a stale one.
 
 Route tests prove the wiring once per route on those fixtures, asserting **properties of
 delivered bytes, never reference byte-equality** (spec §6): the ffprobe-read codec of a

@@ -150,4 +150,8 @@ markers = [
     # exists so the network guard in tests/conftest.py has an exit that is declared rather than
     # improvised, and so feature 010's differential harness has one waiting.
     "needs_reference: needs a reachable reference service - a Jellyfin server, or the online metadata providers 004 uses. Exempt from the no-network guard, skipped by default, never in CI",
+    # Feature 008 is the first that has to open a media file, so the suite grew a build tool.
+    # Unlike `needs_reference` this one *does* run in CI - the workflow installs the binaries - and
+    # `pytest -m "not ffmpeg"` on a machine that has them is the check that the marker is complete.
+    "ffmpeg: generates or inspects real media with the ffmpeg and ffprobe binaries. Skipped with a message when they are absent (tests/conftest.py), installed by CI, and deselectable with -m 'not ffmpeg'",
 ]
