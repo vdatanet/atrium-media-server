@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent; and 2026-08-29 by T7 — httpx's ASGI transport cannot drop a connection, so AC-26 needed a client written for it and the `TranscodeManager` this list names does not exist until T11; a `StreamPlan` states every ceiling and passing them all to the encoder is what breaks it; `StreamPlan` gained `bit_depth`; and the `mediaSourceId` `500` is decided as behaviours §3.9; and 2026-08-29 by T8 — the codec-less hole is not a codec-less transcoding profile but a streaming request inferring a codec from a path with no extension, so behaviours §3.8's divergence is narrower than it read; synthesising the device profile *exactly* as the reference does scopes its ceilings to the direct-play containers and would have honoured none of them; AC-19's bit-depth clause is a copy refusal rather than an output target; `transcodingProtocol` must not be typed; and this route's three refusals are none of the `stream` pair's
+amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent; and 2026-08-29 by T7 — httpx's ASGI transport cannot drop a connection, so AC-26 needed a client written for it and the `TranscodeManager` this list names does not exist until T11; a `StreamPlan` states every ceiling and passing them all to the encoder is what breaks it; `StreamPlan` gained `bit_depth`; and the `mediaSourceId` `500` is decided as behaviours §3.9; and 2026-08-29 by T8 — the codec-less hole is not a codec-less transcoding profile but a streaming request inferring a codec from a path with no extension, so behaviours §3.8's divergence is narrower than it read; synthesising the device profile *exactly* as the reference does scopes its ceilings to the direct-play containers and would have honoured none of them; AC-19's bit-depth clause is a copy refusal rather than an output target; `transcodingProtocol` must not be typed; and this route's three refusals are none of the `stream` pair's; and 2026-08-29 by T9 — the two WAV prior-probe claims both moved when the battery was written: symptom 1 has two causes rather than one, and symptom 2 comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3; a WAV states its length inside the body and cannot be produced to a pipe at all, so "a `Content-Length` computed from sample count" is a file's size instead; the wav container has to name its own codec, because the muxer accepts a FLAC stream and writes a real RIFF header over it; and behaviours §3.8's "with or without a `transcodingContainer`" is container-dependent
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -717,7 +717,7 @@ only when it is below what arrived. The table stays owed by whichever task needs
 
 ## T9 — WAV: both symptoms answered with a real header, and the prior-probe debt paid
 
-- [ ] **Changes:** the PCM path in `media/ffmpeg.py` and the two routes: `stream.wav` (and
+- [x] **Changes:** the PCM path in `media/ffmpeg.py` and the two routes: `stream.wav` (and
   `stream` with a `pcm_*` codec) and `/universal` with `Container=wav` both answer valid RIFF —
   real header, `Content-Length` computed from sample count, `Range` support — the behaviours
   §3.2 decision, both symptoms. **The probe debt is paid in the same change:**
@@ -732,6 +732,55 @@ only when it is below what arrived. The table stays owed by whichever task needs
   (AC-20); `python3 tools/probe_universal_audio.py --allow-writes` prints the new battery's
   finding against the reference and exits 0.
 - **Spec reference:** §3.6, AC-20; behaviours §3.2
+
+**Done (2026-08-29).** The debt was the task, and paying it moved **both** of the claims it was
+supposed to confirm. Neither symptom is a property of the route it was recorded against; both are
+properties of one parameter.
+
+**Symptom 1 has two causes.** [Behaviours §3.2](../../docs/compatibility/behaviours.md#32-pcmwav-output--one-bug-two-symptoms-two-classes)
+recorded one — `-ar` built from an absent `AudioBitRate` — and that is only the second way in. A
+bare `stream.wav` never reaches the PCM block at all: the codec is inferred from the path
+extension, the reference's inference table has no `wav` row, and it hands `wav` to `-acodec`
+because it is a well-formed container name. Two `500`s that look identical on the wire, one of
+which the entry had never seen, and only one of which the upstream fix addresses.
+
+**Symptom 2 was recorded against a parameter that does not produce it.** `/universal` with
+`Container=wav` answers **mp3** — `container` is the direct-play list, and the headerless PCM
+comes from `transcodingContainer=wav`. AC-20 said `Container=wav`, so the criterion as written
+was unreachable; it now names the transcoding container and the two `stream` spellings beside it.
+The same run showed symptom 2 on `stream.wav` too, which the §3.2 split had assigned to
+`/universal` alone: the real split is *whether an `audioBitRate` was sent*, and it cuts across
+both route families.
+
+**And "a `Content-Length` computed from sample count" is the wrong shape.** A WAV states its own
+length **inside the body**, twice, and a muxer writing to a pipe fills both fields with
+`ffffffff` and exits `0` — two invocations of one conversion differ in exactly those eight bytes.
+So there is no chunked WAV answer to compute a header for: the output goes to scratch like a
+remux and the length is the file's. `media/ffmpeg.py` refuses to build the piped invocation, and
+that refusal is the assertion, because httpx's ASGI transport could never have shown the
+difference (T7's finding, met from the other side).
+
+**One row had to be added rather than transcribed.** ffmpeg's wav muxer *accepts* a FLAC stream
+under a codec tag and writes a genuine `RIFF` header over it, so a bare `stream.wav` falling back
+to the source's codec — the rule that makes a bare `stream.mkv` a remux — would have passed every
+"is it RIFF" assertion in the new test file and played nowhere. The wav container names its own
+codec, in `media/ffmpeg.py` rather than in `api/universal_audio.py`'s transcribed inference table,
+so that table's citation stays true about what the reference contains.
+
+**Two findings outside §3.2.** [Behaviours §3.8](../../docs/compatibility/behaviours.md#38-universal-without-audiocodec-answers-an-empty-200--class-a-diverged)
+said the empty `200` arrives "with or without a `transcodingContainer`"; it does not. A codec-less
+streaming request does not become the request path — `GetAudioEncoder` guards its input with the
+container-validation pattern and substitutes `aac` — so the empty body is `aac` meeting a muxer
+that cannot hold it, and a `wav` target, which can, answers a real RIFF. And the probe needed a
+fresh `DeviceId` on every row: the reference names its transcode output from the media path, the
+user agent, the device and the play session and nothing else, so a request that **cannot be
+produced at all** is answered `200` with a neighbouring request's bytes. Four rows of the first
+battery passed for that reason. Atrium keys its scratch on the whole command plus the file's
+change signal (T7), so the same pair of requests answers two bodies.
+
+The audio-bitrate default table T5 left owed was **not** needed: nothing in this task renders a
+`TranscodingUrl`, and PCM has no bitrate to default — `-b:a` at a `pcm_*` encoder is accepted and
+ignored, measured. It stays owed to whichever task splits that cap.
 
 ## T10 — `media/hls.py`: predicted playlists, and the two cadences
 

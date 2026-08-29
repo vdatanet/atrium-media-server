@@ -718,6 +718,7 @@ __all__ = [
     "FfmpegUnavailableError",
     "MediaFile",
     "ScannedMediaWorld",
+    "binary",
     "build_media_files",
     "build_scanned_media_world",
     "ffmpeg_version",

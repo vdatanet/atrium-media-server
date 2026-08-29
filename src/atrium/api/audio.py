@@ -70,9 +70,11 @@ async def get_audio_stream_by_container(
 
     `stream.wav?static=true` reaches here and answers the untouched source behind `audio/wav` -
     which is the one shape of the reference's PCM/WAV defect that is **not** broken, because
-    static never starts an encoder (behaviours sections 2.20 and 3.2). The *produced* form is
-    T9's, and until it lands `stream.wav` without `static=true` refuses the way any container this
-    server cannot mux into does.
+    static never starts an encoder (behaviours sections 2.20 and 3.2). **The produced form is the
+    divergence**, landed at 008 T9: where the reference answers `500` - naming no codec, because
+    it infers one called `wav`, and naming a `pcm_*` one without a bitrate, because of the `-ar`
+    it builds from an absent field - this answers a real `RIFF….WAVE` with a `Content-Length` and
+    an honoured `Range` (AC-20, behaviours section 3.2).
     """
     return await _serve(request, itemId, with_container(parameters, container), static=static)
 
