@@ -134,20 +134,37 @@ is a visible difference.
 
 **Atrium does:** includes it.
 
-### 1.6 `Container` at item level is a list, not a format
+### 1.6 `Container` at item level is a list for some formats, and the single form is per response
 
-**Jellyfin does:** reports the *demuxer* string at item level, e.g.
-`"mov,mp4,m4a,3gp,3g2,mj2"` — ffprobe's format-name list, not a single container. The real
-container is on the `MediaSource`. `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
+**Jellyfin does:** report one normalised container string at item level, which names a single
+container for some formats and lists several for others. A `.mp4` and a `.m4a` both answer
+`"mov,mp4,m4a,3gp,3g2,mj2"`; a `.mkv` answers `"mkv"`, an `.avi` `"avi"`, a `.flac` `"flac"`
+`[probe: tools/probe_media_container.py, Jellyfin 10.11.11, 2026-08-29]`. It is **not** ffprobe's
+`format_name` verbatim: `matroska` is renamed and `webm` dropped where the streams disqualify it
+`[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:124,270-315 @ v10.11.11]`.
+
+The single container on a `MediaSource` is derived from that string per response, and the two
+routes derive it differently. On a listing **no profile is involved**: it is the file's own
+extension where the list contains it — so the same list answers `mp4` for a `.mp4` and `m4a` for a
+`.m4a` — and the list's first member where it does not
+`[source: Emby.Server.Implementations/Dto/DtoService.cs:320-353 @ v10.11.11]`. In a negotiation
+it is the first
+member the `DeviceProfile` accepts, and a **profile-less** `PlaybackInfo` passes the list
+through untouched — the same `.m4a` answers `m4a` on `/Items` and the full list on `PlaybackInfo`
+`[probe: tools/probe_media_container.py, Jellyfin 10.11.11, 2026-08-29]`, `[probe:
+tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28]`.
+
+*The 2026-06-13 measurement recorded here — "the item level is ffprobe's format-name list, the
+real container is on the `MediaSource`" `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` — was made
+on an mp4 and is true of one. It is kept rather than deleted: it did not fail to reproduce, it
+generalised wrongly.*
 
 **Depends on it:** clients that pick a player by container have already learned to read the
-`MediaSource`, and a client reading the item-level field expects the list form.
+`MediaSource`, and a client reading the item-level field of an mp4 expects the list form.
 
-**Atrium does:** the same. ffprobe's `format_name` is passed through verbatim at item level; the
-resolved single container goes on the `MediaSource` — with 008's measured refinement that the
-resolution happens against a device profile: a **profile-less** `PlaybackInfo` reports the list
-form on the source too `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28]`
-([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)).
+**Atrium does:** the same, from one stored string. Inspection stores the normalised container and
+what the demuxer said before it, and each single form is derived where the response is built
+([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources), plan §4).
 
 ### 1.7 A null property is absent, everywhere, by one setting
 

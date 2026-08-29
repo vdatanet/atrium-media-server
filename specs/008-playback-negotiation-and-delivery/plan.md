@@ -129,30 +129,62 @@ Migration `0006_media_probes`, reversible (drop both tables).
 
 | Column | Meaning |
 |---|---|
-| `path` (PK) | The file inspected |
+| `library_id`, `relative_path` (PK) | The file inspected, named the way `item_sources` names it |
 | `size`, `mtime_ns` | 003's change signal, denormalised here so staleness is one comparison |
-| `container` | The resolved single container (`mp4`) |
-| `format_names` | ffprobe's demuxer list (`mov,mp4,...`) — the item-level `Container` |
+| `container` | The reference's normalised container string — a single name for some formats, a demuxer list for others |
+| `format_names` | What the demuxer answered, before that normalisation |
 | `runtime_ticks`, `bitrate` | Whole-file facts |
 | `video_keyframes` | Keyframe timestamps in ticks, serialised — §6.4's copy-cadence input |
-| `probed_at` | Diagnostic only |
+| `probed_at` | Diagnostic, and read back rather than write-only |
+
+**The key is the library and the relative path, not a path** — corrected at T2. An absolute path
+would be the one key in this schema that a remount invalidates: `library/identity.py` derives
+every identifier from the path *relative* to its root, deliberately, so that moving a root changes
+nothing — and probe rows keyed absolutely would be orphaned by a move that leaves every item,
+favourite, image and resume position intact. This shape is also the shape of the table these rows
+join to.
+
+**There is one container column, and it is not "the resolved single container"** — also corrected
+at T2, and it is the finding that decided the table. A single container is not a property of a
+file: the reference derives it per response, from the file's *extension* on a listing and from the
+*device profile* in a negotiation, so the same `.m4a` answers `m4a` on `/Items` and the whole
+`mov,mp4,m4a,3gp,3g2,mj2` on a profile-less `PlaybackInfo` `[probe:
+tools/probe_media_container.py, Jellyfin 10.11.11, 2026-08-29]`. What is storable is the
+normalisation the reference performs once, at inspection: `matroska,webm` becomes `mkv` where the
+streams disqualify WebM, and the mp4 family survives whole `[source:
+MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:124,270-315 @ v10.11.11]`.
+`format_names` keeps what the demuxer said before that, so re-deriving the normalisation never
+costs a rescan. §6.1 says who owns each derivation.
 
 **`media_streams`** — one row per elementary stream:
 
-`path` (FK, cascade), `stream_index`, `type`, `codec`, `codec_tag`, `profile`, `level`,
-`bit_depth`, `width`, `height`, `aspect_ratio`, `framerate`, `channels`, `channel_layout`,
-`sample_rate`, `language`, `title`, `is_default`, `is_forced`, `is_external`, `bitrate`,
-`video_range`, `video_range_type`, `color_transfer`, `color_primaries`, `color_space`,
+`library_id`, `relative_path` (FK, cascade), `stream_index`, `type`, `codec`, `codec_tag`,
+`profile`, `level`, `bit_depth`, `width`, `height`, `aspect_ratio`, `framerate`,
+`average_framerate`, `channels`, `channel_layout`, `sample_rate`, `language`, `title`,
+`is_default`, `is_forced`, `is_hearing_impaired`, `is_external`, `bitrate`, `video_range`,
+`video_range_type`, `color_range`, `color_transfer`, `color_primaries`, `color_space`,
 `pixel_format`, `ref_frames`, `is_interlaced`, `is_anamorphic`.
 
 The column set is the wire `MediaStream`'s needs plus the condition inputs the decision reads
 (profile, level, bit depth, resolution, channels, sample rate, and the HDR pair §3.3's
-metadata rule needs). `video_keyframes` exists to serve a *query pattern* — predicting copy
-segment boundaries without re-running ffprobe per playlist — and is the column a later reader
-will otherwise try to normalise away; it is one ordered list per video file and lives with the
-probe, not in a table of its own.
+metadata rule needs). **Three of them were missing from this list until T2 wrote the migration**,
+each of them beside one the list already had: `average_framerate`, because the reference carries
+two frame rates and they differ on variable-frame-rate content; `color_range`, beside the three
+other colour fields; and `is_hearing_impaired`, beside the two other disposition flags. Finding
+them in T3 would have cost a second migration.
 
-No index beyond the primary keys: every read is by `path` for one item's files.
+`video_keyframes` exists to serve a *query pattern* — predicting copy segment boundaries without
+re-running ffprobe per playlist — and is the column a later reader will otherwise try to normalise
+away; it is one ordered list per video file and lives with the probe, not in a table of its own.
+
+Almost every stream column is nullable, and that is measured rather than cautious: a Matroska
+stream reports no bitrate, no language tag and no codec tag; a lossless audio stream states its
+bit depth in one field and zero in the other; and ffprobe 9.0.1 reports no `refs` at all, so
+`ref_frames` is empty wherever that build inspects. Nothing may require it, and no test may assert
+it either way — the suite runs against two different builds.
+
+No index beyond the primary keys: every read is by `(library_id, relative_path)` for one item's
+files.
 
 **No table for sessions.** A transcode session is a process, scratch on disk and an in-memory
 record — it dies with the server on restart exactly as the reference's does, and `/Sessions`
@@ -254,9 +286,23 @@ def negotiate_range(header: str | None, size: int) -> RangeAnswer
     # multi-range and reversed → Full; suffix → Partial — the measured table, nothing else
 ```
 
-**`media/probe.py`**: `inspect(path) -> MediaInspection` — a dataclass mirror of the two tables.
-Raises on an unreadable or unparseable file; the scan records the failure the way 003 §3.7
-records unexamined files, and the item simply has no media source until a rescan succeeds.
+**`media/probe.py`**: `inspect(path) -> MediaInspection` — a dataclass mirror of the two tables,
+in `domain/media.py` so the repository can hand them out (ADR-0003). Raises on an unreadable or
+unparseable file; the scan records the failure the way 003 §3.7 records unexamined files, and the
+item simply has no media source until a rescan succeeds.
+
+**Two failures, not one**, and a scan must tell them apart: `UnreadableMediaError` is a fact
+about one file, while `ProberUnavailableError` — ffprobe is not installed — is true of *every*
+file, and recording a whole library as unexaminable would hide an operator's problem behind its
+own consequences. Both derive from `InspectionError` for a caller that does not care.
+
+**`MediaProbeRepository`**: `get(library_id, relative_path)` reads whatever is stored;
+`current(library_id, relative_path, size, mtime_ns)` reads it only while the change signal still
+matches, and answers nothing when it does not. Two readers because the callers ask different
+questions — a scan has the `stat` in hand and wants to know whether to re-inspect, and a wire
+assembly must not touch the filesystem to answer a request (§6.1). `put` replaces the stream rows
+rather than merging them: a file that lost a track between scans would otherwise keep it as a
+track no file has, at an index a delivery command addresses.
 
 ## 6. Algorithms
 
@@ -266,11 +312,16 @@ The scan pipeline, after 003's change detection says a media file is new or chan
 ffprobe once and upserts the two tables. The stored `size`/`mtime_ns` pair makes staleness a
 single comparison at read time; a stale row triggers re-inspection at the next scan, not at
 request time. `media/info.py` assembles the wire shapes from rows alone: the item-level
-`Container` is `format_names`, the source's `Container` is the resolved single form — except in
-a profile-less negotiation, where the source deliberately carries `format_names` too (spec §3.1,
-measured). `ETag` is the 32-hex hash the reference derives per source; its exact derivation is
-read from the source tree at task time and recorded with the task, because the `Tag` parameter
-in the TranscodingUrl must round-trip it.
+`Container` is the stored `container` verbatim, and the single container a **media source**
+reports is derived there rather than stored, because the two routes derive it differently
+(spec §3.1, measured). On a listing it is the file's extension where the stored list contains it
+and the list's first member where it does not — no profile is consulted. In a negotiation it is
+the first member the `DeviceProfile` accepts, which is `media/decision.py`'s to answer and T5's to
+emit; with no profile the list is passed through untouched. `format_names` is read by neither: it
+is the record of what the demuxer said, kept so that changing the normalisation costs a
+re-derivation rather than a rescan. `ETag` is the 32-hex hash the reference derives per source; its
+exact derivation is read from the source tree at task time and recorded with the task, because the
+`Tag` parameter in the TranscodingUrl must round-trip it.
 
 ### 6.2 The decision
 

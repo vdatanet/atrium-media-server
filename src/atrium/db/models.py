@@ -30,6 +30,7 @@ from sqlalchemy import (
     CheckConstraint,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -757,3 +758,144 @@ class ProviderCacheEntry(Base):
     #: When this stops being fresh. An identity lookup by id never expires - an id does not change
     #: meaning - so this is null for those (004 plan section 6.8).
     expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+
+
+class MediaProbe(Base):
+    """One media file, as a demuxer described it. `media/probe.py` produces these; 008 T3's wire
+    assembly reads them and never re-opens the file.
+
+    **Keyed by library and relative path, the way `item_sources` names the same file.** An
+    absolute path would be the one key in this schema that a remount invalidates: `library/
+    identity.py` derives every identifier from the path *relative* to its root precisely so that
+    moving a root costs nothing, and probe rows keyed absolutely would be silently orphaned by a
+    move that leaves every item, favourite and image intact.
+
+    `size` and `mtime_ns` are 003's change signal, denormalised here so that "is this inspection
+    still about these bytes" is one comparison against a `stat` (plan section 6.1) rather than a
+    join back to the item's sources.
+    """
+
+    __tablename__ = "media_probes"
+
+    library_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("libraries.id", ondelete="CASCADE"), primary_key=True
+    )
+    #: Relative to the library root, forward slashes, exactly as `item_sources` stores it.
+    relative_path: Mapped[str] = mapped_column(String, primary_key=True)
+
+    size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    mtime_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    #: The reference's normalised container string, which is a single container for some formats
+    #: and a comma-separated demuxer list for others - `mkv` against `mov,mp4,m4a,3gp,3g2,mj2`.
+    #: The **single** container a media source reports is derived from this per response and is
+    #: not stored: see `media/probe.py`.
+    container: Mapped[str] = mapped_column(String, nullable=False)
+    #: What the demuxer itself answered, before that normalisation.
+    format_names: Mapped[str] = mapped_column(String, nullable=False)
+
+    runtime_ticks: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    bitrate: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    #: Keyframe presentation times in ticks, in order; null where the file has no video stream.
+    #: A JSON array rather than a table of its own: it is one ordered list per file, read whole
+    #: and never queried into, and the query pattern it serves is predicting copy-segment
+    #: boundaries without re-reading the file (plan section 6.4).
+    video_keyframes: Mapped[Any | None] = mapped_column(JSON, nullable=True)
+
+    probed_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+
+    streams: Mapped[list[MediaStreamRow]] = relationship(
+        back_populates="probe",
+        lazy="raise",
+        cascade="all, delete-orphan",
+        order_by="MediaStreamRow.stream_index",
+    )
+
+
+class MediaStreamRow(Base):
+    """One elementary stream inside a probed file.
+
+    The column set is what a wire `MediaStream` needs plus what the negotiation reads as
+    conditions. **Almost all of it is nullable, and that is measured rather than cautious**: a
+    Matroska stream reports no bitrate, no language and no codec tag, and requiring any of them
+    would make half of a normal library unstorable.
+    """
+
+    __tablename__ = "media_streams"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["library_id", "relative_path"],
+            ["media_probes.library_id", "media_probes.relative_path"],
+            ondelete="CASCADE",
+            name="fk_media_streams_probe",
+        ),
+        CheckConstraint(
+            "type IN ('video', 'audio', 'subtitle', 'data', 'attachment', 'unknown')",
+            name="ck_media_streams_type",
+        ),
+    )
+
+    library_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    relative_path: Mapped[str] = mapped_column(String, primary_key=True)
+    #: The demuxer's own numbering, kept rather than re-derived: every delivery command addresses
+    #: a stream by it, so a renumbering here would map a request onto a different track.
+    stream_index: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    #: The demuxer's vocabulary, with `unknown` for a kind this build does not recognise - a
+    #: stream nobody can classify must not cost the file its other streams.
+    type: Mapped[str] = mapped_column(String, nullable=False)
+
+    codec: Mapped[str | None] = mapped_column(String, nullable=True)
+    codec_tag: Mapped[str | None] = mapped_column(String, nullable=True)
+    profile: Mapped[str | None] = mapped_column(String, nullable=True)
+    level: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bit_depth: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: The display aspect ratio as the file states it, `16:9`. The wire form is a *snapped* label
+    #: the reference picks from a table of near matches, which is the emitter's business.
+    aspect_ratio: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    #: Exact rationals, `24000/1001`, not floats: the segment cadence is computed from the first
+    #: of them and a rounded frame rate rounds every boundary with it.
+    framerate: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: Both, because the reference carries both and they differ on variable-frame-rate content.
+    average_framerate: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    channels: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    channel_layout: Mapped[str | None] = mapped_column(String, nullable=True)
+    sample_rate: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    language: Mapped[str | None] = mapped_column(String, nullable=True)
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    is_forced: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    is_hearing_impaired: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false()
+    )
+    #: Always false while nothing inspects a sidecar subtitle. The column exists because the wire
+    #: flag does, and an external stream is a row like any other when one arrives.
+    is_external: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+
+    bitrate: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    #: Derived from the colour metadata, stored because the negotiation compares them against
+    #: what a profile declares it can take (spec section 3.3). Null on anything but video.
+    video_range: Mapped[str | None] = mapped_column(String, nullable=True)
+    video_range_type: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    color_range: Mapped[str | None] = mapped_column(String, nullable=True)
+    color_transfer: Mapped[str | None] = mapped_column(String, nullable=True)
+    color_primaries: Mapped[str | None] = mapped_column(String, nullable=True)
+    color_space: Mapped[str | None] = mapped_column(String, nullable=True)
+    pixel_format: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    ref_frames: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_interlaced: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    #: Null on anything but video, where the question does not arise.
+    is_anamorphic: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+
+    probe: Mapped[MediaProbe] = relationship(back_populates="streams", lazy="raise")

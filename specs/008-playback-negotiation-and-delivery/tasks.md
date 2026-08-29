@@ -128,7 +128,7 @@ agreed with its tags could not tell the two scans apart.
 
 ## T2 — Inspection lands in rows: `media/probe.py`, migration 0006, the repository
 
-- [ ] **Changes:** new `src/atrium/media/probe.py` — `inspect(path) -> MediaInspection`, the
+- [x] **Changes:** new `src/atrium/media/probe.py` — `inspect(path) -> MediaInspection`, the
   ffprobe invocation and parse ([plan §5](plan.md#5-contracts)), raising on an unreadable or
   unparseable file; new migration `0006_media_probes` with the two tables of
   [plan §4](plan.md#4-data-model) (`media_probes` keyed by path with the denormalised change
@@ -144,6 +144,49 @@ agreed with its tags could not tell the two scans apart.
   runs over its `REPOSITORIES` tuple.
 - **Spec reference:** §3.1; plan §4, §5
 
+**Done (2026-08-29).** Two tables, forty-four columns, and the one column that cannot exist.
+
+**`container` — "the resolved single container (`mp4`)" — is not a property of a file.**
+Plan §4 asked for two container columns, a demuxer list and a resolved single form, and spec §3.1
+said the single form was "only resolved against a profile". Measured across a real library, the
+reference derives it **twice, differently, and once without a profile at all**: on a listing the
+single form is the file's own *extension* where the stored list contains it — the same
+`mov,mp4,m4a,3gp,3g2,mj2` answers `mp4` for a `.mp4` and `m4a` for a `.m4a` — and the list's first
+member where it does not
+`[source: Emby.Server.Implementations/Dto/DtoService.cs:320-353 @ v10.11.11]`; in a negotiation it
+is the first member the profile accepts, and a profile-less negotiation passes the list through.
+The same `.m4a` therefore answers `m4a` on `/Items` and the whole six-name list on `PlaybackInfo`
+`[probe: tools/probe_media_container.py, Jellyfin 10.11.11, 2026-08-29]`. Stored, either answer
+would have been wrong on the other route.
+
+**And the half of that sentence nobody doubted was also wrong.** "Item-level `Container` is a
+demuxer list, not a container" holds for the mp4 family and for nothing else: a `.mkv` answers
+`mkv`, a `.flac` answers `flac`, because what the reference stores is a *normalised* string —
+`matroska` renamed, `webm` dropped where the streams disqualify it — and not ffprobe's
+`format_name`
+`[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:124,270-315 @ v10.11.11]`.
+Reproducing the sentence literally would have put `matroska,webm` on the wire for 702 of the
+library's 1 200 items.
+
+**The primary key moved from `path` to `(library_id, relative_path)`.** An absolute path would have
+been the one key in this schema a remount invalidates: `library/identity.py` derives every
+identifier from the path *relative* to its root, on purpose, so that moving a root changes nothing.
+Keyed absolutely, a move would leave every item, favourite, image and resume position intact and
+silently orphan every probe row.
+
+**Three columns were missing from plan §4's list, each beside one it had.** `average_framerate` —
+the reference carries two frame rates and they differ on variable-frame-rate content, so one column
+could not emit both; `color_range`, beside the three other colour fields; `is_hearing_impaired`,
+beside the two other disposition flags. Found in T3 instead, they would have cost migration 0007.
+
+Measured rather than assumed, and the assumptions would have been wrong: a Matroska stream reports
+**no bitrate at all** and no language tag where the same content in mp4 carries `und`; a flac track
+states its bit depth in `bits_per_raw_sample` and zero in `bits_per_sample`; a file ffprobe opens
+happily can have **no duration** (a still image); and **ffprobe 9.0.1 does not report `refs`** —
+the field the reference reads for `RefFrames` — so `ref_frames` is empty wherever that build
+inspects. What an older build answers is not measured here and no test asserts the column either
+way, which is why the suite is green on 9.0.1 locally and on 6.1.1 in CI.
+
 ## T3 — The scan probes, and the wire finally says what a file contains
 
 - [ ] **Changes:** `library/scan.py` grows the inspection step behind 003's change signal — the
@@ -151,9 +194,12 @@ agreed with its tags could not tell the two scans apart.
   files in the existing library tests keep a stub and their speed; an inspection failure records
   the file the way 003 §3.7 records unexamined ones and never blocks the item.
   `media/info.py` (new) assembles `MediaSourceInfo`/`MediaStream` wire shapes from stored rows —
-  one source per `item_sources` part, the resolved container on the source, the demuxer list at
-  item level, and the **`ETag` derivation read from the reference's source first** and cited in
-  the module (plan §6.8's first debt). `api/item_dto.py`'s `MediaSources`, `MediaStreams`,
+  one source per `item_sources` part, the stored `container` verbatim at item level, and the
+  source's single container **derived here rather than read from a column** (T2's finding: on a
+  listing it is the file's extension where the stored list contains it, the list's first member
+  where it does not, and no profile is consulted — spec §3.1, plan §6.1), and the **`ETag`
+  derivation read from the reference's source first** and cited in the module (plan §6.8's first
+  debt). `api/item_dto.py`'s `MediaSources`, `MediaStreams`,
   `Container`, `Width`, `Height` gap-emitters fill from the same assembly, and the measured
   `NowPlayingItem` gaps 007 left — `HasSubtitles`, `IsHD`, `VideoType` — emit with them.
 - **Depends on:** T2

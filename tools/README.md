@@ -53,6 +53,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_universal_audio.py`](probe_universal_audio.py) | Does `/universal` meet a stated ceiling, when is it an empty `200`, and does `enableRedirection` ever fire? | 008 §3.6, OQ-4, AC-19, AC-21; behaviours §3.7, §3.8 | yes — short audio encodes |
 | [`probe_transcode_session.py`](probe_transcode_session.py) | Does production follow the throttle configuration, restart at a seek, and stop on `DELETE /Videos/ActiveEncodings`? | 008 §3.4, §3.8, OQ-6, OQ-10, OQ-11 | yes — about a minute of deliberate encoding |
 | [`probe_range_matrix.py`](probe_range_matrix.py) | What does static delivery answer to each shape of `Range` header, and what does a mismatched container suffix serve? | 008 §3.5, AC-11–AC-14, AC-18; behaviours §2.20 | no |
+| [`probe_media_container.py`](probe_media_container.py) | What is a file's `Container` at item level and on its media source, and what decides the single form? | 008 §3.1, plan §4 and §6.1 | no |
 
 ### Running them
 
@@ -88,6 +89,7 @@ python3 tools/probe_hls.py           --allow-writes
 python3 tools/probe_universal_audio.py --allow-writes
 python3 tools/probe_transcode_session.py --allow-writes
 python3 tools/probe_range_matrix.py
+python3 tools/probe_media_container.py
 ```
 
 The five playback probes marked `--allow-writes` make the reference **encode**: each starts one
