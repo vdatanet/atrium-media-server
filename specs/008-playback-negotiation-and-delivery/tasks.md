@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent; and 2026-08-29 by T7 — httpx's ASGI transport cannot drop a connection, so AC-26 needed a client written for it and the `TranscodeManager` this list names does not exist until T11; a `StreamPlan` states every ceiling and passing them all to the encoder is what breaks it; `StreamPlan` gained `bit_depth`; and the `mediaSourceId` `500` is decided as behaviours §3.9; and 2026-08-29 by T8 — the codec-less hole is not a codec-less transcoding profile but a streaming request inferring a codec from a path with no extension, so behaviours §3.8's divergence is narrower than it read; synthesising the device profile *exactly* as the reference does scopes its ceilings to the direct-play containers and would have honoured none of them; AC-19's bit-depth clause is a copy refusal rather than an output target; `transcodingProtocol` must not be typed; and this route's three refusals are none of the `stream` pair's; and 2026-08-29 by T9 — the two WAV prior-probe claims both moved when the battery was written: symptom 1 has two causes rather than one, and symptom 2 comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3; a WAV states its length inside the body and cannot be produced to a pipe at all, so "a `Content-Length` computed from sample count" is a file's size instead; the wav container has to name its own codec, because the muxer accepts a FLAC stream and writes a real RIFF header over it; and behaviours §3.8's "with or without a `transcodingContainer`" is container-dependent
+amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent; and 2026-08-29 by T7 — httpx's ASGI transport cannot drop a connection, so AC-26 needed a client written for it and the `TranscodeManager` this list names does not exist until T11; a `StreamPlan` states every ceiling and passing them all to the encoder is what breaks it; `StreamPlan` gained `bit_depth`; and the `mediaSourceId` `500` is decided as behaviours §3.9; and 2026-08-29 by T8 — the codec-less hole is not a codec-less transcoding profile but a streaming request inferring a codec from a path with no extension, so behaviours §3.8's divergence is narrower than it read; synthesising the device profile *exactly* as the reference does scopes its ceilings to the direct-play containers and would have honoured none of them; AC-19's bit-depth clause is a copy refusal rather than an output target; `transcodingProtocol` must not be typed; and this route's three refusals are none of the `stream` pair's; and 2026-08-29 by T9 — the two WAV prior-probe claims both moved when the battery was written: symptom 1 has two causes rather than one, and symptom 2 comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3; a WAV states its length inside the body and cannot be produced to a pipe at all, so "a `Content-Length` computed from sample count" is a file's size instead; the wav container has to name its own codec, because the muxer accepts a FLAC stream and writes a real RIFF header over it; and behaviours §3.8's "with or without a `transcodingContainer`" is container-dependent; and 2026-08-29 by T10 — both of §3.7's cadence numbers were attributed to the wrong thing, and the fixture T1 built for this task answers 3.003 s rather than the 3.004 s this list told it to make a golden of: the scaling divides by the rate the request carries at 32-bit precision, and 6.0 s is the copy default's equal grid rather than the source's keyframes, which a copy follows only for a container the operator has permitted on-demand extraction for; the playlist routes require a token where the four `stream` routes require none; and the `/universal` HLS handoff this task was to land cannot be, because its master playlist names an audio `main.m3u8` that is on no surface
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -784,7 +784,7 @@ ignored, measured. It stays owed to whichever task splits that cap.
 
 ## T10 — `media/hls.py`: predicted playlists, and the two cadences
 
-- [ ] **Changes:** new `src/atrium/media/hls.py` — `plan_segments` (uniform cadence for an
+- [x] **Changes:** new `src/atrium/media/hls.py` — `plan_segments` (uniform cadence for an
   encode, keyframe buckets off the stored list for a copy), `media_playlist` (VOD, v3,
   `MEDIA-SEQUENCE:0`, `ENDLIST`, `, nodesc`, `runtimeTicks` + `actualSegmentLengthTicks` per
   URI), `master_playlist` (exactly one variant, the negotiated `CODECS`/`RESOLUTION`/
@@ -802,6 +802,43 @@ ignored, measured. It stays owed to whichever task splits that cap.
   been produced**, and twice identically (AC-22's playlist half); the master carries one
   variant and the full forwarded query.
 - **Spec reference:** §3.7; AC-22 (boundaries and playlists); plan §6.4
+
+**Done (2026-08-29).** **Both published cadence numbers were attributed to the wrong thing, and
+the golden this task was told to write would have failed on the fixture built for it.** The
+rounding rule is `ceil(milliseconds × ceil(rate) ÷ rate)` over the rate the *request* carries, at
+32-bit precision — so 3.004 s is a fact about one film's **stored** 23.975988, and T1's
+`long_take`, built at an exact `24000/1001` precisely so "T10's rounding arithmetic has a source
+that actually runs at it", answers **3.003 s**. What is pinned is therefore the rule at five
+requested lengths (1 s → 1.002, 2 s → 2.003, 3 s → 3.004, 5 s → 5.006, 10 s → 10.011) and at both
+rates, which is also what separates `ceil` from `round`: a single row cannot.
+
+The 6.0 s copy cadence is **not** "the source's own keyframes" either. A copy follows real
+keyframes only where the operator has permitted on-demand keyframe extraction for that container,
+shipped and running as Matroska alone — so the measured mp4 film got the equal-length grid at the
+copy default. Asked at an off-grid five seconds the same mp4 answers ten segments of exactly 5.0 s
+and a Matroska file answers 5.045, 5.0, 5.0 …, which is what the conformance test now asserts
+against ffprobe-read keyframes, over a Matroska sibling generated for it (the fixture matrix has
+no keyframed mkv).
+
+Three smaller things. **Forwarding the query string verbatim needed the bytes from before
+`compat/query_params.py`'s case-insensitive rewrite**, which would otherwise have handed clients
+`maxFramerate` where the reference writes `MaxFramerate`; the middleware now stashes them.
+**These two routes require a token where the four `stream` routes require none** — behaviours
+§2.10's split is per action, not per feature — and their other refusals are the `stream` pair's
+third error shape rather than `/universal`'s problem details, `main.m3u8` with no query at all
+being no refusal at all. And **`BANDWIDTH` is this server's own encoder target**, where the
+reference advertises a rate scaled between the input and output codecs; with one variant there is
+nothing to select on it.
+
+**One bullet of this task is not done, and it needs a decision that is not an implementation
+one.** "T8's `transcodingProtocol=hls` refusal is replaced by the real master playlist" cannot be
+carried out inside the accepted surface: the reference answers that request with a master playlist
+whose single variant URI is a relative `main.m3u8`, which resolves to `/Audio/{itemId}/main.m3u8`
+— a path [surface.yaml](../../docs/compatibility/surface.yaml) does not carry, [§3.7](spec.md#37-video-delivery)'s
+route table does not describe, and no task lands. Serving that master would advertise a route that
+answers nothing, which is Principle VI's plausible-looking stub. The refusal therefore stands in
+`INTERIM_008` with its reason now measured rather than deferred, and adding the audio playlist
+pair is a scope decision under AGENTS.md's "Adding an endpoint" procedure — spec first.
 
 ## T11 — The `TranscodeManager` and the segment route: production with an owner
 

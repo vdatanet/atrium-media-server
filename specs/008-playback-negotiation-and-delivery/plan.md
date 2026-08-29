@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's; and 2026-08-29 by T6 — §3 gains `media/labels.py`, `api/delivery.py` and a `MediaFileRepository` that takes no user, §6.5 records that the four `stream` routes declare no authentication dependency at all and why the response is built header by header, §6.8's delivery-route error shape is discharged for those four (the third shape, not the problem details §7 implied), and §7 gains the container pattern's `400` and the missing-file case; and 2026-08-29 by T8 — §6.6's "exactly as the reference's controller does" is one clause too strong: its codec profile is scoped to the direct-play containers and therefore constrains nothing on the transcoding path, so the ceilings are stated unscoped here; and 2026-08-29 by T9 — §6.5's "a WAV re-encode, whose length is computable from sample count" is the wrong shape: a WAV states its own length inside the body and a piped one states `ffffffff`, so the output goes to scratch like a remux and the length is the file's, with `media/ffmpeg.py` refusing to build the piped invocation at all; and §6.6 gains the one inference row the reference has not got, kept out of the transcribed table
+amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's; and 2026-08-29 by T6 — §3 gains `media/labels.py`, `api/delivery.py` and a `MediaFileRepository` that takes no user, §6.5 records that the four `stream` routes declare no authentication dependency at all and why the response is built header by header, §6.8's delivery-route error shape is discharged for those four (the third shape, not the problem details §7 implied), and §7 gains the container pattern's `400` and the missing-file case; and 2026-08-29 by T8 — §6.6's "exactly as the reference's controller does" is one clause too strong: its codec profile is scoped to the direct-play containers and therefore constrains nothing on the transcoding path, so the ceilings are stated unscoped here; and 2026-08-29 by T9 — §6.5's "a WAV re-encode, whose length is computable from sample count" is the wrong shape: a WAV states its own length inside the body and a piped one states `ffffffff`, so the output goes to scratch like a remux and the length is the file's, with `media/ffmpeg.py` refusing to build the piped invocation at all; and §6.6 gains the one inference row the reference has not got, kept out of the transcribed table; and 2026-08-29 by T10 — §6.4's two cadence claims both moved when the rounding rule was finally read: the scaling divides by the rate the *request* carries at 32-bit precision, so the published 3.004 s is a fact about one film's stored 23.975988 and the T1 fixture's exact `24000/1001` answers 3.003 s; and a copy buckets the source's keyframes only for a container the operator has permitted on-demand extraction for, shipped as Matroska alone, so the published 6.0 s was the equal grid at the copy default. §6.4 also records that forwarding a query string verbatim needed the pre-canonicalisation bytes, and that `BANDWIDTH` is this server's own encoder target rather than the reference's codec-scaled one
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -453,17 +453,46 @@ one can be copied and stays a list when none can.
 
 ### 6.4 HLS
 
-The encode cadence and the copy bucketing both come from `plan_segments` over stored data. For
-a re-encode, boundaries are the forced-keyframe cadence (the measured 3.004 s at 23.976 fps —
-the exact rounding rule is read from the reference's playlist generator at task time and pinned
-by a golden against these measured values); ffmpeg is instructed to force keyframes at exactly
-those timestamps, so the playlist's promise and the produced bytes cannot drift. For a copy,
-boundaries bucket the stored keyframe list at the copy cadence (measured 6.0 s), which is why
-`video_keyframes` is a probe column. Segment requests inside the produced window serve the
-finished file with `Content-Length` and `Accept-Ranges: bytes` (parity, behaviours §3.3);
-outside it, §6.5 of the manager restarts production at `segments[index].start_ticks`. Produced
-segments stay on disk for the session's life, which is what makes AC-23's within-session byte
-identity structural.
+The encode cadence and the copy bucketing both come from `plan_segments` over stored data, in
+`media/hls.py`, with `api/dynamic_hls.py` doing nothing but reaching the same `decide_delivery`
+the `stream` pair reaches and rendering the answer. **The rounding rule this section owed is
+read and cited in the module**, and it moved two things the draft had wrong (T10):
+
+* **The re-encode cadence is `ceil(milliseconds × ceil(rate) ÷ rate)`**, over the rate the
+  *request* carries in `MaxFramerate` — which the negotiation sets to the source's clamped rate
+  and `media/urls.py` prints at 32-bit precision. So the module narrows the incoming float to a
+  single before dividing, because the reference re-reads that decimal as one. The measured
+  3.004 s is that arithmetic over a **stored** 23.975988; the T1 `long_take` fixture runs at an
+  exact `24000/1001` and answers 3.003 s, which is the rule reproducing rather than failing. The
+  golden pins the rule at five requested lengths and both rates.
+* **A copy does not always bucket keyframes.** The reference reads a file's keyframes on demand
+  only where the extension is in `AllowOnDemandMetadataBasedKeyframeExtractionForExtensions`,
+  shipped as `["mkv"]` and confirmed as that on the operator's server; every other container
+  gets the equal-length grid. The measured 6.0 s came from an mp4 film, so it was the grid at the
+  copy default and not the source's keyframes. `media/hls.buckets_allowed` is that gate, keyed on
+  the extension the way the reference keys it, and `video_keyframes` is still the input — for the
+  containers that are allowed to use it.
+
+The unrequested segment length is 3 s for a re-encode and 6 s for a copy. ffmpeg is instructed to
+force keyframes at exactly the planned timestamps, so the playlist's promise and the produced
+bytes cannot drift. Segment requests inside the produced window serve the finished file with
+`Content-Length` and `Accept-Ranges: bytes` (parity, behaviours §3.3); outside it, §6.5 of the
+manager restarts production at `segments[index].start_ticks`. Produced segments stay on disk for
+the session's life, which is what makes AC-23's within-session byte identity structural.
+
+**Both playlists forward the query string exactly as it arrived**, which needed a scope key
+rather than a read of the request: `compat/query_params.py`'s case-insensitive rewrite has already
+replaced every recognised parameter with *this* server's declared spelling by the time a handler
+runs, so a forwarded `MaxFramerate` would reach a client's playlist as `maxFramerate`. The
+middleware now stashes the original bytes under `ORIGINAL_QUERY_STRING` and these two routes are
+the only readers.
+
+**`BANDWIDTH` is the sum of the two stream plans' bitrates**, which is what this server will
+produce. The reference advertises its own `OutputVideoBitrate`, and reaches it by scaling the
+source's rate between the input and output codecs — so an h264 re-encode of an hevc source is
+advertised higher there than here. Both servers advertise their own encoder's target; reproducing
+the reference's number would mean advertising a rate `media/ffmpeg.py` is not aiming at, and with
+exactly one variant there is nothing for a client to select on it.
 
 ### 6.5 Progressive delivery
 
@@ -595,8 +624,11 @@ the ceilings a plan holds. What stays owed to the task list:
 
 * ~~**The `ETag` derivation** (§6.1)~~ — **discharged at T3**, and it took a search rather than a
   reading: the assignment carries two silent conventions, and §6.1 now records both with the probe
-  that proved them. **The exact cadence-rounding rule** behind the measured 3.004 s (§6.4) is
-  still one source-reading, cited with the task that implements it.
+  that proved them. ~~**The exact cadence-rounding rule** behind the measured 3.004 s (§6.4)~~ —
+  **discharged at T10**, and reading it moved the number: 3.004 s is the scaling over a *stored*
+  23.975988 rather than over the nominal 23.976, so the same rule answers 3.003 s for a source at
+  an exact `24000/1001`. The probe grew a five-row cadence matrix, which is what separates `ceil`
+  from `round`, and the copy half of §6.4 moved with it.
 * **The reference's ping-timeout constants** (§6.7): the kill-timer shape is sourced
   (`TranscodeManager.cs`), the numbers are read when the sweep is built.
 * ~~**The delivery-route error shapes** (§7): an unknown item on `/stream`~~ — **discharged at T6
@@ -604,8 +636,12 @@ the ceilings a plan holds. What stays owed to the task list:
   §7 table's "007-measured refusal family" implied. ~~A **malformed range on a chunked response**~~
   — **discharged at T7**: on a chunked answer *every* `Range` is ignored, readable or not, so the
   sized case's five-shape table has no counterpart here at all (behaviours §3.3). The refusal
-  shapes of `/universal`, the playlists and the segments remain owed to the tasks that land them,
-  folded into a probe battery.
+  shapes of `/universal` ~~, the playlists~~ and the segments remain owed to the tasks that land
+  them, folded into a probe battery. **The playlists' four were discharged at T10**, into
+  `probe_hls.py`: `401` empty with no credential — these two routes require a token where the four
+  `stream` routes require none — and then the `stream` pair's own shapes, `404` and `400` in
+  `text/plain`, rather than `/universal`'s problem details. The fourth is not a refusal: a
+  `main.m3u8` with no query at all answers a playlist.
 * ~~**AC-26's disconnect timing** needs a fixture client that drops mid-body~~ — **discharged at
   T7**, and the client had to be written rather than configured: **httpx's ASGI transport cannot
   drop a connection.** It drives the application to completion and hands back a buffered body, so

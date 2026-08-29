@@ -57,11 +57,14 @@ IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007"})
 #: landed are listed here. It is deleted at T14, when `"008"` joins the set above. 002, 005, 006
 #: and 007 each used exactly this device, and all four lists are gone.
 #:
-#: **One route on this list is knowingly incomplete.** `/Audio/{itemId}/universal` with
-#: `transcodingProtocol=hls` answers a master playlist on the reference and a refusal here, until
-#: T10 exists to produce one; every other shape of that route is complete. A playlist naming
-#: segments nothing can serve would be Principle VI's plausible-looking stub, which is the one
-#: thing an unimplemented path may not be.
+#: **One route on this list is knowingly incomplete, and T10 did not complete it.**
+#: `/Audio/{itemId}/universal` with `transcodingProtocol=hls` answers a master playlist on the
+#: reference whose single variant URI is a relative `main.m3u8` - which resolves to
+#: `/Audio/{itemId}/main.m3u8`, a path this project's surface does not carry and no accepted spec
+#: describes. Serving that master would advertise a route that answers nothing, which is Principle
+#: VI's plausible-looking stub; adding the audio playlist pair is a surface decision under the
+#: "Adding an endpoint" procedure and not an implementation detail. The refusal therefore stands,
+#: with the reason now measured rather than deferred (`api/universal_audio.py`).
 INTERIM_008 = frozenset(
     {
         ("POST", "/Items/{itemId}/PlaybackInfo"),
@@ -71,6 +74,8 @@ INTERIM_008 = frozenset(
         ("GET", "/Audio/{itemId}/universal"),
         ("GET", "/Videos/{itemId}/stream"),
         ("GET", "/Videos/{itemId}/stream.{container}"),
+        ("GET", "/Videos/{itemId}/master.m3u8"),
+        ("GET", "/Videos/{itemId}/main.m3u8"),
     }
 )
 

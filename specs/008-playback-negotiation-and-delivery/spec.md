@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — §3.1 gains the measured media-source field set (31 properties on every source, `VideoType` on a video one), the 32-bit number format its rates and level are written in, the three stream families v1 does not emit, and two divergences the first draft stated as parity: a multi-part film's parts are media sources here and separate items in the reference, and `HasSubtitles` counts only the streams inside the container; and 2026-08-29 at the spec review, which wrote the five probes the OQ table had been citing prospectively and ran all of them — all twelve open questions answered, and five claims did not survive: the policy story was fiction (no playback route consults `EnableMediaPlayback`, and a single denied permission moves nothing at negotiation — §3.2, §3.3, AC-31), `EnableTranscoding: false` in the request body is ignored (OQ-12), `static=true` on a mismatched container is not an error but the original bytes behind the wrong label (§3.5, AC-18), `enableRedirection` never redirects a local file (OQ-4, AC-21), and the reference's HLS segments already carry `Content-Length` — the §3.5 divergence shrank to the progressive routes. Plus one defect nobody was looking for: a sample-rate ceiling is answered from the Opus rate ladder and can be **exceeded** (§3.6, AC-19); and 2026-08-29 by T4 — §3.3's rule 1 loses "or empty": an absent profile means anything and an empty one permits nothing, which are opposite answers; the reasons list is measured to say why *direct play* failed rather than which rung was reached, to name `DirectPlayError` when nothing else explains the refusal, and to arrive in flag-value order; and a numeric ceiling is compared against the value the server holds rather than the shorter decimal it printed; and 2026-08-29 by T6 — §3.5's authentication sentence was the wrong way round: the four `stream` routes accept every mechanism and **require none**, where `/universal` alone requires one, so AC-32 records the decision 002 deferred here; the range table gains five measured rows including the one the RFC would have got backwards (an unreadable `Range` is the whole body, never a `416`); a delivery route's own refusal is the third error shape rather than problem details; the container is a label with a fallback and a spelling rule; and a static response carries exactly four headers and does no conditional handling; and 2026-08-29 by T8 — §3.6's codec-less hole is not a codec-less transcoding profile: the profile defaults to mp3 and negotiates, and it is the streaming request behind it that infers a codec from a request path with no extension, which is why the empty `200` arrives with a `transcodingContainer` as well as without one; AC-19's bit-depth clause is a direct-play refusal and not an output target, because neither server ever states a sample format; `transcodingProtocol` is unvalidated and case-insensitive, so a typed parameter would refuse requests the reference serves; `container` is split on commas before bars; and this route's three refusals are none of its siblings' — the item `404` is problem details where theirs is the third shape, and both `mediaSourceId` shapes answer one `400` where theirs split `400`/`500`; and 2026-08-29 by T9 — §3.6's PCM/WAV warning was wrong in both halves once its prior-probe was discharged: the `500` has two causes (a `wav` extension inferred as a codec, and a `pcm_*` codec with no `audioBitRate`), and the headerless body comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3 on both servers. Neither symptom belongs to one route family — the split is whether an `audioBitRate` was sent — and AC-20 now names every WAV shape and the length and `Range` each of them carries; the codec-less hole is container-dependent, because the codec the reference ends up asking for is `aac` rather than the request path, and a `wav` transcoding container can carry it
+amended: 2026-08-29 by T3 — §3.1 gains the measured media-source field set (31 properties on every source, `VideoType` on a video one), the 32-bit number format its rates and level are written in, the three stream families v1 does not emit, and two divergences the first draft stated as parity: a multi-part film's parts are media sources here and separate items in the reference, and `HasSubtitles` counts only the streams inside the container; and 2026-08-29 at the spec review, which wrote the five probes the OQ table had been citing prospectively and ran all of them — all twelve open questions answered, and five claims did not survive: the policy story was fiction (no playback route consults `EnableMediaPlayback`, and a single denied permission moves nothing at negotiation — §3.2, §3.3, AC-31), `EnableTranscoding: false` in the request body is ignored (OQ-12), `static=true` on a mismatched container is not an error but the original bytes behind the wrong label (§3.5, AC-18), `enableRedirection` never redirects a local file (OQ-4, AC-21), and the reference's HLS segments already carry `Content-Length` — the §3.5 divergence shrank to the progressive routes. Plus one defect nobody was looking for: a sample-rate ceiling is answered from the Opus rate ladder and can be **exceeded** (§3.6, AC-19); and 2026-08-29 by T4 — §3.3's rule 1 loses "or empty": an absent profile means anything and an empty one permits nothing, which are opposite answers; the reasons list is measured to say why *direct play* failed rather than which rung was reached, to name `DirectPlayError` when nothing else explains the refusal, and to arrive in flag-value order; and a numeric ceiling is compared against the value the server holds rather than the shorter decimal it printed; and 2026-08-29 by T6 — §3.5's authentication sentence was the wrong way round: the four `stream` routes accept every mechanism and **require none**, where `/universal` alone requires one, so AC-32 records the decision 002 deferred here; the range table gains five measured rows including the one the RFC would have got backwards (an unreadable `Range` is the whole body, never a `416`); a delivery route's own refusal is the third error shape rather than problem details; the container is a label with a fallback and a spelling rule; and a static response carries exactly four headers and does no conditional handling; and 2026-08-29 by T8 — §3.6's codec-less hole is not a codec-less transcoding profile: the profile defaults to mp3 and negotiates, and it is the streaming request behind it that infers a codec from a request path with no extension, which is why the empty `200` arrives with a `transcodingContainer` as well as without one; AC-19's bit-depth clause is a direct-play refusal and not an output target, because neither server ever states a sample format; `transcodingProtocol` is unvalidated and case-insensitive, so a typed parameter would refuse requests the reference serves; `container` is split on commas before bars; and this route's three refusals are none of its siblings' — the item `404` is problem details where theirs is the third shape, and both `mediaSourceId` shapes answer one `400` where theirs split `400`/`500`; and 2026-08-29 by T9 — §3.6's PCM/WAV warning was wrong in both halves once its prior-probe was discharged: the `500` has two causes (a `wav` extension inferred as a codec, and a `pcm_*` codec with no `audioBitRate`), and the headerless body comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3 on both servers. Neither symptom belongs to one route family — the split is whether an `audioBitRate` was sent — and AC-20 now names every WAV shape and the length and `Range` each of them carries; the codec-less hole is container-dependent, because the codec the reference ends up asking for is `aac` rather than the request path, and a `wav` transcoding container can carry it; and 2026-08-29 by T10 — §3.7's two cadence numbers were both attributed to the wrong thing: 3.004 s is a requested three seconds scaled by the rate the *container stores* (23.975988, where an exact 24000/1001 answers 3.003 s) and not "the cadence at 23.976 fps", and 6.0 s is the copy path's own default laid as an equal grid rather than "the source's own keyframes" — a copy follows real keyframes only for a container the operator has permitted on-demand extraction for, which ships as Matroska alone. §3.7 gains the playlist routes' four measured refusals and their header set, and AC-32 gains them: they are the second and third delivery routes that require a token, where it had named `/universal` alone
 depends_on: [005, 007]
 ---
 
@@ -749,6 +749,22 @@ that only follows the playlist cannot tell, which is the point:
 - Every `#EXTINF` line ends `, nodesc`, and every segment URI repeats the full query plus two
   per-segment parameters: `runtimeTicks` (the segment's cumulative start offset) and
   `actualSegmentLengthTicks` (its exact duration).
+- Both playlists carry a `Content-Length` and are labelled `application/vnd.apple.mpegurl`; the
+  master carries `Expires: 0` and the media playlist carries none. `#EXT-X-TARGETDURATION` is the
+  **longest** segment rounded up, not the requested length — a copy asked for at five seconds
+  whose longest bucket is 5.045 s declares `6`
+  `[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+**These two routes require a token where the four `stream` routes require none**, and their other
+refusals are the `stream` pair's rather than `/universal`'s — all four measured on both playlist
+routes in one run `[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]`:
+
+| Refusal | `master.m3u8` and `main.m3u8` |
+|---|---|
+| No credential | `401`, empty body |
+| An item nothing holds | `404`, `text/plain`, the fixed 25 bytes |
+| A `mediaSourceId` naming no source | `400`, `text/plain`, the same 25 bytes |
+| No query string at all | **not a refusal**: a copy is planned at the copy default and a playlist is answered |
 
 Rules:
 
@@ -759,9 +775,25 @@ Rules:
    always.
 2. **Segment duration is uniform** except for the last, and the playlist's declared duration matches
    what is delivered. Players build their seek bar from this. The number itself depends on the
-   path: the same film measured 3.004 s per segment re-encoded (the forced-keyframe cadence at
-   23.976 fps) and 6.0 s per segment stream-copied (the source's own keyframes), each uniform
-   within its session.
+   path: the same film measured 3.004 s per segment re-encoded and 6.0 s per segment
+   stream-copied, each uniform within its session — and **neither number means what it looks
+   like**, which is the reading this section owed and 008 T10 paid
+   `[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+   The 3.004 s is a requested three seconds scaled up so a whole number of frames fits a segment:
+   `ceil(3000 × ceil(rate) ÷ rate)` milliseconds, over the rate the *request* states and only
+   where the video is re-encoded. The rate is the one the film's container **stores**, and this
+   film stores 23.975988; a source at an exact 24000/1001 — 23.976025 — answers **3.003 s** from
+   the same arithmetic. Measured at five requested lengths, one rate: 1 s → 1.002, 2 s → 2.003,
+   3 s → 3.004, 5 s → 5.006, 10 s → 10.011.
+
+   The 6.0 s is the **copy path's own default segment length**, laid as an equal grid over the
+   runtime — not the source's keyframes. A copy's boundaries follow the file's real keyframes only
+   where the operator has permitted on-demand keyframe extraction for that container, and the
+   shipped permission names Matroska alone (`AllowOnDemandMetadataBasedKeyframeExtractionForExtensions`,
+   `["mkv"]`). Asked for at five seconds, the measured mp4 answers ten segments of exactly 5.0 s
+   and a Matroska file beside it answers 5.045, 5.0, 5.0 … — the bucketing, visible only where it
+   is allowed. The unrequested default is three seconds re-encoded and six copied.
 3. **A segment requested out of order is served.** Players seek; they do not walk the playlist.
 4. **The playlist is complete and marked ended** for a finite source. A live-style rolling playlist
    would make the file appear unseekable.
@@ -888,9 +920,10 @@ though the age-based one is.
     step is refused rather than force-copied into an output that violates the profile.
 32. The four `stream` routes **accept every token mechanism and require none**: a request carrying
     nothing at all, one carrying a token nothing issued, and one carrying `?api_key=` answer
-    identically, byte for byte. `/Audio/{itemId}/universal` is the one delivery route that refuses
-    without a token, and it refuses with the empty `401` (§3.5, §3.6, behaviours §2.10). The
-    criterion was written the other way round until it was measured.
+    identically, byte for byte. `/Audio/{itemId}/universal` and the **two playlist routes** are the
+    three delivery routes that refuse without a token, and all three refuse with the empty `401`
+    (§3.5, §3.6, §3.7, behaviours §2.10). The criterion was written the other way round until it
+    was measured, and named only `/universal` until the playlists were measured too.
 
 ## 6. Conformance
 

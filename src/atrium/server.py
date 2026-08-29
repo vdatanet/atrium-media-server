@@ -35,6 +35,7 @@ from atrium import logs as log_setup
 from atrium.api import (
     artists,
     audio,
+    dynamic_hls,
     filters,
     genres,
     images,
@@ -119,6 +120,7 @@ ROUTERS = (
     audio.router,
     universal_audio.router,
     videos.router,
+    dynamic_hls.router,
     items.router,
 )
 

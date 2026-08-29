@@ -1,0 +1,372 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""The cadence arithmetic and the two playlist renderers, against the measured reference bytes.
+
+Plan section 6.8 left one reading owed to 008 T10 - "the exact rounding rule behind the measured
+3.004 s" - and this file is the golden that pins it. What is pinned is the **rule**, at five
+requested lengths and three frame rates, rather than the single number: the measured 3.004 s turns
+out to be a fact about one film's stored frame rate, and the same arithmetic over an exact
+`24000/1001` answers 3.003.
+
+Every expected value here was measured `[probe: tools/probe_hls.py, Jellyfin 10.11.11,
+2026-08-29]`. `tests/conformance/test_hls_playlists.py` proves the routes reach this module; what
+is proven here is the arithmetic and the bytes.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+
+from atrium.domain.media import InspectedStream, StreamKind, VideoRange, VideoRangeType
+from atrium.media.decision import StreamAction, StreamPlan
+from atrium.media.hls import (
+    Segment,
+    buckets_allowed,
+    cadence_milliseconds,
+    master_playlist,
+    media_playlist,
+    plan_segments,
+    segment_extension,
+)
+
+#: The frame rate the measured film reports and the reference put in its `MaxFramerate`. Not
+#: `24000/1001`: the stored average rate is the exact decimal, and one millisecond of cadence
+#: hangs on the difference.
+MEASURED_RATE = 23.975988
+
+#: What an exact NTSC film rate reaches this arithmetic as - `media/info.as_single` of
+#: `24000/1001`, which is what a negotiation writes into the URL for the T1 `long_take` fixture.
+EXACT_NTSC_RATE = 23.976025
+
+
+# ------------------------------------------------------------------------------------------
+# The cadence - plan section 6.8's owed reading
+# ------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("requested", "milliseconds"),
+    [(None, 3004), (1, 1002), (2, 2003), (5, 5006), (10, 10011)],
+)
+def test_the_re_encode_cadence_is_the_measured_matrix(
+    requested: int | None, milliseconds: int
+) -> None:
+    """Five requested lengths, one frame rate, five measured answers.
+
+    A matrix rather than the single published number, because one row cannot tell `ceil` from
+    `round`: at 2 s the two agree and at 1 s, 3 s, 5 s and 10 s they do not.
+    """
+    assert cadence_milliseconds(requested, MEASURED_RATE, copying_video=False) == milliseconds
+
+
+def test_the_published_3004_is_a_fact_about_one_films_stored_rate() -> None:
+    """The same rule at an exact `24000/1001` answers **3003**, not 3004.
+
+    Spec section 3.7 reads "3.004 s per segment re-encoded (the forced-keyframe cadence at
+    23.976 fps)", which invites the reading that 3.004 follows from 23.976 fps. It follows from
+    `23.975988` - the rate that film's container stores and that the negotiation put in the URL.
+    A source at the exact rational is one millisecond shorter, which is a different playlist and
+    a different set of forced keyframes.
+    """
+    assert cadence_milliseconds(None, MEASURED_RATE, copying_video=False) == 3004
+    assert cadence_milliseconds(None, EXACT_NTSC_RATE, copying_video=False) == 3003
+
+
+def test_a_copy_is_never_scaled_and_defaults_to_six_seconds() -> None:
+    """The scaling exists so ffmpeg can force keyframes on the boundaries; a copy forces none."""
+    assert cadence_milliseconds(None, MEASURED_RATE, copying_video=True) == 6000
+    assert cadence_milliseconds(5, MEASURED_RATE, copying_video=True) == 5000
+
+
+@pytest.mark.parametrize("rate", [None, 0.0, 25.0, 30.0, 24.0])
+def test_a_whole_or_absent_frame_rate_is_not_scaled(rate: float | None) -> None:
+    """A request carrying no `MaxFramerate` is the unscaled 3 s, which is what `main.m3u8` asked
+    for with no query at all answers on the reference."""
+    assert cadence_milliseconds(None, rate, copying_video=False) == 3000
+
+
+# ------------------------------------------------------------------------------------------
+# The two shapes
+# ------------------------------------------------------------------------------------------
+
+
+def test_an_equal_grid_is_uniform_with_a_short_tail() -> None:
+    """AC-22's boundary half: every body duration equal, the last no longer than a body, and the
+    whole thing summing to the runtime rather than to something near it."""
+    runtime = 2842 * 30_040_000 + 12_380_000
+    segments = plan_segments(runtime, 3004)
+
+    assert len(segments) == 2843
+    bodies = {one.duration_ticks for one in segments[:-1]}
+    assert bodies == {30_040_000}
+    assert segments[-1].duration_ticks == 12_380_000
+    assert segments[-1].duration_ticks <= segments[0].duration_ticks
+    assert sum(one.duration_ticks for one in segments) == runtime
+    assert [one.index for one in segments[:3]] == [0, 1, 2]
+    assert segments[2].start_ticks == 2 * 30_040_000
+
+
+def test_a_runtime_that_divides_exactly_has_no_tail() -> None:
+    segments = plan_segments(4 * 60_000_000, 6000)
+
+    assert len(segments) == 4
+    assert {one.duration_ticks for one in segments} == {60_000_000}
+
+
+def test_no_runtime_plans_nothing() -> None:
+    """Where the reference throws and answers `500`; the route turns the empty tuple into the
+    same refusal rather than rendering a playlist of nothing."""
+    assert plan_segments(0, 3000) == ()
+    assert plan_segments(10_000_000, 0) == ()
+
+
+def test_a_copy_buckets_the_keyframes_and_never_drifts_off_the_grid() -> None:
+    """Each cut is the first keyframe at or past the next multiple of the cadence - and the next
+    multiple advances by the cadence whatever the cut actually was, so one long bucket does not
+    push the ones after it.
+
+    Keyframes every 2 s over 12 s, asked for at 5 s: the cuts are 6 s and 10 s, not 6 s and 11 s.
+    """
+    keyframes = tuple(one * 20_000_000 for one in range(6))
+    segments = plan_segments(120_000_000, 5000, keyframes)
+
+    assert [one.duration_ticks for one in segments] == [60_000_000, 40_000_000, 20_000_000]
+    assert [one.start_ticks for one in segments] == [0, 60_000_000, 100_000_000]
+
+
+def test_a_keyframe_list_that_reaches_the_runtime_still_gets_its_tail() -> None:
+    """The reference appends the tail unconditionally, so a final keyframe on the runtime produces
+    a zero-length last segment rather than one segment fewer. Reproduced rather than tidied."""
+    segments = plan_segments(60_000_000, 5000, (0, 60_000_000))
+
+    assert [one.duration_ticks for one in segments] == [60_000_000, 0]
+
+
+@pytest.mark.parametrize(
+    ("path", "allowed"),
+    [
+        ("Film (2001).mkv", True),
+        ("Film (2001).MKV", True),
+        ("Film (2001).mp4", False),
+        ("Film (2001).ts", False),
+        ("Film", False),
+    ],
+)
+def test_only_the_allowed_extensions_may_bucket(path: str, allowed: bool) -> None:
+    """The gate the measurement found: the reference reads keyframes on demand only for a
+    container the operator has allowed it for, and ships that list as `mkv` alone. An mp4 copy is
+    the equal grid - which is where the published 6.0 s came from."""
+    assert buckets_allowed(path) is allowed
+
+
+# ------------------------------------------------------------------------------------------
+# The media playlist, byte for byte
+# ------------------------------------------------------------------------------------------
+
+QUERY = "?&DeviceId=d&MediaSourceId=m&VideoCodec=h264"
+
+
+def test_the_media_playlist_is_the_measured_header_and_entry() -> None:
+    """The five header lines, the `, nodesc` suffix, six decimals always, and the two per-segment
+    parameters appended to the whole forwarded query."""
+    body = media_playlist(plan_segments(60_080_000, 3004), query=QUERY, container="ts")
+
+    lines = body.splitlines()
+    assert lines[:5] == [
+        "#EXTM3U",
+        "#EXT-X-PLAYLIST-TYPE:VOD",
+        "#EXT-X-VERSION:3",
+        "#EXT-X-TARGETDURATION:4",
+        "#EXT-X-MEDIA-SEQUENCE:0",
+    ]
+    assert lines[5] == "#EXTINF:3.004000, nodesc"
+    assert lines[6] == (f"hls1/main/0.ts{QUERY}&runtimeTicks=0&actualSegmentLengthTicks=30040000")
+    assert lines[7] == "#EXTINF:3.004000, nodesc"
+    assert lines[8] == (
+        f"hls1/main/1.ts{QUERY}&runtimeTicks=30040000&actualSegmentLengthTicks=30040000"
+    )
+    assert lines[-1] == "#EXT-X-ENDLIST"
+    assert body.endswith("#EXT-X-ENDLIST\n"), "the reference ends every line, the last included"
+    assert "\r" not in body
+
+
+def test_a_whole_number_of_seconds_still_prints_six_decimals() -> None:
+    assert Segment(index=0, start_ticks=0, duration_ticks=60_000_000).duration_text == "6.000000"
+    assert Segment(index=0, start_ticks=0, duration_ticks=50_450_000).duration_text == "5.045000"
+
+
+def test_the_target_duration_is_the_longest_segment_rounded_up() -> None:
+    """`#EXT-X-TARGETDURATION:6` over 5.045 s buckets, measured on the mkv the copy bucketing was
+    found with - so it is the *longest* segment and not the requested length."""
+    segments = plan_segments(120_000_000, 5000, (0, 450_000, 50_450_000, 100_450_000))
+
+    assert "#EXT-X-TARGETDURATION:6" in media_playlist(segments, query=QUERY, container="ts")
+
+
+def test_an_fmp4_playlist_is_version_seven_with_an_initialisation_segment() -> None:
+    """`SegmentContainer=mp4` is the one shape that changes the header: HLS carries fMP4 only from
+    version 7, and the init segment is segment `-1`."""
+    body = media_playlist(plan_segments(60_000_000, 6000), query=QUERY, container="mp4")
+
+    lines = body.splitlines()
+    assert lines[2] == "#EXT-X-VERSION:7"
+    assert lines[5] == (
+        f'#EXT-X-MAP:URI="hls1/main/-1.mp4{QUERY}&runtimeTicks=0&actualSegmentLengthTicks=0"'
+    )
+    assert lines[7].startswith("hls1/main/0.mp4")
+
+
+@pytest.mark.parametrize(
+    ("container", "extension"), [("ts", ".ts"), ("mp4", ".mp4"), (None, ".ts"), ("", ".ts")]
+)
+def test_the_segment_extension_is_the_container_or_ts(
+    container: str | None, extension: str
+) -> None:
+    assert segment_extension(container) == extension
+
+
+# ------------------------------------------------------------------------------------------
+# The master playlist, byte for byte
+# ------------------------------------------------------------------------------------------
+
+#: The measured film's video stream, as this project stores it: 1920x816 HEVC Main at level 120.
+MEASURED_VIDEO = InspectedStream(
+    index=0,
+    kind=StreamKind.VIDEO,
+    codec="hevc",
+    width=1920,
+    height=816,
+    level=120,
+    profile="Main",
+    bit_depth=8,
+    bitrate=4_938_398,
+    video_range=VideoRange.SDR,
+    video_range_type=VideoRangeType.SDR,
+    framerate="24000/1001",
+)
+
+
+def _copy(codec: str, bitrate: int, **extra: Any) -> StreamPlan:
+    return StreamPlan(
+        source_index=0, action=StreamAction.COPY, codec=codec, bitrate=bitrate, **extra
+    )
+
+
+def test_the_copy_master_variant_is_the_reference_line_byte_for_byte() -> None:
+    """The whole `#EXT-X-STREAM-INF` of the measured stream-copy session, reproduced exactly:
+    field order, the quoted `CODECS` pair, the HEVC string's `hvc1.1.4.L120.B0` shape, and a
+    `FRAME-RATE` rounded to three decimals."""
+    video = _copy("hevc", 4_938_398, width=1920, height=816, bit_depth=8)
+    audio = StreamPlan(
+        source_index=4, action=StreamAction.COPY, codec="ac3", bitrate=448_000, channels=6
+    )
+
+    body = master_playlist(
+        query=QUERY,
+        video=video,
+        audio=audio,
+        source_video=MEASURED_VIDEO,
+        frame_rate=MEASURED_RATE,
+    )
+
+    assert body.splitlines() == [
+        "#EXTM3U",
+        "#EXT-X-STREAM-INF:BANDWIDTH=5386398,AVERAGE-BANDWIDTH=5386398,VIDEO-RANGE=SDR,"
+        'CODECS="hvc1.1.4.L120.B0,ac-3",RESOLUTION=1920x816,FRAME-RATE=23.976',
+        f"main.m3u8{QUERY}",
+    ]
+    assert body.endswith("\n")
+
+
+def test_the_re_encode_master_describes_the_target_and_not_the_source() -> None:
+    """`CODECS="avc1.424029,mp4a.40.2"` - constrained baseline at level 41, which is what the
+    reference describes an h264 re-encode as when the profile requested no level and no profile,
+    even though the *source* is HEVC Main at 120 and its `hevc-level` is right there in the query.
+
+    `BANDWIDTH` is the one field this project answers differently, and knowingly: the reference
+    scales the source's rate between the input and output codecs and advertises the result
+    (8678663 here), where this advertises what its own encoder is aimed at. Both servers advertise
+    their own target; with one variant there is nothing to select on it.
+    """
+    video = StreamPlan(
+        source_index=0,
+        action=StreamAction.ENCODE,
+        codec="h264",
+        width=1920,
+        height=816,
+        bitrate=4_938_398,
+    )
+    audio = StreamPlan(
+        source_index=4, action=StreamAction.ENCODE, codec="aac", bitrate=448_000, channels=6
+    )
+
+    variant = master_playlist(
+        query=QUERY,
+        video=video,
+        audio=audio,
+        source_video=MEASURED_VIDEO,
+        frame_rate=MEASURED_RATE,
+        options={"hevc-level": "120", "hevc-profile": "main"},
+    ).splitlines()[1]
+
+    assert 'CODECS="avc1.424029,mp4a.40.2"' in variant
+    assert "RESOLUTION=1920x816" in variant
+    assert "FRAME-RATE=23.976" in variant
+    assert "VIDEO-RANGE=SDR" in variant
+
+
+def test_a_requested_level_is_read_from_the_query_and_capped() -> None:
+    """`{codec}-level` qualified by the **target** codec, which is how a h264-to-h264 re-encode
+    picks up the level the negotiation wrote - and level 62 is capped to 51 for compatibility,
+    which is `avc1.424033`."""
+    video = StreamPlan(source_index=0, action=StreamAction.ENCODE, codec="h264", bitrate=1)
+
+    high = master_playlist(
+        query="",
+        video=video,
+        audio=None,
+        source_video=MEASURED_VIDEO,
+        frame_rate=25.0,
+        options={"h264-level": "62", "h264-profile": "high"},
+    )
+    low = master_playlist(
+        query="",
+        video=video,
+        audio=None,
+        source_video=MEASURED_VIDEO,
+        frame_rate=25.0,
+        options={"h264-level": "40"},
+    )
+
+    assert 'CODECS="avc1.640033"' in high
+    assert "FRAME-RATE=25" in high, "a whole rate prints without a fractional part"
+    assert 'CODECS="avc1.424028"' in low
+
+
+def test_a_copied_hdr_stream_is_labelled_by_its_transfer_and_a_re_encode_is_always_sdr() -> None:
+    """`VIDEO-RANGE` is the source's only where the video survives; the reference encodes SDR and
+    nothing else, so a re-encode of an HDR source says SDR."""
+    hdr = InspectedStream(
+        index=0,
+        kind=StreamKind.VIDEO,
+        codec="hevc",
+        width=3840,
+        height=2160,
+        level=150,
+        profile="Main 10",
+        video_range=VideoRange.HDR,
+        video_range_type=VideoRangeType.HDR10,
+    )
+    copied = _copy("hevc", 1, width=3840, height=2160)
+    encoded = StreamPlan(source_index=0, action=StreamAction.ENCODE, codec="h264", bitrate=1)
+
+    assert "VIDEO-RANGE=PQ" in master_playlist(
+        query="", video=copied, audio=None, source_video=hdr, frame_rate=None
+    )
+    assert "VIDEO-RANGE=SDR" in master_playlist(
+        query="", video=encoded, audio=None, source_video=hdr, frame_rate=None
+    )
+    assert 'CODECS="hvc1.2.4.L150.B0"' in master_playlist(
+        query="", video=copied, audio=None, source_video=hdr, frame_rate=None
+    )
