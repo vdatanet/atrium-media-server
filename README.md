@@ -62,7 +62,7 @@ Start here:
 | [docs/constitution.md](docs/constitution.md) | The principles that override every other decision |
 | [docs/README.md](docs/README.md) | Map of the documentation and how SDD is practised here |
 | [docs/roadmap.md](docs/roadmap.md) | What v1 is, what it is not, and in what order |
-| [docs/compatibility/api-surface-v1.md](docs/compatibility/api-surface-v1.md) | The 55 endpoints v1 must serve, and where that number comes from |
+| [docs/compatibility/api-surface-v1.md](docs/compatibility/api-surface-v1.md) | The 58 endpoints v1 must serve, and where that number comes from |
 | [specs/](specs/) | Feature specifications, one numbered directory each — and the status table |
 | [AGENTS.md](AGENTS.md) | How to work on this: the rhythm, the gates, and the habit that finds things |
 

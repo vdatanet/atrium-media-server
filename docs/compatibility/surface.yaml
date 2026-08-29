@@ -310,6 +310,24 @@ endpoints:
     consumers: [video-client]
     feature: "008"
     level: L2
+  - path: "/Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/subtitles.m3u8"
+    method: GET
+    operation: GetSubtitlePlaylist
+    consumers: []
+    feature: "011"
+    level: L2
+  - path: "/Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/Stream.{routeFormat}"
+    method: GET
+    operation: GetSubtitle
+    consumers: [video-client]
+    feature: "011"
+    level: L2
+  - path: "/Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/{routeStartPositionTicks}/Stream.{routeFormat}"
+    method: GET
+    operation: GetSubtitleWithTicks
+    consumers: []
+    feature: "011"
+    level: L2
   - path: "/Playlists"
     method: POST
     operation: CreatePlaylist

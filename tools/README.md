@@ -57,6 +57,11 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_media_source.py`](probe_media_source.py) | What does a media source carry on a listing, and how is its `ETag` derived? | 008 §3.1, plan §6.1 | no |
 | [`probe_decision_ladder.py`](probe_decision_ladder.py) | What does each rung of the ladder answer, in what order are the reasons listed, and at what precision is a ceiling compared? | 008 §3.3, §3.4, AC-1–AC-9; plan §5, §6.2 | no |
 | [`probe_progressive_delivery.py`](probe_progressive_delivery.py) | What shape is a progressive answer, what does a `Range` do to one, what does `mediaSourceId` decide, and does a start position seek? | 008 §3.4, §3.5, AC-10, AC-15, AC-17; behaviours §1.11, §3.3, §3.9 | yes — a few seconds of deliberate encoding, every session stopped |
+| [`probe_subtitle_negotiation.py`](probe_subtitle_negotiation.py) | Which subtitle properties live where, what does each declared method resolve to per stream, is a posted index read, and what picks the default track? | 011 §3.2, §3.3, OQ-2, OQ-5, OQ-12 | only under `--allow-writes`: a throwaway user whose subtitle mode and language preference the score battery flips, deleted on the way out |
+| [`probe_subtitle_manifest.py`](probe_subtitle_manifest.py) | What makes the master playlist announce a subtitle, what does each announcement say verbatim, and where does its name come from? | 011 §3.4, OQ-1, OQ-3, OQ-4 | yes — one play session per negotiation, each stopped; no segment fetched |
+| [`probe_subtitle_delivery.py`](probe_subtitle_delivery.py) | What do the subtitle playlist and the subtitle fetch answer — to a caller with no token, to a window, to a format, and to every way of naming nothing? | 011 §3.5, §3.7, OQ-6, OQ-8, OQ-11; behaviours §3.12 | only under `--allow-writes`: the image-subtitle case, which the reference attempts with ffmpeg before refusing |
+| [`probe_sidecar_subtitles.py`](probe_sidecar_subtitles.py) | Which files beside a media file become subtitle streams, and what does the reference read out of their names? | 011 §3.6, OQ-7; behaviours §5 | no |
+| [`probe_progressive_production.py`](probe_progressive_production.py) | Does a capped progressive transcode ever state a length, and is the work keyed on the play session the client supplies? | 011 OQ-9, OQ-10; behaviours §3.3 | yes — two or three short audio transcodes of one track, every session stopped |
 
 ### Running them
 
@@ -96,9 +101,14 @@ python3 tools/probe_media_container.py
 python3 tools/probe_media_source.py
 python3 tools/probe_decision_ladder.py
 python3 tools/probe_progressive_delivery.py --allow-writes
+python3 tools/probe_subtitle_negotiation.py --allow-writes
+python3 tools/probe_subtitle_manifest.py --allow-writes
+python3 tools/probe_subtitle_delivery.py --allow-writes
+python3 tools/probe_sidecar_subtitles.py
+python3 tools/probe_progressive_production.py --allow-writes
 ```
 
-The six playback probes marked `--allow-writes` make the reference **encode**: each starts one
+The playback probes marked `--allow-writes` make the reference **encode**: each starts one
 or two short transcoding sessions, fetches a handful of segments or the first bytes of a
 stream, and stops its sessions on the way out — including on failure. They are the measured
 ground under 008's spec review, and `probe_transcode_session.py` deliberately spends about a
@@ -129,6 +139,22 @@ response rather than a server.
 python3 tools/generate_cultures.py
 python3 tools/generate_cultures.py --from-file cultures.json
 ```
+
+The **five subtitle probes** were written for 011's spec review and share `_playback.py`'s
+subtitle helpers, which find a source of the shape each battery needs — a text track, an image
+track beside it, an external file, or two streams that tie on score — rather than assuming a
+seeded library. Two of them reproduce the reference rather than describing it, which is what makes
+them able to fail: `probe_sidecar_subtitles.py` predicts, for every file in a media directory,
+whether it becomes a stream and what language, flags and title it carries, and compares that with
+what the server reported; `probe_subtitle_negotiation.py` recomputes each stream's ranking score
+from the stream's own properties and compares it with the emitted one. A rule that is wrong shows
+up as a mismatch rather than as prose nobody checks.
+
+`probe_subtitle_negotiation.py`'s score battery needs an **administrator**, for the same reason
+`probe_playback_info.py`'s policy battery does and a different one: the default subtitle track is
+a function of a *user's* subtitle mode and language preference, and the only way to vary those is
+to own an account. It creates `atrium-probe-subs`, flips its configuration, and deletes it on the
+way out including on failure.
 
 `probe_item_shapes.py` asks for **every member of the server's own `ItemFields` enum**, read from
 `/api-docs/openapi.json`, rather than the names the specification happens to list. That is what

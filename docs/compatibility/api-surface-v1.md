@@ -3,7 +3,7 @@
 **Last verified: 2026-08-26. Every path and method below was checked to exist in the Jellyfin
 10.11.10 OpenAPI document; the `Operation` column is that document's `operationId`.**
 
-Jellyfin exposes **322 paths**. v1 of Atrium serves **55**. This document explains which 55, and —
+Jellyfin exposes **322 paths**. v1 of Atrium serves **58**. This document explains which 58, and —
 more importantly — *how that set was chosen*, because Principle VI forbids adding an endpoint
 without a named consumer.
 
@@ -225,6 +225,23 @@ sizing proxy. Atrium serving a correct `Content-Length` on progressive remuxed o
 is knowable is one of the few places where being right costs nothing and helps a lot
 ([behaviours §3.3](behaviours.md#33-progressive-transcoding-responses-carry-no-content-length-or-accept-ranges--class-c)).
 
+## 8.1 Subtitle delivery
+
+Added at 011's spec review on 2026-08-29, and the only place a client trace's *"it does not grow
+the surface"* had to be read against: the manifest is the lever a subtitle needs, and the manifest
+addresses these routes.
+
+| Method | Path | Operation | Used by | Notes |
+|---|---|---|---|---|
+| GET | `/Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/subtitles.m3u8` | `GetSubtitlePlaylist` | D | The address a `#EXT-X-MEDIA` line names. No analysed client calls it by hand; the player follows it out of the master playlist, which is why it is `D` and not `V` |
+| GET | `/Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/Stream.{routeFormat}` | `GetSubtitle` | V | The cues, converted to the format the path names, whole or windowed by `StartPositionTicks`/`EndPositionTicks`. The playlist's own entries name it in **lower case** — `stream.vtt` — where the reference's declaration spells it `Stream.{format}` |
+| GET | `/Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/{routeStartPositionTicks}/Stream.{routeFormat}` | `GetSubtitleWithTicks` | D | The same answer with the start position in the path instead of the query. It is in because it is the route a negotiation's own `DeliveryUrl` names, so a client that follows the address it was handed lands here `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]` |
+
+**These three do not share the credential rule.** The playlist refuses a caller with no token and
+one with an unknown token alike, with an empty `401`; both fetch routes serve the cues to anybody
+who asks — which is why the manifest and the playlist both write the caller's own token into every
+address they emit `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-29]`.
+
 ## 9. Playback reporting
 
 | Method | Path | Operation | Used by |
@@ -250,7 +267,7 @@ that "missing" is never confused with "forgotten".
 | DLNA server and profiles | Out of the client-facing contract |
 | Backup, scheduled tasks, activity log | Operations surface, not client surface |
 | Quick Connect | Convenience auth; adds a second auth state machine |
-| Subtitles: search, download, burn-in | Delivery of *existing* external subtitle files may land in v1; provider search does not |
+| Subtitles: search, download, burn-in | Delivery of existing subtitle tracks is in, as §8.1 and [011](../../specs/011-subtitle-delivery/spec.md); provider search and burn-in are not |
 | Hardware-accelerated transcoding | v1 re-encodes on the CPU; VAAPI/QSV/NVENC/VideoToolbox are a per-machine surface, not an endpoint |
 | Trickplay / chapter images generation | Serving existing chapter images is in; generating them is not |
 | WebSocket `/socket` | Push notification of library changes; clients poll instead in v1 |
@@ -262,7 +279,7 @@ Growing the surface is a roadmap decision, not something an implementer does opp
 ## 11. Keeping this table honest
 
 The tables above have a machine-readable companion, [`surface.yaml`](surface.yaml), carrying the
-same 55 entries with their consumers, owning feature and required conformance level.
+same 58 entries with their consumers, owning feature and required conformance level.
 
 ```bash
 python3 tools/extract_v1_surface.py --spec reference/openapi.json --print-summary
