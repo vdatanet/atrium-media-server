@@ -36,7 +36,6 @@ See specs/008-playback-negotiation-and-delivery/spec.md section 3.1 and plan sec
 from __future__ import annotations
 
 import hashlib
-import struct
 from collections.abc import Sequence
 from pathlib import PurePosixPath
 from typing import Annotated, Any
@@ -45,7 +44,13 @@ from atrium.compat.guids import derive
 from atrium.compat.model import AtriumModel, PropertyKeyed
 from atrium.compat.ticks import WireTicks
 from atrium.domain.items import Item, MediaSource
-from atrium.domain.media import InspectedStream, MediaInspection, StreamKind
+from atrium.domain.media import (
+    IMPLAUSIBLE_FRAME_RATE,
+    InspectedStream,
+    MediaInspection,
+    StreamKind,
+    narrow_to_single,
+)
 
 #: .NET counts 100-nanosecond ticks from 0001-01-01; the Unix epoch is this far along.
 TICKS_AT_UNIX_EPOCH = 621_355_968_000_000_000
@@ -75,10 +80,6 @@ SPATIAL_FORMATS = (("dolby atmos", "DolbyAtmos"), ("dts:x", "DTSX"))
 
 #: The answer for everything else, including every stream that is not audio. Same source.
 NO_SPATIAL_FORMAT = "None"
-
-#: Above this the reference distrusts the average frame rate and falls back to the real one: some
-#: libraries report 1000 fps for a file that is nothing of the sort. Same file, same fallback.
-IMPLAUSIBLE_FRAME_RATE = 1000.0
 
 #: The height at which the reference calls an item high definition. `[source:
 #: MediaBrowser.Controller/Entities/BaseItem.cs:391 @ v10.11.11]`
@@ -306,15 +307,20 @@ def _frame_rate(rational: str | None) -> int | float | None:
 def _as_single(value: float) -> int | float:
     """The number a 32-bit float would print, and an integer where it is whole.
 
-    The shortest decimal that reads back as the same single is found by trying precisions in turn,
-    which is what .NET's own formatter computes and what Python's `repr` computes for a double.
+    The narrowing itself is `domain/media.py`'s, because a negotiation compares against the same
+    single (008 T4). What belongs here is the **printing**, and it is a different number: .NET
+    writes the shortest decimal that reads back as the same single, found by trying precisions in
+    turn, so `23.975988388061523` reaches a client as `23.975988`. The negotiation is handed the
+    former and a client reads the latter, which is why a ceiling stated at the printed rate is
+    refused (`narrow_to_single`).
+
     An integral result comes back as an `int` so that the serialiser writes `25` rather than
     `25.0` - a difference no parser sees and every byte comparison does.
     """
-    narrowed: float = struct.unpack("f", struct.pack("f", value))[0]
+    narrowed = narrow_to_single(value)
     for digits in range(1, 10):
         rounded = float(f"{narrowed:.{digits}g}")
-        if struct.unpack("f", struct.pack("f", rounded))[0] == narrowed:
+        if narrow_to_single(rounded) == narrowed:
             narrowed = rounded
             break
     return int(narrowed) if narrowed.is_integer() else narrowed

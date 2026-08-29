@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — §3.1 gains the measured media-source field set (31 properties on every source, `VideoType` on a video one), the 32-bit number format its rates and level are written in, the three stream families v1 does not emit, and two divergences the first draft stated as parity: a multi-part film's parts are media sources here and separate items in the reference, and `HasSubtitles` counts only the streams inside the container; and 2026-08-29 at the spec review, which wrote the five probes the OQ table had been citing prospectively and ran all of them — all twelve open questions answered, and five claims did not survive: the policy story was fiction (no playback route consults `EnableMediaPlayback`, and a single denied permission moves nothing at negotiation — §3.2, §3.3, AC-31), `EnableTranscoding: false` in the request body is ignored (OQ-12), `static=true` on a mismatched container is not an error but the original bytes behind the wrong label (§3.5, AC-18), `enableRedirection` never redirects a local file (OQ-4, AC-21), and the reference's HLS segments already carry `Content-Length` — the §3.5 divergence shrank to the progressive routes. Plus one defect nobody was looking for: a sample-rate ceiling is answered from the Opus rate ladder and can be **exceeded** (§3.6, AC-19)
+amended: 2026-08-29 by T3 — §3.1 gains the measured media-source field set (31 properties on every source, `VideoType` on a video one), the 32-bit number format its rates and level are written in, the three stream families v1 does not emit, and two divergences the first draft stated as parity: a multi-part film's parts are media sources here and separate items in the reference, and `HasSubtitles` counts only the streams inside the container; and 2026-08-29 at the spec review, which wrote the five probes the OQ table had been citing prospectively and ran all of them — all twelve open questions answered, and five claims did not survive: the policy story was fiction (no playback route consults `EnableMediaPlayback`, and a single denied permission moves nothing at negotiation — §3.2, §3.3, AC-31), `EnableTranscoding: false` in the request body is ignored (OQ-12), `static=true` on a mismatched container is not an error but the original bytes behind the wrong label (§3.5, AC-18), `enableRedirection` never redirects a local file (OQ-4, AC-21), and the reference's HLS segments already carry `Content-Length` — the §3.5 divergence shrank to the progressive routes. Plus one defect nobody was looking for: a sample-rate ceiling is answered from the Opus rate ladder and can be **exceeded** (§3.6, AC-19); and 2026-08-29 by T4 — §3.3's rule 1 loses "or empty": an absent profile means anything and an empty one permits nothing, which are opposite answers; the reasons list is measured to say why *direct play* failed rather than which rung was reached, to name `DirectPlayError` when nothing else explains the refusal, and to arrive in flag-value order; and a numeric ceiling is compared against the value the server holds rather than the shorter decimal it printed
 depends_on: [005, 007]
 ---
 
@@ -264,12 +264,37 @@ Given a media source and a device profile, exactly one outcome:
 4. **Not playable** — the profile accepts no container, or no codec, that v1 can produce. The
    answer is the capability flags all `false` (§3.2) — not an error, and not an `ErrorCode`.
 
+**A numeric ceiling is compared against the number the server holds, not the number it printed.**
+§3.1 records that a stream's frame rates and level reach a client as 32-bit numbers, written as
+the shortest decimal that reads back as the same value. The condition is evaluated against the
+value itself, which is not that decimal: a stream reported as `23.975988` is held as
+`23.975988388…`, so a client that declares a frame-rate ceiling of exactly the rate it read off
+the wire is answered with a **transcode**, and one that declares a hair more is answered with
+direct play `[probe: tools/probe_decision_ladder.py, Jellyfin 10.11.11, 2026-08-29]`. Atrium
+compares the same number, because a ladder that compared the printed one would direct-play a
+file the reference re-encodes — visible to any client that echoes back what it was told.
+
 **On the wire, remux and transcode are one shape.** A remux answer is a `TranscodingUrl` like
-any transcode's, with `TranscodeReasons=ContainerNotSupported` in its query and the elementary
-streams copied at delivery; `SupportsDirectStream` stays `false` because it mirrors direct play
-(§3.2). What separates the two outcomes is what the session does per frame, and a client sees it
-only in the reasons list `[probe: tools/probe_transcode_decision.py, Jellyfin 10.11.11,
+any transcode's, with the elementary streams copied at delivery; `SupportsDirectStream` stays
+`false` because it mirrors direct play (§3.2). What separates the two outcomes is what the
+session does per frame `[probe: tools/probe_transcode_decision.py, Jellyfin 10.11.11,
 2026-08-28]`.
+
+**And the reasons list does not separate them either.** `TranscodeReasons` says why **direct
+play** was refused and nothing more: a profile that rejects a codec for direct play while its
+own transcoding target accepts that codec answers `VideoCodecNotSupported` over a stream that is
+then copied. Which rung was reached is decided against the *transcoding* profile, not against
+the reasons `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs GetVideoTranscodeProfile @
+v10.11.11]`, `[probe: tools/probe_decision_ladder.py, Jellyfin 10.11.11, 2026-08-29]`. The
+common case — a container-only rejection — does answer `ContainerNotSupported` alone, which is
+what this paragraph used to state as the rule.
+
+**A refusal with nothing to blame is `DirectPlayError`.** A profile that lists no direct-play
+entry at all, and a request carrying `EnableDirectPlay: false` against a profile the source
+satisfies, both answer with that single reason — a member of the vocabulary's "Errors" group
+arriving on an ordinary, successful negotiation. **The reasons are listed in flag-value order**,
+which is not the order the vocabulary is declared in: `VideoLevelNotSupported` precedes
+`VideoRangeTypeNotSupported` on the wire and follows it in the declaration. Same probe.
 
 **"Not playable" is now a much smaller set**, and it is worth being precise about what is left in
 it: a profile listing only containers or codecs this server cannot produce, a source whose streams
@@ -296,10 +321,16 @@ receiving a broken stream. Of the request body's switches, `EnableDirectPlay` is
 
 **Three rules that prevent the classic failures:**
 
-- **A profile that says nothing means "anything".** An empty or absent `DeviceProfile` is not a
-  profile that permits nothing; it is a client that has not told us, and the answer is direct play.
-  Reading absence as prohibition is how a server ends up refusing to play anything to a simple
-  client.
+- **A profile that says nothing means "anything" — and a profile that says *nothing at all* is a
+  different thing from an absent one.** An **absent** `DeviceProfile` is a client that has not
+  told us, and the answer is direct play with every capability flag true. Reading absence as
+  prohibition is how a server ends up refusing to play anything to a simple client. An **empty**
+  profile is not absence: it is a client that listed no container, no codec and no target, and
+  the answer is every flag false, no `TranscodingUrl` and no `ErrorCode` — the same refusal a
+  profile that can play nothing gets, because it is one `[probe:
+  tools/probe_decision_ladder.py, Jellyfin 10.11.11, 2026-08-29]`. This paragraph read "empty or
+  absent" until the empty half was measured, and a server that answered direct play to it would
+  hand a client bytes it had said nothing about being able to open.
 - **Never claim a capability that is not there.** `SupportsTranscoding` is `true` on a source
   exactly when this server can produce, for *this* profile, a stream the profile accepts — and
   `false` otherwise, including when the profile's ceilings leave nothing producible. It is a claim
@@ -591,7 +622,10 @@ though the age-based one is.
 
 ## 5. Acceptance criteria
 
-1. `PlaybackInfo` with an empty profile answers direct play, not "not playable".
+1. `PlaybackInfo` with **no** profile answers direct play, not "not playable" — and
+   `PlaybackInfo` with an **empty** profile answers the opposite, every flag false, because a
+   profile that lists nothing permits nothing (§3.3). The criterion read "an empty profile" until
+   both halves were measured.
 2. `PlaybackInfo` with a profile accepting the source's container and codecs answers direct play.
 3. A profile rejecting the container but accepting the codecs answers remux, with a
    `TranscodingUrl`.

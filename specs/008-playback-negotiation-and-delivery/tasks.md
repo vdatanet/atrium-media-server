@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"
+amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -274,7 +274,7 @@ worse than the three-phase vocabulary it replaces.
 
 ## T4 — `media/decision.py`: the ladder, pure, and the table that proves it
 
-- [ ] **Changes:** new `src/atrium/media/decision.py` with the contracts
+- [x] **Changes:** new `src/atrium/media/decision.py` with the contracts
   [plan §5](plan.md#5-contracts) declares — `Outcome`, `StreamAction`, `StreamPlan`, `Decision`,
   `decide()`. Every measured semantic is a branch here and nowhere else: direct play → remux →
   transcode → `NONE` stopping at first success; CSV container membership; codec conditions off
@@ -286,12 +286,68 @@ worse than the three-phase vocabulary it replaces.
 - **Verified by:** `uv run pytest tests/unit/test_media_decision.py -q` — the table: every spec
   §5 negotiation criterion as a row (AC-1..AC-7, AC-9's clamps, AC-31's three policy shapes),
   plus the measured oddities as their own rows — `EnableTranscoding: false` changing nothing,
-  a single denied permission changing nothing, the empty profile answering direct play, the
+  a single denied permission changing nothing, the empty profile object answering `NONE`, the
   nothing-plays profile answering `NONE` with no reasons for a URL. No HTTP, no database, no
   process: `tests/unit/test_import_directions.py`'s `PURE_WHEREVER_THEY_LIVE` — the tuple that
   already holds `library/identity.py` to the no-I/O rule outside `domain/` — gains
   `media/decision.py` (and T10 adds `media/hls.py` beside it).
 - **Spec reference:** §3.2, §3.3, §3.4; plan §5, §6.2
+
+**Done (2026-08-29).** Fifty-six cases, an eighth probe, and three of the task statement's own
+clauses turned out to be wrong.
+
+**"The empty profile answering direct play" is the opposite of what happens.** [Spec
+§3.3](spec.md#33-the-decision)'s rule 1 read "an empty or absent `DeviceProfile`", and only the
+absent half had ever been measured — `probe_playback_info.py` posts no profile, never an empty
+one. Posted, `DeviceProfile: {}` answers **every capability flag false**, no `TranscodingUrl`, no
+`ErrorCode`: it is a profile whose lists are empty, which is a client that has named no container,
+no codec and no target, and it lands on the same refusal a nothing-plays profile does. Written to
+the task statement, Atrium would have direct-played a file to a client that had said nothing about
+being able to open it. Rule 1, AC-1, [plan §5](plan.md#5-contracts)'s "callers may assume" and this
+task's own verification list all now say which half is which.
+
+**`TranscodeReason`s are not accumulated "in enum order", and they do not describe the rung.**
+Two separate corrections from one battery. The order is **ascending flag value**, which the
+reference's `[Flags]` enum declares in subject groups rather than in value order — so
+`VideoRangeTypeNotSupported` (1 << 24) is written above `VideoLevelNotSupported` (1 << 7) and
+arrives below it, and a profile failing both conditions at once is what tells the two orders apart.
+And the reasons are the *direct-play* analysis alone: a profile that rejects a codec for direct
+play while its own transcoding target accepts that codec answers `VideoCodecNotSupported` over a
+stream that is then copied, so `TranscodeReasons=ContainerNotSupported` is the common case rather
+than the rule spec §3.3 stated it as. A refusal with nothing to blame — no direct-play entry at
+all, or `EnableDirectPlay: false` against a profile the source satisfies — answers
+`DirectPlayError`, a member of the vocabulary's "Errors" group arriving on an ordinary `200`.
+
+**A ceiling is compared against a number the wire never prints.** The reference's frame rate is a
+32-bit field, and the two things done with it are different numbers: the wire writes the shortest
+decimal that reads back as the same value, and the negotiation compares the value. A client
+declaring a `VideoFramerate` ceiling of exactly the `23.975988` it read is answered with a
+**transcode**, because the value is `23.975988388…`; a hair more direct-plays. The narrowing is
+`domain/media.py`'s now, so the wire and the ladder cannot drift apart, and the table asserts the
+disagreement itself rather than the row that depends on it.
+
+**Two more the next tasks need.** `SupportsTranscoding` cannot be derived from the outcome — one
+accepting profile answered direct play with the flag true and false depending only on whether it
+declared a transcoding target, so `Decision` carries it. And the **URL carries the profile's
+ceilings, not the plan's**: `Height <= 4320` on an 816-line source reaches the query as
+`MaxHeight=4320`, because only `MaxFramerate` is seeded from the stream before being minimised
+against the condition. T5 renders what was *allowed*; a `StreamPlan` holds what to *produce*
+([plan §6.3](plan.md#63-the-transcodingurl)).
+
+**And one branch the task asked for cannot exist yet.** The §3.3 HDR rule on the copy path keys on
+a `DOVIWithHDR10Plus` declaration, and T2's inspection cannot produce that range type at all —
+`VideoRangeType` carries the three members a stream listing yields, by its own docstring. The copy
+path therefore strips nothing, which is [behaviours §3.4](../../docs/compatibility/behaviours.md#34-hdr10-metadata-stripped-from-clients-that-asked-for-it--class-b-no-compensation)'s
+divergence in the only shape v1 can reach; the conditional half arrives with the probe that reads
+Dolby Vision side data. A test asserts the vocabulary rather than a branch nothing could enter.
+
+The rest of the ladder confirmed the documents: the four containment rules including the leading
+`-` and the split-both-sides that makes `mov,mp4,m4a,3gp,3g2,mj2` match `mp4`, `EnableDirectPlay`
+honoured and `EnableTranscoding` changing nothing, the all-three policy gate and the single audio
+permission, `SupportsDirectStream` mirroring, no upscaling, and a sample-rate ceiling honoured
+exactly rather than from the Opus ladder. One thing the plan did not name and the code needs:
+`decide` takes the **item's** kind as `is_video` rather than reading it off the file, because a
+track with cover art has a video stream and is still negotiated as audio.
 
 ## T5 — `PlaybackInfo`: the negotiation routes, and the URL a client parses
 
@@ -306,8 +362,9 @@ worse than the three-phase vocabulary it replaces.
   table in this same change. `INTERIM_008` begins.
 - **Depends on:** T3, T4
 - **Verified by:** new `tests/conformance/test_playback_info.py` — goldens per profile class
-  over the scanned world (empty profile, accepts-all, container-reject, codec-reject,
-  nothing-plays), each pinning flags, `TranscodingUrl` presence and its exact query-string
+  over the scanned world (no profile at all and an empty profile object, which T4 measured as
+  opposite answers; accepts-all, container-reject, codec-reject, nothing-plays), each pinning
+  flags, `TranscodingUrl` presence and its exact query-string
   anatomy; the switch cases (`EnableDirectPlay: false` flips per request; `EnableTranscoding:
   false` does not); the policy cases through a user whose policy the test sets (all-three
   denied → flags down, no URL, no `ErrorCode`); and the refusal shapes as the battery measured

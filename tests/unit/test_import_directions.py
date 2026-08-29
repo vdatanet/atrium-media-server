@@ -233,7 +233,17 @@ PURE_METADATA = ("model.py", "merge.py")
 #: Modules that are pure in the sense that matters here - **no I/O** - wherever they happen to
 #: live. `library/identity.py` derives every identifier in the project from strings, and a version
 #: of it that could read a file could derive an identifier from something that changes.
-PURE_WHEREVER_THEY_LIVE = ("library/identity.py", "metadata/byname.py")
+#:
+#: `media/decision.py` joined them at 008 T4, and for the same reason at a larger scale: the whole
+#: of the playback ladder is one function of four values, which is what lets seven routes inherit
+#: one set of semantics and lets those semantics be a table instead of seven negotiations. A
+#: version of it that could open the file it is negotiating about would decide from something the
+#: negotiation was not handed.
+PURE_WHEREVER_THEY_LIVE = (
+    "library/identity.py",
+    "media/decision.py",
+    "metadata/byname.py",
+)
 
 #: `compat/` belongs here for the same reason it belongs in the domain rule: it exists to know
 #: that the wire format is Jellyfin's, and a pure merge that knew would be untestable as values.

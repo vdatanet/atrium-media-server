@@ -1,0 +1,805 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""The whole ladder, as a table of values.
+
+Every semantic of [008 spec section 3.3](../../specs/008-playback-negotiation-and-delivery/spec.md)
+is one function of four arguments, so the findings that cost a probe to learn are asserted here -
+once - rather than seven times through seven routes. The rows below are the battery of
+`tools/probe_decision_ladder.py` translated into values: same source shape, same profiles, same
+answers `[probe: tools/probe_decision_ladder.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+What is deliberately *not* here: HTTP, a database, a process and a clock. A `MediaInspection` and
+a `DeviceProfile` go in and a `Decision` comes out, which is what lets the negotiation's rules be
+checked without producing a single frame.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+import pytest
+
+from atrium.domain.media import (
+    InspectedStream,
+    MediaInspection,
+    StreamKind,
+    VideoRange,
+    VideoRangeType,
+)
+from atrium.media.decision import (
+    CodecKind,
+    CodecProfile,
+    ConditionProperty,
+    ConditionType,
+    Decision,
+    DeviceProfile,
+    DirectPlayProfile,
+    MediaKind,
+    Outcome,
+    PlaybackPolicy,
+    ProfileCondition,
+    StreamAction,
+    Switches,
+    TranscodeReason,
+    TranscodingProfile,
+    decide,
+)
+from atrium.media.info import stream_of
+
+PROBED_AT = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
+
+#: The container string the reference stores for every member of the mp4 family - a demuxer
+#: *list*, which is why membership has to split both sides (008 spec section 3.1).
+MP4_FAMILY = "mov,mp4,m4a,3gp,3g2,mj2"
+
+#: **A real stream's frame rate, chosen for the disagreement it exposes.** This rational is a
+#: 32-bit float of 23.975988388061523, which the wire prints as `23.975988` - exactly the
+#: `ReferenceFrameRate` the probe measured on the reference's own file. A ceiling stated at the
+#: printed number is therefore *below* the value compared against, and a ladder that compared the
+#: printed number instead would answer direct play where the reference answers a transcode.
+AWKWARD_RATE = "16975/708"
+PRINTED_RATE = "23.975988"
+
+SOURCE_BITRATE = 3_069_137
+
+
+def a_video_stream(**overrides: object) -> InspectedStream:
+    values: dict[str, object] = {
+        "index": 0,
+        "kind": StreamKind.VIDEO,
+        "codec": "hevc",
+        "profile": "Main 10",
+        "level": 120,
+        "bit_depth": 10,
+        "width": 1920,
+        "height": 816,
+        "framerate": "24000/1001",
+        "average_framerate": AWKWARD_RATE,
+        "video_range": VideoRange.SDR,
+        "video_range_type": VideoRangeType.SDR,
+        "bitrate": 2_600_000,
+        "is_default": True,
+    }
+    values.update(overrides)
+    return InspectedStream(**values)  # type: ignore[arg-type]
+
+
+def an_audio_stream(**overrides: object) -> InspectedStream:
+    values: dict[str, object] = {
+        "index": 1,
+        "kind": StreamKind.AUDIO,
+        "codec": "ac3",
+        "channels": 6,
+        "sample_rate": 48000,
+        "bitrate": 448_000,
+        "is_default": True,
+    }
+    values.update(overrides)
+    return InspectedStream(**values)  # type: ignore[arg-type]
+
+
+def a_source(
+    *streams: InspectedStream, container: str = MP4_FAMILY, **overrides: object
+) -> MediaInspection:
+    values: dict[str, object] = {
+        "size": 1_500_000_000,
+        "mtime_ns": 1_700_000_000_000_000_000,
+        "container": container,
+        "format_names": container,
+        "probed_at": PROBED_AT,
+        "runtime_ticks": 51_000_000_000,
+        "bitrate": SOURCE_BITRATE,
+        "streams": streams or (a_video_stream(), an_audio_stream()),
+    }
+    values.update(overrides)
+    return MediaInspection(**values)  # type: ignore[arg-type]
+
+
+FILM = a_source()
+TRACK = a_source(
+    an_audio_stream(index=0, codec="flac", channels=2, sample_rate=96000, bitrate=1_100_000),
+    container="flac",
+)
+
+#: The transcoding target every real browser profile offers, able to copy either of the film's
+#: streams - so a rejection that only concerns the container has a remux available.
+TS_HLS = TranscodingProfile(
+    container="ts",
+    video_codec="hevc,h264",
+    audio_codec="ac3,aac",
+    protocol="hls",
+)
+#: The same target with no way to keep the source's video: the rung below.
+TS_HLS_H264_ONLY = TranscodingProfile(
+    container="ts", video_codec="h264", audio_codec="aac", protocol="hls"
+)
+#: What a browser actually offers - it will take the source's video and will not take its
+#: surround ac3, which is the common case section 3.4 is written about.
+TS_HLS_AAC_ONLY = TranscodingProfile(
+    container="ts", video_codec="hevc,h264", audio_codec="aac", protocol="hls"
+)
+
+PLAYS_EVERYTHING = DirectPlayProfile(container="mp4", video_codec="hevc", audio_codec="ac3")
+
+
+def a_profile(
+    *direct_play: DirectPlayProfile,
+    transcoding: tuple[TranscodingProfile, ...] = (TS_HLS,),
+    codecs: tuple[CodecProfile, ...] = (),
+    max_streaming_bitrate: int | None = None,
+) -> DeviceProfile:
+    return DeviceProfile(
+        max_streaming_bitrate=max_streaming_bitrate,
+        direct_play_profiles=direct_play,
+        transcoding_profiles=transcoding,
+        codec_profiles=codecs,
+    )
+
+
+def a_condition(
+    prop: ConditionProperty,
+    value: str,
+    condition: ConditionType = ConditionType.LESS_THAN_EQUAL,
+    *,
+    is_required: bool = True,
+) -> ProfileCondition:
+    return ProfileCondition(
+        condition=condition, property=prop, value=value, is_required=is_required
+    )
+
+
+def a_video_codec_profile(*conditions: ProfileCondition) -> CodecProfile:
+    return CodecProfile(type=CodecKind.VIDEO, codec="hevc,h264", conditions=conditions)
+
+
+def answer(profile: DeviceProfile | None, **switches: object) -> Decision:
+    return decide(FILM, profile, Switches(**switches), is_video=True)  # type: ignore[arg-type]
+
+
+# ------------------------------------------------------------------------------------------
+# The rungs: every row the probe measured (AC-1 to AC-6)
+# ------------------------------------------------------------------------------------------
+
+RUNGS: list[tuple[str, DeviceProfile | None, Outcome, tuple[str, ...]]] = [
+    (
+        "AC-1 - no profile at all: the client has not spoken, so nothing is refused",
+        None,
+        Outcome.DIRECT_PLAY,
+        (),
+    ),
+    (
+        "an empty profile object is the opposite of an absent one: it permits nothing",
+        DeviceProfile(),
+        Outcome.NONE,
+        (),
+    ),
+    (
+        "AC-2 - the container and both codecs are listed",
+        a_profile(PLAYS_EVERYTHING),
+        Outcome.DIRECT_PLAY,
+        (),
+    ),
+    (
+        "AC-3 - only the container is refused, and both streams survive the change",
+        a_profile(DirectPlayProfile(container="mkv", video_codec="hevc", audio_codec="ac3")),
+        Outcome.REMUX,
+        ("ContainerNotSupported",),
+    ),
+    (
+        "the reasons do not name the rung: a refused codec the target can still copy is a remux",
+        a_profile(DirectPlayProfile(container="mp4", video_codec="h264", audio_codec="ac3")),
+        Outcome.REMUX,
+        ("VideoCodecNotSupported",),
+    ),
+    (
+        "AC-4 - the same refusal with a target that cannot keep the codec is a transcode",
+        a_profile(
+            DirectPlayProfile(container="mp4", video_codec="h264", audio_codec="ac3"),
+            transcoding=(TS_HLS_H264_ONLY,),
+        ),
+        Outcome.TRANSCODE,
+        ("VideoCodecNotSupported",),
+    ),
+    (
+        "AC-7 - only the audio is refused, so only the audio is produced again",
+        a_profile(
+            DirectPlayProfile(container="mp4", video_codec="hevc", audio_codec="aac"),
+            transcoding=(TS_HLS_AAC_ONLY,),
+        ),
+        Outcome.TRANSCODE,
+        ("AudioCodecNotSupported",),
+    ),
+    (
+        "all three refused at once, and the reasons arrive in flag-value order - over a target "
+        "that can still copy both, which is a remux carrying three reasons",
+        a_profile(DirectPlayProfile(container="mkv", video_codec="h264", audio_codec="vorbis")),
+        Outcome.REMUX,
+        ("ContainerNotSupported", "VideoCodecNotSupported", "AudioCodecNotSupported"),
+    ),
+    (
+        "a direct-play failure with nothing to blame: no entry to reject at all",
+        a_profile(),
+        Outcome.REMUX,
+        ("DirectPlayError",),
+    ),
+    (
+        "AC-5 - a profile that permits nothing and can produce nothing",
+        a_profile(transcoding=()),
+        Outcome.NONE,
+        (),
+    ),
+    (
+        "a resolution ceiling below the source",
+        a_profile(
+            PLAYS_EVERYTHING,
+            codecs=(a_video_codec_profile(a_condition(ConditionProperty.HEIGHT, "480")),),
+        ),
+        Outcome.TRANSCODE,
+        ("VideoResolutionNotSupported",),
+    ),
+    (
+        "a resolution ceiling above the source refuses nothing",
+        a_profile(
+            PLAYS_EVERYTHING,
+            codecs=(a_video_codec_profile(a_condition(ConditionProperty.HEIGHT, "4320")),),
+        ),
+        Outcome.DIRECT_PLAY,
+        (),
+    ),
+    (
+        "two conditions failing at once, declared in the order the enum does not use",
+        a_profile(
+            PLAYS_EVERYTHING,
+            codecs=(
+                a_video_codec_profile(
+                    a_condition(ConditionProperty.VIDEO_RANGE_TYPE, "HDR10", ConditionType.EQUALS),
+                    a_condition(ConditionProperty.VIDEO_LEVEL, "1"),
+                ),
+            ),
+        ),
+        Outcome.TRANSCODE,
+        ("VideoLevelNotSupported", "VideoRangeTypeNotSupported"),
+    ),
+    (
+        "AC-9 - the streaming bitrate bounds direct play, and blames the container",
+        a_profile(PLAYS_EVERYTHING, max_streaming_bitrate=SOURCE_BITRATE // 2),
+        Outcome.TRANSCODE,
+        ("ContainerBitrateExceedsLimit",),
+    ),
+    (
+        "a frame-rate ceiling stated at the rate the wire printed is still refused",
+        a_profile(
+            PLAYS_EVERYTHING,
+            codecs=(
+                a_video_codec_profile(a_condition(ConditionProperty.VIDEO_FRAMERATE, PRINTED_RATE)),
+            ),
+        ),
+        Outcome.TRANSCODE,
+        ("VideoFramerateNotSupported",),
+    ),
+    (
+        "the same ceiling a hair higher is satisfied",
+        a_profile(
+            PLAYS_EVERYTHING,
+            codecs=(
+                a_video_codec_profile(a_condition(ConditionProperty.VIDEO_FRAMERATE, "23.975998")),
+            ),
+        ),
+        Outcome.DIRECT_PLAY,
+        (),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "profile,outcome,reasons",
+    [row[1:] for row in RUNGS],
+    ids=[row[0] for row in RUNGS],
+)
+def test_every_rung_of_the_ladder(
+    profile: DeviceProfile | None, outcome: Outcome, reasons: tuple[str, ...]
+) -> None:
+    decision = answer(profile)
+    assert (decision.outcome, decision.reasons) == (outcome, reasons)
+
+
+def test_the_printed_rate_really_is_below_the_value_compared_against() -> None:
+    """The row above is only a test while these two numbers differ.
+
+    If `narrow_to_single` were ever changed to round to the decimal the wire prints, the ceiling
+    would be satisfied and the row would pass for the wrong reason - so the disagreement itself
+    is asserted rather than assumed.
+    """
+    stream = a_video_stream()
+    assert stream.reference_frame_rate is not None
+    assert stream.reference_frame_rate > float(PRINTED_RATE)
+    assert stream_of(stream).reference_frame_rate == float(PRINTED_RATE)
+
+
+# ------------------------------------------------------------------------------------------
+# The flags a client branches on (spec section 3.2)
+# ------------------------------------------------------------------------------------------
+
+
+def test_supports_direct_stream_mirrors_direct_play_on_every_outcome() -> None:
+    """The reference disables its direct-stream path outright, so the flag never answers alone."""
+    for profile in (None, DeviceProfile(), a_profile(PLAYS_EVERYTHING), a_profile()):
+        decision = answer(profile)
+        assert decision.supports_direct_stream is decision.supports_direct_play
+
+
+def test_supports_transcoding_is_about_the_profile_not_about_the_answer() -> None:
+    """A direct-play answer still says `true` when a target exists, and `false` when none does.
+
+    Measured on one accepting profile with and without a transcoding entry - the flag moved while
+    the outcome did not, which is why it cannot be derived from the outcome.
+    """
+    with_target = answer(a_profile(PLAYS_EVERYTHING))
+    without = answer(a_profile(PLAYS_EVERYTHING, transcoding=()))
+    assert (with_target.outcome, without.outcome) == (Outcome.DIRECT_PLAY, Outcome.DIRECT_PLAY)
+    assert with_target.supports_transcoding is True
+    assert without.supports_transcoding is False
+
+
+def test_a_refusal_carries_no_reasons_because_it_carries_no_url() -> None:
+    refusal = answer(a_profile(transcoding=()))
+    assert refusal.outcome is Outcome.NONE
+    assert (refusal.reasons, refusal.container, refusal.sub_protocol) == ((), None, None)
+    assert (refusal.video, refusal.audio) == (None, None)
+
+
+def test_the_negotiated_container_and_protocol_come_from_the_chosen_target() -> None:
+    """What `TranscodingContainer` and `TranscodingSubProtocol` are answered from (T5's input)."""
+    decision = answer(a_profile(DirectPlayProfile(container="mkv")))
+    assert (decision.container, decision.sub_protocol) == ("ts", "hls")
+
+
+# ------------------------------------------------------------------------------------------
+# The switches: one is honoured, one is ignored on purpose (spec section 3.2)
+# ------------------------------------------------------------------------------------------
+
+
+def test_enable_direct_play_false_is_honoured_and_blames_nothing() -> None:
+    """The flags describe *this* negotiation: a source the profile satisfies still gets a URL."""
+    decision = answer(a_profile(PLAYS_EVERYTHING), enable_direct_play=False)
+    assert decision.outcome is Outcome.REMUX
+    assert decision.reasons == ("DirectPlayError",)
+    assert decision.supports_direct_play is False
+
+
+def test_enable_transcoding_false_changes_nothing() -> None:
+    """Measured: the `TranscodingUrl` arrives anyway. The switch is declared and never read."""
+    forced = a_profile(DirectPlayProfile(container="mkv", video_codec="h264", audio_codec="aac"))
+    assert answer(forced) == answer(forced, enable_transcoding=False)
+
+
+def test_allow_video_stream_copy_false_turns_a_remux_into_a_transcode() -> None:
+    """The switch the reference does read on the copy path."""
+    container_only = a_profile(DirectPlayProfile(container="mkv", video_codec="hevc"))
+    assert answer(container_only).outcome is Outcome.REMUX
+    assert answer(container_only, allow_video_stream_copy=False).outcome is Outcome.TRANSCODE
+
+
+# ------------------------------------------------------------------------------------------
+# AC-31: the policy shapes, and the single denial that decides nothing
+# ------------------------------------------------------------------------------------------
+
+FORCES_A_TRANSCODE = a_profile(
+    DirectPlayProfile(container="mkv", video_codec="h264", audio_codec="vorbis"),
+    transcoding=(TS_HLS_H264_ONLY,),
+)
+
+POLICIES: list[tuple[str, PlaybackPolicy, bool, Outcome]] = [
+    ("every permission granted", PlaybackPolicy(), True, Outcome.TRANSCODE),
+    (
+        "video transcoding alone denied changes nothing",
+        PlaybackPolicy(enable_video_transcoding=False),
+        True,
+        Outcome.TRANSCODE,
+    ),
+    (
+        "audio transcoding alone denied changes nothing",
+        PlaybackPolicy(enable_audio_transcoding=False),
+        True,
+        Outcome.TRANSCODE,
+    ),
+    (
+        "remuxing alone denied changes nothing",
+        PlaybackPolicy(enable_remuxing=False),
+        True,
+        Outcome.TRANSCODE,
+    ),
+    (
+        "two of the three denied still changes nothing",
+        PlaybackPolicy(enable_video_transcoding=False, enable_audio_transcoding=False),
+        True,
+        Outcome.TRANSCODE,
+    ),
+    (
+        "all three denied at once, and only then",
+        PlaybackPolicy(
+            enable_video_transcoding=False,
+            enable_audio_transcoding=False,
+            enable_remuxing=False,
+        ),
+        False,
+        Outcome.NONE,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "policy,supports,outcome",
+    [row[1:] for row in POLICIES],
+    ids=[row[0] for row in POLICIES],
+)
+def test_ac31_a_video_policy_needs_all_three_denials(
+    policy: PlaybackPolicy, supports: bool, outcome: Outcome
+) -> None:
+    decision = decide(FILM, FORCES_A_TRANSCODE, Switches(), policy, is_video=True)
+    assert (decision.outcome, decision.supports_transcoding) == (outcome, supports)
+
+
+def test_ac31_an_audio_item_turns_on_the_audio_permission_alone() -> None:
+    """The other half of the measured rule, and it is not the video one with a name changed."""
+    profile = DeviceProfile(
+        direct_play_profiles=(DirectPlayProfile(container="mp3", type=MediaKind.AUDIO),),
+        transcoding_profiles=(
+            TranscodingProfile(container="mp3", audio_codec="mp3", type=MediaKind.AUDIO),
+        ),
+    )
+    denied = PlaybackPolicy(enable_audio_transcoding=False)
+    assert decide(TRACK, profile, Switches(), denied, is_video=False).outcome is Outcome.NONE
+    kept = PlaybackPolicy(enable_video_transcoding=False, enable_remuxing=False)
+    assert decide(TRACK, profile, Switches(), kept, is_video=False).outcome is Outcome.TRANSCODE
+
+
+def test_no_policy_shape_produces_an_error() -> None:
+    """AC-31's last clause: every answer is a `Decision`. There is no error shape to produce."""
+    for _, policy, _, _ in POLICIES:
+        decision = decide(FILM, FORCES_A_TRANSCODE, Switches(), policy, is_video=True)
+        assert isinstance(decision, Decision)
+        assert decision.reasons == () or decision.outcome is not Outcome.NONE
+
+
+# ------------------------------------------------------------------------------------------
+# AC-7 and AC-9: what each stream is planned to become
+# ------------------------------------------------------------------------------------------
+
+
+def test_ac7_a_refused_audio_track_costs_an_audio_encode_and_not_a_video_one() -> None:
+    decision = answer(
+        a_profile(
+            DirectPlayProfile(container="mp4", video_codec="hevc", audio_codec="aac"),
+            transcoding=(TS_HLS_AAC_ONLY,),
+        )
+    )
+    assert decision.video is not None and decision.audio is not None
+    assert decision.video.action is StreamAction.COPY
+    assert (decision.video.codec, decision.video.width, decision.video.height) == (
+        "hevc",
+        1920,
+        816,
+    )
+    assert decision.audio.action is StreamAction.ENCODE
+    assert decision.audio.codec == "aac"
+
+
+def test_ac9_nothing_is_upscaled() -> None:
+    """A 1080p ceiling over an 816-line source plans 816 lines, not 1080."""
+    decision = answer(
+        a_profile(
+            DirectPlayProfile(container="mp4", video_codec="h264"),
+            transcoding=(TS_HLS_H264_ONLY,),
+            codecs=(
+                CodecProfile(
+                    type=CodecKind.VIDEO,
+                    codec="h264",
+                    conditions=(
+                        a_condition(ConditionProperty.WIDTH, "1920"),
+                        a_condition(ConditionProperty.HEIGHT, "1080"),
+                    ),
+                ),
+            ),
+        )
+    )
+    assert decision.video is not None
+    assert (decision.video.action, decision.video.width, decision.video.height) == (
+        StreamAction.ENCODE,
+        1920,
+        816,
+    )
+
+
+def test_ac9_a_ceiling_below_the_source_is_the_ceiling() -> None:
+    decision = answer(
+        a_profile(
+            DirectPlayProfile(container="mp4", video_codec="h264"),
+            transcoding=(TS_HLS_H264_ONLY,),
+            codecs=(
+                CodecProfile(
+                    type=CodecKind.VIDEO,
+                    codec="h264",
+                    conditions=(a_condition(ConditionProperty.HEIGHT, "480"),),
+                ),
+            ),
+        )
+    )
+    assert decision.video is not None and decision.video.height == 480
+
+
+def test_a_sample_rate_ceiling_is_honoured_exactly_rather_than_from_the_opus_ladder() -> None:
+    """behaviours section 3.7's divergence, decided here because this is where the target is set.
+
+    The reference answers a 22 050 Hz ceiling at 24 000 Hz - the next step of the ladder Opus
+    needs, applied to every codec. A client declares a ceiling because something downstream cannot
+    go above it, so Atrium plans the ceiling itself.
+    """
+    profile = DeviceProfile(
+        direct_play_profiles=(DirectPlayProfile(container="mp3", type=MediaKind.AUDIO),),
+        transcoding_profiles=(
+            TranscodingProfile(container="mp3", audio_codec="mp3", type=MediaKind.AUDIO),
+        ),
+        codec_profiles=(
+            CodecProfile(
+                type=CodecKind.AUDIO,
+                codec="mp3",
+                conditions=(a_condition(ConditionProperty.AUDIO_SAMPLE_RATE, "22050"),),
+            ),
+        ),
+    )
+    decision = decide(TRACK, profile, Switches(), is_video=False)
+    assert decision.audio is not None
+    assert decision.audio.sample_rate == 22050
+
+
+def test_a_channel_ceiling_comes_from_the_body_as_well_as_the_profile() -> None:
+    """`MaxAudioChannels` is a request switch, and it binds like a condition would."""
+    surround = a_source(
+        an_audio_stream(index=0, codec="flac", channels=6, sample_rate=48000), container="flac"
+    )
+    profile = DeviceProfile(
+        transcoding_profiles=(
+            TranscodingProfile(container="mp3", audio_codec="mp3", type=MediaKind.AUDIO),
+        ),
+    )
+    decision = decide(surround, profile, Switches(max_audio_channels=2), is_video=False)
+    assert decision.audio is not None and decision.audio.channels == 2
+
+
+def test_a_copied_stream_keeps_the_numbers_the_file_has() -> None:
+    decision = answer(a_profile(DirectPlayProfile(container="mkv", video_codec="hevc")))
+    assert decision.video is not None and decision.audio is not None
+    assert decision.video.action is StreamAction.COPY
+    assert (decision.audio.channels, decision.audio.sample_rate) == (6, 48000)
+
+
+# ------------------------------------------------------------------------------------------
+# The reasons vocabulary and its order
+# ------------------------------------------------------------------------------------------
+
+#: The whole enum in the order .NET's flags formatter emits it - ascending value, which is *not*
+#: the order the reference declares the members in. Spelled out so that a member renamed, added
+#: or re-valued fails here rather than on a client.
+EVERY_REASON = (
+    "ContainerNotSupported",
+    "VideoCodecNotSupported",
+    "AudioCodecNotSupported",
+    "SubtitleCodecNotSupported",
+    "AudioIsExternal",
+    "SecondaryAudioNotSupported",
+    "VideoProfileNotSupported",
+    "VideoLevelNotSupported",
+    "VideoResolutionNotSupported",
+    "VideoBitDepthNotSupported",
+    "VideoFramerateNotSupported",
+    "RefFramesNotSupported",
+    "AnamorphicVideoNotSupported",
+    "InterlacedVideoNotSupported",
+    "AudioChannelsNotSupported",
+    "AudioProfileNotSupported",
+    "AudioSampleRateNotSupported",
+    "AudioBitDepthNotSupported",
+    "ContainerBitrateExceedsLimit",
+    "VideoBitrateNotSupported",
+    "AudioBitrateNotSupported",
+    "UnknownVideoStreamInfo",
+    "UnknownAudioStreamInfo",
+    "DirectPlayError",
+    "VideoRangeTypeNotSupported",
+    "VideoCodecTagNotSupported",
+    "StreamCountExceedsLimit",
+)
+
+
+def test_the_reason_vocabulary_is_the_references_own_in_its_own_order() -> None:
+    ordered = sorted(TranscodeReason, key=lambda one: one.value)
+    assert tuple(one.wire_name for one in ordered) == EVERY_REASON
+
+
+def test_the_declaration_order_and_the_value_order_really_disagree() -> None:
+    """Otherwise the ordering row above would pass whichever order the implementation used."""
+    declared = [one.wire_name for one in TranscodeReason]
+    assert declared.index("VideoRangeTypeNotSupported") > declared.index("VideoLevelNotSupported")
+    assert TranscodeReason.VIDEO_RANGE_TYPE_NOT_SUPPORTED.value > (
+        TranscodeReason.VIDEO_LEVEL_NOT_SUPPORTED.value
+    )
+
+
+# ------------------------------------------------------------------------------------------
+# Comma-separated membership, which is four rules rather than one
+# ------------------------------------------------------------------------------------------
+
+CONTAINMENT: list[tuple[str, DirectPlayProfile, bool]] = [
+    ("one member of the stored list is enough", DirectPlayProfile(container="mp4"), True),
+    ("a list of its own, any member matching", DirectPlayProfile(container="mkv,mp4"), True),
+    ("casing does not matter", DirectPlayProfile(container="MP4"), True),
+    ("an absent list admits everything", DirectPlayProfile(), True),
+    ("an empty list admits everything", DirectPlayProfile(container=""), True),
+    ("a leading minus inverts the whole answer", DirectPlayProfile(container="-mp4"), False),
+    ("and an exclusion list that misses admits", DirectPlayProfile(container="-mkv"), True),
+    ("a member that is not there", DirectPlayProfile(container="mkv"), False),
+    (
+        "members are not trimmed, because the reference does not",
+        DirectPlayProfile(container="mkv, mp4"),
+        False,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "entry,accepted",
+    [row[1:] for row in CONTAINMENT],
+    ids=[row[0] for row in CONTAINMENT],
+)
+def test_container_membership(entry: DirectPlayProfile, accepted: bool) -> None:
+    decision = answer(a_profile(entry))
+    assert (decision.outcome is Outcome.DIRECT_PLAY) is accepted
+
+
+# ------------------------------------------------------------------------------------------
+# Conditions: what an unknown value does, and the ones that fail silently
+# ------------------------------------------------------------------------------------------
+
+
+def test_an_unknown_value_satisfies_a_condition_that_is_not_required() -> None:
+    """A Matroska stream reports no per-stream bit depth; a profile that merely prefers one is
+    not a profile that refuses the file."""
+    no_depth = a_source(a_video_stream(bit_depth=None), an_audio_stream())
+    conditions = (a_condition(ConditionProperty.VIDEO_BIT_DEPTH, "8", is_required=False),)
+    profile = a_profile(PLAYS_EVERYTHING, codecs=(a_video_codec_profile(*conditions),))
+    assert decide(no_depth, profile, Switches(), is_video=True).outcome is Outcome.DIRECT_PLAY
+
+    required = (a_condition(ConditionProperty.VIDEO_BIT_DEPTH, "8"),)
+    refuses = a_profile(PLAYS_EVERYTHING, codecs=(a_video_codec_profile(*required),))
+    assert decide(no_depth, refuses, Switches(), is_video=True).reasons == (
+        "VideoBitDepthNotSupported",
+    )
+
+
+def test_a_condition_the_reference_blames_on_nothing_fails_silently() -> None:
+    """Eight properties map to no reason at all upstream, so a profile stating one of them gets
+    direct play whether or not it holds. Reproduced rather than tidied."""
+    profile = a_profile(
+        PLAYS_EVERYTHING,
+        codecs=(
+            a_video_codec_profile(
+                a_condition(ConditionProperty.IS_AVC, "true", ConditionType.EQUALS)
+            ),
+        ),
+    )
+    assert answer(profile).outcome is Outcome.DIRECT_PLAY
+
+
+def test_apply_conditions_gate_the_entry_they_belong_to() -> None:
+    """ "h264 above level 4.1 must also be 8-bit" must not constrain a stream below that level."""
+    gated = CodecProfile(
+        type=CodecKind.VIDEO,
+        codec="hevc",
+        apply_conditions=(
+            a_condition(ConditionProperty.VIDEO_LEVEL, "150", ConditionType.GREATER_THAN_EQUAL),
+        ),
+        conditions=(a_condition(ConditionProperty.VIDEO_BIT_DEPTH, "8"),),
+    )
+    assert answer(a_profile(PLAYS_EVERYTHING, codecs=(gated,))).outcome is Outcome.DIRECT_PLAY
+    reached = CodecProfile(
+        type=CodecKind.VIDEO,
+        codec="hevc",
+        apply_conditions=(
+            a_condition(ConditionProperty.VIDEO_LEVEL, "90", ConditionType.GREATER_THAN_EQUAL),
+        ),
+        conditions=(a_condition(ConditionProperty.VIDEO_BIT_DEPTH, "8"),),
+    )
+    assert answer(a_profile(PLAYS_EVERYTHING, codecs=(reached,))).reasons == (
+        "VideoBitDepthNotSupported",
+    )
+
+
+def test_equals_any_takes_a_pipe_separated_list() -> None:
+    profile = a_profile(
+        PLAYS_EVERYTHING,
+        codecs=(
+            a_video_codec_profile(
+                a_condition(
+                    ConditionProperty.VIDEO_PROFILE, "Main|Main 10", ConditionType.EQUALS_ANY
+                )
+            ),
+        ),
+    )
+    assert answer(profile).outcome is Outcome.DIRECT_PLAY
+
+
+def test_an_unreadable_condition_value_costs_a_transcode_rather_than_the_response() -> None:
+    """The reference raises on an ordering comparison against a string, which is a 500. Atrium
+    answers the request and treats the condition as unmet."""
+    profile = a_profile(
+        PLAYS_EVERYTHING,
+        codecs=(a_video_codec_profile(a_condition(ConditionProperty.VIDEO_PROFILE, "Main")),),
+    )
+    assert answer(profile).reasons == ("VideoProfileNotSupported",)
+
+
+# ------------------------------------------------------------------------------------------
+# The HDR rule, and what is left of it in v1
+# ------------------------------------------------------------------------------------------
+
+
+def test_a_copy_never_strips_what_the_client_declared() -> None:
+    """behaviours section 3.4 in the shape v1 can reach.
+
+    The reference plans removal of HDR10+ side data from a `DOVIWithHDR10Plus` stream as soon as a
+    client's declared range types contain `DOVI`, without checking whether the client declared the
+    coexistence itself. Atrium's copy path removes nothing at all, and the conditional half of the
+    divergence has nothing to condition on: `VideoRangeType` carries only the three members a
+    stream listing can produce (`domain/media.py`), so no inspection in v1 ever answers
+    `DOVIWithHDR10Plus`. It arrives with the probe that reads Dolby Vision side data.
+    """
+    assert {one.value for one in VideoRangeType} == {"SDR", "HDR10", "HLG"}
+    hdr = a_source(
+        a_video_stream(video_range=VideoRange.HDR, video_range_type=VideoRangeType.HDR10),
+        an_audio_stream(),
+    )
+    declares_dovi = a_profile(
+        DirectPlayProfile(container="mkv", video_codec="hevc"),
+        codecs=(
+            a_video_codec_profile(
+                a_condition(
+                    ConditionProperty.VIDEO_RANGE_TYPE,
+                    "SDR|HDR10|DOVI|DOVIWithHDR10Plus",
+                    ConditionType.EQUALS_ANY,
+                )
+            ),
+        ),
+    )
+    decision = decide(hdr, declares_dovi, Switches(), is_video=True)
+    assert decision.outcome is Outcome.REMUX
+    assert decision.video is not None and decision.video.action is StreamAction.COPY
+
+
+# ------------------------------------------------------------------------------------------
+# Determinism (Principle VII)
+# ------------------------------------------------------------------------------------------
+
+
+def test_the_same_question_twice_is_the_same_answer() -> None:
+    for _, profile, _, _ in RUNGS:
+        assert answer(profile) == answer(profile)
