@@ -34,6 +34,7 @@ from atrium import REFERENCE_VERSION, __version__
 from atrium import logs as log_setup
 from atrium.api import (
     artists,
+    audio,
     filters,
     genres,
     images,
@@ -50,6 +51,7 @@ from atrium.api import (
     user_library,
     user_views,
     users,
+    videos,
     years,
 )
 from atrium.api import sessions as session_routes
@@ -112,6 +114,8 @@ ROUTERS = (
     similar.router,
     instant_mix.router,
     media_info.router,
+    audio.router,
+    videos.router,
     items.router,
 )
 

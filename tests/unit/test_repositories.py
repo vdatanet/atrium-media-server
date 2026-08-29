@@ -27,6 +27,7 @@ from atrium.db import models, repositories, schema
 from atrium.db.engine import create_database_engine, session_factory
 from atrium.db.repositories import (
     LibraryRepository,
+    MediaFileRepository,
     MediaProbeRepository,
     SessionRepository,
     TokenRepository,
@@ -61,6 +62,7 @@ REPOSITORIES = (
     SessionRepository,
     UserDataRepository,
     MediaProbeRepository,
+    MediaFileRepository,
 )
 
 

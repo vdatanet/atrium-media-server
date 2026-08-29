@@ -185,6 +185,7 @@ class Server:
         path_and_query: str,
         max_bytes: int,
         extra_headers: dict[str, str] | None = None,
+        send_token: bool = True,
     ) -> tuple[int, dict[str, str], bytes]:
         """GET reading at most `max_bytes` of the body, then closing the connection.
 
@@ -194,11 +195,15 @@ class Server:
         server encoding for the whole read; closing early is also, deliberately, the same signal
         a disconnecting client sends, which the reference answers by stopping the work.
 
+        `send_token=False` sends nothing at all, which is the only way to ask whether a delivery
+        route *requires* a credential - and behaviours section 2.10 says the answer is not the
+        obvious one.
+
         Returns (status, headers, first bytes). Error responses come back the same way.
         """
         url = self.base + path_and_query
         headers = {}
-        if self.token:
+        if self.token and send_token:
             headers["X-Emby-Token"] = self.token
         if extra_headers:
             headers.update(extra_headers)

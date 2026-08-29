@@ -39,6 +39,7 @@ from atrium.db import models
 from atrium.domain.items import BY_NAME, CollectionType, Item, ItemType, MediaSource
 from atrium.domain.library import Library
 from atrium.domain.media import (
+    DeliveredFile,
     InspectedStream,
     MediaInspection,
     StreamKind,
@@ -1561,3 +1562,44 @@ class MediaProbeRepository:
                 .order_by(models.MediaStreamRow.stream_index)
             )
         )
+
+
+class MediaFileRepository:
+    """The one query the four delivery routes need: an item id, and the file behind it.
+
+    Separate from `ItemQueryRepository` because that one takes a user and applies 005's visibility
+    predicate, and a delivery route has neither - it may be called with no token at all
+    (behaviours section 2.10). Separate from `MediaProbeRepository` because a static request needs
+    no inspection: the bytes are the file's, and their size and modification time come from the
+    filesystem, which is what the reference reads too.
+    """
+
+    def __init__(self, session: OrmSession) -> None:
+        self._session = session
+
+    def locate(self, item_id: str, part_index: int = 0) -> DeliveredFile | None:
+        """The part's file, or `None` when no item, no part, or a removed item holds that id.
+
+        **A soft-removed item is not found**, the same reading the image routes serve under: the
+        world a client browses has no removed items in it, and a delivery route that disagreed
+        would answer bytes for an item every list says is gone.
+        """
+        item = self._session.get(models.Item, item_id)
+        if item is None or item.removed_at is not None:
+            return None
+        relative_path = self._session.scalars(
+            select(models.ItemSource.relative_path).where(
+                models.ItemSource.item_id == item_id,
+                models.ItemSource.part_index == part_index,
+            )
+        ).first()
+        if relative_path is None:
+            return None
+        roots = tuple(
+            self._session.scalars(
+                select(models.LibraryRoot.path)
+                .where(models.LibraryRoot.library_id == item.library_id)
+                .order_by(models.LibraryRoot.path)
+            ).all()
+        )
+        return DeliveredFile(library_roots=roots, relative_path=relative_path)

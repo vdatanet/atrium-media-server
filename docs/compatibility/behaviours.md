@@ -536,15 +536,26 @@ never rewind — and the measurement reversed each.
 whatever container the path names: `stream.mp3?static=true` on a FLAC track is `200` with FLAC
 bytes behind `Content-Type: audio/mpeg`, and `stream.mkv?static=true` on an mp4 film is the mp4
 bytes as `video/x-matroska` — byte-identical to the unsuffixed static route, ranges included.
-No error, no remux, no re-encode.
-`[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-28]`
+No error, no remux, no re-encode. Swept at 008 T6 across **every** container a library admits, on
+video and on audio, and the bytes were identical for all thirty-eight
+`[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-28, 2026-08-29]`.
+
+Three further parts of the same rule, measured in that sweep. The `container` **query** parameter
+is the same lever as the path suffix, and answers the same label. A container the table has no row
+for is not an error either: the label falls back to the file's own extension, so
+`stream.banana?static=true` on an mp4 is `video/mp4`. And `stream.wav?static=true` is a `200` with
+the source bytes — the one shape of the PCM/WAV defect of §3.2 that is *not* broken, because static
+never starts an encoder.
 
 **Depends on it:** a downloading client that names a wrong container still receives, correctly,
 the original file — sniffing tools open it fine and only the label lies. A server that refused
 instead would break that download outright.
 
-**Atrium does:** the same. Static means the source bytes, absolutely; the suffix picks the
-`Content-Type` and nothing else. The
+**Atrium does:** the same, implemented at 008 T6. Static means the source bytes, absolutely; the
+suffix picks the `Content-Type` and nothing else, from a table measured row by row rather than
+transcribed from the reference's own — which matters twice, because copying it would be copying
+code (Principle IV) and because several rows are not guessable: `.opus` is `audio/ogg`, `.alac` is
+`audio/mp4`, `.mts` is `model/vnd.mts`. The
 [008 draft](../../specs/008-playback-negotiation-and-delivery/spec.md#35-delivery-the-rules-that-apply-to-every-route)
 said a mismatch would be an error, and the measurement replaced it.
 
@@ -716,14 +727,31 @@ that has never sent a token on them is a client a server can break by starting t
 
 **Atrium does:** for the image routes, the same — decided at 006's spec review, 2026-08-28: a
 token is accepted, none is required, and there is no per-user visibility branch
-([006 §3.2](../../specs/006-images/spec.md#32-get-itemsitemidimagesimagetype--getitemimage)). The
-delivery routes stay undecided until [008](../../specs/008-playback-negotiation-and-delivery/spec.md);
-what 002 owns is the measurement and the fact that a token is *accepted*. Deferring was per §3.0.1
-tie-break 3 — a decision is taken when the feature that owns it is the one being written.
+([006 §3.2](../../specs/006-images/spec.md#32-get-itemsitemidimagesimagetype--getitemimage)).
 
-What 002 does record is the consequence, so that whoever takes it takes it knowingly: on the
+**And for the delivery routes, the same, decided at 008 T6 on 2026-08-29.** The deferral above ran
+out at the task that landed the routes, and the measurement it was waiting for is now this feature's
+own: no token, an unknown token and `?api_key=` answer identically on all four `stream` routes
+`[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-29]`. The split is **per action**,
+not per feature — `/Audio/{itemId}/universal` answers `401` to the first two from the same probe run,
+because it is the one delivery action carrying an authorization attribute `[source:
+Jellyfin.Api/Controllers/AudioController.cs:89, Jellyfin.Api/Controllers/VideosController.cs:312,
+Jellyfin.Api/Controllers/UniversalAudioController.cs:94 @ v10.11.11]`. So Atrium requires a token on
+`/universal` and on none of the other four, which is the reference's own line and not a simplification
+of it.
+
+The argument is the paragraph above, at its strongest here: a bare URL handed to an **external
+player** is what these routes are for, and the divergence would be invisible in every test written
+against a client that also holds a token. 008's own task list had it the other way round — "a
+tokenless request refuses" — while [002 §3.1](../../specs/002-authentication-users-and-sessions/spec.md#31-how-a-client-presents-a-token),
+accepted three days earlier, already said none is required on this class. The measurement settled it
+in 002's favour.
+
+What 002 records is the consequence, so that whoever takes it takes it knowingly: on the
 reference **an item id is a capability**, and any divergence 006 or 008 chooses is one a client can
-observe.
+observe. Both features have now taken it and neither diverged, so the consequence stands as the
+reference's: anyone holding an item's identifier can read its bytes, and no per-user visibility
+branch runs on the way.
 
 ### 2.11 A disabled account is refused with `403`, not `401`
 
@@ -857,6 +885,25 @@ surface a client that reads it.
 The split is not arbitrary: the empty ones are produced before the framework's controller pipeline
 runs, the JSON ones by that pipeline, and the last two by a controller inside it — the fixed
 25-byte body where it refused abstractly, the quoted string where it wrote a message.
+
+**The third shape answers a `404` as well, and that was measured at 008 T6** on 2026-08-29. An
+identifier no library holds answers `404`, `text/plain` with no charset and the fixed 25 bytes on
+all four `stream` routes, while the *same* identifier on `GET /Items/{itemId}/PlaybackInfo` answers
+problem details `[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-29]`. One feature,
+one identifier, two bodies. The delivery controller throws its own exception before the framework's
+not-found result is ever reached `[source: Jellyfin.Api/Helpers/StreamingHelpers.cs:111 @
+v10.11.11]`, which is the same "decided by where it happened" rule the table states — worth writing
+down because the third shape had been met only at `4xx`s that were not `404`s, and "an item that
+could not be found is problem details" reads like a rule until this pair breaks it.
+
+**The `errors` map's *message* is per annotation, and one more of them is reproduced exactly.** A
+value failing a declared **pattern** answers `The field container must match the regular expression
+'^[a-zA-Z0-9\-\._,|]{0,40}$'.` — the expression itself, not the value the client sent, with the
+apostrophes escaped as `\u0027` like every other quotable character (§1.16). Measured on
+`/Videos/{id}/stream.a%20b` and on a forty-one-character container, and reproduced here rather than
+recorded as a divergence because it is a template rather than a parser's output
+`[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-29]`. The refusal also happens
+**before** the item is looked up: an unknown item behind an illegal container answers this `400`.
 
 **The fourth shape was measured at 006's plan gate**, on 2026-08-28, and it is the shape of the
 image route's own `404`s: an item that exists but lacks the asked-for image type, an

@@ -122,6 +122,18 @@ PROBLEM_TYPE_NOT_FOUND = "https://tools.ietf.org/html/rfc9110#section-15.5.5"
 VALIDATION_TITLE = "One or more validation errors occurred."
 NOT_FOUND_TITLE = "Not Found"
 
+#: The framework's name for "this string did not match the declared pattern".
+PATTERN_MISMATCH = "string_pattern_mismatch"
+
+#: What the reference says when one does not, byte for byte, including the expression itself -
+#: `/Videos/{id}/stream.a%20b` answers `{"container": ["The field container must match the regular
+#: expression '^[a-zA-Z0-9\-\._,|]{0,40}$'."]}`, with the apostrophes escaped as `\u0027` by the
+#: serialiser like every other quotable character (behaviours section 1.16). Reproducible exactly
+#: because it is a template rather than a parser's output, which is why this one is matched where
+#: the JSON parser's message in section 1.11 is a recorded divergence.
+#: `[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-29]`
+PATTERN_MESSAGE = "The field {name} must match the regular expression '{pattern}'."
+
 
 class NotFoundError(Exception):
     """A handler looked and there was nothing there. Answered with a problem-details `404`.
@@ -147,6 +159,25 @@ class ItemNotFoundError(NotFoundError):
     Measured: a well-formed identifier nothing owns answers problem details on
     `/Items/{itemId}/Images/{imageType}`, byte-identical to the same refusal on `/Items/{itemId}`
     `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
+    """
+
+
+class DeliveryNotFoundError(Exception):
+    """A delivery route was asked for bytes it has nowhere to read. Answered with the **third**
+    shape - `404`, `text/plain`, the fixed 25 bytes - and not with problem details.
+
+    Deliberately not a `NotFoundError`: the same unknown identifier answers two different bodies
+    depending on the route, and this is the pair that proves it. `GET
+    /Items/{itemId}/PlaybackInfo` answers RFC 9457 problem details for an id nothing holds, and
+    `GET /Videos/{itemId}/stream?static=true` answers `Error processing request.` in `text/plain`
+    with no charset - measured on all four `stream` routes in the same run `[probe:
+    tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-29]`. The split is behaviours section
+    1.11's, from the other side: the negotiation refuses through the framework's own not-found
+    result, and the delivery controller throws its own exception before any of that runs
+    `[source: Jellyfin.Api/Helpers/StreamingHelpers.cs:111 @ v10.11.11]`.
+
+    Inheriting `NotFoundError` would have made it a problem-details `404` silently, which is the
+    reason the two are named apart rather than distinguished by a status code.
     """
 
 
@@ -260,7 +291,12 @@ def validation_errors(raw: list[Any], body_parameter: str | None = None) -> dict
                 collected[body_parameter].append(required)
             continue
         name = str(location[-1])
-        if "input" in error:
+        pattern = (error.get("ctx") or {}).get("pattern")
+        if str(error.get("type", "")) == PATTERN_MISMATCH and pattern:
+            # A different sentence, measured: the reference's data annotation says which
+            # expression was not matched rather than quoting what the client sent.
+            message = PATTERN_MESSAGE.format(name=name, pattern=pattern)
+        elif "input" in error:
             message = f"The value '{error['input']}' is not valid."
         else:
             message = str(error.get("msg", "The value is not valid."))
@@ -370,6 +406,10 @@ def message_error(status_code: int, message: str) -> Response:
     return AtriumJSONResponse(message, status_code=status_code)
 
 
+async def delivery_not_found_handler(_request: Request, _exc: Exception) -> Response:
+    return controller_error(404)
+
+
 async def image_not_found_handler(_request: Request, exc: Exception) -> Response:
     message = str(exc) if isinstance(exc, ImageNotFoundError) else NOT_FOUND_TITLE
     return message_error(404, message)
@@ -412,6 +452,10 @@ EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     # handler by walking the exception's MRO, so the subclass finds the base's handler and the
     # two shapes stay one shape. `ImageNotFoundError` does not inherit it - different shape.
     ImageNotFoundError: image_not_found_handler,
+    # Not a `NotFoundError` subclass, and the row is what makes the difference real: the four
+    # delivery routes answer the third shape where every other `404` in this project answers
+    # problem details (behaviours section 1.11, measured 2026-08-29).
+    DeliveryNotFoundError: delivery_not_found_handler,
     RequestValidationError: validation_handler,
     HTTPException: routing_handler,
 }
@@ -422,12 +466,15 @@ __all__ = [
     "EXCEPTION_HANDLERS",
     "IMAGE_ABSENT_TEMPLATE",
     "NOT_FOUND_TITLE",
+    "PATTERN_MESSAGE",
+    "PATTERN_MISMATCH",
     "PROBLEM_TYPE_BAD_REQUEST",
     "PROBLEM_TYPE_NOT_FOUND",
     "ROUTING_REFUSALS",
     "VALIDATION_TITLE",
     "AccountUnavailableError",
     "ClientAuthorizationError",
+    "DeliveryNotFoundError",
     "ExceptionHandler",
     "ForbiddenError",
     "ImageNotFoundError",

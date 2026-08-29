@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's
+amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's; and 2026-08-29 by T6 — §3 gains `media/labels.py`, `api/delivery.py` and a `MediaFileRepository` that takes no user, §6.5 records that the four `stream` routes declare no authentication dependency at all and why the response is built header by header, §6.8's delivery-route error shape is discharged for those four (the third shape, not the problem details §7 implied), and §7 gains the container pattern's `400` and the missing-file case
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -56,10 +56,14 @@ timeout, client disconnect, shutdown. `architecture.md` §4's "external processe
 was written for exactly this module.
 
 **Range handling is one function in `compat/`, measured shapes only.** The §3.5 table is now
-fully measured (prefix, mid, suffix, multi→full-body, reversed→full-body, `416` with
+fully measured (prefix, mid, single byte, the whole file named, open-ended, overshooting, suffix,
+multi→full-body, reversed→full-body, every unreadable shape→full-body, `416` with
 `Content-Length: 0`), and `architecture.md` §1 already assigns `Range` to `compat/`. One
 `negotiate_range` used by every delivery route; the golden range matrix tests it table-driven
-once, not per route.
+once, not per route. **The measured table and RFC 9110 disagree**, which is the reason it is one
+function rather than a per-route reading: the reference answers a reversed or malformed `Range`
+with the whole body where the RFC invites a `416`, and a route that reached for the standard
+instead of the table would refuse requests the reference serves.
 
 ## 2. Inherited decisions
 
@@ -93,6 +97,7 @@ src/atrium/
 │   ├── decision.py      pure: (source, profile, switches, policy) → Decision
 │   ├── urls.py          the TranscodingUrl anatomy — OQ-8's measured parameter list
 │   ├── hls.py           pure: segment-boundary prediction and playlist rendering
+│   ├── labels.py        pure: container → Content-Type, the measured table (T6)
 │   ├── ffmpeg.py        command construction, our own design per stream plan
 │   └── sessions.py      TranscodeManager: process supervision, scratch, ping/kill
 │                        timers, restart-at-seek, the configurable throttle
@@ -100,6 +105,8 @@ src/atrium/
 │   └── ranges.py        negotiate_range: the §3.5 table, one place
 ├── api/
 │   ├── media_info.py    MediaInfoController: POST and GET /Items/{itemId}/PlaybackInfo
+│   ├── delivery.py      what the four stream routes share: the lookup, the range answer,
+│   │                    the label and the measured header set (T6)
 │   ├── audio.py         AudioController: /Audio/{itemId}/stream[.{container}]
 │   ├── universal_audio.py  UniversalAudioController: /Audio/{itemId}/universal
 │   ├── videos.py        VideosController: /Videos/{itemId}/stream[.{container}]
@@ -110,6 +117,11 @@ src/atrium/
     ├── repositories.py  grows MediaProbeRepository
     └── migrations/versions/0006_media_probes.py
 ```
+
+`db/repositories.py` also grows a `MediaFileRepository`, whose one query is an item id to the file
+behind it. Separate from `ItemQueryRepository` because that one takes a **user** and applies 005's
+visibility predicate, and a delivery route has neither: it may be called with no token at all
+(§6.5), so there is nobody to apply a predicate for.
 
 Grows, not new: `library/scan.py` gains the inspection step behind the change signal;
 `api/item_dto.py` gains `MediaSources`, `MediaStreams` and item-level `Container` emission (the
@@ -443,8 +455,27 @@ identity structural.
 
 ### 6.5 Progressive delivery
 
+**No authentication dependency on the four `stream` routes**, which is the measured rule and the
+decision behaviours §2.10 had deferred to this feature: a request with no token, one with a token
+nothing issued and one with `?api_key=` are one answer `[probe: tools/probe_range_matrix.py,
+Jellyfin 10.11.11, 2026-08-29]`. `/universal` is the exception and declares one. The routes
+therefore resolve an item **by identifier alone**, with no user and no visibility predicate — the
+same shape `api/images.py` has, and for the same reason: a route that declared a dependency and
+ignored its answer would still have to decide what an *invalid* token means.
+
+The response is built header by header rather than with the framework's file response, because the
+measured set is four headers and the convenient class ships an `ETag` and a `Content-Disposition`
+the reference does not send — 006 met the identical trap on the image routes. There is no
+conditional handling: `If-Modified-Since` is not read, measured.
+
+An unknown item is the **third** error shape here (`404`, `text/plain`, the fixed 25 bytes), not
+the problem details `PlaybackInfo` answers for the same identifier; the container path parameter
+carries the reference's own spelling pattern, so an illegal container is a validation `400` keyed
+on `container` decided before the lookup.
+
 `/Audio/{id}/stream` and `/Videos/{id}/stream`: `static=true` serves the source bytes through
-`negotiate_range` with the path suffix choosing only the `Content-Type` (behaviours §2.20);
+`negotiate_range` with the path suffix choosing only the `Content-Type` (behaviours §2.20) —
+falling back to the file's own extension where the requested container names no label;
 remuxes and re-encodes stream chunked with `Accept-Ranges: none` — except where the output size
 is knowable, the §3.5 divergence: a remux produced to scratch first, and a WAV re-encode, whose
 length is computable from sample count, so AC-20's valid-RIFF answer carries a real
@@ -491,9 +522,12 @@ the ceilings a plan holds. What stays owed to the task list:
   still one source-reading, cited with the task that implements it.
 * **The reference's ping-timeout constants** (§6.7): the kill-timer shape is sourced
   (`TranscodeManager.cs`), the numbers are read when the sweep is built.
-* **The delivery-route error shapes** (§7): an unknown item on `/stream`, a malformed range on a
-  chunked response — measured against behaviours §1.11's four shapes as each route lands, the
-  007 pattern.
+* ~~**The delivery-route error shapes** (§7): an unknown item on `/stream`~~ — **discharged at T6
+  for the four `stream` routes**, and it is the third shape rather than the problem details the
+  §7 table's "007-measured refusal family" implied. A **malformed range on a chunked response** is
+  still owed, by T7, and the sized case is measured: every unreadable `Range` is a `200` with the
+  whole body. The refusal shapes of `/universal`, the playlists and the segments remain owed to
+  the tasks that land them, folded into a probe battery.
 * **AC-26's disconnect timing** needs a fixture client that drops mid-body; it is an Atrium-side
   test, with the reference's own behaviour spot-checked by hand at the task.
 
@@ -503,7 +537,9 @@ the ceilings a plan holds. What stays owed to the task list:
 |---|---|---|---|
 | ffprobe missing at startup | Launch check | Log loudly; scans proceed without inspection, items carry no sources | Install; rescan |
 | ffprobe fails on one file | Non-zero exit / parse error | File recorded as uninspected (003 §3.7's report), item has no media source | Next scan retries |
-| Unknown or invisible item on any delivery route | 005 lookup | The 007-measured refusal family; exact shape measured per route at task time | — |
+| Unknown or invisible item on any delivery route | Item lookup by id, no user | **The third shape** — `404`, `text/plain`, the fixed 25 bytes — on the four `stream` routes, measured at T6; the remaining routes are measured as they land | — |
+| A container outside the reference's spelling rule on a `stream` route | The declared pattern | `400` problem details keyed `container`, naming the expression; decided before the lookup (T6, measured) | — |
+| An item whose file is gone since the scan | `stat` fails | The same third-shape `404`. ⚠️ Not measured: it needs a file deleted underneath a live reference | Rescan |
 | ffmpeg dies mid-production | Process exit observed by the manager | In-flight segment requests answer `500`; session torn down, scratch removed | Client re-negotiates |
 | Client disconnects mid-response | Response lifecycle | Production cancelled, session reaped after grace (spec §3.8) | — |
 | Segment requested past the playlist | Bounds check on the plan | `404` | — |

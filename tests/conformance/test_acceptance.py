@@ -122,14 +122,18 @@ FEATURE_002: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_user_routes:test_a_missing_client_header_is_400_and_specifically_not_401",
     ),
     3: (
-        "tests.conformance.test_auth_mechanisms:test_every_mechanism_authenticates_every_route_class",
+        "tests.conformance.test_auth_mechanisms:test_every_mechanism_authenticates_the_api_route",
         "tests.conformance.test_auth_mechanisms:test_the_precedence_chain_resolves_as_it_was_measured",
-        "tests.conformance.test_auth_mechanisms:test_the_stub_is_not_asserted_to_demand_a_token",
-        # Renamed at 006 T9, when the image stub became the real route and its assertion changed
-        # from "every mechanism reaches it" to "no mechanism changes the answer". This map is what
-        # noticed: a rename that left the criterion unasserted fails here rather than quietly.
-        "tests.conformance.test_auth_mechanisms:test_a_token_never_changes_the_image_routes_answer",
+        "tests.conformance.test_auth_mechanisms:test_neither_optional_class_demands_a_token",
+        # Renamed twice, and for the same reason each time: at 006 T9 the image stub became a real
+        # route, and at 008 T6 the delivery stub did - so "every mechanism reaches it" stopped
+        # being the surviving claim and "no mechanism changes the answer" replaced it. This map is
+        # what noticed both: a rename that left the criterion unasserted fails here rather than
+        # quietly. The delivery half of AC-3's precedence pairs is gone with the stub, because a
+        # route that reads no token cannot show which of two tokens wins.
+        "tests.conformance.test_auth_mechanisms:test_a_token_never_changes_a_token_optional_routes_answer",
         "tests.conformance.test_auth_mechanisms:test_the_query_forms_are_the_only_ones_a_player_can_use",
+        "tests.conformance.test_auth_mechanisms:test_a_stale_header_beside_a_fresh_url_cannot_break_delivery",
     ),
     4: (
         "tests.unit.test_require_user:test_no_token_is_the_empty_401_that_001_measured",
@@ -553,7 +557,7 @@ FEATURE_006: dict[int, tuple[str, ...]] = {
     ),
     12: (
         "tests.conformance.test_image_routes:test_ac12_every_mechanism_is_accepted_and_none_changes_the_answer",
-        "tests.conformance.test_auth_mechanisms:test_a_token_never_changes_the_image_routes_answer",
+        "tests.conformance.test_auth_mechanisms:test_a_token_never_changes_a_token_optional_routes_answer",
     ),
     13: (
         "tests.unit.test_image_cache:test_deleting_the_tree_between_operations_loses_nothing_but_time",
