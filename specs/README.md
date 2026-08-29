@@ -122,7 +122,7 @@ say how it will be proven is not finished.
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Implemented** | **Implemented** | **Implemented** |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
-| [011](011-subtitle-delivery/) | Subtitle delivery | Draft | — | — |
+| [011](011-subtitle-delivery/) | Subtitle delivery | **Accepted** | — | — |
 
 **001 through 008 are implemented**, 008 on 2026-08-29 across fourteen tasks. Its spec and plan
 were accepted the same day, at a review that wrote and ran the five probes its open questions had
@@ -134,11 +134,13 @@ codec-less empty `200`). **Every one of the fourteen tasks then found something 
 why the spec carries thirteen amendments and not one: the sharpest are the four `stream` routes
 requiring no token where the task list said the opposite (T6), a `PlaySessionId`-keyed stop whose
 mandatory `deviceId` decides nothing (T12), and a `SegmentKeepSeconds` that is a distance behind
-the client rather than a file age (T13). **009, 010 and 011 remain drafts**, and their open
+the client rather than a file age (T13). **009 and 010 remain drafts**, and their open
 questions are the standing review agenda —
 [what 008 owes them](008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
-is written down rather than remembered. The lowest-numbered feature that is not implemented is
-**009**, so its spec review is the next gate, and that list is one of its inputs.
+is written down rather than remembered. **011's spec was accepted the same day**, at its own
+measurement gate, so it is no longer one of the drafts: 009 and 010 are. The lowest-numbered
+feature that is not implemented is **009**, so its spec review is the next gate, and that list is
+one of its inputs.
 
 **008's own closing task found the class it exists to catch.** The acceptance map is where a
 criterion and the test that proves it are put on one line, and doing that showed two criteria whose
@@ -159,8 +161,29 @@ excludes subtitle *burn-in* and says in the same sentence that **v1 delivers sub
 Nothing does. 008 §2 excluded subtitle extraction, conversion and delivery — correctly, for a
 feature about deciding a play method — and the feature order ran 001 to 010 with no row to catch
 what 008 put down, so the promise fell between two features rather than being descoped by either.
-[011's spec](011-subtitle-delivery/spec.md) is a draft with **twelve open questions and no
-measurements of its own**, which is 008's shape before its gate.
+[011's spec](011-subtitle-delivery/spec.md) opened as a draft with **twelve open questions and no
+measurements of its own**, which is 008's shape before its gate — and it went the same way.
+
+**Its gate ran on 2026-08-29 and four of the twelve did not survive.** Five probes were written
+for it (`probe_subtitle_negotiation`, `probe_subtitle_manifest`, `probe_subtitle_delivery`,
+`probe_sidecar_subtitles`, `probe_progressive_production`) and the sharpest finding changes what
+the feature is for: **the master playlist does not accept the manifest flag at all**, so the
+condition the spec had read as *"a manifest delivery method **or** the profile asking"* has only
+one reachable half — and the reference's own negotiation writes the unreadable flag into the
+address it hands the client. What announces a subtitle is the delivery **address** naming the
+manifest method beside a stream index, which is the client-side override the trace had sized as
+*"a line inside"* the main work. Beside it: burn-in is not a branch the reference avoids but the
+answer it gives on every track no profile fits; the default track is **never** the highest-scoring
+stream, because the score is only ever read to detect a tie; a posted subtitle index is dropped
+in silence unless the request also names the media source; and the surface grew by **three** rows
+rather than two, because a negotiation's own `DeliveryUrl` names a third operation. Two defects
+nobody asked about: a subtitle playlist's window durations are written in the *server's locale*
+(behaviours §3.12), and the playlist route never reads the stream index it is given, so a playlist
+for a stream that does not exist is a `200` whose every entry is a `500`. And the two Principle I
+questions the spec parked were measured rather than argued: an honest `Content-Length` is an
+improvement as recorded, while **keying a transcode on the client's play session is parity** —
+the reference already does it on the three routes that declare the parameter, and `/universal`,
+the one the music client uses, mints a fresh session per request instead.
 
 **Its scope argument is the roadmap's *"008 is one feature, not two"* read backwards.** The two
 client traces

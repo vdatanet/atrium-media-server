@@ -203,3 +203,110 @@ def fetch_main_playlist(
     """`fetch_playlists`' first three answers, for the probes that want nothing else."""
     playlists = fetch_playlists(server, item_id, transcoding_url)
     return playlists.main, playlists.segments, playlists.durations
+
+
+# ------------------------------------------------------------------------------------------
+# Subtitles
+# ------------------------------------------------------------------------------------------
+
+
+#: The score the reference holds on each subtitle stream, recomputed from the stream's own
+#: properties. Six digits, each a decision, read left to right as language rank then five flags
+#: `[source: Emby.Server.Implementations/Library/MediaStreamSelector.cs:181-192 @ v10.11.11]`.
+#: A probe recomputes it rather than trusting the emitted value, because reproducing the ranking
+#: is what a second implementation has to be able to do.
+def subtitle_score(stream: dict[str, Any], preferred_languages: list[str]) -> int:
+    language = (stream.get("Language") or "").lower()
+    ranked = [str(x).lower() for x in preferred_languages]
+    index = ranked.index(language) if language in ranked else -1
+    score = 1 if index == -1 else 101 - index
+    score = (score * 10) + (2 if stream.get("IsForced") else 1)
+    score = (score * 10) + (2 if stream.get("IsDefault") else 1)
+    score = (score * 10) + (2 if stream.get("SupportsExternalStream") else 1)
+    score = (score * 10) + (2 if stream.get("IsTextSubtitleStream") else 1)
+    score = (score * 10) + (2 if stream.get("IsExternal") else 1)
+    return score
+
+
+class SubtitledSource:
+    """One item whose media source carries subtitle streams, split by kind."""
+
+    def __init__(self, item_id: str, source: dict[str, Any]) -> None:
+        self.item_id = item_id
+        self.source = source
+        self.source_id: str = source.get("Id") or item_id
+        self.runtime_ticks: int = source.get("RunTimeTicks") or 0
+        streams = source.get("MediaStreams") or []
+        self.subtitles = [s for s in streams if s.get("Type") == "Subtitle"]
+        self.text = [s for s in self.subtitles if s.get("IsTextSubtitleStream")]
+        self.image = [s for s in self.subtitles if not s.get("IsTextSubtitleStream")]
+        self.external = [s for s in self.subtitles if s.get("IsExternal")]
+        self.embedded = [s for s in self.subtitles if not s.get("IsExternal")]
+
+    def text_index(self) -> int:
+        return int(self.text[0]["Index"])
+
+    def image_index(self) -> int:
+        return int(self.image[0]["Index"])
+
+    def top_score_tie(self, preferred_languages: list[str]) -> list[int]:
+        """The indices sharing the highest recomputed score, when more than one does.
+
+        The reference's own default only consults the client's profile when this list has more
+        than one member, so a probe that wants to measure the tie-break has to find one first.
+        """
+        if not self.subtitles:
+            return []
+        scored = [(subtitle_score(s, preferred_languages), int(s["Index"])) for s in self.subtitles]
+        best = max(score for score, _ in scored)
+        return [index for score, index in scored if score == best]
+
+
+def find_subtitled_sources(
+    server: Server,
+    limit: int = 400,
+) -> list[SubtitledSource]:
+    """Every movie or episode in the library whose source carries at least one subtitle stream.
+
+    Read from the listing with `Fields=MediaStreams` rather than item by item: the four probes
+    that need one of these each want a *different* shape - text and image together, an external
+    file, two streams that tie on score - and one listing answers all of them.
+    """
+    found = server.get(
+        "/Items",
+        UserId=server.user_id,
+        IncludeItemTypes="Movie,Episode",
+        Recursive="true",
+        Limit=limit,
+        Fields="MediaStreams",
+    )
+    sources: list[SubtitledSource] = []
+    for row in found.get("Items", []):
+        streams = row.get("MediaStreams") or []
+        if not any(s.get("Type") == "Subtitle" for s in streams):
+            continue
+        sources.append(
+            SubtitledSource(
+                row["Id"],
+                {"Id": row["Id"], "RunTimeTicks": row.get("RunTimeTicks"), "MediaStreams": streams},
+            )
+        )
+    if not sources:
+        raise ProbeError(
+            "the library holds no movie or episode with a subtitle stream, so nothing here can "
+            "be measured. Point the probe at a library that has one"
+        )
+    return sources
+
+
+def resolve_subtitled_source(server: Server, item_id: str) -> SubtitledSource:
+    """The full media source of one item, which is where `Id` and `RunTimeTicks` are honest.
+
+    A listing row carries `MediaStreams` but not the media source's own identifier, and every
+    subtitle address names both.
+    """
+    item = server.get("/Items/" + item_id, userId=server.user_id)
+    sources = item.get("MediaSources") or []
+    if not sources:
+        raise ProbeError("item " + item_id + " carries no media source")
+    return SubtitledSource(item_id, sources[0])

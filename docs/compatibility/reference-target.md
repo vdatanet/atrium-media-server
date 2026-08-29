@@ -28,6 +28,11 @@ The reasoning for pinning, and for pinning to this particular line rather than `
 > `10.11.11` and make both rows the same version. **That is a version move**, and §"When the
 > reference version moves" in [conformance.md](conformance.md) is its procedure — step 2 of which
 > needs the differential harness feature 010 delivers. Not decided here.
+>
+> **The surface has since grown to 58** — the three subtitle routes 011 added on 2026-08-29 — and
+> all three were checked against the `10.11.11` document at that gate: path, method and
+> `operationId`. The pin is unmoved, and the sentence above still holds of the endpoints it was
+> written about.
 
 > **The one measured consequence of the gap so far: two property names** (2026-08-28). The
 > `10.11.11` document declares `BaseItemDto.GenreItems` and `BaseItemDto.LockedFields`; the pinned

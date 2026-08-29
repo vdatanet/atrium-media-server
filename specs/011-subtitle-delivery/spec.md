@@ -1,7 +1,7 @@
 ---
 feature: 011-subtitle-delivery
 title: Subtitle delivery
-status: Draft
+status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 depends_on: [003, 005, 008]
@@ -39,9 +39,14 @@ answers is not *should v1 do this*, which the roadmap answered before 001 was wr
   and honouring the track the client asked for — at negotiation and on a delivery request.
 - Announcing text subtitle tracks in the **HLS master playlist**, when the client's profile asks
   for them.
-- `GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/subtitles.m3u8` — `GetSubtitlePlaylist`.
-- `GET /Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/Stream.{format}` — `GetSubtitle`, whole
-  file and windowed.
+- **Three** routes, not two. `GetSubtitlePlaylist` is the address a manifest entry names;
+  `GetSubtitle` is the cues, whole or windowed by position parameters; and `GetSubtitleWithTicks`
+  is the same answer with the start position in the path instead of the query — which is in scope
+  because it is the route a *negotiation's own* `DeliveryUrl` names, so a client following the
+  address it was handed lands there and not on the other one
+  `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]`. The opening draft
+  of this section said two, and folded the windowed form into `GetSubtitle` as though it were the
+  same operation; §7's first dependency is corrected with it.
 - Extracting a text subtitle track from its container and converting it to the format the client
   asked for.
 - **Subtitle files sitting beside the media**: seeing them at all, counting them, offering them as
@@ -60,7 +65,16 @@ answers is not *should v1 do this*, which the roadmap answered before 001 was wr
   No analysed client calls either, and v1 writes nothing into a library root (004 §2).
 - **Per-user subtitle preferences** — a default language, a "forced only" mode, a remembered
   choice. 008 §3.1 records `DefaultSubtitleStreamIndex` as exactly this and v1 does not keep it;
-  a client sends the index it wants on each request.
+  a client sends the index it wants on each request. **Measuring §3.3 made this exclusion
+  expensive, and it is kept anyway**: the reference's default track is a function of two *user*
+  settings this feature does not store, so with none stored there is nothing to compute and the
+  answer is no default at all — which is exactly what the reference answers for a user whose
+  subtitle mode is `None`. What is lost is that a *new* user's mode is `Default` rather than
+  `None` `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]`, so a
+  stock reference proposes a track where Atrium proposes none. Recorded as an accepted gap
+  ([behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)) rather than
+  designed around, because the alternative is two user settings, five modes and a language
+  preference list — a per-user feature, which is what §2 excludes.
 - **Every other finding the two client traces record**, from a source with no stored inspection to
   UDP discovery. §2.1 says where each goes, and why none of them is decided by what decides a
   subtitle.
@@ -110,7 +124,7 @@ sentence is blunter still — *"whoever does §4.2 owns this line"* — and it i
 | [tvOS §4.6](../../docs/compatibility/client-atrium-tvos.md#46-two-spellings-of-hls-and-only-one-of-them-selects-hls) — `"Hls"` does not select HLS where `"hls"` does | *"One probe each, then one parameter each. Both are cheap and neither is safe to guess"* | It is the **delivery address's** vocabulary, and it is unanswerable before the probe that says whether the reference is case-insensitive there |
 | [tvOS §4.4](../../docs/compatibility/client-atrium-tvos.md#44-get-sessions-takes-no-deviceid-and-the-client-sends-one) — the session list takes no `deviceId` | Same row of the same table | It is the **session list's** request shape. The client already matches on what is playing, so this is a degradation whose worst case is an administrator reading another device's row |
 | [tvOS §4.5](../../docs/compatibility/client-atrium-tvos.md#45-the-fmp4-init-segment-restarts-the-encoder-which-is-the-defect-the-client-pre-warms-to-dodge) — the initialisation segment restarts production | *"A [behaviours §3.0](../../docs/compatibility/behaviours.md#30-how-the-decision-is-made) decision, taken on a probe, before any code"* | It is a **defect decision**, not a requirement. The restart is faithful reproduction, the client pre-warms to dodge it `[client-contract: 2026-08-29, §3]`, and the Jellyfin-side claim behind it is a third-party lead this repository has not measured. A feature is the wrong container for an argument |
-| [music §5.3](../../docs/compatibility/client-embeat-mobile.md#53-a-piped-mp3-carries-no-xing-frame-which-is-not-the-blank-one-the-client-measured), [§5.4](../../docs/compatibility/client-embeat-mobile.md#54-every-universal-request-re-encodes-for-a-different-reason-than-the-reference-does), [§6.1](../../docs/compatibility/client-embeat-mobile.md#61-an-honest-content-length-on-a-capped-transcode), [§6.2](../../docs/compatibility/client-embeat-mobile.md#62-keying-a-transcode-on-a-client-supplied-playsessionid) | *"One question about where a progressive re-encode is produced, asked three ways. Settle it once"* | It is one question about **where a progressive re-encode is produced**. Two of its four parts are Principle I improvements rather than parity — recorded in §7 as OQ-9 and OQ-10 so they are not lost, and owned there rather than here |
+| [music §5.3](../../docs/compatibility/client-embeat-mobile.md#53-a-piped-mp3-carries-no-xing-frame-which-is-not-the-blank-one-the-client-measured), [§5.4](../../docs/compatibility/client-embeat-mobile.md#54-every-universal-request-re-encodes-for-a-different-reason-than-the-reference-does), [§6.1](../../docs/compatibility/client-embeat-mobile.md#61-an-honest-content-length-on-a-capped-transcode), [§6.2](../../docs/compatibility/client-embeat-mobile.md#62-keying-a-transcode-on-a-client-supplied-playsessionid) | *"One question about where a progressive re-encode is produced, asked three ways. Settle it once"* | It is one question about **where a progressive re-encode is produced**. Two of its four parts were recorded as Principle I improvements rather than parity — measured at this gate, and **one of the two was mis-framed**: keying on the client's play session is what the reference already does (§7.1). Both stay owned there rather than here |
 | [music §5.8](../../docs/compatibility/client-embeat-mobile.md#58-the-album-play-queue-is-correctly-ordered-by-accident) — the album play queue is ordered by accident | *"One test, and it can be written today. The only item here that needs no decision"* | See below |
 | [tvOS §4.7](../../docs/compatibility/client-atrium-tvos.md#47-udp-discovery-is-out-of-v1-and-the-client-needs-it) — UDP discovery | *"An amendment to 001, or its own small feature. Not a route"* | It is not an endpoint and not a subtitle |
 
@@ -180,59 +194,125 @@ server HLS, remuxed or transcoded, and not from a file beside the media by any p
 
 ### 3.2 Which streams are subtitles, and which of those are text
 
-Every subtitle stream a source carries gains the four properties 008 §3.1 named as owed and did not
-emit: whether it is a **text** subtitle, whether it can be served on its own, **how** it would be
-delivered for this negotiation, and **where from**. `[spec: MediaStream]`
+**Two of the four properties 008 §3.1 named as owed are not this feature's to add.** Whether a
+stream is a **text** subtitle and whether it can be served on its own are facts about the file,
+and the reference carries both on every read: a bare listing row, a bare item, and a negotiation
+with no profile all state them on every subtitle stream. What appears only on a **negotiated**
+source is *how* the track would be delivered and *where from* — and a fifth property nobody had
+named, the per-stream **score** of §3.3, which appears only for the streams the user's own
+preferences selected `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11,
+2026-08-29]`. That is OQ-2, and it moves work out of this feature rather than into it: the two
+file facts belong wherever a stream is emitted, and only the two negotiation answers are decided
+here.
 
-The text/image split is the one that decides everything downstream. A text track is a cue list and
-can be converted, served alone and announced; an image track is a sequence of bitmaps and can be
-none of those without burn-in, which is out (§2). The reference filters the manifest on exactly
-this property `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:192-195 @ v10.11.11]`.
+**The delivery method is resolved for every subtitle stream, not for the selected one.** A source
+with six subtitle streams answers six methods, whatever the request selected. The address is
+narrower: `DeliveryUrl` is emitted only for the streams whose method is *external*, because that
+is the only method whose answer is a URL the client fetches itself. Same probe.
+
+The text/image split decides everything downstream. A text track is a cue list and can be
+converted, served alone and announced; an image track is a sequence of bitmaps and can be none of
+those without burn-in, which is out (§2). The reference filters the manifest on exactly this
+property `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:192-195 @ v10.11.11]`, and the split
+is decided by the **codec spelling** rather than by anything measured in the file: everything
+counts as text except a codec containing `pgs`, `dvdsub` or `dvbsub`, or spelled exactly `sup` or
+`sub` — with one exception written into the rule itself, because a codec containing `microdvd` is
+text however it is spelled: that text format and an image one share the `.sub` extension
+`[source: MediaBrowser.Model/Entities/MediaStream.cs:751-761 @ v10.11.11]`. So the split is a
+lookup, not an inspection, and a stream with no codec at all is text only when it came from a
+file beside the media `[source: MediaBrowser.Model/Entities/MediaStream.cs:639-654 @ v10.11.11]`.
 
 **The delivery-method property is an answer to a negotiation, not a fact about a file.** The same
 track answers differently for two clients, and differently for the same client direct-playing and
 transcoding — the reference resolves it separately on the direct-play branch and the transcode
 branch of its own ladder
-`[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:771-773, 806-807 @ v10.11.11]`. It is therefore
-a property of a *negotiated* source, and what a bare listing row carries is
-**OQ-2**.
+`[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:771-773, 806-807 @ v10.11.11]`.
 
-> ⚠️ **The names a manifest needs are names 008 decided not to emit.** The reference labels each
-> announced track with the stream's `DisplayTitle`
-> `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:604, 608 @ v10.11.11]`, and `DisplayTitle` is
-> one of the six *localised* properties 008 §3.1 deliberately leaves absent, because an English
-> approximation would differ from the reference on every track rather than be missing on it. A
-> manifest cannot leave the name absent — it is a required attribute — so this feature must either
-> reach the localisation 008 deferred or state what it writes instead. **OQ-4**, and it is the one
-> place where this feature cannot inherit an accepted decision unchanged.
+> ⚠️ **The names a manifest needs are names 008 decided not to emit, and the measurement made the
+> bill exact.** The reference labels each announced track with the stream's `DisplayTitle`
+> `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:604, 608 @ v10.11.11]`, and that string is
+> assembled from up to six pieces joined by ` - `: the track's own title if it has one, then the
+> language's **name**, a hearing-impaired word, a default word, a forced word, the codec upper
+> cased, and an external word — each of the five words omitted when its flag is false, and each
+> attribute dropped when the title already contains it as a substring
+> `[source: MediaBrowser.Model/Entities/MediaStream.cs:380-465 @ v10.11.11]`. Measured on a
+> Spanish-configured server the announced names read
+> `Castellano [Forzados Planos] - Español - Predeterminado - SUBRIP` and
+> `Ingles SDH [Completos Planos] - Inglés - Discapacidad Auditiva - SUBRIP`
+> `[probe: tools/probe_subtitle_manifest.py, Jellyfin 10.11.11, 2026-08-29]`.
+>
+> **What that costs is two localisations, not one, and neither is the table v1 already has.** The
+> five flag words come from the server's own translation table in its configured interface
+> culture; the language name comes from the *platform's* culture data in that same culture — not
+> from the culture table `/Localization/Cultures` serves, whose display names are English
+> (`Spanish; Castilian` where the announced name says `Español`). So reaching the reference's
+> exact string means shipping a translation table and a localised language-name table, in one
+> configurable culture, for a string that appears in one attribute of one manifest.
+>
+> **The decision this feature takes: write the name in the invariant form and record the
+> divergence.** A manifest cannot leave `NAME` absent — it is a required attribute — so "omit it,
+> as 008 does" is not available here, and that is what made this the one place 011 cannot inherit
+> 008's accepted decision unchanged. The invariant form is the same assembly with the English
+> words and an English language name, which is what the reference itself writes on an
+> English-configured host. **Which** English name is a plan question rather than a spec one, and
+> it is not free either: the two tables available disagree — the reference's own culture list
+> says `Spanish; Castilian` where the platform data it actually reads says `Spanish` — so a plan
+> that reaches for the table v1 already has produces a third string rather than the reference's.
+> It is observably different from a Spanish-configured reference on
+> every announced track, which is precisely the objection 008 raised — and it is answered here by
+> what the attribute is *for*: `NAME` is a label a person reads in a track picker, no client
+> branches on it, and the attributes clients do branch on (`LANGUAGE`, `FORCED`, `DEFAULT`,
+> `URI`) are byte-identical. **OQ-4, resolved.** The gap stays recorded in
+> [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) with the rest of
+> the localised properties, and closing it here would close it there.
 
 ### 3.3 Choosing a track and a delivery method
 
-Two inputs and one answer.
+Two inputs and one answer, and the measurement moved both inputs.
 
-**The track.** A client either names one, or does not. A named index is honoured. With none named,
-a default is chosen, and **the rule is not the one an audit of this feature first wrote down**: the
-reference ranks the source's subtitle streams by a *score* it holds on each stream, takes the
-highest, and consults the client's profile only to break a tie among equal top scores — falling
-back to the source's own stated default when nothing separates them
-`[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:546-584 @ v10.11.11]`. "The profile picks the
-default" is the tie-break mistaken for the rule. What that score is, and what v1 would have to
-compute to reproduce the ranking, is **OQ-12**.
+**The track a client names is read only when the request also names the media source.** A
+negotiation carrying `SubtitleStreamIndex` and nothing else is answered as though it carried
+nothing: the index is dropped in silence, and the answer is the default. Add the matching
+`MediaSourceId` and the same index is honoured, appears as the source's stated default, and is
+written into the delivery address `[probe: tools/probe_subtitle_negotiation.py, Jellyfin
+10.11.11, 2026-08-29]`. **This settles the third-party lead the opening draft flagged**: the claim
+was that the reference ignores the indices posted with a negotiation and builds its address from
+the source's defaults. Measured, it is half right, and the half that is true is the half that
+matters to the client — a client that posts an index without a source id gets a delivery address
+naming a different track, which is exactly the failure the video client rewrites the address by
+hand to avoid `[client-contract: 2026-08-29, §3]`. An index naming no stream at all is not an
+error: it is accepted, restated and written into the address.
 
-**The index is honoured in the negotiation *and* on a delivery request**, because a client changes
-the subtitle track mid-playback by re-requesting delivery, not by re-negotiating: the video client
-rewrites both track indices in the address it was handed rather than re-posting a negotiation
-`[client-contract: 2026-08-29, §3]`. That override already works for audio and is dropped for
-subtitles
+**With no track named, the rule is not a ranking.** The reference holds a *score* on each subtitle
+stream, and the opening draft of this section said it takes the highest and consults the profile
+only to break a tie. It never takes the highest. The score is read to find out whether **more than
+one** stream shares the top of it; when exactly one does, the score is discarded and the answer is
+the source's own stated default, computed by a different rule that never looks at a score
+`[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:546-584 @ v10.11.11]`. Measured on the wire:
+a user preferring Spanish is answered stream 2 while streams 0 and 1 sit above it on score, and
+the same request answers stream 0 the moment the profile is changed
+`[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]`. So the profile
+does not pick the default and it does not merely break a tie — **when there is a tie it decides
+outright, and when there is not it decides nothing at all.**
+
+**The score is reproducible, and what it is computed from is out of scope.** It is six decisions
+read as six digits: the position of the stream's language in the *user's* subtitle language
+preferences, then forced, default, servable-alone, text, external, each contributing 2 or 1
+`[source: Emby.Server.Implementations/Library/MediaStreamSelector.cs:181-192 @ v10.11.11]`,
+reproduced from each stream's own properties and compared against the emitted value on every
+scored stream. Which streams are scored at all is decided by the user's subtitle **mode**, and a
+mode of `None` scores nothing and states no default. Both settings are per-user preferences §2
+excludes, which is why the answer this feature owes for an unnamed track is *no default* — the
+reference's own answer for that mode. **OQ-12, resolved, and it is a scope answer rather than an
+algorithm.**
+
+**The index is honoured on a delivery request as well**, because a client changes the subtitle
+track mid-playback by re-requesting delivery rather than by re-negotiating: the video client
+rewrites both track indices in the address it was handed `[client-contract: 2026-08-29, §3]`.
+That override already works for audio and is dropped for subtitles
 ([client-atrium-tvos §4.3](../../docs/compatibility/client-atrium-tvos.md#43-the-clients-track-override-works-for-audio-and-is-dropped-for-subtitles)),
-which is why §4.3 costs nothing today and stops costing nothing the moment the manifest announces a
-track — *"whoever does §4.2 owns this line"*. AC-4.
-
-*The claim that the reference builds its delivery address from the source's default tracks and
-ignores the indices posted with the negotiation — the reason the client overrides at all — is a
-third-party claim about Jellyfin and a **lead, not a measured behaviour**. It is settled by the
-probe 008 OQ-8 already names, and it does not change what this feature owes: honouring the index in
-both places is safe whichever way it lands, because the client sends the same value twice.*
+and §3.4's measurement promotes that line from *"a line inside §4.2"* to the **only** thing that
+makes a manifest announce anything. AC-4.
 
 **The method.** The client's profile declares, per subtitle format, how it will take that format:
 embedded in the container, as a separate file, as a separate stream in the manifest, burned in, or
@@ -240,113 +320,224 @@ dropped `[source: MediaBrowser.Model/Dlna/SubtitleDeliveryMethod.cs @ v10.11.11]
 method applies only when the play method is transcode
 `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:1549 @ v10.11.11]`, which is the mechanical
 reason a direct-played file needs nothing from this feature and an HLS-delivered one needs all of
-it.
+it — and it is measurable from outside: a profile declaring the manifest method is answered *burn
+in* on a source it will direct-play, and the manifest method on the same source when the container
+is rejected. Same probe.
 
-**Burn-in is out, and it is the reference's fallback.** When no declared method fits, the reference
-falls back to painting the track into the frames
-`[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:1517 @ v10.11.11]`. v1 cannot, so v1 must answer
-something else on that branch, and every candidate answer is client-observable: dropping the track,
-offering it as a separate file anyway, or refusing the negotiation. **OQ-5**, and it is the only
-place in this feature where a divergence is certain rather than possible.
+**Burn-in is the reference's fallback, and it is an answer it gives rather than one it avoids.**
+The opening draft called it *"the only place in this feature where a divergence is certain"* and
+said the reference's own answer was unavailable *"because it never has to give one"*. It gives one
+constantly: every subtitle stream that no declared profile fits is answered `Encode`, per stream,
+at negotiation — an image track under any text profile, and *every* track for a profile that
+declares no subtitle handling at all `[probe: tools/probe_subtitle_negotiation.py, Jellyfin
+10.11.11, 2026-08-29]`. So the branch is not rare and it is not hypothetical; it is the default
+answer for most of a real track list.
+
+**The decision this feature takes: say the same word.** v1 answers `Encode` exactly where the
+reference does, and never burns anything in. The property is a *statement about what would happen*
+on a track the client has not selected, and a client that selects such a track and starts playback
+gets a stream with no subtitle painted into it — which is the same thing it gets today, and the
+same thing [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)'s burn-in
+row has said since 008. The two alternatives the opening draft listed are both worse and both are
+deltas: dropping the track changes a property on every source that has an image subtitle, and
+offering it as a separate file promises a fetch that cannot succeed (§3.7 measures what that
+fetch does — it attempts the extraction for twenty seconds and then refuses). **OQ-5, resolved**,
+and the divergence it was certain would be needed turns out to be parity plus a gap already
+recorded.
 
 ### 3.4 The manifest
 
-When the negotiation selected a text subtitle track for manifest delivery, or the client's profile
-asked for subtitles in the manifest, the master playlist gains **one media entry per text subtitle
-stream**, and the variant line gains the group they belong to
+**There is exactly one lever, and it is not the profile.** The opening draft read the reference's
+condition as an *or* — a manifest delivery method **or** the client's profile asking for subtitles
+in the manifest — and asked, as OQ-1, what the direct-play case answers. The second half of that
+*or* is unreachable on this route: the master playlist does not accept the manifest flag as a
+parameter at all. It is a parameter of the live-stream playlist, which is out of scope
+`[probe: tools/probe_subtitle_manifest.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+**And the reference's own negotiation writes it anyway.** A profile whose transcoding entry sets
+the manifest flag is answered a delivery address carrying `EnableSubtitlesInManifest=True`, and
+following that address changes nothing: the route it addresses cannot read the parameter it was
+given. Same probe. So a client that asks for subtitles in the manifest the way the reference's own
+model says to ask gets a manifest with no subtitles in it.
+
+**What announces a track is the delivery address naming the manifest method beside a stream
+index.** The negotiation writes both, and only when a track was selected — which returns §3.3's
+selection rule to the centre of this feature: no selection, no announcement, and the selection is
+a per-user computation §2 excludes. That is why AC-5 is written against the *address* and not
+against the profile.
+
+When the address names the manifest method, the master playlist gains **one media entry per text
+subtitle stream** and the variant line gains their group
 `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:192-210, 338-350, 596-632 @ v10.11.11]`.
+Measured verbatim, an entry is:
 
-Each entry carries the track's name, whether it is the selected one, whether it is forced, its
-language, and an address. The language falls back to a literal `Unknown` rather than being omitted,
-same source.
+```
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="…",DEFAULT=NO,FORCED=YES,AUTOSELECT=YES,URI="…",LANGUAGE="spa"
+```
 
-**Image subtitle streams are never announced**, because the filter is on text (§3.2), and **a
-burned-in selection suppresses the group entirely** — irrelevant in v1, where nothing burns in, and
-stated so that the absence of the branch is a recorded consequence rather than an oversight.
+with the attributes in that order, the group literally `subs`, `AUTOSELECT=YES` on every entry,
+`DEFAULT=YES` on the selected stream and `NO` on the rest, `FORCED` from the stream's own flag,
+and the language falling back to a literal `Unknown` rather than being omitted. The variant line
+gains `,SUBTITLES="subs"` **last**, after the frame rate. Same probe.
 
-**When nothing is selected and the profile asks for nothing, the master playlist is unchanged.**
-This is the criterion that keeps 008's accepted answer intact: a client that says nothing about
-subtitles must receive byte-identically what it receives today (AC-6).
+**The address in a media entry is a playlist, not a file**, it is relative to the master
+playlist's own directory, and it carries two things the opening draft did not know about: a
+**hard-coded** window length of thirty seconds — not the segment length of the stream — and **the
+caller's own access token**, written into the query string. The token is load-bearing rather than
+decorative: the playlist route it addresses requires a caller (§3.5), and a player following a
+`URI` out of a manifest sends no headers of its own. Same probe.
 
-**The address in a media entry is a playlist, not a file.** It names a per-track playlist relative
-to the item and the media source, and that playlist's own entries name **windows** of the track —
-each a start and an end position — rather than one whole file, same source. This is why
-[client-atrium-tvos §4.2](../../docs/compatibility/client-atrium-tvos.md#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one)'s
-argument and its conclusion are both right and are not in tension: *"adding `GetSubtitle` as a 56th
-endpoint would not help this client"* is true — on the Jellyfin path the client never asks for it
-directly — and the manifest is the only lever. But the lever pulls that route. **A manifest whose
-entries point nowhere is not a smaller version of this feature; it is a worse failure than the
-silence it replaces**, because a client that finds a track and cannot fetch it has already
-committed its player to a track list. The route is not an alternative to the manifest, it is what
-the manifest addresses.
+**Image subtitle streams are never announced**, because the filter is on the stream kind — but the
+filter is *not* on the selection, and the difference is observable: selecting an **image** track
+for manifest delivery still announces every text track, with `DEFAULT=NO` on all of them, because
+no announced stream matches the selected index. Same probe. AC-7 holds and is narrower than it
+reads.
+
+**A burned-in selection suppresses the group entirely**, and so does every other method: external,
+burn-in, and an index with no method at all each answer a manifest with no media entries. Stated
+so that the absence of the branch is a recorded consequence rather than an oversight.
+
+**When the address names no subtitle method, the master playlist is unchanged.** This is the
+criterion that keeps 008's accepted answer intact: a client that says nothing about subtitles must
+receive byte-identically what it receives today (AC-6). Measured against the same negotiation's
+own address, four ways.
 
 ### 3.5 Fetching a subtitle
 
-Two addresses, and the second is reachable two ways.
+Three addresses, and the manifest reaches all three.
 
 **The per-track playlist** — `GetSubtitlePlaylist` — lists the windows of one track of one media
-source, at a window length the caller states, covering the source's runtime.
+source, at a window length the caller states, covering the source's runtime. Measured, it is a
+complete VOD playlist: `#EXTM3U`, a target duration, version 3, media sequence 0,
+`#EXT-X-PLAYLIST-TYPE:VOD`, one `#EXTINF` and one address per window, `#EXT-X-ENDLIST`
+`[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-29]`.
 
-**The track itself** — `GetSubtitle` — answers the track converted into the format named in the
-address, whole or windowed. The windowed form is what the playlist's entries name; the whole-file
-form is one the video client builds by hand `[client-contract: 2026-08-28, §4]`.
+**Its entries name a lower-case `stream.vtt`**, always in that one format whatever the track holds,
+always with both timestamp switches set, and always with the caller's token appended — where the
+reference's own declaration spells the route `Stream.{format}` with a capital. Both spellings
+answer, identically. A route that is served only under the declared spelling would break every
+client that follows a playlist as written, which is what AC-8's traversal exists to catch.
 
-> **Two rows of one client document disagree about when that fallback fires, and which is right
-> changes what the fetch route buys on its own.** The answer table of
+**The track itself** — `GetSubtitle`, and `GetSubtitleWithTicks` for the form with the start
+position in the path — answers the track converted into the format named in the address, whole or
+windowed. Measured: the cue-list formats all answer, a format the server cannot produce answers a
+refusal (§3.7), and two spellings answer something other than a subtitle file — the cue list as a
+JSON object of `TrackEvents` with tick positions, under `json` and under its alias `js`. Same
+probe.
+
+**The two timestamp switches are not decoration, and one of them changes the bytes.** Without the
+copy switch, a window's cues are rebased on the window — a cue 36.1 s into the file comes back at
+6.1 s in a window starting at 30 s. With it, the cue keeps the time it has in the file. The time
+map switch prepends a mapping line into the header **and drops the byte order mark** the plain
+answer starts with, because the body is rebuilt to insert it. The playlist sets both. **OQ-11,
+resolved.** Same probe.
+
+> ⚠️ **The last window's duration is written in the server's locale.** A partial window comes back
+> as `#EXTINF:7,851,` on a Spanish-configured server, which an HLS parser reads as a duration of
+> `7`. Recorded as a reference defect and diverged from at
+> [behaviours §3.12](../../docs/compatibility/behaviours.md#312-a-subtitle-playlists-window-durations-are-written-in-the-servers-locale--class-b-diverged):
+> Atrium writes a decimal point, always, because it has no server locale to reproduce the defect
+> from and inventing one in order to write a number wrongly is not replication.
+
+> **Two rows of one client document disagree about when a whole-file fetch fires, and no probe
+> here can settle it.** The answer table of
 > [client-atrium-tvos §2](../../docs/compatibility/client-atrium-tvos.md#2-the-answer) records the
 > client requesting `…/Subtitles/{index}/Stream.vtt` ***when the manifest carries none***, while
 > [§4.2](../../docs/compatibility/client-atrium-tvos.md#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one)
-> says that path is wired for the other server flavour and *"the client will not compensate"*. If
-> the first is right, serving this route alone already puts a subtitle on the screen; if the second
-> is right, it buys nothing until the manifest announces one. **Only the client's author can
-> settle it** — it is a claim about the client, not about the reference, so no probe here can reach
-> it, and it is a question for the trace rather than for a measurement session. **It changes no
-> scope**: the route is in either way, because the manifest addresses it (§3.4). What it changes is
-> the *order* the work is worth doing in, and that belongs in the plan.
+> says that path is wired for the other server flavour and *"the client will not compensate"*. It
+> is a claim about the client, not about the reference, so it is a question for the trace's author
+> and **it stays open**. Nothing in this document depends on the answer: the route is in either
+> way, because the manifest addresses it (§3.4), every criterion below is written against the
+> manifest's traversal rather than against a bare fetch, and what the answer changes is the
+> *order* the work is worth doing in — which belongs in the plan.
 
-**These two routes do not share an authentication rule, in the reference's own declaration**: the
-playlist route requires a caller and the track route declares no requirement at all
-`[source: Jellyfin.Api/Controllers/SubtitleController.cs:208-212, 338-345 @ v10.11.11]` — which is
-the same split 008 T6 measured across the delivery routes, and which
+**These two routes do not share an authentication rule, and the measurement matches the
+declaration for once.** The playlist route refuses a caller with no token and a caller with an
+unknown token alike, with an empty `401` and no body; both fetch routes answer `200` with the cues
+to a caller with no credential at all. Both accept the token in the query string, which is how the
+addresses in §3.4 and in the playlist work at all. This is the same split
 [behaviours §2.10](../../docs/compatibility/behaviours.md#210-the-image-and-delivery-routes-accept-a-token-and-require-none)
-already describes for the routes it covers. Reading an attribute is not measuring a wire, so what
-each route actually answers to a caller with no token, an unknown token and a query-string token is
-**OQ-6**.
+describes for the delivery routes, extended to two more. **OQ-6, resolved.** Same probe.
 
-**Conversion is part of delivery, not a separate capability.** A client asks for a format by naming
-it in the address; the stored track is in whatever format its container holds. If v1 served only
-the formats it already has, a client asking for the one format it can render would be refused by a
-server that holds the same cues in a different spelling.
+**Neither route answers `Accept-Ranges`**, and both state a `Content-Length`. That is the same
+shape 008 T14 measured on the two HLS playlists, and it is worth stating here because *"every
+delivery route whose body has a known size answers `Accept-Ranges: bytes`"* was false then and is
+false on two more routes now.
+
+**Conversion is part of delivery, not a separate capability.** A client asks for a format by
+naming it in the address; the stored track is in whatever format its container holds. If v1 served
+only the formats it already has, a client asking for the one format it can render would be refused
+by a server that holds the same cues in a different spelling.
 
 ### 3.6 Subtitles beside the media
 
 A subtitle file next to the media is invisible to v1 today: nothing in a scan looks at it, so
 nothing counts it, offers it, or serves it. 008 §3.1 already records one half of the consequence —
 `HasSubtitles` counts only what is inside the container, so *"a film with an external `.srt` and no
-embedded track answers nothing where the reference answers `true`"*
-`[source: MediaBrowser.Providers/MediaInfo/FFProbeVideoInfo.cs:275 @ v10.11.11]`. That gap closes
-here, and the rest of it with it: a discovered file becomes a subtitle stream on its source, marked
-external, and is deliverable through §3.5 like an embedded one.
+embedded track answers nothing where the reference answers `true`"*, measured true
+`[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-29]`. That gap closes here,
+and the rest of it with it.
 
-**Which files count as a subtitle for which item is a naming question**, and naming questions have
-been the most expensive class in this repository (003, 004). Language suffixes, forced markers,
-files in a subdirectory, and files whose stem matches an item only after the same cleaning 003
-applies to a filename — each is a rule, and each is measurable against the reference before it is
-written. **OQ-7.**
+**The rule is a stem match and a right-to-left read, and it was reproduced rather than described.**
+A file counts when its name without its extension begins with the media file's name without *its*
+extension, and then either stops or continues with a dot; the extension must be one of nine the
+reference admits, two of which name image formats. What follows the stem is read one dot-delimited
+token at a time from the right, each token claimed by the first vocabulary that recognises it —
+a default word, then a forced word, then a language, then a hearing-impaired word — and every
+token nothing claims is prepended to the stream's **title**. The reproduction was checked against
+six items in directories holding up to 259 files each, and every discovered file, its language,
+its flags and its title came out identical. **OQ-7, resolved.** Same probe.
+
+**Two consequences no rule about names states, and the second is the expensive one.**
+
+1. `HasSubtitles` counts the discovered files, which is the 008 gap closing.
+2. **The discovered streams are numbered first.** An item whose subtitles are all files answers
+   them at indices 0, 1, 2, and the container's own video and audio streams begin at 3. So putting
+   a file beside a film **renumbers every stream it has** — and a stream index is what a delivery
+   address carries. AC-12 is written for this: removing the file must renumber them back.
+
+**One place the reference looks that no probe here can reach**: the item's own internal metadata
+directory, where the reference puts a subtitle it downloaded or extracted. No route exposes it, so
+its contribution to a source's stream list is a bound rather than a measurement — and it is a bound
+this feature can live inside, because v1 neither downloads nor stores extracted subtitles (§2).
 
 ### 3.7 Error paths
 
-Every one of these is what a client branches on, and none may be invented:
+Measured per route, because 008 found delivery-route refusals splitting across three shapes by
+*where* the refusal happens, and these two routes split the same way
+`[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-29]`. **OQ-8, resolved.**
 
-| Condition | Owed answer |
-|---|---|
-| Item unknown or not visible to the caller | Per the shape the owning route family uses — and the delivery routes split across shapes by *where* the refusal happens (008 §3.5, §3.6), so this is measured per route, not assumed. **OQ-8** |
-| Media source names nothing on the item | Measured. 008 T8 found one route answering `400` where its siblings split `400`/`500` on the same malformed identifier |
-| Index names no stream, or names a non-subtitle stream | Measured |
-| Index names an **image** subtitle and a text format was asked for | Measured — the interesting case, because conversion is impossible rather than unsupported |
-| Format in the address is one the server cannot produce | Measured |
-| Window length absent or not positive on the playlist route | The reference raises on its own argument check, which is the shape behaviours §1.11 calls the controller refusal — to be confirmed on the wire |
-| Source has no runtime, so windows cannot be laid | Same |
+| Condition | Playlist route | Fetch route |
+|---|---|---|
+| Caller has no token, or an unknown one | `401`, no body | `200` — the cues (§3.5) |
+| Item id is well formed and names nothing | `404`, problem details | `400`, `text/plain` `Error processing request.` |
+| Item id is the all-zero identifier | `400`, `text/plain` | `400`, `text/plain` |
+| Item id is not an identifier at all | `400`, problem details naming `routeItemId` | `400`, problem details naming `routeItemId` |
+| Media source names nothing on the item | `500`, `text/plain` | `500`, `text/plain` |
+| Index names no stream | **`200`** — a full playlist | `500`, `text/plain` |
+| Index names a video or audio stream | **`200`** — a full playlist | `500`, `text/plain` |
+| Index is negative | **`200`** — a full playlist | `500`, `text/plain` |
+| Index names an **image** subtitle, text format asked for | — | `400`, `text/plain`, after ~20 s of extraction |
+| Format in the address cannot be produced | — | `400`, `text/plain` |
+| Window length absent | `400`, problem details naming `segmentLength` | — |
+| Window length is zero | `400`, `text/plain` | — |
+| Window length is not a number | `400`, problem details naming `segmentLength` | — |
+| Window whose end precedes its start | — | `200`, a body with no cues |
+
+**The playlist route never reads the index it is given.** It is a declared parameter that the
+reference's own source marks as unused, and the consequence is the row above: a playlist for a
+stream that does not exist is a `200` listing a hundred addresses, every one of which answers
+`500`. This is the sharpest reason AC-8 is written as a traversal rather than as a string
+comparison — a manifest and a playlist can both be well formed and lead nowhere, and only
+following them says so.
+
+**Two shapes, split by where the refusal happens.** A refusal the framework raises before the
+route runs is problem details naming the parameter it could not bind; a refusal the route raises
+is `text/plain` `Error processing request.` with no `Content-Length`. Both are shapes
+[behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one) already
+names — with one extension: §1.11 records the `text/plain` shape for a controller refusing at
+`4xx`, and these two routes reach the identical 25-byte body at **`500`** as well, on every
+condition that reaches a lookup and finds nothing.
 
 ## 4. Data the feature owns
 
@@ -361,14 +552,19 @@ remembered, which is the same line 008 draws for `DefaultSubtitleStreamIndex` an
 
 ## 5. Acceptance criteria
 
-1. Every subtitle stream of an item and of a media source carries the four properties of §3.2, and
-   a text track and an image track differ in the first of them.
-2. A negotiation carrying a subtitle index answers a source whose selected subtitle track is the
-   one named; a negotiation carrying none answers the default §3.3's ranking picks, and a
-   discriminating case proves the profile breaks a tie rather than making the choice — two tracks
-   the ranking separates are not reordered by a profile that prefers the loser.
-3. A profile that declares no subtitle handling negotiates exactly as it does today — the
-   response is unchanged from the accepted 008 answer for the same request.
+1. Every subtitle stream of an item and of a media source carries the text flag and the
+   servable-alone flag — on a listing row and on a bare item, not only on a negotiation — and a
+   text track and an image track differ in the first of them. A **negotiated** source carries, in
+   addition, a delivery method on every subtitle stream and a delivery address on every stream
+   whose method is external.
+2. A negotiation carrying a subtitle index **and the matching media source** answers a source
+   whose stated default subtitle track is the one named, and a delivery address naming it; the
+   same negotiation without the media source answers as though no index had been sent. A
+   negotiation carrying neither answers **no default subtitle track**, which is §3.3's measured
+   answer for a server that keeps no per-user subtitle preference.
+3. A profile that declares no subtitle handling negotiates exactly as it does today except that
+   every subtitle stream now states a delivery method of `Encode` — the answer §3.3 measured, and
+   the one property that changes.
 4. A **delivery** request carrying a subtitle index is served with that track — the criterion
    [client-atrium-tvos §4.3](../../docs/compatibility/client-atrium-tvos.md#43-the-clients-track-override-works-for-audio-and-is-dropped-for-subtitles)
    asks for, in its subtitle half. *(Its audio half was owed to 008 and **008 T14 paid it**: the
@@ -377,49 +573,62 @@ remembered, which is the same line 008 draws for `DefaultSubtitleStreamIndex` an
    `tests/conformance/test_progressive_delivery.py`'s. Without both halves the video client's
    "change the track" path breaks against Atrium and no test here fails, so this criterion is the
    remaining one.)*
-5. A master playlist for a source with at least one text subtitle stream, negotiated for a profile
-   that asks for subtitles in the manifest, carries one media entry per text subtitle stream and a
-   variant line naming their group.
-6. A master playlist for a profile that asks for nothing about subtitles is **byte-identical** to
-   the one the same request answers today.
-7. An image subtitle stream never appears in a master playlist, whatever the profile asks for.
+5. A master playlist request whose **address** names the manifest delivery method beside a
+   subtitle stream index carries one media entry per text subtitle stream and a variant line
+   ending in the group name. Written against the address rather than against the profile because
+   the profile flag is unreachable on this route (§3.4), which is what OQ-1 measured.
+6. A master playlist for any request that does **not** name the manifest delivery method is
+   **byte-identical** to the one the same request answers today — including one that names the
+   manifest flag, one that names an index with no method, and one that names the external or
+   burn-in method.
+7. An image subtitle stream never appears in a master playlist, whatever the address asks for —
+   including when the selected index **is** an image stream, which still announces every text
+   stream with the default attribute set to `NO` on all of them.
 8. The address of every media entry in a master playlist is fetched successfully by following it
-   as written, and every entry of the playlist it answers is fetched successfully the same way.
+   as written, and every entry of the playlist it answers is fetched successfully the same way —
+   **as written** including its lower-case spelling of the fetch route, which is not the spelling
+   the route is declared under.
    *(Written as a traversal rather than as a string comparison: the failure this feature exists to
-   prevent is an announcement that leads nowhere — §3.4.)*
+   prevent is an announcement that leads nowhere — §3.4 and §3.7.)*
 9. A whole-file fetch of a text track answers its cues, in the requested format, with timings that
    match the source's.
-10. A windowed fetch answers the cues of that window and no others, and the concatenation of every
+10. A windowed fetch answers the cues of that window and no others; with the copy switch their
+    timings are the source's and without it they are the window's; and the concatenation of every
     window of a track is the whole track.
 11. A subtitle file placed beside a media file and then scanned becomes an external subtitle
     stream on that item's source, is counted by `HasSubtitles`, and is fetchable through the same
-    two routes as an embedded one.
-12. Removing that file and rescanning removes the stream, and neither the item nor its user data
-    is affected.
-13. Each row of §3.7 answers the status and body measured for it, per route.
+    routes as an embedded one — with its language, its flags and its title read from its name by
+    §3.6's rule.
+12. Removing that file and rescanning removes the stream, **renumbers the remaining streams back**
+    to the indices they had before it appeared, and affects neither the item nor its user data.
+13. Each row of §3.7 answers the status and body measured for it, per route — including the two
+    rows where the playlist route answers `200` for a stream that does not exist.
 14. A subtitle fetched twice answers the same bytes.
 15. Nothing in this feature changes what a **direct-played** file answers: the negotiation, the
-    source list and the delivery of a file the client reads byte for byte are unchanged.
+    source list and the delivery of a file the client reads byte for byte are unchanged, except
+    for the stream properties AC-1 and AC-3 add.
+16. A subtitle window's declared duration is written with a decimal point whatever the host is
+    configured for — the divergence
+    [behaviours §3.12](../../docs/compatibility/behaviours.md#312-a-subtitle-playlists-window-durations-are-written-in-the-servers-locale--class-b-diverged)
+    argues.
 
-**Two things the music client asks for are deliberately not criteria here**, and are open questions
+**Two things the music client asks for are deliberately not criteria here**, and are measurements
 instead: an honest `Content-Length` on a capped transcode, and keying a transcode on a
-client-supplied play-session identifier. Both are **improvements over the reference rather than
-parity**, both are settled by measurement before they are argued, and neither belongs to this
-feature at all (OQ-9, OQ-10; §2.1 hands them to the question they are three-quarters of). A
-criterion asserting either would make this feature fail for being *more correct* than the thing it
-reproduces — Principle I read backwards — and reading them as failures is the mistake their own
-document was written to prevent: *"neither is a failure"*.
+client-supplied play-session identifier (OQ-9, OQ-10; §2.1 hands them to the question they are
+three-quarters of). Both are now measured, and **one of them was mis-framed** — see §7. A criterion
+asserting either would make this feature fail for being *more correct* than the thing it
+reproduces, or would smuggle another feature's work in under this one's name.
 
 ## 6. Conformance
 
 | Endpoint | Level | How it is proven |
 |---|---|---|
 | The subtitle stream properties on an item and a source | **L3** | Golden per stream kind, plus differential — the properties appear on every source that has a subtitle, so an error is everywhere |
-| `POST /Items/{itemId}/PlaybackInfo`, subtitle half | **L3** | Golden per profile class — declared method × text/image × named index or not — plus differential |
-| `GET /Videos/{itemId}/master.m3u8`, subtitle half | **L3** | Golden manifest per profile class, including the unchanged one (AC-6), plus differential |
-| `GET …/Subtitles/{index}/subtitles.m3u8` | **L2** | Playlist shape, window coverage, and the traversal of AC-8 |
-| `GET …/Subtitles/{index}/Stream.{format}` | **L2** | Cue-level assertions against a fixture of known cues, whole and windowed, plus determinism (AC-14) |
-| Subtitle files beside the media | **L2** | Fixture mutated between assertions (AC-11, AC-12) |
+| `POST /Items/{itemId}/PlaybackInfo`, subtitle half | **L3** | Golden per profile class — declared method × text/image × named index or not, with and without the media source id — plus differential |
+| `GET /Videos/{itemId}/master.m3u8`, subtitle half | **L3** | Golden manifest per address class, including the four that must leave it unchanged (AC-6), plus differential |
+| `GET …/Subtitles/{index}/subtitles.m3u8` | **L2** | Playlist shape, window coverage, the invariant duration of AC-16, and the traversal of AC-8 |
+| `GET …/Subtitles/{index}/Stream.{format}` and its ticks-in-path form | **L2** | Cue-level assertions against a fixture of known cues, whole and windowed, both timestamp switches, both spellings of the path, plus determinism (AC-14) |
+| Subtitle files beside the media | **L2** | Fixture mutated between assertions (AC-11, AC-12), including the renumbering |
 | Error paths | **L2** | Table-driven per route over §3.7 |
 
 **Converted text is asserted cue by cue, not byte by byte against the reference.** Two converters
@@ -429,52 +638,103 @@ property a client depends on: *the cues, their text and their timings are the so
 comparison here would be asserting that Atrium ships the reference's converter, which is not a
 compatibility claim — the same argument 008 §6 makes for transcoded bytes.
 
+**The manifest is the exception, and it is asserted as bytes.** Everything in a media entry except
+`NAME` is mechanical, and `NAME` is the one attribute this feature knowingly diverges on (§3.2), so
+the differential compares the entries with that attribute masked and compares `NAME` against the
+invariant form.
+
 **Fixtures are synthetic**, extending 008's: the existing generated media gain an embedded text
 subtitle track of known cues, an embedded image subtitle track, and a sidecar file beside one of
 them. No copyrighted media, and the cue list is small enough to assert in full.
 
-## 7. Open questions
+## 7. Open questions, and what measuring them did
 
-**None of these has been measured.** This document opens the feature; it does not measure it, and
-naming the probe that will answer each is what 008's table did before its own gate. OQ-1 through
-OQ-8 and OQ-11 and OQ-12 each block the plan and are each answered by a measurement rather than by
-a decision — except OQ-4 and OQ-5, which are a measurement *and then* a decision this repository
-takes. **OQ-9 and OQ-10 block nothing here**: they are recorded at the status §5 gives them so that
-they are not lost and not mistaken for failures.
+**All twelve were measured on 2026-08-29**, by five probes written for this gate. Ten of them
+block the plan and are now answered; two of them block nothing here and are recorded as
+measurements. **Four of the twelve did not survive their own probes**, and one of the four was
+wrong in a way that changes what this feature is for.
 
-| # | Question | Blocks | Resolved by |
+| # | Answer | Held? | Measured by |
 |---|---|---|---|
-| OQ-1 | Does the reference announce subtitles when the profile asks for it in the manifest but the play method is direct play, or only on a transcode? The source reads as transcode-only for the manifest method, and the manifest also fires on the profile flag alone — the two conditions are joined by an *or* `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:197 @ v10.11.11]`, so the direct-play case has no answer without measuring it | §3.3, §3.4, AC-5 | `tools/probe_subtitle_manifest.py` |
-| OQ-2 | Do the four subtitle stream properties of §3.2 appear on a **bare listing** source, or only on a negotiated one? 008 §3.1 measured 31 properties on every listed source and named these four as absent for a different reason — because v1 delivers none — so which of them are negotiation answers is unmeasured | §3.2, AC-1 | `tools/probe_subtitle_negotiation.py` |
-| OQ-3 | What exactly does a media entry carry — every attribute, in order, with the reference's spellings and its `Unknown` fallback — and what does the variant line become? A manifest is compared as text by nothing and as bytes by 010's differential | §3.4, AC-5, AC-6 | `tools/probe_subtitle_manifest.py` |
-| OQ-4 | The name a manifest entry carries is the stream's localised display title, which 008 §3.1 deliberately does not emit. Measure what it reads for an English-configured server, and decide whether this feature reaches the localisation 008 deferred or writes something else and records the divergence | §3.2, §3.4 | `tools/probe_subtitle_manifest.py`, plus a decision this repository takes rather than measures |
-| OQ-5 | What does a server that cannot burn in answer where the reference falls back to burn-in — drop the track, offer it as a separate file, or refuse? Every candidate is client-observable, and the reference's own answer is unavailable because it never has to give one | §3.3 | `tools/probe_subtitle_negotiation.py`, then a divergence argued under behaviours §3.0 |
-| OQ-6 | What do the two fetch routes answer to a caller with no token, an unknown token, and a token in the query string? The reference's declarations differ between the two routes; 008 T6 found the declared and the measured answers differ on exactly this class | §3.5, §3.7, AC-13 | `tools/probe_subtitle_delivery.py` |
-| OQ-7 | Which files beside a media file the reference treats as its subtitles: the stem-matching rule, language and forced suffixes, subdirectories, and what it records as the stream's language and flags | §3.6, AC-11 | `tools/probe_sidecar_subtitles.py` |
-| OQ-8 | The status and body of each row of §3.7, per route. 008 found delivery-route refusals splitting across three error shapes by *where* the refusal happens, so this cannot be inherited | §3.7, AC-13 | `tools/probe_subtitle_delivery.py` |
-| OQ-9 | **An improvement over the reference, not parity — and not this feature's to answer.** An honest `Content-Length` on a capped transcode, which is the whole reason the music client ships a local proxy ([client-embeat-mobile §6.1](../../docs/compatibility/client-embeat-mobile.md#61-an-honest-content-length-on-a-capped-transcode)). Behaviours §3.3 already diverges *where the size is knowable before the first byte*; this asks to extend it to a case where it is knowable only by producing the whole file first, which trades latency for a header. The client's own warning bounds it — *"an estimated length is worse than none"*, measured 50% long for lossless — so half-measures are ruled out before they are proposed. **Measured first, never an acceptance criterion, and never read as a failure** | Nothing here. Recorded so it is not lost, and owned by the *"where a progressive re-encode is produced"* question of §2.1 | A measurement session, then behaviours §3.0 |
-| OQ-10 | **An improvement over the reference, not parity — and not this feature's to answer.** Keying a transcode on a client-supplied play-session identifier, so every reconnect and retry is a cache hit ([client-embeat-mobile §6.2](../../docs/compatibility/client-embeat-mobile.md#62-keying-a-transcode-on-a-client-supplied-playsessionid)). Its two halves have opposite answers: **declaring the parameter is a delta** — the reference has not got it there, and that is what Principle I forbids most plainly — while caching the chunked branch may be no delta at all, since a client cannot observe a response being faster. So the answer is likely neither the ask nor a refusal. **Same status: measured before it is decided, never a criterion** | Nothing here. Recorded so it is not lost, and owned by the same question as OQ-9 | `tools/probe_transcode_session.py`, extended |
-| OQ-11 | Does a windowed fetch answer timestamps in the window's own frame or the source's, and what do the two timestamp switches in the address change? The playlist's own entries set both of them, which says they matter and not what they do | §3.5, AC-10 | `tools/probe_subtitle_delivery.py` |
-| OQ-12 | What is the per-stream **score** the reference ranks subtitle streams by, and can v1 reproduce the ranking from what it inspects? Reading the source overturned this feature's own first reading of §3.3 — the profile breaks a tie, it does not choose — so the ranking is the rule and it is unmeasured | §3.3, AC-2 | `tools/probe_subtitle_negotiation.py` |
+| OQ-1 | **No.** The question assumed the manifest flag was one of two conditions; the master playlist route does not accept it at all, on any play method. It is a parameter of the live-stream playlist. The one lever is the delivery address naming the manifest method beside a stream index — and the reference's own negotiation writes the unreadable flag into that address anyway (§3.4) | ✗ **died** | `tools/probe_subtitle_manifest.py` |
+| OQ-2 | Two of the four properties are on every bare read; the delivery method and its address appear only on a negotiated source, the method on **every** subtitle stream and the address only on the external ones. A fifth property, the score, appears there too (§3.2) | ✗ **narrowed** | `tools/probe_subtitle_negotiation.py` |
+| OQ-3 | Eight attributes in a fixed order, the group literally `subs`, `AUTOSELECT=YES` always, the language falling back to a literal `Unknown`, a **hard-coded** thirty-second window length and **the caller's own token** in the address; the variant line gains the group last (§3.4) | ✓ | `tools/probe_subtitle_manifest.py` |
+| OQ-4 | The name is the localised display title, assembled from up to six pieces out of **two** localisations — the server's translation table for the flag words and the platform's culture data for the language name, both in the server's interface culture. **Decided: the invariant form**, with the divergence recorded, because a manifest cannot omit the attribute and no client branches on it (§3.2) | ✓ + decided | `tools/probe_subtitle_manifest.py` |
+| OQ-5 | **The reference does answer.** Burn-in is not a branch it declines to reach — it is the per-stream answer for every track no declared profile fits, which is every image track under a text profile and every track for a profile that declares nothing. **Decided: say the same word and burn nothing in**, which is parity plus a gap already recorded, not the certain divergence the draft predicted (§3.3) | ✗ **died** | `tools/probe_subtitle_negotiation.py` |
+| OQ-6 | The declaration and the wire agree for once: the playlist refuses no-token and unknown-token alike with an empty `401`; both fetch routes answer `200` to a caller with no credential; all three accept the token in the query string, which is how the emitted addresses work (§3.5) | ✓ | `tools/probe_subtitle_delivery.py` |
+| OQ-7 | A stem match, a dot delimiter, nine extensions, and a right-to-left read in which each token is claimed by the first vocabulary that recognises it and the rest becomes the title. Reproduced and checked against six items in directories of up to 259 files. Two consequences the question did not ask about: `HasSubtitles` counts them, and the discovered streams are numbered **ahead of** the container's own (§3.6) | ✓ + more | `tools/probe_sidecar_subtitles.py` |
+| OQ-8 | Fourteen rows, two shapes, and the sharpest one is not an error at all: the playlist route never reads the stream index, so a playlist for a stream that does not exist is a `200` whose every entry is a `500` (§3.7) | ✓ + more | `tools/probe_subtitle_delivery.py` |
+| OQ-9 | Measured, framing intact — see below | ✓ | `tools/probe_progressive_production.py` |
+| OQ-10 | Measured, **framing inverted** — see below | ✗ **died** | `tools/probe_progressive_production.py` |
+| OQ-11 | Without the copy switch a window is rebased on itself; with it the cues keep the file's timings. The time-map switch prepends a mapping line **and drops the byte order mark**, because the body is rebuilt to insert it. The playlist sets both (§3.5) | ✓ | `tools/probe_subtitle_delivery.py` |
+| OQ-12 | **The highest score is never taken.** The score is read only to find out whether more than one stream shares the top of it; with a single stream there the score is discarded and the source's own default answers, computed by a rule that never looks at a score. With a tie the client's profile decides outright. And the whole computation is a function of two per-user settings §2 excludes, so v1's answer for an unnamed track is *no default* — the reference's own answer for a user whose subtitle mode is `None` (§3.3) | ✗ **died** | `tools/probe_subtitle_negotiation.py` |
 
-**Three dependencies outside this document, none of them a measurement.**
+### 7.1 The two measurements that are not this feature's to act on
 
-1. **The surface grows by two rows.** `GetSubtitlePlaylist` and `GetSubtitle` are not in the 55, and
-   L0 forbids serving a route that is not listed — the video client's trace says so of `Stream.vtt`
-   in as many words. Both need a row with their consumers, feature and conformance level before any
-   code, by the procedure in [AGENTS.md](../../AGENTS.md), *adding an endpoint*. This is the one
-   place this feature contradicts
-   [client-atrium-tvos §7](../../docs/compatibility/client-atrium-tvos.md#7-what-this-document-does-not-do)'s
-   *"it does not grow the surface"* — correctly: that sentence is about what the **trace** does, and
-   it says in the same breath that the open decision *"is not answered by adding a route"*. Adding
-   the routes is not the answer; it is what the answer needs underneath it (§3.4).
-2. **One accepted-gap row was wrong, and correcting it is not the same as closing it.** The
-   subtitle row of [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)
-   said subtitles are *"delivered as files"*; they are not delivered at all. Both client traces
-   recorded the correction as owed and neither made it; **008 T14 made it**, in the change that
-   marked 008 `Implemented`, and the row now names this feature as its closing mechanism. What
-   is owed here is the work, not the wording — and the row is rewritten again the day it lands,
-   because "delivered as files" will still not describe a manifest-announced track.
+Both were recorded so they would not be lost and so that nobody would read them as failures. Both
+are now measured, and **the second was mis-framed in the same way a neighbouring finding was**: the
+music client's gapless finding was recorded as an improvement and re-measured as a parity gap, and
+OQ-10 turns out to be the same shape. `[probe: tools/probe_progressive_production.py, Jellyfin
+10.11.11, 2026-08-29]`
+
+**OQ-9 — an honest `Content-Length` on a capped transcode. Framing intact: it is an improvement.**
+A lossless source asked for at a bitrate cap answers chunked with no `Content-Length`, and it still
+does on a repeat of a request whose bytes are already produced and sitting in a file — the same
+answer, byte for byte, delivered eight times faster. So there is no state in which the reference
+states a length for this, and an honest one would be a Principle I improvement exactly as
+[client-embeat-mobile §6.1](../../docs/compatibility/client-embeat-mobile.md#61-an-honest-content-length-on-a-capped-transcode)
+says. One correction to the record: the answer carries `Accept-Ranges: none` — the header is
+present and says no, rather than absent. Still owned by the *"where a progressive re-encode is
+produced"* question of §2.1, and still not a criterion here.
+
+**OQ-10 — keying a transcode on a client-supplied play session. Framing inverted: on three routes
+of four it is parity, and on the fourth it is a defect of the reference.** The question was
+recorded as *"declaring the parameter is a delta — the reference has not got it there"*. The
+reference has got it there: `playSessionId` is a declared parameter of the two audio delivery
+routes and of the video one, and the reference **already keys the produced file on it**, together
+with the media path, the user agent and the device
+`[source: Jellyfin.Api/Helpers/StreamingHelpers.cs:374-383 @ v10.11.11]`. Measured: the same
+request repeated with the same play session is answered from the existing file, and with a
+different one it is produced again.
+
+What has no such parameter is `/Audio/{itemId}/universal` — the one route the music client uses —
+and it does not merely lack it: it mints a **fresh** play session per request, so every reconnect
+and every retry re-encodes from the beginning. Measured on the same track: two `/universal`
+requests took the same time as each other, where the two keyed ones did not.
+
+So the ask splits, and neither half is the one that was written down. Declaring the parameter on
+the routes that already have it is **parity**, and Atrium not keying on it would be a gap.
+Declaring it on `/universal` is the delta — and the thing worth arguing there is not a new
+parameter but the reference's own choice to discard the session, which is a
+[behaviours §3.0](../../docs/compatibility/behaviours.md#30-how-the-decision-is-made) defect
+decision on the route rather than a feature request. **Neither belongs here**, and both belong to
+the same question §2.1 hands on, now with the measurement it needed.
+
+### 7.2 The one question no probe here can answer
+
+Whether the video client fetches a whole-file subtitle when the manifest carries none, or will not
+compensate at all. Its own trace says both in different sections, it is a claim about the client
+rather than about the reference, and **it stays open, marked as needing the trace's author**. §3.5
+records why nothing in this document depends on the answer: the route is in either way, every
+criterion is written against the manifest's traversal, and what the answer changes is the order the
+work is worth doing in — which belongs in the plan.
+
+### 7.3 The three dependencies outside this document
+
+1. **The surface grew by three rows, not two** — `GetSubtitlePlaylist`, `GetSubtitle` and
+   `GetSubtitleWithTicks`, the last of them because it is the route a negotiation's own
+   `DeliveryUrl` names. Added to [surface.yaml](../../docs/compatibility/surface.yaml) and to
+   [api-surface-v1.md §8.1](../../docs/compatibility/api-surface-v1.md) at this gate, validated
+   against the reference's own document, and the surface is 58 endpoints rather than 55.
+2. **The accepted-gap row is corrected twice.** The subtitle row of
+   [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) said subtitles
+   were *"delivered as files"*; they were not delivered at all. **008 T14 made that correction**,
+   in the change that marked 008 `Implemented` — and this gate corrected it again, because the
+   ordered list it then gave as the closing mechanism (*"emit `IsTextSubtitleStream`, bind
+   `EnableSubtitlesInManifest`, extract and serve, announce"*) is two-fifths wrong: the property
+   is already emitted by every read, and the manifest flag is not a parameter the route accepts.
+   The `HasSubtitles` row and the localised-properties row move with it, and one new gap is
+   added — no per-user subtitle preference, so no default track is proposed (§2).
 3. **The two client traces are a floor, not a ceiling**, and they say so: absence from one means
    *not measured*, never *not needed*. The video client's went stale in a day. Nothing in CI
    notices when they do.
@@ -497,11 +757,23 @@ they are not lost and not mistaken for failures.
   the name cleaning a sidecar rule would have to match
 - [docs/compatibility/behaviours.md §1.11, §2.10, §3.0, §3.3](../../docs/compatibility/behaviours.md)
   — the error shapes, the token rule on delivery routes, the defect procedure, and the sizing rule
-- `[spec: GetSubtitle, GetSubtitlePlaylist, GetMasterHlsVideoPlaylist, GetPostedPlaybackInfo, MediaStream, MediaSourceInfo, DeviceProfile, SubtitleProfile, SubtitleDeliveryMethod, TranscodingProfile]`
-- The reference's own paths, read at the opening and **not yet measured**:
+- `[spec: GetSubtitle, GetSubtitleWithTicks, GetSubtitlePlaylist, GetMasterHlsVideoPlaylist, GetPostedPlaybackInfo, MediaStream, MediaSourceInfo, DeviceProfile, SubtitleProfile, SubtitleDeliveryMethod, TranscodingProfile]`
+- **The five probes this gate wrote**, which are where every measurement above comes from:
+  `tools/probe_subtitle_negotiation.py` (OQ-2, OQ-5, OQ-12 and the media-source rule),
+  `tools/probe_subtitle_manifest.py` (OQ-1, OQ-3, OQ-4),
+  `tools/probe_subtitle_delivery.py` (OQ-6, OQ-8, OQ-11 and the locale defect),
+  `tools/probe_sidecar_subtitles.py` (OQ-7), and
+  `tools/probe_progressive_production.py` (OQ-9, OQ-10)
+- The reference's own paths, read at the opening and **now measured against**:
   `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:192-210, 338-350, 596-632 @ v10.11.11]`,
-  `[source: Jellyfin.Api/Controllers/SubtitleController.cs:208-212, 338-400 @ v10.11.11]`,
+  `[source: Jellyfin.Api/Controllers/SubtitleController.cs:207-345, 389-392 @ v10.11.11]`,
+  `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:165-276, 408-470 @ v10.11.11]`,
   `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:546-584, 654, 771-773, 806-807, 1442-1570 @ v10.11.11]`,
+  `[source: Emby.Server.Implementations/Library/MediaStreamSelector.cs:30-192 @ v10.11.11]`,
+  `[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:395-424 @ v10.11.11]`,
+  `[source: MediaBrowser.Model/Entities/MediaStream.cs:253-465, 639-761 @ v10.11.11]`,
+  `[source: MediaBrowser.Providers/MediaInfo/MediaInfoResolver.cs:85-253, Emby.Naming/ExternalFiles/ExternalPathParser.cs, Emby.Naming/Common/NamingOptions.cs:163-318 @ v10.11.11]`,
+  `[source: Jellyfin.Api/Helpers/StreamingHelpers.cs:374-383, 515-560 @ v10.11.11]`,
   `[source: MediaBrowser.Model/Dlna/SubtitleDeliveryMethod.cs, MediaBrowser.Model/Dlna/SubtitleProfile.cs @ v10.11.11]`,
   `[source: MediaBrowser.Model/Dlna/TranscodingProfile.cs:119, MediaBrowser.Model/Dlna/StreamInfo.cs:117, 1067-1070
   @ v10.11.11]`, `[source: MediaBrowser.Providers/MediaInfo/FFProbeVideoInfo.cs:275 @ v10.11.11]`
