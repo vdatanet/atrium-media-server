@@ -672,7 +672,11 @@ its own exit, so it can neither finish nor be reaped by waiting. At `-loglevel e
 encode says nothing, which is why the hazard survived from T7 to here. Every production therefore
 has exactly one reader task, started in the same statement that starts the process, keeping the
 last twenty lines; a production that exits non-zero on its own logs them, and one that was killed
-does not, because a signal is not a fault to report.
+does not, because a signal is not a fault to report. Two details are load-bearing and neither was
+obvious: the reader reads by **block**, because a line reader refuses a line longer than its
+stream's limit and then stops reading — the same hang with more code — and `finish` **waits** for
+the reader rather than cancelling it, because the process is already dead and the words it left
+buffered are exactly the ones the log line wanted.
 
 ### 6.8 Measured at the gate, and what stays owed
 

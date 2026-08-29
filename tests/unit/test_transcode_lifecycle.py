@@ -220,6 +220,13 @@ async def test_a_process_that_fills_the_diagnostic_pipe_still_exits(
     nothing, which is why three tasks shipped over this - it takes an encode that goes *badly*,
     for the length of a film, to fill it. The timeout is what makes the assertion a test rather
     than a hang.
+
+    **The half-megabyte arrives with no newline in it on purpose.** The first drain read by
+    line, and a line reader refuses one longer than its stream's limit and stops reading from
+    that moment on - the same hang with more code, which this hung against. The second assertion
+    is the same test from the other side, and it caught the second version: the words have to
+    survive `finish`, which is where they are logged, and a `finish` that cancelled the reader
+    rather than waiting for it lost them on a machine slower than the one it was written on.
     """
     noisy = await harness.ledger.start(
         (sys.executable, "-c", f"import sys; sys.stderr.write('x' * {SHOUTED_BYTES})"),
@@ -227,8 +234,13 @@ async def test_a_process_that_fills_the_diagnostic_pipe_still_exits(
     )
     await asyncio.wait_for(noisy.process.wait(), timeout=10)
     assert noisy.process.returncode == 0
+
     await harness.ledger.finish(noisy)
     assert noisy.complaints, "the encoder's last words were read but not kept"
+    assert set("".join(noisy.complaints)) == {"x"}
+    assert sum(len(one) for one in noisy.complaints) < SHOUTED_BYTES, (
+        "the whole shout was kept; a bounded tail is the point"
+    )
 
 
 # ------------------------------------------------------------------------------------------

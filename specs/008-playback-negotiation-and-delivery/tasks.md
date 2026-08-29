@@ -962,7 +962,11 @@ blocked writing into a full one never reaches its own exit, so it can neither fi
 reaped by waiting. The drain that fixes it had to read by *block*: written with `readline` it
 gave up on any line longer than the stream's limit and stopped reading from that moment on, which
 is the same hang with more code — and the test written for the hazard caught it, having been
-written to fail by timing out rather than by hanging.
+written to fail by timing out rather than by hanging. **The second version was wrong on a slower
+machine only**: `finish` cancelled the reader instead of waiting for it, so the encoder's last
+words were discarded in the very call that logs them. It passed locally every time and failed in
+CI, which is the whole argument for asserting that the words survive as well as that the process
+does.
 
 Two smaller things. **The measured `TranscodingInfo` is thirteen properties and Atrium sends
 eleven**: the two missing are the ones read out of the encoder's progress output, which this

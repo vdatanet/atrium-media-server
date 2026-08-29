@@ -71,6 +71,11 @@ STDERR_LINES_KEPT: Final = 20
 #: How much of it is read at a time, and the longest run without a newline that is kept.
 STDERR_BLOCK_BYTES: Final = 4096
 
+#: How long a finished production's reader is given to reach the end of a pipe whose writer is
+#: already dead. Generous, because it is never spent: the wait exists so that a reader still
+#: holding buffered bytes is not cancelled out from under the log line that wanted them.
+DRAIN_GRACE_SECONDS: Final = 5.0
+
 #: How ffmpeg is invoked before anything else is said to it. `-nostdin` because the server has no
 #: terminal to hand it, and a build that waits on stdin waits for ever.
 PREAMBLE: Final[tuple[str, ...]] = (
@@ -730,6 +735,14 @@ class ProductionLedger:
         still listed a process nobody is waiting for would say the server is producing when it is
         not - which is the one thing this set exists to answer.
 
+        **The drain is waited for rather than cancelled**, which is the difference between having
+        the encoder's last words and having an empty deque exactly when they were wanted. The
+        process is already dead by here, so its pipe is at end and the reader ends on its own
+        almost at once; the bound is for the case where it does not, and cancelling then costs
+        nothing, because a reader that is still going is one whose process was killed and whose
+        exit is a signal rather than a fault. Cancelling unconditionally looked identical on one
+        machine and lost the message on a slower one.
+
         The complaint is logged only for an encoder that failed on its own: a killed one exits on
         a signal, which is what every stop path here produces and not a fault to report.
         """
@@ -738,9 +751,9 @@ class ProductionLedger:
         reader = running.reader
         running.reader = None
         if reader is not None:
+            with contextlib.suppress(Exception, asyncio.CancelledError):
+                await asyncio.wait_for(reader, timeout=DRAIN_GRACE_SECONDS)
             reader.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await reader
         if running.process.returncode is not None and running.process.returncode > 0:
             logger.warning(
                 "%s exited %s: %s",
@@ -758,6 +771,7 @@ __all__ = [
     "AUDIO_ENCODERS",
     "CHUNK_BYTES",
     "DEFAULT_SEGMENT_FORMAT",
+    "DRAIN_GRACE_SECONDS",
     "ENCODER_PRESET",
     "FFMPEG",
     "FRAGMENT_FLAGS",
