@@ -412,7 +412,19 @@ production at that position; it does not produce from the beginning and discard.
 segment at ~90% of a 2h22 film arrives in 0.9 seconds, and the session's progress jumps to the
 seek point — the transcoder is restarted at the requested position, and the same holds for a
 segment requested far ahead of the produced window `[probe: tools/probe_transcode_session.py,
-Jellyfin 10.11.11, 2026-08-28]`.
+Jellyfin 10.11.11, 2026-08-28]`. It holds on the progressive routes too, where there is no playlist
+to seek in: a start position ten minutes into a half-hour source answers its first bytes in the same
+1.2 seconds a start position of zero does `[probe: tools/probe_progressive_delivery.py, Jellyfin
+10.11.11, 2026-08-29]`. **A copied stream restarts at the last keyframe at or before the position**,
+because a copy cannot begin mid-GOP; a re-encoded one starts at the position itself.
+
+**A re-encode never produces more than the profile allows and never more than arrived.** Every
+ceiling — resolution, bitrate, channel count, sample rate, bit depth — is stated to the encoder only
+where it asks for *less* than the source has. That is not an optimisation: a limit equal to the
+source is not an instruction, and issuing it as one asks encoders for things they do not have. A
+lossless 96 kHz source re-encoded to a codec that stops at 48 kHz is the case that shows it — told
+to produce 96 kHz because the client stated no ceiling, the encode fails and the request answers
+nothing.
 
 **Throttling is an operator setting, off as shipped.** The reference's `EnableThrottling`
 defaults to `false` — an idle client leaves the encoder producing the whole file — and when an
@@ -503,6 +515,13 @@ reference's is. The rule is *send the size when it is known*, never *invent one*
 `Content-Length` truncates playback, which is a worse failure than the missing header this project
 went out of its way to fix.
 
+**On a chunked answer a `Range` header decides nothing, whatever shape it has.** The sized case has
+five unreadable shapes and two answers; this one has a single answer for every shape there is —
+`bytes=100-199`, a suffix, a single byte and `bytes=abc-def` all reply `200` with no `Content-Range`
+and the body from its first byte `[probe: tools/probe_progressive_delivery.py, Jellyfin 10.11.11,
+2026-08-29]`. A response that has said `Accept-Ranges: none` is answering a client that asked
+anyway, and it answers by ignoring the question rather than by refusing it.
+
 > **The deliberate divergence is now exactly one route family.** Where a progressive remux's
 > size is knowable, Atrium sends it and honours `Range`; the reference answers chunked with
 > `Accept-Ranges: none` `[source:
@@ -547,6 +566,35 @@ loaders that set no headers, so a server that began requiring a token would brea
 they exist for. The consequence — **an item id is a capability on these routes** — is
 [behaviours §2.10](../../docs/compatibility/behaviours.md#210-the-image-and-delivery-routes-accept-a-token-and-require-none)'s,
 taken knowingly and identically to 006's decision for the image routes.
+
+**Which part of the item is `mediaSourceId`'s, and it is the same question on both halves.** Absent,
+the request is about the first part, which is what the reference serves when the parameter is not
+given. Naming a part serves that part's bytes. And a value naming *no* part of the item is refused
+identically on a `static=true` request and on a produced one — which is what makes part selection a
+property of the route rather than of the processing behind it. The reference splits that refusal in
+two: a well-formed identifier that matches nothing is a `400` in the third error shape, and a value
+that is not an identifier at all is a `500` in the same shape, because the fallback comparison
+parses the string before comparing it `[probe: tools/probe_progressive_delivery.py, Jellyfin
+10.11.11, 2026-08-29]`. **Atrium answers the `400` to both**: the two values mean the same thing,
+and the `400` is the reference's own answer to that meaning one value away
+([behaviours §3.9](../../docs/compatibility/behaviours.md#39-an-unparseable-mediasourceid-is-a-500-where-a-well-formed-one-is-a-400--class-a-diverged)).
+
+**A produced request into a container the server cannot write is a `500`, and that is parity.**
+Three shapes of one failure — a container no muxer exists for (`stream.banana`, `?container=banana`)
+and one that cannot hold the streams it was handed (`stream.mp3` on a film) — each answer `500` in
+the third error shape, with `Accept-Ranges: none` already on the response because the produced path
+writes that header before it asks for anything. This is the failure-handling table's "the encoder
+died" reached before the first byte rather than after it, and no decision is involved: a production
+that cannot start is a `500` on both servers.
+
+**What a produced request is muxed into, when the client names nothing.** The path's suffix or the
+`container` parameter first; then the container the *requested codec* implies — `h264` means `ts`,
+`hevc` and `av1` mean `mp4`, `vp8` and `vp9` mean `webm`, `aac` means `aac`, `mp3` means `mp3`; and
+finally the **first member of the source's own stored container string**. That last step is a third
+derivation of "the container" beside the two §3.1 records, and it is visible: a bare
+`/Audio/{itemId}/stream` on an `.m4a` answers `Content-Type: video/quicktime`, because the stored
+`mov,mp4,m4a,3gp,3g2,mj2` begins with `mov`, while the same request on an `.mkv` film answers
+`video/x-matroska` `[probe: tools/probe_progressive_delivery.py, Jellyfin 10.11.11, 2026-08-29]`.
 
 **A delivery route's own refusal is the third error shape, not problem details.** An identifier no
 library holds answers `404` with `text/plain` — no charset — and the fixed 25-byte

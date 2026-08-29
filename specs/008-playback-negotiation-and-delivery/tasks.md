@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent
+amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent; and 2026-08-29 by T7 — httpx's ASGI transport cannot drop a connection, so AC-26 needed a client written for it and the `TranscodeManager` this list names does not exist until T11; a `StreamPlan` states every ceiling and passing them all to the encoder is what breaks it; `StreamPlan` gained `bit_depth`; and the `mediaSourceId` `500` is decided as behaviours §3.9
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -549,7 +549,7 @@ went the other way: `/universal` **does** require a token, and answers the empty
 
 ## T7 — Progressive delivery: the remux is sized, the re-encode is chunked
 
-- [ ] **Changes:** new `src/atrium/media/ffmpeg.py` — command construction from a `Decision`'s
+- [x] **Changes:** new `src/atrium/media/ffmpeg.py` — command construction from a `Decision`'s
   stream plans, our own design (Principle IV), copy flags for `COPY` plans, encoder/ceiling
   arguments for `ENCODE`, `-ss` for a start position. `api/audio.py` and `api/videos.py` grow
   their non-static halves: a remux is produced to session scratch and served **sized with
@@ -567,6 +567,73 @@ went the other way: `/universal` **does** require a token, and answers the empty
   progressive half); and killing the client connection mid-body stops the process within the
   grace, asserted on the manager's state (AC-26's first appearance).
 - **Spec reference:** §3.4, §3.5; AC-7, AC-8, AC-9, AC-15, AC-17
+
+**Done (2026-08-29).** The shapes were all as documented. Three things this list assumed the
+project already had were not there, and one of them made a passing test impossible rather than
+merely wrong.
+
+**`httpx`'s ASGI transport cannot drop a connection**, so AC-26 had nothing to assert against. It
+drives the application to completion, collects every body message and hands back a buffered
+response `[source: httpx/_transports/asgi.py, httpx 0.28]` — which means every "streaming" test in
+this repository is really a buffered one, and the obvious version of this test (open a stream, read
+one chunk, break) was asserting against a response that had already finished: it saw an empty
+ledger and an exited process and would have passed with the cancellation path deleted. Plan §6.8
+had asked for "a fixture client that drops mid-body" and nobody had written one. It is nine lines
+of ASGI in the test file: call the application directly, and return `http.disconnect` from
+`receive` the moment the first body chunk is sent, which is what a dropped connection *is* at that
+boundary.
+
+**The task statement's "asserted on the manager's state" names something that does not exist yet** —
+`TranscodeManager` is T11's and T11 depends on this task. What the assertion needed was a place that
+holds the live processes, so `media/ffmpeg.py` grew a `ProductionLedger`: one per application, the
+set T11 keys sessions on top of rather than replaces. It also settles the ordering of its own
+cleanup, which is not obvious: the ledger discards **before** it kills, because the kill runs from
+the `finally` of a body a disconnect has just cancelled and in a cancelled task the very next
+`await` raises `CancelledError` again — a version that waited first signalled nothing and left the
+ledger claiming the server was still producing.
+
+**A `StreamPlan` states every ceiling, and passing them all to the encoder is what breaks it.** The
+plan carries `min(profile, source)` and therefore *the source's own number* wherever the profile
+stated no limit — so a faithful command line tells `libmp3lame` to produce 96 kHz and to spend the
+FLAC source's lossless bitrate, and both are outside what that encoder has. Two `500`s on the
+fixture matrix before the rule existed. Every ceiling is now stated only where it is **below** what
+arrived, which is spec §3.4's "limits, not targets" read as an instruction, is what the reference
+gets by leaving the same arguments off, and is AC-9 made structural: a plan equal to the source
+emits no `-vf` at all, so there is nothing that could upscale.
+
+**And one condition the ladder was already reading had nowhere to go.** `VideoBitDepth` is in
+`_REASON_FOR` — a profile that rejects ten-bit h264 refuses direct play over it — and `StreamPlan`
+had no field for the answer, so the transcode that refusal produced would have handed the same
+client ten-bit h264 again, because libx264 keeps the source's depth. `StreamPlan.bit_depth` is T4's
+contract grown by one field, derived by the same `ceiling` as the other five.
+
+**The `mediaSourceId` decision, made by the written procedure.** T6 measured the pair and left it
+here: a well-formed identifier naming no source is a `400` in the third shape, one that is not an
+identifier at all is a `500`. Re-measured on both halves of the route, four requests, and the split
+holds on `static=true` as well as on a produced request. It is class A, so [behaviours
+§3.0](../../docs/compatibility/behaviours.md#30-how-the-decision-is-made)'s default is to diverge;
+what settles it against §3.0.2's ban on a third behaviour is that the `400` is **not** a third
+behaviour — it is the reference's own answer to the same sentence one value away, in the same shape,
+on the same parameter — and that replicating costs a parse whose only purpose is to throw (§3.0.0).
+Upstream still has the `Guid.Parse` on `master` at 2026-08-07, so tie-break 2 weighs nothing.
+Recorded as behaviours §3.9 and asserted as one parametrised row, so the two values are visibly one
+answer.
+
+Three smaller things measured rather than assumed. A `Range` on a chunked response is not merely
+unhonoured but **unread** — every shape, readable or not, is one `200` from the first byte, so the
+sized case's five-row table has no counterpart at all (plan §6.8's second owed reading, discharged).
+A produced request into a container nothing can mux is a `500` in the third shape *carrying
+`Accept-Ranges: none`*, because the header is written before the encoder is asked for anything —
+three shapes of it, including `stream.mp3` on a film. And the output container a bare request falls
+back to is the **first member of the source's stored container string**, a third derivation of "the
+container" beside T2's two: a bare `/Audio/{id}/stream` on an `.m4a` answers `video/quicktime`.
+
+The probe itself needed two corrections before it measured anything, and both would have reported
+the reference as more forgiving than it is. A negotiated `TranscodingUrl` replayed verbatim finds
+the job the first request started and answers from *its* media source, so `mediaSourceId` is never
+read and every value answers `200`; and an appended `&mediaSourceId=` is a duplicate query name,
+which binds to the **first** value — the negotiated one. Replacing both parameters is what turned
+three serene `200`s into the measured pair.
 
 ## T8 — `/universal`: synthesised profiles and three recorded divergences
 

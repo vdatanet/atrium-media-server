@@ -56,6 +56,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_media_container.py`](probe_media_container.py) | What is a file's `Container` at item level and on its media source, and what decides the single form? | 008 §3.1, plan §4 and §6.1 | no |
 | [`probe_media_source.py`](probe_media_source.py) | What does a media source carry on a listing, and how is its `ETag` derived? | 008 §3.1, plan §6.1 | no |
 | [`probe_decision_ladder.py`](probe_decision_ladder.py) | What does each rung of the ladder answer, in what order are the reasons listed, and at what precision is a ceiling compared? | 008 §3.3, §3.4, AC-1–AC-9; plan §5, §6.2 | no |
+| [`probe_progressive_delivery.py`](probe_progressive_delivery.py) | What shape is a progressive answer, what does a `Range` do to one, what does `mediaSourceId` decide, and does a start position seek? | 008 §3.4, §3.5, AC-10, AC-15, AC-17; behaviours §1.11, §3.3, §3.9 | yes — a few seconds of deliberate encoding, every session stopped |
 
 ### Running them
 
@@ -94,9 +95,10 @@ python3 tools/probe_range_matrix.py
 python3 tools/probe_media_container.py
 python3 tools/probe_media_source.py
 python3 tools/probe_decision_ladder.py
+python3 tools/probe_progressive_delivery.py --allow-writes
 ```
 
-The five playback probes marked `--allow-writes` make the reference **encode**: each starts one
+The six playback probes marked `--allow-writes` make the reference **encode**: each starts one
 or two short transcoding sessions, fetches a handful of segments or the first bytes of a
 stream, and stops its sessions on the way out — including on failure. They are the measured
 ground under 008's spec review, and `probe_transcode_session.py` deliberately spends about a

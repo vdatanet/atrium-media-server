@@ -259,7 +259,7 @@ def _source_name(relative_path: str) -> str:
     return PurePosixPath(relative_path).stem
 
 
-def _source_id(item: Item, part_index: int, part: MediaSource) -> str:
+def source_id(item_id: str, part_index: int, relative_path: str) -> str:
     """The identifier a client addresses this file by.
 
     Part zero answers the **item's own id**, which is the reference's convention - it derives a
@@ -270,10 +270,18 @@ def _source_id(item: Item, part_index: int, part: MediaSource) -> str:
     with several sources where the reference models it as several items (see the note in spec
     section 3.1). Its id is derived from the item and the file, so it is stable across rescans and
     across a remount, like every other identifier in this project (Principle VII).
+
+    Public since 008 T7, because `mediaSourceId` on a delivery route is resolved by deriving these
+    and comparing - there is no stored column to look one up in, and a second derivation beside
+    this one would be a source a client could address on one route and not the other.
     """
     if part_index == 0:
-        return item.id
-    return derive(item.id, part.relative_path)
+        return item_id
+    return derive(item_id, relative_path)
+
+
+def _source_id(item: Item, part_index: int, part: MediaSource) -> str:
+    return source_id(item.id, part_index, part.relative_path)
 
 
 def _spatial_format(stream: InspectedStream) -> str:
@@ -534,6 +542,7 @@ __all__ = [
     "media_etag",
     "primary_video_stream",
     "source_container",
+    "source_id",
     "source_of",
     "sources_for",
     "stream_of",
