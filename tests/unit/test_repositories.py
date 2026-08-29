@@ -26,6 +26,8 @@ from atrium.config.paths import DataPaths
 from atrium.db import models, repositories, schema
 from atrium.db.engine import create_database_engine, session_factory
 from atrium.db.repositories import (
+    LibraryRepository,
+    MediaProbeRepository,
     SessionRepository,
     TokenRepository,
     UserDataRepository,
@@ -33,6 +35,9 @@ from atrium.db.repositories import (
     normalise_name,
     token_digest,
 )
+from atrium.domain.items import CollectionType
+from atrium.domain.library import Library
+from atrium.domain.media import InspectedStream, MediaInspection, StreamKind
 from atrium.domain.playstate import UserItemData
 from atrium.domain.session import AccessToken, IssuedToken, Session
 from atrium.domain.user import User
@@ -47,9 +52,16 @@ ALLOWED_MODULES = {
     "atrium.domain.user",
     "atrium.domain.session",
     "atrium.domain.playstate",
+    "atrium.domain.media",
 }
 
-REPOSITORIES = (UserRepository, TokenRepository, SessionRepository, UserDataRepository)
+REPOSITORIES = (
+    UserRepository,
+    TokenRepository,
+    SessionRepository,
+    UserDataRepository,
+    MediaProbeRepository,
+)
 
 
 @pytest.fixture
@@ -485,3 +497,52 @@ def test_deleting_the_user_takes_their_rows_with_them(
     session.delete(session.get(models.User, joan.id))
     session.flush()
     assert session.query(models.ItemUserData).filter_by(item_key=item_key).all() == []
+
+
+# ------------------------------------------------------------------------------------------
+# Media probes (008 T2)
+# ------------------------------------------------------------------------------------------
+
+#: The rest of this repository's behaviour - staleness, cascades, the keyframe list, a real file
+#: inspected and stored - lives in tests/unit/test_media_probe.py, beside the prober that produces
+#: the records. What belongs *here* is that it takes part in the sweep at the top of this file,
+#: which is a claim about the boundary rather than about media.
+
+
+@pytest.fixture
+def probes(session: OrmSession) -> MediaProbeRepository:
+    return MediaProbeRepository(session)
+
+
+@pytest.fixture
+def films(session: OrmSession, tmp_path: Path) -> Library:
+    return LibraryRepository(session).add(
+        Library(
+            id=new_id(),
+            name="Films",
+            collection_type=CollectionType.MOVIES,
+            roots=(str(tmp_path / "films"),),
+        )
+    )
+
+
+def test_an_inspection_comes_back_as_a_domain_object(
+    probes: MediaProbeRepository, films: Library
+) -> None:
+    """The annotations say `MediaInspection`; this asserts the objects agree with them, streams
+    included - a row that escaped inside the tuple would satisfy the annotation sweep and fail
+    the moment its session closed."""
+    written = MediaInspection(
+        size=10,
+        mtime_ns=20,
+        container="mkv",
+        format_names="matroska,webm",
+        probed_at=datetime(2026, 8, 29, 12, tzinfo=UTC),
+        streams=(InspectedStream(index=0, kind=StreamKind.VIDEO, codec="h264"),),
+    )
+    probes.put(films.id, "A Film (2026).mkv", written)
+
+    read = probes.get(films.id, "A Film (2026).mkv")
+    assert isinstance(read, MediaInspection)
+    assert all(isinstance(one, InspectedStream) for one in read.streams)
+    assert isinstance(probes.current(films.id, "A Film (2026).mkv", 10, 20), MediaInspection)

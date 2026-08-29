@@ -65,7 +65,9 @@ a cosmetic defect; get this wrong and nothing plays.
 Each playable item has one or more **media sources**. A single-file movie has one; a multi-part
 film (003 §3.3) has one per part.
 
-A source is built by inspecting the actual file, never by trusting its extension, and carries:
+What a source says about the content — its codecs, streams, duration and dimensions — comes from
+inspecting the actual file and never from its extension. The one field that is **not** a fact about
+the content is `Container`, and the note below says what it is instead. A source carries:
 
 | Group | Fields |
 |---|---|
@@ -81,16 +83,24 @@ A source is built by inspecting the actual file, never by trusting its extension
 information, channel layout, sample rate, language, and the default/forced/external flags.
 `[spec: MediaStream]`
 
-> **Item-level `Container` is a demuxer list, not a container.** The reference reports ffprobe's
-> `format_name` at item level — `"mov,mp4,m4a,3gp,3g2,mj2"` — while the resolved single container
-> lives on the media source. `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` Atrium reproduces both.
-> A client reading the item-level field expects the list form, and "fixing" it would be a delta.
+> **Item-level `Container` is sometimes a demuxer list.** The reference reports one normalised
+> container string at item level, and whether it names one container depends on the format: a
+> Matroska file answers `"mkv"`, and every member of the mp4 family answers the whole six-name
+> list `"mov,mp4,m4a,3gp,3g2,mj2"` `[probe: tools/probe_media_container.py, Jellyfin 10.11.11,
+> 2026-08-29]`. Atrium reproduces the string. A client reading the item-level field of an mp4
+> expects the list form, and "fixing" it would be a delta.
 >
-> **And the source's own `Container` is only resolved against a profile.** On `/Items` and on a
-> negotiation that carries a `DeviceProfile`, the media source reports the single container
-> (`mp4`); a **profile-less** negotiation reports the raw demuxer list on the source too
-> `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28]`. The normalisation is
-> part of evaluating the profile, not part of the source.
+> **The single container a source reports is not a property of the file.** It is derived from
+> that string per response, and the two routes derive it differently. On `/Items` **no profile is
+> involved**: the single form is the file's own extension where the list contains it — the same
+> six-name list answers `mp4` for a `.mp4` and `m4a` for a `.m4a` — and the list's first member
+> where it does not `[source: Emby.Server.Implementations/Dto/DtoService.cs:320-353 @ v10.11.11]`.
+> In a negotiation it is the first member the `DeviceProfile` accepts, and a **profile-less**
+> negotiation leaves the list alone: the same `.m4a` that answers `m4a` on a listing answers the
+> full list on `GET /Items/{itemId}/PlaybackInfo` `[probe: tools/probe_media_container.py,
+> Jellyfin 10.11.11, 2026-08-29]`, `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11,
+> 2026-08-28]`. What inspecting a file can establish is the normalised string; each single form is
+> the answer to a particular request and belongs to that response.
 
 **Inspection is cached** and re-run only when the file changes. Probing an entire library on every
 request is not viable, and probing on first playback makes the first play of every item slow.

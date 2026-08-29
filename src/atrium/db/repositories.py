@@ -38,6 +38,13 @@ from atrium.compat.guids import new_id
 from atrium.db import models
 from atrium.domain.items import BY_NAME, CollectionType, Item, ItemType, MediaSource
 from atrium.domain.library import Library
+from atrium.domain.media import (
+    InspectedStream,
+    MediaInspection,
+    StreamKind,
+    VideoRange,
+    VideoRangeType,
+)
 from atrium.domain.playstate import UserItemData
 from atrium.domain.session import AccessToken, IssuedToken, Session
 from atrium.domain.sorting import sort_name
@@ -1366,3 +1373,185 @@ def _credits(value: object) -> list[PersonCredit]:
     if isinstance(value, Sequence) and not isinstance(value, str):
         return [one for one in value if isinstance(one, PersonCredit)]
     return []
+
+
+# --------------------------------------------------------------------------------------------
+# Media probes (008 T2)
+# --------------------------------------------------------------------------------------------
+
+
+def _stream(row: models.MediaStreamRow) -> InspectedStream:
+    return InspectedStream(
+        index=row.stream_index,
+        kind=StreamKind(row.type),
+        codec=row.codec,
+        codec_tag=row.codec_tag,
+        profile=row.profile,
+        level=row.level,
+        bit_depth=row.bit_depth,
+        width=row.width,
+        height=row.height,
+        aspect_ratio=row.aspect_ratio,
+        framerate=row.framerate,
+        average_framerate=row.average_framerate,
+        channels=row.channels,
+        channel_layout=row.channel_layout,
+        sample_rate=row.sample_rate,
+        language=row.language,
+        title=row.title,
+        is_default=row.is_default,
+        is_forced=row.is_forced,
+        is_hearing_impaired=row.is_hearing_impaired,
+        is_external=row.is_external,
+        bitrate=row.bitrate,
+        video_range=VideoRange(row.video_range) if row.video_range else None,
+        video_range_type=VideoRangeType(row.video_range_type) if row.video_range_type else None,
+        color_range=row.color_range,
+        color_transfer=row.color_transfer,
+        color_primaries=row.color_primaries,
+        color_space=row.color_space,
+        pixel_format=row.pixel_format,
+        ref_frames=row.ref_frames,
+        is_interlaced=row.is_interlaced,
+        is_anamorphic=row.is_anamorphic,
+    )
+
+
+def _inspection(
+    row: models.MediaProbe, streams: Sequence[models.MediaStreamRow]
+) -> MediaInspection:
+    keyframes = row.video_keyframes
+    return MediaInspection(
+        size=row.size,
+        mtime_ns=row.mtime_ns,
+        container=row.container,
+        format_names=row.format_names,
+        runtime_ticks=row.runtime_ticks,
+        bitrate=row.bitrate,
+        video_keyframes=None if keyframes is None else tuple(int(one) for one in keyframes),
+        probed_at=row.probed_at,
+        streams=tuple(_stream(one) for one in streams),
+    )
+
+
+class MediaProbeRepository:
+    """What inspection found, per file, and whether it still applies.
+
+    **Keyed the way `item_sources` names a file** - its library and its path relative to the
+    root - so that the join a wire assembly makes is exact and a remounted root keeps its
+    inspections. See `models.MediaProbe`.
+
+    Two readers rather than one, because the two callers ask different questions. A scan asks
+    "does what I stored still describe this file", hands over the `stat` it already has, and gets
+    nothing back when the answer is no. Everything else asks "what is in this file" and must not
+    touch the filesystem to find out: a stale row is re-inspected by the next scan, not by a
+    request (plan section 6.1).
+    """
+
+    def __init__(self, session: OrmSession) -> None:
+        self._session = session
+
+    def get(self, library_id: str, relative_path: str) -> MediaInspection | None:
+        """The stored inspection, however old it is."""
+        row = self._session.get(models.MediaProbe, (library_id, relative_path))
+        if row is None:
+            return None
+        return _inspection(row, self._streams(library_id, relative_path))
+
+    def current(
+        self, library_id: str, relative_path: str, size: int, mtime_ns: int
+    ) -> MediaInspection | None:
+        """The stored inspection when it still describes these bytes, otherwise nothing.
+
+        Staleness is the comparison and not a timestamp: 003 makes `(size, mtime_ns)` the change
+        signal, and a file rewritten to the same size *and* the same modification time is one
+        nothing in this project claims to notice.
+        """
+        found = self.get(library_id, relative_path)
+        if found is None or not found.unchanged_since(size, mtime_ns):
+            return None
+        return found
+
+    def put(self, library_id: str, relative_path: str, inspection: MediaInspection) -> None:
+        """Store one inspection, replacing whatever was there.
+
+        The streams are deleted and rewritten rather than merged: a file that lost a track between
+        two scans has fewer streams now, and merging would leave the old one behind as a track no
+        file has.
+        """
+        self._session.execute(
+            delete(models.MediaStreamRow).where(
+                models.MediaStreamRow.library_id == library_id,
+                models.MediaStreamRow.relative_path == relative_path,
+            )
+        )
+        row = self._session.get(models.MediaProbe, (library_id, relative_path))
+        if row is None:
+            row = models.MediaProbe(library_id=library_id, relative_path=relative_path)
+            self._session.add(row)
+        row.size = inspection.size
+        row.mtime_ns = inspection.mtime_ns
+        row.container = inspection.container
+        row.format_names = inspection.format_names
+        row.runtime_ticks = inspection.runtime_ticks
+        row.bitrate = inspection.bitrate
+        row.video_keyframes = (
+            None if inspection.video_keyframes is None else list(inspection.video_keyframes)
+        )
+        row.probed_at = inspection.probed_at
+        self._session.flush()
+
+        for one in inspection.streams:
+            self._session.add(
+                models.MediaStreamRow(
+                    library_id=library_id,
+                    relative_path=relative_path,
+                    stream_index=one.index,
+                    type=one.kind.value,
+                    codec=one.codec,
+                    codec_tag=one.codec_tag,
+                    profile=one.profile,
+                    level=one.level,
+                    bit_depth=one.bit_depth,
+                    width=one.width,
+                    height=one.height,
+                    aspect_ratio=one.aspect_ratio,
+                    framerate=one.framerate,
+                    average_framerate=one.average_framerate,
+                    channels=one.channels,
+                    channel_layout=one.channel_layout,
+                    sample_rate=one.sample_rate,
+                    language=one.language,
+                    title=one.title,
+                    is_default=one.is_default,
+                    is_forced=one.is_forced,
+                    is_hearing_impaired=one.is_hearing_impaired,
+                    is_external=one.is_external,
+                    bitrate=one.bitrate,
+                    video_range=None if one.video_range is None else one.video_range.value,
+                    video_range_type=(
+                        None if one.video_range_type is None else one.video_range_type.value
+                    ),
+                    color_range=one.color_range,
+                    color_transfer=one.color_transfer,
+                    color_primaries=one.color_primaries,
+                    color_space=one.color_space,
+                    pixel_format=one.pixel_format,
+                    ref_frames=one.ref_frames,
+                    is_interlaced=one.is_interlaced,
+                    is_anamorphic=one.is_anamorphic,
+                )
+            )
+        self._session.flush()
+
+    def _streams(self, library_id: str, relative_path: str) -> list[models.MediaStreamRow]:
+        return list(
+            self._session.scalars(
+                select(models.MediaStreamRow)
+                .where(
+                    models.MediaStreamRow.library_id == library_id,
+                    models.MediaStreamRow.relative_path == relative_path,
+                )
+                .order_by(models.MediaStreamRow.stream_index)
+            )
+        )
