@@ -433,7 +433,11 @@ the pair of booleans four parameters apart — `BreakOnNonKeyFrames=True` beside
 — the `-audiochannels` option qualified by the **video** codec, and the h264 profile name arriving
 as `constrainedbaseline`, spaces stripped rather than encoded. One rule the plan did not name and
 the route needs: `AudioStreamIndex` is honoured only when `MediaSourceId` names the source it is
-about `[source: Jellyfin.Api/Helpers/MediaInfoHelper.cs:206-211 @ v10.11.11]`.
+about `[source: Jellyfin.Api/Helpers/MediaInfoHelper.cs:206-211 @ v10.11.11]`. And one narrow gap
+left for the tasks that produce the audio: an audio stream that reports **no** bitrate takes no
+share of the cap here, where the reference substitutes a default from a table keyed on the target
+codec and the channel count - so `AudioBitrate` is absent from the URL and `VideoBitrate` is the
+whole cap. Recorded in `media/urls.py` beside the arithmetic it belongs to.
 
 ## T6 — `compat/ranges.py` and static delivery: the measured matrix, one function
 

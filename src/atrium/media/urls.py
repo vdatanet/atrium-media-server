@@ -255,6 +255,15 @@ def _video_bitrate(
     `VideoBitrate=119552000` once a 448 kbit audio track is subtracted. With no cap stated at all
     the number is whatever ceiling the profile's own conditions left, and absent when they left
     none. `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:1105-1120 @ v10.11.11]`
+
+    **One gap, and it is narrow.** The audio's share is the negotiated audio bitrate, which is the
+    source stream's own clamped to whatever ceiling the profile stated - and a source stream that
+    reports *no* bitrate (a Matroska track sometimes does, 008 T2) therefore takes no share here,
+    where the reference substitutes a default from a table keyed on the target codec and the
+    channel count `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs GetAudioBitrate,
+    GetDefaultAudioBitrate @ v10.11.11]`. `AudioBitrate` is then absent from the URL and
+    `VideoBitrate` is the whole cap. Reproducing that table belongs to the task that produces the
+    audio, not to the one that renders the URL.
     """
     stated = _tightest(
         profile, CodecKind.VIDEO, video_codecs, container, ConditionProperty.VIDEO_BITRATE
