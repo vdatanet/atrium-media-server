@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's; and 2026-08-29 by T6 — §3 gains `media/labels.py`, `api/delivery.py` and a `MediaFileRepository` that takes no user, §6.5 records that the four `stream` routes declare no authentication dependency at all and why the response is built header by header, §6.8's delivery-route error shape is discharged for those four (the third shape, not the problem details §7 implied), and §7 gains the container pattern's `400` and the missing-file case
+amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's; and 2026-08-29 by T6 — §3 gains `media/labels.py`, `api/delivery.py` and a `MediaFileRepository` that takes no user, §6.5 records that the four `stream` routes declare no authentication dependency at all and why the response is built header by header, §6.8's delivery-route error shape is discharged for those four (the third shape, not the problem details §7 implied), and §7 gains the container pattern's `400` and the missing-file case; and 2026-08-29 by T8 — §6.6's "exactly as the reference's controller does" is one clause too strong: its codec profile is scoped to the direct-play containers and therefore constrains nothing on the transcoding path, so the ceilings are stated unscoped here
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -120,8 +120,12 @@ src/atrium/
 
 `db/repositories.py` also grows a `MediaFileRepository`, whose one query is an item id to the file
 behind it. Separate from `ItemQueryRepository` because that one takes a **user** and applies 005's
-visibility predicate, and a delivery route has neither: it may be called with no token at all
-(§6.5), so there is nobody to apply a predicate for.
+visibility predicate, and the four `stream` routes have neither: they may be called with no token
+at all (§6.5), so there is nobody to apply a predicate for. **`/universal` is the exception, and
+it uses both**: it requires a token, and the reference resolves its item through the caller's user
+`[source: Jellyfin.Api/Controllers/UniversalAudioController.cs:124 @ v10.11.11]`, so it runs the
+visibility query first — which is also why an unknown item is problem details there and the third
+error shape on its siblings (spec §3.6) — and reads the file through `MediaFileRepository` after.
 
 Grows, not new: `library/scan.py` gains the inspection step behind the change signal;
 `api/item_dto.py` gains `MediaSources`, `MediaStreams` and item-level `Container` emission (the
@@ -529,14 +533,25 @@ sessions on top of it rather than replacing it. `server.py`'s lifespan stops wha
 
 ### 6.6 `/universal`
 
-The parameter set synthesises a device profile exactly as the reference's controller does —
-`container` becomes the direct-play list, `transcodingContainer`/`transcodingProtocol` the
-transcoding profile, the ceilings become codec conditions — then flows through the same
-`decide()`. Three decided divergences, each recorded: the output sample rate is the stated
-ceiling, not the Opus ladder step (behaviours §3.7); a codec-less http transcode picks the
-transcoding container's own codec instead of answering an empty `200` (behaviours §3.8); and
-`enableRedirection` is bound and never fires — v1 has no remote sources, so the measured
-"proxied `200` bytes" is the only reachable answer (AC-21).
+The parameter set synthesises a device profile as the reference's controller does — `container`
+becomes the direct-play list (split on **commas before bars**),
+`transcodingContainer`/`transcodingProtocol` the transcoding profile, the ceilings codec
+conditions — then flows through the same `decide()`. Three decided divergences, each recorded:
+the output sample rate is the stated ceiling, not the Opus ladder step (behaviours §3.7); a
+transcode naming no codec takes the one the reference's own inference table gives the
+transcoding container, instead of the one it gives a request path with no extension in it —
+which is the empty `200` (behaviours §3.8); and `enableRedirection` is bound and never fires —
+v1 has no remote sources, so the measured "proxied `200` bytes" is the only reachable answer
+(AC-21).
+
+**One place the synthesis is deliberately not the reference's, found at T8.** Its
+`GetDeviceProfile` gives the codec profile carrying the ceilings a container list of the
+*direct-play* containers — the ones it will not be transcoding into — so those conditions apply
+to nothing on the transcoding path, and the ceiling reaches the encoder only because the
+controller passes `maxAudioSampleRate` into the streaming request outside the profile as well.
+Here the profile is the only path, so the conditions are stated **unscoped**; that is what
+reproduces the measured answer to `container=ogg` with `transcodingContainer=flac` and a
+sample-rate ceiling, which a literal transcription would have delivered unconstrained.
 
 ### 6.7 Session lifecycle and configuration
 

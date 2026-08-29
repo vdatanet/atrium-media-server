@@ -56,12 +56,19 @@ IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007"})
 #: (T12) - and the exact-set check below has to stay meaningful in between, so the routes that have
 #: landed are listed here. It is deleted at T14, when `"008"` joins the set above. 002, 005, 006
 #: and 007 each used exactly this device, and all four lists are gone.
+#:
+#: **One route on this list is knowingly incomplete.** `/Audio/{itemId}/universal` with
+#: `transcodingProtocol=hls` answers a master playlist on the reference and a refusal here, until
+#: T10 exists to produce one; every other shape of that route is complete. A playlist naming
+#: segments nothing can serve would be Principle VI's plausible-looking stub, which is the one
+#: thing an unimplemented path may not be.
 INTERIM_008 = frozenset(
     {
         ("POST", "/Items/{itemId}/PlaybackInfo"),
         ("GET", "/Items/{itemId}/PlaybackInfo"),
         ("GET", "/Audio/{itemId}/stream"),
         ("GET", "/Audio/{itemId}/stream.{container}"),
+        ("GET", "/Audio/{itemId}/universal"),
         ("GET", "/Videos/{itemId}/stream"),
         ("GET", "/Videos/{itemId}/stream.{container}"),
     }

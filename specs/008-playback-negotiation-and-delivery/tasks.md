@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent; and 2026-08-29 by T7 — httpx's ASGI transport cannot drop a connection, so AC-26 needed a client written for it and the `TranscodeManager` this list names does not exist until T11; a `StreamPlan` states every ceiling and passing them all to the encoder is what breaks it; `StreamPlan` gained `bit_depth`; and the `mediaSourceId` `500` is decided as behaviours §3.9
+amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent; and 2026-08-29 by T7 — httpx's ASGI transport cannot drop a connection, so AC-26 needed a client written for it and the `TranscodeManager` this list names does not exist until T11; a `StreamPlan` states every ceiling and passing them all to the encoder is what breaks it; `StreamPlan` gained `bit_depth`; and the `mediaSourceId` `500` is decided as behaviours §3.9; and 2026-08-29 by T8 — the codec-less hole is not a codec-less transcoding profile but a streaming request inferring a codec from a path with no extension, so behaviours §3.8's divergence is narrower than it read; synthesising the device profile *exactly* as the reference does scopes its ceilings to the direct-play containers and would have honoured none of them; AC-19's bit-depth clause is a copy refusal rather than an output target; `transcodingProtocol` must not be typed; and this route's three refusals are none of the `stream` pair's
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -637,7 +637,7 @@ three serene `200`s into the measured pair.
 
 ## T8 — `/universal`: synthesised profiles and three recorded divergences
 
-- [ ] **Changes:** new `src/atrium/api/universal_audio.py` — the parameter set synthesised into
+- [x] **Changes:** new `src/atrium/api/universal_audio.py` — the parameter set synthesised into
   a device profile exactly as [plan §6.6](plan.md#66-universal) describes, flowing through the
   same `decide()`. The three divergences behaviours already argues land here: the output sample
   rate is the stated ceiling, never the Opus ladder step (behaviours §3.7); a codec-less http
@@ -653,6 +653,67 @@ three serene `200`s into the measured pair.
   a real stream whose codec is the container's; `enableRedirection=true` on a local file is
   `200` with bytes and no `Location` (AC-21).
 - **Spec reference:** §3.6; AC-19, AC-21
+
+**Done (2026-08-29).** All three divergences were as documented on the wire. **The mechanism
+behind one of them was not**, and the difference decides how narrow the divergence is — plus
+this route turned out to share none of its three refusals with the two `stream` routes beside it.
+
+**"A transcoding profile with no codec in it" is not what happens.** The controller builds its
+transcoding profile with `audioCodec ?? "mp3"`, so a codec-less request negotiates perfectly well
+and resolves its container — the empty `200` arrives behind `Content-Type: audio/mpeg` when no
+`transcodingContainer` is named, which is that default on the wire. What carries no codec is the
+**streaming request** built after it, and a streaming request with none infers one from the part
+of the request path after its last dot. `/Audio/{itemId}/universal` has no dot, and the helper's
+answer to a missing separator is the whole string `[source:
+Jellyfin.Api/Helpers/StreamingHelpers.cs:71-75, src/Jellyfin.Extensions/StringExtensions.cs
+RightPart @ v10.11.11]`, so the path becomes the encoder name. Measured with a
+`transcodingContainer` and without one, both empty `[probe: tools/probe_universal_audio.py,
+Jellyfin 10.11.11, 2026-08-29]`. That makes behaviours §3.8's divergence far smaller than it read:
+the reference *has* this inference table and Atrium hands it the container rather than a dotless
+path, so `mp3` in and `mp3` out on both servers and the difference exists only where a client
+named a transcoding container and no codec.
+
+**Synthesising the profile "exactly as the reference does" would have honoured no ceiling at
+all.** Its `GetDeviceProfile` scopes the one codec profile it builds to the **direct-play**
+container list — the containers it will not be transcoding into — so on the transcoding path
+those conditions apply to nothing, and the ceiling reaches the encoder only because the
+controller *also* passes `maxAudioSampleRate` straight into the streaming request, outside the
+profile entirely. Atrium has one path and it is the profile, and the probe settles which
+observable to reproduce: `container=ogg` with `transcodingContainer=flac` and a 22 050 Hz ceiling
+really is answered at a constrained rate. The conditions are therefore stated unscoped, and a
+transcription of the reference's profile would have delivered the full 96 kHz.
+
+**AC-19 named three ceilings and the reference honours two.** A `maxAudioBitDepth` below the
+source's refuses a *stream copy* and nothing else: no sample-format argument is emitted anywhere
+in the reference's builder, on any route `[source:
+MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs CanStreamCopyAudio @ v10.11.11]`. Adding
+one would be a third behaviour, and one that breaks every encoder whose sample format is not a
+choice — `aac` takes `fltp` and nothing else. So the criterion is corrected rather than
+implemented: the bit depth is a trigger, the rate and the channel count are targets.
+
+**Three refusals, and this route shares none of them with its siblings.** An item nothing holds
+is **problem details** here — byte-identical to `GET /Items/{itemId}`'s, trace identifier aside —
+where `/Audio/{itemId}/stream` answers the third error shape on the same identifier in the same
+run. And both `mediaSourceId` shapes answer one `400` here, where the `stream` pair splits them
+`400`/`500`: [behaviours §3.9](../../docs/compatibility/behaviours.md)'s divergence turns out to
+be a choice between two answers the reference itself already gives the same parameter, which is a
+stronger argument than the one recorded when it was decided. The token requirement was the one
+row T6 had already measured, and it holds.
+
+**`transcodingProtocol` is a nullable enumeration upstream and declaring one here would have been
+a `400` the reference never sends.** `HLS` reaches the playlists and `banana` reaches the
+progressive body — both `200`, neither refused — so the parameter binds as text and is compared
+case-insensitively (behaviours §1.12, on a typed parameter for the first time). `container` needed
+measuring from the source rather than guessing too: it is split on **commas before bars**, so a
+music client's `opus,webm|opus,mp3,aac,m4a|aac,flac` is six direct-play entries, and splitting it
+the other way round would have produced one nonsense container and transcoded everything.
+
+**The audio-bitrate default table 008 T5 left owed is not this task's**, and the reason is worth
+recording so T9 does not go looking either. That gap is in the *`TranscodingUrl`'s* arithmetic —
+a total cap split between a video share and an audio share, where a stream reporting no bitrate
+takes none. `/universal` renders no URL and has no video half: `audioBitRate ?? maxStreamingBitrate`
+is a plain audio ceiling here, stated as a condition like every other and passed to the encoder
+only when it is below what arrived. The table stays owed by whichever task needs the split.
 
 ## T9 — WAV: both symptoms answered with a real header, and the prior-probe debt paid
 

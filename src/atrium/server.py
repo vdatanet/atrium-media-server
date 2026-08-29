@@ -48,6 +48,7 @@ from atrium.api import (
     similar,
     system,
     tv_shows,
+    universal_audio,
     user_library,
     user_views,
     users,
@@ -116,6 +117,7 @@ ROUTERS = (
     instant_mix.router,
     media_info.router,
     audio.router,
+    universal_audio.router,
     videos.router,
     items.router,
 )

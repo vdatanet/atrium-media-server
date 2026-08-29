@@ -16,6 +16,19 @@ specs/008 OQ-4 and §3.6. Four questions against one short track:
   sources with EnableRemoteMedia `[source: Jellyfin.Api/Controllers/
   UniversalAudioController.cs:175 @ v10.11.11]`.
 
+008 T8 added three batteries, because the task that lands a route measures that route's own
+shapes rather than borrowing a sibling's:
+
+- **the direct-play header set**, whole rather than two named headers, so a conformance test can
+  assert it as a set the way the four `stream` routes' is asserted;
+- **the codec-less request with no `TranscodingContainer` at all**, which separates "the codec
+  falls back to something" from "the codec falls back to the *container's*" - the distinction
+  the divergence of behaviours section 3.8 is written in terms of;
+- **the refusals**: no credential, an unknown item, and the two `mediaSourceId` shapes, since
+  this is the one delivery route that requires a token and its 404 had never been read.
+
+And one reading left for 008 T10: what `TranscodingProtocol=hls` answers here.
+
 Needs --allow-writes: the constraint cases make the reference start real audio encodes. The
 probe reads only the first bytes of each answer and closes, which is the same signal a
 disconnecting client sends and triggers the reference's own kill path.
@@ -45,6 +58,16 @@ def flac_sample_rate(payload: bytes) -> int | None:
         return None
     streaminfo = payload[8:]
     return (streaminfo[10] << 12) | (streaminfo[11] << 4) | (streaminfo[12] >> 4)
+
+
+def header_names(headers: dict) -> str:
+    """The header set, sorted and joined - a set is what a conformance test asserts."""
+    return ", ".join(sorted(headers))
+
+
+def body_shape(headers: dict, payload: bytes) -> str:
+    """A refusal in the terms behaviours section 1.11 splits them by: type, and the bytes."""
+    return f"{headers.get('Content-Type') or 'no content type'}, {payload[:80]!r}"
 
 
 def pick_track(server: Server) -> tuple[str, str, int]:
@@ -103,11 +126,21 @@ def run(server: Server) -> Probe:
         f"{status}, Content-Length {headers.get('Content-Length')}, "
         f"Accept-Ranges {headers.get('Accept-Ranges')}",
     )
+    probe.observe("  its whole header set", header_names(headers))
     checks.append(
         status == 200
         and headers.get("Content-Length") is not None
         and headers.get("Accept-Ranges") == "bytes"
     )
+
+    status, headers, body = server.get_streaming(
+        f"/Audio/{track_id}/universal?{query}", max_bytes=32, extra_headers={"Range": "bytes=8-15"}
+    )
+    probe.observe(
+        "  a mid-file Range on it",
+        f"{status}, Content-Range {headers.get('Content-Range')}, {len(body)} bytes",
+    )
+    checks.append(status == 206 and len(body) == 8)
 
     ceiling = rate // 2
     query = urllib.parse.urlencode(
@@ -157,6 +190,65 @@ def run(server: Server) -> Probe:
     )
     checks.append(status == 200 and len(body) == 0)
 
+    query = urllib.parse.urlencode(
+        {**common, "Container": "ogg", "TranscodingProtocol": "http", "MaxAudioSampleRate": ceiling}
+    )
+    status, headers, body = server.get_streaming(
+        f"/Audio/{track_id}/universal?{query}", max_bytes=64
+    )
+    probe.observe(
+        "  and without TranscodingContainer either",
+        f"{status}, {len(body)} bytes, Content-Length {headers.get('Content-Length')}, "
+        f"Content-Type {headers.get('Content-Type')}",
+    )
+    checks.append(status == 200 and len(body) == 0)
+
+    query = urllib.parse.urlencode(
+        {
+            **common,
+            "Container": "ogg",
+            "TranscodingContainer": "flac",
+            "TranscodingProtocol": "hls",
+            "MaxAudioSampleRate": ceiling,
+        }
+    )
+    status, headers, body = server.get_streaming(
+        f"/Audio/{track_id}/universal?{query}", max_bytes=512
+    )
+    probe.observe(
+        "TranscodingProtocol=hls",
+        f"{status}, Content-Type {headers.get('Content-Type')}, {body[:48]!r}",
+    )
+    probe.note(
+        "The hls variant hands off to the master playlist rather than to a progressive body, "
+        "which is 008 T10's route; T8 refuses it rather than answering a playlist it cannot "
+        "yet produce segments for."
+    )
+
+    # TranscodingProtocol is a nullable enumeration upstream, so the obvious implementation
+    # declares one - and a declared enumeration refuses values this route serves.
+    for stated in ("HLS", "banana"):
+        query = urllib.parse.urlencode(
+            {
+                **common,
+                "Container": "ogg",
+                "TranscodingContainer": "flac",
+                "AudioCodec": "flac",
+                "TranscodingProtocol": stated,
+                "MaxAudioSampleRate": ceiling,
+            }
+        )
+        status, headers, body = server.get_streaming(
+            f"/Audio/{track_id}/universal?{query}", max_bytes=64
+        )
+        probe.observe(
+            f"  spelled {stated!r}",
+            f"{status}, Content-Type {headers.get('Content-Type')}, {len(body)} bytes",
+        )
+        # `HLS` reaches the playlist and `banana` is ignored rather than refused: neither is a
+        # `400`, which is what makes a typed parameter here the wrong shape.
+        checks.append(status == 200)
+
     query = urllib.parse.urlencode({**common, "Container": container, "EnableRedirection": "true"})
     status, headers, body = server.get_streaming(
         f"/Audio/{track_id}/universal?{query}", max_bytes=16
@@ -166,6 +258,34 @@ def run(server: Server) -> Probe:
         f"{status}, Location {headers.get('Location') or 'absent'}",
     )
     checks.append(status == 200 and headers.get("Location") is None)
+
+    # The refusals. This is the one delivery route that requires a credential, which the range
+    # matrix measured from the other side; what had never been read is what it refuses *with*,
+    # nor what an unknown item or an unknown media source answers here.
+    unknown_item = "deadbeefdeadbeefdeadbeefdeadbeef"
+    bare = urllib.parse.urlencode({"Container": container, "DeviceId": common["DeviceId"]})
+    status, headers, body = server.get_streaming(
+        f"/Audio/{track_id}/universal?{bare}", max_bytes=256, send_token=False
+    )
+    probe.observe("no credential at all", f"{status}, {body_shape(headers, body)}")
+    checks.append(status == 401 and not body)
+
+    query = urllib.parse.urlencode({**common, "Container": container})
+    status, headers, body = server.get_streaming(
+        f"/Audio/{unknown_item}/universal?{query}", max_bytes=256
+    )
+    probe.observe("an item that does not exist", f"{status}, {body_shape(headers, body)}")
+    checks.append(status == 404)
+
+    for label, named in (
+        ("a well-formed MediaSourceId naming no source", "beefdeadbeefdeadbeefdeadbeefdead"),
+        ("a MediaSourceId that is not an identifier", "banana"),
+    ):
+        query = urllib.parse.urlencode({**common, "Container": container, "MediaSourceId": named})
+        status, headers, body = server.get_streaming(
+            f"/Audio/{track_id}/universal?{query}", max_bytes=256
+        )
+        probe.observe(label, f"{status}, {body_shape(headers, body)}")
 
     probe.note(
         "The redirect branch requires SupportsDirectPlay, protocol Http, IsRemote and the "

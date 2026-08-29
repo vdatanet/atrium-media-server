@@ -1518,18 +1518,34 @@ fixed upstream, and no blind compensation exists that a correct answer would bre
 
 ### 3.8 `/universal` without `audioCodec` answers an empty 200 — class A, diverged
 
-**Jellyfin does:** builds, for a `/universal` request whose `transcodingProtocol` is `http` and
-which names no `audioCodec`, a transcoding profile with no codec in it; the encoder invocation
-dies immediately and the route answers `200` with `Content-Length: 0` and an empty body — every
-retry identical. `[probe: tools/probe_universal_audio.py, Jellyfin 10.11.11, 2026-08-28]`
+**Jellyfin does:** answer a `/universal` request whose `transcodingProtocol` is `http` and which
+names no `audioCodec` with `200`, `Content-Length: 0` and an empty body — every retry identical,
+and **with or without a `transcodingContainer`**: naming one answers the empty body all the same,
+and naming none answers it behind `Content-Type: audio/mpeg`
+`[probe: tools/probe_universal_audio.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+**The mechanism is not the one this entry first recorded**, and the difference decides what a
+correct answer looks like. The transcoding profile is *not* codec-less: the controller builds it
+with `audioCodec ?? "mp3"`, so the negotiation has a codec and resolves the container perfectly
+well — `audio/mpeg` above is that default arriving. What has no codec is the **streaming request**
+the controller then builds, which passes the raw parameter through; and a streaming request with
+no codec infers one from the part of the request path after its last dot `[source:
+Jellyfin.Api/Helpers/StreamingHelpers.cs:71-75 @ v10.11.11]`. On `/Audio/{id}/stream.mp3` that is
+`mp3`; on `/Audio/{id}/universal` there is no dot at all, and the helper's answer to a missing
+separator is *the whole string* `[source: src/Jellyfin.Extensions/StringExtensions.cs RightPart @
+v10.11.11]`. The path falls through the codec table unchanged, becomes the encoder name, and the
+invocation dies before its first byte.
 
 **Depends on it:** nothing can be built on an empty body behind a `200` — a player fed zero
 bytes errors on its own side. Class A by the same logic as §3.2's symptom 1: whatever a client
 does today, it keeps working when the request succeeds instead.
 
 **Atrium does: diverge — answer the request.** When the client names no codec, the transcoding
-container's own codec is the target, and the response is a real stream. Recorded in
-[008 §3.6](../../specs/008-playback-negotiation-and-delivery/spec.md).
+container's own codec is the target, derived by **the reference's own inference table** given the
+container instead of a dotless path — so `mp3` in and `mp3` out on both servers, and the
+divergence is confined to the request that named a transcoding container and no codec, which is
+the request the reference answers with nothing. Recorded in
+[008 §3.6](../../specs/008-playback-negotiation-and-delivery/spec.md) and implemented at 008 T8.
 
 ### 3.9 An unparseable `mediaSourceId` is a 500 where a well-formed one is a 400 — class A, diverged
 
@@ -1560,6 +1576,14 @@ carry it past §3.0.2's ban on inventing a third behaviour:
   item* — and the `400` is the answer the reference itself gives that sentence one value away, in
   the same error shape, on the same parameter, on the same route. What is dropped is a split the
   reference draws by accident of ordering, not a behaviour it chose.
+- **And the reference gives both values the `400` on the sibling route.** `GET
+  /Audio/{itemId}/universal` answers `400`, `text/plain`, the same 25 bytes, to a well-formed
+  identifier naming no source **and** to `banana` — measured at 008 T8, on the same server and the
+  same item as the pair above `[probe: tools/probe_universal_audio.py, Jellyfin 10.11.11,
+  2026-08-29]`. It resolves the source through the negotiation helper rather than the streaming
+  one, so nothing parses the string in order to throw. Atrium's single answer is therefore not
+  merely *derived* from the reference's — it is one of the two answers the reference already gives
+  the same parameter, chosen over the one that only an accident produces.
 - **Replicating it costs code that exists only to fail worse.** §3.0.0: the natural implementation
   compares the identifier against the item's sources and refuses when none matches, which is one
   refusal. Reproducing the reference would mean adding a parse whose sole purpose is to throw, and
@@ -1568,7 +1592,8 @@ carry it past §3.0.2's ban on inventing a third behaviour:
 
 The divergence takes §3.0.3's second shape — strictly more correct on a path that previously
 failed — and is asserted as one parametrised row in
-`tests/conformance/test_progressive_delivery.py`, so the two values are visibly one answer.
+`tests/conformance/test_progressive_delivery.py` and again in
+`tests/conformance/test_universal_audio.py`, so the two values are visibly one answer.
 Recorded in [008 §3.5](../../specs/008-playback-negotiation-and-delivery/spec.md#35-delivery-the-rules-that-apply-to-every-route).
 
 ## 4. Deliberate exceptions
