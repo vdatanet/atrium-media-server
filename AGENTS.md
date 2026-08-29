@@ -176,6 +176,7 @@ scripted edit that will silently not happen.
 |---|---|
 | Understand a decision | [docs/decisions/](docs/decisions/) |
 | Know if an endpoint is in scope | [docs/compatibility/surface.yaml](docs/compatibility/surface.yaml) |
+| Know what a real client actually needs | [client-atrium-tvos.md](docs/compatibility/client-atrium-tvos.md) (video) and [client-embeat-mobile.md](docs/compatibility/client-embeat-mobile.md) (music) — the two `consumers:` tags, traced back to their authors' own contracts |
 | Know what a Jellyfin term means | [docs/glossary.md](docs/glossary.md) |
 | Know how a behaviour gets proven | [docs/compatibility/conformance.md](docs/compatibility/conformance.md) |
 | Know what comes next | [docs/roadmap.md](docs/roadmap.md) |

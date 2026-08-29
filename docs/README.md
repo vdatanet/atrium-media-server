@@ -35,7 +35,8 @@ docs/
 │   ├── reference-target.md      Pinned version, sources of truth, what parity means
 │   ├── api-surface-v1.md        The endpoints v1 serves, with provenance per endpoint
 │   ├── surface.yaml             The same set, machine-readable and CI-validated
-│   ├── client-atrium-tvos.md    One real client's requirements, traced against v1
+│   ├── client-atrium-tvos.md    The video client's requirements, traced against v1
+│   ├── client-embeat-mobile.md  The music client's, likewise — and it never negotiates
 │   ├── behaviours.md            Measured Jellyfin behaviours, quirks and defects to replicate
 │   └── conformance.md           How parity is proven, including differential testing
 └── decisions/
