@@ -3,7 +3,8 @@ feature: 011-subtitle-delivery
 title: Subtitle delivery
 status: Accepted
 created: 2026-08-29
-updated: 2026-08-29
+updated: 2026-08-30
+amended: 2026-08-30 at the tasks gate — §3.4 and AC-5 said the master playlist's *variant line* gains the subtitle group, which was true while the master answered exactly one variant and stopped being true on the day 008's own T15 gave an HDR stream copy a standard-range entrance beside it; the reference gives the group to every variant it writes, so the criterion is written against every variant line and an entrance with no subtitles is the failure it now catches. And §3.2's text/image split reads a codec spelling the file itself does not report: four subtitle codecs are renamed when a file is inspected, and against the unrenamed spellings the rule inverts on the two commonest image formats in a real library
 depends_on: [003, 005, 008]
 ---
 
@@ -222,6 +223,19 @@ text however it is spelled: that text format and an image one share the `.sub` e
 lookup, not an inspection, and a stream with no codec at all is text only when it came from a
 file beside the media `[source: MediaBrowser.Model/Entities/MediaStream.cs:639-654 @ v10.11.11]`.
 
+**The spelling the lookup reads is not the one the file itself reports**, and this was
+corrected at the tasks gate on 2026-08-30 because the difference is the whole of the rule for two
+of the four image formats. Four subtitle codecs are **renamed when a file is inspected** — the
+two digital-broadcast spellings, the DVD one and the Blu-ray one become `DVBSUB`, `DVBTXT`,
+`DVDSUB` and `PGSSUB` — and every later reader, the split included, sees the renamed form; it is
+also the spelling a subtitle stream's codec carries on the wire `[source:
+MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:632-652, 765-768 @ v10.11.11]`,
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`. Read against the
+unrenamed spellings the rule inverts on the two commonest image formats in a real library — the
+DVD one is not a name containing `dvdsub` until it has been renamed — so a server that announced
+the file's own spelling would announce every DVD and broadcast subtitle track as text. AC-1's
+"differ in the first of them" is a claim about the renamed spelling.
+
 **The delivery-method property is an answer to a negotiation, not a fact about a file.** The same
 track answers differently for two clients, and differently for the same client direct-playing and
 transcoding — the reference resolves it separately on the direct-play branch and the transcode
@@ -367,7 +381,7 @@ a per-user computation §2 excludes. That is why AC-5 is written against the *ad
 against the profile.
 
 When the address names the manifest method, the master playlist gains **one media entry per text
-subtitle stream** and the variant line gains their group
+subtitle stream** and **every** variant line gains their group
 `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:192-210, 338-350, 596-632 @ v10.11.11]`.
 Measured verbatim, an entry is:
 
@@ -377,8 +391,18 @@ Measured verbatim, an entry is:
 
 with the attributes in that order, the group literally `subs`, `AUTOSELECT=YES` on every entry,
 `DEFAULT=YES` on the selected stream and `NO` on the rest, `FORCED` from the stream's own flag,
-and the language falling back to a literal `Unknown` rather than being omitted. The variant line
+and the language falling back to a literal `Unknown` rather than being omitted. A variant line
 gains `,SUBTITLES="subs"` **last**, after the frame rate. Same probe.
+
+**Every variant line gains it, not one**, and that sentence was corrected at the tasks gate on
+2026-08-30 because the shape it describes changed underneath it: an HDR source whose video is
+stream-copied is offered a standard-range entrance beside the copy, so the master carries more
+than one variant. The reference gives the same group to every entrance it appends — the copy, the
+codec entrances, the level rewrite and the adaptive-bitrate variants alike `[source:
+Jellyfin.Api/Helpers/DynamicHlsHelper.cs:213-315, 325-345 @ v10.11.11]` — and it has to: the
+entrance exists so that a client which cannot render the copy has somewhere to go, and an
+entrance with no subtitle group is that client losing subtitles for the reason it was offered the
+entrance. AC-5 is written against every variant line for the same reason.
 
 **The address in a media entry is a playlist, not a file**, it is relative to the master
 playlist's own directory, and it carries two things the opening draft did not know about: a
@@ -574,9 +598,12 @@ remembered, which is the same line 008 draws for `DefaultSubtitleStreamIndex` an
    "change the track" path breaks against Atrium and no test here fails, so this criterion is the
    remaining one.)*
 5. A master playlist request whose **address** names the manifest delivery method beside a
-   subtitle stream index carries one media entry per text subtitle stream and a variant line
-   ending in the group name. Written against the address rather than against the profile because
-   the profile flag is unreachable on this route (§3.4), which is what OQ-1 measured.
+   subtitle stream index carries one media entry per text subtitle stream, and **every** variant
+   line it answers ends in the group name — including the standard-range entrance a
+   high-dynamic-range stream copy is offered beside the copy. Written against the address rather
+   than against the profile because the profile flag is unreachable on this route (§3.4), which is
+   what OQ-1 measured; written against *every* variant because the criterion was drafted when the
+   master answered exactly one and no longer does (§3.4).
 6. A master playlist for any request that does **not** name the manifest delivery method is
    **byte-identical** to the one the same request answers today — including one that names the
    manifest flag, one that names an index with no method, and one that names the external or
