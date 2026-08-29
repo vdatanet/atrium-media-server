@@ -122,7 +122,7 @@ say how it will be proven is not finished.
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Implemented** | **Implemented** | **Implemented** |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
-| [011](011-subtitle-delivery/) | Subtitle delivery | **Accepted** | — | — |
+| [011](011-subtitle-delivery/) | Subtitle delivery | **Accepted** | **Accepted** | — |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
 
 **001 through 008 are implemented**, 008 on 2026-08-29 across fourteen tasks. Its spec and plan

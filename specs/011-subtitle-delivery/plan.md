@@ -1,9 +1,10 @@
 ---
 feature: 011-subtitle-delivery
 title: Subtitle delivery — implementation plan
-status: Draft
+status: Accepted
 created: 2026-08-29
-updated: 2026-08-29
+updated: 2026-08-30
+accepted: 2026-08-30
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
