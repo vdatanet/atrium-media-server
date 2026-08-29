@@ -14,8 +14,10 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 **Features 001 through 007 are implemented**, 007 on 2026-08-28 across thirteen tasks —
 **[007](specs/007-user-data-and-playstate/) is implemented** (2026-08-28, thirteen tasks,
-probes first at all three gates), so **008 is next**, and what 007 leaves it is written in
-[007's tasks](specs/007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones). The three features after 007 are
+probes first at all three gates). **008's spec and plan are accepted** (2026-08-29, a review
+that wrote and ran the five probes the OQ table had been citing prospectively), so **008's task
+list is next**, and what 007 leaves it is written in
+[007's tasks](specs/007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones). 009 and 010 remain
 specified only, their specs still drafts. What 005 and 006 leave for each of them is written in
 [005's tasks](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones) and
 [006's](specs/006-images/tasks.md#what-this-feature-owes-the-next-ones), beside 004's standing
@@ -109,6 +111,7 @@ reasoning:
 | 007 T8 | Wire three routes to a proven core | **The first typed request body answered `{"item_id": …}`** — snake_case on the wire, because the framework keys validation errors on the model's Python field. Nothing had bound a body before, so behaviours §1.1's exact failure was one route away |
 | 007 T9 | Serialise a measured item shape | The plan asked for "a field selection derived from the measured width". Reading the property *list* showed the shape is a **subtraction** — a full item body minus a named fifteen — so the existing `omit` mechanism expresses it and `MediaSources` is excluded before 008 exists to emit it |
 | 007 T11 | Assert an aggregate nothing was expected to change | **The container `PlayedPercentage` had never been implemented.** AC-20's first half passed because there was no percentage to gate, and its second half was unreachable |
+| 008 gate | Answer twelve open questions, write a plan | **Five spec claims did not survive their own probes.** No playback route consults `EnableMediaPlayback` — the error table's `403` was fiction; the body's `EnableTranscoding: false` is ignored; `static=true` on a wrong container is the original bytes behind a lying label, not an error; `enableRedirection` never redirects a local file; and the reference's HLS segments already carry `Content-Length` — half of the project's flagship divergence measured as parity. Plus a defect nobody asked about: a 22 050 Hz sample-rate ceiling is answered at 24 000 — the Opus ladder applied to every codec |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
 question each, and a plain `urllib` request answers the rest.

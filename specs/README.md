@@ -119,14 +119,20 @@ say how it will be proven is not finished.
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
 | [006](006-images/) | Images | **Implemented** | **Implemented** | **Implemented** |
 | [007](007-user-data-and-playstate/) | User data and playstate | **Implemented** | **Implemented** | **Implemented** |
-| [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | Draft | — | — |
+| [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Accepted** | **Accepted** | — |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 
-**001 through 007 are implemented**, 007 on 2026-08-28 across thirteen tasks. The three specs
-after 007 remain drafts, and their open questions are the standing review agenda — **008 is the
-next feature, and 007 leaves it a tripwire rather than a gap**
-([007's tasks](007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones)).
+**001 through 007 are implemented**, 007 on 2026-08-28 across thirteen tasks. **008's spec and
+plan were accepted on 2026-08-29** at a review that wrote and ran the five probes its open
+questions had been citing prospectively — all twelve OQs answered, five claims overturned (the
+policy story, the body's `EnableTranscoding` switch, `static=true` as an error, `enableRedirection`'s
+`302`, and the HLS half of the §3.5 divergence, which measured as parity), and two defects found
+that nobody was looking for (behaviours §3.7 and §3.8: the Opus rate ladder applied to every
+codec, and the codec-less empty `200`). **008's tasks are next**; 009 and 010 remain drafts, and
+their open questions are the standing review agenda
+([007's tasks](007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones) names
+what 008 inherits).
 
 **007's thirteen tasks found something in seven of them, and two were features that did not
 exist.** The sharpest is T11's: **the container `PlayedPercentage` had never been implemented.**

@@ -61,7 +61,7 @@ specification section, a document line or a source line.
 | §4 Hand-built image and stream URLs | Four are surface rows; three are not, deliberately — see [§3](#3-the-thirty-operations-and-the-seven-urls) | ✅ / 🔴 |
 | §5a The two direct-play switches decide the mode | [008 §3.3](../../specs/008-playback-negotiation-and-delivery/spec.md): a step removed by the request is not silently substituted — the ladder falls through to transcode, with a `TranscodingUrl` | ✅ specified |
 | §5b The client rewrites the track indices in the returned `TranscodingUrl` | Nowhere | 🟠 [§4.3](#43-the-track-indices-in-a-transcodingurls-query-are-unspecified) |
-| §6 `Range`, `206`, and byte-exact `static=true` | [008 §3.5](../../specs/008-playback-negotiation-and-delivery/spec.md) and acceptance criteria 11–14 and 18 — stricter than the reference, deliberately ([behaviours §3.3](behaviours.md#33-transcoding-responses-carry-no-content-length-or-accept-ranges--class-c)) | ✅ specified |
+| §6 `Range`, `206`, and byte-exact `static=true` | [008 §3.5](../../specs/008-playback-negotiation-and-delivery/spec.md) and acceptance criteria 11–14 and 18 — stricter than the reference, deliberately ([behaviours §3.3](behaviours.md#33-progressive-transcoding-responses-carry-no-content-length-or-accept-ranges--class-c)) | ✅ specified |
 | §6 Subtitle tracks announced in the HLS master | Nowhere. Subtitle delivery of every kind is out of 008 | 🔴 [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
 | §7 What the client does *not* need | Agrees with v1's exclusions, item for item — see [§3.1](#31-the-exclusions-agree) | ✅ |
 

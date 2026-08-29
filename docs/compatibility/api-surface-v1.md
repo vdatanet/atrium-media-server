@@ -211,10 +211,12 @@ table depends on either**, which is why they can arrive later without the surfac
 
 **Range support is not optional.** Every delivery route must answer `Range` requests with `206`,
 correct `Content-Range` and `Accept-Ranges: bytes`, and must send `Content-Length` on non-chunked
-responses. Jellyfin's *transcoding* routes do not, and that single gap forces every client that
-casts to a DLNA renderer to run a local sizing proxy. Atrium serving a correct `Content-Length` on
-remuxed and transcoded output is one of the few places where being right costs nothing and helps a
-lot.
+responses. Jellyfin's *progressive* transcoding routes do not — its finished HLS segments,
+measured, already carry both `[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-28]` — and
+that progressive gap is what forces every client that casts to a DLNA renderer to run a local
+sizing proxy. Atrium serving a correct `Content-Length` on progressive remuxed output whose size
+is knowable is one of the few places where being right costs nothing and helps a lot
+([behaviours §3.3](behaviours.md#33-progressive-transcoding-responses-carry-no-content-length-or-accept-ranges--class-c)).
 
 ## 9. Playback reporting
 

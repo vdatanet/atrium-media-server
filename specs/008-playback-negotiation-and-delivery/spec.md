@@ -1,9 +1,11 @@
 ---
 feature: 008-playback-negotiation-and-delivery
 title: Playback negotiation and delivery
-status: Draft
+status: Accepted
 created: 2026-08-26
-updated: 2026-08-27
+updated: 2026-08-29
+accepted: 2026-08-29
+amended: 2026-08-29 at the spec review, which wrote the five probes the OQ table had been citing prospectively and ran all of them — all twelve open questions answered, and five claims did not survive: the policy story was fiction (no playback route consults `EnableMediaPlayback`, and a single denied permission moves nothing at negotiation — §3.2, §3.3, AC-31), `EnableTranscoding: false` in the request body is ignored (OQ-12), `static=true` on a mismatched container is not an error but the original bytes behind the wrong label (§3.5, AC-18), `enableRedirection` never redirects a local file (OQ-4, AC-21), and the reference's HLS segments already carry `Content-Length` — the §3.5 divergence shrank to the progressive routes. Plus one defect nobody was looking for: a sample-rate ceiling is answered from the Opus rate ladder and can be **exceeded** (§3.6, AC-19)
 depends_on: [005, 007]
 ---
 
@@ -83,6 +85,12 @@ information, channel layout, sample rate, language, and the default/forced/exter
 > `format_name` at item level — `"mov,mp4,m4a,3gp,3g2,mj2"` — while the resolved single container
 > lives on the media source. `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` Atrium reproduces both.
 > A client reading the item-level field expects the list form, and "fixing" it would be a delta.
+>
+> **And the source's own `Container` is only resolved against a profile.** On `/Items` and on a
+> negotiation that carries a `DeviceProfile`, the media source reports the single container
+> (`mp4`); a **profile-less** negotiation reports the raw demuxer list on the source too
+> `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28]`. The normalisation is
+> part of evaluating the profile, not part of the source.
 
 **Inspection is cached** and re-run only when the file changes. Probing an entire library on every
 request is not viable, and probing on first playback makes the first play of every item slow.
@@ -110,6 +118,17 @@ Each returned media source is **annotated with the decision** for this client: t
 set to what this profile can actually do, and `TranscodingUrl` populated when the answer is
 "fetch it from here instead of directly".
 
+**The annotation is per request, and the switches are not equals.** `EnableDirectPlay: false`
+on a profile the source satisfies flips `SupportsDirectPlay` to `false` and produces a
+`TranscodingUrl` — the flags describe *this* negotiation, not the source. `EnableTranscoding:
+false` on a profile that forces a transcode changes **nothing**: the `TranscodingUrl` arrives
+anyway. And `SupportsDirectStream` never answers independently — the reference disables its
+direct-stream path outright ("direct-stream http streaming is currently broken"), so the flag
+mirrors `SupportsDirectPlay` on every answer. `[probe: tools/probe_playback_info.py, Jellyfin
+10.11.11, 2026-08-28; source: Jellyfin.Api/Helpers/MediaInfoHelper.cs:251-268 @ v10.11.11]`
+A client that branches on `SupportsDirectStream` is branching on direct play, and Atrium keeps
+the mirror rather than resurrecting a distinction no reference answer draws.
+
 **`PlaySessionId` ties everything together** — this negotiation, the delivery request that follows,
 and the three reports of 007. It is what makes `DELETE /Videos/ActiveEncodings` able to stop the
 right thing.
@@ -120,19 +139,36 @@ right thing.
 |---|---|
 | Unknown or invisible item | `404` |
 | Unauthenticated | `401` |
-| User lacks `EnableMediaPlayback` | `403` |
+| User lacks `EnableMediaPlayback` | `200`, **the negotiation unchanged** — see below |
 | No source can be played by this profile | `200`, **not** a `4xx` — and **no** `ErrorCode`: the refusal is the source's own capability flags |
 
-That last row is the important one, and its first wording did not survive measurement: this table
-said an `ErrorCode` arrives, and none does. A profile that can play nothing gets `200` with
-`SupportsDirectPlay`, `SupportsDirectStream` and `SupportsTranscoding` all `false`, no
+The last two rows are the important ones, and neither survived in its first wording.
+
+The refusal row said an `ErrorCode` arrives, and none does. A profile that can play nothing gets
+`200` with `SupportsDirectPlay`, `SupportsDirectStream` and `SupportsTranscoding` all `false`, no
 `TranscodingUrl`, and no `ErrorCode` — measured in four request shapes, transcoding allowed and
 forbidden `[probe: tools/probe_playback_refusal.py, Jellyfin 10.11.11, 2026-08-28]`. A `4xx`
 would still be read as a transport failure; what a client actually branches on is the flags.
 
+The `EnableMediaPlayback` row said `403`, and **no playback route consults the permission at
+all**. A user whose policy denies playback negotiates exactly as anyone else — same flags, same
+`TranscodingUrl`, no error `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11,
+2026-08-28]`. The flag's only consumers at 10.11.11 are the item DTO's `PlayAccess` property and
+the remote-control `Play` command `[source: MediaBrowser.Controller/Entities/BaseItem.cs:1057,
+Emby.Server.Implementations/Session/SessionManager.cs:1321 @ v10.11.11]`. A `403` here would
+have been an invented refusal — a delta a policy-restricted client would observe.
+
+**`ErrorCode` has one real value.** The schema's vocabulary is `NotAllowed`,
+`NoCompatibleStream` and `RateLimitExceeded` `[spec: PlaybackInfoResponse]`, but the reference
+has exactly one assignment site: `NoCompatibleStream`, set when the **media source list is
+empty** `[source: Jellyfin.Api/Helpers/MediaInfoHelper.cs:123 @ v10.11.11]`. The other two are
+dead members no response can carry. Atrium emits `NoCompatibleStream` in the same one place and
+nothing else anywhere.
+
 **`GET /Items/{itemId}/PlaybackInfo`** is the profile-less variant, included by design. Without a
 profile there is nothing to negotiate against, so it returns the sources with their intrinsic
-capabilities and leaves the choice to the client.
+capabilities — all three flags `true`, no `TranscodingUrl` — and still issues a `PlaySessionId`
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 ### 3.3 The decision
 
@@ -156,19 +192,38 @@ Given a media source and a device profile, exactly one outcome:
 3. **Transcode** — some output this server can produce satisfies the profile: a container it
    accepts, holding codecs it accepts, within every ceiling it declared. Only the streams that fail
    a condition are re-encoded (§3.4).
-4. **Not playable** — the profile accepts no container, or no codec, that v1 can produce. Say so, in
-   the body, with the reason.
+4. **Not playable** — the profile accepts no container, or no codec, that v1 can produce. The
+   answer is the capability flags all `false` (§3.2) — not an error, and not an `ErrorCode`.
+
+**On the wire, remux and transcode are one shape.** A remux answer is a `TranscodingUrl` like
+any transcode's, with `TranscodeReasons=ContainerNotSupported` in its query and the elementary
+streams copied at delivery; `SupportsDirectStream` stays `false` because it mirrors direct play
+(§3.2). What separates the two outcomes is what the session does per frame, and a client sees it
+only in the reasons list `[probe: tools/probe_transcode_decision.py, Jellyfin 10.11.11,
+2026-08-28]`.
 
 **"Not playable" is now a much smaller set**, and it is worth being precise about what is left in
 it: a profile listing only containers or codecs this server cannot produce, a source whose streams
 cannot be decoded at all, a source that is not readable, and a user whose policy forbids the step
 that would have answered.
 
-**The user's policy gates the ladder.** `EnableVideoPlaybackTranscoding`,
-`EnableAudioPlaybackTranscoding` and `EnablePlaybackRemuxing` remove their step from the evaluation
-for that user (002 §3.5); the request body's `EnableDirectPlay` / `EnableDirectStream` /
-`EnableTranscoding` switches remove it for that request. A step that is removed is not silently
-substituted: the decision falls through to the next one, and to "not playable" if none is left.
+**The user's policy barely gates the ladder, and the spec's first draft said otherwise.** The
+measured rule at 10.11.11: a **single** denied permission changes nothing at negotiation. For a
+video item, `SupportsTranscoding` goes `false` only when `EnableVideoPlaybackTranscoding`,
+`EnableAudioPlaybackTranscoding` **and** `EnablePlaybackRemuxing` are all denied at once; for an
+audio item, `EnableAudioPlaybackTranscoding` alone decides `[probe:
+tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28; source:
+Jellyfin.Api/Helpers/MediaInfoHelper.cs:278-293 @ v10.11.11]`. Even the all-denied answer is
+flags, never an `ErrorCode`. At **delivery** the enforcement is stranger still: a user denied
+`EnableVideoPlaybackTranscoding` has the video stream **force-copied "regardless of whether it
+will be compatible or not"** `[source:
+MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:7142 @ v10.11.11]` — an output that can
+violate the profile it was negotiated for. Atrium replicates the negotiation rule exactly (the
+all-three gate, flags not errors); at delivery it honours the same gate by refusing the
+re-encode step, but it never ships an output that violates the negotiated profile — a
+force-copied incompatible stream fails at the client's decoder, and no client can *depend* on
+receiving a broken stream. Of the request body's switches, `EnableDirectPlay` is honoured and
+`EnableTranscoding` is ignored (§3.2); Atrium reproduces both.
 
 **Three rules that prevent the classic failures:**
 
@@ -220,16 +275,27 @@ the refusal happens at the client's decoder, far from the cause, and looks like 
 than an unsupported one.
 
 **Work starts where the client asked to start.** A request carrying a start position begins
-production at that position; it does not produce from the beginning and discard. Seeking to the last
-minute of a long film must not cost the whole film.
+production at that position; it does not produce from the beginning and discard. Measured: a
+segment at ~90% of a 2h22 film arrives in 0.9 seconds, and the session's progress jumps to the
+seek point — the transcoder is restarted at the requested position, and the same holds for a
+segment requested far ahead of the produced window `[probe: tools/probe_transcode_session.py,
+Jellyfin 10.11.11, 2026-08-28]`.
 
-**Production is throttled, not unbounded.** Work runs ahead of the player by a bounded margin and
-then waits. Without a ceiling, one client seeking repeatedly through a film has the server encoding
-several copies of it at once, and the machine is lost to a user who is not even watching.
+**Throttling is an operator setting, off as shipped.** The reference's `EnableThrottling`
+defaults to `false` — an idle client leaves the encoder producing the whole file — and when an
+operator enables it, production pauses once it leads the last downloaded position by
+`max(ThrottleDelaySeconds, 60)` seconds, 180 by default, resuming when the gap closes `[source:
+MediaBrowser.Model/Configuration/EncodingOptions.cs:23-24,
+MediaBrowser.Controller/MediaEncoding/TranscodingThrottler.cs:118-171 @ v10.11.11]`. Measured on
+a throttled server: production stalls ~180 seconds ahead of the one fetched segment and stays
+there `[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-28]`. Atrium ships
+the same two knobs with the same defaults and the same pause-at-gap behaviour — the draft's
+"always throttled" would have been an observable difference in how much of a file exists after
+an abandoned session, and the operator who wants the bound can turn it on in both servers.
 
 **A transcode is bounded work with an owner**: it belongs to a playback session (§3.8), it stops
 when the session stops, when the client disconnects, and when the server shuts down, and its output
-lives in scratch space with a ceiling.
+lives in scratch space that dies with the session (§3.8).
 
 **Determinism is per session.** For a remux, the byte-identity rule holds globally: the same source
 and parameters give the same segments. For a re-encode the guarantee is narrower and is the one
@@ -255,15 +321,32 @@ them (§3.3).
 
 | Requirement | Behaviour |
 |---|---|
-| `Accept-Ranges: bytes` | On every delivery response |
-| `Range: bytes=a-b` | `206` with a correct `Content-Range` |
-| Multiple ranges | Single range honoured; multi-range may be answered as the full body |
-| Unsatisfiable range | `416` with `Content-Range: bytes */total` |
+| `Accept-Ranges: bytes` | On every delivery response whose body has a known size |
+| `Range: bytes=a-b` | `206` with a correct `Content-Range` and exactly the bytes asked for |
+| Suffix range `bytes=-n` | `206` with the last `n` bytes |
+| Multiple ranges | The full body as `200` — the reference does not split |
+| Reversed range `bytes=b-a` | The full body as `200`, not a `416` |
+| Unsatisfiable range | `416` with `Content-Range: bytes */total` and `Content-Length: 0` |
 | No `Range` | `200` with the full body |
+
+The whole table is measured, not designed: the matrix runs against a direct-play
+`/Videos/{itemId}/stream?static=true` — `bytes=100-199` answers `206` with
+`Content-Range: bytes 100-199/{size}` and a `Content-Length` of exactly `100`; the suffix form
+answers the last bytes; the multi-range, reversed and no-`Range` shapes all answer `200` with
+the full body; one byte past the end is the `416` with `Content-Length: 0`.
+`[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-28]`
 
 **`Content-Length` is sent whenever the size is known** — always for direct play, for remuxed
 output whenever it can be computed or the output is produced to a seekable location first, and for
 every HLS segment, which is finished before it is served.
+
+**For HLS this is parity, not a divergence.** The measurement narrowed the draft's claim: the
+reference's finished segments already answer with `Content-Length`, `Accept-Ranges: bytes` and
+byte-identical retries, and its playlists carry a length too `[probe: tools/probe_hls.py,
+Jellyfin 10.11.11, 2026-08-28]`. What stays chunked and sizeless on the reference is the
+**progressive** family — `/stream` remuxes and re-encodes, `/universal` over http — which
+forces `Accept-Ranges: none` and no length even where the size is knowable, a remux to a
+seekable location included ([behaviours §3.3](../../docs/compatibility/behaviours.md#33-progressive-transcoding-responses-carry-no-content-length-or-accept-ranges--class-c)).
 
 **The one delivery in v1 that cannot carry a size** is a progressive (non-HLS) re-encode, where the
 final length is not known until the last frame is produced. That response is chunked, exactly as the
@@ -271,18 +354,25 @@ reference's is. The rule is *send the size when it is known*, never *invent one*
 `Content-Length` truncates playback, which is a worse failure than the missing header this project
 went out of its way to fix.
 
-> **This is a deliberate divergence, and the most useful one in v1.** The reference's transcoding
-> and remuxing routes answer chunked, with no size and no range support, *including where the size
-> is perfectly knowable* — a finished HLS segment, a remux to a seekable location. That single gap
-> is why
-> every client that casts to a DLNA renderer has to run a local proxy: a renderer will not touch a
-> stream whose size it does not know. Recorded in
-> [behaviours §3.3](../../docs/compatibility/behaviours.md#33-transcoding-responses-carry-no-content-length-or-accept-ranges--class-c).
-> A client cannot branch on a response being *more* correct, so Principle I is not violated.
+> **The deliberate divergence is now exactly one route family.** Where a progressive remux's
+> size is knowable, Atrium sends it and honours `Range`; the reference answers chunked with
+> `Accept-Ranges: none` `[source:
+> Jellyfin.Api/Helpers/FileStreamResponseHelpers.cs:123-135 @ v10.11.11]`. That gap is why every
+> client that casts to a DLNA renderer runs a local sizing proxy: a renderer will not touch a
+> stream whose size it does not know. A client cannot branch on a response being *more* correct,
+> so Principle I is not violated — and the HLS half of the draft's divergence dissolved into
+> parity when it was measured.
 
-**`static=true`** requests the original bytes with no processing. Honoured exactly: if the source
-cannot be served untouched, the answer is an error, not a silent remux. A client asking for static
-is usually downloading, and silently handing it a rewritten container corrupts what it saves.
+**`static=true`** requests the original bytes with no processing, and the reference honours the
+*bytes* absolutely — including past the URL. `stream.mp3?static=true` on a FLAC source answers
+`200` with the untouched FLAC bytes behind a `Content-Type: audio/mpeg` label, and
+`stream.mkv?static=true` on an mp4 film serves the mp4 bytes as `video/x-matroska`: the path's
+container decides the label and nothing else, and no error, remux or re-encode ever happens on a
+static request `[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-28]`
+(behaviours §2.20). The draft said a mismatch would be an
+error; it is not, and inventing one would break the client that names a wrong container while
+downloading — it still receives, correctly, the original file. Atrium replicates: static always
+serves the source bytes, whatever the path says.
 
 **Authentication** is via any of the four mechanisms (002 §3.1), in practice `?api_key=`, because
 these URLs go to media players that do not set headers.
@@ -299,17 +389,34 @@ these URLs go to media players that do not set headers.
 `maxAudioSampleRate`, `maxAudioBitDepth`, `transcodingContainer`, `transcodingProtocol`,
 `startTimeTicks`, `deviceId`, `userId`, `mediaSourceId` and `enableRedirection`. `[spec: GetUniversalAudioStream]`
 
-**`/universal` meets the constraints it is given, re-encoding where it must.** A sample-rate
-ceiling below the source, a bit-depth ceiling, a channel ceiling, a codec the client cannot decode:
-each is a reason to convert, and the answer is a stream that satisfies every stated constraint. The
-rule that does not bend is the one that was already here — **it never serves something that violates
-a constraint the client stated.** A client that asked for at most 48 kHz and received 96 kHz fails
-at its own decoder, further from the cause. Only a constraint set that v1 cannot produce at all
-answers with an error.
+**`/universal` re-encodes to meet a constraint the source violates** — a sample-rate ceiling, a
+bit-depth ceiling, a channel ceiling, a codec the client cannot decode — **and the reference
+then misses the target it was aiming at.** At 10.11.11 the output sample rate is not the ceiling
+but the nearest step of the ladder Opus needs — `≤8000, ≤12000, ≤16000, ≤24000, else 48000` —
+applied to **every** codec: a stated ceiling of 22 050 Hz is answered at 24 000 Hz, above what
+the client declared `[probe: tools/probe_universal_audio.py, Jellyfin 10.11.11, 2026-08-28]`.
+The restructure that scopes the ladder to Opus is merged upstream and in no 10.11.x — the same
+family as behaviours §3.2's PCM fix. **Atrium honours the ceiling exactly**: a client that asked
+for at most 22 050 Hz receives at most 22 050 Hz, because an output above a declared ceiling
+fails at the client's decoder, far from the cause (recorded as the divergence in
+[behaviours §3.7](../../docs/compatibility/behaviours.md#37-a-sample-rate-ceiling-is-answered-from-the-opus-ladder--class-b-diverged)).
 
-**`enableRedirection`** may answer `302` to the direct-play URL rather than proxying, which is
-strictly better for the client. It is honoured when the client asks for it and direct play was the
-decision.
+**A codec-less transcode request is the reference's other hole here.** `/universal` with a
+`transcodingProtocol` of `http` and no `audioCodec` builds a transcoding profile with no codec
+in it, the encoder invocation dies at once, and the route answers `200` with a
+`Content-Length: 0` empty body `[probe: tools/probe_universal_audio.py, Jellyfin 10.11.11,
+2026-08-28]`. Nothing can be built on an empty body behind a `200`; Atrium answers the request
+with a stream, choosing the transcoding container's own codec when the client names none
+([behaviours §3.8](../../docs/compatibility/behaviours.md#38-universal-without-audiocodec-answers-an-empty-200--class-a-diverged)).
+
+**`enableRedirection` never redirects a local file, and the draft said otherwise.** The `302`
+branch requires a source that is **remote** over HTTP, direct-playable, and a user with
+`EnableRemoteMedia` — all at once `[source:
+Jellyfin.Api/Controllers/UniversalAudioController.cs:175 @ v10.11.11]`; a library file is
+protocol `File`, so a direct-play answer for anything a v1 library holds is proxied bytes with a
+`200`, redirection enabled or not — measured `[probe: tools/probe_universal_audio.py, Jellyfin
+10.11.11, 2026-08-28]`. Atrium accepts the parameter and, having no remote sources in v1, never
+answers `302` — exactly the reachable subset of the reference's rule.
 
 > ⚠️ **The reference's PCM/WAV routes are broken at 10.11.11**: `stream.wav` with any PCM codec
 > answers `500`, and `/universal` with `Container=wav` answers `200` with a body that has no RIFF
@@ -330,9 +437,27 @@ that only follows the playlist cannot tell, which is the point:
 
 | Route | Returns |
 |---|---|
-| `/Videos/{itemId}/master.m3u8` | The master playlist: the variant this negotiation decided on |
+| `/Videos/{itemId}/master.m3u8` | The master playlist: **exactly one variant** for this negotiation |
 | `/Videos/{itemId}/main.m3u8` | The media playlist: the segment list |
 | `/Videos/{itemId}/hls1/{playlistId}/{segmentId}.{container}` | One segment |
+
+**The measured shape** `[probe: tools/probe_hls.py, tools/probe_transcode_decision.py, Jellyfin
+10.11.11, 2026-08-28]`:
+
+- The master playlist advertises **one** `#EXT-X-STREAM-INF` variant — never a ladder — whose
+  `CODECS`, `RESOLUTION`, `FRAME-RATE` and `BANDWIDTH` describe the negotiated output, and whose
+  URI is a relative `main.m3u8` carrying the entire query string forward. (The reference adds an
+  `#EXT-X-IMAGE-STREAM-INF` trickplay entry when it has trickplay images; v1 has none, and a
+  master playlist without one is a server with nothing to advertise there, not a different
+  shape.)
+- The media playlist is `#EXT-X-PLAYLIST-TYPE:VOD`, `#EXT-X-VERSION:3`,
+  `#EXT-X-MEDIA-SEQUENCE:0`, ends with `#EXT-X-ENDLIST`, and arrives **complete in a fraction of
+  a second, before any segment exists** — 2 843 segments in 0.18 s. The boundaries are predicted
+  from the source, not derived from produced output; this is what makes rule 1 below possible at
+  all.
+- Every `#EXTINF` line ends `, nodesc`, and every segment URI repeats the full query plus two
+  per-segment parameters: `runtimeTicks` (the segment's cumulative start offset) and
+  `actualSegmentLengthTicks` (its exact duration).
 
 Rules:
 
@@ -342,7 +467,10 @@ Rules:
    output the byte-identity half of this holds **within the session** (§3.4); the boundaries hold
    always.
 2. **Segment duration is uniform** except for the last, and the playlist's declared duration matches
-   what is delivered. Players build their seek bar from this.
+   what is delivered. Players build their seek bar from this. The number itself depends on the
+   path: the same film measured 3.004 s per segment re-encoded (the forced-keyframe cadence at
+   23.976 fps) and 6.0 s per segment stream-copied (the source's own keyframes), each uniform
+   within its session.
 3. **A segment requested out of order is served.** Players seek; they do not walk the playlist.
 4. **The playlist is complete and marked ended** for a finite source. A live-style rolling playlist
    would make the file appear unseekable.
@@ -366,10 +494,22 @@ stops. The reference is called by real clients for exactly this reason, and a se
 `204` while leaving work running accumulates processes until the machine dies. Answering `204`
 without acting is worse than not implementing the route, because it looks correct.
 
-**Scratch space is bounded and reclaimed**: by session on stop, by age on a sweep, and by total
-size when a ceiling is reached. A remux that fills the disk takes the server down with it, and a
-transcode fills it faster — the output of a re-encode is written wholesale, and a user who seeks
-around a long film produces far more of it than they watch.
+**Its parameters are both mandatory, and it measurably acts.** `deviceId` and `playSessionId`
+are each required — omitting either answers a validation `400` naming the missing field — and
+the well-formed call answers `204` with the session's `TranscodingInfo` gone from `/Sessions`
+immediately after `[spec: StopEncodingProcess; probe: tools/probe_transcode_session.py, Jellyfin
+10.11.11, 2026-08-28]`. It stops one session, the named one, not everything the device owns.
+
+**Scratch space is reclaimed the way the reference reclaims it**: by session — on the stop
+route, and when a session goes unpinged past its kill timeout, the partial output is deleted
+with the job `[source:
+MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:145-275 @ v10.11.11]` — and by age
+behind the operator's produced-segment knobs (`EnableSegmentDeletion`, off as shipped;
+`SegmentKeepSeconds`, 720) `[source:
+MediaBrowser.Model/Configuration/EncodingOptions.cs:25-26 @ v10.11.11]`. Atrium ships the same
+knobs with the same defaults. A remux that fills the disk takes the server down with it, and a
+transcode fills it faster — which is why the session-scoped reclamation is not optional even
+though the age-based one is.
 
 ## 4. Data the feature owns
 
@@ -388,10 +528,12 @@ around a long film produces far more of it than they watch.
    `TranscodingUrl`.
 4. A profile rejecting the codecs, but accepting at least one codec and container this server can
    produce, answers **transcode**, with a `TranscodingUrl` — not an error.
-5. A profile accepting no container or codec this server can produce answers `200` with an
-   `ErrorCode` — never a `4xx`.
+5. A profile accepting no container or codec this server can produce answers `200` with every
+   capability flag `false`, no `TranscodingUrl`, and **no `ErrorCode`** — never a `4xx`. The one
+   `ErrorCode` that exists, `NoCompatibleStream`, is emitted exactly when the media source list
+   is empty (§3.2).
 6. `SupportsTranscoding` is `true` exactly on the sources whose negotiated answer is a stream this
-   server can produce, and `false` on the ones that answered with an `ErrorCode`.
+   server can produce, and `false` on the ones refused with every flag down.
 7. A source whose video the profile accepts and whose audio it does not is delivered with its
    **video stream copied**: same codec, same resolution, same frame count as the source.
 8. Delivered output satisfies **every** condition of the profile it was negotiated against —
@@ -407,13 +549,17 @@ around a long film produces far more of it than they watch.
 16. Every HLS segment carries a `Content-Length`, whether it was remuxed or re-encoded.
 17. A progressive re-encode whose final size is unknown answers chunked, and never a
     `Content-Length` that is not the true length.
-18. `static=true` on a source that cannot be served untouched answers an error, never a silent remux
-    or re-encode.
+18. `static=true` always serves the untouched original bytes — never an error, a remux or a
+    re-encode. A container-suffixed static URL that does not match the source changes only the
+    `Content-Type` label, byte-for-byte identical body (§3.5).
 19. `/universal` with a constraint that requires re-encoding — a sample-rate, bit-depth or channel
-    ceiling below the source — answers a stream that **meets** the constraint.
+    ceiling below the source — answers a stream that **meets** the constraint: the target is the
+    stated ceiling, not the reference's Opus-ladder step above it (§3.6, behaviours §3.7).
 20. `/universal` with `Container=wav` answers a body with a valid RIFF header and a real length
     ([behaviours §3.2](../../docs/compatibility/behaviours.md#32-pcmwav-output--one-bug-two-symptoms-two-classes)).
-21. `/universal` with `enableRedirection` and a direct-play decision answers `302`.
+21. `/universal` accepts `enableRedirection` and **never answers `302` for a local source**: the
+    direct-play answer is the proxied bytes with a `200` (§3.6). The redirect branch exists only
+    for remote HTTP sources, which v1 does not have.
 22. The same **remuxed** HLS source requested twice yields identical segment boundaries and
     identical segment bytes.
 23. Within one session, a **re-encoded** segment requested twice yields identical bytes.
@@ -421,15 +567,22 @@ around a long film produces far more of it than they watch.
 25. `DELETE /Videos/ActiveEncodings` terminates the work, verified by the absence of the process and
     the reclamation of its scratch space.
 26. A client disconnecting mid-remux or mid-transcode causes the work to stop within the timeout.
-27. Production is throttled: a client that fetches the first segments and then stops does not cause
-    the whole source to be produced.
+27. With throttling enabled in configuration, a client that fetches the first segments and then
+    stops does not cause the whole source to be produced: production pauses at the configured
+    gap. With it disabled — the shipped default, matching the reference — production continues
+    to the end (§3.4).
 28. Item-level `Container` is the demuxer list; the media source's `Container` is the single
     resolved container.
-29. Scratch space never exceeds its configured ceiling under repeated remux and transcode requests.
+29. Scratch space is reclaimed with its session: after a stop, a kill-timeout or a shutdown,
+    nothing of the session's output remains; with segment deletion enabled, produced segments
+    older than the configured window are removed while the session still runs (§3.8).
 30. A `PlaySessionId` from `PlaybackInfo` is accepted by the delivery route and by
     `ActiveEncodings`.
-31. A user whose policy denies transcoding never receives one: the same request that answers
-    transcode for a permitted user answers `200` with an `ErrorCode` for this one.
+31. Policy shapes the negotiation exactly as measured (§3.3): a user denied **every**
+    playback-processing permission negotiates `SupportsTranscoding: false` and no
+    `TranscodingUrl`; a user denied only one of them negotiates exactly as a permitted user; and
+    no policy shape produces an `ErrorCode` or a `4xx`. At delivery, a denied user's re-encode
+    step is refused rather than force-copied into an output that violates the profile.
 
 ## 6. Conformance
 
@@ -442,7 +595,7 @@ around a long film produces far more of it than they watch.
 | Container-suffixed forms | **L2** | Same assertions, path-derived container |
 | HLS routes | **L2** | Playlist shape, segment determinism (AC-22, AC-23), out-of-order fetch |
 | Transcoded output | **L2** | The delivered bytes are inspected and asserted against the profile they were negotiated for (AC-8, AC-9). **Not** byte-compared with the reference |
-| Throttling and scratch ceiling | **L2** | Produced output observed against what was fetched (AC-27, AC-29) |
+| Throttling and scratch reclamation | **L2** | Produced output observed against what was fetched (AC-27, AC-29) |
 | `DELETE /Videos/ActiveEncodings` | **L2** | Process and scratch-space observation (AC-25) |
 
 **Transcoded bytes are not compared with the reference, and never will be.** Two encoders given the
@@ -463,25 +616,31 @@ takes minutes is a suite that stops being run.
 
 ## 7. Open questions
 
-| # | Question | Blocks | Resolved by |
-|---|---|---|---|
-| OQ-1 | The reference's `ErrorCode` vocabulary and which code it uses for each failure | AC-5's exact value | `tools/probe_playback_info.py` |
-| OQ-2 | Does the reference set `SupportsDirectPlay` per source or per request? | Annotation semantics in §3.2 | `tools/probe_playback_info.py` |
-| OQ-3 | The reference's HLS segment duration and boundary rule | Segment-level parity | `tools/probe_hls.py` |
-| OQ-4 | Does the reference honour `enableRedirection`, and with which status? | AC-21 | `tools/probe_universal_audio.py` |
-| OQ-5 | Which of the 19 `/universal` parameters clients actually send | Parameter coverage | Differential harness (010) |
-| OQ-6 | Does `DELETE /Videos/ActiveEncodings` take the session id as a query parameter or apply to all of the caller's? | AC-25, AC-30 | `[spec: StopEncodingProcess]` plus a probe |
-| OQ-7 | Does the reference's master playlist advertise one variant or several when the answer is a transcode? | §3.7's master-playlist row | `tools/probe_transcode_decision.py` |
-| OQ-8 | Which container and codecs the reference picks for a given profile, and what it puts in `TranscodingContainer`, `TranscodingSubProtocol` and the `TranscodingUrl` parameters | Whether a client that parses that URL sees what it expects | `tools/probe_transcode_decision.py` |
-| OQ-9 | Does the reference copy the compatible stream and re-encode only the other, or re-encode both? | §3.4's stream table, AC-7 | `tools/probe_transcode_decision.py` |
-| OQ-10 | The reference's throttle margin and what it does when a client stops fetching | AC-27's threshold | `tools/probe_transcode_session.py` |
-| OQ-11 | Does the reference start work at the requested position, or produce from zero and discard? | AC-10's threshold | `tools/probe_transcode_session.py` |
-| OQ-12 | What the reference answers when transcoding is refused by `EnableTranscoding: false` in the request body | An error path §3.2 does not yet name | `tools/probe_playback_info.py` |
+None open. OQ-5 moved to the 010 differential, where it always belonged; the other eleven were
+answered at the spec review on 2026-08-28, by the five probes the table had been citing
+prospectively — every one of which now exists and runs.
 
-**OQ-7 to OQ-12 arrived with the scope change on 2026-08-27** and none of them blocks the *decision*
-this specification makes — they block the *parity* of the values it reports. That is the honest
-statement of where this feature stands: what Atrium does is specified, what the reference puts in
-four fields while doing it is measured before the plan, not guessed after it (Principle II).
+### Resolved
+
+| # | Question | Answer | Resolved by |
+|---|---|---|---|
+| OQ-1 | The `ErrorCode` vocabulary and which code fires for each failure | **Three enum members, one assignment site.** `NoCompatibleStream` when the source list is empty; `NotAllowed` and `RateLimitExceeded` are dead vocabulary. A profile refusal is flags, not a code — AC-5 rewritten | `tools/probe_playback_info.py` and source, 2026-08-28 |
+| OQ-2 | `SupportsDirectPlay` per source or per request? | **Per request** — `EnableDirectPlay: false` flips the flag on a source the profile satisfies. And `SupportsDirectStream` mirrors `SupportsDirectPlay` always: the reference's direct-stream path is disabled outright | `tools/probe_playback_info.py`, 2026-08-28 |
+| OQ-3 | The HLS segment duration and boundary rule | **Predicted up front, uniform except the last, `, nodesc`, per-segment `runtimeTicks` and `actualSegmentLengthTicks`.** 3.004 s re-encoded at 23.976 fps, 6.0 s stream-copied, same film — the complete VOD playlist (2 843 segments) arrives in 0.18 s, before any segment exists | `tools/probe_hls.py`, 2026-08-28 |
+| OQ-4 | Does `enableRedirection` answer `302`? | **Never for a local file.** The redirect requires a remote HTTP source and `EnableRemoteMedia`; a library file is proxied `200` bytes — AC-21 rewritten | `tools/probe_universal_audio.py` and source, 2026-08-28 |
+| OQ-5 | Which `/universal` parameters clients actually send | Moved to the 010 differential — a question about clients, not about the reference | — |
+| OQ-6 | `DELETE /Videos/ActiveEncodings`: session id or all of the caller's? | **One session, both parameters mandatory.** Omitting `playSessionId` is a validation `400` naming it; the well-formed call is `204` and the session's `TranscodingInfo` is gone | `tools/probe_transcode_session.py`, 2026-08-28 |
+| OQ-7 | One variant or several in the master playlist? | **Exactly one** `#EXT-X-STREAM-INF` (plus a trickplay `#EXT-X-IMAGE-STREAM-INF` when the reference has trickplay images; v1 has none) | `tools/probe_transcode_decision.py`, 2026-08-28 |
+| OQ-8 | What goes into `TranscodingContainer`, `TranscodingSubProtocol` and the `TranscodingUrl` | **`ts` / `hls`, and a relative `/videos/{dashed-id}/master.m3u8?&…`** with PascalCase parameters: `DeviceId`, `MediaSourceId`, `VideoCodec`, `AudioCodec`, stream indexes and bitrates, `SegmentContainer`, `PlaySessionId`, `ApiKey` (the caller's token), `Tag` (the source `ETag`), source-codec condition triplets (`hevc-level`, `hevc-profile`, `hevc-videobitdepth`) and `TranscodeReasons` | `tools/probe_transcode_decision.py`, 2026-08-28 |
+| OQ-9 | Copy the compatible stream, or re-encode both? | **Copy.** The accepted video codec survives byte-inspected in the segment (`IsVideoDirect: true`), only the rejected audio is re-encoded — §3.4's table is parity | `tools/probe_transcode_decision.py`, 2026-08-28 |
+| OQ-10 | The throttle margin, and what happens when fetching stops | **An operator setting, off as shipped.** `EnableThrottling` defaults `false`; enabled, production pauses `max(ThrottleDelaySeconds, 60)` s (default 180) ahead of the last download — measured stalled at the gap. §3.4 and AC-27 rewritten around the configuration | `tools/probe_transcode_session.py` and source, 2026-08-28 |
+| OQ-11 | Start at the requested position, or produce from zero? | **Restart at the position.** A segment at ~90% of a 2 h 22 film arrives in 0.9 s and the session's progress jumps to the seek point | `tools/probe_transcode_session.py`, 2026-08-28 |
+| OQ-12 | What does `EnableTranscoding: false` in the body answer? | **It is ignored.** The `TranscodingUrl` arrives anyway — there is no error path to name, and inventing one would be a delta | `tools/probe_playback_info.py`, 2026-08-28 |
+
+**And two things nobody asked** fell out of the same session: the reference's `/universal`
+answers a sample-rate ceiling from the Opus ladder — above the ceiling when it falls between
+steps — and answers a codec-less http transcode request with an empty `200` (§3.6, behaviours
+§3.7 and §3.8).
 
 ## 8. References
 
