@@ -318,6 +318,108 @@ def _assert_opens_nothing(module: Path, described: str) -> None:
 
 
 # ------------------------------------------------------------------------------------------
+# Every ffmpeg has an owner
+# ------------------------------------------------------------------------------------------
+
+#: architecture.md section 4 says every external process this server starts belongs to something
+#: that can stop it, and 008 makes that load-bearing: an encoder nobody owns keeps running after
+#: the client that wanted it has gone, and a server that accumulates those dies of them.
+#:
+#: **Two** modules may reach for a process, and the 008 task list expected three: it named
+#: `media/sessions.py` beside these, and the manager turned out not to need the capability at
+#: all. It starts everything through the ledger, so the exemption would have been a hole rather
+#: than a permission - and the sweep is stronger without it, because a manager that grew its own
+#: `create_subprocess_exec` would be a manager whose processes the ledger does not list.
+#:
+#: `media/probe.py` runs ffprobe to completion and reads its output; `media/ffmpeg.py` holds the
+#: `ProductionLedger`, which is the whole set of live processes and the thing AC-26 asks to be
+#: empty. A sweep rather than a discipline: the third module to spawn a process fails this test
+#: on the line that imports the capability, which is a great deal earlier than the operator
+#: noticing.
+MAY_START_A_PROCESS = ("media/probe.py", "media/ffmpeg.py")
+
+#: The owner the task list expected to need an exemption. Checked explicitly rather than left to
+#: the sweep, because "it happens not to import subprocess today" and "it starts its processes
+#: through the ledger on purpose" are the same test result and different facts.
+SUPERVISED_THROUGH_THE_LEDGER = "media/sessions.py"
+
+
+def package_modules() -> list[Path]:
+    return sorted(PACKAGE.rglob("*.py"))
+
+
+@pytest.mark.parametrize("relative", [*MAY_START_A_PROCESS, SUPERVISED_THROUGH_THE_LEDGER])
+def test_the_supervised_modules_exist_to_be_checked(relative: str) -> None:
+    """A renamed module would otherwise make the sweep below pass by exempting nothing."""
+    assert (PACKAGE / relative).exists(), f"{relative} does not exist under atrium/"
+
+
+def process_spawners(module: Path) -> list[str]:
+    """Which of the two spellings that start a process this module reaches for.
+
+    `subprocess` and `asyncio.create_subprocess_*`. Named rather than pattern-matched, because
+    what is being detected is *reaching for* the capability: a module that imports either has a
+    process in it somewhere.
+    """
+    tree = ast.parse(module.read_text(encoding="utf-8"))
+    imported = {
+        alias.name.split(".")[0]
+        for node in ast.walk(tree)
+        for alias in getattr(node, "names", [])
+        if isinstance(node, ast.Import)
+    } | {
+        node.module.split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module
+    }
+    return sorted(
+        {name for name in ("subprocess",) if name in imported}
+        | {
+            f"asyncio.{node.attr}"
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute) and node.attr.startswith("create_subprocess")
+        }
+    )
+
+
+@pytest.mark.parametrize("module", package_modules(), ids=lambda path: path.name)
+def test_only_a_supervised_module_starts_a_process(module: Path) -> None:
+    relative = module.relative_to(PACKAGE).as_posix()
+    if relative in MAY_START_A_PROCESS:
+        pytest.skip(f"{relative} is one of the supervised set")
+    spawners = process_spawners(module)
+    assert not spawners, (
+        f"atrium/{relative} reaches {spawners}. Every external process this server starts has an "
+        f"owner that can stop it (architecture.md section 4), and the owners are "
+        f"{list(MAY_START_A_PROCESS)}: a probe run to completion, and the ledger that holds every "
+        f"live production. A session owns its encoder *through* the ledger, which is what keeps "
+        f"'every ffmpeg has an owner' one set to sweep rather than two."
+    )
+
+
+def test_the_two_supervised_modules_really_do_start_processes() -> None:
+    """Otherwise the exemptions above are two names nothing needs, and the sweep proves nothing."""
+    for relative in MAY_START_A_PROCESS:
+        assert process_spawners(PACKAGE / relative), (
+            f"atrium/{relative} starts no process any more; it should not be exempt from the "
+            f"sweep either"
+        )
+
+
+def test_the_transcode_manager_starts_its_encoders_through_the_ledger() -> None:
+    """008 T11's own shape, asserted rather than described.
+
+    The manager decides *which* process to start and *when* to kill it; the ledger is what
+    actually spawns and reaps. Written down here because the alternative reads identically in a
+    diff - a `create_subprocess_exec` inside the manager would work, pass every segment test, and
+    quietly make the ledger a partial list of what this server is running.
+    """
+    module = PACKAGE / SUPERVISED_THROUGH_THE_LEDGER
+    assert process_spawners(module) == []
+    assert "_ledger.start(" in module.read_text(encoding="utf-8")
+
+
+# ------------------------------------------------------------------------------------------
 # `images/` knows nothing about HTTP, and owns no SQL
 # ------------------------------------------------------------------------------------------
 

@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's; and 2026-08-29 by T6 — §3 gains `media/labels.py`, `api/delivery.py` and a `MediaFileRepository` that takes no user, §6.5 records that the four `stream` routes declare no authentication dependency at all and why the response is built header by header, §6.8's delivery-route error shape is discharged for those four (the third shape, not the problem details §7 implied), and §7 gains the container pattern's `400` and the missing-file case; and 2026-08-29 by T8 — §6.6's "exactly as the reference's controller does" is one clause too strong: its codec profile is scoped to the direct-play containers and therefore constrains nothing on the transcoding path, so the ceilings are stated unscoped here; and 2026-08-29 by T9 — §6.5's "a WAV re-encode, whose length is computable from sample count" is the wrong shape: a WAV states its own length inside the body and a piped one states `ffffffff`, so the output goes to scratch like a remux and the length is the file's, with `media/ffmpeg.py` refusing to build the piped invocation at all; and §6.6 gains the one inference row the reference has not got, kept out of the transcribed table; and 2026-08-29 by T10 — §6.4's two cadence claims both moved when the rounding rule was finally read: the scaling divides by the rate the *request* carries at 32-bit precision, so the published 3.004 s is a fact about one film's stored 23.975988 and the T1 fixture's exact `24000/1001` answers 3.003 s; and a copy buckets the source's keyframes only for a container the operator has permitted on-demand extraction for, shipped as Matroska alone, so the published 6.0 s was the equal grid at the copy default. §6.4 also records that forwarding a query string verbatim needed the pre-canonicalisation bytes, and that `BANDWIDTH` is this server's own encoder target rather than the reference's codec-scaled one
+amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's; and 2026-08-29 by T6 — §3 gains `media/labels.py`, `api/delivery.py` and a `MediaFileRepository` that takes no user, §6.5 records that the four `stream` routes declare no authentication dependency at all and why the response is built header by header, §6.8's delivery-route error shape is discharged for those four (the third shape, not the problem details §7 implied), and §7 gains the container pattern's `400` and the missing-file case; and 2026-08-29 by T8 — §6.6's "exactly as the reference's controller does" is one clause too strong: its codec profile is scoped to the direct-play containers and therefore constrains nothing on the transcoding path, so the ceilings are stated unscoped here; and 2026-08-29 by T9 — §6.5's "a WAV re-encode, whose length is computable from sample count" is the wrong shape: a WAV states its own length inside the body and a piped one states `ffffffff`, so the output goes to scratch like a remux and the length is the file's, with `media/ffmpeg.py` refusing to build the piped invocation at all; and §6.6 gains the one inference row the reference has not got, kept out of the transcribed table; and 2026-08-29 by T10 — §6.4's two cadence claims both moved when the rounding rule was finally read: the scaling divides by the rate the *request* carries at 32-bit precision, so the published 3.004 s is a fact about one film's stored 23.975988 and the T1 fixture's exact `24000/1001` answers 3.003 s; and a copy buckets the source's keyframes only for a container the operator has permitted on-demand extraction for, shipped as Matroska alone, so the published 6.0 s was the equal grid at the copy default. §6.4 also records that forwarding a query string verbatim needed the pre-canonicalisation bytes, and that `BANDWIDTH` is this server's own encoder target rather than the reference's codec-scaled one; and 2026-08-29 by T11 — §5's `TranscodeManager` moved in three places: the decision belongs to the request rather than to the session, the restart position is the URI's `runtimeTicks` rather than `plan_segments()[index]`, and `run()` arrives with the policy it enforces at T12; §6.4's forced-keyframe grid is a divergence the reference does not share; and §6.8's segment refusal shapes are discharged
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -298,25 +298,37 @@ def master_playlist(decision, stream_facts, main_query: str) -> str   # exactly 
 The same `plan_segments` output drives the playlist, the per-segment `-ss` restart points and
 the tests — one derivation, so the playlist can never disagree with production (AC-22's shape).
 
-**`media/sessions.py`**:
+**`media/sessions.py`**, as T11 landed it — three of these moved, and each of them for a measured
+reason:
 
 ```python
 class TranscodeManager:
-    def obtain(self, key: SessionKey, decision, source) -> TranscodeSession
-        # keyed by PlaySessionId; reuse if live
-    async def segment(self, session, index: int) -> Path
-        # on disk → return; ahead of window → kill, restart at plan_segments()[index]
-    def stop(self, device_id: str, play_session_id: str) -> bool
-        # the DELETE route; kills the process, removes scratch
-    def ping(self, session) -> None                  # every segment/playlist request
-    async def run(self) -> None                      # kill-timer sweep, throttle check
-    def shutdown(self) -> None                       # all sessions stopped, scratch cleared
+    def obtain(self, key: SessionKey) -> TranscodeSession
+        # keyed by (device, play session, media path); reused whether or not anything is running
+    async def segment(self, session, plan: SegmentPlan, *, index: int, start_ticks: int) -> Path
+        # on disk → return; behind or far ahead of production → kill, restart at start_ticks
+    def stop(self, device_id: str, play_session_id: str) -> bool      # T12, with the DELETE route
+    def ping(self, session) -> None                  # every segment request
+    async def run(self) -> None                      # T12: kill-timer sweep, throttle check
+    async def shutdown(self) -> None                 # all sessions stopped
 ```
 
+* **The decision is not part of a session**, it is part of a request. The reference rebuilds its
+  whole streaming state from every segment request, so a client that changes audio track mid-film
+  restarts with the new one; a manager holding the first request's answer would go on producing
+  the track the client just left. `SegmentPlan` is that per-request bundle.
+* **The restart position is the request's `runtimeTicks`, not `plan_segments()[index]`.** The
+  index is ffmpeg's `-start_number` and decides only the produced file's name — measured, and the
+  two agree for every URI a playlist writes `[probe: tools/probe_transcode_session.py, Jellyfin
+  10.11.11, 2026-08-29]`.
+* **`run()` arrives with the policy it enforces** (T12). A sweep loop that swept nothing would be
+  a task in the lifespan doing nothing at all; what T11 wires is construction and `shutdown()`.
+
 Callers may assume: every ffmpeg the server ever starts is owned by exactly one session in this
-registry (architecture §4); `stop` on an unknown id is a no-op returning `False` — the route
-still answers `204`, matching the reference's fire-and-forget contract; time is injectable like
-`SessionRegistry`'s, so kill-timer and throttle tests never sleep.
+registry (architecture §4) and started through the `ProductionLedger`, which
+`tests/unit/test_import_directions.py` sweeps for; `stop` on an unknown id is a no-op returning
+`False` — the route still answers `204`, matching the reference's fire-and-forget contract; time
+is injectable like `SessionRegistry`'s, so kill-timer and throttle tests never sleep.
 
 **`compat/ranges.py`**:
 
@@ -475,10 +487,14 @@ read and cited in the module**, and it moved two things the draft had wrong (T10
 
 The unrequested segment length is 3 s for a re-encode and 6 s for a copy. ffmpeg is instructed to
 force keyframes at exactly the planned timestamps, so the playlist's promise and the produced
-bytes cannot drift. Segment requests inside the produced window serve the finished file with
-`Content-Length` and `Accept-Ranges: bytes` (parity, behaviours §3.3); outside it, §6.5 of the
-manager restarts production at `segments[index].start_ticks`. Produced segments stay on disk for
-the session's life, which is what makes AC-23's within-session byte identity structural.
+bytes cannot drift — **which the reference does not do**, and T11 found it by writing the encoder
+arguments: it states the scaled cadence to the playlist and the unscaled integer to ffmpeg, so its
+own segments hold four milliseconds less than they declare. The divergence is behaviours §3.10;
+the playlist stays byte-identical. Segment requests inside the produced window serve the finished
+file with `Content-Length`, `Accept-Ranges: bytes` and a `Last-Modified` (parity in all three,
+behaviours §3.3); outside it the manager restarts production at the **request's `runtimeTicks`**,
+which is what the reference seeks to and not the index in the path. Produced segments stay on disk
+for the session's life, which is what makes AC-23's within-session byte identity structural.
 
 **Both playlists forward the query string exactly as it arrived**, which needed a scope key
 rather than a read of the request: `compat/query_params.py`'s case-insensitive rewrite has already
@@ -636,12 +652,17 @@ the ceilings a plan holds. What stays owed to the task list:
   §7 table's "007-measured refusal family" implied. ~~A **malformed range on a chunked response**~~
   — **discharged at T7**: on a chunked answer *every* `Range` is ignored, readable or not, so the
   sized case's five-shape table has no counterpart here at all (behaviours §3.3). The refusal
-  shapes of `/universal` ~~, the playlists~~ and the segments remain owed to the tasks that land
+  shapes of `/universal` ~~, the playlists and the segments~~ remain owed to the tasks that land
   them, folded into a probe battery. **The playlists' four were discharged at T10**, into
   `probe_hls.py`: `401` empty with no credential — these two routes require a token where the four
   `stream` routes require none — and then the `stream` pair's own shapes, `404` and `400` in
   `text/plain`, rather than `/universal`'s problem details. The fourth is not a refusal: a
-  `main.m3u8` with no query at all answers a playlist.
+  `main.m3u8` with no query at all answers a playlist. **The segments' six were discharged at
+  T11**, into `probe_transcode_session.py`'s segment battery: those same three, plus a `400` in
+  the same shape for a request carrying `startTimeTicks`, plus the one that is *not* the third
+  shape — `runtimeTicks` and `actualSegmentLengthTicks` are required, so a segment URI stripped of
+  its query answers problem details where `main.m3u8` stripped of its query answers a playlist —
+  and one that is not a refusal at all: a `playlistId` nothing named still serves the segment.
 * ~~**AC-26's disconnect timing** needs a fixture client that drops mid-body~~ — **discharged at
   T7**, and the client had to be written rather than configured: **httpx's ASGI transport cannot
   drop a connection.** It drives the application to completion and hands back a buffered body, so

@@ -81,6 +81,7 @@ from atrium.db.repositories import SessionRepository, UserDataRepository
 from atrium.db.schema import ensure_current
 from atrium.lifecycle import Readiness, ReadinessMiddleware
 from atrium.media.ffmpeg import ProductionLedger
+from atrium.media.sessions import TranscodeManager
 from atrium.users import passwords as password_module
 from atrium.users.playing import NowPlayingRegistry, PlayingNow
 from atrium.users.service import Authenticator
@@ -185,6 +186,13 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     # gets forgotten. plan section 5.
     authenticator = Authenticator(sessions, passwords, registry, settings.authentication)
 
+    # Every ffmpeg this application starts, and the subset of them a playback session owns.
+    # Built here rather than on first use so the lifespan below can stop them, and so two
+    # applications in one process - which is every conformance test - never see each other's
+    # processes or each other's scratch. 008 plan section 5.
+    productions = ProductionLedger()
+    transcodes = TranscodeManager(resolved.transcodes, productions)
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         # Everything slow belongs here, before the gate opens. Today there is nothing slow, and
@@ -215,12 +223,18 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
             # the crash this design already accepts losing thirty seconds to.
             with suppress(SQLAlchemyError):
                 registry.flush()
-            # Every encoder this application started, stopped. 008 T12 owns the sweep that also
-            # clears the scratch these left behind; what belongs here is the narrower promise the
-            # ledger already makes - the server does not outlive its own processes.
-            productions: ProductionLedger | None = getattr(_app.state, "productions", None)
-            if productions is not None:
-                await productions.shutdown()
+            # Every encoder this application started, stopped - the sessions first, so a manager
+            # that is asked afterwards says it owns nothing rather than pointing at a killed
+            # process, and then the ledger for anything a progressive response was still
+            # streaming. 008 T12 owns the sweep that clears the scratch these leave behind and
+            # the timer that reaps a session nobody is asking about; what belongs here is the
+            # narrower promise both already make - the server does not outlive its own processes.
+            live_manager: TranscodeManager | None = getattr(_app.state, "transcodes", None)
+            if live_manager is not None:
+                await live_manager.shutdown()
+            live_ledger: ProductionLedger | None = getattr(_app.state, "productions", None)
+            if live_ledger is not None:
+                await live_ledger.shutdown()
             # Returns every pooled connection, which is what closes the WAL cleanly. Without it a
             # test that builds hundreds of instances leaves hundreds of open files behind.
             engine.dispose()
@@ -278,6 +292,8 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
 
     app.state.paths = resolved
     app.state.db = engine
+    app.state.productions = productions
+    app.state.transcodes = transcodes
     app.state.sessions = sessions
     app.state.passwords = passwords
     app.state.registry = registry

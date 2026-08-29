@@ -205,6 +205,22 @@ class DeliverySourceError(Exception):
     """
 
 
+class DeliverySegmentRequestError(DeliverySourceError):
+    """A segment request carried a start position, which that route refuses outright.
+
+    The reference's first line of `GetDynamicSegment` throws on any `startTimeTicks` above zero -
+    a segment already says where it begins, in the `runtimeTicks` its own URI carries, and two
+    positions in one request have no defined meaning `[source:
+    Jellyfin.Api/Controllers/DynamicHlsController.cs:1450-1453 @ v10.11.11]`. Measured as the
+    third shape at `400`, which is the same answer as the parameter above it
+    `[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+    A subclass rather than a row of its own: Starlette resolves a handler by walking the
+    exception's MRO, so one shape stays one handler, and the name says which refusal it is at the
+    place that raises it.
+    """
+
+
 class DeliveryProductionError(Exception):
     """Nothing could be produced for this request. The third shape at `500`, measured.
 
@@ -532,6 +548,7 @@ __all__ = [
     "ClientAuthorizationError",
     "DeliveryNotFoundError",
     "DeliveryProductionError",
+    "DeliverySegmentRequestError",
     "DeliverySourceError",
     "ExceptionHandler",
     "ForbiddenError",

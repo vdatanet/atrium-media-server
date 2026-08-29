@@ -53,6 +53,7 @@ import contextlib
 import shutil
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Final
 
 from atrium.domain.media import InspectedStream, MediaInspection, StreamKind
@@ -147,6 +148,25 @@ MUXERS: Final[dict[str, str]] = {
 #: The muxers whose index is written at the end of the file, so a non-seekable destination has to
 #: be told to fragment instead. Everything else streams as it stands.
 NEEDS_FRAGMENTING: Final[frozenset[str]] = frozenset({"mp4", "mov", "ipod", "3gp"})
+
+#: Segment container to what the HLS muxer calls that shape, and the fallback for everything
+#: else. **The fallback is the reference's**, not a refusal: it logs "Invalid HLS segment
+#: container, default to mpegts" and carries on, so a playlist naming an unknown container gets
+#: MPEG-TS bytes behind that container's own extension `[source:
+#: Jellyfin.Api/Controllers/DynamicHlsController.cs:1622-1651 @ v10.11.11]`.
+SEGMENT_FORMATS: Final[dict[str, str]] = {"ts": "mpegts", "mp4": "fmp4"}
+DEFAULT_SEGMENT_FORMAT: Final = "mpegts"
+
+#: The segment index that names the fMP4 initialisation segment rather than a body segment. The
+#: media playlist's `#EXT-X-MAP` points at it and ffmpeg writes it under this name beside the
+#: playlist `[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`.
+INITIALISATION_INDEX: Final = -1
+
+#: The encoders that honour `-force_key_frames` and therefore get the segment grid stated to
+#: them; the reference sets the grid by GOP for the hardware ones instead, and v1 has no hardware
+#: encoding at all `[source:
+#: MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:1948-2010 @ v10.11.11]`.
+KEYFRAME_FORCERS: Final[frozenset[str]] = frozenset({"libx264", "libx265"})
 
 #: The muxers that state a length in a header they can only fill in at the end, and have **no**
 #: fragmented form to fall back on - so a non-seekable destination makes them declare a length
@@ -327,6 +347,130 @@ def command(
     if not output.seekable and muxer in NEEDS_FRAGMENTING:
         argv += list(FRAGMENT_FLAGS)
     argv += ["-f", muxer, output.destination]
+    return argv
+
+
+@dataclass(frozen=True, slots=True)
+class SegmentOutput:
+    """Where one session's segments are written, and on what grid.
+
+    Not an `Output`: the destination is a *directory* full of numbered files rather than one
+    place bytes go, and the muxer arguments that produce them have no counterpart in the
+    progressive shape.
+    """
+
+    container: str
+    """The segment container - `ts` or `mp4`. What `segmentContainer` named, not the path's own
+    extension: those two disagree freely and only this one decides what is produced
+    `[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`."""
+
+    directory: Path
+    """The session's scratch. Segments land here as `{index}{extension}`."""
+
+    extension: str
+    """The suffix produced files carry, dot included. Passed in rather than derived from
+    `container` because `media/hls.segment_extension` is what the playlist's URIs are built from,
+    and a second derivation here is a second chance for the file a request looks for and the file
+    ffmpeg writes to be spelled differently."""
+
+    start_number: int
+    """The index the first produced segment is named with - ffmpeg's `-start_number`, and the
+    only thing the requested index decides. Where production *begins* is the start position,
+    which arrives separately."""
+
+    cadence_ticks: int
+    """The planned segment length, the same number `media/hls.plan_segments` laid the playlist
+    out on."""
+
+    @property
+    def playlist(self) -> Path:
+        """ffmpeg's own playlist. Written and never served - `api/dynamic_hls.py` answers from
+        the plan - but the muxer needs an output path, and it is what names the init segment's
+        directory for the fMP4 shape."""
+        return self.directory / "main.m3u8"
+
+
+def segment_command(
+    source: MediaInspection,
+    decision: Decision,
+    output: SegmentOutput,
+    *,
+    path: str,
+    start_ticks: int | None = None,
+) -> list[str]:
+    """One session's whole invocation: the same stream plans, muxed into numbered segments.
+
+    **The grid is stated to the encoder, so the playlist's promise and the produced bytes cannot
+    drift.** Both `-hls_time` and the forced-keyframe expression take the *planned* cadence -
+    `media/hls.cadence_milliseconds`' answer - where the reference states its unscaled integer
+    request to ffmpeg and the scaled one to the playlist, and lets the two differ by the four
+    milliseconds a fractional frame rate costs `[source:
+    Jellyfin.Api/Controllers/DynamicHlsController.cs:1425-1432,1667-1680 @ v10.11.11]`. Spec
+    section 3.7 rule 2 asks for the opposite - "the playlist's declared duration matches what is
+    delivered" - and nothing observes the difference except a seek bar that would otherwise
+    accumulate 11 seconds of error over a two-hour film.
+
+    `-copyts` is what makes a restart land on the same grid as the first run: the forced
+    keyframes are expressed in the input's own timeline, so production restarted at 300 seconds
+    cuts where production from zero would have cut.
+    """
+    argv = [executable(), *PREAMBLE]
+    if start_ticks:
+        argv += ["-ss", _seconds(start_ticks)]
+    argv += ["-i", path]
+    # No metadata and no chapters in a segment, which is the reference's own choice and saves
+    # repeating a file's tags across every one of two thousand of them.
+    argv += ["-map_metadata", "-1", "-map_chapters", "-1"]
+
+    cadence = output.cadence_ticks / TICKS_PER_SECOND
+    wrote_any = False
+    for plan, video in ((decision.video, True), (decision.audio, False)):
+        if plan is None:
+            continue
+        argv += _stream_arguments(
+            plan, _stream_of(source, plan.source_index), source.bitrate, video=video
+        )
+        if video:
+            argv += _grid_arguments(plan, cadence)
+        wrote_any = True
+    if not wrote_any:
+        raise ProductionError("the decision plans no output stream")
+
+    argv += ["-copyts", "-avoid_negative_ts", "disabled"]
+    segment_format = SEGMENT_FORMATS.get(output.container.lower(), DEFAULT_SEGMENT_FORMAT)
+    argv += ["-f", "hls", "-hls_time", f"{cadence:.6f}", "-hls_segment_type", segment_format]
+    if segment_format == "fmp4":
+        # A name rather than a path: ffmpeg writes it beside the playlist, which is the session's
+        # own scratch, and it is the file the `#EXT-X-MAP` line points at.
+        argv += ["-hls_fmp4_init_filename", f"{INITIALISATION_INDEX}{output.extension}"]
+    argv += [
+        "-hls_playlist_type",
+        "vod",
+        "-hls_list_size",
+        "0",
+        "-start_number",
+        str(output.start_number),
+        "-hls_segment_filename",
+        str(output.directory / f"%d{output.extension}"),
+        "-y",
+        str(output.playlist),
+    ]
+    return argv
+
+
+def _grid_arguments(plan: StreamPlan, cadence: float) -> list[str]:
+    """Where the video is cut, stated only where this server is the one deciding.
+
+    A copy cuts where the source already has keyframes, so there is nothing to force and
+    `-start_at_zero` is what the reference sends instead. A re-encode is asked for a keyframe on
+    every boundary, and libx264 is additionally told not to insert its own on a scene change -
+    without which its post-processing moves the boundary the expression just placed.
+    """
+    if plan.action is StreamAction.COPY:
+        return ["-start_at_zero"]
+    argv = ["-force_key_frames:v:0", f"expr:gte(t,n_forced*{cadence:.6f})"]
+    if _encoder_for(plan.codec, video=True) in KEYFRAME_FORCERS:
+        argv += ["-sc_threshold:v:0", "0"]
     return argv
 
 
@@ -531,9 +675,12 @@ class ProductionLedger:
 __all__ = [
     "AUDIO_ENCODERS",
     "CHUNK_BYTES",
+    "DEFAULT_SEGMENT_FORMAT",
     "ENCODER_PRESET",
     "FFMPEG",
     "FRAGMENT_FLAGS",
+    "INITIALISATION_INDEX",
+    "KEYFRAME_FORCERS",
     "MUXERS",
     "NEEDS_FRAGMENTING",
     "NEEDS_SEEKING",
@@ -541,16 +688,19 @@ __all__ = [
     "PIXEL_FORMATS",
     "PREAMBLE",
     "RAW_SAMPLE_CODECS",
+    "SEGMENT_FORMATS",
     "TICKS_PER_SECOND",
     "VIDEO_ENCODERS",
     "Output",
     "Production",
     "ProductionError",
     "ProductionLedger",
+    "SegmentOutput",
     "command",
     "default_stream_indexes",
     "executable",
     "muxer_for",
     "needs_seeking",
     "raw_codec_for",
+    "segment_command",
 ]
