@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent; and 2026-08-29 by T7 — httpx's ASGI transport cannot drop a connection, so AC-26 needed a client written for it and the `TranscodeManager` this list names does not exist until T11; a `StreamPlan` states every ceiling and passing them all to the encoder is what breaks it; `StreamPlan` gained `bit_depth`; and the `mediaSourceId` `500` is decided as behaviours §3.9; and 2026-08-29 by T8 — the codec-less hole is not a codec-less transcoding profile but a streaming request inferring a codec from a path with no extension, so behaviours §3.8's divergence is narrower than it read; synthesising the device profile *exactly* as the reference does scopes its ceilings to the direct-play containers and would have honoured none of them; AC-19's bit-depth clause is a copy refusal rather than an output target; `transcodingProtocol` must not be typed; and this route's three refusals are none of the `stream` pair's; and 2026-08-29 by T9 — the two WAV prior-probe claims both moved when the battery was written: symptom 1 has two causes rather than one, and symptom 2 comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3; a WAV states its length inside the body and cannot be produced to a pipe at all, so "a `Content-Length` computed from sample count" is a file's size instead; the wav container has to name its own codec, because the muxer accepts a FLAC stream and writes a real RIFF header over it; and behaviours §3.8's "with or without a `transcodingContainer`" is container-dependent; and 2026-08-29 by T10 — both of §3.7's cadence numbers were attributed to the wrong thing, and the fixture T1 built for this task answers 3.003 s rather than the 3.004 s this list told it to make a golden of: the scaling divides by the rate the request carries at 32-bit precision, and 6.0 s is the copy default's equal grid rather than the source's keyframes, which a copy follows only for a container the operator has permitted on-demand extraction for; the playlist routes require a token where the four `stream` routes require none; and the `/universal` HLS handoff this task was to land cannot be, because its master playlist names an audio `main.m3u8` that is on no surface; and 2026-08-29 by T11 — a segment's index is ffmpeg's `-start_number` and the URI's `runtimeTicks` is where production starts, so "restart at `plan_segments()[index]`" names the wrong number; the supervised set is two modules rather than three, because the manager starts everything through the ledger; a segment carries a `Last-Modified` where the progressive routes carry none; the reference states the scaled cadence only to its playlist and the unscaled integer to its encoder, which is behaviours §3.10; and the segment route's six refusals split across two shapes by where they happen
+amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent; and 2026-08-29 by T7 — httpx's ASGI transport cannot drop a connection, so AC-26 needed a client written for it and the `TranscodeManager` this list names does not exist until T11; a `StreamPlan` states every ceiling and passing them all to the encoder is what breaks it; `StreamPlan` gained `bit_depth`; and the `mediaSourceId` `500` is decided as behaviours §3.9; and 2026-08-29 by T8 — the codec-less hole is not a codec-less transcoding profile but a streaming request inferring a codec from a path with no extension, so behaviours §3.8's divergence is narrower than it read; synthesising the device profile *exactly* as the reference does scopes its ceilings to the direct-play containers and would have honoured none of them; AC-19's bit-depth clause is a copy refusal rather than an output target; `transcodingProtocol` must not be typed; and this route's three refusals are none of the `stream` pair's; and 2026-08-29 by T9 — the two WAV prior-probe claims both moved when the battery was written: symptom 1 has two causes rather than one, and symptom 2 comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3; a WAV states its length inside the body and cannot be produced to a pipe at all, so "a `Content-Length` computed from sample count" is a file's size instead; the wav container has to name its own codec, because the muxer accepts a FLAC stream and writes a real RIFF header over it; and behaviours §3.8's "with or without a `transcodingContainer`" is container-dependent; and 2026-08-29 by T10 — both of §3.7's cadence numbers were attributed to the wrong thing, and the fixture T1 built for this task answers 3.003 s rather than the 3.004 s this list told it to make a golden of: the scaling divides by the rate the request carries at 32-bit precision, and 6.0 s is the copy default's equal grid rather than the source's keyframes, which a copy follows only for a container the operator has permitted on-demand extraction for; the playlist routes require a token where the four `stream` routes require none; and the `/universal` HLS handoff this task was to land cannot be, because its master playlist names an audio `main.m3u8` that is on no surface; and 2026-08-29 by T11 — a segment's index is ffmpeg's `-start_number` and the URI's `runtimeTicks` is where production starts, so "restart at `plan_segments()[index]`" names the wrong number; the supervised set is two modules rather than three, because the manager starts everything through the ledger; a segment carries a `Last-Modified` where the progressive routes carry none; the reference states the scaled cadence only to its playlist and the unscaled integer to its encoder, which is behaviours §3.10; and the segment route's six refusals split across two shapes by where they happen; and 2026-08-29 by T12 — the stop route's key is the play session alone and the `deviceId` it requires decides nothing, so `stop(device_id, play_session_id)` would have leaked an encoder for every client that respells its device; the well-formed call does *not* remove the session's `TranscodingInfo`, which the spec had asserted in both directions and no probe had separated from the completion percentage going null; the kill timer is 60 000 ms because the job is not progressive, measured at 58 s and 60 s; and the unread `stderr` pipe T11 handed on had to be drained by block rather than by line, because `readline` gives up on an over-long line and stops reading
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -41,7 +41,9 @@ implemented features; T5 through T12 each add to an explicit `INTERIM_008` — t
 
 **Every owed reading from [plan §6.8](plan.md#68-measured-at-the-gate-and-what-stays-owed) has
 an owner here.** The `ETag` derivation is T3's, the cadence-rounding rule behind the measured
-3.004 s is T10's, the kill-timer constants are T12's, the per-route refusal shapes are measured
+3.004 s is T10's, the kill-timer constants are T12's — discharged, and reading them found two
+things beside the numbers: the stop route is keyed on the play session alone, and it does not
+clear the session's `TranscodingInfo` — the per-route refusal shapes are measured
 by the task that lands each route — folded into a probe battery, never left as a hand request
 (the L2 fold's rule) — and the two `[prior-probe:]` WAV citations in behaviours §3.2 are
 upgraded by T9, the task that implements what they describe.
@@ -911,7 +913,7 @@ over nothing is dead code with a schedule.
 
 ## T12 — The kill paths: a stop that stops, and scratch that dies with its session
 
-- [ ] **Changes:** new `src/atrium/api/hls_segment.py` — the reference's `HlsSegmentController`
+- [x] **Changes:** new `src/atrium/api/hls_segment.py` — the reference's `HlsSegmentController`
   is where `DELETE /Videos/ActiveEncodings` actually lives — both parameters mandatory (`400`
   naming the missing one), `204` always, the named session's process killed and its scratch
   removed, unknown session a no-op `204`. The manager's sweep gains the
@@ -929,6 +931,49 @@ over nothing is dead code with a schedule.
   loses it after the stop; and a `PlaySessionId` from a T5 negotiation is accepted by the
   segment route and by this one (AC-30).
 - **Spec reference:** §3.8; AC-25, AC-26, AC-29, AC-30
+
+**Done (2026-08-29).** **The stop route is keyed on the play session, and the `deviceId` it
+requires decides nothing.** This list and [plan §5](plan.md#5-contracts) both wrote `stop(device_id,
+play_session_id)`, and the reference selects the jobs to kill by `playSessionId` whenever one was
+given — measured rather than reasoned: a `DELETE` carrying a device the server has never seen
+still stopped the named session, and one carrying a play session nothing issued left a live one
+running and still answered `204`. A manager that had required both to match would have leaked an
+encoder for every client that spells its device differently between the negotiation and the stop,
+which is the one failure this route exists to prevent.
+
+**And the well-formed call does not remove the session's `TranscodingInfo`**, which [spec
+§3.8](spec.md#38-session-lifecycle) and OQ-6 had both asserted since the gate. The reference
+reports one last time as the process exits, with every number null, so the object stays on the
+session with two fewer keys — `Framerate` and `CompletionPercentage` — until playback is reported
+stopped. Nobody had noticed because the probe's own helper read `CompletionPercentage` straight
+off the session and returned `None` for "absent object" and "absent number" alike; the kill
+battery separates them, and behaviours §3.11 carries Atrium's decision to drop the report with
+the work.
+
+**The kill-timer reading was the smaller half of the owed reading.** The numbers are 60 000 ms and
+10 000 ms, split by nothing but whether the job is progressive, and everything a session here owns
+is the former. Measured end to end at 58 s and 60 s on two runs — worth the two minutes, because
+"the sweep uses the number in `TranscodeManager.cs`" and "a real server really kills at that
+number" are different claims and only one of them was owed.
+
+**The hazard T11 handed on was real and its first fix was not.** `ProductionLedger.start` gave
+every process an unread `stderr` pipe; a pipe fills at some tens of kilobytes and a process
+blocked writing into a full one never reaches its own exit, so it can neither finish nor be
+reaped by waiting. The drain that fixes it had to read by *block*: written with `readline` it
+gave up on any line longer than the stream's limit and stopped reading from that moment on, which
+is the same hang with more code — and the test written for the hazard caught it, having been
+written to fail by timing out rather than by hanging. **The second version was wrong on a slower
+machine only**: `finish` cancelled the reader instead of waiting for it, so the encoder's last
+words were discarded in the very call that logs them. It passed locally every time and failed in
+CI, which is the whole argument for asserting that the words survive as well as that the process
+does.
+
+Two smaller things. **The measured `TranscodingInfo` is thirteen properties and Atrium sends
+eleven**: the two missing are the ones read out of the encoder's progress output, which this
+server does not parse, and the shape without them is one the reference itself sends every time a
+job stops. And **the battery's first draft measured its own confound**: `TranscodingInfo` hangs
+off the *device's* session, so two of the probe's own jobs were two writers of one property and a
+row that killed its job read the survivor's percentage — the rows now start and end one job each.
 
 ## T13 — The operator knobs, and policy at delivery
 

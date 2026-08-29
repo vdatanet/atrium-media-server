@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's; and 2026-08-29 by T6 — §3 gains `media/labels.py`, `api/delivery.py` and a `MediaFileRepository` that takes no user, §6.5 records that the four `stream` routes declare no authentication dependency at all and why the response is built header by header, §6.8's delivery-route error shape is discharged for those four (the third shape, not the problem details §7 implied), and §7 gains the container pattern's `400` and the missing-file case; and 2026-08-29 by T8 — §6.6's "exactly as the reference's controller does" is one clause too strong: its codec profile is scoped to the direct-play containers and therefore constrains nothing on the transcoding path, so the ceilings are stated unscoped here; and 2026-08-29 by T9 — §6.5's "a WAV re-encode, whose length is computable from sample count" is the wrong shape: a WAV states its own length inside the body and a piped one states `ffffffff`, so the output goes to scratch like a remux and the length is the file's, with `media/ffmpeg.py` refusing to build the piped invocation at all; and §6.6 gains the one inference row the reference has not got, kept out of the transcribed table; and 2026-08-29 by T10 — §6.4's two cadence claims both moved when the rounding rule was finally read: the scaling divides by the rate the *request* carries at 32-bit precision, so the published 3.004 s is a fact about one film's stored 23.975988 and the T1 fixture's exact `24000/1001` answers 3.003 s; and a copy buckets the source's keyframes only for a container the operator has permitted on-demand extraction for, shipped as Matroska alone, so the published 6.0 s was the equal grid at the copy default. §6.4 also records that forwarding a query string verbatim needed the pre-canonicalisation bytes, and that `BANDWIDTH` is this server's own encoder target rather than the reference's codec-scaled one; and 2026-08-29 by T11 — §5's `TranscodeManager` moved in three places: the decision belongs to the request rather than to the session, the restart position is the URI's `runtimeTicks` rather than `plan_segments()[index]`, and `run()` arrives with the policy it enforces at T12; §6.4's forced-keyframe grid is a divergence the reference does not share; and §6.8's segment refusal shapes are discharged
+amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's; and 2026-08-29 by T6 — §3 gains `media/labels.py`, `api/delivery.py` and a `MediaFileRepository` that takes no user, §6.5 records that the four `stream` routes declare no authentication dependency at all and why the response is built header by header, §6.8's delivery-route error shape is discharged for those four (the third shape, not the problem details §7 implied), and §7 gains the container pattern's `400` and the missing-file case; and 2026-08-29 by T8 — §6.6's "exactly as the reference's controller does" is one clause too strong: its codec profile is scoped to the direct-play containers and therefore constrains nothing on the transcoding path, so the ceilings are stated unscoped here; and 2026-08-29 by T9 — §6.5's "a WAV re-encode, whose length is computable from sample count" is the wrong shape: a WAV states its own length inside the body and a piped one states `ffffffff`, so the output goes to scratch like a remux and the length is the file's, with `media/ffmpeg.py` refusing to build the piped invocation at all; and §6.6 gains the one inference row the reference has not got, kept out of the transcribed table; and 2026-08-29 by T10 — §6.4's two cadence claims both moved when the rounding rule was finally read: the scaling divides by the rate the *request* carries at 32-bit precision, so the published 3.004 s is a fact about one film's stored 23.975988 and the T1 fixture's exact `24000/1001` answers 3.003 s; and a copy buckets the source's keyframes only for a container the operator has permitted on-demand extraction for, shipped as Matroska alone, so the published 6.0 s was the equal grid at the copy default. §6.4 also records that forwarding a query string verbatim needed the pre-canonicalisation bytes, and that `BANDWIDTH` is this server's own encoder target rather than the reference's codec-scaled one; and 2026-08-29 by T11 — §5's `TranscodeManager` moved in three places: the decision belongs to the request rather than to the session, the restart position is the URI's `runtimeTicks` rather than `plan_segments()[index]`, and `run()` arrives with the policy it enforces at T12; §6.4's forced-keyframe grid is a divergence the reference does not share; and §6.8's segment refusal shapes are discharged; and 2026-08-29 by T12 — §5's `stop` takes the play session and not the device, because the reference keys on it alone and the `deviceId` the route requires decides nothing; §6.7 gains the measured kill-timer constants (§6.8's third debt), the reason the two clearing paths differ, and the diagnostic drain the ledger needed before any of them could reap a process at all — an unread `stderr` pipe fills and a process blocked on it never exits
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -307,11 +307,28 @@ class TranscodeManager:
         # keyed by (device, play session, media path); reused whether or not anything is running
     async def segment(self, session, plan: SegmentPlan, *, index: int, start_ticks: int) -> Path
         # on disk → return; behind or far ahead of production → kill, restart at start_ticks
-    def stop(self, device_id: str, play_session_id: str) -> bool      # T12, with the DELETE route
+    async def stop(self, play_session_id: str) -> bool   # T12: the play session is the whole key
     def ping(self, session) -> None                  # every segment request
-    async def run(self) -> None                      # T12: kill-timer sweep, throttle check
-    async def shutdown(self) -> None                 # all sessions stopped
+    def reporting(self, device_id: str) -> TranscodingReport | None   # T12, for /Sessions
+    async def sweep(self) -> int                     # T12: the kill timer, one pass
+    async def run(self) -> None                      # T12: that sweep on an interval
+    async def shutdown(self) -> None                 # all sessions stopped, scratch root cleared
+    def clear_scratch(self) -> None                  # T12: startup and shutdown, the root
 ```
+
+* **`stop` takes the play session and not the device**, which is the third of these that moved
+  for a measured reason. The route binds both — omitting either is a validation `400` naming it
+  — and the reference then selects the jobs to kill by `playSessionId` whenever one was given
+  `[source: MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:203-205 @ v10.11.11]`,
+  measured on a `DELETE` carrying a device nothing owns `[probe:
+  tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`. A signature taking both
+  would have leaked an encoder for every client that spells its device differently between the
+  negotiation and the stop. It is `async` for the reason `segment` is: ending a session waits on
+  the process it owned.
+* **`TranscodingReport` is what a session tells `/Sessions`**, recorded per request rather than
+  per session for the same reason `SegmentPlan` is. Eleven of the reference's thirteen
+  properties; the two it does not carry are `Framerate` and `CompletionPercentage`, which come
+  from parsing the encoder's progress output (behaviours §3.11).
 
 * **The decision is not part of a session**, it is part of a request. The reference rebuilds its
   whole streaming state from every segment request, so a client that changes audio track mid-film
@@ -628,6 +645,39 @@ disconnect on a progressive response cancels production through the response's o
 stops exactly the named session. Server shutdown walks the registry and clears every scratch
 directory; startup clears the scratch root of anything a crash left behind.
 
+**The ping timeout is sixty seconds**, discharging §6.8's third debt. The reference keeps one per
+job and chooses it by a single property — `10000` ms for a progressive job, `60000` ms for
+everything else — restarting the timer on every request that finishes and killing the job when
+one fires with nothing newer to wait for `[source:
+MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:145-190 @ v10.11.11]`. Sixty is the
+number this registry uses, because a progressive response owns its encoder for its own lifetime
+and stops it in a `finally`; nothing here is progressive. Measured as well as read: 58 s and 60 s
+on two runs of a session whose client fetched one segment and went quiet `[probe:
+tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`. The sweep is one loop over
+every session on a ten-second interval rather than a timer per job — 007's playback reaper's
+shape — so a session dies inside a timeout plus a tick.
+
+**The two clearing paths are not the same path**, and the difference is what the scratch root
+holds. A session owns a *directory* named for its key; a remux owns a *file* named for the
+command that produced it (§6.5), deliberately shared because spec §3.4 makes a remux
+byte-identical for everyone who asks for it. So ending one session removes one directory and
+never touches the files beside it, while startup and shutdown clear the root whole — which is the
+reference's own startup behaviour, minus the empty directories it leaves `[source:
+MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:717-736 @ v10.11.11]`.
+
+**And the ledger reads its processes' diagnostics**, which is a lifecycle property rather than a
+logging one: `ProductionLedger.start` gives every process a `stderr` pipe, and a pipe nobody
+reads fills at some tens of kilobytes — a process blocked writing into a full one never reaches
+its own exit, so it can neither finish nor be reaped by waiting. At `-loglevel error` a healthy
+encode says nothing, which is why the hazard survived from T7 to here. Every production therefore
+has exactly one reader task, started in the same statement that starts the process, keeping the
+last twenty lines; a production that exits non-zero on its own logs them, and one that was killed
+does not, because a signal is not a fault to report. Two details are load-bearing and neither was
+obvious: the reader reads by **block**, because a line reader refuses a line longer than its
+stream's limit and then stops reading — the same hang with more code — and `finish` **waits** for
+the reader rather than cancelling it, because the process is already dead and the words it left
+buffered are exactly the ones the log line wanted.
+
 ### 6.8 Measured at the gate, and what stays owed
 
 Every §3 claim this plan builds on was measured on 2026-08-28 by the seven probes
@@ -645,8 +695,13 @@ the ceilings a plan holds. What stays owed to the task list:
   23.975988 rather than over the nominal 23.976, so the same rule answers 3.003 s for a source at
   an exact `24000/1001`. The probe grew a five-row cadence matrix, which is what separates `ceil`
   from `round`, and the copy half of §6.4 moved with it.
-* **The reference's ping-timeout constants** (§6.7): the kill-timer shape is sourced
-  (`TranscodeManager.cs`), the numbers are read when the sweep is built.
+* ~~**The reference's ping-timeout constants** (§6.7)~~ — **discharged at T12**, and reading
+  them was the smaller half: the numbers are 60 000 ms and 10 000 ms, split by whether the job is
+  progressive, and §6.7 records which one this registry uses and why. What the same battery found
+  was that the *stop route* is keyed on the play session alone — the `deviceId` it requires
+  decides nothing — and that the reference does **not** remove a stopped session's
+  `TranscodingInfo`, which the spec had asserted in both directions without measuring either
+  (behaviours §3.11).
 * ~~**The delivery-route error shapes** (§7): an unknown item on `/stream`~~ — **discharged at T6
   for the four `stream` routes**, and it is the third shape rather than the problem details the
   §7 table's "007-measured refusal family" implied. ~~A **malformed range on a chunked response**~~

@@ -1714,6 +1714,56 @@ is *unchanged*, and what moves is the thing it was always meant to describe. Rec
 [008 §3.7](../../specs/008-playback-negotiation-and-delivery/spec.md#37-video-delivery) rule 2,
 which asked for it before it was known that the reference did not do it.
 
+### 3.11 A stopped transcode leaves its `TranscodingInfo` on the session — class B, diverged
+
+**Jellyfin does:** keep reporting a transcode that has ended. `TranscodingInfo` hangs off the
+*device's* session and is overwritten on every progress tick `[source:
+Emby.Server.Implementations/Session/SessionManager.cs:1866-1875 @ v10.11.11]`; the job's own exit
+handler reports one last time with every number null, which leaves the object in place with two
+fewer properties rather than removing it `[source:
+MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:333-368, 640-644 @ v10.11.11]`. Only a
+playback report saying the item is no longer being transcoded clears it. Measured: a session
+whose job was killed by `DELETE /Videos/ActiveEncodings` — and one whose job died on the kill
+timer — still carried a `TranscodingInfo` of eleven keys, `Framerate` and `CompletionPercentage`
+gone and the codecs, the container, the size and the reasons still there `[probe:
+tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`. 008's own spec had said the
+opposite until this was measured.
+
+**Depends on it:** nobody who is not already tolerant of it, which is class B's first escape
+hatch. There are two compensations a client can build on a report that outlives its job, and
+neither breaks when the report goes away with the job. One is to believe `TranscodingInfo` only
+while it carries a moving `CompletionPercentage` — and the reference drops that property at
+exactly the moment the object goes stale, so such a client already reads the stale object as "not
+transcoding", which is what Atrium's absence says. The other is to read the object's presence as
+"this device is transcoding", which is a belief Atrium makes true and the reference makes false
+for as long as playback goes unreported. The remaining consumer is a person looking at an
+administration dashboard, and it shows them a job that has stopped.
+
+**Atrium does: diverge — the report lives exactly as long as the work.** `/Sessions` carries
+`TranscodingInfo` while the transcode manager owns a live session for that device and omits it
+once the session is stopped, reaped or shut down. The manager *is* the set of live transcodes
+here, and there is no second place to keep a copy that nothing would ever clear: reproducing the
+reference's staleness would mean holding a per-device record whose only removal path is a
+playback report belonging to another feature, and a record like that goes stale in the other
+direction — a client that stops playing without calling the stop route would keep a
+`TranscodingInfo` for as long as the process lives rather than for as long as the reference keeps
+one.
+
+**And the shape is one the reference sends.** Atrium's `TranscodingInfo` carries eleven of the
+thirteen declared properties; the missing pair is `Framerate` and `CompletionPercentage`, which
+come from parsing the encoder's progress output. Atrium runs its encoders at `-loglevel error`
+and reads their diagnostics only to say why one failed, so it has no honest number to put there —
+and inventing one from the segments produced so far would report the *last request's* position
+rather than the encoder's. Both are nullable upstream and both are genuinely absent there twice:
+before ffmpeg has reported anything, and after the job stops.
+
+Implemented at 008 T12 in `media/sessions.TranscodingReport` and `api/sessions.TranscodingInfo`,
+asserted over the wire in `tests/unit/test_transcode_lifecycle.py`. The divergence takes
+§3.0.3's fourth and most dangerous shape — a property clients already read changes, from present
+to absent — so it is carried by the evidence above rather than by the argument that it is more
+correct: every property a client reads *while the work is real* is unchanged, and the two the
+reference itself withdraws when the work ends are the two a compensation would key on.
+
 ## 4. Deliberate exceptions
 
 Every one of them is listed here so it is never mistaken for an oversight — including §4.4, which

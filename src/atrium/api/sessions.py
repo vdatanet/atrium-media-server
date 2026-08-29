@@ -40,6 +40,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from pydantic import Field
 
 from atrium.api.deps import get_playing, get_registry, get_sessions, get_state, require_user
+from atrium.api.dynamic_hls import transcode_manager
 from atrium.api.item_dto import BuildContext, Width, build_dto
 from atrium.api.item_models import BaseItemDto
 from atrium.api.items import library_context
@@ -53,6 +54,7 @@ from atrium.db.repositories import LibraryRepository, SessionRepository, UserRep
 from atrium.domain.queries import ItemQuery
 from atrium.domain.session import Session
 from atrium.domain.user import User as DomainUser
+from atrium.media.sessions import TranscodingReport
 from atrium.users.playing import PlayingNow
 from atrium.users.sessions import SessionRegistry
 
@@ -61,6 +63,11 @@ router = APIRouter(tags=["Session"])
 #: .NET's `DateTime.MinValue`, which is what the reference sends for a session that has never
 #: reported playback. Measured.
 DOTNET_MIN_DATE = datetime(1, 1, 1, tzinfo=UTC)
+
+#: The reference's `HardwareAccelerationType` for "no hardware at all", which is both its shipped
+#: default and the truth about this server: nothing here asks ffmpeg for a hardware encoder
+#: `[source: MediaBrowser.Model/Entities/HardwareAccelerationType.cs:13 @ v10.11.11]`.
+SOFTWARE_ACCELERATION = "none"
 
 #: **What a `NowPlayingItem` is not.** Measured against a live playback: it carries 41 properties
 #: and a full `/Items/{itemId}` body carries 56, and the difference is exactly this set - so the
@@ -132,6 +139,55 @@ class ClientCapabilities(AtriumModel):
     supports_persistent_identifier: bool = False
 
 
+class TranscodingInfo(AtriumModel):
+    """What a device is having produced for it, while it is being produced.
+
+    Thirteen properties upstream, measured on a live re-encode and reproduced in that order
+    `[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`. **Eleven are
+    declared here**, and the two that are not - `Framerate` and `CompletionPercentage` - are the
+    two that come from parsing the encoder's progress output, which Atrium does not do. They are
+    nullable upstream and genuinely absent there twice: before ffmpeg has said anything, and
+    after the job stops, where the measured object keeps exactly these eleven keys. The argument
+    for the divergence is in behaviours section 3.11.
+
+    `HardwareAccelerationType` is the operator's encoding setting rather than a fact about the
+    job - the measured server answers `qsv` because that is what it is configured for - and its
+    shipped default is `none` `[source:
+    MediaBrowser.Model/Entities/HardwareAccelerationType.cs:13 @ v10.11.11]`, which is what
+    Atrium answers and what it does.
+    """
+
+    audio_codec: str | None = None
+    video_codec: str | None = None
+    container: str | None = None
+    is_video_direct: bool = False
+    is_audio_direct: bool = False
+    bitrate: int | None = None
+    width: int | None = None
+    height: int | None = None
+    audio_channels: int | None = None
+    hardware_acceleration_type: str = SOFTWARE_ACCELERATION
+    transcode_reasons: list[str] = Field(default_factory=list)
+
+
+def transcoding_info(report: TranscodingReport | None) -> TranscodingInfo | None:
+    """The wire object for one manager report, or nothing when nothing is being produced."""
+    if report is None:
+        return None
+    return TranscodingInfo(
+        audio_codec=report.audio_codec,
+        video_codec=report.video_codec,
+        container=report.container,
+        is_video_direct=report.video_direct,
+        is_audio_direct=report.audio_direct,
+        bitrate=report.bitrate,
+        width=report.width,
+        height=report.height,
+        audio_channels=report.audio_channels,
+        transcode_reasons=list(report.reasons),
+    )
+
+
 class SessionInfo(AtriumModel):
     """One device's session, in the reference's field order."""
 
@@ -152,6 +208,11 @@ class SessionInfo(AtriumModel):
     now_playing_item: BaseItemDto | None = None
     device_id: str = ""
     application_version: str = ""
+    #: **Between `ApplicationVersion` and `IsActive`**, which is where the reference's own
+    #: document puts it `[spec: SessionInfoDto]` - and absent, not null, for a device having
+    #: nothing produced for it, so 002's twenty-three-field order is untouched for every session
+    #: that is not transcoding.
+    transcoding_info: TranscodingInfo | None = None
     is_active: bool = True
     supports_media_control: bool = False
     supports_remote_control: bool = False
@@ -188,6 +249,7 @@ def to_wire(
     playing: PlayingNow | None = None,
     now_playing_item: BaseItemDto | None = None,
     check_in: datetime | None = None,
+    transcoding: TranscodingReport | None = None,
 ) -> SessionInfo:
     """Build the wire object from a domain session.
 
@@ -195,11 +257,16 @@ def to_wire(
     live in the registries between flushes, and reporting the stored ones would tell a client that
     the session it is using right now was last active half a minute ago (plan section 6.5) and
     that the playback it is reporting has not checked in (007 plan section 6.6).
+
+    `transcoding` is passed in for the same reason and one more: it comes from the transcode
+    manager rather than from the database, because a transcode is a live process and nothing
+    about it survives a restart (008 spec section 3.8).
     """
     capabilities = dict(session.capabilities)
     return SessionInfo(
         play_state=play_state(playing),
         now_playing_item=now_playing_item,
+        transcoding_info=transcoding_info(transcoding),
         capabilities=capabilities,
         playable_media_types=list(capabilities.get("PlayableMediaTypes") or []),
         supported_commands=list(capabilities.get("SupportedCommands") or []),
@@ -231,6 +298,7 @@ async def sessions(
     with was last active half a minute ago (plan section 6.5).
     """
     playing = get_playing(request)
+    transcodes = transcode_manager(request)
     with session_scope(get_sessions(request)) as opened:
         repository = SessionRepository(opened)
         found = repository.all() if user.is_administrator else repository.for_user(user.id)
@@ -252,6 +320,10 @@ async def sessions(
             playing=live.get(one.id),
             now_playing_item=items.get(one.id),
             check_in=playing.check_in(one.id) or registry.playback_check_in(one.id),
+            # By **device**, not by session: the reference hangs its report on the device's
+            # session and the delivery routes only ever carry a `deviceId`, which is the
+            # identifier a client puts in the negotiated URL rather than the session row's id.
+            transcoding=transcodes.reporting(one.device_id),
         )
         for one in found
     ]
@@ -343,9 +415,12 @@ async def post_capabilities(
 __all__ = [
     "DOTNET_MIN_DATE",
     "NOT_IN_NOW_PLAYING",
+    "SOFTWARE_ACCELERATION",
     "ClientCapabilities",
     "PlayState",
     "SessionInfo",
+    "TranscodingInfo",
     "router",
     "to_wire",
+    "transcoding_info",
 ]

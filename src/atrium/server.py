@@ -38,6 +38,7 @@ from atrium.api import (
     dynamic_hls,
     filters,
     genres,
+    hls_segment,
     images,
     instant_mix,
     items,
@@ -122,6 +123,7 @@ ROUTERS = (
     universal_audio.router,
     videos.router,
     dynamic_hls.router,
+    hls_segment.router,
     items.router,
 )
 
@@ -198,6 +200,13 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
         # Everything slow belongs here, before the gate opens. Today there is nothing slow, and
         # the gate exists anyway so that 003's scan has somewhere to go that is already wired,
         # already tested and already answering correctly meanwhile.
+        #
+        # Except this, which is deliberately before the gate: whatever a crash left in the
+        # scratch root is unreachable - a session directory is named for a play session id no
+        # client will send twice, and a remux file for a change signal a restart has no reason
+        # to reproduce - so it is disk nobody will ever claim. The reference clears the same
+        # path when it starts, for the same reason (008 plan section 6.7).
+        transcodes.clear_scratch()
         readiness.mark_ready()
         logger.info(
             "Atrium %s serving the Jellyfin %s API from %s",
@@ -211,10 +220,15 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
         # loses is the extrapolation since each session's last report, which is exactly what the
         # reference's restart loses too (007 spec section 3.8).
         reaper = asyncio.create_task(playing.run())
+        # And the encoders' own reaper, on the reference's kill timer: a playback session that
+        # has not asked for a segment in a minute goes down with its scratch. 008 T11 wired the
+        # manager without this deliberately, because a sweep with no policy to enforce is a task
+        # in the lifespan doing nothing at all.
+        sweeper = asyncio.create_task(transcodes.run())
         try:
             yield
         finally:
-            for task in (flusher, reaper):
+            for task in (flusher, reaper, sweeper):
                 task.cancel()
                 with suppress(asyncio.CancelledError):
                     await task
@@ -226,9 +240,9 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
             # Every encoder this application started, stopped - the sessions first, so a manager
             # that is asked afterwards says it owns nothing rather than pointing at a killed
             # process, and then the ledger for anything a progressive response was still
-            # streaming. 008 T12 owns the sweep that clears the scratch these leave behind and
-            # the timer that reaps a session nobody is asking about; what belongs here is the
-            # narrower promise both already make - the server does not outlive its own processes.
+            # streaming. The manager's shutdown clears the scratch root as it goes, which is the
+            # other half of what it clears at startup: what a clean stop leaves behind is exactly
+            # as unreachable as what a crash leaves behind (spec section 3.8).
             live_manager: TranscodeManager | None = getattr(_app.state, "transcodes", None)
             if live_manager is not None:
                 await live_manager.shutdown()
