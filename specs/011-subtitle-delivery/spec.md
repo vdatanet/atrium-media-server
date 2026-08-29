@@ -371,8 +371,12 @@ remembered, which is the same line 008 draws for `DefaultSubtitleStreamIndex` an
    response is unchanged from the accepted 008 answer for the same request.
 4. A **delivery** request carrying a subtitle index is served with that track — the criterion
    [client-atrium-tvos §4.3](../../docs/compatibility/client-atrium-tvos.md#43-the-clients-track-override-works-for-audio-and-is-dropped-for-subtitles)
-   asks for, in its subtitle half. *(Its audio half is owed to 008 — §2.1. Without both, the
-   video client's "change the track" path breaks against Atrium and no test here fails.)*
+   asks for, in its subtitle half. *(Its audio half was owed to 008 and **008 T14 paid it**: the
+   parameter had only ever been asserted as a string in a negotiated address, and the assertion
+   that it changes the audio that comes back is now
+   `tests/conformance/test_progressive_delivery.py`'s. Without both halves the video client's
+   "change the track" path breaks against Atrium and no test here fails, so this criterion is the
+   remaining one.)*
 5. A master playlist for a source with at least one text subtitle stream, negotiated for a profile
    that asks for subtitles in the manifest, carries one media entry per text subtitle stream and a
    variant line naming their group.
@@ -464,11 +468,13 @@ they are not lost and not mistaken for failures.
    *"it does not grow the surface"* — correctly: that sentence is about what the **trace** does, and
    it says in the same breath that the open decision *"is not answered by adding a route"*. Adding
    the routes is not the answer; it is what the answer needs underneath it (§3.4).
-2. **One accepted-gap row is wrong until this feature lands, and stays wrong after it.** The
+2. **One accepted-gap row was wrong, and correcting it is not the same as closing it.** The
    subtitle row of [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)
-   says subtitles are *"delivered as files"*; today they are not delivered at all. Both client
-   traces record the correction as owed and neither makes it, because a change was in flight
-   against that document.
+   said subtitles are *"delivered as files"*; they are not delivered at all. Both client traces
+   recorded the correction as owed and neither made it; **008 T14 made it**, in the change that
+   marked 008 `Implemented`, and the row now names this feature as its closing mechanism. What
+   is owed here is the work, not the wording — and the row is rewritten again the day it lands,
+   because "delivered as files" will still not describe a manifest-announced track.
 3. **The two client traces are a floor, not a ceiling**, and they say so: absence from one means
    *not measured*, never *not needed*. The video client's went stale in a day. Nothing in CI
    notices when they do.

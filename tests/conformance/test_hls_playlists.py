@@ -427,3 +427,31 @@ def test_the_matroska_sibling_really_is_a_different_container() -> None:
     assert LONG_TAKE_MKV.path.endswith(".mkv")
     assert LONG_TAKE.path.endswith(".mp4")
     assert LONG_TAKE_MKV.keyframe_interval_seconds == LONG_TAKE.keyframe_interval_seconds
+
+
+# ------------------------------------------------------------------------------------------
+# AC-11's boundary: these are the two sized delivery responses with no range unit
+# ------------------------------------------------------------------------------------------
+
+
+async def test_ac11_a_playlist_is_sized_and_carries_no_range_unit(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """AC-11 stops here, and the stopping point is measured rather than deduced from the rule.
+
+    Spec section 3.5's table reads *"`Accept-Ranges: bytes` on every delivery response whose body
+    has a known size"*, and these two routes are where that sentence is wrong: the reference's
+    master and media playlists answer `Content-Length`, `Content-Type` and no range unit at all,
+    where its segments carry both `[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]`.
+    Reproduced rather than tidied - sending the header the rule implies would be a header the
+    reference does not send, on the one delivery family a client parses as text.
+    """
+    item = served[1].of(LONG_TAKE)
+
+    master, main = await negotiated_playlists(client, item.id)
+
+    for answered in (master, main):
+        assert answered.headers["Content-Type"] == MEDIA_TYPES["m3u8"]
+        assert answered.headers["Content-Length"] == str(len(answered.content))
+        assert "Accept-Ranges" not in answered.headers
+        assert "Content-Range" not in answered.headers

@@ -234,11 +234,12 @@ the manifest, and the manifest costs the WebVTT extraction 008 excluded. Four pi
 dependency order: emit `IsTextSubtitleStream`; bind `EnableSubtitlesInManifest`; extract and serve
 WebVTT; announce the tracks. The first two are cheap and buy nothing alone.
 
-**One correction to this repository is still owed**, and it was owed on 2026-08-28 too: the
-subtitle row of [behaviours §5](behaviours.md#5-accepted-gaps-in-v1) says subtitles are *"delivered
-as files"*, and in v1 as implemented they are not delivered at all. That row is not edited here
-because another change is in flight against that document; it belongs in **§5's gap table**, and
-the wording it needs is the one in the table above.
+**One correction to this repository was owed here, and it was owed on 2026-08-28 too**: the
+subtitle row of [behaviours §5](behaviours.md#5-accepted-gaps-in-v1) said subtitles are *"delivered
+as files"*, and in v1 as implemented they are not delivered at all. **Made at 008 T14**, in the
+change that marked the feature `Implemented` — a feature closing over that row would have been
+exactly the claim the acceptance map exists to catch. The row now carries the three cases of the
+table above, and names [011](../../specs/011-subtitle-delivery/) as the mechanism that closes it.
 
 ### 4.3 The client's track override works for audio, and is dropped for subtitles
 
@@ -469,9 +470,10 @@ Grouped as a scope would take them:
 | [§4.5](#45-the-fmp4-init-segment-restarts-the-encoder-which-is-the-defect-the-client-pre-warms-to-dodge) | A [behaviours §3.0](behaviours.md#30-how-the-decision-is-made) decision, taken on a probe, before any code |
 | [§4.7](#47-udp-discovery-is-out-of-v1-and-the-client-needs-it) | An amendment to 001, or its own small feature. Not a route |
 
-The two behaviours entries owed — §4.2's correction to the [§5](behaviours.md#5-accepted-gaps-in-v1)
-subtitle row, and §4.1's missing entry — are recorded here rather than made, because a change is in
-flight against that document.
+The two behaviours entries this document owed — §4.2's correction to the
+[§5](behaviours.md#5-accepted-gaps-in-v1) subtitle row, and §4.1's missing entry — were **written at
+008 T14**: both describe what 008 ships, so both belonged to the change that closed it, and neither
+waits on the work above.
 
 ## 7. What this document does not do
 

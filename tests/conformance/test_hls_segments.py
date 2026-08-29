@@ -551,3 +551,38 @@ async def test_a_playlist_id_nothing_named_still_answers_the_segment(
 
     assert answered.status_code == 200, answered.text
     assert answered.content[:1] == b"G"
+
+
+async def test_ac16_and_ac22_a_copied_segment_is_sized_and_identical_twice(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld], tmp_path: Path
+) -> None:
+    """The **remuxed** halves of AC-16 and AC-22, which every other segment test here misses.
+
+    Every other segment in this file is produced by a plan that re-encodes the video, so "every
+    segment carries a `Content-Length`, whether it was remuxed or re-encoded" was half asserted,
+    and so was "the same **remuxed** source requested twice yields identical segment bytes" - the
+    re-encoded twin of that sentence is AC-23 and has its own test. A bare variant request plans a
+    copy at the copy default, which is what makes this a remux rather than a second re-encode with
+    different arguments; the codec assertions are what prove it was one.
+    """
+    item = served[1].of(LONG_TAKE)
+    uris, _durations = await segment_uris(
+        client, item.id, playSessionId="c" * 32, deviceId=DEVICE_ID
+    )
+
+    answered = await client.get(uris[0], headers=HEADERS)
+    again = await client.get(uris[0], headers=HEADERS)
+
+    assert answered.status_code == 200, answered.text
+    assert answered.headers["Content-Length"] == str(len(answered.content))
+    assert answered.headers["Accept-Ranges"] == "bytes"
+    assert again.content == answered.content
+
+    delivered = tmp_path / "copied.ts"
+    delivered.write_bytes(answered.content)
+    streams = {
+        one["codec_type"]: one
+        for one in probe(delivered)["streams"]  # type: ignore[union-attr]
+    }
+    assert streams["video"]["codec_name"] == LONG_TAKE.video_codec
+    assert streams["audio"]["codec_name"] == LONG_TAKE.audio_codec

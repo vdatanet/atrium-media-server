@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import subprocess
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Any
@@ -54,6 +55,7 @@ from tests.fixtures.media import (
     BuiltMedia,
     MediaFile,
     ScannedMediaWorld,
+    binary,
     build_scanned_media_world,
     frame_count,
     keyframe_seconds,
@@ -588,3 +590,155 @@ async def test_a_produced_audio_request_answers_the_measured_shape(
     assert answered.headers["Accept-Ranges"] == NO_RANGES
     delivered = streams_by_kind(inspected(answered.content, tmp_path, "track.mp3"))
     assert delivered["audio"]["codec_name"] == "mp3"
+
+
+# ------------------------------------------------------------------------------------------
+# `audioStreamIndex`: the track the client named is the track the encoder mapped
+# ------------------------------------------------------------------------------------------
+
+#: A film with **two** audio tracks, and the only reason it exists: every entry in T1's matrix
+#: carries exactly one, so `audioStreamIndex` had nothing to select between and the parameter
+#: could only ever be asserted as a string in a URL. Built here rather than added to the matrix,
+#: the way T10 generated its Matroska sibling, because `MediaFile` declares one audio stream.
+TWO_TRACKS = "Two Tracks (2007)/Two Tracks (2007).mkv"
+
+#: The two tracks differ **only** in sample rate, and are deliberately the same codec: a test that
+#: told them apart by codec would pass on a server that inferred the codec correctly and mapped
+#: the wrong stream, which is the failure being ruled out.
+FIRST_TRACK_RATE = 48_000
+SECOND_TRACK_RATE = 24_000
+
+#: Their indexes in the file, and therefore on the wire: `MediaStream.Index` is the file's own.
+FIRST_TRACK_INDEX = 1
+SECOND_TRACK_INDEX = 2
+
+
+def _generate_two_audio_tracks(destination: Path) -> None:
+    """One video stream and two aac tracks, at two sample rates, in Matroska.
+
+    Matroska because both tracks have to survive a stream copy: the assertion is about which
+    stream was mapped, and a container that re-encoded to hold them would answer a rate neither
+    track has.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        binary("ffmpeg"),
+        *("-hide_banner", "-loglevel", "error", "-nostdin", "-y"),
+        *("-f", "lavfi", "-i", "smptebars=size=320x240:rate=25:duration=4"),
+        *("-f", "lavfi", "-i", f"sine=frequency=440:sample_rate={FIRST_TRACK_RATE}:duration=4"),
+        *("-f", "lavfi", "-i", f"sine=frequency=880:sample_rate={SECOND_TRACK_RATE}:duration=4"),
+        *("-map", "0:v:0", "-map", "1:a:0", "-map", "2:a:0"),
+        *("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"),
+        *("-c:a", "aac", "-b:a", "96k"),
+        *("-fflags", "+bitexact", "-flags:v", "+bitexact", "-flags:a", "+bitexact"),
+        *("-f", "matroska", str(destination)),
+    ]
+    finished = subprocess.run(command, capture_output=True, text=True, check=False)  # noqa: S603
+    assert finished.returncode == 0, finished.stderr
+
+
+@pytest.fixture
+def two_track_world(
+    media_paths: DataPaths, media_files: BuiltMedia, tmp_path: Path
+) -> Iterator[tuple[FastAPI, str]]:
+    """The generated matrix plus the two-track sibling, scanned, and the item it produced."""
+    copied = media_files.copy_into(tmp_path / "media")
+    _generate_two_audio_tracks(copied.movies_root.joinpath(*TWO_TRACKS.split("/")))
+
+    built = create_app(media_paths)
+    built.state.readiness.mark_ready()
+    with built.state.sessions.begin() as opened:
+        world = build_scanned_media_world(opened, copied)
+        UserRepository(opened).add(User(id=VIEWER_ID, name="viewer", enable_all_folders=True))
+    built.dependency_overrides[require_user] = _as_viewer
+
+    found = next(
+        candidate
+        for candidate in world.items.values()
+        if any(source.relative_path == TWO_TRACKS for source in candidate.sources)
+    )
+    yield built, found.id
+    built.dependency_overrides.clear()
+    built.state.db.dispose()
+
+
+@pytest.fixture
+async def two_track_client(
+    two_track_world: tuple[FastAPI, str],
+) -> AsyncIterator[httpx.AsyncClient]:
+    transport = httpx.ASGITransport(app=two_track_world[0])
+    async with httpx.AsyncClient(transport=transport, base_url="http://atrium:8096") as opened:
+        yield opened
+
+
+async def test_the_wire_shows_both_tracks_with_the_indexes_the_parameter_names(
+    two_track_client: httpx.AsyncClient, two_track_world: tuple[FastAPI, str]
+) -> None:
+    """The premise, asserted before the thing it is a premise for.
+
+    If the two tracks did not reach the wire under these indexes, the delivery assertion below
+    would be selecting between streams a client cannot name.
+    """
+    _, item_id = two_track_world
+
+    streams = (await two_track_client.get(f"/Items/{item_id}")).json()["MediaSources"][0][
+        "MediaStreams"
+    ]
+    audio = {one["Index"]: one for one in streams if one["Type"] == "Audio"}
+
+    assert sorted(audio) == [FIRST_TRACK_INDEX, SECOND_TRACK_INDEX]
+    assert audio[FIRST_TRACK_INDEX]["SampleRate"] == FIRST_TRACK_RATE
+    assert audio[SECOND_TRACK_INDEX]["SampleRate"] == SECOND_TRACK_RATE
+
+
+async def test_ac8_audio_stream_index_changes_the_audio_that_is_produced(
+    two_track_client: httpx.AsyncClient,
+    two_track_world: tuple[FastAPI, str],
+    tmp_path: Path,
+) -> None:
+    """AC-8 on the one delivery parameter whose effect had only ever been asserted as a string.
+
+    `audioStreamIndex` is bound by `api/delivery.py`, read into the ladder's switches and carried
+    into the encoder's stream mapping, and it is forwarded onto every variant and segment URI -
+    but the only assertion anywhere was that the negotiated `TranscodingUrl` **spells** it. A
+    mapping that ignored the parameter would have passed every test in this repository, and the
+    first client to notice would have been one whose user chose the second audio track.
+
+    The pair is the assertion: the same request with and without the parameter, delivering two
+    different tracks out of one file.
+    """
+    _, item_id = two_track_world
+
+    default = await two_track_client.get(f"/Videos/{item_id}/stream.mkv")
+    named = await two_track_client.get(
+        f"/Videos/{item_id}/stream.mkv", params={"audioStreamIndex": SECOND_TRACK_INDEX}
+    )
+
+    assert default.status_code == 200, default.text
+    assert named.status_code == 200, named.text
+
+    delivered = streams_by_kind(inspected(default.content, tmp_path, "default.mkv"))
+    chosen = streams_by_kind(inspected(named.content, tmp_path, "named.mkv"))
+
+    assert int(delivered["audio"]["sample_rate"]) == FIRST_TRACK_RATE
+    assert int(chosen["audio"]["sample_rate"]) == SECOND_TRACK_RATE
+    # One audio stream out, not both: the parameter selects rather than reorders.
+    assert len(inspected(named.content, tmp_path, "named.mkv")["streams"]) == 2
+
+
+async def test_an_audio_stream_index_naming_nothing_falls_back_to_the_first(
+    two_track_client: httpx.AsyncClient,
+    two_track_world: tuple[FastAPI, str],
+    tmp_path: Path,
+) -> None:
+    """Measured leniency, not a guess: an index no stream carries is not a refusal - the route
+    delivers the first audio track, which is what a request that named none gets."""
+    _, item_id = two_track_world
+
+    answered = await two_track_client.get(
+        f"/Videos/{item_id}/stream.mkv", params={"audioStreamIndex": 99}
+    )
+
+    assert answered.status_code == 200, answered.text
+    delivered = streams_by_kind(inspected(answered.content, tmp_path, "absent.mkv"))
+    assert int(delivered["audio"]["sample_rate"]) == FIRST_TRACK_RATE

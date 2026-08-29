@@ -119,23 +119,38 @@ say how it will be proven is not finished.
 | [005](005-item-query-api/) | Item query API | **Implemented** | **Implemented** | **Implemented** |
 | [006](006-images/) | Images | **Implemented** | **Implemented** | **Implemented** |
 | [007](007-user-data-and-playstate/) | User data and playstate | **Implemented** | **Implemented** | **Implemented** |
-| [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Accepted** | **Accepted** | **Accepted** |
+| [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Implemented** | **Implemented** | **Implemented** |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 | [011](011-subtitle-delivery/) | Subtitle delivery | Draft | — | — |
 
-**001 through 007 are implemented**, 007 on 2026-08-28 across thirteen tasks. **008's spec and
-plan were accepted on 2026-08-29** at a review that wrote and ran the five probes its open
-questions had been citing prospectively — all twelve OQs answered, five claims overturned (the
-policy story, the body's `EnableTranscoding` switch, `static=true` as an error, `enableRedirection`'s
-`302`, and the HLS half of the §3.5 divergence, which measured as parity), and two defects found
-that nobody was looking for (behaviours §3.7 and §3.8: the Opus rate ladder applied to every
-codec, and the codec-less empty `200`). **008's fourteen tasks were accepted the same day** —
-their gate found the fixture world has no files behind any item and CI has no ffmpeg, both now
-T1's to fix — so **008 T1 is next**; 009, 010 and 011 remain drafts, and
-their open questions are the standing review agenda
-([007's tasks](007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones) names
-what 008 inherits).
+**001 through 008 are implemented**, 008 on 2026-08-29 across fourteen tasks. Its spec and plan
+were accepted the same day, at a review that wrote and ran the five probes its open questions had
+been citing prospectively — all twelve OQs answered, five claims overturned (the policy story, the
+body's `EnableTranscoding` switch, `static=true` as an error, `enableRedirection`'s `302`, and the
+HLS half of the §3.5 divergence, which measured as parity), and two defects found that nobody was
+looking for (behaviours §3.7 and §3.8: the Opus rate ladder applied to every codec, and the
+codec-less empty `200`). **Every one of the fourteen tasks then found something further**, which is
+why the spec carries thirteen amendments and not one: the sharpest are the four `stream` routes
+requiring no token where the task list said the opposite (T6), a `PlaySessionId`-keyed stop whose
+mandatory `deviceId` decides nothing (T12), and a `SegmentKeepSeconds` that is a distance behind
+the client rather than a file age (T13). **009, 010 and 011 remain drafts**, and their open
+questions are the standing review agenda —
+[what 008 owes them](008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
+is written down rather than remembered. The lowest-numbered feature that is not implemented is
+**009**, so its spec review is the next gate, and that list is one of its inputs.
+
+**008's own closing task found the class it exists to catch.** The acceptance map is where a
+criterion and the test that proves it are put on one line, and doing that showed two criteria whose
+tests contradict them — `SupportsTranscoding` derived from the negotiated answer rather than from
+the profile, and *"every delivery route whose body has a known size answers `Accept-Ranges: bytes`"*,
+which the two playlist routes disprove on both servers — and two more mapped to tests that proved
+less than their names: nothing had ever compared the `Size` a negotiation advertises with the bytes
+the delivery route serves, and `audioStreamIndex` was asserted as a string in a URL and never as a
+property of the audio that came back. The definition of done's *"no other response differs
+observably from the measured reference"* was also false: a progressive re-encode produced to a pipe
+carries no MP3 header frame and no completed FLAC `STREAMINFO`, which is a **fourth** delivery
+divergence and the only one in the feature pointing away from the reference.
 
 **011 was opened on 2026-08-29 for a promise, not for a new idea.** An audit of the two
 first-party clients found requirements nothing owns, and the sharpest is one the
