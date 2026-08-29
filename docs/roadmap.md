@@ -21,6 +21,7 @@ Everything below is either a step toward that sentence or explicitly out.
 | **Images** | Primary, Backdrop, Thumb, Logo, Banner; on-the-fly resizing with a disk cache; content-hash tags |
 | **Playback** | `PlaybackInfo` negotiation against a client `DeviceProfile`; direct play with full `Range` support; remuxing to a compatible container without re-encoding, delivered over HLS |
 | **Transcoding** | Software re-encoding when neither direct play nor remux satisfies the profile: video and audio codec conversion, resolution / bitrate / channel ceilings, HLS delivery, throttling, and scratch space with a ceiling |
+| **Subtitles** | Text subtitle tracks — embedded and sitting beside the media — announced in the HLS manifest, negotiated from the client's profile, converted and served as files. Not painted into frames |
 | **Conformance** | The four-level harness in [compatibility/conformance.md](compatibility/conformance.md) |
 
 **Transcoding entered v1 on 2026-08-27**, and it is the one scope decision in this document that was
@@ -37,7 +38,7 @@ advertising a capability and failing at delivery time is worse than not having i
 | Not in v1 | Reason |
 |---|---|
 | **Hardware-accelerated transcoding** | VAAPI, QSV, NVENC, VideoToolbox: a per-machine hardware surface with its own detection, failure modes and driver matrix. v1 encodes on the CPU — slower, but portable and testable on any machine that can run the test suite |
-| **Subtitle burn-in** | Needs a text-rendering stack (fonts, ASS positioning, shaping) and a second filter path. v1 delivers subtitle files; it does not paint them into frames |
+| **Subtitle burn-in** | Needs a text-rendering stack (fonts, ASS positioning, shaping) and a second filter path. v1 delivers subtitle files — that half is **011**, and it had no owning feature until 2026-08-29 — but it does not paint them into frames |
 | **Live TV, DVR, tuners** | A separate product with its own hardware surface |
 | **The Jellyfin web UI** | Would add a large endpoint surface whose only consumer is a UI this project is not building |
 | **Plugins** | .NET assembly loading; no Python analogue worth inventing |
@@ -63,11 +64,36 @@ priority order: each feature is testable the moment it lands, and each unlocks t
 | **008** | Playback negotiation and delivery | `PlaybackInfo`, direct play, remux, software transcoding, `Range` | 005, 007 |
 | **009** | Playlists | Create, read, add, remove, reorder | 005 |
 | **010** | Conformance harness | The L0–L3 machinery as a deliverable, not a by-product | all |
+| **011** | Subtitle delivery | Text subtitle tracks announced, negotiated, and served — embedded and beside the media | 008 |
 
 **008 is one feature, not two.** Transcoding lives inside it rather than in a directory of its own,
 because it is not a separate capability a client can ask for: it is the third branch of a single
 decision, reached only when the first two fail. Splitting it would put one decision ladder in two
 specifications and guarantee they drift.
+
+**011 is a correction to this table, not an addition to v1's scope.** The exclusion row above
+excludes subtitle *burn-in* and says in the same sentence that **v1 delivers subtitle files** —
+a promise made before 001 was written, and one this table had no row for. 008 excluded subtitle
+extraction, conversion and delivery as out of its own scope, correctly: it is a feature about
+deciding a play method and moving the bytes of a media file. Nothing picked the promise up, so
+between the two of them v1 as specified delivered **no** subtitle by any path, which is wider than
+the burn-in row records and was found from the client's side rather than the server's
+([client-atrium-tvos §4.2](compatibility/client-atrium-tvos.md#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one)).
+011 is that row. Its number is 011 rather than a slot before 009 because numbers are assigned in
+the order features are *started* and never reused ([specs/README.md](../specs/README.md)) — the
+gap in the sequence is the information that this was found late, not planned late.
+
+**011 is not everything the client traces found.** Both
+[client-atrium-tvos §6](compatibility/client-atrium-tvos.md#6-where-these-findings-go) and
+[client-embeat-mobile §7](compatibility/client-embeat-mobile.md#7-where-these-findings-go) route
+their findings to *"the feature that comes after 010"*, and both are right that none of them is an
+008 defect. 011 takes the two that are one mechanism — subtitle delivery end to end, which the
+video client's own grouping calls *"the largest of them"*. The rest are handed on at the size those
+documents measured them, and four of them are one probe away from being specifiable and none is
+specifiable before its probe: a source with no stored inspection, two spellings of `hls`, a session
+list that takes no `deviceId`, and an initialisation segment that restarts production. They become
+a feature on the day their measurement session runs, and take their number then
+([011 §2.1](../specs/011-subtitle-delivery/spec.md)).
 
 **010 is last in the list but not last in time.** L0 and L1 exist from 001 — the casing sweep has
 to be in place before the first response model, or Principle I is enforced by discipline instead of
