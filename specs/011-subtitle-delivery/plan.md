@@ -5,6 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-30
 accepted: 2026-08-30
+amended: 2026-08-30 at the tasks gate — four things this plan could not have known or did not check. §6.5's "the variant line gains the group" was written while the master answered one variant and 008's T15 amended that the same day, so the group goes through `_variant` and every entrance carries it. §6.1's "lookup on the codec spelling" reads a spelling `media/probe.py` does not store: the reference renames four subtitle codecs inside its own probe normalisation, `dvd_subtitle` contains no `dvdsub`, and applied to ffprobe's own name the rule answers *text* for every DVD and DVB subtitle track there is — so the rename moves to inspection and migration 0007 rewrites the four values. §8's embedded image subtitle track cannot be encoded by ffmpeg at all, and the fixture writes a PGS bitstream itself. And §6.2's "eight regional rows" are nine, two of which are not regional tags
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -162,7 +163,10 @@ half needed a ledger. A single module would make the cue tests need a scratch di
 
 ## 4. Data model
 
-Migration `0007_external_subtitle_streams`, reversible (drop the table).
+Migration `0007_external_subtitle_streams`, reversible (drop the table). It carries one data
+change beside the new table: the four subtitle codec spellings of §6.1 are rewritten in
+`media_streams`, because a row a 008 scan stored holds ffprobe's own name and the media file's
+change signal will never move to trigger a re-inspection.
 
 **`media_external_streams`** — one row per subtitle stream found in a file beside the media:
 
@@ -337,8 +341,25 @@ as text except a codec containing `pgs`, `dvdsub` or `dvbsub`, or spelled exactl
 extension with an image one `[source: MediaBrowser.Model/Entities/MediaStream.cs:751-761 @
 v10.11.11]`. A stream with no codec at all is text only when it came from a file beside the media
 `[source: MediaBrowser.Model/Entities/MediaStream.cs:639-654 @ v10.11.11]`. Both live in
-`media/info.py` as functions of the stored row, so no column and no migration is needed for
-either.
+`media/info.py` as functions of the stored row, so no column is needed for either.
+
+**But the spelling that lookup reads is not the one `media/probe.py` stores, and the tasks gate
+corrected this paragraph on 2026-08-30.** The reference renames four subtitle codecs *inside* its
+own probe normalisation, before any consumer sees them — `dvb_subtitle`→`DVBSUB`,
+`dvb_teletext`→`DVBTXT`, `dvd_subtitle`→`DVDSUB`, `hdmv_pgs_subtitle`→`PGSSUB` `[source:
+MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:632-652, 765-768 @ v10.11.11]` — and
+`"dvd_subtitle"` contains no `dvdsub`. Applied to ffprobe's own `codec_name`, the rule answers
+*text* for every DVD and DVB subtitle track there is, which is AC-1 and AC-7 failing together on
+any real library. The renamed spelling is also what `MediaStream.Codec` carries on the wire —
+`PGSSUB`, `DVDSUB` and `DVBTXT` all appear beside `subrip`, `ass` and `webvtt` `[probe: manual
+requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]` — so this is a property **008
+already emits differently**, invisible until now because no fixture had a subtitle stream. The
+rename therefore goes in `media/probe.py`, where the reference puts it and where one spelling then
+reaches `media/info.py`, `media/decision.py` and `media/extract.py` alike; a rename applied only
+at emission would leave the negotiation's `SupportsFormat` comparing a spelling no profile
+declares. Migration 0007 rewrites the four values in `media_streams`, because a stored row from a
+008 scan otherwise keeps a spelling the wire disagrees with and its media file's change signal
+will never move.
 
 `SupportsExternalStream` is `is_external or is_text_subtitle or is_pgs`, where PGS is a codec
 containing `pgs` or spelled `sup` `[source:
@@ -395,10 +416,18 @@ once against six items in directories of up to 259 files
    that made `hi` a flag outright would mislabel every Hindi sidecar in a library. This branch is
    **read, not measured**: the probe's own reproduction does not carry it and the library it ran
    against has no filename that reaches it (§6.8).
-4. The language written down is the culture row's `Name` when it contains a `-` — the eight
-   regional rows, `zh-hk` and its siblings — and its terminological three-letter code otherwise.
-   `metadata/cultures.py` already carries all four fields for all 192 rows, so this is a lookup
-   and not a new table.
+4. The language written down is the culture row's `Name` when it contains a `-` and its
+   terminological three-letter code otherwise. `metadata/cultures.py` already carries all four
+   fields for all 192 rows, so this is a lookup and not a new table — and the lookup itself is the
+   reference's: a token matches a row's display name, its name, either three-letter code or the
+   two-letter code, case-insensitively, first row in the table wins `[source:
+   Emby.Server.Implementations/Localization/LocalizationManager.cs:172-199 @ v10.11.11]`.
+   **This step said "the eight regional rows, `zh-hk` and its siblings" and the tasks gate
+   corrected it**: **nine** of the 192 names contain a dash, and two of them are not regional tags
+   at all — `Greek, Modern (1453-)` and `Luba-Katanga`, in this repository's generated table and
+   in what `/Localization/Cultures` serves alike. A Greek sidecar's language is therefore written
+   `Greek, Modern (1453-)` rather than `ell`, which is the reference's own answer and a row of the
+   filename matrix rather than a footnote.
 
 Note the asymmetry in step 2 and reproduce it: the default and forced vocabularies match by
 **containment** and the hearing-impaired one matches by **equality**. It is not a tidiness
@@ -595,8 +624,21 @@ Jellyfin.Api/Helpers/DynamicHlsHelper.cs:596-632 @ v10.11.11]`,
 with the attributes in that order, the group literally `subs`, `AUTOSELECT=YES` always,
 `DEFAULT=YES` on the stream whose index equals the selected one and `NO` on every other,
 `FORCED` from the stream's own flag, `LANGUAGE` falling back to the literal `Unknown`, and the
-lines emitted **before** the `#EXT-X-STREAM-INF` line. The variant line gains `,SUBTITLES="subs"`
-**last**, after the frame rate.
+lines emitted **before** the first `#EXT-X-STREAM-INF` line.
+
+**Every variant line gains `,SUBTITLES="subs"` last, after the frame rate — and this paragraph
+said "the variant line" until the tasks gate corrected it on 2026-08-30.** It was written while
+`master_playlist` answered exactly one variant, and 008's own T15 amended that on the same day:
+an HDR source whose video is stream-copied is now offered an h264 SDR entrance beside the copy,
+so the master carries two `#EXT-X-STREAM-INF` lines. The reference passes its subtitle group to
+**every** playlist line it appends — the copy, the two codec entrances, the h264 entrance, the
+level-5.0 rewrite and both adaptive-bitrate variants `[source:
+Jellyfin.Api/Helpers/DynamicHlsHelper.cs:213-315, 325-345 @ v10.11.11]`, confirmed on the wire
+against an HDR film negotiated for a copy: three variants, all three ending `,SUBTITLES="subs"`
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`. The group therefore
+belongs to `_variant`, which is the one function both lines already go through, rather than to the
+first line's construction — and a group on one variant only would take subtitles away from
+exactly the client the entrance exists for.
 
 **The filter is on the stream kind and not on the selection**, which AC-7 turns on: selecting an
 image track still announces every text track, with `DEFAULT=NO` on all of them, because no
@@ -835,6 +877,16 @@ under a `vtt`-only profile. The **sidecar** `.srt` goes beside the second, with 
 exercises the right-to-left read — a language token, a forced token and an unclaimed token that
 becomes the title.
 
+**The image track cannot be encoded, and the tasks gate found that out by trying.** ffmpeg has no
+Presentation Graphic Stream encoder at all, and its bitmap encoders refuse a text input outright —
+*"Subtitle encoding currently only possible from text to text or bitmap to bitmap"* — so
+`-c:s dvdsub` over the generated `.srt` fails and the matrix's generate-with-ffmpeg rule has
+nothing to ask for. The entry therefore writes the **bitstream itself**: a 434-byte PGS of five
+segment types, one 32×8 run-length object and two display sets, which demuxes as
+`hdmv_pgs_subtitle` and muxes in with `-c:s copy` (measured at the gate, 2026-08-30). It is still
+generated rather than checked in, which is the module's own rule, and the entry carrying it is
+Matroska because mp4 accepts neither PGS nor DVD subtitles.
+
 **The sidecar must not go beside a film 008's tests already assert about.** Placing it there
 renumbers that film's streams, which is this feature working correctly and 008's `audioStreamIndex`
 assertions failing for a reason that looks like a bug in the renumbering. It is the fixture trap
@@ -865,7 +917,11 @@ per address class — the manifest method with a text index, with an image index
 method, the burn-in method, an index with no method, the manifest flag alone, and nothing at all —
 where four of them must be **byte-identical to the master playlist the same request answers
 today** (AC-6). Those four are the criterion that keeps 008 intact, and they are cheap: the golden
-files already exist.
+files already exist. A **ninth** class arrived with 008's own T15 and is the one this plan was
+written before: the HDR fixture entry negotiated for a stream copy, whose master carries the copy
+*and* the SDR entrance, where the assertion is that **both** variant lines end in the group
+(§6.5). Two files differing only in colour are negotiated the same way and answer one variant and
+two, which is already `tests/conformance/test_hls_playlists.py`'s shape.
 
 **AC-8 is a traversal and not a comparison**, which is the sharpest thing the tasks inherit. One
 conformance test negotiates against a profile declaring the manifest method, follows the

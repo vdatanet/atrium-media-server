@@ -122,7 +122,7 @@ say how it will be proven is not finished.
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Implemented** | **Implemented** | **Implemented** |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
-| [011](011-subtitle-delivery/) | Subtitle delivery | **Accepted** | **Accepted** | — |
+| [011](011-subtitle-delivery/) | Subtitle delivery | **Accepted** | **Accepted** | **Accepted** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
 
 **001 through 008 are implemented**, 008 on 2026-08-29 across fourteen tasks. Its spec and plan
@@ -139,9 +139,9 @@ the client rather than a file age (T13). **009 and 010 remain drafts**, and thei
 questions are the standing review agenda —
 [what 008 owes them](008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
 is written down rather than remembered. **011's spec was accepted the same day**, at its own
-measurement gate, so it is no longer one of the drafts; **012 was opened as one on the same day and
-accepted at its own gate the same day**, so the drafts are 009 and 010. The lowest-numbered feature
-that is not implemented is
+measurement gate, and its plan and task list on 2026-08-30, so it is no longer one of the drafts
+and it is ready for code; **012 was opened as one on 2026-08-29 and accepted at its own gate the
+same day**, so the drafts are 009 and 010. The lowest-numbered feature that is not implemented is
 **009**, so its spec review is the next gate, and that list is one of its inputs.
 
 **008's own closing task found the class it exists to catch.** The acceptance map is where a
@@ -186,6 +186,19 @@ questions the spec parked were measured rather than argued: an honest `Content-L
 improvement as recorded, while **keying a transcode on the client's play session is parity** —
 the reference already does it on the three routes that declare the parameter, and `/universal`,
 the one the music client uses, mints a fresh session per request instead.
+
+**Its plan was accepted on 2026-08-30 and its task list at a gate on the same day, and that gate
+found the class this project keeps meeting from a new direction: a document that was true when it
+was written.** Plan §6.5 put the manifest's subtitle group on *"the variant line"*, which was
+right while the master playlist answered exactly one — and 008's own T15 had given an HDR stream
+copy a standard-range entrance beside it hours earlier, so an entrance offering no subtitles would
+have shipped to precisely the client the entrance exists for. Three more: the text/image split
+reads a **renamed** codec spelling, and against the name a file actually reports the rule inverts
+on every DVD and broadcast subtitle track there is — a property 008 already emits, invisible until
+now because no fixture had a subtitle stream; the embedded **image** subtitle track the fixture
+needs cannot be encoded by ffmpeg at all, so it is written as a bitstream by hand; and the sidecar
+naming rule's *"eight regional rows"* are nine, two of which are not regional. **Twelve tasks**,
+ordered so that the two stream numberings land before any address carries one.
 
 **Its scope argument is the roadmap's *"008 is one feature, not two"* read backwards.** The two
 client traces
