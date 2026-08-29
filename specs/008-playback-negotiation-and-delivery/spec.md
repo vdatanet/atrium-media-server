@@ -171,21 +171,39 @@ proven by recovering a real file's modification time from a tag the reference se
 **Request body:** `UserId`, `MaxStreamingBitrate`, `StartTimeTicks`, `AudioStreamIndex`,
 `SubtitleStreamIndex`, `MaxAudioChannels`, `MediaSourceId`, `DeviceProfile`, and the
 `EnableDirectPlay` / `EnableDirectStream` / `EnableTranscoding` / `AllowVideoStreamCopy` /
-`AllowAudioStreamCopy` switches. `[spec: PlaybackInfoDto]`
+`AllowAudioStreamCopy` switches. `[spec: PlaybackInfoDto]` **The whole body is optional** — a
+request that carries none at all is answered rather than refused `[probe: manual requests via
+tools/_probe.py, Jellyfin 10.11.11, 2026-08-29]` — while an unrecognised token *inside* one is a
+`400`, which is the opposite of what an unrecognised query token does (§1.12 of the behaviours
+document). `AudioStreamIndex` is applied only when `MediaSourceId` names the source it is about.
 
 **Response — 200**
 
 ```json
 {
   "MediaSources": [ ],
-  "PlaySessionId": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
-  "ErrorCode": null
+  "PlaySessionId": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
 }
 ```
+
+Two properties, not three: an absent `ErrorCode` is **absent**, not `null`, under the global
+null-suppression this server already reproduces. And the third shape has the opposite pair — an
+empty source list answers `{"MediaSources": [], "ErrorCode": "NoCompatibleStream"}` with **no
+`PlaySessionId`**, because one is issued only where there is something to play `[probe:
+tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29]`.
 
 Each returned media source is **annotated with the decision** for this client: the support flags
 set to what this profile can actually do, and `TranscodingUrl` populated when the answer is
 "fetch it from here instead of directly".
+
+**A request with no `DeviceProfile` is not a request with no profile.** The negotiation falls back
+to the profile the calling device stored through `POST /Sessions/Capabilities/Full`, so the same
+bare request answers direct play before a client posts its capabilities and a `TranscodingUrl`
+after `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29; source:
+Jellyfin.Api/Controllers/MediaInfoController.cs:137-147 @ v10.11.11]`. The `GET` below is
+unaffected — it is profile-less by construction, measured on the same session. A client that
+describes itself once and then negotiates with a bare body is what this exists for, and a server
+without it hands that client a file it never said it could open.
 
 **The annotation is per request, and the switches are not equals.** `EnableDirectPlay: false`
 on a profile the source satisfies flips `SupportsDirectPlay` to `false` and produces a
@@ -206,10 +224,18 @@ right thing.
 
 | Condition | Status / body |
 |---|---|
-| Unknown or invisible item | `404` |
-| Unauthenticated | `401` |
+| Unknown or invisible item | `404`, problem details — byte-identical to `/Items/{itemId}`'s own refusal for the same identifier, on both routes `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29]` |
+| Unauthenticated | `401`, **empty**: no body, no `Content-Type`. Refused before the route runs, which is why it is not the problem-details shape above. Same probe |
 | User lacks `EnableMediaPlayback` | `200`, **the negotiation unchanged** — see below |
 | No source can be played by this profile | `200`, **not** a `4xx` — and **no** `ErrorCode`: the refusal is the source's own capability flags |
+
+The first two rows carried no citation until the routes were implemented, and measuring them
+turned up the one identifier that is neither: the **all-zeros** form is the reference's
+`Guid.Empty` and never reaches a lookup at all, because a guard throws before it
+`[source: Emby.Server.Implementations/Library/LibraryManager.cs:1359-1362 @ v10.11.11]` — so it
+answers the controller's `400` in plain text where any other unowned identifier answers `404`.
+That edge is already recorded as not reproduced (behaviours §1.11, and 006 §3.2's own table): this
+server has no root-folder item, so the identifier is simply unknown here.
 
 The last two rows are the important ones, and neither survived in its first wording.
 
@@ -232,12 +258,17 @@ have been an invented refusal — a delta a policy-restricted client would obser
 has exactly one assignment site: `NoCompatibleStream`, set when the **media source list is
 empty** `[source: Jellyfin.Api/Helpers/MediaInfoHelper.cs:123 @ v10.11.11]`. The other two are
 dead members no response can carry. Atrium emits `NoCompatibleStream` in the same one place and
-nothing else anywhere.
+nothing else anywhere. What a v1 request reaches that place by is a **`MediaSourceId` naming no
+part of the item**: the list is filtered to it, nothing survives, and the answer carries the code
+and no `PlaySessionId` `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29]`.
 
 **`GET /Items/{itemId}/PlaybackInfo`** is the profile-less variant, included by design. Without a
 profile there is nothing to negotiate against, so it returns the sources with their intrinsic
 capabilities — all three flags `true`, no `TranscodingUrl` — and still issues a `PlaySessionId`
-`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28]`.
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28]`. It stays profile-less even
+for a device whose stored capabilities carry one, which is what makes the fallback above the
+`POST`'s alone — measured on the one session, answering both ways in the same minute `[probe:
+tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29]`.
 
 ### 3.3 The decision
 
@@ -330,7 +361,9 @@ receiving a broken stream. Of the request body's switches, `EnableDirectPlay` is
   profile that can play nothing gets, because it is one `[probe:
   tools/probe_decision_ladder.py, Jellyfin 10.11.11, 2026-08-29]`. This paragraph read "empty or
   absent" until the empty half was measured, and a server that answered direct play to it would
-  hand a client bytes it had said nothing about being able to open.
+  hand a client bytes it had said nothing about being able to open. **"Absent" is decided by the
+  route, not here**: a `POST` whose body names no profile is negotiated against the one its device
+  stored, and only a device that stored none is a client that has not told us (§3.2).
 - **Never claim a capability that is not there.** `SupportsTranscoding` is `true` on a source
   exactly when this server can produce, for *this* profile, a stream the profile accepts — and
   `false` otherwise, including when the profile's ceilings leave nothing producible. It is a claim

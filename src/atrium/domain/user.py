@@ -6,10 +6,11 @@ type**: what a client sees is built from this, not this. The distinction is what
 names, the domain names and the property names a client reads all be different without any of them
 being wrong.
 
-The nine honoured policy flags are fields here because something reads them. The other 31 sit in
-`policy_extra` untouched, and `configuration` is whole for the same reason - v1 acts on two of its
-sixteen properties and stores all of them, because a client that round-trips a document from a
-newer server must get its own data back.
+The nine policy flags with columns are fields here because something queries them. The other 28
+sit in `policy_extra`, three of them read at negotiation time and the rest untouched; and
+`configuration` is whole for the same reason - v1 acts on two of its sixteen properties and stores
+all of them, because a client that round-trips a document from a newer server must get its own
+data back.
 """
 
 from __future__ import annotations
@@ -65,8 +66,9 @@ class User:
     last_login_date: datetime | None = None
     last_activity_date: datetime | None = None
 
-    #: The 31 policy properties v1 does not act on, and the whole `UserConfiguration`. Echoed back
-    #: exactly as they arrived; feature 002 never reads inside either one.
+    #: The 28 policy properties without a column, and the whole `UserConfiguration`. Echoed back
+    #: exactly as they arrived; feature 002 never reads inside either one, and 008 reads exactly
+    #: three keys of the first (`users/policy.py`, the playback permissions).
     policy_extra: dict[str, Any] = field(default_factory=dict)
     configuration: dict[str, Any] = field(default_factory=dict)
 

@@ -250,7 +250,9 @@ therefore unverified: nothing can measure where a property that is never sent wo
 `[spec: UserDto]`
 
 **Policy in v1.** The reference sends **42** policy properties. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` v1 stores and returns the
-whole set so clients see the shape they expect, but **honours eleven of them**:
+whole set so clients see the shape they expect, but **honours fourteen of them** — eleven since it
+was written, and the three playback permissions since transcoding entered v1, which is the last
+row of this table and the amendment below it:
 
 | Flag | Effect |
 |---|---|

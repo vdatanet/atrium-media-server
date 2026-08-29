@@ -9,11 +9,13 @@ them into domain objects and hands those out (architecture section 1, ADR-0003).
 reason it is visible in the schema rather than only in the code. The reference's `UserPolicy`
 carries **42** properties `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11,
 2026-08-28]`; v1 honours
-**eleven** of them, and those eleven become **nine columns plus two rows in a join table**, because
-two of the eleven are lists of libraries rather than flags. The other **31** live in `policy_extra`
-and are echoed back untouched. A reader can therefore tell what is enforced from what is merely
-kept without reading the enforcement code, and honouring a twelfth means moving a key out of the
-blob into a column - a migration, and therefore a decision somebody makes on purpose.
+**fourteen** of them, and eleven of those become **nine columns plus two rows in a join table**,
+because two are lists of libraries rather than flags. The other **28** live in `policy_extra` and
+are echoed back untouched - except the three playback permissions 008 reads there, which are
+honoured without a column because no query touches them (`users/policy.py`). A reader can
+therefore tell what is enforced from what is merely kept without reading the enforcement code, and
+honouring another property that anything queries means moving a key out of the blob into a column
+- a migration, and therefore a decision somebody makes on purpose.
 
 See specs/002-authentication-users-and-sessions/plan.md section 4.
 """
@@ -118,7 +120,7 @@ class User(Base):
     )
 
     # -- what is stored and echoed, not enforced ---------------------------------------------
-    #: The other 31 policy properties, returned to a client exactly as they arrived. A client that
+    #: The other 28 policy properties, returned to a client exactly as they arrived. A client that
     #: round-trips a policy from a newer server must get its own data back (spec AC-8's shape).
     policy_extra: Mapped[dict[str, Any]] = mapped_column(
         JSON, nullable=False, default=dict, server_default=text("'{}'")

@@ -1,13 +1,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The policy document: eleven properties this server acts on, and 31 it carries.
+"""The policy document: fourteen properties this server acts on, and 28 it carries.
 
 The reference sends **42** policy properties
-`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`. v1 honours eleven of
+`[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`. v1 honours fourteen of
 them, and the split is structural rather than conventional -
-nine are typed columns, two are the library join table, and the remaining 31 live in a blob that
-nothing in this project ever reads inside. A reader can therefore tell enforcement from storage by
-looking at the schema, and honouring a twelfth means moving a key out of the blob into a column,
-which is a migration and therefore a decision somebody makes on purpose.
+nine are typed columns, two are the library join table, and the rest live in a blob. A reader can
+therefore tell enforcement from storage by looking at the schema, and honouring another property
+that anything *queries* means moving a key out of the blob into a column, which is a migration and
+therefore a decision somebody makes on purpose.
+
+**Three of the fourteen are read out of the blob rather than promoted**, and that is the one
+exception to the sentence above: the playback permissions at the bottom of this module. 002
+section 3.5 moved them into the enforced set on 2026-08-27, when transcoding entered v1, and 008
+enforces them - in one response, through one reader, with no query anywhere near them. The column
+rule buys visibility for things a query touches; these touch none.
 
 **Assembling is not "return what was stored".** The document a client receives is built from three
 places, and the order is the reference's own: a C# object serialises its properties in a fixed
@@ -15,8 +21,9 @@ order regardless of what any client sent, so echoing a client's key order would 
 than the fidelity. What round-trips is the **set of properties and their values**, which is what
 `split(assemble(x)) == x` means here.
 
-**A known property never lives in the blob.** Splitting strips the eleven out of `policy_extra`
-before storing the rest, and assembling reads each of them from its column. That is what makes the
+**A property with a column never lives in the blob.** Splitting strips those eleven out of
+`policy_extra` before storing the rest, and assembling reads each of them from its column - the
+three playback permissions have no column and stay where they arrived. That is what makes the
 promotion of a property from blob to column - the migration described above - lossless in both
 directions: a stale copy left in an old blob is ignored rather than fighting the column, and a
 newer server's unknown property is preserved rather than dropped.
@@ -32,7 +39,9 @@ from typing import Any
 
 from atrium.domain.user import LibraryAccess, User
 
-#: Reference property name -> the column that holds it. Nine of the eleven honoured properties.
+#: Reference property name -> the column that holds it. Nine of the eleven properties honoured
+#: by storage; the other two are the library lists, and the three playback permissions below have
+#: no column at all.
 HONOURED_COLUMNS: Mapping[str, str] = {
     "IsAdministrator": "is_administrator",
     "IsDisabled": "is_disabled",
@@ -51,7 +60,9 @@ ENABLED_FOLDERS = "EnabledFolders"
 DELETION_FOLDERS = "EnableContentDeletionFromFolders"
 HONOURED_LISTS = (ENABLED_FOLDERS, DELETION_FOLDERS)
 
-#: Everything this server acts on. Anything else is carried, not read.
+#: Everything with a place of its own in the schema. What `split` strips out of the blob, and what
+#: `assemble` puts back from a column - not the whole enforced set, which is these eleven plus the
+#: three playback permissions below.
 HONOURED = frozenset(HONOURED_COLUMNS) | frozenset(HONOURED_LISTS)
 
 #: Which of the nine are booleans, so a value of the wrong shape is caught before it reaches a
@@ -79,7 +90,8 @@ class PolicyUpdate:
     #: Column name -> value, for the nine.
     columns: dict[str, Any] = field(default_factory=dict)
     access: LibraryAccess = field(default_factory=LibraryAccess)
-    #: The other 31, or however many a newer server sent.
+    #: The other 28, or however many a newer server sent - three of which are read rather than
+    #: merely kept (see the playback permissions at the bottom of this module).
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -144,15 +156,69 @@ def _library_ids(value: Any) -> tuple[str, ...]:
     return tuple(str(one) for one in value)
 
 
+# ------------------------------------------------------------------------------------------------
+# The three that are read rather than stored
+# ------------------------------------------------------------------------------------------------
+
+#: What a negotiation asks of an account, in the reference's own spellings.
+VIDEO_TRANSCODING = "EnableVideoPlaybackTranscoding"
+AUDIO_TRANSCODING = "EnableAudioPlaybackTranscoding"
+REMUXING = "EnablePlaybackRemuxing"
+
+#: Honoured, and carried in the blob rather than promoted to columns. **The third category**, and
+#: it is deliberate: 002 section 3.5 moved these into the enforced set on 2026-08-27, when
+#: transcoding entered v1, and 008 is the feature that enforces them. They stay in
+#: `policy_extra` because the column rule above exists to make enforcement *visible in the
+#: schema for anything a query touches* - and these three touch no query. They shape one
+#: response, are read in one place, and default to permitted exactly as a new account's do.
+#: Promoting them would be a migration that bought nothing back.
+PLAYBACK_PERMISSIONS = (VIDEO_TRANSCODING, AUDIO_TRANSCODING, REMUXING)
+
+
+@dataclass(frozen=True, slots=True)
+class PlaybackPermissions:
+    """What this account is allowed to have produced for it. All three default to permitted."""
+
+    video_transcoding: bool = True
+    audio_transcoding: bool = True
+    remuxing: bool = True
+
+
+def playback_permissions(user: User) -> PlaybackPermissions:
+    """The three permissions a negotiation reads, as stored or as a new account would have them.
+
+    A property that is absent means permitted, which is what the reference's own defaults say and
+    what an account created here has: `policy_extra` is empty until somebody posts a policy. A
+    value that is not a boolean is treated as absent rather than as false - a policy this server
+    could not have written is not grounds for refusing a user their playback.
+    """
+
+    def permitted(name: str) -> bool:
+        stated = user.policy_extra.get(name)
+        return stated if isinstance(stated, bool) else True
+
+    return PlaybackPermissions(
+        video_transcoding=permitted(VIDEO_TRANSCODING),
+        audio_transcoding=permitted(AUDIO_TRANSCODING),
+        remuxing=permitted(REMUXING),
+    )
+
+
 __all__ = [
+    "AUDIO_TRANSCODING",
     "BOOLEAN_COLUMNS",
     "DELETION_FOLDERS",
     "ENABLED_FOLDERS",
     "HONOURED",
     "HONOURED_COLUMNS",
     "HONOURED_LISTS",
+    "PLAYBACK_PERMISSIONS",
+    "REMUXING",
+    "VIDEO_TRANSCODING",
+    "PlaybackPermissions",
     "PolicyError",
     "PolicyUpdate",
     "assemble",
+    "playback_permissions",
     "split",
 ]

@@ -301,11 +301,15 @@ def _frame_rate(rational: str | None) -> int | float | None:
         top, bottom = float(dividend), float(divisor or 1)
     except ValueError:
         return None
-    return None if bottom == 0 else _as_single(top / bottom)
+    return None if bottom == 0 else as_single(top / bottom)
 
 
-def _as_single(value: float) -> int | float:
+def as_single(value: float) -> int | float:
     """The number a 32-bit float would print, and an integer where it is whole.
+
+    Public because `media/urls.py` prints the same number into a `MaxFramerate`: a client reads
+    `23.975988` off a stream and `23.975988` out of the URL it is handed, and two roundings would
+    eventually disagree in the last digit.
 
     The narrowing itself is `domain/media.py`'s, because a negotiation compares against the same
     single (008 T4). What belongs here is the **printing**, and it is a different number: .NET
@@ -522,6 +526,7 @@ __all__ = [
     "HD_HEIGHT",
     "MediaSourceInfo",
     "MediaStream",
+    "as_single",
     "has_subtitles",
     "is_hd",
     "item_container",

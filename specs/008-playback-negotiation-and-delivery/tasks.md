@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on
+amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -351,7 +351,7 @@ track with cover art has a video stream and is still negotiated as audio.
 
 ## T5 — `PlaybackInfo`: the negotiation routes, and the URL a client parses
 
-- [ ] **Changes:** new `src/atrium/api/media_info.py` — `POST` and
+- [x] **Changes:** new `src/atrium/api/media_info.py` — `POST` and
   `GET /Items/{itemId}/PlaybackInfo` — and new `src/atrium/media/urls.py` rendering
   [plan §6.3](plan.md#63-the-transcodingurl)'s measured anatomy verbatim (the `?&`, the
   PascalCase parameters, `ApiKey`, `Tag`, the source-codec triplet, `TranscodeReasons`).
@@ -370,6 +370,70 @@ track with cover art has a video stream and is still negotiated as audio.
   denied → flags down, no URL, no `ErrorCode`); and the refusal shapes as the battery measured
   them. `python3 tools/probe_playback_info.py --allow-writes` stays green with its new battery.
 - **Spec reference:** §3.2, §3.3; AC-1..AC-6, AC-31 (negotiation half), AC-30's first hop
+
+**Done (2026-08-29).** The two uncited rows were both right. The row nobody had doubted — this
+list's own "no profile at all" — was not.
+
+**A `POST` carrying no `DeviceProfile` is not a negotiation without a profile.** The reference
+falls back to the profile the *device* stored through `POST /Sessions/Capabilities/Full`, and the
+same bare request answers direct play before a client posts its capabilities and a
+`TranscodingUrl` after — measured on one session, both ways, in the same minute `[probe:
+tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29]`. So "no profile at all" is a
+property of the *device*, not of the body, and only the `GET` is profile-less by construction
+(measured on the same session, still answering all three flags true). Implemented as written,
+Atrium would have direct-played a file to a client that had described itself once and then
+negotiated with a bare body — the exact shape of client Principle I exists for. 002 stores the
+capabilities document whole and unread, so the profile was already there to find.
+
+**The measurement nearly reported the opposite of the row it was written for.** The refusal
+battery's first run answered `400`, `text/plain` for "unknown item" on both routes — because the
+identifier it used was all zeros, which is the reference's `Guid.Empty` and is refused by a guard
+before any lookup happens `[source: Emby.Server.Implementations/Library/LibraryManager.cs:1359-1362
+@ v10.11.11]`. With an identifier that reaches a lookup, both routes answer the problem-details
+`404` the table claimed, byte-identical to `/Items/{itemId}`'s own refusal; a request with no
+token is the empty `401`. The all-zeros edge is a row of its own in the battery now, and it is the
+one 006 §3.2 already records as deliberately not reproduced.
+
+**Two things the response is not.** §3.2's own sample carried `"ErrorCode": null`, and the
+reference never sends it: a successful negotiation has exactly `MediaSources` and `PlaySessionId`,
+the null suppressed globally like every other. And the answer that *does* carry the code carries
+**no `PlaySessionId`** — one is issued only where there is something to play. The v1 route into
+that answer is a `MediaSourceId` naming no part of the item, which is what makes AC-5's one
+`ErrorCode` reachable by a test at all.
+
+**An unrecognised token inside the body is a `400`**, which is the opposite of behaviours §1.12's
+query rule and had to be measured rather than assumed: `"Property": "NotAThing"` inside a codec
+profile is refused, not dropped. The profile vocabulary is therefore declared as enums — and the
+DTO's profile type carries all five of `DlnaProfileType`'s members, because a real browser profile
+lists `Photo` entries and refusing those would be a `400` on every request such a client makes.
+The whole body is optional in the same measurement (`EmptyBodyBehavior.Allow`): a required one
+would refuse a request the reference answers with a full negotiation.
+
+**AC-31 was unreachable, because nothing had ever read the three permissions.** [002
+§3.5](../002-authentication-users-and-sessions/spec.md#35-get-usersuserid--getuserbyid) moved
+`EnableVideoPlaybackTranscoding`, `EnableAudioPlaybackTranscoding` and `EnablePlaybackRemuxing`
+into the enforced set on 2026-08-27 — "any flag whose feature arrives must be enforced in the same
+change" — and the code never followed: `users/policy.py` still declared eleven honoured properties
+and 31 carried, with these three in the carried blob. They are honoured now, read there rather
+than promoted to columns, and the reason is written where the column rule is: that rule buys
+visibility for what a *query* touches, and these touch none. Both counts, in four modules and in
+002's own spec paragraph, said eleven and 31; they now say fourteen and 28.
+
+**Two additions to T4's contracts, because the URL repeats the client's own words back.**
+`Decision` gained `target` — the transcoding entry the answer was built from — and
+`TranscodingProfile` gained the five fields that decide nothing in the ladder and are read
+straight out of the `TranscodingUrl`: `MinSegments`, `SegmentLength`, `BreakOnNonKeyFrames`,
+`MaxAudioChannels`, `EnableAudioVbrEncoding`. Re-deriving which entry was chosen in order to read
+them would have been a second copy of `_choose_target`'s ranking. `decision.ceiling` is public for
+the same reason: the ladder clamps a limit against the source and the URL reports it unclamped, so
+they are two answers from one derivation.
+
+The rest of the anatomy confirmed [plan §6.3](plan.md#63-the-transcodingurl) exactly, including
+the pair of booleans four parameters apart — `BreakOnNonKeyFrames=True` beside `RequireAvc=false`
+— the `-audiochannels` option qualified by the **video** codec, and the h264 profile name arriving
+as `constrainedbaseline`, spaces stripped rather than encoded. One rule the plan did not name and
+the route needs: `AudioStreamIndex` is honoured only when `MediaSourceId` names the source it is
+about `[source: Jellyfin.Api/Helpers/MediaInfoHelper.cs:206-211 @ v10.11.11]`.
 
 ## T6 — `compat/ranges.py` and static delivery: the measured matrix, one function
 

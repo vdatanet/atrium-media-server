@@ -924,6 +924,17 @@ into no answer *and is itself a delta*. That argument was reasoned; this is the 
 
 **Atrium does:** the same, and counts what it ignored (010 §3.6).
 
+**And the rule does not extend to a request *body*.** An unrecognised enum token inside a posted
+JSON document is a `400` in §1.11's problem-details shape, not a dropped value: a
+`PlaybackInfo` body whose codec profile states `"Property": "NotAThing"` is refused, keyed by the
+JSON path of the offending value `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11,
+2026-08-29]`. The leniency above belongs to the *query* binder, and a server that generalised it
+to bodies would accept a profile the reference rejects — which is the failure direction that
+matters, since the client would then be served an answer negotiated against a profile it does not
+have. Atrium declares the profile vocabulary as enums so the refusal is the framework's own; the
+error map's keys are its `""`/parameter-name shape (§1.11) rather than the reference's JSON paths,
+which name .NET types no client can act on.
+
 ### 1.17 A forgiven dimension re-encodes; a bare `quality` does not
 
 **Jellyfin does:** answer an image request that changes nothing with the source file's **own
