@@ -479,7 +479,7 @@ gives the opposite answer. Five shapes of nonsense — a value with no unit at a
 reversed range. A server that refused them with `416`, which is what the RFC invites, would refuse
 requests the reference serves.
 
-**A response whose size is known carries exactly four headers**, and the absences are as measured
+**A static response carries exactly four headers**, and the absences are as measured
 as the presences: `Content-Length`, `Content-Type`, `Accept-Ranges: bytes` and `Last-Modified`,
 with `Content-Range` added on a `206` and on the `416`. There is no `ETag`, no
 `Content-Disposition`, no `Cache-Control`, and **no conditional handling at all** — a request whose
