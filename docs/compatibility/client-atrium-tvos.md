@@ -1,7 +1,10 @@
 # One client's requirements, traced against v1
 
 **Last verified: 2026-08-29**, against the client's conformance document as received from its
-author on 2026-08-29, and this repository at `95a6b67` — 008 T1 through T12 merged.
+author on 2026-08-29, and this repository at `95a6b67` — 008 T1 through T12 merged. **§§3.2 and 3.3
+rest on something else**: what that author said about the client in conversation on the same date,
+which is evidence of a different kind and carries a mark of its own
+([§1](#1-how-to-read-the-evidence-here)).
 
 [api-surface-v1.md](api-surface-v1.md) is written from the server's side: *these are the endpoints
 v1 serves, and here is who asked for them*. This document asks the same question from the other
@@ -25,18 +28,31 @@ useful half is behavioural, and on 2026-08-28 it was four gaps in specifications
 
 ## 1. How to read the evidence here
 
-One provenance mark is used in addition to the ones in [../README.md](../README.md#conventions):
+Two provenance marks are used in addition to the ones in [../README.md](../README.md#conventions):
 
 | Mark | Meaning |
 |---|---|
 | `[client-contract: 2026-08-29, §3]` | That section of the client's own conformance document, of that date |
+| `[client-author: 2026-08-29]` | Something the client's author said about the client they wrote, in conversation with this repository on that date, and written in no edition of the contract |
 
-**It ranks with `prior-probe`, with one difference that matters.** A `prior-probe` was a
+**`client-contract` ranks with `prior-probe`, with one difference that matters.** A `prior-probe` was a
 measurement *of the reference* made by this project and carried forward; these are claims made by a
 third party about their own software — and, in several places, about Jellyfin. Claims of the first
 kind are authoritative for what *the client* does, because its author is the one who can know.
 Claims of the second kind are **leads for probes, never measured behaviours** (Principle II), and
 this document marks each one as such.
+
+**`client-author` ranks below `client-contract`, and not because the source is weaker.** It is the
+same author, about the same software, and on the question it is used for — *why* the client is
+built the way it is — that author is again the only one who can know. What it lacks is a document.
+A `client-contract` row can be walked to a numbered section that exists, which whoever holds both
+documents can read; a `client-author` row ends at the sentence carrying it. So the mark is used for
+**intent and decisions** — what a path is for, what was considered and set aside — and never for
+behaviour: anything about what the client *does* on the wire keeps `client-contract` or waits for a
+probe. Nothing about **Jellyfin** may carry it at all, because a third-party claim about the
+reference is only a lead when it is written down (Principle II) and less than one when it is
+remembered. And it carries no `§N`, because there is no section to name — inventing one would make
+it look checkable.
 
 **Two editions, and the date in the mark is doing real work.** The contract has been received
 twice: 2026-08-28, and a 2026-08-29 edition derived from the client at a later commit. The second
@@ -72,12 +88,12 @@ specification section, a document line or a source line.
 | §1 `SupportsDirectPlay`/`SupportsDirectStream` reflect reality | Only where a stored inspection exists — see [§4.1](#41-a-source-with-no-stored-inspection-is-the-clients-documented-dead-end) | 🔴 [§4.1](#41-a-source-with-no-stored-inspection-is-the-clients-documented-dead-end) |
 | §1 `TranscodingUrl` present whenever direct is refused | The reference's own condition, transcribed ([`api/media_info.py:381-388`](../../src/atrium/api/media_info.py)) — except in the case above, where nothing runs at all | ✅ / 🔴 |
 | §1 Two round trips: the second sets both switches false and takes HLS | [008 §3.3](../../specs/008-playback-negotiation-and-delivery/spec.md): a step removed by the request is not silently substituted — the ladder falls through to transcode, with a `TranscodingUrl` | ✅ |
-| §1 `Size` is the byte length of the file being served | Read from the stored part, so it survives a missing inspection ([`media/info.py:427`](../../src/atrium/media/info.py)) | ✅ |
+| §1 `Size` is the byte length of the file being served | Read from the stored part, so it survives a missing inspection ([`media/info.py:427`](../../src/atrium/media/info.py)) — one of the three obligations of [§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect) | ✅ |
 | §1 `MediaStreams[].IsTextSubtitleStream` | Deliberately not emitted ([008 `spec.md:111`](../../specs/008-playback-negotiation-and-delivery/spec.md)) | 🔴 [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
 | §1 `DeviceProfile.TranscodingProfiles[].EnableSubtitlesInManifest: true` | Not a field of the bound model ([`api/media_info.py:134-152`](../../src/atrium/api/media_info.py)), so `extra="ignore"` drops it ([`compat/model.py:67`](../../src/atrium/compat/model.py)) | 🔴 [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
 | §1 `DeviceProfile.TranscodingProfiles[].Protocol` selects HLS | Compared case-sensitively against `"hls"` ([`media/urls.py:202`](../../src/atrium/media/urls.py), [`:236`](../../src/atrium/media/urls.py)) where `/universal` normalises ([`api/universal_audio.py:267`](../../src/atrium/api/universal_audio.py)) | 🟠 [§4.6](#46-two-spellings-of-hls-and-only-one-of-them-selects-hls) |
-| §2 `Range` must answer `206`, never `200` | [`compat/ranges.py:87-140`](../../src/atrium/compat/ranges.py): a well-formed `bytes=lo-hi` inside the file is `PARTIAL_CONTENT`, always | ✅ |
-| §2 `static=true` is the original container bytes | [behaviours §2.20](behaviours.md#220-statictrue-serves-the-original-bytes-the-urls-container-is-only-a-label), implemented at 008 T6 | ✅ |
+| §2 `Range` must answer `206`, never `200` | [`compat/ranges.py:87-140`](../../src/atrium/compat/ranges.py): a well-formed `bytes=lo-hi` inside the file is `PARTIAL_CONTENT`, always — one of the three obligations of [§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect) | ✅ |
+| §2 `static=true` is the original container bytes | [behaviours §2.20](behaviours.md#220-statictrue-serves-the-original-bytes-the-urls-container-is-only-a-label), implemented at 008 T6 — one of the three obligations of [§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect) | ✅ |
 | §3 The master carries `VIDEO-RANGE`, `CODECS`, `FRAME-RATE` | [`media/hls.py:306-319`](../../src/atrium/media/hls.py) writes all three | ✅ |
 | §3 The master announces subtitle tracks | One `#EXT-X-STREAM-INF` and nothing else — no `#EXT-X-MEDIA` tag exists anywhere in `src/` | 🔴 [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
 | §3 `…/Subtitles/{index}/Stream.vtt` when the manifest carries none | Not a row of [`surface.yaml`](surface.yaml), and L0 forbids serving what is not listed | 🔴 [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
@@ -151,7 +167,114 @@ source can direct-play, the client immediately re-negotiates with both switches 
 the HLS answer, because the progressive path starves on that hardware at any bitrate
 `[client-contract: 2026-08-29, §1]`. **For video there are two paths, not three.** Nothing in v1
 changes, and no effort spent making progressive video smooth is spent on this client. Music still
-uses it.
+uses it. **Which two they are, and why the surviving pair is not one real path and one fallback, is
+[§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect).**
+
+### 3.2 On-Device Remux is a placement of work, not only a way round a defect
+
+The two are **the client fetching the original file and packaging it on the device**, and **the
+server producing HLS**. The client's own name for the first is **On-Device Remux**
+`[client-author: 2026-08-29]`, and the name is the argument. Reading it as a workaround — *the
+reference servers package badly, so the client stopped asking them to* — is true, and is the
+smaller half. The other half is that **packaging is work, and the work has to be paid for
+somewhere**: a host too small to package a film can be relieved of packaging by a device that is
+not, and the author's own example of such a host is a Raspberry Pi `[client-author: 2026-08-29]`.
+On that deployment the switch is not a measure taken while waiting for somebody to fix a server. It
+is where the work belongs.
+
+Three consequences for this repository:
+
+**1. The setting is a permanent choice, not a temporary one.** Nothing Atrium can ship makes it
+obsolete, because a server that packages correctly does not move the CPU cost back off the device —
+it removes only the *other* reason for the switch. A server that treats the on-device path as
+something its users will outgrow will under-invest in it for ever.
+
+**2. Static delivery is therefore a first-class delivery mode for this client**, and the whole
+server side of it is three obligations — all three already ✅ in [§2](#2-the-answer) above:
+`static=true` answers with the original container's bytes whatever the URL's extension claims
+([behaviours §2.20](behaviours.md#220-statictrue-serves-the-original-bytes-the-urls-container-is-only-a-label)),
+every well-formed `Range` inside the file answers `206` and never `200`, and the `Size` the
+negotiation advertised is the byte length of what the route actually serves. What changes here is
+not those three verdicts but their weight. They are the cheap ✅s of a table whose interesting rows
+are 🔴s, and on a small host they are the rows that decide whether anything plays at all. The third
+of them had never been *tested* until [008 T14](../../specs/008-playback-negotiation-and-delivery/tasks.md),
+which found that the advertised size and the served bytes had never met in any test — *"a client
+reads that field as the length of what it is about to fetch and bounds every range request with
+it"*.
+
+**3. On a small enough host it is not the better path but the only one**, and
+[roadmap.md](../roadmap.md#out-of-scope-and-why) is what sharpens that from a preference into
+arithmetic. Hardware-accelerated transcoding is out of v1 on purpose — *"v1 encodes on the CPU —
+slower, but portable and testable on any machine that can run the test suite"* — which is the right
+call for the project, and is also the sentence that decides what a small server can produce.
+Wherever the negotiation's answer is a re-encode rather than a stream copy, that re-encode is a CPU
+one, and for an HDR film on a low-powered host it is not merely slow but infeasible
+`[client-author: 2026-08-29]`. What is left is the path that costs the host nothing but bytes, so
+**on that deployment the static route carries more of v1 than the produced one does** — the inverse
+of where 008's effort went.
+
+**That third one is an argument, not a measurement, and is marked so deliberately.** No probe in
+this repository has run an encode on such a host, and the number that would settle "infeasible" — a
+real-time factor for one CPU-encoded ladder on the hardware in question — is in none of them. It
+rests on the roadmap's own exclusion plus the client author's experience of living with it, which is
+exactly what `client-author` is for and exactly what it may not be promoted past (Principle II).
+
+**One cost of this path that no server can remove.** The client's on-device demuxer reads **SubRip
+and nothing else** `[client-author: 2026-08-29]`. A film whose subtitles are anything else — ASS, a
+PGS or DVD bitmap, a sidecar in another format — has no subtitle the device can render on this
+path, and the only way to see one is to turn the switch off and take the server's HLS. **That is
+precisely the path a small host cannot pay for**, so the two costs compose: the deployment that
+most needs the on-device path is the one an unsupported subtitle format takes it away from.
+[011](../../specs/011-subtitle-delivery/spec.md) approaches the same user-visible problem from the
+server's side — a track the device cannot read, converted before it is delivered — and for
+image-based tracks the reference's own answer is burn-in, which v1 excludes
+([roadmap](../roadmap.md#out-of-scope-and-why)). Where those two meet, v1 reaches that subtitle on
+neither side of the switch.
+
+**An observation of this repository's own, and a lead for
+[010](../../specs/010-conformance-harness/spec.md) rather than a finding here.** That demuxer is an
+executable statement of what a server must produce for Apple's native player: it takes bytes and
+either plays them or does not, with no JSON to compare. 010's differential layer compares Atrium
+against a reference carrying the very defects that made the demuxer worth writing
+([§4.5](#45-the-fmp4-init-segment-restarts-the-encoder-which-is-the-defect-the-client-pre-warms-to-dodge)
+is one of them), so a request both servers answer identically can still be two servers being wrong
+together — the one failure a structural comparison is unable to see. An oracle that answers *"does
+this play"* rather than *"do these bodies match"* would see it. **This is not a claim by the
+client's author and not a plan**: no contract and no conversation contains it, the client is not
+this repository's to run, its source is cited nowhere here, and nothing about how such an oracle
+would be built has been designed. It is written down so that whoever scopes 010 has it.
+
+### 3.3 The switch is global, and server identity would be the wrong key for it
+
+**On-Device Remux is one setting for the whole application, and it stays one**
+`[client-author: 2026-08-29]`. A per-server switch was considered and set aside, and the reason is
+worth recording because "make it per-server" reads like an obvious improvement: a normal user has
+exactly one server, so per-server and global are the same switch for everybody except the person
+writing a second server to point the client at.
+
+**Server identity would be the wrong key even where it is available.** What the switch is about is
+whether *this master, for this file*, is serviceable — a property of a version and of a file, not
+of a name. A reference server whose defects are fixed should have the switch off; an Atrium that
+ships a broken master should have it on; keying on who served the bytes gets both of those
+backwards.
+
+**And this client could not use that key anyway, which is Principle I working rather than a gap in
+it.** Atrium answers `ProductName` as exactly `Jellyfin Server`
+([001 §3.1](../../specs/001-server-identity-and-discovery/spec.md)), because a client that has to
+know which server it is talking to in order to behave correctly is the failure that principle
+names. The client's own `jellyfin` test — the one that decides whether Emby's pre-flattening routes
+are used ([§3.1](#31-the-exclusions-agree)) — therefore puts Atrium in the Jellyfin bucket, which is
+correct and is the entire point. A switch keyed on it would have a constant for a key.
+
+**What all this costs the server is one line: both paths must work, always.** The switch's position
+never reaches the server — a `static=true` request and a master playlist request are all Atrium
+sees, and neither says which setting produced it — so it is a choice Atrium cannot detect, cannot
+steer, and cannot excuse one path from by being good at the other. And because the setting is
+global rather than per-file, a user who turns it on for the one film that stutters has turned it on
+for the whole library: the static route has to be right for **every** container a library admits,
+which is why the sweep behind
+[behaviours §2.20](behaviours.md#220-statictrue-serves-the-original-bytes-the-urls-container-is-only-a-label)
+was worth its cost at 008 T6.
 
 ## 4. The eight findings
 
@@ -224,7 +347,7 @@ shows no subtitles at all, and the client will not compensate.
 
 | Playback path | Subtitles |
 |---|---|
-| On-device remux, embedded tracks | Fine — the tracks are inside the file the client is reading byte for byte |
+| On-device remux, embedded tracks | Fine **where the track is SubRip**, which is all the client's own demuxer reads `[client-author: 2026-08-29]`: the bytes are inside the file it is reading, and anything else among them is not rendered ([§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect)) |
 | Anything delivered over server HLS (remux or transcode) | None |
 | External sidecar files (`.srt` beside the media), any path | None, and none reachable |
 
@@ -489,7 +612,8 @@ rather than restating rows that would then drift.
 measured*, never *not needed*. It describes the client at one commit on 2026-08-29, from its own
 source — not from Jellyfin's documentation and not from a differential run. When the client
 changes, this document is stale and nothing in CI will notice. It went stale once already, in a
-day.
+day. The two `client-author` sections go stale differently and no less quietly: a decision does not
+drift, it is reversed, and a reversed one leaves no trace on the wire either.
 
 The mechanism that turns any of this into something measured is the same one the constitution
 already names: the differential harness of

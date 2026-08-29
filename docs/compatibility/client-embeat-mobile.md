@@ -21,8 +21,11 @@ different than it does for the other one, for the reason in §2.
 
 ## 1. How to read the evidence here
 
-The provenance mark is the one [client-atrium-tvos.md §1](client-atrium-tvos.md#1-how-to-read-the-evidence-here)
-introduced, and it means the same thing:
+The provenance mark is the `client-contract` one that
+[client-atrium-tvos.md §1](client-atrium-tvos.md#1-how-to-read-the-evidence-here) introduced, and it
+means the same thing. That document now defines a second mark, for what its client's author has
+said in conversation rather than published; this document has no rows from that source and does not
+use it:
 
 | Mark | Meaning |
 |---|---|
