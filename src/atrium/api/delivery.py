@@ -466,7 +466,7 @@ async def produced_response(
     """
     found, absolute = locate(request, item_id, parameters.media_source_id)
     inspection = inspection_of(request, found)
-    decision, container = _decide_delivery(
+    decision, container = decide_delivery(
         inspection, parameters, is_video_route=is_video_route, is_video=found.is_video
     )
     return await produce(
@@ -568,14 +568,22 @@ def inspection_of(request: Request, found: DeliveredFile) -> MediaInspection:
     return stored
 
 
-def _decide_delivery(
+def decide_delivery(
     source: MediaInspection,
     parameters: DeliveryParameters,
     *,
     is_video_route: bool,
     is_video: bool,
+    container: str | None = None,
+    protocol: str = "http",
 ) -> tuple[Decision, str]:
     """The delivery request, run through the one ladder, plus the container it produces into.
+
+    **`container` and `protocol` are the HLS routes' two overrides** (008 T10). A playlist request
+    produces into its `SegmentContainer` rather than into anything the output-extension inference
+    would name, and it says so in the decision it hands on: left to infer, an hevc copy would plan
+    `mp4` where the segments are `ts`. Public for the same pair - the playlists reach the ladder
+    through this function rather than through a second synthesis beside it.
 
     **A `stream` request is a device profile with the client's words in it.** The parameters
     describe an output - these codecs, inside these ceilings - and `media/decision.py` already
@@ -592,7 +600,7 @@ def _decide_delivery(
     """
     video = source.video if is_video else None
     audio = _audio_stream(source, parameters.audio_stream_index)
-    container = _output_container(
+    container = container or _output_container(
         source,
         parameters.container,
         video_codec=parameters.video_codec,
@@ -612,7 +620,7 @@ def _decide_delivery(
                 video_codec=video_codec,
                 audio_codec=audio_codec,
                 type=MediaKind.VIDEO if is_video else MediaKind.AUDIO,
-                protocol="http",
+                protocol=protocol,
             ),
         ),
         codec_profiles=tuple(_ceiling_profiles(parameters, is_video=is_video)),
@@ -842,6 +850,7 @@ __all__ = [
     "VIDEO_OUTPUT_CONTAINERS",
     "DeliveryParameters",
     "audio_parameters",
+    "decide_delivery",
     "inspection_of",
     "locate",
     "produce",

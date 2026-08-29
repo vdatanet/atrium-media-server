@@ -156,9 +156,15 @@ class MediaFile:
         return self.video_codec is not None
 
 
-#: The frame rate the reference's measured 3.004 s HLS cadence comes from
-#: (008 spec OQ-3, `tools/probe_hls.py`). The one entry that exists to be segmented carries it, so
-#: T10's rounding arithmetic has a source that actually runs at it.
+#: The NTSC film rate, on the one entry that exists to be segmented - so 008 T10's rounding
+#: arithmetic has a source that actually runs at a fractional rate.
+#:
+#: **It does not reproduce the reference's measured 3.004 s, and T10 measured why.** The cadence
+#: is scaled by the rate the *request* carries, which is the rate the container stores: the
+#: measured film stores `23.975988` and answers 3.004 s, while this exact rational reaches the
+#: arithmetic as `23.976025` and answers **3.003 s**. Left exact rather than skewed to match,
+#: because a fixture that ran at 23.976 to make one number come out would be a fixture asserting
+#: the conclusion (`tests/unit/test_hls_planning.py` pins the rule at both rates).
 NTSC_FILM_RATE = "24000/1001"
 
 DIRECT_PLAY = MediaFile(
@@ -723,6 +729,7 @@ __all__ = [
     "build_scanned_media_world",
     "ffmpeg_version",
     "frame_count",
+    "generate",
     "keyframe_seconds",
     "missing_binaries",
     "probe",

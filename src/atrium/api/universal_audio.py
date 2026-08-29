@@ -340,9 +340,15 @@ async def get_universal_audio_stream(
         # file itself, sized, with `Accept-Ranges: bytes` and a `Range` that is honoured.
         return source_response(request, found, absolute, container=None, absent=ItemNotFoundError)
     if decision.sub_protocol == HLS_PROTOCOL:
-        # 008 T10 answers this with a real master playlist. Until it exists, refusing is the only
-        # honest answer: a playlist naming segments nothing can produce is Principle VI's
-        # "plausible-looking stub" and would be worse than a refusal.
+        # **Still the refusal after 008 T10, and now for a measured reason rather than a deferred
+        # one.** The reference answers this with a master playlist whose single variant URI is a
+        # relative `main.m3u8` - which resolves to `/Audio/{itemId}/main.m3u8`, a route
+        # `docs/compatibility/surface.yaml` does not carry and no accepted specification
+        # describes. T10 serves the video pair; the audio pair would be a surface addition, which
+        # is a scope decision and not an implementation detail. Answering the master anyway would
+        # advertise a route that answers nothing, which is Principle VI's plausible-looking stub -
+        # worse than a refusal, because it looks correct.
+        # `[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]`
         raise DeliveryProductionError
     produced_container = decision.container or DEFAULT_TRANSCODING_CONTAINER
     return await produce(

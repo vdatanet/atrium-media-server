@@ -747,6 +747,15 @@ tokenless request refuses" — while [002 §3.1](../../specs/002-authentication-
 accepted three days earlier, already said none is required on this class. The measurement settled it
 in 002's favour.
 
+**Two more delivery actions require one, found at 008 T10**: `GET /Videos/{id}/master.m3u8` and
+`GET /Videos/{id}/main.m3u8` answer the empty `401` to a request carrying nothing, because the
+reference's whole HLS controller carries the authorization attribute where its stream actions carry
+none `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:39-41 @ v10.11.11]`, `[probe:
+tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]`. That does not soften the heading: the routes a
+bare URL is handed to are the ones that require nothing, and a playlist is followed by a player that
+already holds a token. It does mean the split is genuinely **per action** rather than "delivery
+requires none" — three of the seven delivery routes require a credential and four do not.
+
 What 002 records is the consequence, so that whoever takes it takes it knowingly: on the
 reference **an item id is a capability**, and any divergence 006 or 008 chooses is one a client can
 observe. Both features have now taken it and neither diverged, so the consequence stands as the

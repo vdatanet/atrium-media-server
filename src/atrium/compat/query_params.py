@@ -52,6 +52,12 @@ logger = logging.getLogger(__name__)
 GLOBAL_PARAMETERS: frozenset[str] = frozenset(AUTHENTICATION_PARAMETERS)
 
 
+#: Where `CanonicalQueryMiddleware` keeps the query string exactly as it arrived. Namespaced, as
+#: every extra ASGI scope key must be, so it cannot collide with a server's or another
+#: middleware's.
+ORIGINAL_QUERY_STRING = "atrium.original_query_string"
+
+
 class AmbiguousParameterError(RuntimeError):
     """Two declared parameters on one route differ only in case.
 
@@ -210,6 +216,13 @@ class CanonicalQueryMiddleware:
             await self.app(scope, receive, send)
             return
 
+        # Kept before anything is rewritten, for the one route family that hands its own query
+        # back to the client. 008's playlists forward the query string **verbatim** into every
+        # segment URI, the way the reference forwards what arrived - so a client reading the
+        # playlist reads back the spellings it sent, `?&` doubling and all, rather than this
+        # server's declared ones (`api/dynamic_hls.py`).
+        scope = {**scope, ORIGINAL_QUERY_STRING: scope["query_string"]}
+
         template = self.routes.template_for(scope["path"])
         if template is None:
             # No route: the request is on its way to an empty 404 and there is nothing to
@@ -243,6 +256,7 @@ class CanonicalQueryMiddleware:
 
 __all__ = [
     "GLOBAL_PARAMETERS",
+    "ORIGINAL_QUERY_STRING",
     "AmbiguousParameterError",
     "CanonicalQueryMiddleware",
     "IgnoredParameters",

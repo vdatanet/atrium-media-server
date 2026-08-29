@@ -15,6 +15,7 @@ Standard library only, like everything under tools/.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from _probe import ProbeError, Server
@@ -129,22 +130,48 @@ def stop_encoding(server: Server, play_session_id: str) -> int:
     return status
 
 
-def fetch_main_playlist(
-    server: Server, item_id: str, transcoding_url: str
-) -> tuple[str, list[str], list[float]]:
-    """Follow a negotiation's TranscodingUrl to its media playlist.
+@dataclass(frozen=True)
+class Playlists:
+    """Both playlists of one negotiation, with the headers each of them answered with.
 
-    Returns (main playlist text, segment URLs resolved against the item's path, EXTINF
-    durations). The master playlist's relative main.m3u8 line keeps the whole query string,
-    which is how the parameters survive the hop - the probes assert on that elsewhere.
+    008 T10 measures the bytes rather than a summary of them - the field order of the variant
+    line, the exact `#EXTINF` formatting, whether either response is sized - so the whole text
+    of both is carried here instead of the three values `fetch_main_playlist` distils.
     """
-    status, _, master = server._request("GET", transcoding_url, raw=True)
+
+    master: str
+    master_headers: dict[str, str]
+    variant: str
+    """The `#EXT-X-STREAM-INF` line, verbatim, or `""` when the master carries none."""
+
+    variant_url: str
+    """The line beneath it: a relative `main.m3u8` and the whole forwarded query."""
+
+    main: str
+    main_headers: dict[str, str]
+    segments: list[str]
+    durations: list[float]
+
+
+def fetch_playlists(server: Server, item_id: str, transcoding_url: str) -> Playlists:
+    """Follow a negotiation's TranscodingUrl to its master and media playlists.
+
+    The master playlist's relative `main.m3u8` line keeps the whole query string, which is how
+    the parameters survive the hop.
+    """
+    status, master_headers, master = server._request("GET", transcoding_url, raw=True)
     if status != 200:
         raise ProbeError(f"master.m3u8 answered {status}")
-    main_lines = [line for line in master.decode().splitlines() if line.startswith("main.m3u8")]
+    master_text = master.decode()
+    main_lines = [line for line in master_text.splitlines() if line.startswith("main.m3u8")]
     if not main_lines:
         raise ProbeError("master playlist carries no main.m3u8 line")
-    status, _, main = server._request("GET", f"/videos/{dashed(item_id)}/{main_lines[0]}", raw=True)
+    variant = next(
+        (line for line in master_text.splitlines() if line.startswith("#EXT-X-STREAM-INF")), ""
+    )
+    status, main_headers, main = server._request(
+        "GET", f"/videos/{dashed(item_id)}/{main_lines[0]}", raw=True
+    )
     if status != 200:
         raise ProbeError(f"main.m3u8 answered {status}")
     text = main.decode()
@@ -158,4 +185,21 @@ def fetch_main_playlist(
         for line in text.splitlines()
         if line.startswith("#EXTINF")
     ]
-    return text, segments, durations
+    return Playlists(
+        master=master_text,
+        master_headers=dict(master_headers),
+        variant=variant,
+        variant_url=main_lines[0],
+        main=text,
+        main_headers=dict(main_headers),
+        segments=segments,
+        durations=durations,
+    )
+
+
+def fetch_main_playlist(
+    server: Server, item_id: str, transcoding_url: str
+) -> tuple[str, list[str], list[float]]:
+    """`fetch_playlists`' first three answers, for the probes that want nothing else."""
+    playlists = fetch_playlists(server, item_id, transcoding_url)
+    return playlists.main, playlists.segments, playlists.durations
