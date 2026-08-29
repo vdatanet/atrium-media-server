@@ -73,6 +73,7 @@ priority order: each feature is testable the moment it lands, and each unlocks t
 | **009** | Playlists | Create, read, add, remove, reorder | 005 |
 | **010** | Conformance harness | The L0–L3 machinery as a deliverable, not a by-product | all |
 | **011** | Subtitle delivery | Text subtitle tracks announced, negotiated, and served — embedded and beside the media | 008 |
+| **012** | Negotiation inputs | A negotiation answer a client can act on: a source nothing has opened, and a delivery protocol spelled a way the comparison does not match | 003, 008 |
 
 **008 is one feature, not two.** Transcoding lives inside it rather than in a directory of its own,
 because it is not a separate capability a client can ask for: it is the third branch of a single
@@ -102,6 +103,19 @@ specifiable before its probe: a source with no stored inspection, two spellings 
 list that takes no `deviceId`, and an initialisation segment that restarts production. They become
 a feature on the day their measurement session runs, and take their number then
 ([011 §2.1](../specs/011-subtitle-delivery/spec.md)).
+
+**012 is that number, and it is two of the four rather than all of them.** Opened on 2026-08-29,
+it applied the *"008 is one feature, not two"* test above to the handover itself and kept the two
+that share a decision: `PlaybackInfo` has exactly two inputs, and v1 steps over one of them and
+falls through the other, so both answer `200` with something a client cannot act on. The session
+list's missing parameters go to **002**, which owns the route and owns the visibility rule they
+narrow; the initialisation segment stays a
+[behaviours §3.0](compatibility/behaviours.md#30-how-the-decision-is-made) defect decision, because
+a feature is the wrong container for an argument about whether to keep reproducing something. Both
+are measured at 012's gate and recorded where they belong
+([012 §2.1](../specs/012-negotiation-inputs/spec.md)). Like 011, 012 opened with open questions and
+no measurements of its own, and it adds no row to the surface — the first feature to change what an
+already-listed route answers without adding one.
 
 **010 is last in the list but not last in time.** L0 and L1 exist from 001 — the casing sweep has
 to be in place before the first response model, or Principle I is enforced by discipline instead of
