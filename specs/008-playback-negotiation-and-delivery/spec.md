@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 at the spec review, which wrote the five probes the OQ table had been citing prospectively and ran all of them — all twelve open questions answered, and five claims did not survive: the policy story was fiction (no playback route consults `EnableMediaPlayback`, and a single denied permission moves nothing at negotiation — §3.2, §3.3, AC-31), `EnableTranscoding: false` in the request body is ignored (OQ-12), `static=true` on a mismatched container is not an error but the original bytes behind the wrong label (§3.5, AC-18), `enableRedirection` never redirects a local file (OQ-4, AC-21), and the reference's HLS segments already carry `Content-Length` — the §3.5 divergence shrank to the progressive routes. Plus one defect nobody was looking for: a sample-rate ceiling is answered from the Opus rate ladder and can be **exceeded** (§3.6, AC-19)
+amended: 2026-08-29 by T3 — §3.1 gains the measured media-source field set (31 properties on every source, `VideoType` on a video one), the 32-bit number format its rates and level are written in, the three stream families v1 does not emit, and two divergences the first draft stated as parity: a multi-part film's parts are media sources here and separate items in the reference, and `HasSubtitles` counts only the streams inside the container; and 2026-08-29 at the spec review, which wrote the five probes the OQ table had been citing prospectively and ran all of them — all twelve open questions answered, and five claims did not survive: the policy story was fiction (no playback route consults `EnableMediaPlayback`, and a single denied permission moves nothing at negotiation — §3.2, §3.3, AC-31), `EnableTranscoding: false` in the request body is ignored (OQ-12), `static=true` on a mismatched container is not an error but the original bytes behind the wrong label (§3.5, AC-18), `enableRedirection` never redirects a local file (OQ-4, AC-21), and the reference's HLS segments already carry `Content-Length` — the §3.5 divergence shrank to the progressive routes. Plus one defect nobody was looking for: a sample-rate ceiling is answered from the Opus rate ladder and can be **exceeded** (§3.6, AC-19)
 depends_on: [005, 007]
 ---
 
@@ -63,7 +63,7 @@ a cosmetic defect; get this wrong and nothing plays.
 ### 3.1 Media sources
 
 Each playable item has one or more **media sources**. A single-file movie has one; a multi-part
-film (003 §3.3) has one per part.
+film (003 §3.3) has one per part — and that last clause is a **divergence**, described below.
 
 What a source says about the content — its codecs, streams, duration and dimensions — comes from
 inspecting the actual file and never from its extension. The one field that is **not** a fact about
@@ -74,14 +74,61 @@ the content is `Container`, and the note below says what it is instead. A source
 | Identity | `Id`, `Path`, `Protocol`, `Type`, `Name`, `ETag` |
 | Container | `Container`, `Size`, `Bitrate`, `RunTimeTicks`, `Formats` |
 | Streams | `MediaStreams`, `DefaultAudioStreamIndex`, `DefaultSubtitleStreamIndex` |
-| Capability | `SupportsDirectPlay`, `SupportsDirectStream`, `SupportsTranscoding` |
-| Delivery | `TranscodingUrl`, `TranscodingContainer`, `TranscodingSubProtocol` |
+| Capability | `SupportsDirectPlay`, `SupportsDirectStream`, `SupportsTranscoding`, `SupportsProbing` |
+| Transport | `IsRemote`, `IsInfiniteStream`, `ReadAtNativeFramerate`, `IgnoreDts`, `IgnoreIndex`, `GenPtsInput`, `RequiresOpening`, `RequiresClosing`, `RequiresLooping`, `RequiredHttpHeaders`, `HasSegments` |
+| Video | `VideoType` — on a video source only |
+| Attachments | `MediaAttachments` |
+| Delivery | `TranscodingUrl`, `TranscodingContainer`, `TranscodingSubProtocol`, `UseMostCompatibleTranscodingProfile` |
 
 `[spec: MediaSourceInfo]`
+
+**Every one of those is sent unconditionally**, and that is the reason the last four groups are
+listed rather than left out: 31 properties on every audio source and those plus `VideoType` on
+every video one, identical across 180 sources of three item types
+`[probe: tools/probe_media_source.py, Jellyfin 10.11.11, 2026-08-29]`. A property the reference
+always sends is one a client can see missing — the argument 005 §3.2 made for `ChannelId` — so
+Atrium sends all of them, at the values a local file measurably has. The three that never appeared
+are the three that are not facts about a file: `TranscodingUrl` and `TranscodingContainer` are
+answers to a negotiation, and `DefaultSubtitleStreamIndex` is a **per-user** selection driven by
+that account's subtitle mode and remembered choices, which v1 does not record.
 
 **Streams** carry codec, profile, level, bit depth, frame rate, resolution, colour and HDR
 information, channel layout, sample rate, language, and the default/forced/external flags.
 `[spec: MediaStream]`
+
+> **A stream's frame rates and level are 32-bit numbers, and the wire shows it.** The reference
+> writes the shortest decimal that reads back as the same single, so `24000/1001` arrives as
+> `23.976025` rather than as the seventeen digits a double prints, and a whole rate arrives as
+> `25` rather than `25.0` — a difference no parser sees and every byte comparison does. Same
+> probe.
+>
+> **Three families of stream property are deliberately not emitted**, each for a different
+> reason, and each is a bounded gap rather than a decision that they do not exist. `DisplayTitle`
+> and the five `Localized*` properties are a *localised* rendering of a track — measured as
+> `Español - MP3 - Stereo - Predeterminado` on a Spanish-configured server — and need the
+> server's own localisation table; an English approximation would differ from the reference on
+> every track rather than be absent on it. `IsAVC`, `TimeBase` and `NalLengthSize` are read from
+> the demuxer and are not among the fields inspection records. `IsTextSubtitleStream`,
+> `SupportsExternalStream`, `DeliveryMethod` and `DeliveryUrl` describe how a subtitle would be
+> delivered, and v1 delivers none.
+
+> **A multi-part film's parts are media sources here and separate items in the reference.** The
+> reference builds a source per *item* — itself plus its linked and local alternate versions —
+> and a stacked film's later parts are none of those: they are counted in `PartCount` and fetched
+> from `GET /Videos/{id}/AdditionalParts`, an endpoint outside v1's surface
+> `[source: MediaBrowser.Controller/Entities/Video.cs:533-563, MediaBrowser.Controller/Entities/
+> BaseItem.cs:1096,1120 @ v10.11.11]`. 003 §3.3 already merged the parts into one item with one
+> source per part, so this is that model reaching the wire rather than a choice made here, and no
+> library reachable from this repository has a multi-part film to measure the reference's answer
+> on. A client sees one item that offers two sources instead of one item that offers one source
+> and a part count; both are playable, and the second part is addressable either way.
+
+> **`HasSubtitles` counts only the streams inside the container.** The reference sets it from
+> everything the file's inspection produced, which for it includes the subtitle files sitting
+> beside the media `[source: MediaBrowser.Providers/MediaInfo/FFProbeVideoInfo.cs:275 @
+> v10.11.11]`. v1 inspects no sidecar, so a film with an external `.srt` and no embedded track
+> answers nothing where the reference answers `true`. Bounded, and it closes when something reads
+> sidecar subtitles.
 
 > **Item-level `Container` is sometimes a demuxer list.** The reference reports one normalised
 > container string at item level, and whether it names one container depends on the format: a
@@ -94,7 +141,7 @@ information, channel layout, sample rate, language, and the default/forced/exter
 > that string per response, and the two routes derive it differently. On `/Items` **no profile is
 > involved**: the single form is the file's own extension where the list contains it — the same
 > six-name list answers `mp4` for a `.mp4` and `m4a` for a `.m4a` — and the list's first member
-> where it does not `[source: Emby.Server.Implementations/Dto/DtoService.cs:320-353 @ v10.11.11]`.
+> where it does not `[source: Emby.Server.Implementations/Dto/DtoService.cs:316-352 @ v10.11.11]`.
 > In a negotiation it is the first member the `DeviceProfile` accepts, and a **profile-less**
 > negotiation leaves the list alone: the same `.m4a` that answers `m4a` on a listing answers the
 > full list on `GET /Items/{itemId}/PlaybackInfo` `[probe: tools/probe_media_container.py,
@@ -104,6 +151,18 @@ information, channel layout, sample rate, language, and the default/forced/exter
 
 **Inspection is cached** and re-run only when the file changes. Probing an entire library on every
 request is not viable, and probing on first playback makes the first play of every item slow.
+
+**A file that has never been inspected still has a source.** The reference emits one for it, with
+an empty stream list and the container taken from the file's extension `[source:
+MediaBrowser.Controller/Entities/BaseItem.cs:1200-1207 @ v10.11.11]`, so an item whose inspection
+failed or has not run yet is visible and unplayable rather than absent. A scan records the failure
+the way it records a file whose name said too little (003 §3.8) and never drops the item over it.
+
+**`ETag` is derived from the file's time of last change**, not from its bytes, so it moves when
+the file is touched and not when the same content is written again — the same signal the cache
+above turns on. Its exact derivation is recorded in [plan §6.1](plan.md#61-inspection-and-the-cache),
+proven by recovering a real file's modification time from a tag the reference sent
+`[probe: tools/probe_media_source.py, Jellyfin 10.11.11, 2026-08-29]`.
 
 ### 3.2 `POST /Items/{itemId}/PlaybackInfo` — `GetPostedPlaybackInfo`
 

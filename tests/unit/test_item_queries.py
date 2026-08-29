@@ -451,10 +451,41 @@ def test_the_statement_count_is_what_the_plan_says_it_is(
     parents and grandparents with their images and artists (four - an episode's row carries its
     series' name and tags), and the two played-rollup shapes (a container's `UserData` is a
     statement about its subtree). Written as a number so that a *new* related table shows up
-    here as a decision rather than as drift."""
+    here as a decision rather than as drift.
+
+    **Two more since 008 T3**: the page's media probes and their streams. Unconditional, like the
+    ancestors above and for the same reason - a page carries `Container`, `HasSubtitles` and
+    `VideoType` on a *bare* row, so a hydrator that fetched inspections only when something asked
+    for `MediaSources` would need them anyway on every list of films, and a count that depended on
+    what the page happened to hold would make the equality here meaningless."""
     with query_counter.watching(engine):
         repository.run(ItemQuery(user=world.everyone, limit=10))
-    assert len(query_counter) == 15, query_counter.report()
+    assert len(query_counter) == 17, query_counter.report()
+
+
+def test_a_page_with_no_files_costs_the_same_as_a_page_of_films(
+    engine: Engine,
+    repository: ItemQueryRepository,
+    world: QueryWorld,
+    query_counter: QueryCounter,
+) -> None:
+    """The inspection statements run whether or not the page has a file behind it.
+
+    A page of containers has nothing to look up, and skipping the two reads for it would make the
+    count a property of what the page happened to hold - which is the drift the number above is
+    written to catch. The predicate compiles to a false clause instead.
+    """
+    with query_counter.watching(engine):
+        repository.run(
+            ItemQuery(user=world.everyone, include_types=frozenset({ItemType.SERIES}), limit=10)
+        )
+        containers = len(query_counter)
+        query_counter.reset()
+        repository.run(
+            ItemQuery(user=world.everyone, include_types=frozenset({ItemType.MOVIE}), limit=10)
+        )
+        films = len(query_counter)
+    assert containers == films, query_counter.report()
 
 
 def test_an_empty_page_costs_no_hydration(

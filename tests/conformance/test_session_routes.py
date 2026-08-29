@@ -312,6 +312,38 @@ async def test_ac22_the_now_playing_item_carries_no_user_data(
     assert playing["RunTimeTicks"] == RUNTIME_TICKS
 
 
+async def test_the_now_playing_item_carries_the_media_properties_and_not_the_source_list(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """What 007 left 008, now that 008 T3 has filled it - and the tripwire that survived it.
+
+    007 measured a `NowPlayingItem` as a full body minus a named fifteen, and listed nine
+    media-derived properties the differential would show absent because nothing had probed. Seven
+    of them exist now. `MediaSources` is the fifteenth name in `NOT_IN_NOW_PLAYING` and is the one
+    that must **not** appear: the reference does not put it in a session entry, and the omission
+    is what the set was written for `[probe: manual requests via tools/_probe.py, Jellyfin
+    10.11.11, 2026-08-28]`.
+
+    `Chapters` and `Trickplay` are the two of the nine still owed, and neither has an owner in v1.
+    """
+    token = await log_in(client, world.everyone.name)
+    playing = (await playing_session(client, token, world.corpus[1]))["NowPlayingItem"]
+
+    for name in (
+        "Container",
+        "MediaStreams",
+        "Width",
+        "Height",
+        "IsHD",
+        "HasSubtitles",
+        "VideoType",
+    ):
+        assert name in playing, f"{name} is 008's to fill and a session entry has no value for it"
+    assert "MediaSources" not in playing, (
+        "the tripwire failed: a session entry carries a media source the reference never sends"
+    )
+
+
 async def test_ac22_play_state_mirrors_exactly_the_last_report(
     client: httpx.AsyncClient, world: QueryWorld
 ) -> None:

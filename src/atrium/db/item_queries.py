@@ -31,10 +31,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Integer, Select, case, cast, extract, func, or_, select
+from sqlalchemy import Integer, Select, case, cast, extract, func, or_, select, tuple_
 from sqlalchemy.orm import Session as OrmSession
 
 from atrium.db import models
+from atrium.db.repositories import inspection_of
 from atrium.domain.items import (
     BY_NAME,
     FILE_BACKED,
@@ -44,6 +45,7 @@ from atrium.domain.items import (
     ItemType,
     MediaSource,
 )
+from atrium.domain.media import MediaInspection
 from atrium.domain.playstate import UserItemData
 from atrium.domain.queries import Filter, ItemQuery, SortBy, SortOrder
 from atrium.domain.user import User
@@ -169,6 +171,12 @@ class HydratedItem:
 
     item: Item
     metadata: ItemMetadata = field(default_factory=ItemMetadata)
+    #: What inspection stored for each of `item.sources`, **positionally**: index *n* is part
+    #: *n*'s inspection, or `None` where nothing has opened that file. Positional rather than
+    #: keyed by path because every reader wants them in part order beside the sources they
+    #: describe, and a mapping would make "part two was never inspected" a lookup miss rather
+    #: than a `None` in the place it belongs.
+    probes: tuple[MediaInspection | None, ...] = ()
     genres: tuple[NameLink, ...] = ()
     studios: tuple[NameLink, ...] = ()
     people: tuple[NameLink, ...] = ()
@@ -588,6 +596,7 @@ class ItemQueryRepository:
         ids = [row.id for row in rows]
 
         sources = self._grouped(models.ItemSource, ids)
+        probes = self._probes(rows, sources)
         genres = self._grouped(models.ItemGenre, ids)
         studios = self._grouped(models.ItemStudio, ids)
         people = self._grouped(models.ItemPerson, ids)
@@ -601,6 +610,7 @@ class ItemQueryRepository:
             HydratedItem(
                 item=_item(row, sources.get(row.id, [])),
                 metadata=_metadata(row),
+                probes=probes.get(row.id, ()),
                 genres=tuple(
                     NameLink(name=one.name, item_id=one.genre_item_id)
                     for one in _ordered(genres.get(row.id, []))
@@ -635,6 +645,65 @@ class ItemQueryRepository:
             )
             for row in rows
         )
+
+    def _probes(
+        self, rows: Sequence[models.Item], sources: Mapping[str, Sequence[models.ItemSource]]
+    ) -> dict[str, tuple[MediaInspection | None, ...]]:
+        """What inspection stored for the page's files, in part order, two statements for the page.
+
+        **Two, and unconditionally**, which is this method's own rule: the statement count is a
+        property of hydration rather than of what the page happened to contain, and a page that
+        skipped these because no row had a file would make the counter's equality assertion
+        meaningless (and would then cost a round trip the first time a movie appeared).
+
+        Read by `(library_id, relative_path)` because that is how the probe is keyed - the pair
+        `item_sources` already names the file with - so a remounted root keeps its inspections.
+        The predicate is a tuple `IN`, which SQLite expands to one comparison per file rather
+        than to a join this page does not need; an empty one compiles to a false clause rather
+        than to a skipped statement, which is what keeps the count fixed on a page of containers.
+        """
+        wanted = sorted(
+            {
+                (row.library_id, one.relative_path)
+                for row in rows
+                if row.library_id is not None
+                for one in sources.get(row.id, ())
+            }
+        )
+        found = {
+            (one.library_id, one.relative_path): one
+            for one in self._session.scalars(
+                select(models.MediaProbe).where(
+                    tuple_(models.MediaProbe.library_id, models.MediaProbe.relative_path).in_(
+                        wanted
+                    )
+                )
+            )
+        }
+        streams: dict[tuple[str, str], list[models.MediaStreamRow]] = {}
+        for one in self._session.scalars(
+            select(models.MediaStreamRow)
+            .where(
+                tuple_(models.MediaStreamRow.library_id, models.MediaStreamRow.relative_path).in_(
+                    wanted
+                )
+            )
+            .order_by(models.MediaStreamRow.stream_index)
+        ):
+            streams.setdefault((one.library_id, one.relative_path), []).append(one)
+
+        collected: dict[str, tuple[MediaInspection | None, ...]] = {}
+        for row in rows:
+            parts = sorted(sources.get(row.id, ()), key=lambda one: one.part_index)
+            if not parts or row.library_id is None:
+                continue
+            collected[row.id] = tuple(
+                None
+                if (key := (row.library_id, one.relative_path)) not in found
+                else inspection_of(found[key], streams.get(key, []))
+                for one in parts
+            )
+        return collected
 
     def _ancestors(self, rows: Sequence[models.Item]) -> dict[str, tuple[Ancestor | None, ...]]:
         """The page's parents and grandparents, summarised - four statements, page-independent.

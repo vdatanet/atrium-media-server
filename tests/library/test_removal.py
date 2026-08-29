@@ -30,7 +30,7 @@ from atrium.domain.library import Library
 from atrium.library import config
 from atrium.library.maintenance import DEFAULT_GRACE, purge_removed
 from atrium.library.scan import scan
-from tests.conftest import data_dir
+from tests.conftest import data_dir, not_media
 from tests.fixtures.library import BuiltFixture
 
 FILM = "Amélie (2001).mkv"
@@ -53,14 +53,14 @@ def library(engine: Engine, fixture_library: BuiltFixture) -> Library:
             LibraryRepository(db), "Movies", "movies", (str(fixture_library.of("movies").root),)
         )
     with session_scope(factory) as db:
-        scan(made, db)
+        scan(made, db, prober=not_media)
     return made
 
 
 def rescan(engine: Engine, library: Library, **options: object):  # type: ignore[no-untyped-def]
     factory = session_factory(engine)
     with session_scope(factory) as db:
-        return scan(library, db, **options)  # type: ignore[arg-type]
+        return scan(library, db, prober=not_media, **options)  # type: ignore[arg-type]
 
 
 def film_id(engine: Engine, library: Library) -> str:
@@ -281,7 +281,7 @@ def test_purging_only_touches_the_library_it_was_asked_about(
             LibraryRepository(db), "Music", "music", (str(fixture_library.of("music").root),)
         )
     with session_scope(factory) as db:
-        scan(other, db)
+        scan(other, db, prober=not_media)
     with session_scope(factory) as db:
         before = len(ItemRepository(db).by_library(other.id))
 

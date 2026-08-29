@@ -1417,9 +1417,15 @@ def _stream(row: models.MediaStreamRow) -> InspectedStream:
     )
 
 
-def _inspection(
+def inspection_of(
     row: models.MediaProbe, streams: Sequence[models.MediaStreamRow]
 ) -> MediaInspection:
+    """Two rows into the domain record, ADR-0003's direction.
+
+    Public because `item_queries.py` hydrates a whole page's inspections in two statements rather
+    than asking this repository once per file, and both readers must produce the same record from
+    the same rows - a second conversion is a second answer waiting to happen.
+    """
     keyframes = row.video_keyframes
     return MediaInspection(
         size=row.size,
@@ -1456,7 +1462,7 @@ class MediaProbeRepository:
         row = self._session.get(models.MediaProbe, (library_id, relative_path))
         if row is None:
             return None
-        return _inspection(row, self._streams(library_id, relative_path))
+        return inspection_of(row, self._streams(library_id, relative_path))
 
     def current(
         self, library_id: str, relative_path: str, size: int, mtime_ns: int

@@ -30,7 +30,7 @@ from atrium.domain.library import Library
 from atrium.library import config
 from atrium.library.scan import scan
 from atrium.metadata.model import RefreshMode
-from tests.conftest import data_dir
+from tests.conftest import data_dir, not_media
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "metadata"
 NFO = FIXTURES / "nfo"
@@ -59,7 +59,7 @@ def a_library(engine: Engine, root: Path, collection_type: str) -> Library:
 def scanned(engine: Engine, library: Library, **options: object) -> object:
     factory = session_factory(engine)
     with session_scope(factory) as db:
-        return scan(library, db, **options)  # type: ignore[arg-type]
+        return scan(library, db, prober=not_media, **options)  # type: ignore[arg-type]
 
 
 def items(engine: Engine) -> list[models.Item]:

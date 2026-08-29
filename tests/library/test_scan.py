@@ -31,7 +31,7 @@ from atrium.domain.items import CollectionType, ItemType
 from atrium.domain.library import Library
 from atrium.library import config
 from atrium.library.scan import RootSuddenlyEmptyError, scan
-from tests.conftest import data_dir
+from tests.conftest import data_dir, not_media
 from tests.fixtures.library import BuiltFixture
 
 
@@ -58,7 +58,7 @@ def a_library(engine: Engine, fixture_library: BuiltFixture, collection_type: st
 def scanned(engine: Engine, library: Library, **options: object):  # type: ignore[no-untyped-def]
     factory = session_factory(engine)
     with session_scope(factory) as db:
-        return scan(library, db, **options)  # type: ignore[arg-type]
+        return scan(library, db, prober=not_media, **options)  # type: ignore[arg-type]
 
 
 def items_of(engine: Engine, library: Library) -> dict[str, object]:
@@ -140,7 +140,7 @@ def test_scanning_into_an_empty_database_gives_the_same_identifiers(
                     )
                 )
             with session_scope(factory) as db:
-                scan(library, db)
+                scan(library, db, prober=not_media)
             identifiers.append(set(items_of(engine, library)))
         finally:
             engine.dispose()
@@ -164,7 +164,7 @@ def test_moving_the_root_changes_no_identifier(
     Path(fixture_library.of("movies").root).rename(moved)
     factory = session_factory(engine)
     with session_scope(factory) as db:
-        scan(library, db, roots=[moved])
+        scan(library, db, roots=[moved], prober=not_media)
 
     assert set(items_of(engine, library)) == before
 
@@ -377,7 +377,7 @@ def test_a_large_tree_is_written_in_one_transaction(engine: Engine, tmp_path: Pa
 
     started = time.monotonic()
     with session_scope(factory) as db:
-        report = scan(library, db)
+        report = scan(library, db, prober=not_media)
     elapsed = time.monotonic() - started
     event.remove(engine, "commit", _count)
 

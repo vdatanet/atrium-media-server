@@ -65,7 +65,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -73,14 +73,17 @@ from pathlib import Path
 from sqlalchemy.orm import Session as OrmSession
 
 from atrium.compat.dates import utc_now
-from atrium.db.repositories import ItemRepository, MetadataRepository
+from atrium.db.repositories import ItemRepository, MediaProbeRepository, MetadataRepository
 from atrium.domain.items import IN_THE_TREE, PARENT_OF, Item, ItemType
 from atrium.domain.library import Library
+from atrium.domain.media import MediaInspection
 from atrium.library.identity import ensure_unique
 from atrium.library.naming import MetadataSource
-from atrium.library.report import Phase, Progress, ProgressSink, ScanReport, silent
+from atrium.library.report import Phase, Progress, ProgressSink, ScanReport, Uninspected, silent
 from atrium.library.resolver import Resolution, resolve
 from atrium.library.walker import Candidate, Skipped, WalkResult, walk
+from atrium.media.probe import InspectionError, ProberUnavailableError
+from atrium.media.probe import inspect as inspect_media
 from atrium.metadata.model import RefreshMode
 from atrium.metadata.refresh import pending_and_touched, refresh_items
 from atrium.metadata.tags import MemoisedSource, TagSource
@@ -90,6 +93,12 @@ from atrium.metadata.tags import MemoisedSource, TagSource
 #: a half-mounted share is caught. An operator who really did delete a third of their films passes
 #: `confirm_removals`, which is a decision somebody makes rather than a threshold nobody notices.
 DEFAULT_REMOVAL_THRESHOLD = 0.25
+
+#: What a scan calls to find out what is inside a media file. A seam rather than a direct call,
+#: because the hundreds of dummy-byte files in the 003 and 004 fixtures are not media and every one
+#: of them would cost a process launch and a refusal - so those suites pass a stub and keep their
+#: speed, while a real server gets the real prober by default.
+MediaProber = Callable[[Path], MediaInspection]
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +164,7 @@ def scan(
     providers: Sequence[object] = (),
     removal_threshold: float = DEFAULT_REMOVAL_THRESHOLD,
     confirm_removals: bool = False,
+    prober: MediaProber | None = None,
     progress: ProgressSink = silent,
 ) -> ScanReport:
     """Bring the database into line with what is on disk.
@@ -172,7 +182,12 @@ def scan(
     6.5 fires. Raising rather than returning is deliberate: a returned report can be ignored by a
     caller in a hurry, and an exception rolls the caller's transaction back on its way out.
 
-    `progress` is called as the scan moves through its three phases (plan section 6.7) and defaults
+    `prober` is what opens a media file to find out what is inside it, and defaults to the real
+    one (008 plan section 6.1). It is injectable because the fixture libraries of 003 and 004 are
+    thousands of files of dummy bytes: a suite that ran the real prober over them would pay a
+    process launch per file to be told, correctly, that none of them is media.
+
+    `progress` is called as the scan moves through its four phases (plan section 6.7) and defaults
     to reporting to nobody. **A guard that refuses raises without a final report**, which is
     correct: there is no summary of a scan that did not happen, and a progress sink that had been
     told "walking, 3 of 3 roots" and then hears nothing more is being told the truth.
@@ -241,6 +256,18 @@ def scan(
         (item.id, item.relative_path or item.name) for item in kept.values() if item.is_file_backed
     )
 
+    # **Inspection, behind the same idea as change detection and against a different table.**
+    # After the three guards, because it is the slowest thing here and a scan that is about to
+    # refuse should refuse before opening a thousand files. A file is opened when what is stored
+    # about its bytes no longer describes them - or when
+    # nothing is stored, which is every file the first time a library is scanned after 008. That
+    # is `MediaProbeRepository.current`'s whole reason for existing, and it is deliberately not
+    # `unchanged_paths`: those compare against `item_sources`, which is in step with the disk long
+    # before any probe row exists, so reusing them would leave a library permanently uninspected.
+    inspected, uninspected = _inspect_media(
+        library, session, paths, walked, prober or inspect_media, deep=deep, report=report
+    )
+
     now = utc_now()
     added = updated = unchanged = 0
     returning: list[str] = []
@@ -304,6 +331,8 @@ def scan(
         updated=updated,
         unchanged=unchanged,
         examined=examined,
+        inspected=inspected,
+        uninspected=uninspected,
         removed=removed,
         revived=revived,
         missing=len(missing),
@@ -314,6 +343,75 @@ def scan(
         noticed=tuple(one for one in resolution.noticed if one.item_id in kept),
         refreshed=refreshed,
     )
+
+
+def _inspect_media(
+    library: Library,
+    session: OrmSession,
+    roots: Sequence[Path],
+    walked: WalkResult,
+    prober: MediaProber,
+    *,
+    deep: bool,
+    report: _Reporter,
+) -> tuple[int, tuple[Uninspected, ...]]:
+    """Open every media file whose stored inspection no longer describes it, and store what it says.
+
+    **An unreadable file costs itself and nothing else.** It is recorded and the walk continues,
+    because the item exists either way: 003 gives it an identity from its path, and a scan that
+    abandoned the library over one truncated download would lose every other file's inspection to
+    a file nobody can play anyway.
+
+    **A missing prober is not a library of unreadable files**, and telling them apart is the whole
+    reason `media/probe.py` raises two exceptions. `ProberUnavailableError` is true of every file
+    at once, so it stops the phase after the first one and is logged as the operator's problem it
+    is - recording thousands of items as uninspectable would bury the one fact that explains them.
+
+    Writes inside the caller's transaction, like everything else here.
+    """
+    probes = MediaProbeRepository(session)
+    inspected = 0
+    failed: list[Uninspected] = []
+    total = len(walked.candidates)
+    for done, candidate in enumerate(walked.candidates, start=1):
+        report(Phase.INSPECTING, done, total)
+        if not deep and probes.current(
+            library.id, candidate.relative_path, candidate.size, candidate.mtime_ns
+        ):
+            continue
+        try:
+            probes.put(
+                library.id,
+                candidate.relative_path,
+                prober(_absolute(roots, candidate.relative_path)),
+            )
+        except ProberUnavailableError as exc:
+            logger.error(
+                "library %s: no media inspection is possible, so no item will have a media "
+                "source until this is fixed: %s",
+                library.id,
+                exc,
+            )
+            break
+        except InspectionError as exc:
+            failed.append(Uninspected(relative_path=candidate.relative_path, reason=str(exc)))
+            continue
+        inspected += 1
+    return inspected, tuple(failed)
+
+
+def _absolute(roots: Sequence[Path], relative_path: str) -> Path:
+    """A candidate's path on disk, from a walk that merged several roots without recording which.
+
+    The first root the file is actually under, and the first root otherwise - the same
+    reconstruction `BaseItemDto`'s `Path` makes, so the two can never name different files. A
+    library with one root, which is every library in practice, takes the first branch immediately.
+    """
+    for root in roots:
+        candidate = root / relative_path
+        if candidate.exists():
+            return candidate
+    return roots[0] / relative_path
 
 
 def _touched(existing: Mapping[str, Item], item: Item, resolved: AbstractSet[str]) -> bool:

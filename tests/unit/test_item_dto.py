@@ -8,8 +8,9 @@ other fails loudly, which is the drift risk plan section 9 row 6 names.
 
 The second half is AC-2 and AC-3 at builder level, plus the emitters whose answers are worth
 asserting by value: the ancestor context an episode and a track carry, the container rollup, the
-explicit `ChannelId` null, and the five 008-owned names that must stay absent **even when asked**
-- that last one exists so 008's arrival changes a failing test rather than nothing.
+explicit `ChannelId` null, and the one still-unprobed name that must stay absent **even when
+asked** - that last one existed for the five 008 filled at T3 and now holds `Chapters` alone, so
+that whatever extracts a chapter list changes a failing test rather than nothing.
 """
 
 from __future__ import annotations
@@ -157,6 +158,10 @@ SPEC_PER_TYPE: dict[str, set[str]] = {
     "Artists": {"MusicAlbum", "Audio"},
     "ArtistItems": {"MusicAlbum", "Audio"},
     "CollectionType": {"CollectionFolder"},
+    # 008 T3's three: the media properties a bare row carries without asking.
+    "Container": {"Movie", "Episode", "Audio"},
+    "HasSubtitles": {"Movie", "Episode"},
+    "VideoType": {"Movie", "Episode"},
 }
 
 #: Spec section 3.2, "Only when a list row asks for them".
@@ -186,6 +191,7 @@ SPEC_GATED = {
     "PrimaryImageAspectRatio",
     "Width",
     "Height",
+    "IsHD",
 }
 
 
@@ -242,9 +248,15 @@ def test_the_three_tiers_do_not_overlap() -> None:
 def test_a_bare_movie_row_is_exactly_the_always_set(
     hydrated: dict[str, HydratedItem], world: QueryWorld
 ) -> None:
-    """A plain film, nothing asked for: the twelve and not one more (AC-3's absent half)."""
+    """A plain film, nothing asked for: the twelve, and the three 008 T3 put on a film's row.
+
+    `Container`, `HasSubtitles` and `VideoType` are per-type rather than gated - the reference
+    sends all three on a bare list row of a film `[probe: tools/probe_item_shapes.py, Jellyfin
+    10.11.11, 2026-08-27]` - so "exactly the always set" is now the always set plus that type's
+    row, which is what `_considered` computes and what this asserts against.
+    """
     body = wire(hydrated[world.corpus[50]], ctx())
-    assert set(body) == SPEC_ALWAYS
+    assert set(body) == SPEC_ALWAYS | {"Container", "HasSubtitles", "VideoType"}
 
 
 def test_full_width_emits_the_gated_fields_unasked(
@@ -322,11 +334,19 @@ def test_ac2_user_data_is_on_every_item_with_key_and_item_id(
 
 
 #: AC-3's per-field battery: for each gated name, an item that *has* a value for it, and the
-#: context that supplies what the emitter reads. The five 008-owned names are asserted the other
+#: context that supplies what the emitter reads. The one still-unprobed name is asserted the other
 #: way round below.
 def _gated_cases(world: QueryWorld) -> dict[str, tuple[str, dict[str, Any]]]:
     return {
         "Path": (world.corpus[0], {"libraries": libraries_of(world)}),
+        # The five 008 T3 filled. A film rather than a track for the three video ones: the
+        # emitters answer nothing for an item with no video stream, which would make the
+        # "present when asked" half pass or fail on the fixture's choice of item.
+        "MediaSources": (world.corpus[0], {"libraries": libraries_of(world)}),
+        "MediaStreams": (world.corpus[0], {}),
+        "Width": (world.corpus[0], {}),
+        "Height": (world.corpus[0], {}),
+        "IsHD": (world.corpus[0], {}),
         "Etag": (world.corpus[0], {}),
         "DateCreated": (world.corpus[0], {}),
         "ProviderIds": (world.corpus[0], {}),
@@ -378,11 +398,12 @@ def test_ac3_a_gated_field_is_absent_bare_and_present_when_asked(
     assert name in asked, f"{name} absent although fields={GATED[name]} asked for it"
 
 
-def test_the_unprobed_five_stay_absent_even_when_asked(
+def test_the_unprobed_stay_absent_even_when_asked(
     hydrated: dict[str, HydratedItem], world: QueryWorld
 ) -> None:
-    """The 008 gap, held as a failing-test-in-waiting: when probing exists and these emit, this
-    assertion breaks and 008 owns updating it (plan section 1)."""
+    """Held as a failing-test-in-waiting: whatever teaches this server to read a chapter list
+    breaks this assertion and owns updating it (005 plan section 1). It held five names until
+    008 T3, and the four it lost are now in `_gated_cases` being asserted the other way round."""
     asked = ctx(fields=frozenset(UNPROBED), width=Width.FULL)
     body = wire(hydrated[world.corpus[0]], asked)
     for name in UNPROBED:
