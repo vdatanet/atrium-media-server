@@ -191,6 +191,17 @@ class Decision:
     source satisfies still answers `true` here when a transcoding target exists, and `false` when
     none does - measured on the same accepting profile with and without one."""
 
+    target: TranscodingProfile | None = None
+    """The client's own entry this answer was built from, `None` when nothing is produced.
+
+    Carried because the `TranscodingUrl` repeats five of its fields back to the client -
+    `MinSegments`, `SegmentLength`, `BreakOnNonKeyFrames`, `TranscodingMaxAudioChannels`,
+    `EnableAudioVbrEncoding` - and re-deriving *which* entry was chosen in order to read them
+    would be a second copy of `_choose_target`'s ranking, which is the drift this module exists
+    to prevent. `container` and `sub_protocol` are this entry's too, and stay declared because
+    every reader wants those two and few want the rest.
+    """
+
     @property
     def supports_direct_play(self) -> bool:
         return self.outcome is Outcome.DIRECT_PLAY
@@ -337,7 +348,15 @@ class DirectPlayProfile:
 
 @dataclass(frozen=True, slots=True)
 class TranscodingProfile:
-    """A shape the client will accept the server producing."""
+    """A shape the client will accept the server producing.
+
+    The last five fields decide nothing in the ladder and are carried anyway, because the client
+    reads them back out of the `TranscodingUrl` it is handed: the reference copies them from the
+    chosen target onto the stream it describes `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs
+    SetStreamInfoOptionsFromTranscodingProfile @ v10.11.11]`. `max_audio_channels` arrives as a
+    string on the wire and is `None` here when it is not a number, which is the reference's own
+    `int.TryParse` and not leniency invented for it.
+    """
 
     container: str
     audio_codec: str | None = None
@@ -345,6 +364,11 @@ class TranscodingProfile:
     type: MediaKind = MediaKind.VIDEO
     protocol: str = "http"
     context: str = "Streaming"
+    max_audio_channels: int | None = None
+    min_segments: int | None = None
+    segment_length: int | None = None
+    break_on_non_key_frames: bool = False
+    enable_audio_vbr_encoding: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -617,7 +641,7 @@ def _audio_values(
     }
 
 
-def _ceiling(
+def ceiling(
     profile: DeviceProfile,
     kind: CodecKind,
     codec: str | None,
@@ -629,6 +653,11 @@ def _ceiling(
     Only `LessThanEqual` and `Equals` bound an output. `GreaterThanEqual` states a floor, and a
     floor is not something a server that never upscales can honour by producing more - the
     reference does not express it either.
+
+    **Public because the `TranscodingUrl` reads the same limits and reports them unclamped**
+    (`media/urls.py`, plan section 6.3). The ladder clamps them against the source and the URL
+    does not, so they are two answers from one derivation rather than two derivations - which is
+    what stops the number a client is told from drifting from the number it was decided against.
     """
     limits = [
         stated
@@ -642,7 +671,7 @@ def _ceiling(
     return min(limits) if limits else None
 
 
-def _clamped(ceiling: float | None, source_value: int | None) -> int | None:
+def _clamped(limit: float | None, source_value: int | None) -> int | None:
     """`min(profile, source)`, and the source alone when the profile stated no limit.
 
     Spec section 3.4: ceilings are limits, not targets. A 1080p ceiling over a 720p source plans
@@ -650,11 +679,11 @@ def _clamped(ceiling: float | None, source_value: int | None) -> int | None:
     ladder - the divergence of behaviours section 3.7, which is honoured here because this is
     where the target number is chosen.
     """
-    if ceiling is None:
+    if limit is None:
         return source_value
     if source_value is None:
-        return int(ceiling)
-    return min(source_value, int(ceiling))
+        return int(limit)
+    return min(source_value, int(limit))
 
 
 # ------------------------------------------------------------------------------------------------
@@ -764,7 +793,7 @@ def _plan_video(
             bitrate=stream.bitrate,
         )
     codec = _first_codec(target.video_codec)
-    bitrate_ceiling = _ceiling(
+    bitrate_ceiling = ceiling(
         profile, CodecKind.VIDEO, codec, target.container, ConditionProperty.VIDEO_BITRATE
     )
     if max_bitrate is not None:
@@ -774,11 +803,11 @@ def _plan_video(
         action=StreamAction.ENCODE,
         codec=codec,
         width=_clamped(
-            _ceiling(profile, CodecKind.VIDEO, codec, target.container, ConditionProperty.WIDTH),
+            ceiling(profile, CodecKind.VIDEO, codec, target.container, ConditionProperty.WIDTH),
             stream.width,
         ),
         height=_clamped(
-            _ceiling(profile, CodecKind.VIDEO, codec, target.container, ConditionProperty.HEIGHT),
+            ceiling(profile, CodecKind.VIDEO, codec, target.container, ConditionProperty.HEIGHT),
             stream.height,
         ),
         bitrate=_clamped(bitrate_ceiling, stream.bitrate or source.bitrate),
@@ -823,7 +852,7 @@ def _plan_audio(
         (one for one in listed if not _failures(profile, kind, one, target.container, values)),
         _first_codec(target.audio_codec),
     )
-    channel_ceiling = _ceiling(
+    channel_ceiling = ceiling(
         profile, kind, codec, target.container, ConditionProperty.AUDIO_CHANNELS
     )
     if switches.max_audio_channels is not None:
@@ -835,12 +864,12 @@ def _plan_audio(
         action=StreamAction.ENCODE,
         codec=codec,
         bitrate=_clamped(
-            _ceiling(profile, kind, codec, target.container, ConditionProperty.AUDIO_BITRATE),
+            ceiling(profile, kind, codec, target.container, ConditionProperty.AUDIO_BITRATE),
             stream.bitrate,
         ),
         channels=_clamped(channel_ceiling, stream.channels),
         sample_rate=_clamped(
-            _ceiling(profile, kind, codec, target.container, ConditionProperty.AUDIO_SAMPLE_RATE),
+            ceiling(profile, kind, codec, target.container, ConditionProperty.AUDIO_SAMPLE_RATE),
             stream.sample_rate,
         ),
     )
@@ -952,6 +981,7 @@ def decide(
         video=video_plan,
         audio=audio_plan,
         supports_transcoding=True,
+        target=target,
     )
 
 
@@ -1038,5 +1068,6 @@ __all__ = [
     "Switches",
     "TranscodeReason",
     "TranscodingProfile",
+    "ceiling",
     "decide",
 ]

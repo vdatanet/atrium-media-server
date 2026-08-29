@@ -51,6 +51,18 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 #: somebody's client. 004 joined at T15, which is the line this file's own comment promised.
 IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007"})
 
+#: 008 arrives across eight tasks - the negotiation pair (T5), static delivery (T6), progressive
+#: (T7), the two audio specials (T8, T9), the playlists and segments (T10, T11) and the stop route
+#: (T12) - and the exact-set check below has to stay meaningful in between, so the routes that have
+#: landed are listed here. It is deleted at T14, when `"008"` joins the set above. 002, 005, 006
+#: and 007 each used exactly this device, and all four lists are gone.
+INTERIM_008 = frozenset(
+    {
+        ("POST", "/Items/{itemId}/PlaybackInfo"),
+        ("GET", "/Items/{itemId}/PlaybackInfo"),
+    }
+)
+
 
 def _load_surface_parser() -> Any:
     """Reuse the parser the surface validator already has, rather than write a second one.
@@ -127,11 +139,12 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     would pass it. This one fails until `IMPLEMENTED_FEATURES` names the feature - a line that gets
     changed on purpose, in the change that finishes it.
 
-    002 arrived across two tasks, 005 across seven and 006 across five, and for the changes between
-    them this set was accompanied by an explicit list of the individual routes that had landed.
-    All four lists are gone now, which is what finishing a feature looks like here.
+    002 arrived across two tasks, 005 across seven, 006 across five and 007 across three, and for
+    the changes between them this set was accompanied by an explicit list of the individual routes
+    that had landed. Those four lists are gone; `INTERIM_008` is the fifth, and it goes the same
+    way at T14.
     """
-    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES)
+    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES) | INTERIM_008
 
 
 def test_an_unlisted_route_fails_the_check(app: FastAPI) -> None:

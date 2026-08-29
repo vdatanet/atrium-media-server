@@ -40,6 +40,7 @@ from atrium.api import (
     instant_mix,
     items,
     localization,
+    media_info,
     playstate,
     resume,
     search,
@@ -110,6 +111,7 @@ ROUTERS = (
     search.router,
     similar.router,
     instant_mix.router,
+    media_info.router,
     items.router,
 )
 
