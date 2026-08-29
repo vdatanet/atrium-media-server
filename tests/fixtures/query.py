@@ -6,6 +6,15 @@ needs is a library whose contents are known exactly, so a query's answer can be 
 number rather than against whatever the fixture tree happens to hold. No scan runs here and no
 file is read.
 
+**That includes the inspections.** 008 T3 made every file-backed row answer `MediaSources`, and a
+world with no probe rows would answer sources with no streams - which is a real shape (the
+reference sends one for a file it never opened) but not the one worth pinning a golden to. So each
+source is given a *stated* inspection, chosen so the two conditional properties are proven in both
+directions: a film is 1080p with a subtitle track, an episode is 396 lines with none, so `IsHD` and
+`HasSubtitles` appear on one golden and are absent from the other. Where the inspection has to be
+*true of a real file* - AC-28's demuxer list, the two-part film - the proof is 008 T1's scanned
+media world instead, because only a real scan can say a row and a file agree.
+
 **Built through the repositories** rather than by inserting rows, which is what keeps the world
 honest against schema drift: a shape the write path will not produce cannot be quietly relied on
 by a test. The one exception is `item_user_data`, which has no repository until 007 owns it - the
@@ -32,11 +41,19 @@ from atrium.db import models
 from atrium.db.repositories import (
     ItemRepository,
     LibraryRepository,
+    MediaProbeRepository,
     MetadataRepository,
     UserRepository,
 )
 from atrium.domain.items import CollectionType, Item, ItemType, MediaSource
 from atrium.domain.library import Library
+from atrium.domain.media import (
+    InspectedStream,
+    MediaInspection,
+    StreamKind,
+    VideoRange,
+    VideoRangeType,
+)
 from atrium.domain.sorting import sort_name
 from atrium.domain.user import LibraryAccess, User
 from atrium.library import identity
@@ -55,6 +72,16 @@ EPOCH = datetime(2026, 1, 1, tzinfo=UTC)
 #: Passed to every `MetadataRepository.apply` call. Without it `apply` stamps `utc_now()` and two
 #: builds of this world differ in a column - which is a golden response that cannot be checked in.
 REFRESHED_AT = datetime(2026, 2, 1, 12, 0, tzinfo=UTC)
+
+#: Stamped on every seeded inspection, for the same reason: a clock here is a golden that cannot
+#: be checked in.
+PROBED_AT = datetime(2026, 2, 1, 13, 0, tzinfo=UTC)
+
+#: Every source's modification time, and therefore every source's `ETag` - which is `MD5` over
+#: this number expressed in .NET ticks (008 plan section 6.1). One constant for the whole world:
+#: the tag is not a hash of the bytes, so a fixture that varied it would only be varying the
+#: string a golden pins.
+MTIME_NS = 1_767_225_600_123_456_789
 
 MOVIES_LIBRARY_ID = "1" * 32
 SHOWS_LIBRARY_ID = "2" * 32
@@ -286,6 +313,7 @@ def build_query_world(session: OrmSession) -> QueryWorld:
     favourites = (corpus[0], album)
     resumable = (corpus[1], corpus[2])
     _seed_user_data(session, everyone, series, favourites, resumable)
+    _seed_inspections(session, items, (movies, shows, music))
 
     session.flush()
     return QueryWorld(
@@ -311,6 +339,140 @@ def build_query_world(session: OrmSession) -> QueryWorld:
         favourites=favourites,
         resumable=resumable,
     )
+
+
+# ------------------------------------------------------------------------------------------
+# Inspections
+# ------------------------------------------------------------------------------------------
+
+#: What a film in this world turns out to contain: high definition, and subtitled.
+FILM_STREAMS = (
+    InspectedStream(
+        index=0,
+        kind=StreamKind.VIDEO,
+        codec="h264",
+        profile="High",
+        level=40,
+        bit_depth=8,
+        width=1920,
+        height=1080,
+        aspect_ratio="16:9",
+        framerate="24000/1001",
+        average_framerate="24000/1001",
+        is_default=True,
+        video_range=VideoRange.SDR,
+        video_range_type=VideoRangeType.SDR,
+        color_range="tv",
+        pixel_format="yuv420p",
+        is_anamorphic=False,
+    ),
+    InspectedStream(
+        index=1,
+        kind=StreamKind.AUDIO,
+        codec="ac3",
+        channels=6,
+        channel_layout="5.1",
+        sample_rate=48000,
+        language="eng",
+        bitrate=448000,
+        is_default=True,
+    ),
+    #: The stream that makes `HasSubtitles` true, and the only one in this world.
+    InspectedStream(index=2, kind=StreamKind.SUBTITLE, codec="subrip", language="eng"),
+)
+
+#: And an episode: standard definition, no subtitle - so both conditional properties are proven
+#: absent on one golden and present on another rather than only ever one way round.
+EPISODE_STREAMS = (
+    InspectedStream(
+        index=0,
+        kind=StreamKind.VIDEO,
+        codec="h264",
+        profile="Main",
+        level=30,
+        bit_depth=8,
+        width=704,
+        height=396,
+        aspect_ratio="16:9",
+        framerate="25",
+        average_framerate="25",
+        is_default=True,
+        video_range=VideoRange.SDR,
+        video_range_type=VideoRangeType.SDR,
+        pixel_format="yuv420p",
+        is_anamorphic=False,
+    ),
+    InspectedStream(
+        index=1,
+        kind=StreamKind.AUDIO,
+        codec="aac",
+        profile="LC",
+        channels=2,
+        channel_layout="stereo",
+        sample_rate=44100,
+        language="eng",
+        is_default=True,
+    ),
+)
+
+TRACK_STREAMS = (
+    InspectedStream(
+        index=0,
+        kind=StreamKind.AUDIO,
+        codec="flac",
+        bit_depth=16,
+        channels=2,
+        channel_layout="stereo",
+        sample_rate=44100,
+        is_default=True,
+    ),
+)
+
+#: Per item type: the normalised container, what the demuxer said before that, and the streams.
+#: None of the containers here is a demuxer *list* - every path in this world ends `.mkv` or
+#: `.flac`, and a fixture that claimed a `.mkv` was an mp4 would be proving AC-28 against a lie.
+#: The list case is 008 T1's scanned world, over a file that really is an mp4.
+INSPECTED: dict[ItemType, tuple[str, str, tuple[InspectedStream, ...], int | None]] = {
+    ItemType.MOVIE: ("mkv", "matroska,webm", FILM_STREAMS, RUNTIME_TICKS),
+    ItemType.EPISODE: ("mkv", "matroska,webm", EPISODE_STREAMS, EPISODE_RUNTIME_TICKS),
+    ItemType.AUDIO: ("flac", "flac", TRACK_STREAMS, SHORT_RUNTIME_TICKS),
+}
+
+
+def _seed_inspections(
+    session: OrmSession, items: ItemRepository, libraries: tuple[Library, ...]
+) -> None:
+    """One stated inspection per file, through the repository like everything else here.
+
+    Every source of every file-backed item, so no row in this world is half-inspected: a page that
+    carried `MediaSources` for some of its films and not others would make every golden a
+    statement about which films the seeder remembered.
+    """
+    probes = MediaProbeRepository(session)
+    for library in libraries:
+        for item in items.by_library(library.id).values():
+            shape = INSPECTED.get(item.type)
+            if shape is None:
+                continue
+            container, format_names, streams, runtime_ticks = shape
+            for source in item.sources:
+                probes.put(
+                    library.id,
+                    source.relative_path,
+                    MediaInspection(
+                        size=source.size or 0,
+                        mtime_ns=source.mtime_ns or 0,
+                        container=container,
+                        format_names=format_names,
+                        probed_at=PROBED_AT,
+                        runtime_ticks=runtime_ticks,
+                        bitrate=2_000_000,
+                        video_keyframes=(
+                            (0,) if any(one.kind is StreamKind.VIDEO for one in streams) else None
+                        ),
+                        streams=streams,
+                    ),
+                )
 
 
 # ------------------------------------------------------------------------------------------
@@ -437,7 +599,7 @@ def _movie(library: Library, name: str, index: int) -> Item:
             name=name,
             library_id=library.id,
             parent_id=identity.for_library(library.id),
-            sources=(MediaSource(relative_path=relative, size=1000 + index),),
+            sources=(MediaSource(relative_path=relative, size=1000 + index, mtime_ns=MTIME_NS),),
             date_created=_created(index),
         )
     )
@@ -632,7 +794,7 @@ def _seed_episodes(
                 name=f"{series_name} S{season_number:02d}E{episode_number:02d}",
                 library_id=library.id,
                 parent_id=season_id,
-                sources=(MediaSource(relative_path=relative, size=500),),
+                sources=(MediaSource(relative_path=relative, size=500, mtime_ns=MTIME_NS),),
                 index_number=episode_number,
                 parent_index_number=season_number,
                 end_index_number=spans_to,
@@ -735,7 +897,7 @@ def _seed_music(
                 name=f"Track {number}",
                 library_id=library.id,
                 parent_id=album_id,
-                sources=(MediaSource(relative_path=relative, size=300),),
+                sources=(MediaSource(relative_path=relative, size=300, mtime_ns=MTIME_NS),),
                 index_number=number,
                 parent_index_number=1,
                 date_created=_created(410 + number),
@@ -810,7 +972,7 @@ def _seed_guest_album(
             name="Guest Track",
             library_id=library.id,
             parent_id=album_id,
-            sources=(MediaSource(relative_path=relative, size=300),),
+            sources=(MediaSource(relative_path=relative, size=300, mtime_ns=MTIME_NS),),
             index_number=1,
             parent_index_number=1,
             date_created=_created(422),

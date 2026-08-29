@@ -30,7 +30,7 @@ from atrium.library import config
 from atrium.library.naming import PATH_ONLY
 from atrium.library.scan import scan
 from atrium.metadata.tags import TagSource
-from tests.conftest import data_dir
+from tests.conftest import data_dir, not_media
 
 TEMPLATE = Path(__file__).resolve().parents[1] / "fixtures" / "metadata" / "audio" / "template.flac"
 
@@ -65,7 +65,7 @@ def a_music_library(engine: Engine, root: Path) -> Library:
 def scanned(engine: Engine, library: Library, **kwargs: object) -> list[models.Item]:
     factory = session_factory(engine)
     with session_scope(factory) as db:
-        scan(library, db, **kwargs)  # type: ignore[arg-type]
+        scan(library, db, prober=not_media, **kwargs)  # type: ignore[arg-type]
     with session_scope(factory) as db:
         return list(db.execute(select(models.Item)).scalars())
 

@@ -47,7 +47,7 @@ from atrium.domain.user import User
 from atrium.library import config, identity
 from atrium.library.scan import scan
 from atrium.server import create_app
-from tests.conftest import data_dir
+from tests.conftest import data_dir, not_media
 from tests.fixtures.library import BuiltFixture
 from tests.fixtures.query import QueryWorld, build_query_world
 
@@ -81,14 +81,14 @@ def scanned(tmp_path: Path, fixture_library: BuiltFixture) -> Iterator[Scanned]:
         library = config.create(LibraryRepository(opened), "Shows", "tvshows", (str(root),))
         user = UserRepository(opened).add(User(id=new_id(), name="joan", enable_all_folders=True))
     with session_scope(factory) as opened:
-        scan(library, opened)
+        scan(library, opened, prober=not_media)
     yield Scanned(engine=engine, library=library, user=user, root=root)
     engine.dispose()
 
 
 def rescan(scanned: Scanned) -> None:
     with session_scope(session_factory(scanned.engine)) as opened:
-        scan(scanned.library, opened)
+        scan(scanned.library, opened, prober=not_media)
 
 
 def season_of(scanned: Scanned) -> str:

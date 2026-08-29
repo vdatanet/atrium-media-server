@@ -42,7 +42,7 @@ from atrium.metadata.remote import ProviderCredentials, RemoteAccess
 from atrium.metadata.tmdb import NAME as TMDB
 from atrium.metadata.tmdb import RATE as TMDB_RATE
 from atrium.metadata.tmdb import TmdbProvider
-from tests.conftest import data_dir
+from tests.conftest import data_dir, not_media
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "metadata"
 TMDB_RESPONSES = FIXTURES / "tmdb"
@@ -159,7 +159,9 @@ def scanned(
                     )
                 )
             )
-        return scan(library, db, providers=providers, **options)  # type: ignore[arg-type]
+        return scan(  # type: ignore[arg-type]
+            library, db, providers=providers, prober=not_media, **options
+        )
 
 
 def items(engine: Engine) -> list[models.Item]:

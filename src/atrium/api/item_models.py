@@ -11,11 +11,12 @@ and the reference serialises in its own property order, so declaring these in th
 document's order costs nothing now and spares every byte-level comparison later from a wall of
 reordered-key noise. `[spec: BaseItemDto, UserItemDataDto, SearchHint]`
 
-**What is deliberately not declared.** `MediaSources`, `MediaStreams`, `Chapters`, `Width` and
-`Height` are in the gated registry with emitters that yield nothing - they describe what probing
-a file finds, 008 owns probing, and a plausible-looking stub would violate "it never lies"
-(plan section 1). Leaving the fields undeclared makes the gap structural: nothing can emit them
-by accident, and 008 adds the fields in the change that makes them true.
+**The media properties arrived with 008 T3**, which is what the gap here was waiting for:
+`MediaSources`, `MediaStreams`, `Container`, `Width`, `Height`, `HasSubtitles`, `IsHD` and
+`VideoType` are all answers about what a file contains, and inspection now stores that. `Chapters`
+is the one that stayed behind - nothing extracts a chapter list, and a plausible-looking stub
+would violate "it never lies" (005 plan section 1), so its field is still undeclared and its
+emitter still yields nothing.
 
 `ChannelId` is the one field that survives null-suppression: the reference emits it as an
 explicit `null` on every item of every response, measured against its own configuration saying
@@ -31,6 +32,7 @@ from pydantic import Field
 from atrium.compat.dates import WireDateTime
 from atrium.compat.model import AtriumModel
 from atrium.compat.ticks import WireTicks
+from atrium.media.info import MediaSourceInfo, MediaStream
 
 
 class UserItemDataDto(AtriumModel):
@@ -100,9 +102,19 @@ class BaseItemDto(AtriumModel):
     etag: str | None = None
     date_created: WireDateTime | None = None
     date_last_media_added: WireDateTime | None = None
+    #: Emitted only when true, which is the reference's own shape - a video with no subtitle
+    #: stream carries no property rather than `false`
+    #: `[source: Emby.Server.Implementations/Dto/DtoService.cs:1107-1110 @ v10.11.11]`.
+    has_subtitles: bool | None = None
+    #: **The item-level container is not always one container.** It is the reference's normalised
+    #: demuxer string - `mkv` for a Matroska file, the whole `mov,mp4,m4a,3gp,3g2,mj2` for every
+    #: member of the mp4 family - and the single name a *media source* reports is derived from it
+    #: per response (008 spec section 3.1, AC-28).
+    container: str | None = None
     sort_name: str | None = None
     premiere_date: WireDateTime | None = None
     external_urls: list[ExternalUrl] | None = None
+    media_sources: list[MediaSourceInfo] | None = None
     path: str | None = None
     official_rating: str | None = None
     channel_id: str | None = None
@@ -116,6 +128,10 @@ class BaseItemDto(AtriumModel):
     index_number: int | None = None
     parent_index_number: int | None = None
     provider_ids: dict[str, str] | None = None
+    #: Emitted only when true, like `HasSubtitles`: the reference sets it on nothing shorter than
+    #: 720 lines and leaves the property absent otherwise
+    #: `[source: Emby.Server.Implementations/Dto/DtoService.cs:1316-1323 @ v10.11.11]`.
+    is_hd: bool | None = None
     is_folder: bool | None = None
     parent_id: str | None = None
     type: str
@@ -144,6 +160,11 @@ class BaseItemDto(AtriumModel):
     series_primary_image_tag: str | None = None
     album_artist: str | None = None
     album_artists: list[NameGuidPair] | None = None
+    #: The **first** source's streams, which is the reference's own rule: the item-level list is
+    #: the streams of the source whose id is the item's
+    #: `[source: Emby.Server.Implementations/Dto/DtoService.cs:1151-1170 @ v10.11.11]`.
+    media_streams: list[MediaStream] | None = None
+    video_type: str | None = None
     image_tags: dict[str, str] | None = None
     backdrop_image_tags: list[str] | None = None
     series_thumb_image_tag: str | None = None
@@ -152,6 +173,12 @@ class BaseItemDto(AtriumModel):
     parent_thumb_image_tag: str | None = None
     location_type: str | None = None
     media_type: str
+    #: Last, because the pinned document puts them last - after `LockData`, which nothing here
+    #: emits. Both are the primary video stream's, and both are absent rather than zero when the
+    #: item has no video `[source: Emby.Server.Implementations/Dto/DtoService.cs:1298-1314 @
+    #: v10.11.11]`.
+    width: int | None = None
+    height: int | None = None
 
 
 class UserViewDto(BaseItemDto):

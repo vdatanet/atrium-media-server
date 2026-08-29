@@ -38,7 +38,7 @@ from atrium.domain.library import Library
 from atrium.library import config
 from atrium.library.report import ScanReport
 from atrium.library.scan import scan
-from tests.conftest import data_dir
+from tests.conftest import data_dir, not_media
 from tests.fixtures.library import BuiltFixture
 
 USER = "c" * 32
@@ -64,7 +64,7 @@ def scanned(engine: Engine, library: Library) -> ScanReport:
     an operator edits and therefore what AC-10 is about."""
     factory = session_factory(engine)
     with session_scope(factory) as db:
-        return scan(library, db)
+        return scan(library, db, prober=not_media)
 
 
 def items_of(engine: Engine, library: Library) -> dict[str, Item]:

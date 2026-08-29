@@ -44,7 +44,7 @@ from atrium.images.transform import Source, TransformSpec, decide
 from atrium.library import config
 from atrium.library.scan import scan
 from atrium.server import create_app
-from tests.conftest import data_dir
+from tests.conftest import data_dir, not_media
 from tests.fixtures.images import POSTER_SIZE, draw
 
 pytestmark = pytest.mark.conformance
@@ -97,7 +97,7 @@ def library(app: FastAPI, root: Path) -> Library:
 
 def rescan(app: FastAPI, library: Library, *, deep: bool = False) -> None:
     with session_scope(app.state.sessions) as opened:
-        scan(library, opened, deep=deep)
+        scan(library, opened, deep=deep, prober=not_media)
 
 
 def the_film(app: FastAPI) -> models.Item:

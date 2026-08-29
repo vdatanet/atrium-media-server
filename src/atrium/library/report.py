@@ -13,6 +13,14 @@ a wire format and nothing in it can create a delta.
 | Counted — `added`, `updated`, `unchanged`, `removed` | was scanned | exists |
 | **Skipped** — `skipped` | was walked past | **does not exist** |
 | **Noticed** — `noticed` | was scanned | exists, and is **thin** |
+| **Uninspected** — `uninspected` | was **opened, and would not open** | exists, with no streams |
+
+The fourth arrived with 008: 003 said in as many words that a file whose contents cannot be read
+is "not detected here … 008 finds it when it goes to probe" (003 plan section 7), and 008 T3 is
+where the scan first opens one. It is its own category for the same reason the other three are:
+a file that would not open produced an item and is in the library, so counting it as skipped
+would send an operator looking for something that is not missing, and counting it as noticed
+would say its *name* was the problem.
 
 The task that built this described its job as reporting "an unreadable file and an unparseable
 name, each with its reason", which reads like one list with two entries in it. It cannot be: an
@@ -32,6 +40,11 @@ version of this file computed the notices here, from the finished items, and **t
 `Episode` with no number is either a file whose name said nothing or a daily show whose episodes
 are dated, and an `Item` does not carry a date to tell them apart. Only the thing that read the
 name knows.
+
+`Uninspected` is the exception to that rule and says so: its producer is `library/scan.py`, which
+imports this module, so it cannot be declared below it without a cycle. The reason - the text a
+prober raised - is carried as a string for the same reason `refreshed` is typed `object`: this
+module describes a scan and must not depend on 008's exception hierarchy to do it.
 """
 
 from __future__ import annotations
@@ -43,16 +56,31 @@ from enum import StrEnum
 from atrium.library.resolver import Noticed
 from atrium.library.walker import Skipped
 
+
+@dataclass(frozen=True, slots=True)
+class Uninspected:
+    """One media file that produced an item and would not open, and what the prober said."""
+
+    relative_path: str
+    reason: str
+
+
 # ----------------------------------------------------------------------------------------------
 # Progress
 # ----------------------------------------------------------------------------------------------
 
 
 class Phase(StrEnum):
-    """The three things a scan does, in the order it does them (plan section 6.7)."""
+    """The four things a scan does, in the order it does them (003 plan section 6.7).
+
+    `INSPECTING` arrived with 008: opening every changed media file is the slowest thing a scan
+    does, and a phase that reported nothing would leave an operator watching "writing 400 of 400"
+    for the several minutes a first scan of a large library now takes.
+    """
 
     WALKING = "walking"
     RESOLVING = "resolving"
+    INSPECTING = "inspecting"
     WRITING = "writing"
 
 
@@ -139,6 +167,25 @@ class ScanReport:
     item.** See the module docstring for why they are not in the same list as `noticed`."""
 
     noticed: tuple[Noticed, ...] = field(default_factory=tuple)
+    """Every file that *did* produce an item, and what could not be read from its name."""
+
+    inspected: int = 0
+    """Media files this scan opened, because what was stored about their bytes no longer described
+    them - or because nothing was stored at all.
+
+    Separate from `examined`, and the difference is which question was asked. `examined` counts the
+    files whose *tags* the scan did not trust; this counts the files whose *inspection* it did not
+    trust, against the probe rows rather than against `item_sources`. The two disagree on the first
+    scan after 008 arrived, when every file has an unchanged signal and no inspection at all.
+    """
+
+    uninspected: tuple[Uninspected, ...] = field(default_factory=tuple)
+    """Every file this scan opened and could not read, with the reason the prober gave.
+
+    **These produced items.** A file that will not open still has a name, a path and an identity;
+    what it does not have is a container, a duration or any streams, so a client sees the item and
+    cannot play it. See the module docstring for why that is not the same list as `skipped`.
+    """
 
     refreshed: object | None = None
     """What 004's refresh did to the items this scan touched, or `None` when it did not run.
@@ -147,7 +194,6 @@ class ScanReport:
     `RefreshReport` field would make `library/` depend on `metadata/`'s *types* as well as its
     behaviour. A caller that wants the detail knows what it asked for.
     """
-    """Every file that *did* produce an item, and what could not be read from its name."""
 
     @property
     def changed(self) -> int:
@@ -177,7 +223,9 @@ class ScanReport:
         return (
             f"library {self.library_id}: {self.added} added, {self.updated} updated, "
             f"{self.unchanged} unchanged, {self.removed} removed, {self.revived} revived; "
-            f"{self.examined} re-examined; {len(self.skipped)} skipped, {len(self.noticed)} noticed"
+            f"{self.examined} re-examined, {self.inspected} inspected; "
+            f"{len(self.skipped)} skipped, {len(self.noticed)} noticed, "
+            f"{len(self.uninspected)} uninspected"
         )
 
 
@@ -186,5 +234,6 @@ __all__ = [
     "Progress",
     "ProgressSink",
     "ScanReport",
+    "Uninspected",
     "silent",
 ]

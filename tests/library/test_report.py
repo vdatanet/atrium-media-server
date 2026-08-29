@@ -34,7 +34,7 @@ from atrium.library.report import Phase, Progress, ScanReport, silent
 from atrium.library.resolver import Notice, resolve
 from atrium.library.scan import RootUnreadableError, scan
 from atrium.library.walker import Candidate, Skip
-from tests.conftest import data_dir
+from tests.conftest import data_dir, not_media
 from tests.fixtures.library import BuiltFixture
 
 #: The fixture entry whose name says nothing. It is under a season directory, so the scan knows
@@ -60,7 +60,7 @@ def a_library(engine: Engine, roots: tuple[str, ...], collection_type: str) -> L
 def scanned(engine: Engine, library: Library, **options: object) -> ScanReport:
     factory = session_factory(engine)
     with session_scope(factory) as db:
-        return scan(library, db, **options)  # type: ignore[arg-type]
+        return scan(library, db, prober=not_media, **options)  # type: ignore[arg-type]
 
 
 def items_of(engine: Engine, library: Library) -> dict[str, Item]:
@@ -213,16 +213,18 @@ def test_a_file_is_only_unreadable_when_it_cannot_be_stat_ed(
 # ------------------------------------------------------------------------------------------
 
 
-def test_progress_reports_the_three_phases_in_order(
+def test_progress_reports_the_four_phases_in_order(
     engine: Engine, fixture_library: BuiltFixture
 ) -> None:
+    """Four since 008 T3 added inspection, and it reports even when every file refuses to open:
+    a phase that only spoke on success would go silent on the library that needs it most."""
     built = fixture_library.of("movies")
     library = a_library(engine, (str(built.root),), "movies")
     sink = Recording()
 
     scanned(engine, library, progress=sink)
 
-    assert sink.phases() == [Phase.WALKING, Phase.RESOLVING, Phase.WRITING]
+    assert sink.phases() == [Phase.WALKING, Phase.RESOLVING, Phase.INSPECTING, Phase.WRITING]
     assert all(one.library_id == library.id for one in sink.seen)
 
 

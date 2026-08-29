@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails
+amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -319,9 +319,28 @@ and the list's first member where it does not — no profile is consulted. In a 
 the first member the `DeviceProfile` accepts, which is `media/decision.py`'s to answer and T5's to
 emit; with no profile the list is passed through untouched. `format_names` is read by neither: it
 is the record of what the demuxer said, kept so that changing the normalisation costs a
-re-derivation rather than a rescan. `ETag` is the 32-hex hash the reference derives per source; its
-exact derivation is read from the source tree at task time and recorded with the task, because the
-`Tag` parameter in the TranscodingUrl must round-trip it.
+re-derivation rather than a rescan.
+
+**`ETag`, read at T3 and measured rather than reasoned.** It is `MD5` over the file's time of last
+change expressed as a .NET tick count — 100-nanosecond units since year one, truncated — and then
+two conventions that the assignment does not show: the decimal string is hashed as **UTF-16
+little-endian**, and the sixteen bytes are rendered in .NET's **GUID byte order**, which reverses
+the first three groups before writing them as hexadecimal `[source:
+MediaBrowser.Controller/Entities/BaseItem.cs:1164, MediaBrowser.Common/Extensions/BaseExtensions.cs
+GetMD5 @ v10.11.11]`. Either convention taken naively still produces 32 lowercase hexadecimal
+characters, so no shape check catches it; both were proven by taking three real tags, reading each
+file's `Last-Modified` from the static delivery route, and searching that second's ten million
+ticks for the one that hashes to the tag — all three recovered exactly
+`[probe: tools/probe_media_source.py, Jellyfin 10.11.11, 2026-08-29]`. The tag matters beyond the
+source list: the `Tag` parameter in the TranscodingUrl must round-trip it.
+
+**`media/info.py` emits the measured field set, constants included.** Fifteen of a source's
+properties are booleans a local file always answers the same way, and the reference sends every one
+of them on every source — so they are declared with those values rather than omitted, on 005's
+`ChannelId` argument. Three stream families are *not* emitted and each is a different debt (spec
+§3.1 names them): the localised `DisplayTitle` group, the demuxer fields 0006 has no column for,
+and the subtitle-delivery group. The frame rates and `Level` are written the way .NET writes a
+single-precision float — shortest round-trip, and no `.0` on a whole number.
 
 ### 6.2 The decision
 
@@ -403,8 +422,10 @@ Every §3 claim this plan builds on was measured on 2026-08-28 by the seven prob
 `probe_universal_audio`, `probe_transcode_session`, `probe_range_matrix`) — the OQ table in the
 spec carries the per-question answers. What stays owed to the task list:
 
-* **The `ETag` derivation** (§6.1) and **the exact cadence-rounding rule** behind the measured
-  3.004 s (§6.4): both are one source-reading each, cited with the task that implements them.
+* ~~**The `ETag` derivation** (§6.1)~~ — **discharged at T3**, and it took a search rather than a
+  reading: the assignment carries two silent conventions, and §6.1 now records both with the probe
+  that proved them. **The exact cadence-rounding rule** behind the measured 3.004 s (§6.4) is
+  still one source-reading, cited with the task that implements it.
 * **The reference's ping-timeout constants** (§6.7): the kill-timer shape is sourced
   (`TranscodeManager.cs`), the numbers are read when the sweep is built.
 * **The delivery-route error shapes** (§7): an unknown item on `/stream`, a malformed range on a

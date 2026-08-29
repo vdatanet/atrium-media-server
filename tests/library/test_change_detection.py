@@ -35,7 +35,7 @@ from atrium.domain.library import Library
 from atrium.library import config
 from atrium.library.report import ScanReport
 from atrium.library.scan import scan
-from tests.conftest import data_dir
+from tests.conftest import data_dir, not_media
 from tests.fixtures.library import BuiltFixture, BuiltLibrary, Kind
 
 #: The track whose tags disagree with its directory — the one file in the fixture where skipping
@@ -91,7 +91,7 @@ def a_library(engine: Engine, fixture_library: BuiltFixture, collection_type: st
 def scanned(engine: Engine, library: Library, **options: object) -> ScanReport:
     factory = session_factory(engine)
     with session_scope(factory) as db:
-        return scan(library, db, **options)  # type: ignore[arg-type]
+        return scan(library, db, prober=not_media, **options)  # type: ignore[arg-type]
 
 
 def items_of(engine: Engine, library: Library) -> dict[str, Item]:

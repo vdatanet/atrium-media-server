@@ -40,6 +40,7 @@ from typing import Any
 
 from atrium.db.item_queries import Ancestor, ContainerAggregates, HydratedItem
 from atrium.domain.items import BY_NAME, FILE_BACKED, MEDIA_TYPE_OF, ItemType
+from atrium.media import info as media_info
 from atrium.metadata.artwork import ImageKind
 
 from .item_models import BaseItemDto, BaseItemPerson, ExternalUrl, NameGuidPair, UserItemDataDto
@@ -177,7 +178,20 @@ PER_TYPE: Mapping[str, frozenset[ItemType]] = {
     "Artists": frozenset({ItemType.MUSIC_ALBUM, ItemType.AUDIO}),
     "ArtistItems": frozenset({ItemType.MUSIC_ALBUM, ItemType.AUDIO}),
     "CollectionType": frozenset({ItemType.COLLECTION_FOLDER}),
+    # -- 008's media properties, on the types that have a file --------------------------------
+    # `Container` on all three, `HasSubtitles` and `VideoType` on the two that carry video: the
+    # reference attaches the first to every item unconditionally and the other two inside its
+    # `is Video` branch, so a track has a container and no video type
+    # `[source: Emby.Server.Implementations/Dto/DtoService.cs:832,1101-1110 @ v10.11.11]`,
+    # `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`.
+    "Container": frozenset({ItemType.MOVIE, ItemType.EPISODE, ItemType.AUDIO}),
+    "HasSubtitles": frozenset({ItemType.MOVIE, ItemType.EPISODE}),
+    "VideoType": frozenset({ItemType.MOVIE, ItemType.EPISODE}),
 }
+
+#: The types whose media properties describe video rather than only sound. `VideoType` says
+#: `VideoFile` for exactly these, and `Width`, `Height` and `IsHD` can only be answered for them.
+VIDEO_TYPES: frozenset[ItemType] = frozenset({ItemType.MOVIE, ItemType.EPISODE})
 
 #: Property -> the `ItemFields` token that requests it. Almost the identity map; `GenreItems` is
 #: the exception, because the enum has no token of its own for it - the pair travels together
@@ -208,6 +222,7 @@ GATED: Mapping[str, str] = {
     "PrimaryImageAspectRatio": "PrimaryImageAspectRatio",
     "Width": "Width",
     "Height": "Height",
+    "IsHD": "IsHD",
 }
 
 #: What `/UserViews` adds on top of a list row, unasked - measured, all sixteen on all six rows
@@ -234,12 +249,11 @@ USER_VIEW_EXTRAS: frozenset[str] = frozenset(
     }
 )
 
-#: The 008 gap, named: these describe what probing a file finds, nothing has probed, and a stub
-#: would lie (plan section 1). Their emitters yield nothing; a test asserts the absence so that
-#: 008's arrival changes a failing test rather than nothing.
-UNPROBED: frozenset[str] = frozenset(
-    {"MediaSources", "MediaStreams", "Chapters", "Width", "Height"}
-)
+#: What is still unanswerable, named. This was 008's whole gap until T3 filled it; `Chapters` is
+#: what is left, because nothing extracts a chapter list and a stub would lie (005 plan section 1).
+#: Its emitter yields nothing and a test asserts the absence, so the day something extracts
+#: chapters, a failing test changes rather than nothing.
+UNPROBED: frozenset[str] = frozenset({"Chapters"})
 
 
 # ------------------------------------------------------------------------------------------------
@@ -457,6 +471,65 @@ def _collection_type(one: HydratedItem, ctx: BuildContext) -> str | None:
     return ctx.libraries[library_id].collection_type
 
 
+# -- the media properties ------------------------------------------------------------------------
+#
+# **Eight properties, and only two of them build a wire shape.** `MediaSources` is the expensive
+# one and `MediaStreams` is part zero's slice of it; `Container`, `HasSubtitles`, `Width`,
+# `Height` and `IsHD` read the stored inspections directly, and `VideoType` reads nothing at all.
+# The split is not an optimisation for its own sake: a bare list row carries `Container`,
+# `HasSubtitles` and `VideoType` *without* carrying `MediaSources`, so assembling a source to read
+# one string off it would build the whole shape for every row of every list. The reference has the
+# same split for the same reason - all three are columns on its item.
+
+
+def _root_of(one: HydratedItem, ctx: BuildContext) -> str | None:
+    """The library root a source's absolute path is rebuilt from - `_path`'s rule, shared.
+
+    A library may declare several roots and the schema does not record which one a file came from
+    (003 section 3.6), so the first root is the reconstruction, exactly as `Path` does it. The two
+    have to agree: a client that compares an item's `Path` with its source's would otherwise see
+    two spellings of one file.
+    """
+    library_id = one.item.library_id
+    if library_id is None:
+        return None
+    library = ctx.libraries.get(library_id)
+    if library is None or not library.roots:
+        return None
+    return library.roots[0]
+
+
+def _media_sources(one: HydratedItem, ctx: BuildContext) -> list[Any] | None:
+    if not one.item.sources:
+        return None
+    return media_info.sources_for(
+        one.item, one.probes, _root_of(one, ctx), is_video=one.item.type in VIDEO_TYPES
+    )
+
+
+def _media_streams(one: HydratedItem, ctx: BuildContext) -> list[Any] | None:
+    """Part zero's streams, or nothing when nothing has inspected it.
+
+    An empty list rather than absence would be a claim - "this file has no streams" - about a file
+    nothing has opened, and the two are not the same answer.
+    """
+    return media_info.item_streams(one.probes) or None
+
+
+def _dimension(one: HydratedItem, pick: Callable[[Any], int | None]) -> int | None:
+    """`Width` or `Height` of the primary video stream, absent rather than zero.
+
+    The reference emits neither when the number is not positive, which is the same rule as absent
+    for a file it never opened `[source: Emby.Server.Implementations/Dto/DtoService.cs:1298-1314
+    @ v10.11.11]`.
+    """
+    stream = media_info.primary_video_stream(one.probes)
+    if stream is None:
+        return None
+    value = pick(stream)
+    return value if value else None
+
+
 EMITTERS: Mapping[str, Callable[[HydratedItem, BuildContext], Any]] = {
     # -- always ----------------------------------------------------------------------------------
     "Id": lambda one, ctx: one.id,
@@ -521,12 +594,18 @@ EMITTERS: Mapping[str, Callable[[HydratedItem, BuildContext], Any]] = {
         NameGuidPair(name=link.name, id=link.item_id) for link in _performer_links(one)
     ],
     "CollectionType": lambda one, ctx: _collection_type(one, ctx),
+    "Container": lambda one, ctx: media_info.item_container(one.item, one.probes),
+    #: `true` or absent, never `false` - the reference sets the property only when it holds.
+    "HasSubtitles": lambda one, ctx: media_info.has_subtitles(one.probes) or None,
+    "VideoType": lambda one, ctx: media_info.VIDEO_FILE,
     # -- gated -----------------------------------------------------------------------------------
-    "MediaSources": lambda one, ctx: None,  # the 008 gap; see UNPROBED
-    "MediaStreams": lambda one, ctx: None,
-    "Chapters": lambda one, ctx: None,
-    "Width": lambda one, ctx: None,
-    "Height": lambda one, ctx: None,
+    "MediaSources": _media_sources,
+    "MediaStreams": _media_streams,
+    "Chapters": lambda one, ctx: None,  # the last unprobed one; see UNPROBED
+    "Width": lambda one, ctx: _dimension(one, lambda stream: stream.width),
+    "Height": lambda one, ctx: _dimension(one, lambda stream: stream.height),
+    #: Same shape as `HasSubtitles`: `true` or absent.
+    "IsHD": lambda one, ctx: media_info.is_hd(one.probes) or None,
     "Path": _path,
     "Etag": lambda one, ctx: _etag(one),
     "DateCreated": lambda one, ctx: one.item.date_created,
@@ -621,6 +700,7 @@ __all__ = [
     "PER_TYPE",
     "UNPROBED",
     "USER_VIEW_EXTRAS",
+    "VIDEO_TYPES",
     "BuildContext",
     "LibraryContext",
     "Width",

@@ -31,7 +31,9 @@ from atrium.config.settings import Settings, load
 from atrium.config.state import ServerState, load_or_create
 from atrium.db import schema
 from atrium.db.engine import create_database_engine, session_factory
+from atrium.domain.media import MediaInspection
 from atrium.domain.user import User
+from atrium.media.probe import UnreadableMediaError
 from atrium.server import create_app
 from tests.conformance.golden import REWRITTEN, UPDATE_OPTION
 from tests.fixtures.library import BuiltFixture, build_fixture_library
@@ -170,6 +172,20 @@ TEST_USER = User(id="a" * 32, name="joan", is_administrator=True)
 #: It goes in through `config.toml` rather than by patching a default, because that is the
 #: mechanism an operator has, and a test that lowers them any other way is not exercising it.
 FAST_PASSWORDS = "[passwords]\nmemory_cost = 8\ntime_cost = 1\nparallelism = 1\n"
+
+
+def not_media(path: Path) -> MediaInspection:
+    """The prober the 003 and 004 fixture libraries scan with, and the truth about them.
+
+    `tests/fixtures/library/generate.py` says it in its own words - "these are not decodable
+    media" - so the honest stub is the refusal a real prober would give, not an invented
+    inspection. What it saves is the process: several hundred files across those suites, each
+    costing an `ffprobe` launch to be told what this function already knows.
+
+    A test that wants a *real* inspection uses `scanned_media_world`, whose files really are
+    media and whose scan runs the real prober.
+    """
+    raise UnreadableMediaError(f"{path} is a fixture file, not media")
 
 
 def data_dir(root: Path) -> DataPaths:

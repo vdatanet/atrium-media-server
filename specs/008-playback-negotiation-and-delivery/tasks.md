@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"
+amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -189,7 +189,7 @@ way, which is why the suite is green on 9.0.1 locally and on 6.1.1 in CI.
 
 ## T3 — The scan probes, and the wire finally says what a file contains
 
-- [ ] **Changes:** `library/scan.py` grows the inspection step behind 003's change signal — the
+- [x] **Changes:** `library/scan.py` grows the inspection step behind 003's change signal — the
   prober **injectable** on the scan, defaulting to the real one, so the hundreds of dummy-byte
   files in the existing library tests keep a stub and their speed; an inspection failure records
   the file the way 003 §3.7 records unexamined ones and never blocks the item.
@@ -210,6 +210,67 @@ way, which is why the suite is green on 9.0.1 locally and on 6.1.1 in CI.
   media-derived properties now, and still no `MediaSources`); a scanned two-part film answers
   two sources in part order; and the library tests run on the stub prober with no timing change.
 - **Spec reference:** §3.1, AC-28; plan §6.1; 007's owed list
+
+**Done (2026-08-29).** The owed reading was owed twice over, and the naive answer is a
+well-formed tag that is wrong for every file.
+
+**`ETag` is not the hexadecimal of an MD5 digest, and it is not a hash of ASCII either.** The
+assignment is one line — `item.DateModified.Ticks.ToString().GetMD5().ToString("N")`
+`[source: MediaBrowser.Controller/Entities/BaseItem.cs:1164 @ v10.11.11]` — and it hides two
+conventions. `GetMD5` hashes `Encoding.Unicode`, which is **UTF-16 little-endian**
+`[source: MediaBrowser.Common/Extensions/BaseExtensions.cs @ v10.11.11]`, and the sixteen bytes
+are then handed to a `Guid` constructor, whose `"N"` form reverses the first three groups before
+writing them. Either taken at face value still produces 32 lowercase hexadecimal characters, so
+no shape check and no golden regenerated from Atrium would have caught it. It was settled by
+*inverting* the derivation rather than restating it: three files of three item types, each tag
+matched against the ten million ticks inside the second its `Last-Modified` header names, all
+three tick counts recovered exactly `[probe: tools/probe_media_source.py, Jellyfin 10.11.11,
+2026-08-29]`. The unit test pins the tag the reference sent, not the one this code computes.
+
+**"It fills slots and does not add fields" was true of two names of eight.** `MediaSources` and
+`MediaStreams` were registered gaps; `Container`, `HasSubtitles`, `VideoType` and `IsHD` had no
+registry entry at all, because [005's shape notes](../005-item-query-api/notes/item-shapes.md)
+listed all four among the properties *deliberately not added* — measured on the wire, read by
+neither analysed client, declined under Principle VI. What changed is that a client now reads
+them: 007's owed list names three among the nine a `NowPlayingItem` is missing, and AC-28 makes
+`Container` the observable half of a rule. So [005 §3.2](../005-item-query-api/spec.md#32-the-item-representation)
+gains three per-type rows and one gated name, in the tiers the T1 measurement put them in.
+
+**Spec §3.1's "one media source per part" is a divergence, not parity.** The reference builds one
+source per *item* — itself and its linked and local alternate versions — and a stacked film's
+later parts are none of those: they are a `PartCount` and a separate `GET
+/Videos/{id}/AdditionalParts`, an endpoint outside v1's surface `[source:
+MediaBrowser.Controller/Entities/Video.cs:533-563 @ v10.11.11]`. 003 §3.3 merged the parts into
+one item with a source each, so the sentence describes Atrium's model reaching the wire; no
+library reachable from here has a multi-part film to measure the reference on. Recorded in §3.1
+and in [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1).
+
+**Three of a stream's unconditional properties cannot be answered from migration 0006**, and
+finding that here rather than at T2 is the cost of the split: `IsAVC`, `TimeBase` and
+`NalLengthSize` are read from the demuxer and have no column, and the six-property `DisplayTitle`
+family is a *localised* string — `Español - MP3 - Stereo - Predeterminado` on a Spanish server —
+that needs the localisation table. Absent rather than approximated, because an English
+`DisplayTitle` differs from the reference on every track where an absent one differs on none that
+reads it. Four gaps recorded rather than four guesses.
+
+**The wire's numbers are 32-bit, and a double is visible in them.** `AverageFrameRate`,
+`RealFrameRate`, `ReferenceFrameRate` and `Level` are singles upstream, and .NET writes the
+shortest decimal that round-trips as one: `24000/1001` arrives as `23.976025`, not as the
+seventeen digits a double prints, and a whole rate arrives as `25`, not `25.0`. No parser sees
+either difference and every byte comparison does — which is what the goldens are for, and it
+would have been 010's finding on every video item instead.
+
+Two smaller corrections. The task statement cited **003 §3.7** for how an unexamined file is
+recorded; §3.7 is sort names, and the reporting rule is §3.8 — while [003 plan §7](../003-library-configuration-and-scanning/plan.md)
+had already named this arrival in advance ("a file whose contents cannot be read … 008 finds it
+when it goes to probe"). And staleness here is **not** 003's `unchanged_paths`: those compare
+against `item_sources`, which agrees with the disk long before any probe row exists, so a scan
+that reused them would leave every existing library permanently uninspected. `MediaProbeRepository.current`
+is the comparison, which is what it was written for.
+
+The scan grew a fourth phase, `INSPECTING`, because opening every changed file is now the slowest
+thing it does and a progress bar that sat on "writing 400 of 400" for several minutes would be
+worse than the three-phase vocabulary it replaces.
 
 ## T4 — `media/decision.py`: the ladder, pure, and the table that proves it
 

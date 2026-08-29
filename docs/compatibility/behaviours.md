@@ -147,12 +147,16 @@ The single container on a `MediaSource` is derived from that string per response
 routes derive it differently. On a listing **no profile is involved**: it is the file's own
 extension where the list contains it — so the same list answers `mp4` for a `.mp4` and `m4a` for a
 `.m4a` — and the list's first member where it does not
-`[source: Emby.Server.Implementations/Dto/DtoService.cs:320-353 @ v10.11.11]`. In a negotiation
-it is the first
-member the `DeviceProfile` accepts, and a **profile-less** `PlaybackInfo` passes the list
-through untouched — the same `.m4a` answers `m4a` on `/Items` and the full list on `PlaybackInfo`
-`[probe: tools/probe_media_container.py, Jellyfin 10.11.11, 2026-08-29]`, `[probe:
+`[source: Emby.Server.Implementations/Dto/DtoService.cs:316-352 @ v10.11.11]`. In a negotiation it
+is the first member the `DeviceProfile` accepts, and a **profile-less** `PlaybackInfo` passes the
+list through untouched — the same `.m4a` answers `m4a` on `/Items` and the full list on
+`PlaybackInfo` `[probe: tools/probe_media_container.py, Jellyfin 10.11.11, 2026-08-29]`, `[probe:
 tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28]`.
+
+Two details of the listing branch, read at 008 T3 from the same source line: the membership test is
+**case-insensitive** and the value kept is the *path's* own spelling, so a file named `.MP4`
+answers `MP4`; and a container string that already names one format is passed through rather than
+resolved again, which is why a `.mkv` answers `mkv` at both levels.
 
 *The 2026-06-13 measurement recorded here — "the item level is ffprobe's format-name list, the
 real container is on the `MediaSource`" `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` — was made
@@ -1563,6 +1567,10 @@ undocumented bug.
 | **`Path`-derived identifiers differ from the reference's** ([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters)) | Nothing — ids are opaque | Not a gap to close; a deliberate design choice |
 | **A container that has lost every file is still returned** ([003 §3.8](../../specs/003-library-configuration-and-scanning/spec.md#38-scanning-and-change-detection)) | An empty series or album in a library, with nothing under it | A query-time filter in 005: a container with no visible children is not offered. See §5.2 |
 | **No loudness scan** ([004 §3.3](../../specs/004-metadata-resolution/spec.md#33-embedded-tags)) | On a server whose operator enabled the reference's opt-in scan, `NormalizationGain` absent where it would have a computed value. Tag-carried gains are unaffected | 008, which brings the decoder the scan needs. See §5.4 |
+| **A stream carries no `DisplayTitle` and no `Localized*` names** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A track picker with nothing to label its rows: the reference sends one localised string per stream — `Español - MP3 - Stereo - Predeterminado` on a Spanish server — and Atrium sends none | The localisation the strings are assembled from. An English-only approximation would differ from the reference on **every** track rather than be absent on it, which is the worse of the two |
+| **A stream carries no `IsAVC`, `TimeBase` or `NalLengthSize`** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Three properties absent on every stream | Columns migration 0006 does not have; they arrive with the migration that adds them, and nothing in v1 reads them |
+| **`HasSubtitles` counts only the streams inside the container** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A film whose only subtitles are `.srt` files beside it reads as having none, where the reference reads `true` | Sidecar subtitle discovery, which v1 does not do at all — the same work that closes the burn-in row above |
+| **A multi-part film answers one media source per part** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Two sources on one item, where the reference answers one source, a `PartCount` and a separate route for the rest | Not a gap to close on its own: it follows from 003 §3.3 modelling the parts as one item's sources, and closing it means changing that model or adding `GET /Videos/{id}/AdditionalParts` to the surface |
 
 The difference between this section and §4 is intent. §4 says *we thought about it and chose
 differently*. This section says *we have not done it yet, and here is how we will know when it

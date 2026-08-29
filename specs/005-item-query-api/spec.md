@@ -6,7 +6,7 @@ created: 2026-08-26
 updated: 2026-08-28
 accepted: 2026-08-27
 implemented: 2026-08-28
-amended: 2026-08-28 by 006 T2 - section 3.2 gains `ParentBackdropItemId`, the pair 005 measured and emitted only half of; by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated)
+amended: 2026-08-29 by 008 T3 — §3.2 gains `Container`, `HasSubtitles` and `VideoType` per type and `IsHD` gated, four properties T1 measured and declined under Principle VI and that 007's owed list and 008 AC-28 have since given readers; and 2026-08-28 by 006 T2 - section 3.2 gains `ParentBackdropItemId`, the pair 005 measured and emitted only half of; by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated)
 depends_on: [002, 004]
 ---
 
@@ -122,12 +122,26 @@ registry holds.* `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08
 | `AlbumArtist`, `AlbumArtists`, `Artists`, `ArtistItems` | `MusicAlbum`, `Audio` |
 | `CollectionType` | Library roots |
 | `PlaylistItemId` | Playlist entries — see 009 |
+| `Container` | `Movie`, `Episode`, `Audio` — added by 008 |
+| `HasSubtitles`, `VideoType` | `Movie`, `Episode` — added by 008 |
 
 **Only when a list row asks for them:** `MediaSources`, `MediaStreams`, `Path`, `Etag`,
 `Chapters`, `DateCreated`, `DateLastMediaAdded`, `ProviderIds`, `Tags`, `Taglines`, `ExternalUrls`,
 `OriginalTitle`, `ParentId`, `CumulativeRunTimeTicks`, `RecursiveItemCount`, `ChildCount`,
 **`SortName`, `Overview`, `Genres`, `GenreItems`, `Studios`, `People`,
-`PrimaryImageAspectRatio`**, `Width`, `Height`. `[spec: ItemFields]`
+`PrimaryImageAspectRatio`**, `Width`, `Height`, `IsHD`. `[spec: ItemFields]`
+
+> **Four properties arrived after this table was written**, and the note beside "where this field
+> set comes from" is why they need a line rather than a silent edit. `Container`, `VideoType`,
+> `HasSubtitles` and `IsHD` were all measured on the wire at T1 and all deliberately left out: no
+> analysed client read them, and Principle VI applies to fields. What changed is that a client now
+> does — [007's `NowPlayingItem` differential](../007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones)
+> names three of them among the nine media-derived properties a session entry is missing, and
+> [008 AC-28](../008-playback-negotiation-and-delivery/spec.md) turns `Container` into the
+> observable half of a rule about media sources. They are in the tiers the measurement put them in
+> `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`: three per-type, one gated,
+> and the two conditional ones (`HasSubtitles`, `IsHD`) emitted only where they are true, which is
+> the reference's own shape `[source: Emby.Server.Implementations/Dto/DtoService.cs:1107-1110,1316-1323 @ v10.11.11]`.
 
 > **`SeriesThumbImageTag` was not observed at all** — not bare, not asked for, not in a full body,
 > across twelve episodes. Whether it is gated, or simply absent because none of those episodes'

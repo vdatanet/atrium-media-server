@@ -40,7 +40,7 @@ from atrium.library.scan import (
     TooManyRemovalsError,
     scan,
 )
-from tests.conftest import data_dir
+from tests.conftest import data_dir, not_media
 from tests.fixtures.library import BuiltFixture
 
 
@@ -62,7 +62,7 @@ def library(engine: Engine, fixture_library: BuiltFixture) -> Library:
             LibraryRepository(db), "Movies", "movies", (str(fixture_library.of("movies").root),)
         )
     with session_scope(factory) as db:
-        scan(made, db)
+        scan(made, db, prober=not_media)
     return made
 
 
@@ -75,7 +75,7 @@ def stored(engine: Engine, library: Library) -> set[str]:
 def rescan(engine: Engine, library: Library, **options: object) -> object:
     factory = session_factory(engine)
     with session_scope(factory) as db:
-        return scan(library, db, **options)  # type: ignore[arg-type]
+        return scan(library, db, prober=not_media, **options)  # type: ignore[arg-type]
 
 
 def empty_the_root(fixture_library: BuiltFixture) -> None:
@@ -176,7 +176,7 @@ def test_a_library_that_never_had_files_scans_happily(engine: Engine, tmp_path: 
     with session_scope(factory) as db:
         made = config.create(LibraryRepository(db), "Empty", "movies", (str(empty),))
     with session_scope(factory) as db:
-        report = scan(made, db)
+        report = scan(made, db, prober=not_media)
     assert (report.added, report.missing) == (1, 0), (
         "the library's own CollectionFolder, and no loss"
     )
