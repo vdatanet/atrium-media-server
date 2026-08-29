@@ -245,8 +245,35 @@ class MediaInspection:
         return next((one for one in self.streams if one.kind is StreamKind.AUDIO), None)
 
 
+@dataclass(frozen=True, slots=True)
+class DeliveredFile:
+    """Where an item's bytes are, for a route that serves them.
+
+    Two fields and no user, because the reference's delivery routes resolve an item **by
+    identifier alone** - no visibility predicate, no owner - and answer `404` only when nothing
+    holds that id at all `[source: Jellyfin.Api/Helpers/StreamingHelpers.cs:111 @ v10.11.11]`.
+    Modelling the caller here would be modelling a check the reference does not make.
+    """
+
+    library_roots: tuple[str, ...]
+    relative_path: str
+
+    def absolute_path(self) -> str | None:
+        """The file, rebuilt under the first root the library declares.
+
+        The same rule `api/item_dto.py` and `api/media_info.py` follow, and for the same reason: a
+        library may declare several roots and `item_sources` does not record which one a file came
+        from (003 plan section 4). One root is the case every library in v1 has, and a library with
+        none has no file to serve.
+        """
+        if not self.library_roots:
+            return None
+        return f"{self.library_roots[0].rstrip('/')}/{self.relative_path}"
+
+
 __all__ = [
     "IMPLAUSIBLE_FRAME_RATE",
+    "DeliveredFile",
     "InspectedStream",
     "MediaInspection",
     "StreamKind",

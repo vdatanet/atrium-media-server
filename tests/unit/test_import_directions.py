@@ -243,6 +243,12 @@ PURE_WHEREVER_THEY_LIVE = (
     "library/identity.py",
     "media/decision.py",
     "metadata/byname.py",
+    # 008 T6. `compat/ranges.py` reads a header and a number and answers which bytes to send; a
+    # version of it that could open the file would be a version that could answer from the file
+    # instead of from the header, and the measured matrix would stop being a table of values.
+    # `media/labels.py` beside it is a measured lookup table and nothing else.
+    "compat/ranges.py",
+    "media/labels.py",
 )
 
 #: `compat/` belongs here for the same reason it belongs in the domain rule: it exists to know

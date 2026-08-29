@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything
+amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -441,24 +441,111 @@ whole cap. Recorded in `media/urls.py` beside the arithmetic it belongs to.
 
 ## T6 — `compat/ranges.py` and static delivery: the measured matrix, one function
 
-- [ ] **Changes:** new `src/atrium/compat/ranges.py` — `negotiate_range(header, size)`
+- [x] **Changes:** new `src/atrium/compat/ranges.py` — `negotiate_range(header, size)`
   answering exactly the [spec §3.5](spec.md#35-delivery-the-rules-that-apply-to-every-route)
-  table (multi and reversed → full body, suffix honoured, `416` with `Content-Length: 0`); new
-  `src/atrium/api/audio.py` and `src/atrium/api/videos.py` carrying the four `stream` routes'
-  **static** halves: the untouched source bytes, `Content-Length` equal to the file size,
-  `Accept-Ranges: bytes`, the path suffix choosing the `Content-Type` label and nothing else,
-  authentication by any of the four mechanisms with `?api_key=` the working case. A
+  table (multi, reversed and every unreadable shape → full body, suffix honoured, `416` with
+  `Content-Length: 0`); new `src/atrium/media/labels.py` (the measured container →
+  `Content-Type` table) and `src/atrium/api/delivery.py` (the lookup, the range answer and the
+  measured four-header set the two controllers share); new `src/atrium/api/audio.py` and
+  `src/atrium/api/videos.py` carrying the four `stream` routes' **static** halves: the untouched
+  source bytes, `Content-Length` equal to the file size, `Accept-Ranges: bytes`, the path suffix
+  choosing the `Content-Type` label and nothing else, and **no authentication dependency at all**
+  — every mechanism accepted, none required, which is what these routes measure to and what 002
+  §3.1 deferred here (spec AC-32, behaviours §2.10). `db/repositories.py` grows a
+  `MediaFileRepository` that takes no user, `compat/errors.py` a `DeliveryNotFoundError` for the
+  third error shape at `404` and the reference's pattern-mismatch message. A
   non-static request answers behaviours §1.11's controller refusal *in this task only* — an
   explicitly temporary state, safe because `"008"` is not yet in `IMPLEMENTED_FEATURES` and no
   conformance is claimed for the route; T7 replaces it with the real behaviour.
 - **Depends on:** T1, T3
-- **Verified by:** new `tests/conformance/test_static_delivery.py` — the range matrix
-  table-driven over one fixture film (AC-11..AC-14: `bytes=100-199` is `206` with exactly 100
-  bytes; the matrix's full-body and `416` rows byte-exact); `stream.mkv?static=true` on the mp4
-  fixture serves mp4 magic bytes behind `video/x-matroska` (AC-18, behaviours §2.20); a
-  tokenless request refuses and `?api_key=` succeeds; item-level `Container` vs the source's
-  asserted on the same item (AC-28).
-- **Spec reference:** §3.5, §3.6, §3.7 (static halves); AC-11..AC-14, AC-18, AC-28
+- **Verified by:** new `tests/unit/test_compat_ranges.py` — the whole measured matrix as a table,
+  including the five rows RFC 9110 would have answered differently; new
+  `tests/conformance/test_static_delivery.py` over the scanned world (AC-11..AC-14:
+  `bytes=100-199` is `206` with exactly 100 bytes; the full-body and `416` rows byte-exact;
+  the header set asserted as a **set**, so an `ETag` the framework adds is a failure);
+  `stream.mkv?static=true` on the mp4 fixture serves mp4 magic bytes behind `video/x-matroska`
+  (AC-18, behaviours §2.20); a tokenless request and an unknown-token request both **succeed**
+  and answer identical bytes, with `GET /Items/{itemId}` through the same transport answering
+  `401` so the assertion cannot pass vacuously (AC-32); the unknown-item `404` measured against
+  `PlaybackInfo`'s problem-details `404` on the same identifier; and item-level `Container` vs the
+  source's asserted on the same item (AC-28). `tests/conformance/test_auth_mechanisms.py` loses
+  the delivery stub 002 left, the way 006 T9 removed the image one.
+- **Spec reference:** §3.5, §3.6, §3.7 (static halves); AC-11..AC-14, AC-18, AC-28, AC-32
+
+**Done (2026-08-29).** The matrix held on every row it had. The sentence beside it — this task's
+own "a tokenless request refuses and `?api_key=` the working case" — is the opposite of what these
+routes do, and 002 had already said so.
+
+**The four `stream` routes require no token, and `/universal` does.** A request carrying nothing at
+all, one carrying a token nothing issued, and one carrying `?api_key=` answer the identical `200` on
+all four — while `/Audio/{itemId}/universal`, in the same probe run and the same minute, answers
+`401` to the first two `[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-29]`. The
+split is **per action**: the two `stream` actions of each controller carry no authorization attribute
+and the universal one carries `[Authorize]` `[source:
+Jellyfin.Api/Controllers/AudioController.cs:89, Jellyfin.Api/Controllers/VideosController.cs:312,
+Jellyfin.Api/Controllers/UniversalAudioController.cs:94 @ v10.11.11]`. This was not an open
+question and did not need to be: [002 §3.1](../002-authentication-users-and-sessions/spec.md#31-how-a-client-presents-a-token)
+measured it on 2026-08-26, wrote "accepted and none is required" into AC-3, and deferred *the
+decision* to the feature that owns the routes — which is this task. Implemented as written, Atrium
+would have refused the bare URL handed to an external player, which is the entire reason these
+routes take a token in the query string at all. Recorded in
+[behaviours §2.10](../../docs/compatibility/behaviours.md#210-the-image-and-delivery-routes-accept-a-token-and-require-none)
+as decided rather than deferred, and in spec §3.5 with a new **AC-32**.
+
+**The delivery stub 002 left behind had become a test asserting nothing, and its deletion cost a
+row.** `tests/conformance/test_auth_mechanisms.py` carried a stub `/Videos/{itemId}/stream`
+demanding a token — the exact shape 006 T9 had already removed for images, with the file's own
+docstring saying a shadowed stub proves nothing about either route. Removing it takes with it the
+half of AC-3 that proved the **precedence chain** on a delivery route: a route that reads no token
+cannot demonstrate which of two tokens wins. That row is gone rather than rewritten, and what
+replaces it is the failure it was written to catch — a stale header beside a fresh URL cannot
+break delivery, because neither is read.
+
+**An unknown item on a delivery route is the third error shape, not problem details.** `404`,
+`text/plain` with no charset, and the fixed 25 bytes, on all four routes — where the *same*
+identifier on `GET /Items/{itemId}/PlaybackInfo` answers RFC 9457. One feature, one identifier, two
+bodies. [Plan §7](plan.md#7-failure-handling)'s row said "the 007-measured refusal family", which is
+the wrong family; behaviours §1.11 had only ever met the third shape at statuses that were not
+`404`, so "an item that could not be found is problem details" read like a rule until this pair
+broke it. `DeliveryNotFoundError` is deliberately **not** a `NotFoundError` subclass, because
+inheriting would have made it problem details silently.
+
+**Five rows the matrix did not have, and one of them is where a careful implementation goes
+wrong.** [Spec §6](spec.md#6-conformance) named single-byte and whole-file cases the probe had
+never sent. Measured: `bytes=0-{size-1}` is a `206` and never a `200`; an open-ended `bytes=a-` and
+an overshooting end both clamp; `bytes=-0` is a `416` while a suffix longer than the file is the
+whole file; and **every** unreadable shape — no unit at all, `bytes=`, `bytes=-`, `bytes=abc-def`,
+`bytes=100-abc` — is a `200` with the entire body. RFC 9110 invites a `416` for most of those, so
+the implementation that reads the standard rather than the table refuses requests the reference
+serves.
+
+**The label is a measured table, not a transcribed one, and it could not have been guessed.** The
+sweep covers every extension `library/walker.py` admits, on video and on audio, plus `m3u8`:
+`.opus` and `.oga` are `audio/ogg` rather than `audio/opus`, `.alac` and `.dff` are `audio/mp4`
+beside `.dsf`'s `audio/dsf`, `.ogv` is `video/ogg` where `.ogg` is `audio/ogg`, `.rmvb` is not a
+`video/` type at all, `.mpc` is `application/vnd.mophun.certificate`, and `.mts` is
+**`model/vnd.mts`**. Copying the reference's own table would have been copying its code
+(Principle IV); measuring it was cheaper and is the only reason those six rows are right.
+
+Three smaller things the task statement did not name. The `container` **query** parameter is the
+same lever as the path suffix and answers the same label. A container the table has no row for is
+not an error — the label falls back to the file's own extension — while a container outside the
+reference's spelling rule (`^[a-zA-Z0-9\-\._,|]{0,40}$`) is a validation `400` keyed `container`,
+refused *before* the item lookup, whose message names the expression rather than the value and is
+reproduced byte for byte. And a static response carries exactly four headers with **no conditional
+handling at all**: `If-Modified-Since` in the future is answered with the whole film, which is why
+the response is assembled by hand rather than with the framework's file response — the convenient
+class ships an `ETag` and a `Content-Disposition` the reference does not send, the trap 006 met on
+the image routes.
+
+**What T7 and T8 inherit, measured here and not implemented.** `mediaSourceId` is deliberately
+**undeclared** on these routes: T6 serves part zero, which is what the reference does when the
+parameter is absent, and part selection belongs with the task that renders and consumes the
+`TranscodingUrl` carrying it. Its two refusals are measured and waiting: a well-formed id naming no
+source is a `400` in the third shape, and an id that is not an identifier at all is a **`500`** in
+the same shape — a class-A defect T7 will have to decide about
+`[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-29]`. T8 inherits the one row that
+went the other way: `/universal` **does** require a token, and answers the empty `401` without one.
 
 ## T7 — Progressive delivery: the remux is sized, the re-encode is chunked
 

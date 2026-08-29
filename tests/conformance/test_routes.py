@@ -60,6 +60,10 @@ INTERIM_008 = frozenset(
     {
         ("POST", "/Items/{itemId}/PlaybackInfo"),
         ("GET", "/Items/{itemId}/PlaybackInfo"),
+        ("GET", "/Audio/{itemId}/stream"),
+        ("GET", "/Audio/{itemId}/stream.{container}"),
+        ("GET", "/Videos/{itemId}/stream"),
+        ("GET", "/Videos/{itemId}/stream.{container}"),
     }
 )
 

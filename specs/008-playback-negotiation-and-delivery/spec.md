@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — §3.1 gains the measured media-source field set (31 properties on every source, `VideoType` on a video one), the 32-bit number format its rates and level are written in, the three stream families v1 does not emit, and two divergences the first draft stated as parity: a multi-part film's parts are media sources here and separate items in the reference, and `HasSubtitles` counts only the streams inside the container; and 2026-08-29 at the spec review, which wrote the five probes the OQ table had been citing prospectively and ran all of them — all twelve open questions answered, and five claims did not survive: the policy story was fiction (no playback route consults `EnableMediaPlayback`, and a single denied permission moves nothing at negotiation — §3.2, §3.3, AC-31), `EnableTranscoding: false` in the request body is ignored (OQ-12), `static=true` on a mismatched container is not an error but the original bytes behind the wrong label (§3.5, AC-18), `enableRedirection` never redirects a local file (OQ-4, AC-21), and the reference's HLS segments already carry `Content-Length` — the §3.5 divergence shrank to the progressive routes. Plus one defect nobody was looking for: a sample-rate ceiling is answered from the Opus rate ladder and can be **exceeded** (§3.6, AC-19); and 2026-08-29 by T4 — §3.3's rule 1 loses "or empty": an absent profile means anything and an empty one permits nothing, which are opposite answers; the reasons list is measured to say why *direct play* failed rather than which rung was reached, to name `DirectPlayError` when nothing else explains the refusal, and to arrive in flag-value order; and a numeric ceiling is compared against the value the server holds rather than the shorter decimal it printed
+amended: 2026-08-29 by T3 — §3.1 gains the measured media-source field set (31 properties on every source, `VideoType` on a video one), the 32-bit number format its rates and level are written in, the three stream families v1 does not emit, and two divergences the first draft stated as parity: a multi-part film's parts are media sources here and separate items in the reference, and `HasSubtitles` counts only the streams inside the container; and 2026-08-29 at the spec review, which wrote the five probes the OQ table had been citing prospectively and ran all of them — all twelve open questions answered, and five claims did not survive: the policy story was fiction (no playback route consults `EnableMediaPlayback`, and a single denied permission moves nothing at negotiation — §3.2, §3.3, AC-31), `EnableTranscoding: false` in the request body is ignored (OQ-12), `static=true` on a mismatched container is not an error but the original bytes behind the wrong label (§3.5, AC-18), `enableRedirection` never redirects a local file (OQ-4, AC-21), and the reference's HLS segments already carry `Content-Length` — the §3.5 divergence shrank to the progressive routes. Plus one defect nobody was looking for: a sample-rate ceiling is answered from the Opus rate ladder and can be **exceeded** (§3.6, AC-19); and 2026-08-29 by T4 — §3.3's rule 1 loses "or empty": an absent profile means anything and an empty one permits nothing, which are opposite answers; the reasons list is measured to say why *direct play* failed rather than which rung was reached, to name `DirectPlayError` when nothing else explains the refusal, and to arrive in flag-value order; and a numeric ceiling is compared against the value the server holds rather than the shorter decimal it printed; and 2026-08-29 by T6 — §3.5's authentication sentence was the wrong way round: the four `stream` routes accept every mechanism and **require none**, where `/universal` alone requires one, so AC-32 records the decision 002 deferred here; the range table gains five measured rows including the one the RFC would have got backwards (an unreadable `Range` is the whole body, never a `416`); a delivery route's own refusal is the third error shape rather than problem details; the container is a label with a fallback and a spelling rule; and a static response carries exactly four headers and does no conditional handling
 depends_on: [005, 007]
 ---
 
@@ -456,10 +456,14 @@ them (§3.3).
 |---|---|
 | `Accept-Ranges: bytes` | On every delivery response whose body has a known size |
 | `Range: bytes=a-b` | `206` with a correct `Content-Range` and exactly the bytes asked for |
-| Suffix range `bytes=-n` | `206` with the last `n` bytes |
+| A range naming the whole body, `bytes=0-{size-1}` | `206`, never a `200` |
+| An open-ended range `bytes=a-` | `206`, from there to the last byte |
+| A range overshooting the end | `206`, clamped to the last byte |
+| Suffix range `bytes=-n` | `206` with the last `n` bytes, and the whole body where `n` exceeds it |
 | Multiple ranges | The full body as `200` — the reference does not split |
 | Reversed range `bytes=b-a` | The full body as `200`, not a `416` |
-| Unsatisfiable range | `416` with `Content-Range: bytes */total` and `Content-Length: 0` |
+| An unreadable `Range` of any shape | The full body as `200`, not a `416` |
+| Unsatisfiable range — past the end, or `bytes=-0` | `416` with `Content-Range: bytes */total` and `Content-Length: 0` |
 | No `Range` | `200` with the full body |
 
 The whole table is measured, not designed: the matrix runs against a direct-play
@@ -467,7 +471,19 @@ The whole table is measured, not designed: the matrix runs against a direct-play
 `Content-Range: bytes 100-199/{size}` and a `Content-Length` of exactly `100`; the suffix form
 answers the last bytes; the multi-range, reversed and no-`Range` shapes all answer `200` with
 the full body; one byte past the end is the `416` with `Content-Length: 0`.
-`[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-28]`
+`[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-29]`
+
+**The unreadable row is the one that had to be measured**, because the careful reading of RFC 9110
+gives the opposite answer. Five shapes of nonsense — a value with no unit at all, `bytes=`,
+`bytes=-`, `bytes=abc-def` and `bytes=100-abc` — each answer `200` with the entire file, as does a
+reversed range. A server that refused them with `416`, which is what the RFC invites, would refuse
+requests the reference serves.
+
+**A response whose size is known carries exactly four headers**, and the absences are as measured
+as the presences: `Content-Length`, `Content-Type`, `Accept-Ranges: bytes` and `Last-Modified`,
+with `Content-Range` added on a `206` and on the `416`. There is no `ETag`, no
+`Content-Disposition`, no `Cache-Control`, and **no conditional handling at all** — a request whose
+`If-Modified-Since` lies in the future is answered with the whole film, not a `304`.
 
 **`Content-Length` is sent whenever the size is known** — always for direct play, for remuxed
 output whenever it can be computed or the output is produced to a seekable location first, and for
@@ -501,14 +517,44 @@ went out of its way to fix.
 `200` with the untouched FLAC bytes behind a `Content-Type: audio/mpeg` label, and
 `stream.mkv?static=true` on an mp4 film serves the mp4 bytes as `video/x-matroska`: the path's
 container decides the label and nothing else, and no error, remux or re-encode ever happens on a
-static request `[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-28]`
+static request `[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-29]`
 (behaviours §2.20). The draft said a mismatch would be an
 error; it is not, and inventing one would break the client that names a wrong container while
 downloading — it still receives, correctly, the original file. Atrium replicates: static always
 serves the source bytes, whatever the path says.
 
-**Authentication** is via any of the four mechanisms (002 §3.1), in practice `?api_key=`, because
-these URLs go to media players that do not set headers.
+**The container is the label and nothing more, in three parts.** It arrives either as the path's
+suffix or as a `container` query parameter, and both answer identically. A container the server has
+no label for is **not** an error: the label falls back to the file's own extension, so
+`stream.banana?static=true` on an mp4 answers `video/mp4` over the same bytes. And a container
+outside the reference's own spelling rule — anything but letters, digits and `-._,|`, or longer
+than forty characters — is a validation `400` keyed on `container`, refused *before* the item is
+looked up, so an unknown item behind an illegal container answers the `400` and not the `404`.
+Every mapping is measured across the whole extension set a library admits, and several are not
+guessable: `.opus` is `audio/ogg`, `.alac` is `audio/mp4`, `.mts` is `model/vnd.mts`.
+
+**Authentication is accepted on every mechanism and required on none.** The four `stream` routes
+answer identically to a request carrying no token at all, one carrying a token nothing issued, and
+one carrying `?api_key=` — measured on all four, in the same run in which `/Audio/{itemId}/universal`
+answered `401` to the first two `[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11,
+2026-08-29]`. The split is per action rather than per feature, and it is the reference's
+`[source: Jellyfin.Api/Controllers/AudioController.cs:89,
+Jellyfin.Api/Controllers/VideosController.cs:312,
+Jellyfin.Api/Controllers/UniversalAudioController.cs:94 @ v10.11.11]`. This is what
+[002 §3.1](../002-authentication-users-and-sessions/spec.md#31-how-a-client-presents-a-token) already
+recorded and deferred, and 008 replicates it: these URLs are handed to external players and image
+loaders that set no headers, so a server that began requiring a token would break the one thing
+they exist for. The consequence — **an item id is a capability on these routes** — is
+[behaviours §2.10](../../docs/compatibility/behaviours.md#210-the-image-and-delivery-routes-accept-a-token-and-require-none)'s,
+taken knowingly and identically to 006's decision for the image routes.
+
+**A delivery route's own refusal is the third error shape, not problem details.** An identifier no
+library holds answers `404` with `text/plain` — no charset — and the fixed 25-byte
+`Error processing request.`, on all four `stream` routes; the same identifier on
+`GET /Items/{itemId}/PlaybackInfo` answers the RFC 9457 body of §3.2's table
+`[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-29]`. One feature, one
+identifier, two bodies, split by which layer refused
+([behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one)).
 
 ### 3.6 Audio delivery
 
@@ -719,6 +765,11 @@ though the age-based one is.
     `TranscodingUrl`; a user denied only one of them negotiates exactly as a permitted user; and
     no policy shape produces an `ErrorCode` or a `4xx`. At delivery, a denied user's re-encode
     step is refused rather than force-copied into an output that violates the profile.
+32. The four `stream` routes **accept every token mechanism and require none**: a request carrying
+    nothing at all, one carrying a token nothing issued, and one carrying `?api_key=` answer
+    identically, byte for byte. `/Audio/{itemId}/universal` is the one delivery route that refuses
+    without a token, and it refuses with the empty `401` (§3.5, §3.6, behaviours §2.10). The
+    criterion was written the other way round until it was measured.
 
 ## 6. Conformance
 
