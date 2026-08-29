@@ -28,9 +28,13 @@ Both reasons collapse into a single design rule, stated in the [constitution](do
 
 ## Status
 
-**Early implementation.** All ten features are specified; 001, 002 and 003 are planned and broken
-into tasks. **Feature 001 — server identity and discovery — is implemented**, and the server
-answers:
+**Eight of eleven features are implemented.** 001 through 008 are done — identity and discovery,
+authentication and sessions, scanning, metadata, the item query API, images, user data and
+playstate, and as of 2026-08-29 playback negotiation and delivery. 009 (playlists), 010 (the
+conformance harness) and 011 (subtitle delivery) are specified and still drafts. The
+[status table](specs/README.md) is the authority; this paragraph is not.
+
+The first request a Jellyfin client makes is answered the way it expects:
 
 ```
 $ atrium --data-dir /tmp/demo &
@@ -39,7 +43,11 @@ $ curl -s localhost:8096/System/Info/Public
  "ProductName":"Jellyfin Server","OperatingSystem":"","Id":"…","StartupWizardCompleted":false}
 ```
 
-That is a Jellyfin client's first request, answered the way a Jellyfin client expects.
+And the last one it makes before playing something — `POST /Items/{itemId}/PlaybackInfo` — is
+answered by the decision ladder of
+[008](specs/008-playback-negotiation-and-delivery/spec.md): direct play, remux, or software
+transcoding delivered over HLS, with `Range` support, a supervised encoder per session, and the
+operator's throttling and scratch ceilings enforced.
 
 Every change goes through the same gate, locally and in
 [CI](.github/workflows/ci.yml) — `ruff`, `mypy --strict`, the test suite on the oldest and newest
