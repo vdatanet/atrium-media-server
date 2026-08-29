@@ -195,6 +195,13 @@ class DeliverySourceError(Exception):
     **Atrium answers this `400` for both**, which is the divergence argued in behaviours section
     3.9: one refusal for one meaning, in the shape the reference already sends for the
     neighbouring value of the same parameter.
+
+    And the reference sends it to **both** values one route away: `GET /Audio/{itemId}/universal`
+    answers `400`, `text/plain`, the same 25 bytes, to a well-formed identifier naming no source
+    and to `banana` alike, because it resolves the source through the negotiation helper and
+    nothing there parses the string in order to throw `[probe: tools/probe_universal_audio.py,
+    Jellyfin 10.11.11, 2026-08-29]`. So this class is not a third behaviour on any reading: it is
+    the one the reference itself gives the same parameter on the sibling route.
     """
 
 

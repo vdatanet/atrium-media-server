@@ -6,6 +6,13 @@ controllers upstream and two modules here, and every line they would otherwise h
 this one - the item lookup, the range negotiation, the label, and the exact header set. A route
 that built its own response would be a route that could seek differently from its sibling.
 
+**`/Audio/{itemId}/universal` shares the lower half of this module and not the upper one**
+(008 T8). It synthesises its own device profile from its own parameter set, so it does not go
+through `produced_response`; it reaches `locate`, `inspection_of`, `source_response` and
+`produce` directly, which is what keeps one remux sized and one range answered in one place. Two
+of those take a refusal class as an argument, because that route's `404` is problem details where
+these four answer the third error shape - see `locate`.
+
 **`static=true` means the source bytes, absolutely.** Not "the source bytes if the container
 matches": `stream.mkv?static=true` on an mp4 film is the mp4 bytes behind `Content-Type:
 video/x-matroska`, and `stream.wav?static=true` on an m4a track is the m4a bytes behind
@@ -274,7 +281,26 @@ def static_response(
     bytes are the file's. `container` also arrives as a query parameter on the unsuffixed route
     and means the same thing there, measured.
     """
-    found, absolute = _locate(request, item_id, media_source_id)
+    found, absolute = locate(request, item_id, media_source_id)
+    return source_response(request, found, absolute, container=container)
+
+
+def source_response(
+    request: Request,
+    found: DeliveredFile,
+    absolute: str,
+    *,
+    container: str | None,
+    absent: type[Exception] = DeliveryNotFoundError,
+) -> Response:
+    """The file itself, in the measured header set - the answer of every direct play.
+
+    `static_response` reaches it after its own lookup; `/Audio/{itemId}/universal` reaches it
+    after the ladder answered direct play, and the two are one answer because the reference
+    measures identically on both: `200`, a `Content-Length` equal to the file, `Accept-Ranges:
+    bytes`, a `Last-Modified`, and a mid-file `Range` answered `206` with a correct
+    `Content-Range` `[probe: tools/probe_universal_audio.py, Jellyfin 10.11.11, 2026-08-29]`.
+    """
     try:
         stat = Path(absolute).stat()
     except OSError as error:
@@ -282,7 +308,7 @@ def static_response(
         # The reference's answer to this is not measured (it would need a file deleted underneath
         # a live server), so this takes the refusal it *is* measured to send when it cannot serve
         # an item's bytes rather than inventing a fifth shape.
-        raise DeliveryNotFoundError from error
+        raise absent from error
 
     answer = negotiate_range(request.headers.get("range"), stat.st_size)
     return _ranged(
@@ -293,8 +319,12 @@ def static_response(
     )
 
 
-def _locate(
-    request: Request, item_id: str, media_source_id: str | None
+def locate(
+    request: Request,
+    item_id: str,
+    media_source_id: str | None,
+    *,
+    absent: type[Exception] = DeliveryNotFoundError,
 ) -> tuple[DeliveredFile, str]:
     """The part this request is about, and where its bytes are.
 
@@ -304,6 +334,16 @@ def _locate(
     request and on a produced one `[probe: tools/probe_progressive_delivery.py, Jellyfin 10.11.11,
     2026-08-29]`. Absent, it is part zero, which is what the reference serves when the parameter
     is not given.
+
+    **`absent` is a parameter because the three audio routes do not agree about it.** An item
+    nothing holds is the third error shape on the four `stream` routes and RFC 9457 problem
+    details on `/Audio/{itemId}/universal` - measured on the same identifier in the same run,
+    where `/universal`'s body is byte-identical to `GET /Items/{itemId}`'s `[probe:
+    tools/probe_universal_audio.py, Jellyfin 10.11.11, 2026-08-29]`. The universal controller
+    refuses with the framework's own not-found result before any streaming helper runs, and the
+    `stream` controllers throw out of that helper `[source:
+    Jellyfin.Api/Controllers/UniversalAudioController.cs:125-128,
+    Jellyfin.Api/Helpers/StreamingHelpers.cs:111 @ v10.11.11]`.
     """
     with session_scope(get_sessions(request)) as opened:
         repository = MediaFileRepository(opened)
@@ -313,7 +353,7 @@ def _locate(
         found = repository.locate(item_id, part_index)
     absolute = None if found is None else found.absolute_path()
     if found is None or absolute is None:
-        raise DeliveryNotFoundError
+        raise absent
     return found, absolute
 
 
@@ -420,17 +460,44 @@ async def produced_response(
     `is_video_route` is the controller, and it decides only the fallback container. Whether the
     *negotiation* is about video is the item's kind, which is what `decide()` was given at T4.
     """
-    found, absolute = _locate(request, item_id, parameters.media_source_id)
-    inspection = _inspection(request, found)
+    found, absolute = locate(request, item_id, parameters.media_source_id)
+    inspection = inspection_of(request, found)
     decision, container = _decide_delivery(
         inspection, parameters, is_video_route=is_video_route, is_video=found.is_video
     )
+    return await produce(
+        request,
+        path=absolute,
+        source=inspection,
+        decision=decision,
+        container=container,
+        media_type=label_for(container, found.relative_path),
+        start_ticks=parameters.start_time_ticks,
+    )
+
+
+async def produce(
+    request: Request,
+    *,
+    path: str,
+    source: MediaInspection,
+    decision: Decision,
+    container: str,
+    media_type: str,
+    start_ticks: int | None,
+) -> Response:
+    """Carry out a decision that has already been made: the remux/chunked split, once.
+
+    Split out from `produced_response` at 008 T8 because `/Audio/{itemId}/universal` reaches the
+    same two answers from a **different** profile - one synthesised from its own parameter set
+    (`api/universal_audio.py`, plan section 6.6) - and a second copy of this branch is a second
+    place where a remux could stop being sized.
+    """
     if decision.outcome is Outcome.NONE:
         # Nothing can be produced for what was asked - the measured `500`, the same one an
         # unmuxable container gets, because on the reference both are an encoder that never
         # started (behaviours section 1.11's third shape).
         raise DeliveryProductionError
-    media_type = label_for(container, found.relative_path)
     ledger = production_ledger(request)
 
     try:
@@ -438,22 +505,22 @@ async def produced_response(
             produced = await _remuxed(
                 ledger,
                 get_paths(request).transcodes,
-                inspection,
+                source,
                 decision,
                 container,
-                path=absolute,
-                start_ticks=parameters.start_time_ticks,
+                path=path,
+                start_ticks=start_ticks,
             )
             answer = negotiate_range(request.headers.get("range"), produced.stat().st_size)
             return _ranged(str(produced), answer, media_type=media_type)
 
         return await _chunked(
             ledger,
-            inspection,
+            source,
             decision,
             container,
-            path=absolute,
-            start_ticks=parameters.start_time_ticks,
+            path=path,
+            start_ticks=start_ticks,
             media_type=media_type,
         )
     except ffmpeg.ProductionError as error:
@@ -477,7 +544,7 @@ def production_ledger(request: Request) -> ffmpeg.ProductionLedger:
     return existing
 
 
-def _inspection(request: Request, found: DeliveredFile) -> MediaInspection:
+def inspection_of(request: Request, found: DeliveredFile) -> MediaInspection:
     """What was stored about this file, or the refusal that says nothing can be produced.
 
     A file nothing has inspected cannot be negotiated about: there are no streams to copy, no
@@ -755,8 +822,12 @@ __all__ = [
     "VIDEO_OUTPUT_CONTAINERS",
     "DeliveryParameters",
     "audio_parameters",
+    "inspection_of",
+    "locate",
+    "produce",
     "produced_response",
     "production_ledger",
+    "source_response",
     "static_response",
     "video_parameters",
     "with_container",
