@@ -96,6 +96,27 @@ therefore remove one directory and never touch the files beside it, while startu
 clear the root whole - the reference deletes every file under the transcode path when it starts
 `[source: MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:717-736 @ v10.11.11]`.
 
+## What the operator can turn on (008 T13)
+
+Two features, both off as shipped because the reference ships both off, and both measuring
+against the same number: **the download position**, which is the end of the furthest segment any
+request has asked for and never goes backwards.
+
+* `enable_throttling` with `throttle_delay_seconds` **suspends production** while where the
+  encoder has reached leads the download position by `max(delay, 60)` seconds, and lets it go
+  again when the client closes the gap.
+* `enable_segment_deletion` with `segment_keep_seconds` **removes the produced segments** lying
+  more than one window behind the download position, while the session goes on running.
+
+**Neither knob has anything to do with elapsed time**, and the second one reads as though it
+does. `SegmentKeepSeconds` is *media the client has already fetched*, not the age of a file:
+measured with a 720-second window and a client whose furthest segment ended at 811 seconds, the
+reference deleted segment 29 and left segment 33 alone - two files written seconds apart, on
+either side of `(811 - 720) / 3`, forty-five seconds after both were produced and with nothing
+requested in between `[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`.
+A session whose client has paused therefore loses nothing however long it waits, where an
+age-based reading would throw away the segments it is about to resume into.
+
 See specs/008-playback-negotiation-and-delivery/spec.md sections 3.4, 3.7 and 3.8, and plan
 sections 5 and 6.7.
 """
@@ -103,6 +124,7 @@ sections 5 and 6.7.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import logging
 import shutil
@@ -143,8 +165,21 @@ PROGRESSIVE_PING_TIMEOUT_SECONDS: Final = 10
 
 #: How often the sweep looks. Sixth of the timeout, so a session dies inside a timeout plus a
 #: tick rather than inside two of them - the reference's timer fires per job and this is one loop
-#: for all of them, which is the shape 007's session reaper already uses.
+#: for all of them, which is the shape 007's session reaper already uses. The reference's own two
+#: timers are 5 s for the throttle and 20 s for the segment cleaner `[source:
+#: MediaBrowser.Controller/MediaEncoding/TranscodingThrottler.cs:46,
+#: MediaBrowser.Controller/MediaEncoding/TranscodingSegmentCleaner.cs:51 @ v10.11.11]`; one loop
+#: at ten seconds sits between them and is finer than the coarser of the two.
 SWEEP_INTERVAL_SECONDS: Final = 10
+
+#: The floor under `throttle_delay_seconds`, applied where the number is used rather than where it
+#: is configured, because that is where the reference applies it `[source:
+#: MediaBrowser.Controller/MediaEncoding/TranscodingThrottler.cs:118 @ v10.11.11]`.
+THROTTLE_FLOOR_SECONDS: Final = 60
+
+#: The floor under `segment_keep_seconds`, same rule, same reason `[source:
+#: MediaBrowser.Controller/MediaEncoding/TranscodingSegmentCleaner.cs:98 @ v10.11.11]`.
+SEGMENT_KEEP_FLOOR_SECONDS: Final = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -254,9 +289,35 @@ class TranscodeSession:
     report: TranscodingReport | None = None
     """What the last request through this session asked to be produced, for `/Sessions`."""
 
+    download_ticks: int = 0
+    """How far into the film the client has fetched, and it only ever grows.
+
+    The end of the furthest segment any request has asked for - `runtimeTicks` plus
+    `actualSegmentLengthTicks`, which is the parameter the segment route otherwise binds and
+    ignores. The reference keeps the same number the same way, taking the larger of the stored
+    one and the new one so that a client filling a gap behind itself does not move the position
+    backwards `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:2029 @ v10.11.11]`. Both
+    operator knobs measure against it: the throttle asks how far production leads it, and
+    segment deletion asks which segments lie a whole keep-window behind it.
+    """
+
+    plan: SegmentPlan | None = None
+    """The last request's plan, for the cadence the two knobs count in."""
+
+    started_ticks: int = 0
+    """Where the live production was told to start."""
+
+    started_index: int = 0
+    """The `-start_number` it was given, so a file's name can be turned back into a position."""
+
     @property
     def producing(self) -> bool:
-        """Whether this session has a process that has not yet exited."""
+        """Whether this session has a process that has not yet exited.
+
+        A **suspended** process is still producing by this definition, and deliberately: the
+        throttle pauses work it intends to resume, so a request waiting on the encoder must go on
+        waiting rather than decide production has stopped.
+        """
         return self.running is not None and self.running.process.returncode is None
 
 
@@ -277,12 +338,20 @@ class TranscodeManager:
         clock: Callable[[], float] = time.monotonic,
         ping_timeout: float = PING_TIMEOUT_SECONDS,
         sweep_interval: float = SWEEP_INTERVAL_SECONDS,
+        throttling: bool = False,
+        throttle_delay_seconds: int = 180,
+        segment_deletion: bool = False,
+        segment_keep_seconds: int = 720,
     ) -> None:
         self._scratch = scratch
         self._ledger = ledger
         self._clock = clock
         self._ping_timeout = ping_timeout
         self._sweep_interval = sweep_interval
+        self._throttling = throttling
+        self._throttle_gap = max(throttle_delay_seconds, THROTTLE_FLOOR_SECONDS)
+        self._segment_deletion = segment_deletion
+        self._segment_keep = max(segment_keep_seconds, SEGMENT_KEEP_FLOOR_SECONDS)
         self._sessions: dict[SessionKey, TranscodeSession] = {}
 
     @property
@@ -341,16 +410,36 @@ class TranscodeManager:
         return max(live, key=lambda session: session.last_ping).report
 
     async def segment(
-        self, session: TranscodeSession, plan: SegmentPlan, *, index: int, start_ticks: int
+        self,
+        session: TranscodeSession,
+        plan: SegmentPlan,
+        *,
+        index: int,
+        start_ticks: int,
+        length_ticks: int = 0,
     ) -> Path:
         """The file holding this segment, produced if it does not exist yet.
 
         Raises `ffmpeg.ProductionError` when production stopped without ever writing it, which is
         the measured `500`: an encoder that never started and one that died before reaching the
         requested segment are one answer on the reference too.
+
+        `length_ticks` is the request's `actualSegmentLengthTicks`, and with `start_ticks` it is
+        the download position both operator knobs measure against. The reference records it when
+        the *response* completes rather than when the request arrives `[source:
+        Jellyfin.Api/Controllers/DynamicHlsController.cs:2020-2030 @ v10.11.11]`; recording it
+        here instead is what lets a throttled encoder be released before this call returns
+        rather than one sweep later.
         """
         self.ping(session)
         session.report = TranscodingReport.of(plan.decision, plan.container)
+        session.plan = plan
+        session.download_ticks = max(session.download_ticks, start_ticks + length_ticks)
+        # The throttle only, not the whole pass: a paused encoder has to be let go before this
+        # call waits on it, while deletion stays on the sweep's timer the way the reference keeps
+        # it on the cleaner's - a rewind that arrives before the next tick is served from the
+        # file that is still there rather than re-encoded by the request that asked for it.
+        self._throttle(session)
         extension = hls.segment_extension(plan.container)
         target = session.scratch / f"{index}{extension}"
 
@@ -386,12 +475,109 @@ class TranscodeManager:
 
         Reads the injected clock rather than sleeping, so the kill-timer test moves time instead
         of spending it.
+
+        **It is also where the two operator knobs are applied** (008 T13), on the sessions that
+        survive the pass: the reference gives each job a timer of its own for each of them - five
+        seconds for the throttle, twenty for the segment cleaner - and one loop over every session
+        answers both questions with the same reading of the same two positions.
         """
         cutoff = self._clock() - self._ping_timeout
         stale = [session for session in self._sessions.values() if session.last_ping <= cutoff]
         for session in stale:
             await self._discard(session)
+        for session in self._sessions.values():
+            self.apply_policy(session)
         return len(stale)
+
+    # -- the operator's knobs ----------------------------------------------------------------
+
+    def apply_policy(self, session: TranscodeSession) -> None:
+        """Throttle production and reclaim produced segments, as this operator asked.
+
+        The sweep's whole pass over one session. Both halves are off unless configured, and the
+        throttle half runs again on every segment request, which is what keeps a paused encoder
+        from costing a client a whole sweep interval before it is let go.
+        """
+        self._throttle(session)
+        self._delete_behind(session)
+
+    def _throttle(self, session: TranscodeSession) -> None:
+        """Pause production that leads the client by the configured gap; resume it when it does not.
+
+        The reference compares two positions in the film - where the encoder has reached and the
+        end of the furthest segment the client has taken - and pauses while the first leads the
+        second by `max(ThrottleDelaySeconds, 60)` seconds `[source:
+        MediaBrowser.Controller/MediaEncoding/TranscodingThrottler.cs:148-173 @ v10.11.11]`. The
+        same two positions here, with the encoder's read off the scratch directory rather than
+        off a progress parser: a session that does not read its encoders' output still knows
+        which segment they have reached, because that is the file they are writing.
+        """
+        running = session.running
+        if running is None:
+            return
+        if not self._throttling:
+            # An operator who turns it off mid-session must not leave an encoder stopped for ever.
+            running.resume()
+            return
+        produced = self._produced_ticks(session)
+        if produced is None:
+            return
+        gap = (produced - session.download_ticks) / hls.TICKS_PER_SECOND
+        if gap >= self._throttle_gap:
+            running.suspend()
+        else:
+            running.resume()
+
+    def _delete_behind(self, session: TranscodeSession) -> None:
+        """Remove the produced segments that lie a whole keep-window behind the client.
+
+        **The window is media the client has already fetched, not wall-clock file age**, which is
+        the measurement this task turned up: with a 720-second window and a client whose furthest
+        segment ended at 811 seconds, the reference deleted segment 29 and kept segment 33 - two
+        files written seconds apart, one either side of `(811 - 720) / 3` `[probe:
+        tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`, `[source:
+        MediaBrowser.Controller/MediaEncoding/TranscodingSegmentCleaner.cs:100-113 @ v10.11.11]`.
+        Nothing at all is deleted until the client has fetched past the window, so a session
+        paused for an hour keeps every segment it has.
+
+        The index is counted in the *unscaled* requested segment length, the same integer the
+        read-ahead tolerance divides by (behaviours section 3.10), not in the scaled cadence the
+        playlist states.
+        """
+        plan = session.plan
+        if not self._segment_deletion or plan is None:
+            return
+        downloaded = round(session.download_ticks / hls.TICKS_PER_SECOND)
+        if downloaded <= self._segment_keep:
+            return
+        seconds = max(plan.segment_seconds, 1)
+        last = (downloaded - self._segment_keep) // seconds
+        if last <= 0:
+            return
+        extension = hls.segment_extension(plan.container)
+        # The directory is listed and filtered rather than counted down from the boundary: a
+        # session an hour into a film has thousands of indexes below it and a handful of files.
+        for one in self._produced(session, extension):
+            if int(one.stem) <= last:
+                with contextlib.suppress(OSError):
+                    one.unlink(missing_ok=True)
+
+    def _produced_ticks(self, session: TranscodeSession) -> int | None:
+        """Where in the film the live encoder has reached, or `None` when it cannot be told.
+
+        From the file it is writing: production began at `started_ticks` numbering its output
+        from `started_index`, so a newest file numbered `n` means it has produced everything up
+        to `started_ticks + (n + 1 - started_index)` cadences. That is the same quantity the
+        reference reads out of its encoder's progress lines, arrived at from what is on disk -
+        which is all a server that runs its encoders at `-loglevel error` has.
+        """
+        plan = session.plan
+        if plan is None:
+            return None
+        index = self._producing_index(session, hls.segment_extension(plan.container))
+        if index is None:
+            return session.started_ticks
+        return session.started_ticks + (index + 1 - session.started_index) * plan.cadence_ticks
 
     async def run(self) -> None:
         """Sweep on the interval until cancelled, started by the application factory.
@@ -478,6 +664,10 @@ class TranscodeManager:
                 newest.unlink(missing_ok=True)
 
         session.scratch.mkdir(parents=True, exist_ok=True)
+        # Where this run begins and how its files are numbered, which is what turns the name of
+        # the file the encoder is writing back into a position in the film for the throttle.
+        session.started_ticks = start_ticks
+        session.started_index = max(index, 0)
         argv = ffmpeg.segment_command(
             plan.source,
             plan.decision,
@@ -565,6 +755,19 @@ class TranscodeManager:
             return None
 
     @staticmethod
+    def _produced(session: TranscodeSession, extension: str) -> list[Path]:
+        """Every finished segment file in this session's directory, by index.
+
+        The initialisation segment is numbered -1 and is not a position in the film, so it is
+        left out here: it is the header every other segment is read against, and a deletion pass
+        that took it would break the playback it is meant to be tidying up behind.
+        """
+        try:
+            return [one for one in session.scratch.glob(f"*{extension}") if one.stem.isdigit()]
+        except OSError:
+            return []
+
+    @staticmethod
     def _newest(session: TranscodeSession, extension: str) -> Path | None:
         """The most recently written segment file - by modification time, not by index.
 
@@ -593,7 +796,9 @@ __all__ = [
     "PING_TIMEOUT_SECONDS",
     "POLL_SECONDS",
     "PROGRESSIVE_PING_TIMEOUT_SECONDS",
+    "SEGMENT_KEEP_FLOOR_SECONDS",
     "SWEEP_INTERVAL_SECONDS",
+    "THROTTLE_FLOOR_SECONDS",
     "SegmentPlan",
     "SessionKey",
     "TranscodeManager",

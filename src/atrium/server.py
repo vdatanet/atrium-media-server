@@ -193,7 +193,17 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     # applications in one process - which is every conformance test - never see each other's
     # processes or each other's scratch. 008 plan section 5.
     productions = ProductionLedger()
-    transcodes = TranscodeManager(resolved.transcodes, productions)
+    transcodes = TranscodeManager(
+        resolved.transcodes,
+        productions,
+        # The operator's four encoding knobs, in the reference's names and with the reference's
+        # defaults (008 T13). Read here rather than per request: a `config.toml` is read once at
+        # startup, so a session's throttle cannot change under it mid-film.
+        throttling=settings.encoding.enable_throttling,
+        throttle_delay_seconds=settings.encoding.throttle_delay_seconds,
+        segment_deletion=settings.encoding.enable_segment_deletion,
+        segment_keep_seconds=settings.encoding.segment_keep_seconds,
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:

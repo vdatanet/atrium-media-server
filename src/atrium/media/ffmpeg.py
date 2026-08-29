@@ -52,6 +52,7 @@ import asyncio
 import contextlib
 import logging
 import shutil
+import signal
 from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -70,6 +71,13 @@ STDERR_LINES_KEPT: Final = 20
 
 #: How much of it is read at a time, and the longest run without a newline that is kept.
 STDERR_BLOCK_BYTES: Final = 4096
+
+#: The two job-control signals the throttle uses, or `None` where the platform has neither. The
+#: reference pauses by writing a key to ffmpeg's standard input, which this server has already
+#: closed with `-nostdin`; stopping the process produces the one thing a client can observe -
+#: the output stops growing - without caring which ffmpeg build is running (008 spec section 3.4).
+SUSPEND: Final[int | None] = getattr(signal, "SIGSTOP", None)
+CONTINUE: Final[int | None] = getattr(signal, "SIGCONT", None)
 
 #: How long a finished production's reader is given to reach the end of a pipe whose writer is
 #: already dead. Generous, because it is never spent: the wait exists so that a reader still
@@ -636,6 +644,41 @@ class Production:
     reader: asyncio.Task[None] | None = None
     """The task doing that reading, cancelled when the production is finished."""
 
+    paused: bool = False
+    """Whether the throttle has suspended it (008 T13). Still a live process either way."""
+
+    def suspend(self) -> None:
+        """Stop it producing without ending it. The operator's throttle, `media/sessions.py`.
+
+        **A signal rather than the reference's pause key.** The reference writes `p` - or `c`
+        into an unpatched ffmpeg - on the process's standard input `[source:
+        MediaBrowser.Controller/MediaEncoding/TranscodingThrottler.cs:128-146 @ v10.11.11]`,
+        which needs the encoder to be reading its console and needs to know which build it is.
+        A stopped process stops writing whatever it is, which is the whole of what a client can
+        observe: the produced file stops growing and starts again. Plan section 6.7 calls it
+        process suspension for that reason.
+
+        Safe against the kill paths, which is not obvious: `stop` sends `SIGKILL`, and a stopped
+        process is killed by it without ever being resumed. A polite signal would have sat
+        pending for ever.
+        """
+        self._signal(SUSPEND, paused=True)
+
+    def resume(self) -> None:
+        """Let it produce again, when the client has caught up or the session is ending."""
+        self._signal(CONTINUE, paused=False)
+
+    def _signal(self, number: int | None, *, paused: bool) -> None:
+        if self.paused == paused or self.process.returncode is not None:
+            return
+        if number is None:
+            # No job-control signals on this platform: the throttle is then a knob that reads
+            # back as configured and pauses nothing, which is what "off" already looks like.
+            return
+        with contextlib.suppress(ProcessLookupError, OSError, ValueError):
+            self.process.send_signal(number)
+            self.paused = paused
+
     async def drain(self) -> None:
         """Read the diagnostic stream to its end, keeping the tail.
 
@@ -770,6 +813,7 @@ class ProductionLedger:
 __all__ = [
     "AUDIO_ENCODERS",
     "CHUNK_BYTES",
+    "CONTINUE",
     "DEFAULT_SEGMENT_FORMAT",
     "DRAIN_GRACE_SECONDS",
     "ENCODER_PRESET",
@@ -787,6 +831,7 @@ __all__ = [
     "SEGMENT_FORMATS",
     "STDERR_BLOCK_BYTES",
     "STDERR_LINES_KEPT",
+    "SUSPEND",
     "TICKS_PER_SECOND",
     "VIDEO_ENCODERS",
     "Output",

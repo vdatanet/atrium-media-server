@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — §3.1 gains the measured media-source field set (31 properties on every source, `VideoType` on a video one), the 32-bit number format its rates and level are written in, the three stream families v1 does not emit, and two divergences the first draft stated as parity: a multi-part film's parts are media sources here and separate items in the reference, and `HasSubtitles` counts only the streams inside the container; and 2026-08-29 at the spec review, which wrote the five probes the OQ table had been citing prospectively and ran all of them — all twelve open questions answered, and five claims did not survive: the policy story was fiction (no playback route consults `EnableMediaPlayback`, and a single denied permission moves nothing at negotiation — §3.2, §3.3, AC-31), `EnableTranscoding: false` in the request body is ignored (OQ-12), `static=true` on a mismatched container is not an error but the original bytes behind the wrong label (§3.5, AC-18), `enableRedirection` never redirects a local file (OQ-4, AC-21), and the reference's HLS segments already carry `Content-Length` — the §3.5 divergence shrank to the progressive routes. Plus one defect nobody was looking for: a sample-rate ceiling is answered from the Opus rate ladder and can be **exceeded** (§3.6, AC-19); and 2026-08-29 by T4 — §3.3's rule 1 loses "or empty": an absent profile means anything and an empty one permits nothing, which are opposite answers; the reasons list is measured to say why *direct play* failed rather than which rung was reached, to name `DirectPlayError` when nothing else explains the refusal, and to arrive in flag-value order; and a numeric ceiling is compared against the value the server holds rather than the shorter decimal it printed; and 2026-08-29 by T6 — §3.5's authentication sentence was the wrong way round: the four `stream` routes accept every mechanism and **require none**, where `/universal` alone requires one, so AC-32 records the decision 002 deferred here; the range table gains five measured rows including the one the RFC would have got backwards (an unreadable `Range` is the whole body, never a `416`); a delivery route's own refusal is the third error shape rather than problem details; the container is a label with a fallback and a spelling rule; and a static response carries exactly four headers and does no conditional handling; and 2026-08-29 by T8 — §3.6's codec-less hole is not a codec-less transcoding profile: the profile defaults to mp3 and negotiates, and it is the streaming request behind it that infers a codec from a request path with no extension, which is why the empty `200` arrives with a `transcodingContainer` as well as without one; AC-19's bit-depth clause is a direct-play refusal and not an output target, because neither server ever states a sample format; `transcodingProtocol` is unvalidated and case-insensitive, so a typed parameter would refuse requests the reference serves; `container` is split on commas before bars; and this route's three refusals are none of its siblings' — the item `404` is problem details where theirs is the third shape, and both `mediaSourceId` shapes answer one `400` where theirs split `400`/`500`; and 2026-08-29 by T9 — §3.6's PCM/WAV warning was wrong in both halves once its prior-probe was discharged: the `500` has two causes (a `wav` extension inferred as a codec, and a `pcm_*` codec with no `audioBitRate`), and the headerless body comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3 on both servers. Neither symptom belongs to one route family — the split is whether an `audioBitRate` was sent — and AC-20 now names every WAV shape and the length and `Range` each of them carries; the codec-less hole is container-dependent, because the codec the reference ends up asking for is `aac` rather than the request path, and a `wav` transcoding container can carry it; and 2026-08-29 by T10 — §3.7's two cadence numbers were both attributed to the wrong thing: 3.004 s is a requested three seconds scaled by the rate the *container stores* (23.975988, where an exact 24000/1001 answers 3.003 s) and not "the cadence at 23.976 fps", and 6.0 s is the copy path's own default laid as an equal grid rather than "the source's own keyframes" — a copy follows real keyframes only for a container the operator has permitted on-demand extraction for, which ships as Matroska alone. §3.7 gains the playlist routes' four measured refusals and their header set, and AC-32 gains them: they are the second and third delivery routes that require a token, where it had named `/universal` alone; and 2026-08-29 by T11 — §3.7's two per-segment parameters are not symmetric: `runtimeTicks` decides the bytes and the index in the path only names the produced file; a segment answers the static header set including a `Last-Modified` and an honoured `Range`, `SegmentContainer=mp4` gives the playlist an `#EXT-X-MAP` naming a segment numbered -1, and the segment route's six refusals split across two shapes by where they happen; rule 2's second half is a divergence rather than a description, because the reference states the scaled cadence only to its playlist; and 2026-08-29 by T12 — §3.8's stop route was described with the wrong key and the wrong effect: `deviceId` is mandatory at the binder and then decides nothing, so a call carrying an unknown device still stops the session its `playSessionId` names, and the well-formed call does **not** remove the session's `TranscodingInfo` — the reference leaves the object in place, less its completion percentage and frame rate, until playback is reported stopped, which is the divergence behaviours §3.11 argues. §3.8 gains the measured kill timer (sixty seconds, and ten for a progressive stream, which nothing here is) and the report `/Sessions` carries while a transcode runs
+amended: 2026-08-29 by T3 — §3.1 gains the measured media-source field set (31 properties on every source, `VideoType` on a video one), the 32-bit number format its rates and level are written in, the three stream families v1 does not emit, and two divergences the first draft stated as parity: a multi-part film's parts are media sources here and separate items in the reference, and `HasSubtitles` counts only the streams inside the container; and 2026-08-29 at the spec review, which wrote the five probes the OQ table had been citing prospectively and ran all of them — all twelve open questions answered, and five claims did not survive: the policy story was fiction (no playback route consults `EnableMediaPlayback`, and a single denied permission moves nothing at negotiation — §3.2, §3.3, AC-31), `EnableTranscoding: false` in the request body is ignored (OQ-12), `static=true` on a mismatched container is not an error but the original bytes behind the wrong label (§3.5, AC-18), `enableRedirection` never redirects a local file (OQ-4, AC-21), and the reference's HLS segments already carry `Content-Length` — the §3.5 divergence shrank to the progressive routes. Plus one defect nobody was looking for: a sample-rate ceiling is answered from the Opus rate ladder and can be **exceeded** (§3.6, AC-19); and 2026-08-29 by T4 — §3.3's rule 1 loses "or empty": an absent profile means anything and an empty one permits nothing, which are opposite answers; the reasons list is measured to say why *direct play* failed rather than which rung was reached, to name `DirectPlayError` when nothing else explains the refusal, and to arrive in flag-value order; and a numeric ceiling is compared against the value the server holds rather than the shorter decimal it printed; and 2026-08-29 by T6 — §3.5's authentication sentence was the wrong way round: the four `stream` routes accept every mechanism and **require none**, where `/universal` alone requires one, so AC-32 records the decision 002 deferred here; the range table gains five measured rows including the one the RFC would have got backwards (an unreadable `Range` is the whole body, never a `416`); a delivery route's own refusal is the third error shape rather than problem details; the container is a label with a fallback and a spelling rule; and a static response carries exactly four headers and does no conditional handling; and 2026-08-29 by T8 — §3.6's codec-less hole is not a codec-less transcoding profile: the profile defaults to mp3 and negotiates, and it is the streaming request behind it that infers a codec from a request path with no extension, which is why the empty `200` arrives with a `transcodingContainer` as well as without one; AC-19's bit-depth clause is a direct-play refusal and not an output target, because neither server ever states a sample format; `transcodingProtocol` is unvalidated and case-insensitive, so a typed parameter would refuse requests the reference serves; `container` is split on commas before bars; and this route's three refusals are none of its siblings' — the item `404` is problem details where theirs is the third shape, and both `mediaSourceId` shapes answer one `400` where theirs split `400`/`500`; and 2026-08-29 by T9 — §3.6's PCM/WAV warning was wrong in both halves once its prior-probe was discharged: the `500` has two causes (a `wav` extension inferred as a codec, and a `pcm_*` codec with no `audioBitRate`), and the headerless body comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3 on both servers. Neither symptom belongs to one route family — the split is whether an `audioBitRate` was sent — and AC-20 now names every WAV shape and the length and `Range` each of them carries; the codec-less hole is container-dependent, because the codec the reference ends up asking for is `aac` rather than the request path, and a `wav` transcoding container can carry it; and 2026-08-29 by T10 — §3.7's two cadence numbers were both attributed to the wrong thing: 3.004 s is a requested three seconds scaled by the rate the *container stores* (23.975988, where an exact 24000/1001 answers 3.003 s) and not "the cadence at 23.976 fps", and 6.0 s is the copy path's own default laid as an equal grid rather than "the source's own keyframes" — a copy follows real keyframes only for a container the operator has permitted on-demand extraction for, which ships as Matroska alone. §3.7 gains the playlist routes' four measured refusals and their header set, and AC-32 gains them: they are the second and third delivery routes that require a token, where it had named `/universal` alone; and 2026-08-29 by T11 — §3.7's two per-segment parameters are not symmetric: `runtimeTicks` decides the bytes and the index in the path only names the produced file; a segment answers the static header set including a `Last-Modified` and an honoured `Range`, `SegmentContainer=mp4` gives the playlist an `#EXT-X-MAP` naming a segment numbered -1, and the segment route's six refusals split across two shapes by where they happen; rule 2's second half is a divergence rather than a description, because the reference states the scaled cadence only to its playlist; and 2026-08-29 by T12 — §3.8's stop route was described with the wrong key and the wrong effect: `deviceId` is mandatory at the binder and then decides nothing, so a call carrying an unknown device still stops the session its `playSessionId` names, and the well-formed call does **not** remove the session's `TranscodingInfo` — the reference leaves the object in place, less its completion percentage and frame rate, until playback is reported stopped, which is the divergence behaviours §3.11 argues. §3.8 gains the measured kill timer (sixty seconds, and ten for a progressive stream, which nothing here is) and the report `/Sessions` carries while a transcode runs; and 2026-08-29 by T13 — §3.8's produced-segment window is a **distance behind the client**, not a file age: nothing is removed until the furthest-fetched position has passed `SegmentKeepSeconds`, and what goes then is every index below `(position − window) ÷ segment length` — measured with segment 29 gone and segment 33 kept on one 720-second window, forty-five seconds after both were produced. AC-29 said "older than the configured window" and the two rules disagree on exactly the case a paused client makes. §3.3's delivery-time policy rule is **per stream and video-only**: the reference force-copies each stream against its own permission, an audio-only delivery consults neither, `EnablePlaybackRemuxing` has no delivery-time reader at all, and the reference's own refusal beside the force-copy cannot fire because the same permission has already rewritten the codec to a copy
 depends_on: [005, 007]
 ---
 
@@ -339,16 +339,28 @@ video item, `SupportsTranscoding` goes `false` only when `EnableVideoPlaybackTra
 audio item, `EnableAudioPlaybackTranscoding` alone decides `[probe:
 tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28; source:
 Jellyfin.Api/Helpers/MediaInfoHelper.cs:278-293 @ v10.11.11]`. Even the all-denied answer is
-flags, never an `ErrorCode`. At **delivery** the enforcement is stranger still: a user denied
-`EnableVideoPlaybackTranscoding` has the video stream **force-copied "regardless of whether it
-will be compatible or not"** `[source:
-MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:7142 @ v10.11.11]` — an output that can
-violate the profile it was negotiated for. Atrium replicates the negotiation rule exactly (the
-all-three gate, flags not errors); at delivery it honours the same gate by refusing the
-re-encode step, but it never ships an output that violates the negotiated profile — a
+flags, never an `ErrorCode`. At **delivery** the enforcement is stranger still, and it is
+**per stream rather than all-or-nothing**: a user denied `EnableVideoPlaybackTranscoding` has
+the video stream **force-copied "regardless of whether it will be compatible or not"**, and a
+user denied `EnableAudioPlaybackTranscoding` has the audio stream force-copied the same way,
+each against its own permission `[source:
+MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:7136-7166 @ v10.11.11]` — an output
+that can violate the profile it was negotiated for. Atrium replicates the negotiation rule
+exactly (the all-three gate, flags not errors); at delivery it refuses those same two steps
+rather than copying, and so never ships an output that violates the negotiated profile — a
 force-copied incompatible stream fails at the client's decoder, and no client can *depend* on
 receiving a broken stream. Of the request body's switches, `EnableDirectPlay` is honoured and
 `EnableTranscoding` is ignored (§3.2); Atrium reproduces both.
+
+**Two limits on that delivery-time reading, both read at the tag rather than assumed.** It
+belongs to a **video** request and only to one: the force-copy is reached from the branch that
+runs when a request carries video parameters `[source:
+Jellyfin.Api/Helpers/StreamingHelpers.cs:198 @ v10.11.11]`, so an audio-only delivery consults
+neither permission and re-encodes for an account denied audio transcoding exactly as it does
+for a permitted one. And `EnablePlaybackRemuxing` has **no** delivery-time reader at all: a copy
+is what a denied account is *given*, so there is nothing there to refuse. Atrium's refusal is
+therefore scoped to where the reference would have force-copied — the two streams of a video
+delivery — and the audio routes carry it nowhere.
 
 **Three rules that prevent the classic failures:**
 
@@ -437,6 +449,13 @@ there `[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-28]`
 the same two knobs with the same defaults and the same pause-at-gap behaviour — the draft's
 "always throttled" would have been an observable difference in how much of a file exists after
 an abandoned session, and the operator who wants the bound can turn it on in both servers.
+
+**A pause is not a stop, and the difference is what a client sees next.** The paused work
+resumes when the client asks for the next segment: the request moves the furthest-fetched
+position, the gap closes, and production continues from where it left off rather than starting
+again. A server that ended the work at the gap instead would answer every resumed playback with
+a fresh encode of material it had already produced, which is the opposite of what the knob is
+for.
 
 **A transcode is bounded work with an owner**: it belongs to a playback session (§3.8), it stops
 when the session stops, when the client disconnects, and when the server shuts down, and its output
@@ -886,13 +905,28 @@ routes answer restarts that minute.
 **Scratch space is reclaimed the way the reference reclaims it**: by session — on the stop
 route, and when a session goes unpinged past its kill timeout, the partial output is deleted
 with the job `[source:
-MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:145-275 @ v10.11.11]` — and by age
-behind the operator's produced-segment knobs (`EnableSegmentDeletion`, off as shipped;
+MediaBrowser.MediaEncoding/Transcoding/TranscodeManager.cs:145-275 @ v10.11.11]` — and, behind
+the operator's produced-segment knobs (`EnableSegmentDeletion`, off as shipped;
 `SegmentKeepSeconds`, 720) `[source:
-MediaBrowser.Model/Configuration/EncodingOptions.cs:25-26 @ v10.11.11]`. Atrium ships the same
-knobs with the same defaults. A remux that fills the disk takes the server down with it, and a
-transcode fills it faster — which is why the session-scoped reclamation is not optional even
-though the age-based one is.
+MediaBrowser.Model/Configuration/EncodingOptions.cs:25-26 @ v10.11.11]`, **by position behind
+the client**. Atrium ships the same knobs with the same defaults. A remux that fills the disk
+takes the server down with it, and a transcode fills it faster — which is why the
+session-scoped reclamation is not optional even though the other is.
+
+**And that second window is a distance, not an age**, which this section asserted the other way
+round until it was measured. `SegmentKeepSeconds` is *seconds of media the client has already
+fetched*: what is removed is every produced segment whose index falls below
+`(furthest-fetched position − window) ÷ segment length`, and nothing at all is removed until
+the client's furthest-fetched position has passed the window. Measured on a 720-second window
+with a client whose furthest segment ended 811 seconds in: segment 29 was gone and segment 33
+was not, forty-five seconds after both were produced, with nothing requested in between and the
+session still running `[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29;
+source: MediaBrowser.Controller/MediaEncoding/TranscodingSegmentCleaner.cs:100-113 @
+v10.11.11]`. The difference is not academic: read as an age, a session paused for longer than
+the window loses the segments it is about to resume into, and the client's next request is a
+re-encode of material it already had. The **furthest-fetched position never moves backwards** —
+a client filling a gap behind itself leaves it where it was — which is what keeps a rewind from
+re-arming the deletion.
 
 ## 4. Data the feature owns
 
@@ -964,20 +998,28 @@ though the age-based one is.
 26. A client disconnecting mid-remux or mid-transcode causes the work to stop within the timeout.
 27. With throttling enabled in configuration, a client that fetches the first segments and then
     stops does not cause the whole source to be produced: production pauses at the configured
-    gap. With it disabled — the shipped default, matching the reference — production continues
-    to the end (§3.4).
+    gap, and the next segment request releases it. With it disabled — the shipped default,
+    matching the reference — production continues to the end (§3.4). The gap is measured
+    against the same furthest-fetched position AC-29 counts back from.
 28. Item-level `Container` is the demuxer list; the media source's `Container` is the single
     resolved container.
 29. Scratch space is reclaimed with its session: after a stop, a kill-timeout or a shutdown,
-    nothing of the session's output remains; with segment deletion enabled, produced segments
-    older than the configured window are removed while the session still runs (§3.8).
+    nothing of the session's output remains; with segment deletion enabled, the produced
+    segments lying more than the configured window **behind the client's furthest-fetched
+    position** are removed while the session still runs, and a session whose client has not
+    fetched past that window loses nothing however long it is left (§3.8). The criterion read
+    "segments older than the configured window" until the window was measured: it is a distance
+    in the film, and the two rules disagree on exactly the case a paused client produces.
 30. A `PlaySessionId` from `PlaybackInfo` is accepted by the delivery route and by
     `ActiveEncodings`.
 31. Policy shapes the negotiation exactly as measured (§3.3): a user denied **every**
     playback-processing permission negotiates `SupportsTranscoding: false` and no
     `TranscodingUrl`; a user denied only one of them negotiates exactly as a permitted user; and
     no policy shape produces an `ErrorCode` or a `4xx`. At delivery, a denied user's re-encode
-    step is refused rather than force-copied into an output that violates the profile.
+    step is refused rather than force-copied into an output that violates the profile —
+    **per stream and on the video routes**, which is where the reference reads the permissions:
+    a plan that copies the stream a denial names is served exactly as a permitted account's is,
+    and an audio-only delivery consults no permission at all (§3.3).
 32. The four `stream` routes **accept every token mechanism and require none**: a request carrying
     nothing at all, one carrying a token nothing issued, and one carrying `?api_key=` answer
     identically, byte for byte. `/Audio/{itemId}/universal` and the **two playlist routes** are the
