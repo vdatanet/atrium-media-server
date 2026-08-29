@@ -18,7 +18,9 @@ every one of the fourteen finding something the documents had wrong. Playback is
 negotiation, the four `stream` routes, `/universal`, the HLS playlists and segments, and a
 supervised encoder per play session. **[011's spec was accepted on 2026-08-29](specs/011-subtitle-delivery/spec.md)** at its own
 measurement gate — twelve open questions answered by five new probes, four of them overturned —
-and it has no plan yet. **[012's was accepted the same day](specs/012-negotiation-inputs/spec.md)**,
+and **[its plan was accepted on 2026-08-30](specs/011-subtitle-delivery/plan.md)** — the plan
+that found the reference writes the track name itself, so the localised property 008 withholds
+is one 011 cannot. It has no task list yet. **[012's was accepted the same day](specs/012-negotiation-inputs/spec.md)**,
 at a gate that answered its nine open questions with two new probes and two extended ones and
 withdrew one of the two client findings it was built on. **009 and 010 are specified only, their
 specs still drafts**, so the next gate is 009's spec review. What each implemented feature leaves the ones
