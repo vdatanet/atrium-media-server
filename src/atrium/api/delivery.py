@@ -319,6 +319,29 @@ def source_response(
     )
 
 
+def ranged_file(request: Request, path: Path, *, media_type: str) -> Response:
+    """One finished file on disk, in the measured header set - the answer of every HLS segment.
+
+    `source_response` is this with the item lookup in front of it; 008 T11 needed the second half
+    on its own, because a segment's bytes were produced rather than found and its label comes from
+    the segment container rather than from any file's extension.
+
+    **A segment carries a `Last-Modified`**, which is the one place a *produced* answer does. The
+    progressive routes send none - behaviours section 3.3 - and a segment sends one because the
+    reference sends one: it serves the finished file the way it serves any file, with a length, a
+    modification time and an honoured `Range`, and there is no `ETag` on either
+    `[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`.
+    """
+    stat = path.stat()
+    answer = negotiate_range(request.headers.get("range"), stat.st_size)
+    return _ranged(
+        str(path),
+        answer,
+        media_type=media_type,
+        last_modified=datetime.fromtimestamp(stat.st_mtime, tz=UTC),
+    )
+
+
 def locate(
     request: Request,
     item_id: str,
@@ -856,6 +879,7 @@ __all__ = [
     "produce",
     "produced_response",
     "production_ledger",
+    "ranged_file",
     "source_response",
     "static_response",
     "video_parameters",

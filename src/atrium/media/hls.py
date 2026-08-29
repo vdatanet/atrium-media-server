@@ -153,20 +153,29 @@ def buckets_allowed(
     return bool(suffix) and suffix in {one.lstrip(".").lower() for one in allowed}
 
 
+def requested_seconds(requested: int | None, *, copying_video: bool) -> int:
+    """The **unscaled** segment length in whole seconds - the URL's, or the path's default.
+
+    The reference's `SegmentLength`, and the number several of its own decisions are made on
+    rather than on the scaled cadence below: how far ahead of production a request may be before
+    it counts as a seek is `24 / this` `[source:
+    MediaBrowser.Controller/Streaming/StreamState.cs:74-105,
+    Jellyfin.Api/Controllers/DynamicHlsController.cs:1497 @ v10.11.11]`.
+    """
+    if requested:
+        return requested
+    return COPY_SEGMENT_SECONDS if copying_video else ENCODE_SEGMENT_SECONDS
+
+
 def cadence_milliseconds(
-    requested_seconds: int | None, frame_rate: float | None, *, copying_video: bool
+    requested: int | None, frame_rate: float | None, *, copying_video: bool
 ) -> int:
     """How long a body segment is, in milliseconds. The module docstring's rule, once.
 
-    `requested_seconds` is the URL's `SegmentLength`; `frame_rate` is its `MaxFramerate`, which
-    the negotiation set to the source's clamped rate and which is absent on a hand-written URL.
+    `requested` is the URL's `SegmentLength`; `frame_rate` is its `MaxFramerate`, which the
+    negotiation set to the source's clamped rate and which is absent on a hand-written URL.
     """
-    seconds = (
-        requested_seconds
-        if requested_seconds
-        else (COPY_SEGMENT_SECONDS if copying_video else ENCODE_SEGMENT_SECONDS)
-    )
-    milliseconds = seconds * 1000
+    milliseconds = requested_seconds(requested, copying_video=copying_video) * 1000
     if copying_video or not frame_rate:
         return milliseconds
     # A 32-bit float, because the number made a round trip through a decimal in the URL it
@@ -472,5 +481,6 @@ __all__ = [
     "master_playlist",
     "media_playlist",
     "plan_segments",
+    "requested_seconds",
     "segment_extension",
 ]

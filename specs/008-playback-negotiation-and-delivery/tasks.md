@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent; and 2026-08-29 by T7 — httpx's ASGI transport cannot drop a connection, so AC-26 needed a client written for it and the `TranscodeManager` this list names does not exist until T11; a `StreamPlan` states every ceiling and passing them all to the encoder is what breaks it; `StreamPlan` gained `bit_depth`; and the `mediaSourceId` `500` is decided as behaviours §3.9; and 2026-08-29 by T8 — the codec-less hole is not a codec-less transcoding profile but a streaming request inferring a codec from a path with no extension, so behaviours §3.8's divergence is narrower than it read; synthesising the device profile *exactly* as the reference does scopes its ceilings to the direct-play containers and would have honoured none of them; AC-19's bit-depth clause is a copy refusal rather than an output target; `transcodingProtocol` must not be typed; and this route's three refusals are none of the `stream` pair's; and 2026-08-29 by T9 — the two WAV prior-probe claims both moved when the battery was written: symptom 1 has two causes rather than one, and symptom 2 comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3; a WAV states its length inside the body and cannot be produced to a pipe at all, so "a `Content-Length` computed from sample count" is a file's size instead; the wav container has to name its own codec, because the muxer accepts a FLAC stream and writes a real RIFF header over it; and behaviours §3.8's "with or without a `transcodingContainer`" is container-dependent; and 2026-08-29 by T10 — both of §3.7's cadence numbers were attributed to the wrong thing, and the fixture T1 built for this task answers 3.003 s rather than the 3.004 s this list told it to make a golden of: the scaling divides by the rate the request carries at 32-bit precision, and 6.0 s is the copy default's equal grid rather than the source's keyframes, which a copy follows only for a container the operator has permitted on-demand extraction for; the playlist routes require a token where the four `stream` routes require none; and the `/universal` HLS handoff this task was to land cannot be, because its master playlist names an audio `main.m3u8` that is on no surface
+amended: 2026-08-29 by T3 — the `ETag` lead T2 carried forward was wrong in two ways, and four of the eight properties T3 emits had no registry entry to fill; and 2026-08-29 at the gate — the fixture world turned out to have no files behind any item, CI has no ffmpeg, the negotiation error table's first two rows are uncited, and the MediaSources emitters already exist as declared gaps; see "What the gate changed"; and 2026-08-29 by T4 — the empty profile answers the opposite of what this list said, the reasons are ordered by flag value and describe only why direct play failed, and the HDR rule the task asked for has no range type to condition on; and 2026-08-29 by T5 — a `POST` carrying no `DeviceProfile` is negotiated against the profile the *device* stored, so "no profile at all" is not a property of the body; the error table's two uncited rows hold as written; and the three playback permissions 002 moved into the enforced set on 2026-08-27 had never been read by anything; and 2026-08-29 by T6 — this list's "a tokenless request refuses" is the opposite of what the four `stream` routes do and of what 002 §3.1 had already recorded, so the credential decision lands as spec AC-32 and behaviours §2.10; the delivery routes' own refusal is behaviours §1.11's third shape rather than problem details; and the range matrix gained five rows the spec named and the probe had never sent; and 2026-08-29 by T7 — httpx's ASGI transport cannot drop a connection, so AC-26 needed a client written for it and the `TranscodeManager` this list names does not exist until T11; a `StreamPlan` states every ceiling and passing them all to the encoder is what breaks it; `StreamPlan` gained `bit_depth`; and the `mediaSourceId` `500` is decided as behaviours §3.9; and 2026-08-29 by T8 — the codec-less hole is not a codec-less transcoding profile but a streaming request inferring a codec from a path with no extension, so behaviours §3.8's divergence is narrower than it read; synthesising the device profile *exactly* as the reference does scopes its ceilings to the direct-play containers and would have honoured none of them; AC-19's bit-depth clause is a copy refusal rather than an output target; `transcodingProtocol` must not be typed; and this route's three refusals are none of the `stream` pair's; and 2026-08-29 by T9 — the two WAV prior-probe claims both moved when the battery was written: symptom 1 has two causes rather than one, and symptom 2 comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3; a WAV states its length inside the body and cannot be produced to a pipe at all, so "a `Content-Length` computed from sample count" is a file's size instead; the wav container has to name its own codec, because the muxer accepts a FLAC stream and writes a real RIFF header over it; and behaviours §3.8's "with or without a `transcodingContainer`" is container-dependent; and 2026-08-29 by T10 — both of §3.7's cadence numbers were attributed to the wrong thing, and the fixture T1 built for this task answers 3.003 s rather than the 3.004 s this list told it to make a golden of: the scaling divides by the rate the request carries at 32-bit precision, and 6.0 s is the copy default's equal grid rather than the source's keyframes, which a copy follows only for a container the operator has permitted on-demand extraction for; the playlist routes require a token where the four `stream` routes require none; and the `/universal` HLS handoff this task was to land cannot be, because its master playlist names an audio `main.m3u8` that is on no surface; and 2026-08-29 by T11 — a segment's index is ffmpeg's `-start_number` and the URI's `runtimeTicks` is where production starts, so "restart at `plan_segments()[index]`" names the wrong number; the supervised set is two modules rather than three, because the manager starts everything through the ledger; a segment carries a `Last-Modified` where the progressive routes carry none; the reference states the scaled cadence only to its playlist and the unscaled integer to its encoder, which is behaviours §3.10; and the segment route's six refusals split across two shapes by where they happen
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -842,7 +842,7 @@ pair is a scope decision under AGENTS.md's "Adding an endpoint" procedure — sp
 
 ## T11 — The `TranscodeManager` and the segment route: production with an owner
 
-- [ ] **Changes:** new `src/atrium/media/sessions.py` —
+- [x] **Changes:** new `src/atrium/media/sessions.py` —
   [plan §5](plan.md#5-contracts)'s `TranscodeManager`: one supervised ffmpeg per session keyed
   by `PlaySessionId`, sequential production into per-session scratch, `segment()` serving from
   disk inside the produced window and killing + restarting at `plan_segments()[index]` outside
@@ -862,6 +862,52 @@ pair is a scope decision under AGENTS.md's "Adding an endpoint" procedure — sp
   `media/probe.py`, `media/ffmpeg.py` and `media/sessions.py` — the supervised set, so "every
   ffmpeg has an owner" (architecture §4) is a sweep rather than a discipline.
 - **Spec reference:** §3.4, §3.7; AC-7, AC-8, AC-10, AC-16, AC-23, AC-24
+
+**Done (2026-08-29).** **"Restarting at `plan_segments()[index]`" would have produced the wrong
+film.** The index in a segment's path is ffmpeg's `-start_number` and decides nothing but the
+produced file's name; where production *starts* is the `runtimeTicks` the URI carries, which the
+playlist happens to fill with that segment's cumulative start — so the two agree for every URI a
+playlist writes and disagree the moment anything hand-writes one. Measured rather than reasoned:
+segment 0's own path asked for at the middle of a film answers the middle of the film, two
+digests from one path. A manager that seeked to `index × cadence` would have been right on every
+test that followed a playlist and wrong on the one request that matters, a client that kept a URL.
+
+**The task named three modules that may start a process and there are two.** The manager starts
+everything through the `ProductionLedger`, so exempting it from
+`tests/unit/test_import_directions.py`'s new sweep would have been a hole rather than a
+permission: a manager that grew its own `create_subprocess_exec` is a manager whose processes the
+ledger does not list, which is the exact failure "every ffmpeg has an owner" exists to prevent.
+The sweep therefore exempts `media/probe.py` and `media/ffmpeg.py`, asserts that both really do
+start processes, and asserts separately that `media/sessions.py` starts none of its own.
+
+**A segment carries a `Last-Modified` where the progressive routes carry none**, which behaviours
+§3.3's "the produced answer carries no `Last-Modified`" had generalised one route too far: the
+reference serves a finished segment the way it serves any file — `Content-Length`, its container's
+type, `Accept-Ranges: bytes`, a modification time, no `ETag` — and an honoured `Range` on top.
+That is AC-16 and AC-11 in one measurement, and parity rather than divergence.
+
+**The encoder had to be told a cadence the reference never tells it.** The reference scales the
+segment length for the playlist and states the unscaled integer to ffmpeg — `-hls_time 3` under
+`#EXTINF:3.004000` — so its segments hold four milliseconds less than they declare and a 2h22
+film's playlist claims eleven seconds it does not have. Spec §3.7 rule 2 asks for the opposite;
+the divergence is now argued in [behaviours §3.10](../../docs/compatibility/behaviours.md), and it
+is safe because the playlist is byte-identical on both servers and what moves is inside produced
+media §6 already declines to compare.
+
+Three smaller things. **The decision belongs to the request, not to the session**: the reference
+rebuilds its whole streaming state per segment, so a client changing audio track mid-film is
+answered about the new one — `obtain` therefore takes only the key and `segment` takes the plan.
+**Two of the route's three path parameters decide nothing**: `playlistId` is unused, and the
+path's own container is not what the segment is muxed into, `0.mp4` under `SegmentContainer=ts`
+answering MPEG-TS labelled `video/mp2t`. And **the six refusals split across two shapes by where
+they happen**: the `stream` pair's third shape for everything a controller throws, including a
+`400` for a segment carrying `startTimeTicks`, and the framework's own problem details for a
+segment URI stripped of its query — because `runtimeTicks` and `actualSegmentLengthTicks` are
+required, which is the opposite of what the same treatment of `main.m3u8` answers.
+
+**`run()` is not wired, deliberately.** The lifespan gains the manager's construction and its
+`shutdown()`; the sweep arrives at T12 with the ping timeout it enforces, because a task looping
+over nothing is dead code with a schedule.
 
 ## T12 — The kill paths: a stop that stops, and scratch that dies with its session
 

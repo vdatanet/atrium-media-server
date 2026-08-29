@@ -1,38 +1,53 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The reference's `DynamicHlsController`: `master.m3u8` and `main.m3u8`, from the plan alone.
+"""The reference's `DynamicHlsController`: two playlists from the plan alone, and the segments.
 
-Two routes, no process. Both answer from stored data - the source's runtime, its keyframe list,
-and the negotiation the query string carries - so a media playlist of thousands of segments
-arrives complete, `ENDLIST`-marked and sized on a session where nothing has ever been encoded
-`[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]`. That is AC-22's first half and the
-reason its second half is reachable at all: boundaries predicted from the source are the same
-boundaries next time, so a lost segment can be asked for again.
+The playlists answer from stored data - the source's runtime, its keyframe list, and the
+negotiation the query string carries - so a media playlist of thousands of segments arrives
+complete, `ENDLIST`-marked and sized on a session where nothing has ever been encoded `[probe:
+tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]`. That is AC-22's first half and the reason its
+second half is reachable at all: boundaries predicted from the source are the same boundaries next
+time, so a lost segment can be asked for again.
 
-**These two routes require a token, and their three siblings do not.** The four `stream` routes
-accept every mechanism and require none (behaviours section 2.10); the whole HLS controller
-carries `[Authorize]` upstream, and a request with no credential answers the empty `401`
-- measured in the same run as the refusals below `[source:
-Jellyfin.Api/Controllers/DynamicHlsController.cs:39-41 @ v10.11.11]`, `[probe:
-tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]`.
+**The segment route is here and not in `api/hls_segment.py`**, whose name says otherwise: the
+reference's `HlsSegmentController` owns `DELETE /Videos/ActiveEncodings` and the *static* segment
+files, while `hls1/{playlistId}/{segmentId}.{container}` is this controller's `[source:
+Jellyfin.Api/Controllers/DynamicHlsController.cs:1102-1106 @ v10.11.11]`. It is the one route in
+this feature that produces something and then serves it from disk, and everything about running
+the encoder is `media/sessions.py`'s.
 
-**The other three refusals are the `stream` pair's, not `/universal`'s** - the third error shape
-in all three cases, measured on both routes: an item nothing holds is `404`, `text/plain`, the
-fixed 25 bytes; a `mediaSourceId` naming no source is the same body at `400`; and a source with
-no runtime to divide is the same body at `500`, which is where the reference's own playlist
-generator throws. A `main.m3u8` asked for with **no query at all** is not a refusal on either
-server: it plans a copy at the copy default and answers a playlist.
+**Two of its three path parameters decide nothing**, both measured rather than read off the
+signature `[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`:
 
-The segments those playlists name are 008 T11's, which is the ordering the task list chose
-deliberately: this task is arithmetic, the next one is the first process with an owner.
+* `playlistId` is unused - `hls1/banana/0.ts` answers segment 0, and the reference suppresses its
+  own unused-parameter warning on it by name;
+* the path's `{container}` is not what the segment is muxed into. `0.mp4` asked for while
+  `SegmentContainer=ts` answers MPEG-TS bytes labelled `video/mp2t`. The extension has to *be* a
+  container spelling for the route to match, and that is the whole of its effect.
 
-See specs/008-playback-negotiation-and-delivery/spec.md section 3.7 and plan section 6.4.
+**These three routes require a token, and their four `stream` siblings do not** (behaviours
+section 2.10); the whole HLS controller carries `[Authorize]` upstream, and a request with no
+credential answers the empty `401` `[source:
+Jellyfin.Api/Controllers/DynamicHlsController.cs:39-41 @ v10.11.11]`.
+
+**Their other refusals are the `stream` pair's, not `/universal`'s** - the third error shape,
+measured on all three routes: an item nothing holds is `404`, `text/plain`, the fixed 25 bytes; a
+`mediaSourceId` naming no source is the same body at `400`; a source with no runtime to divide is
+the same body at `500`; and, on the segment route alone, so is a request carrying
+`startTimeTicks`, which the reference refuses before it looks at anything else. The one refusal
+that is *not* that shape is the framework's own: `runtimeTicks` and `actualSegmentLengthTicks` are
+required, so a segment URI stripped of its query answers problem details where a `main.m3u8`
+stripped of its query answers a playlist.
+
+See specs/008-playback-negotiation-and-delivery/spec.md sections 3.4, 3.7 and 3.8, and plan
+sections 6.4 and 6.7.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 from starlette.responses import Response
 
 from atrium.api.delivery import (
@@ -41,23 +56,30 @@ from atrium.api.delivery import (
     decide_delivery,
     inspection_of,
     locate,
+    production_ledger,
+    ranged_file,
     video_parameters,
 )
-from atrium.api.deps import require_user
-from atrium.compat.errors import DeliveryProductionError
+from atrium.api.deps import get_paths, require_user
+from atrium.compat.errors import (
+    DeliveryProductionError,
+    DeliverySegmentRequestError,
+)
 from atrium.compat.guids import WireGuid
 from atrium.compat.query_params import ORIGINAL_QUERY_STRING
-from atrium.domain.media import MediaInspection
+from atrium.domain.media import DeliveredFile, MediaInspection
 from atrium.domain.user import User
-from atrium.media import hls
+from atrium.media import ffmpeg, hls
 from atrium.media.decision import Decision, StreamAction
-from atrium.media.labels import media_type_of
+from atrium.media.labels import DEFAULT_MEDIA_TYPE, media_type_of
+from atrium.media.sessions import SegmentPlan, SessionKey, TranscodeManager
 from atrium.media.urls import HLS
 
 router = APIRouter(tags=["DynamicHls"])
 
 MASTER = "/Videos/{itemId}/master.m3u8"
 MAIN = "/Videos/{itemId}/main.m3u8"
+SEGMENT = "/Videos/{itemId}/hls1/{playlistId}/{segmentId}.{container}"
 
 #: What both playlists are labelled, from the one table `media/labels.py` already holds.
 PLAYLIST_MEDIA_TYPE = media_type_of("m3u8")
@@ -132,6 +154,134 @@ async def get_variant_hls_video_playlist(
     return Response(content=body, media_type=PLAYLIST_MEDIA_TYPE)
 
 
+@router.get(SEGMENT)
+async def get_hls_video_segment(
+    request: Request,
+    caller: Annotated[User, Depends(require_user)],
+    itemId: WireGuid,  # noqa: N803
+    playlistId: str,  # noqa: N803
+    segmentId: int,  # noqa: N803
+    container: Annotated[str, Path(pattern=CONTAINER_PATTERN)],
+    parameters: Parameters,
+    runtimeTicks: Annotated[int, Query()],  # noqa: N803
+    actualSegmentLengthTicks: Annotated[int, Query()],  # noqa: N803
+    deviceId: Annotated[str | None, Query()] = None,  # noqa: N803
+    playSessionId: Annotated[str | None, Query()] = None,  # noqa: N803
+    segmentContainer: SegmentContainer = None,  # noqa: N803
+    segmentLength: SegmentLength = None,  # noqa: N803
+) -> Response:
+    """`GetHlsVideoSegment` `[spec: GetHlsVideoSegment]`: one segment, produced then served.
+
+    **`runtimeTicks` is where production starts; `segmentId` is only what the file is called.**
+    Reading the index as the position would work for every URI a playlist writes and for nothing
+    else, and the reference is measurably the other way round: segment 0's own path asked for at
+    the middle of a film answers the middle of the film (`media/sessions.py`).
+
+    `runtimeTicks` and `actualSegmentLengthTicks` are **required**, which is the one refusal on
+    this route that is not the third error shape: a segment URI stripped of its query answers the
+    framework's problem details, where the same treatment of `main.m3u8` answers a playlist.
+    `actualSegmentLengthTicks` is otherwise unread here - the reference records it as the
+    download position its throttle measures against, which is 008 T13's knob rather than this
+    task's.
+
+    `playlistId` decides nothing, in the reference and here: it is in the path because the URI
+    shape has a slot for it, and a playlist nobody named still answers the segment.
+    """
+    if parameters.start_time_ticks:
+        # Before the lookup, because that is where the reference throws it: a segment states its
+        # own position and a second one has no meaning. An unknown item asked for with a start
+        # position is therefore this refusal, not the `404`.
+        raise DeliverySegmentRequestError
+    negotiated = _negotiate(request, itemId, parameters, segmentContainer, segmentLength)
+    manager = transcode_manager(request)
+    session = manager.obtain(
+        SessionKey(
+            device_id=deviceId or "",
+            play_session_id=playSessionId or "",
+            media_path=negotiated.absolute,
+        )
+    )
+    try:
+        produced = await manager.segment(
+            session,
+            SegmentPlan(
+                path=negotiated.absolute,
+                source=negotiated.inspection,
+                decision=negotiated.decision,
+                container=negotiated.container,
+                cadence_ticks=negotiated.milliseconds * (hls.TICKS_PER_SECOND // 1000),
+                segment_seconds=negotiated.seconds,
+            ),
+            index=segmentId,
+            start_ticks=runtimeTicks,
+        )
+    except ffmpeg.ProductionError as error:
+        # An encoder that never started and one that stopped short of the requested segment are
+        # one answer, the same `500` the progressive routes give a command that cannot be built.
+        raise DeliveryProductionError from error
+    return ranged_file(
+        request,
+        produced,
+        media_type=media_type_of(negotiated.container) or DEFAULT_MEDIA_TYPE,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _Negotiation:
+    """The lookup and the ladder, run once for whichever of the three routes asked."""
+
+    found: DeliveredFile
+    absolute: str
+    inspection: MediaInspection
+    decision: Decision
+    container: str
+    seconds: int
+    milliseconds: int
+    copying: bool
+
+
+def _negotiate(
+    request: Request,
+    item_id: str,
+    parameters: DeliveryParameters,
+    segment_container: str | None,
+    segment_length: int | None,
+) -> _Negotiation:
+    """What the file is, what was negotiated about it, and on what grid.
+
+    Run on the master as well as on the variant, and deliberately: the master's `CODECS`,
+    `RESOLUTION` and `BANDWIDTH` describe the negotiated output, so it has to reach the same
+    ladder - and a master that answered for a source whose playlist would refuse would be
+    advertising a variant nothing can serve. The segment route reaches it for a stronger reason:
+    a production planned from anything but this is a production whose boundaries the playlist
+    does not describe.
+    """
+    found, absolute = locate(request, item_id, parameters.media_source_id)
+    inspection = inspection_of(request, found)
+    container = segment_container or hls.DEFAULT_SEGMENT_CONTAINER
+    decision, _container = decide_delivery(
+        inspection,
+        parameters,
+        is_video_route=True,
+        is_video=found.is_video,
+        container=container,
+        protocol=HLS,
+    )
+    copying = decision.video is not None and decision.video.action is StreamAction.COPY
+    return _Negotiation(
+        found=found,
+        absolute=absolute,
+        inspection=inspection,
+        decision=decision,
+        container=container,
+        seconds=hls.requested_seconds(segment_length, copying_video=copying),
+        milliseconds=hls.cadence_milliseconds(
+            segment_length, parameters.max_framerate, copying_video=copying
+        ),
+        copying=copying,
+    )
+
+
 def _planned(
     request: Request,
     item_id: str,
@@ -139,39 +289,37 @@ def _planned(
     segment_container: str | None,
     segment_length: int | None,
 ) -> tuple[MediaInspection, Decision, tuple[hls.Segment, ...]]:
-    """Everything both routes need: what the file is, what was negotiated, and where the cuts go.
-
-    Run on the master as well as on the variant, and deliberately: the master's `CODECS`,
-    `RESOLUTION` and `BANDWIDTH` describe the negotiated output, so it has to reach the same
-    ladder - and a master that answered for a source whose playlist would refuse would be
-    advertising a variant nothing can serve.
-    """
-    found, _absolute = locate(request, item_id, parameters.media_source_id)
-    inspection = inspection_of(request, found)
-    decision, _container = decide_delivery(
-        inspection,
-        parameters,
-        is_video_route=True,
-        is_video=found.is_video,
-        container=segment_container or hls.DEFAULT_SEGMENT_CONTAINER,
-        protocol=HLS,
-    )
-    copying = decision.video is not None and decision.video.action is StreamAction.COPY
-    milliseconds = hls.cadence_milliseconds(
-        segment_length, parameters.max_framerate, copying_video=copying
-    )
+    """The negotiation plus the cuts, which is what the two playlist routes render."""
+    negotiated = _negotiate(request, item_id, parameters, segment_container, segment_length)
     keyframes = (
-        inspection.video_keyframes
-        if copying and inspection.video_keyframes and hls.buckets_allowed(found.relative_path)
+        negotiated.inspection.video_keyframes
+        if negotiated.copying
+        and negotiated.inspection.video_keyframes
+        and hls.buckets_allowed(negotiated.found.relative_path)
         else None
     )
-    segments = hls.plan_segments(inspection.runtime_ticks or 0, milliseconds, keyframes)
+    segments = hls.plan_segments(
+        negotiated.inspection.runtime_ticks or 0, negotiated.milliseconds, keyframes
+    )
     if not segments:
         # A source with no runtime has no boundaries to state. The reference throws out of
         # `ComputeEqualLengthSegments` for exactly this and answers its own `500`, which is the
         # third error shape - the same one an unmuxable container gets one route away.
         raise DeliveryProductionError
-    return inspection, decision, segments
+    return negotiated.inspection, negotiated.decision, segments
+
+
+def transcode_manager(request: Request) -> TranscodeManager:
+    """The application's manager, built by `server.py` beside the ledger it starts through.
+
+    Lazily created for the same reason `production_ledger` is: a test that assembles a bare
+    application still has one, and two applications in one process never share a session.
+    """
+    existing: TranscodeManager | None = getattr(request.app.state, "transcodes", None)
+    if existing is None:
+        existing = TranscodeManager(get_paths(request).transcodes, production_ledger(request))
+        request.app.state.transcodes = existing
+    return existing
 
 
 def _forwarded(request: Request) -> str:
@@ -191,4 +339,12 @@ def _forwarded(request: Request) -> str:
     return f"?{raw.decode('utf-8', 'replace')}" if raw else ""
 
 
-__all__ = ["MAIN", "MASTER", "NO_CACHE", "PLAYLIST_MEDIA_TYPE", "router"]
+__all__ = [
+    "MAIN",
+    "MASTER",
+    "NO_CACHE",
+    "PLAYLIST_MEDIA_TYPE",
+    "SEGMENT",
+    "router",
+    "transcode_manager",
+]

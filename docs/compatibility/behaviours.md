@@ -1423,8 +1423,16 @@ remuxed output whose size is computable or which is written somewhere seekable s
 response being more correct. Implemented at 008 T7: a remux is produced to scratch under a name
 derived from the command and the file's change signal, so the size is known before the first byte
 leaves and a `Range` is served from what the first request produced. The divergence is exactly a
-size and a range unit — the produced answer carries no `Last-Modified`, because the reference
-sends none and bytes that did not exist a second ago have no modification time worth inventing.
+size and a range unit — the **progressive** answer carries no `Last-Modified`, because the
+reference sends none there and bytes that did not exist a second ago have no modification time
+worth inventing.
+
+**A segment does carry one**, which is the other half of the same sentence and had to be measured
+rather than inferred from it: a finished segment answers `Content-Length`, `Content-Type`,
+`Accept-Ranges: bytes` and `Last-Modified`, and no `ETag` — the static answer's four headers
+exactly, because the reference serves the finished file the way it serves any file
+`[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`. Atrium sends the same
+four (008 T11).
 
 **The one place Atrium does not diverge** is a progressive re-encode whose final length is unknown
 until the last frame. That answers chunked, exactly as the reference does, because the alternative
@@ -1671,6 +1679,40 @@ failed — and is asserted as one parametrised row in
 `tests/conformance/test_progressive_delivery.py` and again in
 `tests/conformance/test_universal_audio.py`, so the two values are visibly one answer.
 Recorded in [008 §3.5](../../specs/008-playback-negotiation-and-delivery/spec.md#35-delivery-the-rules-that-apply-to-every-route).
+
+### 3.10 A segment's declared duration is not the duration it holds — class B, diverged
+
+**Jellyfin does:** state two different segment lengths, one to the playlist and one to the
+encoder, and never reconcile them. The media playlist scales the requested length up so a whole
+number of frames fits — `ceil(3000 × ceil(rate) ÷ rate)`, the arithmetic §3.7 of
+[008's spec](../../specs/008-playback-negotiation-and-delivery/spec.md#37-video-delivery) records
+— and writes `#EXTINF:3.004000` on every line `[source:
+Jellyfin.Api/Controllers/DynamicHlsController.cs:1425-1432 @ v10.11.11]`. The encoder is then
+told the **unscaled integer**: `-hls_time 3` and forced keyframes at
+`expr:gte(t,n_forced*3)` `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:1667-1680,
+MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:1948-1962 @ v10.11.11]`. So each segment
+declares four milliseconds more than it holds, and a 2h22 film's playlist claims eleven seconds
+of media that is not in it.
+
+**Depends on it:** nothing that could. Every HLS player reconciles `#EXTINF` against what the
+segment's own timestamps say — segments of unequal length are ordinary, and the last one always
+differs — so a client compensating for the gap is compensating in a way that is unaffected when
+the gap closes. That is class B's first escape hatch. The stronger point is that there is nothing
+to compare: the bytes are ours in one server and theirs in the other, and
+[008 §6](../../specs/008-playback-negotiation-and-delivery/spec.md#6-conformance) already declines
+to byte-compare produced output, because two encoders given one instruction never agree.
+
+**Atrium does: diverge — the encoder is told the planned cadence**, so the playlist's promise and
+the produced media agree. The playlist itself is unchanged: the scaled number is reproduced
+exactly, so two servers answering the same request write the same `#EXTINF` lines and the
+difference lives entirely inside media nobody compares. Implemented at 008 T11 in
+`media/ffmpeg.segment_command` and asserted on a delivered segment's real duration in
+`tests/conformance/test_hls_segments.py`.
+
+The divergence takes §3.0.3's fourth shape read from the safe side — a value clients already read
+is *unchanged*, and what moves is the thing it was always meant to describe. Recorded in
+[008 §3.7](../../specs/008-playback-negotiation-and-delivery/spec.md#37-video-delivery) rule 2,
+which asked for it before it was known that the reference did not do it.
 
 ## 4. Deliberate exceptions
 
