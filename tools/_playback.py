@@ -67,6 +67,22 @@ class VideoSource:
             raise ProbeError(f"item {item_id} has no video+audio stream pair to negotiate about")
         self.video_codec: str = video[0].get("Codec") or ""
         self.audio_codecs: list[str] = sorted({s.get("Codec") or "" for s in audio})
+        self.video_stream: dict[str, Any] = video[0]
+        self.video_range: str = video[0].get("VideoRange") or ""
+        """`SDR` or `HDR`, the reference's own two-valued answer - which is what the master
+        playlist's SDR-entrance branch turns on, and what no probe asked about until now."""
+
+        self.video_range_type: str = video[0].get("VideoRangeType") or ""
+        """The flavour: `SDR`, `HDR10`, `HDR10Plus`, `HLG` or one of the eight Dolby Vision
+        spellings. Only the Dolby Vision and HDR10+ members produce a `SUPPLEMENTAL-CODECS`."""
+
+    @property
+    def is_hdr(self) -> bool:
+        return self.video_range.upper() == "HDR"
+
+    @property
+    def is_dolby_vision(self) -> bool:
+        return self.video_range_type.upper().startswith("DOVI")
 
     def other_container(self) -> str:
         return "mp4" if self.container != "mp4" else "mkv"
@@ -104,6 +120,55 @@ def pick_video_source(server: Server, kind: str = "Movie") -> VideoSource:
     if not sources:
         raise ProbeError(f"item {item_id} carries no media source")
     return VideoSource(item_id, sources[0])
+
+
+#: How many items `pick_hdr_video_source` reads before giving up. High dynamic range is a
+#: minority of any library, so "the first item" - which is what `pick_video_source` takes, and
+#: what left OQ-7 measuring a branch it could not reach - answers SDR almost everywhere.
+HDR_SEARCH_LIMIT = 400
+
+
+def pick_hdr_video_source(
+    server: Server, kind: str = "Movie", *, dolby_vision: bool = False
+) -> VideoSource | None:
+    """The first high-dynamic-range video the library holds, or None if it holds none.
+
+    **This is the helper OQ-7 needed and did not have.** The master playlist grows extra
+    `#EXT-X-STREAM-INF` entrances only where the video is stream-copied *and* the source is HDR
+    `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:218-268 @ v10.11.11]`, so a probe that
+    takes whatever item the library lists first measures the branch's absence and learns nothing
+    about the branch.
+
+    Returns None rather than raising: a library with no HDR video cannot answer this question,
+    and saying so is the honest report. The caller decides whether that is a skip or a failure.
+    """
+    found = server.get(
+        "/Items",
+        UserId=server.user_id,
+        IncludeItemTypes=kind,
+        Recursive="true",
+        Fields="MediaSources",
+        Limit=HDR_SEARCH_LIMIT,
+    )
+    rows = found.get("Items", [])
+    if not rows and kind == "Movie":
+        return pick_hdr_video_source(server, kind="Episode", dolby_vision=dolby_vision)
+    for row in rows:
+        for source in row.get("MediaSources") or []:
+            video = [s for s in source.get("MediaStreams", []) if s.get("Type") == "Video"]
+            if not video or (video[0].get("VideoRange") or "").upper() != "HDR":
+                continue
+            if dolby_vision and not (video[0].get("VideoRangeType") or "").upper().startswith(
+                "DOVI"
+            ):
+                continue
+            # Re-read through `/Items/{id}` for the reason `pick_video_source` documents: only
+            # that route reports the single resolved container a rejecting profile needs.
+            item = server.get(f"/Items/{row['Id']}", userId=server.user_id)
+            sources = item.get("MediaSources") or []
+            if sources:
+                return VideoSource(row["Id"], sources[0])
+    return None
 
 
 def negotiate(

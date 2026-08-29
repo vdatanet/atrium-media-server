@@ -12,6 +12,11 @@ paragraph):
 - a user's playback policy gates the decision ladder step by step;
 - refusals arrive as an `ErrorCode` from a three-value vocabulary.
 
+A fourth was added at 012's measurement gate: the **delivery-protocol battery**, which asks what
+the profile's `Protocol` binds to (012 OQ-4, OQ-5, OQ-6). It is read-only, and it is one battery
+rather than two because the two candidates it separates are opposites - a spelling that binds and a
+value that cannot - and a battery testing only one of them reports the wrong finding for both.
+
 Three batteries were added at 008 T5, when the routes were implemented. The **refusal battery**
 measures the two rows of §3.2's error table that had never been measured at all - an unknown item,
 an invisible one, and a request with no token - plus the one shape that carries an `ErrorCode`.
@@ -34,6 +39,7 @@ from __future__ import annotations
 
 import json
 import secrets
+from typing import Any
 
 from _playback import base_profile, negotiate, pick_video_source
 from _probe import Probe, ProbeError, Server, main
@@ -249,6 +255,106 @@ def _capabilities_battery(server: Server, probe: Probe, source, reject_container
     return checks
 
 
+#: Every spelling of the delivery protocol worth asking about, and what each is asking.
+#: `hls`/`http` are the enumeration's own two members, lower-case by declaration
+#: `[source: Jellyfin.Data/Enums/MediaStreamProtocol.cs @ v10.11.11]`; the altered cases ask how a
+#: name is matched onto it; the rest ask what happens when no member matches at all. The numbers
+#: are here because an enumeration has ordinals whether or not anybody meant it to.
+PROTOCOL_SPELLINGS: tuple[Any, ...] = (
+    "hls",
+    "http",
+    "Hls",
+    "HLS",
+    "hLs",
+    "Http",
+    "HTTP",
+    "dash",
+    "",
+    " ",
+    "0",
+    "1",
+    "2",
+    0,
+    1,
+    2,
+    None,
+    True,
+)
+
+
+def _protocol_battery(server: Server, probe: Probe, source) -> list[bool]:
+    """What does the profile's delivery protocol bind to, and what does the answer echo back?
+
+    Read-only. The profile rejects the source's own container and codec so that every answer
+    carries a `TranscodingUrl` at all - a profile that direct-plays would answer no address, and
+    an address is the only thing that says which branch was taken.
+    """
+    checks: list[bool] = []
+    hls: list[Any] = []
+    progressive: list[Any] = []
+    refused: list[Any] = []
+
+    for value in PROTOCOL_SPELLINGS:
+        entry = {
+            "Container": "ts",
+            "Type": "Video",
+            "VideoCodec": "h264",
+            "AudioCodec": "aac",
+            "Context": "Streaming",
+            "MinSegments": 1,
+            "BreakOnNonKeyFrames": True,
+            "Protocol": value,
+        }
+        profile = base_profile(
+            [
+                {
+                    "Container": source.other_container(),
+                    "Type": "Video",
+                    "VideoCodec": source.other_video_codec(),
+                    "AudioCodec": "aac",
+                }
+            ],
+            transcoding=[entry],
+        )
+        status, headers, payload = server.post_raw(
+            f"/Items/{source.item_id}/PlaybackInfo",
+            body={"UserId": server.user_id, "DeviceProfile": profile, "AutoOpenLiveStream": False},
+        )
+        if status != 200:
+            document = json.loads(payload) if b"{" in payload[:1] else {}
+            named = sorted(document.get("errors", {}))
+            probe.observe(
+                f"Protocol={value!r}",
+                f"{status} {headers.get('Content-Type')}, errors name {named or 'nothing'}",
+            )
+            refused.append(value)
+            checks.append(
+                status == 400 and named == ["$.DeviceProfile.TranscodingProfiles[0].Protocol"]
+            )
+            continue
+        one = json.loads(payload)["MediaSources"][0]
+        url = one.get("TranscodingUrl") or ""
+        shape = "master.m3u8" if "master.m3u8" in url else ("progressive" if url else "no url")
+        probe.observe(
+            f"Protocol={value!r}",
+            f"200, TranscodingSubProtocol={one.get('TranscodingSubProtocol')!r}, {shape}",
+        )
+        (hls if shape == "master.m3u8" else progressive).append(value)
+        #: The agreement clause, asserted as agreement rather than as a string: whatever the
+        #: answer says the sub-protocol is, the address it hands over is of that shape.
+        checks.append(
+            (one.get("TranscodingSubProtocol") == "hls") == (shape == "master.m3u8")
+            or one.get("TranscodingSubProtocol") not in ("hls", "http")
+        )
+
+    probe.observe("selected HLS", hls)
+    probe.observe("selected progressive", progressive)
+    probe.observe("refused the whole body", refused)
+    checks.append(set(hls) == {"hls", "Hls", "HLS", "hLs", "1", 1})
+    checks.append(set(refused) == {"dash", " ", True})
+    return checks
+
+
 def run(server: Server, args) -> Probe:
     probe = Probe(
         script="probe_playback_info.py",
@@ -339,6 +445,7 @@ def run(server: Server, args) -> Probe:
     )
 
     checks.extend(_refusal_battery(server, probe, source.item_id))
+    checks.extend(_protocol_battery(server, probe, source))
 
     if args.allow_writes:
         checks.extend(_policy_battery(server, probe, source, reject_vcodec))
@@ -369,7 +476,12 @@ def run(server: Server, args) -> Probe:
             "a request with no token, problem details for an unknown item and for an invisible "
             "one, and the ErrorCode only where the source list is empty - which also drops the "
             "PlaySessionId. And a POST carrying no DeviceProfile is not a POST with no profile: "
-            "the device's stored capabilities supply one, and only the GET is profile-less",
+            "the device's stored capabilities supply one, and only the GET is profile-less. And "
+            "the delivery protocol is an enumeration in every sense: three altered cases select "
+            "HLS, an unbindable word refuses the whole body with problem details naming the JSON "
+            "path, an empty string and a missing property take the declared default, and the two "
+            "ordinals bind - including one out of range, which comes back as a number in a field "
+            "the enumeration spells as a word",
             matches_documentation=True,
         )
     else:

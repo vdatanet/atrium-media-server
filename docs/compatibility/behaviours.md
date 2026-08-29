@@ -614,6 +614,98 @@ branching on direct play; one that expected an independent remux flag would neve
 **Atrium does:** the same mirror. Resurrecting the distinction would be a flag no reference
 answer sets, which is a delta a differential would flag on the first negotiation.
 
+### 2.23 A negotiation opens the file; a listing does not, and what it learns is kept
+
+**Jellyfin does:** two different things with the same media source, depending on which route is
+asked. A listing reads the stored sources and stops there
+`[source: Emby.Server.Implementations/Dto/DtoService.cs:261 @ v10.11.11]`, so an item whose
+inspection never succeeded is answered with a `Container` inferred from its path, a `Size`, no
+`RunTimeTicks`, no `Bitrate`, `MediaStreams: []` and the three capability flags all `true` — the
+same shape on `/Items`, `/Items/{itemId}` and `/Items/Latest`. A **negotiation** for the same item
+refreshes it with probing enabled before any profile is applied, whenever the first source carries
+no stream of the item's own kind
+`[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:170-189 @ v10.11.11]`, and that
+refresh completes inside the request: a file that became readable after the scan comes back fully
+annotated — streams, runtime, bitrate and a corrected `Size` — in 0.20 s, against 0.01 s for an
+item already annotated. **The result is written down**: the next listing of that item carries all
+of it, with no scan in between. A file that can never be read pays the probe on every negotiation,
+measured at 0.18–0.20 s three runs running
+`[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+Two consequences that are easy to state backwards. A file **truncated** to its first kibibyte is
+not in this state at all — a Matroska header is at the front, so it probes cleanly and answers a
+full annotation with a `Size` of 1 024. And a file **deleted** after the scan is not either: the
+stored streams are still there, so the refresh is never triggered and the negotiation answers as
+though the file were present, address and all.
+
+**Depends on it:** the video client, which refuses direct play and then looks for the address the
+answer promised — on the reference there is always one, because the annotation happened. The music
+client depends on the *listing* half, and gets the same empty source from a stock reference that it
+gets here: that half is parity.
+
+**Atrium does:** [012](../../specs/012-negotiation-inputs/spec.md) reproduces both halves — the
+negotiation opens the file and writes what it finds, the listing does not — which is the whole of
+that feature's §3.2. Until it lands, the shortfall is [§5](#5-accepted-gaps-in-v1)'s row.
+
+### 2.24 A profile's delivery protocol is an enumeration, in every sense
+
+**Jellyfin does:** bind `TranscodingProfile.Protocol` to a two-member enumeration whose members are
+lower-case by declaration `[source: Jellyfin.Data/Enums/MediaStreamProtocol.cs @ v10.11.11]`,
+`[source: MediaBrowser.Model/Dlna/TranscodingProfile.cs:77 @ v10.11.11]`, and read it the way a
+.NET enumeration is read. Eighteen spellings posted to one item on one profile answer four ways
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29]`:
+
+| What the profile said | What came back |
+|---|---|
+| `hls`, `Hls`, `HLS`, `hLs` | An HLS address, `TranscodingSubProtocol: "hls"` |
+| `http`, `Http`, `HTTP` | A progressive address, `TranscodingSubProtocol: "http"` |
+| absent, `null`, `""` | The declared default — progressive, `"http"` |
+| `0`/`"0"`, `1`/`"1"` | The ordinal's member: progressive, HLS |
+| `2`/`"2"` — an ordinal no member has | `200`, a progressive address, and `TranscodingSubProtocol: 2`, a **number** in a field the enumeration spells as a word |
+| `dash`, `" "`, `true` | `400`, RFC 9457 problem details, `errors` keyed on `$.DeviceProfile.TranscodingProfiles[0].Protocol` |
+
+The echo is the enumeration's spelling, never the profile's: `Hls` in, `"hls"` out.
+
+**Depends on it:** any client whose profile spells the protocol the way its own language does. A
+client sending `Hls` is *correct* against this reference and gets HLS; a server that compares the
+string case-sensitively sends it a progressive address instead, which is the one direction
+Principle I has least tolerance for.
+
+**Atrium does:** [012 §3.3](../../specs/012-negotiation-inputs/spec.md) reproduces the whole table,
+including the refusal — which is the same shape §1.1's binding already produces for this body, and
+the opposite of §1.12's rule for a **query** value. The out-of-range ordinal is reproduced too: it
+is a `200` a client can act on, so it is class B and there is nothing to gain by tidying it.
+
+### 2.25 `GET /Sessions`' three filters are two filters and a visibility rule
+
+**Jellyfin does:** declare `controllableByUserId`, `deviceId` and `activeWithinSeconds`
+`[source: Jellyfin.Api/Controllers/SessionController.cs:52-59 @ v10.11.11]` and apply them in an
+order that is observable `[probe: tools/probe_session_filters.py, Jellyfin 10.11.11, 2026-08-29]`:
+
+- `deviceId` narrows the **whole** session list first, before the rule about whose sessions the
+  caller may see, and matches case-insensitively; an empty value is ignored. A non-administrator
+  naming another user's device therefore gets an empty `200` — the filter matched and the
+  visibility rule then removed the row.
+- `activeWithinSeconds` is applied **last**, and only when greater than zero: `0` and `-5` answer
+  the unfiltered list, which is [§1.12](#112-an-unrecognised-query-value-is-ignored-not-rejected)'s
+  family rather than a refusal.
+- `controllableByUserId` is not a filter at all. It replaces the caller's own visibility rule with
+  a different one — sessions that are remote-controllable, subject to the named user's shared-device
+  setting, the caller's remote-control permission and per-device access. A session is
+  remote-controllable only while a live control channel is attached to it
+  `[source: MediaBrowser.Controller/Session/SessionInfo.cs:246-266 @ v10.11.11]`, so declaring
+  `SupportsMediaControl` is necessary and not sufficient, and a request-response client is never
+  one. And a **non-administrator naming anybody but themselves is refused `403`**, `text/plain` —
+  where naming another user's *device* was an empty `200`.
+
+**Depends on it:** the video client sends `deviceId` on this route today. Nothing observed sends
+the other two.
+
+**Atrium does:** none of it — v1 declares no parameter on this route. Recorded here at 012's
+measurement gate (012 OQ-7) because the route is
+[002 §3.8](../../specs/002-authentication-users-and-sessions/spec.md#38-sessions)'s and the `403`
+is a sentence about who may see whose device, which is 002's to specify.
+
 ### 2.13 `DeviceId` is mandatory on one route, not on the header
 
 **Jellyfin does:** answer `200` on an ordinary authenticated route for a client header carrying no
@@ -1845,6 +1937,70 @@ the one every published Jellyfin playlist example shows.
 Recorded at 011's spec review on 2026-08-29 and owed to the task that implements
 [011 §3.5](../../specs/011-subtitle-delivery/spec.md).
 
+### 3.13 An un-inspectable source is advertised, and the address it is given answers `500` — class A, deferred
+
+**Jellyfin does:** answer a negotiation for a video item whose file cannot be read with `200`, a
+source carrying no streams, no runtime and no bitrate, the three capability flags **decided**
+against the profile — `SupportsDirectPlay: false`, `SupportsDirectStream: false`,
+`SupportsTranscoding: true` for a profile that plays neither the container nor the codec — and a
+`TranscodingUrl`. Following that address gives a master playlist that answers `200` and names
+**`live.m3u8`** rather than `main.m3u8`, because a source with no `RunTimeTicks` is addressed as an
+infinite stream; and `live.m3u8` answers **`500`, `text/plain`**
+`[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+So the guarantee the reference actually offers is *an advertised capability has an address*, not
+*an advertised capability has an address that answers*. The two are a paragraph apart and only one
+of them is true.
+
+**Depends on it:** nothing that could build on it — the client is handed an address and meets a
+`500` at the end of it, which is class A's shape: a fallback that stays unused, or an error the
+user sees. The video client's documented behaviour on this path is to stop, which it does either
+way.
+
+**Atrium does: not decided here, and the deferral is the point.** v1 does not emit an address on
+this path at all today, so the defect is in a code path this project does not yet have — which is
+[§3.0.1](#301-the-tie-breaks) tie-break 3 exactly: *a decision made about code nobody will write
+for a while is a decision made with the least information it will ever have.* The candidates are
+two and they are both defensible: reproduce the `200`-with-an-address and let the delivery route
+fail as the reference's does, or decide that a source nothing could read advertises no capability
+at all. Choosing now would also be choosing before
+[012](../../specs/012-negotiation-inputs/spec.md)'s delivery half exists to be measured against.
+Recorded at 012's measurement gate on 2026-08-29, and owed to the task that implements 012 §3.2.
+
+### 3.14 The fMP4 initialisation segment restarts production — class B, replicated
+
+**Jellyfin does:** treat a request for segment `-1` as a reason to start transcoding, before it has
+looked at what is already running — *"Starting transcoding because fmp4 init file is being
+requested"*
+`[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:1501-1505 @ v10.11.11]`. Read on its own
+that is a defect with a real cost, and the video client pre-warms its session to dodge it.
+
+**Measured, the branch is third rather than first, and it is not reached by either order a client
+uses.** Two file-existence checks stand in front of it, one of them inside the transcode lock, and
+both return the segment without starting anything
+`[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:1481-1496 @ v10.11.11]`. An fMP4
+transcode writes the initialisation segment *before* it writes any segment, so a session that has
+produced anything already has the file the branch tests for. Asking for the map after three
+segments answered in **0.03 s**, against **0.69 s** for the same request on a directory with
+nothing in it, and the segments already produced still answered immediately afterwards —
+nothing was discarded. A second request for an initialisation segment already on disk restarts
+nothing at all `[probe: tools/probe_transcode_session.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+**Depends on it:** a client that pre-warms is unaffected either way, which is the compensation
+being defect-tolerant. Nothing else can observe a restart that discards nothing.
+
+**Atrium does: replicate — which here means write the branch and stop worrying about it.** Under
+[§3.0](#30-how-the-decision-is-made) the defect is class B (a `200` produced by more work than
+necessary), and its escape hatches do not open: the compensation is tolerant, and there is a
+measured cost of zero to remove. [§3.0.0](#300-replication-is-not-free-and-for-this-project-it-is-not-the-lazy-option)
+then decides it, because diverging would mean writing *extra* code — a fourth condition on a branch
+that already behaves correctly — to avoid a cost nobody pays. The ordering is what makes this safe
+and it is worth writing down: **the file-existence checks must come before the segment-id branch**,
+because a server that tested the segment id first would restart a producing session on every map
+request and the measurement above would invert.
+
+Decided at 012's measurement gate on 2026-08-29 (012 OQ-8), under the procedure in §3.0.
+
 ## 4. Deliberate exceptions
 
 Every one of them is listed here so it is never mistaken for an oversight — including §4.4, which
@@ -1956,8 +2112,8 @@ undocumented bug.
 | **Item fields outside the observed union omitted** ([005 §3.2](../../specs/005-item-query-api/spec.md)) | A field absent that the reference sends | The differential's key-set pass, which exists mainly for this |
 | **Policy flags stored but unenforced** ([002 §3.5](../../specs/002-authentication-users-and-sessions/spec.md)) | A restriction that does not restrict | All of them gate features v1 lacks; each is enforced in the change that adds its feature |
 | **Image decoration parameters ignored** ([006 §3.2](../../specs/006-images/spec.md)) | `percentPlayed`, `blur`, `foregroundLayer` have no effect | Implement if the differential shows a client sending them |
-| **No subtitle delivery at all** ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)) | Embedded tracks survive a direct play or an on-device remux, because they are inside the bytes the client is reading. Anything delivered over **server HLS** — remux or transcode — carries none: the master announces one variant and no `#EXT-X-MEDIA` tag. An **external sidecar** file is not reachable on any path | [011](../../specs/011-subtitle-delivery/spec.md), end to end. *This row read "subtitles delivered as files" until 008 was implemented and nothing delivered one; the correction was owed from 2026-08-28.* **And the ordered list this row used to give — emit `IsTextSubtitleStream`, bind `EnableSubtitlesInManifest`, extract and serve, announce — did not survive 011's gate**: two of those properties are already emitted by every read, and the manifest flag is not a parameter the master playlist route accepts at all. What announces a track is the delivery address naming the manifest method `[probe: tools/probe_subtitle_manifest.py, Jellyfin 10.11.11, 2026-08-29]` |
-| **A media source with no stored inspection is skipped** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | The source keeps `Id`, a `Container` inferred from its path and `Size`, and carries `RunTimeTicks: null`, `Bitrate: null` and `MediaStreams: []`. On `PlaybackInfo` the whole annotation is skipped, so it answers the model's default `SupportsDirectPlay: true` **with no `TranscodingUrl`** — a client that refuses direct play has nowhere to go, and one that takes it silently loses everything read off the streams. It happens whenever a file is in the library and nothing has opened it: a scan from before 008, a file added since, a probe that failed | A rescan, which is not something a client can ask for — so the real mechanism is a decision about what an un-inspected source should advertise, routed by both client traces to the feature after 010 |
+| **No subtitle delivery at all** ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)) | Embedded tracks survive a direct play or an on-device remux, because they are inside the bytes the client is reading. Anything delivered over **server HLS** — remux or transcode — carries none: the master announces no `#EXT-X-MEDIA` tag and no subtitle group on any variant. An **external sidecar** file is not reachable on any path | [011](../../specs/011-subtitle-delivery/spec.md), end to end. *This row read "subtitles delivered as files" until 008 was implemented and nothing delivered one; the correction was owed from 2026-08-28.* **And the ordered list this row used to give — emit `IsTextSubtitleStream`, bind `EnableSubtitlesInManifest`, extract and serve, announce — did not survive 011's gate**: two of those properties are already emitted by every read, and the manifest flag is not a parameter the master playlist route accepts at all. What announces a track is the delivery address naming the manifest method `[probe: tools/probe_subtitle_manifest.py, Jellyfin 10.11.11, 2026-08-29]` |
+| **A media source with no stored inspection is skipped** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | On a **listing**, nothing: the source keeps `Id`, a `Container` inferred from its path and `Size` and carries `RunTimeTicks: null`, `Bitrate: null` and `MediaStreams: []` — and so does the reference's `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-08-29]`. On `PlaybackInfo` the whole annotation is skipped, so it answers the model's default `SupportsDirectPlay: true` **with no `TranscodingUrl`**, where the reference opens the file and answers it annotated — or, when the file cannot be read, answers the same empty source with the flags *decided* and an address. It happens whenever a file is in the library and nothing has opened it: a scan from before 008, a file added since, a probe that failed | Not a rescan, and not a decision about what to advertise — **the negotiation itself**, which is what the reference does and what [012 §3.2](../../specs/012-negotiation-inputs/spec.md) specifies: open the file inside the request and write down what it says. *This row read "the real mechanism is a decision about what an un-inspected source should advertise" until 012's measurement gate measured the reference resolving the state rather than describing it. It also read as though the listing were part of the shortfall; it is parity, and the music client's four losses with it* |
 | **No per-user subtitle preference, so no default subtitle track is proposed** ([011 §2, §3.3](../../specs/011-subtitle-delivery/spec.md)) | A negotiation that names no subtitle index answers `DefaultSubtitleStreamIndex` absent, where a stock reference proposes a track. It is the reference's own answer for a user whose subtitle mode is `None` — but a *new* reference user's mode is `Default`, not `None` `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]` | The two user settings the choice is a function of: a subtitle mode with five values and a language preference list. Both are a per-user feature, which is what 011 §2 excludes; a client that names the track it wants is unaffected, and both analysed clients name it |
 | **`Path`-derived identifiers differ from the reference's** ([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters)) | Nothing — ids are opaque | Not a gap to close; a deliberate design choice |
 | **A container that has lost every file is still returned** ([003 §3.8](../../specs/003-library-configuration-and-scanning/spec.md#38-scanning-and-change-detection)) | An empty series or album in a library, with nothing under it | A query-time filter in 005: a container with no visible children is not offered. See §5.2 |
@@ -1965,6 +2121,7 @@ undocumented bug.
 | **A stream carries no `DisplayTitle` and no `Localized*` names** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A track picker with nothing to label its rows: the reference sends one localised string per stream — `Español - MP3 - Stereo - Predeterminado` on a Spanish server — and Atrium sends none. **[011 §3.4](../../specs/011-subtitle-delivery/spec.md) is where this stops being only a label**: a manifest entry's `NAME` is required, and the reference fills it from exactly this string | The localisation the strings are assembled from — which is two sources, not one: the flag words come from the server's own translation table and the language name from the platform's culture data, in the server's configured interface culture `[probe: tools/probe_subtitle_manifest.py, Jellyfin 10.11.11, 2026-08-29]`. An English-only approximation would differ from the reference on **every** track rather than be absent on it, which is the worse of the two |
 | **A stream carries no `IsAVC`, `TimeBase` or `NalLengthSize`** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Three properties absent on every stream | Columns migration 0006 does not have; they arrive with the migration that adds them, and nothing in v1 reads them |
 | **`HasSubtitles` counts only the streams inside the container** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A film whose only subtitles are `.srt` files beside it reads as having none, where the reference reads `true` `[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-29]` | [011 §3.6](../../specs/011-subtitle-delivery/spec.md), which discovers them. Closing it moves more than the flag: the discovered streams are numbered **ahead of** the container's own, so a file appearing beside a film renumbers every audio and video stream it has |
+| **Dolby Vision and HDR10+ are not classified** ([008 §3.1, §3.7](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A Dolby Vision or HDR10+ film's master playlist carries no `SUPPLEMENTAL-CODECS`, and its copied segments are tagged `hvc1` where the reference tags `dvh1` — because the file is inspected here as the HDR10 file its colour metadata claims `[probe: tools/probe_transcode_decision.py, Jellyfin 10.11.11, 2026-08-29]` | Reading the Dolby Vision configuration record and the HDR10+ marker out of a stream's side data, which is where that signal lives. See §5.10 |
 | **A multi-part film answers one media source per part** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Two sources on one item, where the reference answers one source, a `PartCount` and a separate route for the rest | Not a gap to close on its own: it follows from 003 §3.3 modelling the parts as one item's sources, and closing it means changing that model or adding `GET /Videos/{id}/AdditionalParts` to the surface |
 
 The difference between this section and §4 is intent. §4 says *we thought about it and chose
@@ -2209,6 +2366,42 @@ whole, so a property from a newer client than the schema survives the round trip
 is visible only to a client doing exactly what no client of the reference can usefully do.
 **Closing mechanism:** filter the stored declaration to the reference's `ClientCapabilitiesDto`
 members if the differential harness (010) ever shows a client observing the difference.
+
+### 5.10 Dolby Vision and HDR10+ are not classified, so two emissions never fire
+
+**Jellyfin does:** describe a stream-copied video's dynamic metadata twice over, in two places, and
+both turn on a range *flavour* rather than on high dynamic range itself
+`[probe: tools/probe_transcode_decision.py, Jellyfin 10.11.11, 2026-08-29]`:
+
+| Where | What it writes | When |
+|---|---|---|
+| The master playlist's copy variant | `SUPPLEMENTAL-CODECS="dvh1.08.06/db1p"` | The source's range type is one of the Dolby Vision spellings, and the metadata is not being stripped |
+| The same attribute | `SUPPLEMENTAL-CODECS="hvc1.2.4.L150.B0/cdm4"` — the variant's own codec string, then the marker | The source's range type is HDR10+ |
+| The produced segment's sample entry | `dvh1` instead of `hvc1` | A Dolby Vision copy **whose client declared `DOVI`** in its range types; a client that did not is muxed `hvc1` `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:1838-1866 @ v10.11.11]` |
+
+Measured on one Dolby Vision film in one run: `SUPPLEMENTAL-CODECS="dvh1.08.06/db1p"` on the copy
+variant and on neither entrance, present whether or not the client declared Dolby Vision, and
+`dvh1` read back out of the fMP4 initialisation segment by `ffprobe`. A plain HDR10 source beside
+it carried neither.
+
+**Depends on it:** a Dolby Vision player reads both. Neither is load-bearing for playback of the
+HDR10 base layer, which is what a player that ignores them gets.
+
+**Atrium does: neither, and the cause is one layer down.** [008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)'s inspection derives a stream's
+range from its colour transfer characteristics, which yields exactly three answers — standard
+range, HDR10 and HLG — and the eight Dolby Vision spellings plus HDR10+ are not among them,
+because that signal is not in a stream's colour metadata. So on **every source this server can
+describe**, the reference sends no `SUPPLEMENTAL-CODECS` and tags `hvc1` either: the emission is
+absent here and would be absent there, which is why writing it would be writing a branch nothing
+can reach. What is really divergent is narrower and upstream of the playlist: a Dolby Vision file
+is *inspected* here as the HDR10 file its colour metadata claims, and the two attributes are the
+first place a client can see that.
+
+**Closing mechanism:** teach the inspection to read the Dolby Vision configuration record and the
+HDR10+ marker — a stream's side data rather than its colour metadata — which adds the range-type
+members and the profile and level the attribute is assembled from. The two emissions then follow
+from data that exists, and so does [§3.4](#34-hdr10-metadata-stripped-from-clients-that-asked-for-it--class-b-no-compensation)'s
+divergence, which is written as a decision and is today equally unreachable for the same reason.
 
 ## 6. Non-improvements
 

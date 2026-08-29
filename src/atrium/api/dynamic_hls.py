@@ -108,12 +108,19 @@ async def get_master_hls_video_playlist(
     segmentContainer: SegmentContainer = None,  # noqa: N803
     segmentLength: SegmentLength = None,  # noqa: N803
 ) -> Response:
-    """`GetMasterHlsVideoPlaylist` `[spec: GetMasterHlsVideoPlaylist]`: one variant, never a ladder.
+    """`GetMasterHlsVideoPlaylist` `[spec: GetMasterHlsVideoPlaylist]`: one variant, and an SDR
+    entrance beside a high-dynamic-range stream copy.
 
-    The reference builds more than one in three cases none of which v1 reaches - an SDR entrance
-    for an HDR copy, a level 5.0 entrance for a high-level HEVC copy, and adaptive bitrate
-    streaming, which it declines for a copy, for a local caller and for a request with no video
-    bitrate. Every measured master carried exactly one `#EXT-X-STREAM-INF`.
+    **This route was documented as answering one variant always, from a measurement that could
+    not reach the branch it was answering about**: the probe took the library's first film, which
+    was standard range, so the entrance never fired and its absence was recorded as the shape of
+    the route. Measured against an HDR source the master carries a second `#EXT-X-STREAM-INF` at
+    the copy's own `BANDWIDTH`, so a client selects on colour rather than on rate
+    `[probe: tools/probe_transcode_decision.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+    The other two multi-variant cases stay out of reach: a level 5.0 entrance for a high-level
+    HEVC copy, and adaptive bitrate streaming, which the reference declines for a copy, for a
+    local caller and for a request with no video bitrate.
 
     The reference also appends an `#EXT-X-IMAGE-STREAM-INF` line for each trickplay resolution it
     has generated, which the operator's server does and v1 does not: the measured 913-byte master

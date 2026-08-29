@@ -48,7 +48,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_playback_refusal.py`](probe_playback_refusal.py) | When no source can be played by the profile, is it `200` — and does an `ErrorCode` arrive? | 008 §3, the error table | no |
 | [`probe_video_stream_for_a_track.py`](probe_video_stream_for_a_track.py) | What does `/Videos/{id}/stream` answer when the id names an audio track? | api-surface §4, §8 | no |
 | [`probe_playback_info.py`](probe_playback_info.py) | Are the negotiation's flags per request, do the body switches and the policy bite, when does an `ErrorCode` appear, how do the two routes refuse, and what is "no `DeviceProfile`" negotiated against? | 008 §3.1–§3.3, OQ-1, OQ-2, OQ-12; behaviours §2.21, §2.22 | only under `--allow-writes`: the policy battery, which needs an admin and a throwaway user, and the capabilities battery, which replaces the probe's own session capabilities and restores them |
-| [`probe_transcode_decision.py`](probe_transcode_decision.py) | What goes into a `TranscodingUrl`, how many variants does the master playlist advertise, and is the accepted stream copied? | 008 §3.3, §3.4, §3.7, OQ-7, OQ-8, OQ-9 | yes — it makes the server encode one segment |
+| [`probe_transcode_decision.py`](probe_transcode_decision.py) | What goes into a `TranscodingUrl`, how many variants does the master playlist advertise **for a standard-range and for a high-dynamic-range source**, and is the accepted stream copied? | 008 §3.3, §3.4, §3.7, OQ-7, OQ-8, OQ-9 | yes — it makes the server encode one segment per half, and the HDR half's is an fMP4 segment of a usually-4K film |
 | [`probe_hls.py`](probe_hls.py) | Is the playlist complete up front and uniform, where does its segment cadence come from, and are segments sized, byte-stable and served out of order? | 008 §3.7, §6, OQ-3, plan §6.4 and §6.8's cadence debt; behaviours §2.10, §3.3's HLS half | yes — two short sessions, plus playlist-only reads |
 | [`probe_universal_audio.py`](probe_universal_audio.py) | Does `/universal` meet a stated ceiling, when is it an empty `200`, does `enableRedirection` ever fire, and what do the two PCM/WAV symptoms actually answer? | 008 §3.6, OQ-4, AC-19, AC-20, AC-21; behaviours §3.2, §3.7, §3.8 | yes — short audio encodes |
 | [`probe_transcode_session.py`](probe_transcode_session.py) | Does production follow the throttle configuration, restart at a seek, stop on `DELETE /Videos/ActiveEncodings`, and die on its own kill timer? | 008 §3.4, §3.8, OQ-6, OQ-10, OQ-11 | yes — several minutes of deliberate encoding |
@@ -62,6 +62,8 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_subtitle_delivery.py`](probe_subtitle_delivery.py) | What do the subtitle playlist and the subtitle fetch answer — to a caller with no token, to a window, to a format, and to every way of naming nothing? | 011 §3.5, §3.7, OQ-6, OQ-8, OQ-11; behaviours §3.12 | only under `--allow-writes`: the image-subtitle case, which the reference attempts with ffmpeg before refusing |
 | [`probe_sidecar_subtitles.py`](probe_sidecar_subtitles.py) | Which files beside a media file become subtitle streams, and what does the reference read out of their names? | 011 §3.6, OQ-7; behaviours §5 | no |
 | [`probe_progressive_production.py`](probe_progressive_production.py) | Does a capped progressive transcode ever state a length, and is the work keyed on the play session the client supplies? | 011 OQ-9, OQ-10; behaviours §3.3 | yes — two or three short audio transcodes of one track, every session stopped |
+| [`probe_uninspected_source.py`](probe_uninspected_source.py) | What does a negotiation answer for a media source nothing has successfully opened, what does a listing answer, and is what an on-demand probe learns kept? | 012 §3.2, §3.4, OQ-1, OQ-2, OQ-3, OQ-9; behaviours §2.23, §3.13, §5 | yes — it builds a library of deliberately unreadable files on the server's own disk, scans, measures, and removes both the libraries and the files |
+| [`probe_session_filters.py`](probe_session_filters.py) | What do `GET /Sessions`' three parameters narrow, and does the narrowing run before or after the rule about whose sessions a caller may see? | 002 §3.8 (measured at 012's gate, OQ-7); behaviours §2.25 | only under `--allow-writes`: a throwaway non-administrator whose session supplies the second row, deleted on the way out |
 
 ### Running them
 
@@ -106,6 +108,20 @@ python3 tools/probe_subtitle_manifest.py --allow-writes
 python3 tools/probe_subtitle_delivery.py --allow-writes
 python3 tools/probe_sidecar_subtitles.py
 python3 tools/probe_progressive_production.py --allow-writes
+python3 tools/probe_session_filters.py --allow-writes
+```
+
+`probe_uninspected_source.py` is the exception to the list above, and it says so in its own
+docstring: its question cannot be asked of a remote server, because the fixture it needs is a file
+the server can see and this machine can write. Every item in a real library has been probed — the
+scan that creates an item is the scan that probes it — so the state only exists where the probe
+*failed*, and the probe has to manufacture it:
+
+```bash
+docker run -d --name jf -p 8097:8096 -v "$PWD/fixture:/media" jellyfin/jellyfin:10.11.11
+#  … complete the startup wizard …
+python3 tools/probe_uninspected_source.py http://127.0.0.1:8097 -u admin \
+    --allow-writes --fixture-root "$PWD/fixture" --server-root /media
 ```
 
 The playback probes marked `--allow-writes` make the reference **encode**: each starts one

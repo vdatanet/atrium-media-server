@@ -141,6 +141,25 @@ class MediaFile:
     """Forced keyframe cadence, where the entry exists to be segmented. `None` leaves the
     encoder's own decision, which for a four-second clip is one keyframe at the start."""
 
+    pixel_format: str = "yuv420p"
+    """Eight-bit by default. Ten bits is what a high-dynamic-range entry needs, and it is a
+    property of the *encode* rather than of the colour tags beside it."""
+
+    color_transfer: str | None = None
+    """The transfer characteristics ffprobe must report back, and **the whole of what makes a
+    file high dynamic range** to both servers: the reference reads this one field and nothing
+    else `[source: MediaBrowser.Model/Entities/MediaStream.cs GetVideoColorRange @ v10.11.11]`.
+
+    Two details cost a run each to find, 2026-08-29. It has to be given to the *encoder* as well
+    as to the muxer - `-color_trc` alone leaves libx264 writing no VUI transfer, so ffprobe
+    reports the primaries and the matrix and not the transfer - and the **Matroska muxer drops
+    it** on this ffmpeg, so an HDR entry has to be mp4 or it probes back as standard range."""
+
+    color_primaries: str | None = None
+    color_space: str | None = None
+    """Beside the transfer because a file that carried only the transfer would be a file no
+    grader ever produces. Nothing reads them."""
+
     audio_bitrate: str | None = None
     """`None` for a lossless codec, which has no bitrate to ask for."""
 
@@ -319,6 +338,39 @@ TWO_PARTER_SECOND = MediaFile(
     duration_seconds=6.0,
 )
 
+HIGH_RANGE = MediaFile(
+    key="high_range",
+    root=MOVIES_ROOT,
+    path="The High Range (2007).mp4",
+    reason="Spec section 3.7's SDR entrance: the master playlist grows a second variant only "
+    "when the video is copied *and* the source is HDR, and no other entry in this matrix is HDR "
+    "- so without this one the branch has nowhere to be proven, which is exactly how OQ-7 came "
+    "to answer 'exactly one variant' for a case it had never reached",
+    muxer="mp4",
+    demuxers="mov,mp4,m4a,3gp,3g2,mj2",
+    video_codec="h264",
+    video_encoder="libx264",
+    width=320,
+    height=240,
+    frame_rate="25",
+    pixel_format="yuv420p10le",
+    color_transfer="smpte2084",
+    color_primaries="bt2020",
+    color_space="bt2020nc",
+    audio_codec="ac3",
+    audio_encoder="ac3",
+    sample_rate=48000,
+    channels=2,
+    audio_bitrate="192k",
+    duration_seconds=4.0,
+)
+"""**h264 rather than hevc, and that is a deliberate choice about the matrix rather than about
+HDR.** Real high dynamic range is hevc or av1 in practice, but the branch under test reads the
+source's transfer characteristics and nothing about its codec, and `rejected_video` exists to be
+*the* entry whose codec nothing else has. A second hevc file would take that property away from
+it to buy realism no assertion here can use. The audio is rejected so the video is copied: an
+entrance stands beside a copy and never beside a re-encode."""
+
 HIGH_RATE_AUDIO = MediaFile(
     key="high_rate_audio",
     root=MUSIC_ROOT,
@@ -358,6 +410,7 @@ FILMS: tuple[MediaFile, ...] = (
     LONG_TAKE,
     TWO_PARTER_FIRST,
     TWO_PARTER_SECOND,
+    HIGH_RANGE,
 )
 
 #: Everything under the music root.
@@ -449,11 +502,31 @@ def _encode_command(one: MediaFile, destination: Path) -> list[str]:
 
     if one.has_video:
         assert one.video_encoder is not None
-        command += ["-c:v", one.video_encoder, "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
+        command += ["-c:v", one.video_encoder, "-preset", "ultrafast", "-pix_fmt", one.pixel_format]
+        parameters = []
         if one.video_encoder == "libx265":
             # Otherwise x265 writes its own banner to stderr whatever `-loglevel` says, and a
             # failure message that is mostly encoder greeting is a failure message nobody reads.
-            command += ["-x265-params", "log-level=none"]
+            parameters.append("log-level=none")
+        if one.color_transfer is not None:
+            # Both to the muxer and to the encoder. The muxer's copy is what ffprobe reads out of
+            # an mp4; the encoder's is what puts the same statement inside the bitstream, and
+            # without it libx264 writes no transfer at all (see `color_transfer` above).
+            command += [
+                "-color_trc",
+                one.color_transfer,
+                "-color_primaries",
+                str(one.color_primaries),
+                "-colorspace",
+                str(one.color_space),
+            ]
+            parameters += [
+                f"colorprim={one.color_primaries}",
+                f"transfer={one.color_transfer}",
+                f"colormatrix={one.color_space}",
+            ]
+        if parameters:
+            command += [f"-{one.video_encoder[3:]}-params", ":".join(parameters)]
         if one.keyframe_interval_seconds is not None:
             command += [
                 "-force_key_frames",
@@ -708,6 +781,7 @@ __all__ = [
     "BINARIES",
     "DIRECT_PLAY",
     "FILMS",
+    "HIGH_RANGE",
     "HIGH_RATE_AUDIO",
     "LONG_TAKE",
     "MATRIX",

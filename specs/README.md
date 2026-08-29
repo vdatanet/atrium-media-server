@@ -123,6 +123,7 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Accepted** | — | — |
+| [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
 
 **001 through 008 are implemented**, 008 on 2026-08-29 across fourteen tasks. Its spec and plan
 were accepted the same day, at a review that wrote and ran the five probes its open questions had
@@ -138,9 +139,10 @@ the client rather than a file age (T13). **009 and 010 remain drafts**, and thei
 questions are the standing review agenda —
 [what 008 owes them](008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
 is written down rather than remembered. **011's spec was accepted the same day**, at its own
-measurement gate, so it is no longer one of the drafts: 009 and 010 are. The lowest-numbered
-feature that is not implemented is **009**, so its spec review is the next gate, and that list is
-one of its inputs.
+measurement gate, so it is no longer one of the drafts; **012 was opened as one on the same day and
+accepted at its own gate the same day**, so the drafts are 009 and 010. The lowest-numbered feature
+that is not implemented is
+**009**, so its spec review is the next gate, and that list is one of its inputs.
 
 **008's own closing task found the class it exists to catch.** The acceptance map is where a
 criterion and the test that proves it are put on one line, and doing that showed two criteria whose
@@ -208,6 +210,54 @@ session runs. **The ordering finding is 005's**, and its own document says the c
 test rather than three new sort keys: the album play queue is correctly ordered only as a side
 effect of [behaviours §2.6](../docs/compatibility/behaviours.md#26-sortname-has-two-derivations-and-three-types-use-the-second)'s
 sort-name derivation, and nothing states the dependency.
+
+**012 took that number on 2026-08-29, and its first act was to apply 011's own test to 011's own
+handover.** The four findings 011 handed on arrived grouped by the fact that they were handed on
+together, which is the failure mode 011 §2.1 named — *"eleven findings do not become one feature by
+sharing a date"* — and the roadmap's *"008 is one feature, not two"* test, applied to them, keeps
+**two**. `PlaybackInfo` has exactly two inputs, and v1 has a lenient branch on each: a source with
+no stored inspection is stepped over, and a profile whose protocol is spelled in an unexpected case
+falls through. Both answer `200` with something a client cannot act on — a capability with no
+address, and an address of a shape the same answer says it is not — so they are one rule seen from
+its two sides, and [012](012-negotiation-inputs/spec.md) is that rule. **The other two are handed
+on again**: the session list's missing parameters belong to the feature that owns the route, and the
+initialisation segment that restarts production is a
+[behaviours §3.0](../docs/compatibility/behaviours.md#30-how-the-decision-is-made) defect decision
+rather than a requirement — both measured at 012's gate, neither specified there, which is 011's
+own OQ-9/OQ-10 device.
+
+**Opening it corrected the handover in five places, all of them by opening a file.** The session
+list is **002's** route, not 007's — `feature: "002"` in `surface.yaml`, specified in 002 §3.8, and
+the video client's trace says so in as many words — and it is **three** parameters rather than one.
+The reference **has no un-inspected source to describe**: its negotiation refreshes the item with
+probing when the first source carries no stream of the item's own kind
+`[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:170-189 @ v10.11.11]`, so the
+decision may be *reproduce the on-demand inspection* rather than *decide what an un-inspected
+source advertises*, which is a different decision with a different cost. Its **listing** path does
+not probe `[source: Emby.Server.Implementations/Dto/DtoService.cs:261 @ v10.11.11]`, which puts
+*"one root cause, two clients"* in doubt on the cure even where it holds on the cause — the music
+client never negotiates, so the reference's on-demand probe never fires for it. And the
+initialisation-segment claim is **no longer third-party**: the line the client's contract cited has
+now been read, and the restart is the first branch, taken before the reference looks at what is
+running `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:1501-1505 @ v10.11.11]`. Nine
+open questions, each naming the probe that answers it, and **not one measurement**: like 011's, its
+next gate was a measurement session.
+
+**That session ran on 2026-08-29 and 012's spec is accepted.** Four probes — two written for it,
+two extended — answered all nine, and the measurements were harder on the doubts than on the
+claims. **The reference does have an un-inspected source to describe, but only an un-*inspectable*
+one**: a readable file is annotated inside the negotiation that asks for it, in 0.20 s, and what it
+learns is **kept**, so the next listing carries it. **The music client's half is parity and the
+claim that it was a gap is withdrawn** — a stock reference answers a listing the same empty source
+Atrium does — and *"one root cause, two clients"* survives through the negotiation's **write**
+rather than through anything on the listing path, which is not the cure either trace proposed.
+An **audio** item with no audio stream refuses the whole request with `400` where a video item
+answers `200` with an address, and the address a video item is given resolves to a live playlist
+that answers `500`. The protocol question had two candidates and needed four: altered cases bind,
+ordinals bind, an empty string takes the default, and only a word that binds to nothing refuses.
+And the initialisation-segment restart is guarded by a file check the same session has already
+satisfied, so it costs nothing in either order a client uses — decided *replicate* under behaviours
+§3.0, at §3.14.
 
 **007's thirteen tasks found something in seven of them, and two were features that did not
 exist.** The sharpest is T11's: **the container `PlayedPercentage` had never been implemented.**
