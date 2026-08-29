@@ -17,9 +17,46 @@ See specs/008-playback-negotiation-and-delivery/plan.md section 4.
 
 from __future__ import annotations
 
+import struct
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+
+#: Above this the reference distrusts the average frame rate and falls back to the real one: some
+#: libraries report 1000 fps for a file that is nothing of the sort. `[source:
+#: MediaBrowser.Model/Entities/MediaStream.cs ReferenceFrameRate @ v10.11.11]`
+IMPLAUSIBLE_FRAME_RATE = 1000.0
+
+
+def narrow_to_single(value: float) -> float:
+    """The number a 32-bit float actually holds, which is **not** the number it prints as.
+
+    The reference declares every frame rate and the video level as singles, and the two readers of
+    that fact want different things from it. `media/info.py` writes the *shortest decimal that
+    reads back as the same single* - `23.975988` - because that is what .NET's serialiser emits.
+    `media/decision.py` compares against the value itself - `23.975988388061523` - because that is
+    what the reference's condition processor is handed.
+
+    The gap between them is observable: a client that declares a frame-rate ceiling of exactly the
+    rate it read off the wire is answered with a **transcode**, because the real single is above
+    the decimal it printed as `[probe: tools/probe_decision_ladder.py, Jellyfin 10.11.11,
+    2026-08-29]`. A single function that rounded to the printed form would answer direct play
+    there and disagree with the reference on the one comparison it exists to make.
+    """
+    narrowed: float = struct.unpack("f", struct.pack("f", value))[0]
+    return narrowed
+
+
+def _rational(text: str | None) -> float | None:
+    """`24000/1001` as a number, or None when it says nothing usable."""
+    if text is None:
+        return None
+    dividend, _, divisor = text.partition("/")
+    try:
+        top, bottom = float(dividend), float(divisor or 1)
+    except ValueError:
+        return None
+    return None if bottom == 0 else top / bottom
 
 
 class StreamKind(Enum):
@@ -127,6 +164,22 @@ class InspectedStream:
     is_interlaced: bool = False
     is_anamorphic: bool | None = None
 
+    @property
+    def reference_frame_rate(self) -> float | None:
+        """The frame rate the reference believes: the average one, unless it is implausible.
+
+        This is the number a negotiation compares a `VideoFramerate` ceiling against - the single
+        itself, not the shorter decimal `media/info.py` prints from it (`narrow_to_single`).
+        """
+        average = _rational(self.average_framerate)
+        real = _rational(self.framerate)
+        chosen = (
+            average
+            if average is not None and narrow_to_single(average) < IMPLAUSIBLE_FRAME_RATE
+            else real
+        )
+        return None if chosen is None else narrow_to_single(chosen)
+
 
 @dataclass(frozen=True, slots=True)
 class MediaInspection:
@@ -193,9 +246,11 @@ class MediaInspection:
 
 
 __all__ = [
+    "IMPLAUSIBLE_FRAME_RATE",
     "InspectedStream",
     "MediaInspection",
     "StreamKind",
     "VideoRange",
     "VideoRangeType",
+    "narrow_to_single",
 ]

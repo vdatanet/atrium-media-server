@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails
+amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -220,22 +220,38 @@ class StreamPlan:              # one per output stream
 @dataclass(frozen=True)
 class Decision:
     outcome: Outcome
-    reasons: tuple[str, ...]   # TranscodeReason names, enum order
+    reasons: tuple[str, ...]   # TranscodeReason names, ascending flag value
     container: str | None      # negotiated output container ("ts")
     sub_protocol: str | None   # "hls" | "http"
     video: StreamPlan | None
     audio: StreamPlan | None
+    supports_transcoding: bool # what this profile leaves producible, not what was answered
 
-def decide(source, profile, switches, policy) -> Decision
+def decide(source, profile, switches, policy, *, is_video) -> Decision
 ```
 
-Callers may assume: an absent or empty profile is `DIRECT_PLAY` (spec §3.3 rule 1); the policy
-gate is the measured all-three rule for video and the single audio permission for audio items —
-implemented here and nowhere else; `switches.enable_direct_play` is honoured and
-`switches.enable_transcoding` is deliberately not consulted (spec §3.2); `REMUX` and `TRANSCODE`
-both produce a `TranscodingUrl` downstream, and only `reasons` distinguishes them on the wire;
-nothing in a `StreamPlan` ever exceeds the source (no upscaling, AC-9) or the profile (AC-8),
-sample rate included — the ceiling itself, not the reference's ladder step (behaviours §3.7).
+The profile vocabulary — `DeviceProfile`, `DirectPlayProfile`, `TranscodingProfile`,
+`CodecProfile`, `ProfileCondition`, `Switches`, `PlaybackPolicy` — is declared here as plain
+frozen records rather than as wire models, so the table test builds them without a framework;
+`api/media_info.py` parses the request body into them (T5).
+
+Callers may assume: an **absent** profile is `DIRECT_PLAY` (spec §3.3 rule 1) while an **empty**
+one is `NONE`, which is the measured half the rule had not been tested on; the policy gate is the
+measured all-three rule for video and the single audio permission for audio items — implemented
+here and nowhere else; `switches.enable_direct_play` is honoured and `switches.enable_transcoding`
+is deliberately not consulted (spec §3.2); `REMUX` and `TRANSCODE` both produce a `TranscodingUrl`
+downstream, and **nothing on the wire distinguishes them** — `reasons` says why *direct play*
+failed, not which rung was reached; nothing in a `StreamPlan` ever exceeds the source (no
+upscaling, AC-9) or the profile (AC-8), sample rate included — the ceiling itself, not the
+reference's ladder step (behaviours §3.7).
+
+Two of those are not what the first draft of this section said, and both were measured rather
+than reasoned `[probe: tools/probe_decision_ladder.py, Jellyfin 10.11.11, 2026-08-29]`.
+`is_video` is the **item's** kind and not something read off the file, because a music track with
+cover art carries a video stream and is still negotiated as audio — `media/info.py` takes the
+same flag from the same caller. And `supports_transcoding` cannot be derived from `outcome`: one
+accepting profile answered direct play with the flag true and false depending only on whether it
+declared a transcoding target.
 
 **`media/hls.py`** — pure:
 
@@ -350,9 +366,40 @@ codec conditions check the stored stream columns against the profile's `CodecPro
 `MaxStreamingBitrate` bounds direct play. The remux step asks whether a transcoding profile's
 container can hold every source stream copied; the transcode step builds `StreamPlan`s — copy
 for every stream the profile accepts (AC-7, measured parity), encode-to-ceiling for the rest,
-ceilings clamped to the source. The §3.3 HDR rule is a condition on the *copy* path: an explicit
-`DOVIWithHDR10Plus` declaration keeps the metadata; no declaration strips it as the reference
-does (behaviours §3.4's safest-shape divergence).
+ceilings clamped to the source.
+
+**CSV-containment is four rules, not one** `[source:
+MediaBrowser.Model/Extensions/ContainerHelper.cs @ v10.11.11]`: an empty or absent list admits
+everything; a list beginning with `-` inverts the whole answer; the **value** is split on commas
+too, which is what lets the stored `mov,mp4,m4a,3gp,3g2,mj2` match a profile listing only `mp4`;
+and an empty value is admitted by nothing, being refused before the empty-list rule is reached.
+Members are not trimmed, because the reference does not trim them.
+
+**Three things about the reasons**, all measured `[probe: tools/probe_decision_ladder.py,
+Jellyfin 10.11.11, 2026-08-29]`. They are accumulated from the *direct-play* analysis alone, so
+they never say which rung was reached. A refusal that has nothing to blame — no direct-play entry
+to reject, or `EnableDirectPlay: false` against a profile the source satisfies — is
+`DirectPlayError`. And they are emitted in **ascending flag value**, which is not the declaration
+order: the reference's `[Flags]` enum is declared in subject groups and .NET's formatter sorts by
+value. A condition whose property the reference maps to no reason at all — `IsAvc`,
+`NumAudioStreams`, five others — fails **silently**, leaving direct play intact `[source:
+MediaBrowser.Model/Dlna/StreamBuilder.cs GetTranscodeReasonForFailedCondition @ v10.11.11]`.
+
+**A numeric condition is compared at the value's own precision, not the wire's.** The reference's
+frame rate and level fields are 32-bit, and the wire prints the shortest decimal that reads back
+as the same value; the comparison gets the value. `domain/media.py` owns the narrowing for both
+readers (`narrow_to_single` and `InspectedStream.reference_frame_rate`) precisely so the
+negotiation cannot come to disagree with the stream it negotiated about. Spec §3.3 carries the
+observable consequence.
+
+**The §3.3 HDR rule has nothing to condition on in v1, and says so rather than pretending.**
+behaviours §3.4 diverges by honouring an explicit `DOVIWithHDR10Plus` declaration on the copy
+path and stripping for clients that did not make one. Atrium's copy path strips nothing at all,
+which is the same answer for every profile a v1 source can be negotiated against: `VideoRangeType`
+carries only `SDR`, `HDR10` and `HLG`, the three a stream listing can produce (§4), so **no
+inspection here ever answers `DOVIWithHDR10Plus`** and the conditional half of the divergence is
+unreachable. It arrives with the inspection that reads Dolby Vision side data, and a branch
+written now would be one no test could reach.
 
 ### 6.3 The TranscodingUrl
 
@@ -366,6 +413,19 @@ prefix, `master.m3u8?&` with the leading ampersand, PascalCase parameters — `D
 `ETag`), the source-codec condition triplet (`{codec}-level`, `{codec}-profile`,
 `{codec}-videobitdepth`), and `TranscodeReasons` as a comma-joined list. A client that parses
 this URL — and OQ-8 existed because some do — sees the reference's spelling.
+
+**The URL carries what the profile permitted, not what the decision planned**, and T4 measured
+the asymmetry so that T5 does not read the ceilings off a `StreamPlan` `[probe:
+tools/probe_decision_ladder.py, Jellyfin 10.11.11, 2026-08-29]`. A `Height <= 4320` condition on
+an 816-line source reaches the URL as `MaxHeight=4320`; `VideoBitrate` is the bitrate cap minus
+the audio's share and stays far above the source's own; only `MaxFramerate` is clamped, because
+it alone is seeded from the stream before the condition is minimised against it `[source:
+MediaBrowser.Model/Dlna/StreamBuilder.cs:949, ApplyTranscodingConditions @ v10.11.11]`. The
+clamped numbers in a `StreamPlan` are what to *produce* (§3.4, AC-9); these are what was
+*allowed*, and they are two different sets of numbers on the same negotiation. Two more spellings
+worth having before the task starts: `VideoCodec` is the transcoding profile's list verbatim even
+when the video is being re-encoded, while `AudioCodec` narrows to the single codec chosen when
+one can be copied and stays a list when none can.
 
 ### 6.4 HLS
 
@@ -420,7 +480,10 @@ directory; startup clears the scratch root of anything a crash left behind.
 Every §3 claim this plan builds on was measured on 2026-08-28 by the seven probes
 (`probe_playback_info`, `probe_playback_refusal`, `probe_transcode_decision`, `probe_hls`,
 `probe_universal_audio`, `probe_transcode_session`, `probe_range_matrix`) — the OQ table in the
-spec carries the per-question answers. What stays owed to the task list:
+spec carries the per-question answers. T4 added an eighth, `probe_decision_ladder`, because
+none of the seven had asked what each *rung* answers: it overturned rule 1's untested half,
+established the reasons' order and their subject, and separated the ceilings a URL carries from
+the ceilings a plan holds. What stays owed to the task list:
 
 * ~~**The `ETag` derivation** (§6.1)~~ — **discharged at T3**, and it took a search rather than a
   reading: the assignment carries two silent conventions, and §6.1 now records both with the probe
