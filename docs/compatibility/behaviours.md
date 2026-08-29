@@ -2112,7 +2112,7 @@ undocumented bug.
 | **Item fields outside the observed union omitted** ([005 §3.2](../../specs/005-item-query-api/spec.md)) | A field absent that the reference sends | The differential's key-set pass, which exists mainly for this |
 | **Policy flags stored but unenforced** ([002 §3.5](../../specs/002-authentication-users-and-sessions/spec.md)) | A restriction that does not restrict | All of them gate features v1 lacks; each is enforced in the change that adds its feature |
 | **Image decoration parameters ignored** ([006 §3.2](../../specs/006-images/spec.md)) | `percentPlayed`, `blur`, `foregroundLayer` have no effect | Implement if the differential shows a client sending them |
-| **No subtitle delivery at all** ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)) | Embedded tracks survive a direct play or an on-device remux, because they are inside the bytes the client is reading. Anything delivered over **server HLS** — remux or transcode — carries none: the master announces one variant and no `#EXT-X-MEDIA` tag. An **external sidecar** file is not reachable on any path | [011](../../specs/011-subtitle-delivery/spec.md), end to end. *This row read "subtitles delivered as files" until 008 was implemented and nothing delivered one; the correction was owed from 2026-08-28.* **And the ordered list this row used to give — emit `IsTextSubtitleStream`, bind `EnableSubtitlesInManifest`, extract and serve, announce — did not survive 011's gate**: two of those properties are already emitted by every read, and the manifest flag is not a parameter the master playlist route accepts at all. What announces a track is the delivery address naming the manifest method `[probe: tools/probe_subtitle_manifest.py, Jellyfin 10.11.11, 2026-08-29]` |
+| **No subtitle delivery at all** ([008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)) | Embedded tracks survive a direct play or an on-device remux, because they are inside the bytes the client is reading. Anything delivered over **server HLS** — remux or transcode — carries none: the master announces no `#EXT-X-MEDIA` tag and no subtitle group on any variant. An **external sidecar** file is not reachable on any path | [011](../../specs/011-subtitle-delivery/spec.md), end to end. *This row read "subtitles delivered as files" until 008 was implemented and nothing delivered one; the correction was owed from 2026-08-28.* **And the ordered list this row used to give — emit `IsTextSubtitleStream`, bind `EnableSubtitlesInManifest`, extract and serve, announce — did not survive 011's gate**: two of those properties are already emitted by every read, and the manifest flag is not a parameter the master playlist route accepts at all. What announces a track is the delivery address naming the manifest method `[probe: tools/probe_subtitle_manifest.py, Jellyfin 10.11.11, 2026-08-29]` |
 | **A media source with no stored inspection is skipped** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | On a **listing**, nothing: the source keeps `Id`, a `Container` inferred from its path and `Size` and carries `RunTimeTicks: null`, `Bitrate: null` and `MediaStreams: []` — and so does the reference's `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-08-29]`. On `PlaybackInfo` the whole annotation is skipped, so it answers the model's default `SupportsDirectPlay: true` **with no `TranscodingUrl`**, where the reference opens the file and answers it annotated — or, when the file cannot be read, answers the same empty source with the flags *decided* and an address. It happens whenever a file is in the library and nothing has opened it: a scan from before 008, a file added since, a probe that failed | Not a rescan, and not a decision about what to advertise — **the negotiation itself**, which is what the reference does and what [012 §3.2](../../specs/012-negotiation-inputs/spec.md) specifies: open the file inside the request and write down what it says. *This row read "the real mechanism is a decision about what an un-inspected source should advertise" until 012's measurement gate measured the reference resolving the state rather than describing it. It also read as though the listing were part of the shortfall; it is parity, and the music client's four losses with it* |
 | **No per-user subtitle preference, so no default subtitle track is proposed** ([011 §2, §3.3](../../specs/011-subtitle-delivery/spec.md)) | A negotiation that names no subtitle index answers `DefaultSubtitleStreamIndex` absent, where a stock reference proposes a track. It is the reference's own answer for a user whose subtitle mode is `None` — but a *new* reference user's mode is `Default`, not `None` `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]` | The two user settings the choice is a function of: a subtitle mode with five values and a language preference list. Both are a per-user feature, which is what 011 §2 excludes; a client that names the track it wants is unaffected, and both analysed clients name it |
 | **`Path`-derived identifiers differ from the reference's** ([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters)) | Nothing — ids are opaque | Not a gap to close; a deliberate design choice |
@@ -2121,6 +2121,7 @@ undocumented bug.
 | **A stream carries no `DisplayTitle` and no `Localized*` names** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A track picker with nothing to label its rows: the reference sends one localised string per stream — `Español - MP3 - Stereo - Predeterminado` on a Spanish server — and Atrium sends none. **[011 §3.4](../../specs/011-subtitle-delivery/spec.md) is where this stops being only a label**: a manifest entry's `NAME` is required, and the reference fills it from exactly this string | The localisation the strings are assembled from — which is two sources, not one: the flag words come from the server's own translation table and the language name from the platform's culture data, in the server's configured interface culture `[probe: tools/probe_subtitle_manifest.py, Jellyfin 10.11.11, 2026-08-29]`. An English-only approximation would differ from the reference on **every** track rather than be absent on it, which is the worse of the two |
 | **A stream carries no `IsAVC`, `TimeBase` or `NalLengthSize`** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Three properties absent on every stream | Columns migration 0006 does not have; they arrive with the migration that adds them, and nothing in v1 reads them |
 | **`HasSubtitles` counts only the streams inside the container** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A film whose only subtitles are `.srt` files beside it reads as having none, where the reference reads `true` `[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-29]` | [011 §3.6](../../specs/011-subtitle-delivery/spec.md), which discovers them. Closing it moves more than the flag: the discovered streams are numbered **ahead of** the container's own, so a file appearing beside a film renumbers every audio and video stream it has |
+| **Dolby Vision and HDR10+ are not classified** ([008 §3.1, §3.7](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A Dolby Vision or HDR10+ film's master playlist carries no `SUPPLEMENTAL-CODECS`, and its copied segments are tagged `hvc1` where the reference tags `dvh1` — because the file is inspected here as the HDR10 file its colour metadata claims `[probe: tools/probe_transcode_decision.py, Jellyfin 10.11.11, 2026-08-29]` | Reading the Dolby Vision configuration record and the HDR10+ marker out of a stream's side data, which is where that signal lives. See §5.10 |
 | **A multi-part film answers one media source per part** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Two sources on one item, where the reference answers one source, a `PartCount` and a separate route for the rest | Not a gap to close on its own: it follows from 003 §3.3 modelling the parts as one item's sources, and closing it means changing that model or adding `GET /Videos/{id}/AdditionalParts` to the surface |
 
 The difference between this section and §4 is intent. §4 says *we thought about it and chose
@@ -2365,6 +2366,42 @@ whole, so a property from a newer client than the schema survives the round trip
 is visible only to a client doing exactly what no client of the reference can usefully do.
 **Closing mechanism:** filter the stored declaration to the reference's `ClientCapabilitiesDto`
 members if the differential harness (010) ever shows a client observing the difference.
+
+### 5.10 Dolby Vision and HDR10+ are not classified, so two emissions never fire
+
+**Jellyfin does:** describe a stream-copied video's dynamic metadata twice over, in two places, and
+both turn on a range *flavour* rather than on high dynamic range itself
+`[probe: tools/probe_transcode_decision.py, Jellyfin 10.11.11, 2026-08-29]`:
+
+| Where | What it writes | When |
+|---|---|---|
+| The master playlist's copy variant | `SUPPLEMENTAL-CODECS="dvh1.08.06/db1p"` | The source's range type is one of the Dolby Vision spellings, and the metadata is not being stripped |
+| The same attribute | `SUPPLEMENTAL-CODECS="hvc1.2.4.L150.B0/cdm4"` — the variant's own codec string, then the marker | The source's range type is HDR10+ |
+| The produced segment's sample entry | `dvh1` instead of `hvc1` | A Dolby Vision copy **whose client declared `DOVI`** in its range types; a client that did not is muxed `hvc1` `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:1838-1866 @ v10.11.11]` |
+
+Measured on one Dolby Vision film in one run: `SUPPLEMENTAL-CODECS="dvh1.08.06/db1p"` on the copy
+variant and on neither entrance, present whether or not the client declared Dolby Vision, and
+`dvh1` read back out of the fMP4 initialisation segment by `ffprobe`. A plain HDR10 source beside
+it carried neither.
+
+**Depends on it:** a Dolby Vision player reads both. Neither is load-bearing for playback of the
+HDR10 base layer, which is what a player that ignores them gets.
+
+**Atrium does: neither, and the cause is one layer down.** [008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)'s inspection derives a stream's
+range from its colour transfer characteristics, which yields exactly three answers — standard
+range, HDR10 and HLG — and the eight Dolby Vision spellings plus HDR10+ are not among them,
+because that signal is not in a stream's colour metadata. So on **every source this server can
+describe**, the reference sends no `SUPPLEMENTAL-CODECS` and tags `hvc1` either: the emission is
+absent here and would be absent there, which is why writing it would be writing a branch nothing
+can reach. What is really divergent is narrower and upstream of the playlist: a Dolby Vision file
+is *inspected* here as the HDR10 file its colour metadata claims, and the two attributes are the
+first place a client can see that.
+
+**Closing mechanism:** teach the inspection to read the Dolby Vision configuration record and the
+HDR10+ marker — a stream's side data rather than its colour metadata — which adds the range-type
+members and the profile and level the attribute is assembled from. The two emissions then follow
+from data that exists, and so does [§3.4](#34-hdr10-metadata-stripped-from-clients-that-asked-for-it--class-b-no-compensation)'s
+divergence, which is written as a decision and is today equally unreachable for the same reason.
 
 ## 6. Non-improvements
 

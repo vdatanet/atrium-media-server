@@ -361,12 +361,98 @@ def test_a_copied_hdr_stream_is_labelled_by_its_transfer_and_a_re_encode_is_alwa
     copied = _copy("hevc", 1, width=3840, height=2160)
     encoded = StreamPlan(source_index=0, action=StreamAction.ENCODE, codec="h264", bitrate=1)
 
-    assert "VIDEO-RANGE=PQ" in master_playlist(
+    copy_master = master_playlist(
         query="", video=copied, audio=None, source_video=hdr, frame_rate=None
     )
-    assert "VIDEO-RANGE=SDR" in master_playlist(
+    encode_master = master_playlist(
         query="", video=encoded, audio=None, source_video=hdr, frame_rate=None
     )
-    assert 'CODECS="hvc1.2.4.L150.B0"' in master_playlist(
-        query="", video=copied, audio=None, source_video=hdr, frame_rate=None
+
+    assert "VIDEO-RANGE=PQ" in copy_master
+    assert 'CODECS="hvc1.2.4.L150.B0"' in copy_master
+    assert "VIDEO-RANGE=PQ" not in encode_master
+    assert encode_master.count("#EXT-X-STREAM-INF") == 1, (
+        "a re-encode already produces SDR, so there is no entrance to stand beside it"
     )
+
+
+def test_an_hdr_copy_carries_an_sdr_entrance_at_the_copys_own_bandwidth() -> None:
+    """The whole two-variant master of the measured HDR stream copy, reproduced exactly.
+
+    **Spec section 3.7 said 'exactly one variant', measured on a standard-range film that could
+    not reach this branch.** Against an HDR source the reference appends an h264 entrance at the
+    *same* `BANDWIDTH` and `AVERAGE-BANDWIDTH` as the copy - so nothing selects on rate and a
+    client picks by colour range - repeating the copy's own `RESOLUTION` and `FRAME-RATE`, and
+    addressing it with `VideoCodec` replaced in place and `AllowVideoStreamCopy=false` appended.
+    The leading empty pair of the negotiated `?&` does not survive into the entrance's address.
+    `[probe: tools/probe_transcode_decision.py, Jellyfin 10.11.11, 2026-08-29]`
+    """
+    hdr = InspectedStream(
+        index=0,
+        kind=StreamKind.VIDEO,
+        codec="hevc",
+        width=3840,
+        height=2160,
+        level=150,
+        profile="Main 10",
+        video_range=VideoRange.HDR,
+        video_range_type=VideoRangeType.HDR10,
+        framerate="24000/1001",
+        average_framerate="24000/1001",
+    )
+    video = _copy("hevc", 26_064_862, width=3840, height=2160, bit_depth=10)
+    audio = StreamPlan(
+        source_index=2, action=StreamAction.ENCODE, codec="aac", bitrate=640_000, channels=6
+    )
+    query = (
+        "?&DeviceId=d&MediaSourceId=m&VideoCodec=hevc,h264&AudioCodec=aac"
+        "&hevc-level=150&hevc-profile=main10&TranscodeReasons=AudioCodecNotSupported"
+    )
+
+    body = master_playlist(
+        query=query,
+        video=video,
+        audio=audio,
+        source_video=hdr,
+        frame_rate=23.976025,
+        options={"hevc-level": "150", "hevc-profile": "main10"},
+    )
+
+    assert body.splitlines() == [
+        "#EXTM3U",
+        "#EXT-X-STREAM-INF:BANDWIDTH=26704862,AVERAGE-BANDWIDTH=26704862,VIDEO-RANGE=PQ,"
+        'CODECS="hvc1.2.4.L150.B0,mp4a.40.2",RESOLUTION=3840x2160,FRAME-RATE=23.976',
+        f"main.m3u8{query}",
+        "#EXT-X-STREAM-INF:BANDWIDTH=26704862,AVERAGE-BANDWIDTH=26704862,VIDEO-RANGE=SDR,"
+        'CODECS="avc1.424029,mp4a.40.2",RESOLUTION=3840x2160,FRAME-RATE=23.976',
+        "main.m3u8?DeviceId=d&MediaSourceId=m&VideoCodec=h264&AudioCodec=aac"
+        "&hevc-level=150&hevc-profile=main10&TranscodeReasons=AudioCodecNotSupported"
+        "&AllowVideoStreamCopy=false",
+    ]
+
+
+def test_the_entrance_names_the_codec_even_where_the_query_never_did() -> None:
+    """`VideoCodec` is replaced in place where the negotiation wrote one and appended where it
+    did not - which is a bare `main.m3u8` request, the one the spec's refusal table calls 'not a
+    refusal: a copy is planned at the copy default and a playlist is answered'."""
+    hdr = InspectedStream(
+        index=0,
+        kind=StreamKind.VIDEO,
+        codec="hevc",
+        width=1920,
+        height=1080,
+        level=120,
+        profile="Main 10",
+        video_range=VideoRange.HDR,
+        video_range_type=VideoRangeType.HLG,
+    )
+    video = _copy("hevc", 1, width=1920, height=1080)
+
+    lines = master_playlist(
+        query="", video=video, audio=None, source_video=hdr, frame_rate=None
+    ).splitlines()
+
+    assert lines[2] == "main.m3u8"
+    assert lines[4] == "main.m3u8?VideoCodec=h264&AllowVideoStreamCopy=false"
+    assert "VIDEO-RANGE=HLG" in lines[1], "an HLG copy is labelled by its own transfer"
+    assert "VIDEO-RANGE=SDR" in lines[3]
