@@ -107,8 +107,8 @@ KILL_POLL_SECONDS = 3
 DELETION_WATCH_SECONDS = 45
 
 
-def transcoding_info(server: Server) -> dict[str, Any] | None:
-    """The probe's own session's `TranscodingInfo`, or `None` when it carries none at all.
+def transcoding_info(server: Server, device: str = DEVICE_ID) -> dict[str, Any] | None:
+    """One device's session's `TranscodingInfo`, or `None` when it carries none at all.
 
     **`None` here means the property is absent**, not that the numbers inside it are: every
     response passes through the reference's global null suppression (behaviours section 1.7), so
@@ -118,15 +118,15 @@ def transcoding_info(server: Server) -> dict[str, Any] | None:
     stop that leaves the object behind reads as a stop that removed it.
     """
     for session in server.get("/Sessions"):
-        if session.get("DeviceId") == DEVICE_ID:
+        if session.get("DeviceId") == device:
             found = session.get("TranscodingInfo")
             if found:
                 return dict(found)
     return None
 
 
-def completion(server: Server) -> float | None:
-    info = transcoding_info(server)
+def completion(server: Server, device: str = DEVICE_ID) -> float | None:
+    info = transcoding_info(server, device)
     return None if info is None else info.get("CompletionPercentage")
 
 
@@ -345,6 +345,111 @@ def segment_battery(
     probe.observe("a playlistId nothing named", f"{status}, {len(body)} bytes")
     checks.append(status == 200 and len(body) > 0)
 
+    return checks
+
+
+def initialisation_battery(
+    server: Server, probe: Probe, source: VideoSource, sessions: set[str]
+) -> list[bool]:
+    """What does asking for the fMP4 initialisation segment cost, and when does it cost anything?
+
+    012 OQ-8. The reference's first branch on a segment request is *"starting transcoding because
+    fmp4 init file is being requested"*, taken before it has looked at what is running
+    `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:1501-1505 @ v10.11.11]` - which is
+    the defect the video client pre-warms its session to dodge. What that reading leaves out is
+    **where the branch sits**: two `File.Exists` checks stand in front of it, one of them inside
+    the lock, and both return the segment without starting anything
+    `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:1481-1496 @ v10.11.11]`. So the
+    question is not whether the restart exists but which orders of request reach it, and that is a
+    measurement rather than a reading.
+
+    Two rows, each on a device and a play session of its own so that neither reads the other's
+    transcode directory:
+
+    - **the map first**, which is the order a player uses, because `#EXT-X-MAP` precedes the first
+      segment in the playlist it has just read;
+    - **segments first, then the map**, which is the order with something to throw away.
+
+    The evidence for "did anything restart" is the time to first byte plus whether the segments
+    already produced still answer immediately afterwards. The session's `CompletionPercentage` is
+    deliberately *not* read: it is reported against the device's own session, so reading it would
+    force both rows onto the probe's own device and back into one transcode directory.
+    """
+    checks: list[bool] = []
+    status, data = negotiate(server, source.item_id, video_profile(source, "mp4"))
+    fragmented = (
+        data["MediaSources"][0]
+        .get("TranscodingUrl", "")
+        .replace("SegmentContainer=ts", "SegmentContainer=mp4")
+    )
+    if not fragmented:
+        raise ProbeError(f"the fMP4 profile produced no TranscodingUrl ({status})")
+    sessions.add(data["PlaySessionId"])
+    lists = fetch_playlists(server, source.item_id, fragmented)
+    mapped = [line for line in lists.main.splitlines() if line.startswith("#EXT-X-MAP")]
+    if not mapped:
+        raise ProbeError("the fMP4 playlist carries no #EXT-X-MAP line to ask about")
+    map_uri = f"/videos/{dashed(source.item_id)}/" + mapped[0].split('URI="', 1)[1].rstrip('"')
+
+    # Row one: the map first, on a directory with nothing in it.
+    device = f"atrium-probe-{uuid.uuid4().hex[:12]}"
+    first_session = uuid.uuid4().hex
+    sessions.add(first_session)
+    status, cold, size = timed_fetch(server, with_session(map_uri, device, first_session))
+    probe.observe("map first, nothing produced yet", f"{status}, {size} bytes in {cold:.2f}s")
+    checks.append(status == 200 and size > 0)
+
+    status, warm, size = timed_fetch(server, with_session(map_uri, device, first_session))
+    probe.observe("the same initialisation segment again", f"{status}, {size} bytes in {warm:.2f}s")
+    checks.append(status == 200 and warm < cold)
+
+    status, after, size = timed_fetch(
+        server, with_session(lists.segments[0], device, first_session)
+    )
+    probe.observe("segment 0 afterwards", f"{status}, {size} bytes in {after:.2f}s")
+    checks.append(status == 200 and size > 0)
+    stop_encoding(server, first_session)
+    time.sleep(2)
+
+    # Row two: three segments, then the map. This is the order that is supposed to pay.
+    device = f"atrium-probe-{uuid.uuid4().hex[:12]}"
+    second_session = uuid.uuid4().hex
+    sessions.add(second_session)
+    produced = [
+        timed_fetch(server, with_session(uri, device, second_session)) for uri in lists.segments[:3]
+    ]
+    probe.observe("segments first, three of them", f"{[round(row[1], 2) for row in produced]}s")
+    checks.append(all(row[0] == 200 for row in produced))
+
+    status, seconds, size = timed_fetch(server, with_session(map_uri, device, second_session))
+    probe.observe("then the initialisation segment", f"{status}, {size} bytes in {seconds:.2f}s")
+    checks.append(status == 200 and size > 0)
+
+    status, again, size = timed_fetch(
+        server, with_session(lists.segments[2], device, second_session)
+    )
+    probe.observe("segment 2 again, afterwards", f"{status}, {size} bytes in {again:.2f}s")
+    checks.append(status == 200 and size > 0)
+
+    #: The whole finding, as one comparison: asking for the map on an empty directory starts a
+    #: transcode and asking for it after three segments does not, because producing any fMP4
+    #: segment writes the initialisation segment first - so by the time the second order gets
+    #: there, the file the branch tests for already exists.
+    probe.observe(
+        "the branch's guard",
+        f"cold {cold:.2f}s against {seconds:.2f}s once segments exist, and segment 2 still "
+        f"answered in {again:.2f}s afterwards",
+    )
+    checks.append(seconds < cold and again < cold)
+    stop_encoding(server, second_session)
+
+    probe.note(
+        "The restart the client contract names is guarded by a file-existence test, and an fMP4 "
+        "transcode writes the initialisation segment before it writes any segment - so a session "
+        "that has produced anything already has the file the branch tests for, and the branch is "
+        "not reached. It is reached on a directory with nothing in it, where a restart discards "
+        "nothing. Neither order measured here loses production."
+    )
     return checks
 
 
@@ -854,6 +959,10 @@ def run(server: Server) -> Probe:
         # 008 T11's battery, last because it starts a dozen sessions of its own and the
         # observation above is about a server with one.
         checks += segment_battery(server, probe, source, started_sessions)
+
+        # 012 OQ-8, and last for the same reason: it starts two sessions of its own and reads
+        # one of them through the same TranscodingInfo row everything above watches.
+        checks += initialisation_battery(server, probe, source, started_sessions)
     finally:
         for one in started_sessions:
             stop_encoding(server, one)

@@ -62,6 +62,8 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_subtitle_delivery.py`](probe_subtitle_delivery.py) | What do the subtitle playlist and the subtitle fetch answer — to a caller with no token, to a window, to a format, and to every way of naming nothing? | 011 §3.5, §3.7, OQ-6, OQ-8, OQ-11; behaviours §3.12 | only under `--allow-writes`: the image-subtitle case, which the reference attempts with ffmpeg before refusing |
 | [`probe_sidecar_subtitles.py`](probe_sidecar_subtitles.py) | Which files beside a media file become subtitle streams, and what does the reference read out of their names? | 011 §3.6, OQ-7; behaviours §5 | no |
 | [`probe_progressive_production.py`](probe_progressive_production.py) | Does a capped progressive transcode ever state a length, and is the work keyed on the play session the client supplies? | 011 OQ-9, OQ-10; behaviours §3.3 | yes — two or three short audio transcodes of one track, every session stopped |
+| [`probe_uninspected_source.py`](probe_uninspected_source.py) | What does a negotiation answer for a media source nothing has successfully opened, what does a listing answer, and is what an on-demand probe learns kept? | 012 §3.2, §3.4, OQ-1, OQ-2, OQ-3, OQ-9; behaviours §2.23, §3.13, §5 | yes — it builds a library of deliberately unreadable files on the server's own disk, scans, measures, and removes both the libraries and the files |
+| [`probe_session_filters.py`](probe_session_filters.py) | What do `GET /Sessions`' three parameters narrow, and does the narrowing run before or after the rule about whose sessions a caller may see? | 002 §3.8 (measured at 012's gate, OQ-7); behaviours §2.25 | only under `--allow-writes`: a throwaway non-administrator whose session supplies the second row, deleted on the way out |
 
 ### Running them
 
@@ -106,6 +108,20 @@ python3 tools/probe_subtitle_manifest.py --allow-writes
 python3 tools/probe_subtitle_delivery.py --allow-writes
 python3 tools/probe_sidecar_subtitles.py
 python3 tools/probe_progressive_production.py --allow-writes
+python3 tools/probe_session_filters.py --allow-writes
+```
+
+`probe_uninspected_source.py` is the exception to the list above, and it says so in its own
+docstring: its question cannot be asked of a remote server, because the fixture it needs is a file
+the server can see and this machine can write. Every item in a real library has been probed — the
+scan that creates an item is the scan that probes it — so the state only exists where the probe
+*failed*, and the probe has to manufacture it:
+
+```bash
+docker run -d --name jf -p 8097:8096 -v "$PWD/fixture:/media" jellyfin/jellyfin:10.11.11
+#  … complete the startup wizard …
+python3 tools/probe_uninspected_source.py http://127.0.0.1:8097 -u admin \
+    --allow-writes --fixture-root "$PWD/fixture" --server-root /media
 ```
 
 The playback probes marked `--allow-writes` make the reference **encode**: each starts one

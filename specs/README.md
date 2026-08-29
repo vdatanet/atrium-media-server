@@ -123,7 +123,7 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Accepted** | — | — |
-| [012](012-negotiation-inputs/) | Negotiation inputs | Draft | — | — |
+| [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
 
 **001 through 008 are implemented**, 008 on 2026-08-29 across fourteen tasks. Its spec and plan
 were accepted the same day, at a review that wrote and ran the five probes its open questions had
@@ -139,8 +139,9 @@ the client rather than a file age (T13). **009 and 010 remain drafts**, and thei
 questions are the standing review agenda —
 [what 008 owes them](008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
 is written down rather than remembered. **011's spec was accepted the same day**, at its own
-measurement gate, so it is no longer one of the drafts; **012 was opened as one on the same day**,
-so the drafts are 009, 010 and 012. The lowest-numbered feature that is not implemented is
+measurement gate, so it is no longer one of the drafts; **012 was opened as one on the same day and
+accepted at its own gate the same day**, so the drafts are 009 and 010. The lowest-numbered feature
+that is not implemented is
 **009**, so its spec review is the next gate, and that list is one of its inputs.
 
 **008's own closing task found the class it exists to catch.** The acceptance map is where a
@@ -240,7 +241,23 @@ initialisation-segment claim is **no longer third-party**: the line the client's
 now been read, and the restart is the first branch, taken before the reference looks at what is
 running `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:1501-1505 @ v10.11.11]`. Nine
 open questions, each naming the probe that answers it, and **not one measurement**: like 011's, its
-next gate is a measurement session.
+next gate was a measurement session.
+
+**That session ran on 2026-08-29 and 012's spec is accepted.** Four probes — two written for it,
+two extended — answered all nine, and the measurements were harder on the doubts than on the
+claims. **The reference does have an un-inspected source to describe, but only an un-*inspectable*
+one**: a readable file is annotated inside the negotiation that asks for it, in 0.20 s, and what it
+learns is **kept**, so the next listing carries it. **The music client's half is parity and the
+claim that it was a gap is withdrawn** — a stock reference answers a listing the same empty source
+Atrium does — and *"one root cause, two clients"* survives through the negotiation's **write**
+rather than through anything on the listing path, which is not the cure either trace proposed.
+An **audio** item with no audio stream refuses the whole request with `400` where a video item
+answers `200` with an address, and the address a video item is given resolves to a live playlist
+that answers `500`. The protocol question had two candidates and needed four: altered cases bind,
+ordinals bind, an empty string takes the default, and only a word that binds to nothing refuses.
+And the initialisation-segment restart is guarded by a file check the same session has already
+satisfied, so it costs nothing in either order a client uses — decided *replicate* under behaviours
+§3.0, at §3.14.
 
 **007's thirteen tasks found something in seven of them, and two were features that did not
 exist.** The sharpest is T11's: **the container `PlayedPercentage` had never been implemented.**
