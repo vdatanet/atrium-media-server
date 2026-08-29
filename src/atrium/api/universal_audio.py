@@ -61,6 +61,7 @@ from atrium.db.item_queries import ItemQueryRepository
 from atrium.db.repositories import UserRepository
 from atrium.domain.queries import ItemQuery
 from atrium.domain.user import User
+from atrium.media import ffmpeg
 from atrium.media.decision import (
     CodecKind,
     CodecProfile,
@@ -141,11 +142,20 @@ def codec_for(container: str | None) -> str:
     written for. A client that names `mp3` or nothing at all gets `mp3` on both servers; the
     divergence is only where the client named a transcoding container and no codec, which is
     where the reference sends nothing.
+
+    **`wav` is the one container the reference's table cannot answer**, and 008 T9 is where that
+    stops being academic: an unlisted container falls through to its own name, so `wav` in gives
+    `wav` out, and there is no encoder called that. `media/ffmpeg.raw_codec_for` supplies the
+    missing row rather than editing the transcribed table, which is what keeps the citation above
+    honest about what the reference contains.
     """
     named = (container or "").strip().lstrip(".").lower()
     if not named:
         return FALLBACK_CODEC
-    return CONTAINER_CODECS.get(named, named)
+    inferred = CONTAINER_CODECS.get(named)
+    if inferred is not None:
+        return inferred
+    return ffmpeg.raw_codec_for(named) or named
 
 
 def direct_play_profiles(container: str | None) -> tuple[DirectPlayProfile, ...]:

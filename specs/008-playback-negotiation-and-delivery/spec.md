@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-26
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — §3.1 gains the measured media-source field set (31 properties on every source, `VideoType` on a video one), the 32-bit number format its rates and level are written in, the three stream families v1 does not emit, and two divergences the first draft stated as parity: a multi-part film's parts are media sources here and separate items in the reference, and `HasSubtitles` counts only the streams inside the container; and 2026-08-29 at the spec review, which wrote the five probes the OQ table had been citing prospectively and ran all of them — all twelve open questions answered, and five claims did not survive: the policy story was fiction (no playback route consults `EnableMediaPlayback`, and a single denied permission moves nothing at negotiation — §3.2, §3.3, AC-31), `EnableTranscoding: false` in the request body is ignored (OQ-12), `static=true` on a mismatched container is not an error but the original bytes behind the wrong label (§3.5, AC-18), `enableRedirection` never redirects a local file (OQ-4, AC-21), and the reference's HLS segments already carry `Content-Length` — the §3.5 divergence shrank to the progressive routes. Plus one defect nobody was looking for: a sample-rate ceiling is answered from the Opus rate ladder and can be **exceeded** (§3.6, AC-19); and 2026-08-29 by T4 — §3.3's rule 1 loses "or empty": an absent profile means anything and an empty one permits nothing, which are opposite answers; the reasons list is measured to say why *direct play* failed rather than which rung was reached, to name `DirectPlayError` when nothing else explains the refusal, and to arrive in flag-value order; and a numeric ceiling is compared against the value the server holds rather than the shorter decimal it printed; and 2026-08-29 by T6 — §3.5's authentication sentence was the wrong way round: the four `stream` routes accept every mechanism and **require none**, where `/universal` alone requires one, so AC-32 records the decision 002 deferred here; the range table gains five measured rows including the one the RFC would have got backwards (an unreadable `Range` is the whole body, never a `416`); a delivery route's own refusal is the third error shape rather than problem details; the container is a label with a fallback and a spelling rule; and a static response carries exactly four headers and does no conditional handling; and 2026-08-29 by T8 — §3.6's codec-less hole is not a codec-less transcoding profile: the profile defaults to mp3 and negotiates, and it is the streaming request behind it that infers a codec from a request path with no extension, which is why the empty `200` arrives with a `transcodingContainer` as well as without one; AC-19's bit-depth clause is a direct-play refusal and not an output target, because neither server ever states a sample format; `transcodingProtocol` is unvalidated and case-insensitive, so a typed parameter would refuse requests the reference serves; `container` is split on commas before bars; and this route's three refusals are none of its siblings' — the item `404` is problem details where theirs is the third shape, and both `mediaSourceId` shapes answer one `400` where theirs split `400`/`500`
+amended: 2026-08-29 by T3 — §3.1 gains the measured media-source field set (31 properties on every source, `VideoType` on a video one), the 32-bit number format its rates and level are written in, the three stream families v1 does not emit, and two divergences the first draft stated as parity: a multi-part film's parts are media sources here and separate items in the reference, and `HasSubtitles` counts only the streams inside the container; and 2026-08-29 at the spec review, which wrote the five probes the OQ table had been citing prospectively and ran all of them — all twelve open questions answered, and five claims did not survive: the policy story was fiction (no playback route consults `EnableMediaPlayback`, and a single denied permission moves nothing at negotiation — §3.2, §3.3, AC-31), `EnableTranscoding: false` in the request body is ignored (OQ-12), `static=true` on a mismatched container is not an error but the original bytes behind the wrong label (§3.5, AC-18), `enableRedirection` never redirects a local file (OQ-4, AC-21), and the reference's HLS segments already carry `Content-Length` — the §3.5 divergence shrank to the progressive routes. Plus one defect nobody was looking for: a sample-rate ceiling is answered from the Opus rate ladder and can be **exceeded** (§3.6, AC-19); and 2026-08-29 by T4 — §3.3's rule 1 loses "or empty": an absent profile means anything and an empty one permits nothing, which are opposite answers; the reasons list is measured to say why *direct play* failed rather than which rung was reached, to name `DirectPlayError` when nothing else explains the refusal, and to arrive in flag-value order; and a numeric ceiling is compared against the value the server holds rather than the shorter decimal it printed; and 2026-08-29 by T6 — §3.5's authentication sentence was the wrong way round: the four `stream` routes accept every mechanism and **require none**, where `/universal` alone requires one, so AC-32 records the decision 002 deferred here; the range table gains five measured rows including the one the RFC would have got backwards (an unreadable `Range` is the whole body, never a `416`); a delivery route's own refusal is the third error shape rather than problem details; the container is a label with a fallback and a spelling rule; and a static response carries exactly four headers and does no conditional handling; and 2026-08-29 by T8 — §3.6's codec-less hole is not a codec-less transcoding profile: the profile defaults to mp3 and negotiates, and it is the streaming request behind it that infers a codec from a request path with no extension, which is why the empty `200` arrives with a `transcodingContainer` as well as without one; AC-19's bit-depth clause is a direct-play refusal and not an output target, because neither server ever states a sample format; `transcodingProtocol` is unvalidated and case-insensitive, so a typed parameter would refuse requests the reference serves; `container` is split on commas before bars; and this route's three refusals are none of its siblings' — the item `404` is problem details where theirs is the third shape, and both `mediaSourceId` shapes answer one `400` where theirs split `400`/`500`; and 2026-08-29 by T9 — §3.6's PCM/WAV warning was wrong in both halves once its prior-probe was discharged: the `500` has two causes (a `wav` extension inferred as a codec, and a `pcm_*` codec with no `audioBitRate`), and the headerless body comes from the *transcoding* container, so AC-20's `Container=wav` named a request that answers mp3 on both servers. Neither symptom belongs to one route family — the split is whether an `audioBitRate` was sent — and AC-20 now names every WAV shape and the length and `Range` each of them carries; the codec-less hole is container-dependent, because the codec the reference ends up asking for is `aac` rather than the request path, and a `wav` transcoding container can carry it
 depends_on: [005, 007]
 ---
 
@@ -655,15 +655,19 @@ sample format is not a choice.
 
 **A codec-less transcode request is the reference's other hole here.** `/universal` with a
 `transcodingProtocol` of `http` and no `audioCodec` answers `200` with a `Content-Length: 0`
-empty body — with a `transcodingContainer` and without one `[probe:
+empty body — naming a `transcodingContainer` of `flac` and naming none at all `[probe:
 tools/probe_universal_audio.py, Jellyfin 10.11.11, 2026-08-29]`. The transcoding profile is not
 the codec-less part: it is built with `audioCodec ?? "mp3"` and negotiates fine. The **streaming
 request** built after it carries the raw parameter, and a streaming request with no codec infers
 one from the request path's extension — of which `/Audio/{itemId}/universal` has none, so the
-whole path becomes the codec name and the encoder dies before its first byte `[source:
-Jellyfin.Api/Helpers/StreamingHelpers.cs:71-75 @ v10.11.11]`. Nothing can be built on an empty
-body behind a `200`; Atrium answers the request with a stream, giving that same inference the
-transcoding container instead of a dotless path
+whole path is what the inference is handed `[source:
+Jellyfin.Api/Helpers/StreamingHelpers.cs:71-75 @ v10.11.11]`. **The encoder it ends up asking for
+is `aac`**, not the path: the name is guarded by the reference's own container spelling pattern
+and anything that fails it becomes `aac`, which a path full of separators does. So the empty body
+is that encoder meeting a muxer that cannot carry it, and the hole is **container-dependent** — a
+`wav` transcoding container, which can carry AAC, answers a real body. Nothing can be built on an
+empty body behind a `200`; Atrium answers the request with a stream, giving that same inference
+the transcoding container instead of a dotless path
 ([behaviours §3.8](../../docs/compatibility/behaviours.md#38-universal-without-audiocodec-answers-an-empty-200--class-a-diverged)).
 
 **`enableRedirection` never redirects a local file, and the draft said otherwise.** The `302`
@@ -692,14 +696,27 @@ Jellyfin.Api/Helpers/StreamingHelpers.cs:111 @ v10.11.11]`. An **invisible** ite
 the same `404` as an unknown one here, and visible on this route at all only because this is the
 one delivery route with a user to check against.
 
-> ⚠️ **The reference's PCM/WAV routes are broken at 10.11.11**: `stream.wav` with any PCM codec
-> answers `500`, and `/universal` with `Container=wav` answers `200` with a body that has no RIFF
-> header. `[prior-probe: Jellyfin 10.11.11, 2026-08-03; upstream jellyfin/jellyfin#17537, merged to
-> master, not in any 10.11.x]` Producing PCM requires re-encoding, which v1 now does, so **this path
-> is served in v1**: Atrium answers with valid WAV — a real RIFF header, a real `Content-Length`,
-> `Range` support — on both routes. Both divergences, and the risk carried by the second, are
-> reasoned in
-> [behaviours §3.2](../../docs/compatibility/behaviours.md#32-pcmwav-output--one-bug-two-symptoms-two-classes).
+**The reference's PCM/WAV answers are broken at 10.11.11, and the break is split by whether the
+request carried an `audioBitRate` rather than by which route was called** `[probe:
+tools/probe_universal_audio.py, Jellyfin 10.11.11, 2026-08-29]`:
+
+| Request | The reference answers |
+|---|---|
+| `stream.wav`, no codec named | `500` — the codec inferred from the extension is `wav`, and nothing encodes that |
+| `stream.wav` or `stream?container=wav` with a `pcm_*` codec and **no** `audioBitRate` | `500` — the sample-rate argument is built from an absent field |
+| the same **with** an `audioBitRate` | `200`, `audio/wav`, a body with **no RIFF header** |
+| `/universal` whose **transcoding** container is `wav`, with a `pcm_*` codec and an `audioBitRate` | the same headerless body |
+| `/universal` with `container=wav` and nothing else | mp3 — `container` is the direct-play list, not a target |
+
+None of the broken answers carries a `Content-Length`, all answer `Accept-Ranges: none`, and every
+`Range` on them is ignored (§3.5, behaviours §3.3). **Atrium answers each of the first four rows
+with valid WAV** — a real RIFF header, a `Content-Length` equal to the body, `Range` honoured —
+which requires producing the output somewhere seekable, because a WAV header written to a stream
+that cannot be rewound states a length it does not know. The last row is parity: `container` is
+what the client can play, not what it is asking to be sent, and both servers answer it with mp3.
+Both divergences, and the risk carried by the second, are reasoned in
+[behaviours §3.2](../../docs/compatibility/behaviours.md#32-pcmwav-output--one-bug-two-symptoms-two-classes);
+the upstream fix is `jellyfin/jellyfin#17537`, merged to master and in no 10.11.x.
 
 ### 3.7 Video delivery
 
@@ -836,8 +853,13 @@ though the age-based one is.
     behaviours §3.7). A bit-depth ceiling is the third trigger and not a third target — it
     refuses the copy, and neither server states a sample format for it (§3.6). The criterion read
     "meets the constraint" of all three until the reference's encoder arguments were read.
-20. `/universal` with `Container=wav` answers a body with a valid RIFF header and a real length
+20. **Every produced WAV answer carries a valid RIFF header, a `Content-Length` equal to its body
+    and an honoured `Range`**: `stream.wav`, `stream` with `container=wav`, and `/universal` whose
+    **transcoding** container is `wav` — with a `pcm_*` codec and without one
     ([behaviours §3.2](../../docs/compatibility/behaviours.md#32-pcmwav-output--one-bug-two-symptoms-two-classes)).
+    The criterion read "`/universal` with `Container=wav`" until the shapes were measured: that
+    parameter is the direct-play list and answers mp3 on both servers, and the reference's
+    headerless body comes from the transcoding container (§3.6).
 21. `/universal` accepts `enableRedirection` and **never answers `302` for a local source**: the
     direct-play answer is the proxied bytes with a `200` (§3.6). The redirect branch exists only
     for remote HTTP sources, which v1 does not have.

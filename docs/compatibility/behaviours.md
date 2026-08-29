@@ -1288,15 +1288,33 @@ right for one symptom and wrong for the other.
 
 **The cause is a single block** of `EncodingHelper.GetProgressiveAudioFullCommandLine`, which for
 any `pcm_*` encoder forced the raw muxer `-f s16le` and fed `-ar` from `AudioBitRate` — the wrong
-field, and an optional one.
-`[prior-probe: Jellyfin 10.11.11, 2026-08-03; upstream jellyfin/jellyfin#17537, merged to master
-2026-08-05, not in any 10.11.x]`
+field, and an optional one `[source:
+MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:7773-7776 @ v10.11.11]`, `[probe:
+tools/probe_universal_audio.py, Jellyfin 10.11.11, 2026-08-29]`. The fix is
+`jellyfin/jellyfin#17537`, merged to master on 2026-08-05 and in no 10.11.x — so §3.0.1's
+tie-break 2 reads **fixed upstream** for both symptoms below.
 
-Two symptoms come out of it:
+Two symptoms come out of it. **Both were carried as `[prior-probe: 2026-08-03]` until 008 T9 wrote
+the battery, and writing it moved both of them**: symptom 1 turned out to have two causes, and
+symptom 2 turned out to name a parameter that does not produce it. Neither symptom belongs to one
+route family — the split below is by *whether the request carried an `AudioBitRate`*, not by
+which route was called.
 
-#### Symptom 1 — `GET /Audio/{id}/stream.wav` with a PCM codec returns 500
+#### Symptom 1 — a PCM request with nothing to put in `-ar` returns 500
 
-`-ar` fed from an absent `AudioBitRate` produces a malformed command line, and ffmpeg never starts.
+Two ways in, one status, measured on the same server in one run `[probe:
+tools/probe_universal_audio.py, Jellyfin 10.11.11, 2026-08-29]`:
+
+* **`GET /Audio/{id}/stream.wav` naming no codec at all.** The codec is inferred from the part of
+  the path after its last dot, and the inference table has no `wav` row, so it answers `wav` —
+  which `GetAudioEncoder` passes straight to `-acodec` because it is a well-formed container name
+  `[source: MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:667-684, 746-806 @ v10.11.11]`.
+  There is no encoder called `wav`. This request never reaches the PCM block at all, and the
+  entry's first wording missed it.
+* **Any `pcm_*` codec sent without an `AudioBitRate`.** `-ar` is built from an absent field, the
+  argument degrades to a bare `-ar`, and ffmpeg aborts before its first frame. Reached identically
+  by `stream.wav?audioCodec=pcm_s16le`, by `stream?container=wav&audioCodec=pcm_s16le`, and by
+  `/universal` with a `wav` transcoding container.
 
 **Class A.** A client cannot build on a 500. Whatever it does today — fall back to FLAC, show an
 error — keeps working when the request succeeds instead.
@@ -1304,10 +1322,17 @@ error — keeps working when the request succeeds instead.
 **Atrium: diverge. Serve valid WAV**, with a RIFF header, a real `Content-Length` and `Range`
 support.
 
-#### Symptom 2 — `GET /Audio/{id}/universal` with `Container=wav` returns headerless PCM
+#### Symptom 2 — the same request *with* a bitrate returns headerless PCM
 
 `200`, `Content-Type: audio/wav`, and a body with no `RIFF` header, because the raw muxer was
-applied regardless of the container the client asked for.
+applied regardless of the container the client asked for. The bitrate is what separates this from
+symptom 1: it gives `-ar` something to consume, so the command is well formed and the encoder
+runs. Measured on `GET /Audio/{id}/stream.wav?audioCodec=pcm_s16le&audioBitRate=128000` and on
+`GET /Audio/{id}/universal` with `transcodingContainer=wav` and the same pair — **the transcoding
+container, not `Container`**: `Container=wav` is `/universal`'s direct-play list, and a source it
+does not cover transcodes to the default target, answering `audio/mpeg`. This entry said
+`Container=wav` until the battery was written `[probe: tools/probe_universal_audio.py, Jellyfin
+10.11.11, 2026-08-29]`.
 
 **Class B, and the trap is real.** A client compensating for this must **synthesise a RIFF header
 and prepend it** — it has no other way to make the stream playable. Send a correct header to that
@@ -1327,6 +1352,26 @@ So the class default says replicate. The tie-breaks say otherwise, and both are 
 does not: a client that blindly prepends a header receives corrupt audio. If the differential
 harness ever finds such a client, this decision is revisited, not defended.
 
+#### The divergence cannot be served chunked, and that decides how it is implemented
+
+A WAV file states its own length twice — the `RIFF` header's size and the `data` chunk's — and a
+muxer writing to a pipe can never go back to fill either in: ffmpeg writes `ffffffff` into both
+and exits `0`. Two invocations of the same conversion, one to a file and one to a pipe, differ in
+exactly those eight bytes and in nothing else (measured, 2026-08-29). So "serve valid WAV with a
+real `Content-Length`" is not a header the delivery code adds on top of the chunked answer of
+§3.3 — it is a different production shape: the output is produced to scratch and then served
+whole, which is where the length and the `Range` come from. `media/ffmpeg.py` refuses to build the
+piped invocation rather than leaving that to a caller to remember, and the refusal is asserted in
+`tests/unit/test_media_ffmpeg.py` beside the measurement in
+`tests/conformance/test_wav_delivery.py`.
+
+**One more row the reference has not got.** Its codec inference answers an unlisted container with
+the container's own name, so nothing anywhere maps `wav` to a PCM encoder — which is symptom 1's
+first cause. Atrium supplies that row, and it has to: ffmpeg's wav muxer *accepts* a FLAC stream
+under a codec tag and writes a genuine `RIFF` header over it, so a bare `stream.wav` that fell
+back to the source's codec the way a bare `stream.mkv` does would pass every "is it RIFF" check
+and play nowhere (measured, 2026-08-29).
+
 #### Status in v1
 
 **Both paths are served in v1.** Producing PCM requires re-encoding, and transcoding entered v1 on
@@ -1335,7 +1380,8 @@ that used to close this section no longer applies: Atrium answers both routes wi
 real RIFF header, a real length, `Range` support — as decided above, and
 [008 AC-20](../../specs/008-playback-negotiation-and-delivery/spec.md#5-acceptance-criteria) is
 where it is asserted. The reasoning was written while it was fresh and was waiting for the code;
-this is the case it was written for.
+this is the case it was written for. Implemented at 008 T9, which is also where both
+`[prior-probe:]` citations above became `[probe:]` ones — this section now carries none.
 
 ### 3.3 Progressive transcoding responses carry no `Content-Length` or `Accept-Ranges` — class C
 
@@ -1374,6 +1420,13 @@ sends none and bytes that did not exist a second ago have no modification time w
 **The one place Atrium does not diverge** is a progressive re-encode whose final length is unknown
 until the last frame. That answers chunked, exactly as the reference does, because the alternative
 is inventing a number, and a wrong `Content-Length` truncates playback.
+
+**Except where the container will not have it**, found at 008 T9 and worth stating here because
+it makes "sized" a property of the *output* rather than of the decision: a `wav` answer is a
+re-encode and is sized all the same, because a WAV header states its own length and a piped one
+would state `ffffffff`. There is no chunked form of that container to be faithful to. So the rule
+is *send the size when it is known*, plus *produce somewhere seekable when the body would
+otherwise lie about it* — see §3.2.
 
 ### 3.4 HDR10+ metadata stripped from clients that asked for it — class B, no compensation
 
@@ -1520,9 +1573,9 @@ fixed upstream, and no blind compensation exists that a correct answer would bre
 
 **Jellyfin does:** answer a `/universal` request whose `transcodingProtocol` is `http` and which
 names no `audioCodec` with `200`, `Content-Length: 0` and an empty body — every retry identical,
-and **with or without a `transcodingContainer`**: naming one answers the empty body all the same,
-and naming none answers it behind `Content-Type: audio/mpeg`
-`[probe: tools/probe_universal_audio.py, Jellyfin 10.11.11, 2026-08-29]`.
+whether the request named a `transcodingContainer` of `flac` or none at all, the latter behind
+`Content-Type: audio/mpeg` `[probe: tools/probe_universal_audio.py, Jellyfin 10.11.11,
+2026-08-29]`.
 
 **The mechanism is not the one this entry first recorded**, and the difference decides what a
 correct answer looks like. The transcoding profile is *not* codec-less: the controller builds it
@@ -1533,8 +1586,19 @@ no codec infers one from the part of the request path after its last dot `[sourc
 Jellyfin.Api/Helpers/StreamingHelpers.cs:71-75 @ v10.11.11]`. On `/Audio/{id}/stream.mp3` that is
 `mp3`; on `/Audio/{id}/universal` there is no dot at all, and the helper's answer to a missing
 separator is *the whole string* `[source: src/Jellyfin.Extensions/StringExtensions.cs RightPart @
-v10.11.11]`. The path falls through the codec table unchanged, becomes the encoder name, and the
-invocation dies before its first byte.
+v10.11.11]`.
+
+**And the last step of that mechanism is one further sentence, added at 008 T9**, because the
+entry's "with or without a `transcodingContainer`" turned out to be false for a container it had
+not been asked about. The path does **not** become the encoder name: `GetAudioEncoder` guards its
+input with the container-validation pattern and substitutes `aac` for anything that fails it,
+which a path full of slashes does `[source:
+MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:41,746-752 @ v10.11.11]`. So the request
+is `-acodec aac` into whatever the transcoding container is, and the empty body is that encoder
+meeting a muxer that cannot carry it. `flac` and `mp3` cannot; **`wav` can**, and a `/universal`
+request naming a `wav` transcoding container and no codec answers a real `RIFF….WAVE` — measured
+in the same run. The observable is therefore container-dependent, and this entry's claim holds for
+the containers it was measured on rather than for every one.
 
 **Depends on it:** nothing can be built on an empty body behind a `200` — a player fed zero
 bytes errors on its own side. Class A by the same logic as §3.2's symptom 1: whatever a client
@@ -1546,6 +1610,9 @@ container instead of a dotless path — so `mp3` in and `mp3` out on both server
 divergence is confined to the request that named a transcoding container and no codec, which is
 the request the reference answers with nothing. Recorded in
 [008 §3.6](../../specs/008-playback-negotiation-and-delivery/spec.md) and implemented at 008 T8.
+For a `wav` container that table has no row and 008 T9 supplied one (§3.2), so the request the
+reference answers with AAC inside a RIFF header is answered here with PCM inside it — a body on
+both servers, and the codec the container exists for.
 
 ### 3.9 An unparseable `mediaSourceId` is a 500 where a well-formed one is a 400 — class A, diverged
 

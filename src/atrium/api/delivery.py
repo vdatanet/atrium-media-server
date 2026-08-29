@@ -439,7 +439,7 @@ def _bytes_of(path: str, start: int, length: int) -> Iterator[bytes]:
 
 
 # ------------------------------------------------------------------------------------------------
-# The produced half: a remux is sized, a re-encode is chunked
+# The produced half: a remux is sized, a re-encode is chunked, and a wav is sized anyway
 # ------------------------------------------------------------------------------------------------
 
 
@@ -456,6 +456,10 @@ async def produced_response(
     * anything re-encoded is **chunked** with `Accept-Ranges: none` and no length, because the
       final length is not known until the last frame (AC-17), which is exactly the reference's
       progressive shape.
+
+    Since 008 T9 the container gets a say too: one that states its own length - `wav` - is
+    produced to scratch whatever the decision, because there is no chunked form of it that would
+    not lie about how long the body is (`produce`, AC-20).
 
     `is_video_route` is the controller, and it decides only the fallback container. Whether the
     *negotiation* is about video is the item's kind, which is what `decide()` was given at T4.
@@ -501,8 +505,12 @@ async def produce(
     ledger = production_ledger(request)
 
     try:
-        if decision.outcome is Outcome.REMUX:
-            produced = await _remuxed(
+        # **Sized when the size can be known before the first byte leaves**, which is a copy-only
+        # output and, since 008 T9, anything whose container states its own length. A `wav`
+        # re-encode has no chunked form: written to a pipe its header would declare `ffffffff`
+        # where the length goes, so the choice is the file or a lie (`media/ffmpeg.py`).
+        if decision.outcome is Outcome.REMUX or ffmpeg.needs_seeking(container):
+            produced = await _to_scratch(
                 ledger,
                 get_paths(request).transcodes,
                 source,
@@ -578,17 +586,24 @@ def _decide_delivery(
 
     A codec the client did not name is the source's own, which is how a bare request remuxes
     rather than refusing - measured, and it is what the reference's own fallback chain produces.
+    **Unless the container holds nothing but raw samples**, which is 008 T9's one row: a bare
+    `stream.wav` cannot copy the source into a container that has no way to describe it, so the
+    wav container names its own codec first (`media/ffmpeg.raw_codec_for`).
     """
     video = source.video if is_video else None
     audio = _audio_stream(source, parameters.audio_stream_index)
-    video_codec = parameters.video_codec or (video.codec if video is not None else None)
-    audio_codec = parameters.audio_codec or (audio.codec if audio is not None else None)
     container = _output_container(
         source,
         parameters.container,
         video_codec=parameters.video_codec,
         audio_codec=parameters.audio_codec,
         is_video_route=is_video_route,
+    )
+    video_codec = parameters.video_codec or (video.codec if video is not None else None)
+    audio_codec = (
+        parameters.audio_codec
+        or ffmpeg.raw_codec_for(container)
+        or (audio.codec if audio is not None else None)
     )
     profile = DeviceProfile(
         transcoding_profiles=(
@@ -699,7 +714,7 @@ def _output_container(
     return stored.lower()
 
 
-async def _remuxed(
+async def _to_scratch(
     ledger: ffmpeg.ProductionLedger,
     scratch: Path,
     source: MediaInspection,
@@ -709,7 +724,12 @@ async def _remuxed(
     path: str,
     start_ticks: int | None,
 ) -> Path:
-    """Produce a copy-only output to a file, and hand back where it landed.
+    """Produce a sized output to a file, and hand back where it landed.
+
+    Copy-only output takes this path because its size is knowable and the divergence of
+    behaviours section 3.3 is to send it; a `wav` output takes it because its size has to be
+    *written into the body* and a pipe cannot go back to do that (008 T9). Named for the
+    destination rather than for either reason, since the two arrive here for different ones.
 
     **Deterministic by name.** Spec section 3.4 makes the byte-identity of a remux global rather
     than per session - the same source and the same parameters give the same output - so the

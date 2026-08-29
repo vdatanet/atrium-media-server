@@ -19,6 +19,15 @@ the profile the negotiation was made against (AC-8), and nothing is upscaled (AC
   is not known until the last frame. That answer is chunked, exactly as the reference's is
   (AC-17), and the rule is *send the size when it is known*, never *invent one*.
 
+**Except where the container states its own length, and then there is no choice at all** (008
+T9). A `wav` output begins `RIFF` and four bytes of size, and states a second length on its
+`data` chunk; written to a pipe ffmpeg fills both with `ffffffff`, because it can never go back
+to correct them. So `NEEDS_SEEKING` is not a preference
+between two working shapes the way `NEEDS_FRAGMENTING` is - it is the difference between the
+divergence behaviours section 3.2 decided ("a real RIFF header, a real `Content-Length`, `Range`
+support") and a header that lies. `command` refuses to build the piped form rather than leaving
+it to a caller to remember.
+
 **A pipe is not a file, and the mp4 family notices.** Writing mp4 to a non-seekable destination
 means the index cannot be written last, so the fragmented flags go on - our own answer to our own
 choice of pipe, and one the reference never has to make because it writes progressive output to a
@@ -94,6 +103,17 @@ AUDIO_ENCODERS: Final[dict[str, str]] = {
     "eac3": "eac3",
     "dts": "dca",
     "wmav2": "wmav2",
+    # The raw-sample family, and the reason behaviours section 3.2 exists: these encoders emit
+    # samples with no header of their own, so everything that makes the output playable comes
+    # from the muxer. Six rows because six sample formats are what the WAVE `fmt ` chunk can
+    # declare - a `pcm_*` spelling outside them is refused here rather than passed through to a
+    # command line, which is `_encoder_for`'s rule for every other codec.
+    "pcm_u8": "pcm_u8",
+    "pcm_s16le": "pcm_s16le",
+    "pcm_s24le": "pcm_s24le",
+    "pcm_s32le": "pcm_s32le",
+    "pcm_f32le": "pcm_f32le",
+    "pcm_f64le": "pcm_f64le",
 }
 
 #: Container name to the muxer that writes it. A container with no row here cannot be produced at
@@ -121,11 +141,32 @@ MUXERS: Final[dict[str, str]] = {
     "asf": "asf",
     "avi": "avi",
     "3gp": "3gp",
+    "wav": "wav",
 }
 
 #: The muxers whose index is written at the end of the file, so a non-seekable destination has to
 #: be told to fragment instead. Everything else streams as it stands.
 NEEDS_FRAGMENTING: Final[frozenset[str]] = frozenset({"mp4", "mov", "ipod", "3gp"})
+
+#: The muxers that state a length in a header they can only fill in at the end, and have **no**
+#: fragmented form to fall back on - so a non-seekable destination makes them declare a length
+#: that is not the body's. `wav` writes `RIFF` followed by four bytes of size: to a file that is
+#: the real size, to a pipe it is `ffffffff`, measured on both. That is why the divergence of
+#: behaviours section 3.2 - "a real RIFF header, a real `Content-Length`, `Range` support" -
+#: cannot be served out of a pipe at all, and why `command` refuses to build one rather than
+#: producing a header that lies.
+NEEDS_SEEKING: Final[frozenset[str]] = frozenset({"wav"})
+
+#: The codec a container carries when nothing named one, for the containers whose *only* codec is
+#: raw samples. One row, because `wav` is the one such container in this feature's surface, and it
+#: is the row the reference's own inference is missing: `InferAudioCodec` answers an unlisted
+#: container with the container's own name, so `stream.wav` asks for an encoder called `wav` and
+#: the request dies before its first byte `[source:
+#: MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:667-684 @ v10.11.11]`,
+#: `[probe: tools/probe_universal_audio.py, Jellyfin 10.11.11, 2026-08-29]`. Sixteen-bit because
+#: that is what a WAVE file means to every decoder that reads one, and because spec section 3.6
+#: already says the target codec is what decides the delivered depth.
+RAW_SAMPLE_CODECS: Final[dict[str, str]] = {"wav": "pcm_s16le"}
 
 #: What a fragmented destination is asked for: an empty index up front and a fragment per
 #: keyframe, so a player can start on the first bytes rather than on the last.
@@ -182,6 +223,30 @@ def muxer_for(container: str | None) -> str | None:
     return MUXERS.get(container.strip().lstrip(".").lower())
 
 
+def raw_codec_for(container: str | None) -> str | None:
+    """The codec a raw-sample container carries, or `None` for every other container.
+
+    Asked *before* falling back to the source's own codec, because a container that holds nothing
+    but raw samples cannot hold the source's codec by definition. Without this a bare
+    `stream.wav` copies: ffmpeg's wav muxer accepts a FLAC stream under a codec tag and writes a
+    genuine `RIFF` header over it, so the answer would pass a "starts with RIFF" check and be
+    unplayable by every wav decoder there is - measured locally, 2026-08-29.
+    """
+    if not container:
+        return None
+    return RAW_SAMPLE_CODECS.get(container.strip().lstrip(".").lower())
+
+
+def needs_seeking(container: str | None) -> bool:
+    """Whether this container has to be produced somewhere its muxer can seek back into.
+
+    The property that decides which of the two delivery shapes carries the output: `True` means
+    a file and therefore a `Content-Length` and a `Range`, because the alternative is not a
+    chunked answer but a header stating the wrong length (`NEEDS_SEEKING`).
+    """
+    return muxer_for(container) in NEEDS_SEEKING
+
+
 def _encoder_for(codec: str | None, *, video: bool) -> str | None:
     """The encoder that produces this codec.
 
@@ -233,6 +298,15 @@ def command(
     muxer = muxer_for(output.container)
     if muxer is None:
         raise ProductionError(f"no muxer writes the container {output.container!r}")
+    if not output.seekable and muxer in NEEDS_SEEKING:
+        # Refused rather than built, because the command would *succeed* and produce a header
+        # whose length field is `ffffffff`. A caller that reaches here has chosen the chunked
+        # shape for a container that cannot honestly take it, which is a mistake in this
+        # repository rather than in the request - and one no response could show.
+        raise ProductionError(
+            f"the container {output.container!r} states its own length and cannot be written to "
+            f"a pipe"
+        )
 
     argv = [executable(), *PREAMBLE]
     if start_ticks:
@@ -462,9 +536,11 @@ __all__ = [
     "FRAGMENT_FLAGS",
     "MUXERS",
     "NEEDS_FRAGMENTING",
+    "NEEDS_SEEKING",
     "PIPE",
     "PIXEL_FORMATS",
     "PREAMBLE",
+    "RAW_SAMPLE_CODECS",
     "TICKS_PER_SECOND",
     "VIDEO_ENCODERS",
     "Output",
@@ -475,4 +551,6 @@ __all__ = [
     "default_stream_indexes",
     "executable",
     "muxer_for",
+    "needs_seeking",
+    "raw_codec_for",
 ]

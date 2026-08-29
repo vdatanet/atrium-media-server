@@ -358,3 +358,62 @@ def test_the_muxer_table_answers_the_containers_a_transcoding_url_names(
 @pytest.mark.parametrize("absent", [None, "", "banana"])
 def test_a_container_the_table_does_not_hold_answers_nothing(absent: str | None) -> None:
     assert ffmpeg.muxer_for(absent) is None
+
+
+# ------------------------------------------------------------------------------------------
+# The container that states its own length - 008 T9
+# ------------------------------------------------------------------------------------------
+
+
+def test_a_self_sizing_container_is_refused_to_a_pipe_rather_than_left_to_lie() -> None:
+    """A `wav` muxer writing to a pipe fills both of its size fields with `ffffffff` and exits
+    `0`, so nothing downstream would have noticed. The refusal is here rather than in the caller
+    because the caller's alternative is a `200` whose header claims four gigabytes.
+
+    The measurement itself - the two invocations, and the eight bytes they differ in - is in
+    `tests/conformance/test_wav_delivery.py`, which is where a real encoder may run.
+    """
+    source = _source(_audio(codec="flac"))
+    decision = _decision(
+        None, StreamPlan(source_index=1, action=StreamAction.ENCODE, codec="pcm_s16le")
+    )
+
+    with pytest.raises(ffmpeg.ProductionError, match="length"):
+        ffmpeg.command(source, decision, ffmpeg.Output("wav", ffmpeg.PIPE), path=SOURCE_PATH)
+
+
+def test_the_same_wav_output_builds_to_a_seekable_destination() -> None:
+    """The other side of that refusal, so the test above cannot be passing because everything is
+    refused: the identical decision to a file builds, names the PCM encoder and the wav muxer."""
+    source = _source(_audio(codec="flac"))
+    decision = _decision(
+        None, StreamPlan(source_index=1, action=StreamAction.ENCODE, codec="pcm_s16le")
+    )
+
+    argv = ffmpeg.command(
+        source, decision, ffmpeg.Output("wav", "/scratch/out.wav"), path=SOURCE_PATH
+    )
+
+    assert argv[-3:] == ["-f", "wav", "/scratch/out.wav"]
+    assert ("-c:a", "pcm_s16le") in _pairs(argv)
+
+
+@pytest.mark.parametrize(
+    ("container", "codec"),
+    [("wav", "pcm_s16le"), (".WAV", "pcm_s16le"), ("flac", None), ("", None), (None, None)],
+)
+def test_only_a_raw_sample_container_names_its_own_codec(
+    container: str | None, codec: str | None
+) -> None:
+    """The row the reference's own inference table has not got. Everything else keeps falling
+    back to the source's codec, which is what makes a bare `stream.mkv` a remux."""
+    assert ffmpeg.raw_codec_for(container) == codec
+
+
+@pytest.mark.parametrize(
+    ("container", "seeking"), [("wav", True), ("mp4", False), ("mp3", False), ("banana", False)]
+)
+def test_only_a_self_sizing_container_has_to_be_written_somewhere_seekable(
+    container: str, seeking: bool
+) -> None:
+    assert ffmpeg.needs_seeking(container) is seeking

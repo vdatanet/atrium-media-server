@@ -92,7 +92,7 @@ reproduces the measurement, at which point the citation becomes a plain `[probe:
 | The `SortBy` vocabulary | 2026-06-13 | `tools/probe_sort_vocabulary.py` (feature 005) | not written |
 | Dates carry seven fractional digits | 2026-06-19 | `tools/probe_wire_format.py` (feature 001) | not written |
 | ~~`/Sessions/Playing/Progress` needs no `MediaSourceId`~~ | 2026-06-13 | `tools/probe_playstate.py` (feature 007) | ✅ **discharged 2026-08-26** |
-| PCM/WAV transcoding returns 500 | 2026-08-03 | `tools/probe_pcm_wav.py` (feature 008) | not written |
+| ~~PCM/WAV transcoding returns 500, and `/universal` returns headerless PCM~~ | 2026-08-03 | `tools/probe_universal_audio.py` (feature 008) | ✅ **discharged 2026-08-29** — and it moved both claims: the 500 has two causes rather than one, and the headerless body comes from the *transcoding* container rather than from `Container` |
 | `LocalAddress` gets an HTTPS override | 2026-08-14 | `tools/probe_local_address.py` (feature 001) | not written |
 | ~~`TotalRecordCount` is 0 without `limit`~~ | 2026-08-05 | `tools/probe_by_name_counts.py` (feature 005) | ✅ **discharged 2026-08-28** |
 | ~~The `/System/Info/Public` payload: seven fields, their order and shapes~~ | 2026-06-13 | `tools/probe_public_info.py` (feature 001) | ✅ **discharged 2026-08-28** — the 2026-08-28 audit (M8) found this claim carried no register row at all |
@@ -103,14 +103,16 @@ reproduces the measurement, at which point the citation becomes a plain `[probe:
 proved nothing; the citation changes from `prior-probe` to `probe` only when it has been run and
 its finding recorded.
 
-**Two down, ten to go.** Both were re-measured on 2026-08-26 against a live 10.11.11 and both
-held: `StartIndex` is present on every envelope, and `/Sessions/Playing/Progress` is accepted
-without a `MediaSourceId`. Their citations are now plain `probe:` and they are struck from this
-register.
+**Six down, nine to go**, the last of them on 2026-08-29. The first two were re-measured on
+2026-08-26 against a live 10.11.11 and both held: `StartIndex` is present on every envelope, and
+`/Sessions/Playing/Progress` is accepted without a `MediaSourceId`. Every discharged citation is
+now a plain `probe:` and its row is struck from this register.
 
-Both runs also returned more than the claim they were sent to check — three envelope shapes the
-original measurement had never covered, and a six-branch completion rule where the documentation
-had two thresholds. That is the argument for discharging the rest rather than trusting them.
+**Every run so far has returned more than the claim it was sent to check** — three envelope
+shapes the original measurement had never covered, a six-branch completion rule where the
+documentation had two thresholds, and, at the PCM/WAV row, a symptom with two causes where one
+was recorded and a symptom recorded against a parameter that does not produce it. That is the
+argument for discharging the rest rather than trusting them.
 
 A claim that fails to reproduce when its probe is finally written is not quietly dropped: it goes
 into [behaviours.md](behaviours.md) as a behaviour that *changed*, with both dates.

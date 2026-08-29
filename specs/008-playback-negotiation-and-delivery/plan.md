@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-29
 accepted: 2026-08-29
-amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's; and 2026-08-29 by T6 — §3 gains `media/labels.py`, `api/delivery.py` and a `MediaFileRepository` that takes no user, §6.5 records that the four `stream` routes declare no authentication dependency at all and why the response is built header by header, §6.8's delivery-route error shape is discharged for those four (the third shape, not the problem details §7 implied), and §7 gains the container pattern's `400` and the missing-file case; and 2026-08-29 by T8 — §6.6's "exactly as the reference's controller does" is one clause too strong: its codec profile is scoped to the direct-play containers and therefore constrains nothing on the transcoding path, so the ceilings are stated unscoped here
+amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's; and 2026-08-29 by T6 — §3 gains `media/labels.py`, `api/delivery.py` and a `MediaFileRepository` that takes no user, §6.5 records that the four `stream` routes declare no authentication dependency at all and why the response is built header by header, §6.8's delivery-route error shape is discharged for those four (the third shape, not the problem details §7 implied), and §7 gains the container pattern's `400` and the missing-file case; and 2026-08-29 by T8 — §6.6's "exactly as the reference's controller does" is one clause too strong: its codec profile is scoped to the direct-play containers and therefore constrains nothing on the transcoding path, so the ceilings are stated unscoped here; and 2026-08-29 by T9 — §6.5's "a WAV re-encode, whose length is computable from sample count" is the wrong shape: a WAV states its own length inside the body and a piped one states `ffffffff`, so the output goes to scratch like a remux and the length is the file's, with `media/ffmpeg.py` refusing to build the piped invocation at all; and §6.6 gains the one inference row the reference has not got, kept out of the transcribed table
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -489,9 +489,16 @@ on `container` decided before the lookup.
 `negotiate_range` with the path suffix choosing only the `Content-Type` (behaviours §2.20) —
 falling back to the file's own extension where the requested container names no label;
 remuxes and re-encodes stream chunked with `Accept-Ranges: none` — except where the output size
-is knowable, the §3.5 divergence: a remux produced to scratch first, and a WAV re-encode, whose
-length is computable from sample count, so AC-20's valid-RIFF answer carries a real
-`Content-Length` (behaviours §3.2's decided divergence, both symptoms).
+is knowable, the §3.5 divergence: a remux produced to scratch first, and a WAV re-encode
+(behaviours §3.2's decided divergence, both symptoms).
+
+**The WAV length is read off the produced file, not predicted from a sample count**, and T9 found
+the reason it has to be: a WAV states its own length *inside the body*, twice — the `RIFF` size
+and the `data` chunk's — and a muxer writing to a pipe fills both with `ffffffff` and exits `0`.
+So there is no chunked WAV answer to add a computed header to; the output goes to scratch like a
+remux, and the length comes from the same `stat` that sizes one. `media/ffmpeg.py` names the
+property (`NEEDS_SEEKING`) and **refuses to build the piped invocation**, so the impossibility is
+structural rather than a rule each caller remembers.
 
 **A `stream` request is a device profile with the client's own words in it** (T7). The query
 parameters describe an output — these codecs, inside these ceilings — and `media/decision.py`
@@ -505,13 +512,16 @@ play on these routes, and everything else is a production. No policy gate is app
 take no user at all (§6.5's first paragraph), so there is no account whose permissions could be
 read, and AC-31's delivery half stays T13's.
 
-**Two destinations, decided by whether any stream is re-encoded.** A `REMUX` is produced to a
+**Two destinations, decided by whether any stream is re-encoded — and, since T9, by whether the
+container states its own length.** A `REMUX` is produced to a
 scratch file named after the command and the file's `(size, mtime_ns)` — spec §3.4 makes a remux's
 byte-identity global, so a second request for the same thing serves what the first produced, and
 that is what makes `Range` on it cheap rather than an encode per seek. Published with a rename, so
 a half-written file is never visible under the name anything serves. A `TRANSCODE` is written to a
-**pipe** and streamed as it is produced; the first block is read before the response is returned,
-so an encoder that dies on the way up answers the measured `500` instead of an empty `200`. A piped
+**pipe** and streamed as it is produced — unless its container is one that cannot be piped, which
+takes the same scratch path for a different reason (above); the first block is read before the
+response is returned, so an encoder that dies on the way up answers the measured `500` instead of
+an empty `200`. A piped
 mp4 carries `-movflags frag_keyframe+empty_moov+default_base_moof`, because an index cannot be
 written last to something that cannot be seeked — our own answer to our own choice of pipe, and one
 no client can observe: spec §6 already declines to byte-compare produced output.
@@ -552,6 +562,12 @@ controller passes `maxAudioSampleRate` into the streaming request outside the pr
 Here the profile is the only path, so the conditions are stated **unscoped**; that is what
 reproduces the measured answer to `container=ogg` with `transcodingContainer=flac` and a
 sample-rate ceiling, which a literal transcription would have delivered unconstrained.
+
+**One row is added to the inference rather than to the transcribed table** (T9). The reference's
+codec inference answers an unlisted container with the container's own name, so a `wav`
+transcoding container asks for an encoder called `wav`; the missing row lives in
+`media/ffmpeg.py` beside the muxer table, and `codec_for` consults it *after* the transcription,
+which keeps the citation on that table honest about what the reference actually contains.
 
 ### 6.7 Session lifecycle and configuration
 
@@ -598,6 +614,14 @@ the ceilings a plan holds. What stays owed to the task list:
   finished. `tests/conformance/test_progressive_delivery.py` calls the application directly and
   returns `http.disconnect` from `receive` as soon as the first body chunk is sent, which is what
   a dropped connection *is* at the ASGI boundary.
+* ~~**The two `[prior-probe: 2026-08-03]` WAV citations** of behaviours §3.2~~ — **discharged at
+  T9**, into `probe_universal_audio.py`'s WAV battery, and both claims moved: the `500` has two
+  causes rather than one (a `wav` extension inferred as a codec, and a `pcm_*` codec with no
+  `audioBitRate`), and the headerless body comes from the **transcoding** container rather than
+  from `Container`, which is `/universal`'s direct-play list. The battery also needed a fresh
+  `DeviceId` on every row: the reference names its transcode output from the media path, the user
+  agent, the device and the play session, so a request that cannot be produced at all is served a
+  neighbouring request's bytes — four rows of the first draft passed for exactly that reason.
 
 ## 7. Failure handling
 
