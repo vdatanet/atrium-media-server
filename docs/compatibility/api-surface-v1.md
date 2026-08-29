@@ -26,6 +26,13 @@ playlists, instant mix, DLNA casting), **V** is a video-first client (series nav
 next-up, playback negotiation). An endpoint neither of them calls has to justify itself on other
 grounds, and the `D` tag below marks the ones that did.
 
+**Each client's requirements are traced back the other way**, from the client's own conformance
+document to what this server actually does, in
+[client-embeat-mobile.md](client-embeat-mobile.md) (**M**) and
+[client-atrium-tvos.md](client-atrium-tvos.md) (**V**). Those two documents name the clients,
+because their authors published documents *for* this repository; the table above stays by role, and
+the `music-client`/`video-client` tags in [surface.yaml](surface.yaml) are unchanged by either.
+
 > **On the strength of this evidence.** Two clients are not the population of Jellyfin clients, and
 > this document does not claim otherwise. What the analysis gives is a *floor* — a set known to be
 > insufficient if any of it is missing — not a ceiling. The differential harness (feature 010) is
