@@ -29,10 +29,20 @@ from atrium.api.deps import require_user
 from atrium.config.paths import DataPaths
 from atrium.config.settings import Settings, load
 from atrium.config.state import ServerState, load_or_create
+from atrium.db import schema
+from atrium.db.engine import create_database_engine, session_factory
 from atrium.domain.user import User
 from atrium.server import create_app
 from tests.conformance.golden import REWRITTEN, UPDATE_OPTION
 from tests.fixtures.library import BuiltFixture, build_fixture_library
+from tests.fixtures.media import (
+    BINARIES,
+    BuiltMedia,
+    ScannedMediaWorld,
+    build_media_files,
+    build_scanned_media_world,
+    missing_binaries,
+)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -61,6 +71,26 @@ def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
         "Read the diff before committing. Each of these is a statement about what a client "
         "receives, and a change to one is a change to the contract."
     )
+
+
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    """Skip an `ffmpeg`-marked test when the binaries are absent, rather than failing it.
+
+    Every other external dependency in this suite is forbidden - the network guard below turns a
+    missing server into a loud error precisely so nobody can trade a failure for a skip. This is
+    the one exception and it points the other way: ffmpeg is a *build tool*, not a service, the
+    tests that need it produce and inspect real media, and a contributor without it should get a
+    green suite with an honest gap rather than a wall of red they cannot act on. CI installs it,
+    so the gap is never load-bearing there.
+
+    The fence is checkable: `pytest -m "not ffmpeg"` on a machine that *has* ffmpeg must still be
+    green, which is what proves every test that reaches a binary carries the marker.
+    """
+    if item.get_closest_marker("ffmpeg") is None:
+        return
+    absent = missing_binaries()
+    if absent:
+        pytest.skip(f"needs {' and '.join(BINARIES)}; not on PATH: {', '.join(absent)}")
 
 
 @pytest.fixture(autouse=True)
@@ -250,3 +280,41 @@ def fixture_library(tmp_path: Path) -> BuiltFixture:
     is a few hundred small writes and costs less than the first assertion that has to be debugged.
     """
     return build_fixture_library(tmp_path / "library")
+
+
+@pytest.fixture(scope="session")
+def media_files() -> BuiltMedia:
+    """The generated media matrix of `tests/fixtures/media.py`, encoded once.
+
+    Session-scoped and cached between runs, unlike `fixture_library` above, and the difference is
+    what each fixture costs against what its tests do to it. A 003 test *mutates the tree* - it
+    deletes a file and rescans - so sharing one would make those tests order-dependent, and
+    rebuilding it is a few hundred small writes. This one costs real encoder time and nothing reads
+    it except to inspect: a test that wants to change a file calls `copy_into` first.
+
+    Only requested by tests carrying `@pytest.mark.ffmpeg`, which are skipped above when the
+    binaries are missing - so this never runs on a machine that cannot satisfy it.
+    """
+    return build_media_files()
+
+
+@pytest.fixture
+def scanned_media_world(tmp_path: Path, media_files: BuiltMedia) -> Iterator[ScannedMediaWorld]:
+    """Two libraries over the generated tree, scanned by the real 003 pipeline.
+
+    A fresh database per test over shared files: the rows are cheap and the encodes are not, and a
+    world whose rows persisted between tests would be the ordering dependency `fixture_library`
+    avoids by rebuilding.
+
+    The real scan rather than seeded rows, unlike `tests/fixtures/query.py`: the point of this
+    world is that the rows and the files on disk agree about which file is where, which is exactly
+    what a seeded row cannot say.
+    """
+    paths = data_dir(tmp_path / "atrium")
+    engine = create_database_engine(paths)
+    schema.ensure_current(engine, paths)
+    try:
+        with session_factory(engine).begin() as session:
+            yield build_scanned_media_world(session, media_files)
+    finally:
+        engine.dispose()

@@ -76,6 +76,20 @@ jobs:
       - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
+      # Feature 008's fixtures are real media, generated at test time (tests/fixtures/media.py),
+      # and nothing before it needed a media tool - so no job here had one. Without this the
+      # `ffmpeg`-marked tests would *skip* in CI, which is the failure mode the no-network guard
+      # exists to prevent one directory away: a gate that reports green because it ran nothing.
+      #
+      # The version is printed because produced bytes are a function of the encoder: when an
+      # assertion about a delivered stream starts failing, the first question is which ffmpeg
+      # answered it.
+      - name: ffmpeg, for the media fixtures
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+          ffmpeg -version | head -1
+          ffprobe -version | head -1
       - run: uv sync --locked --python ${{ matrix.python }}
       - run: uv run --no-sync pytest
       - name: The golden responses are the ones in the repository
