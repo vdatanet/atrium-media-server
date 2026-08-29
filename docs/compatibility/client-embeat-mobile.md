@@ -200,10 +200,10 @@ audio is correct, and four features are absent.
 fixing it in the source builder rather than in `PlaybackInfo`, where the tvOS symptom happens to
 live.
 
-It also needs a [behaviours](behaviours.md) entry it does not have — §5, *accepted gaps*, is where
+It also needed a [behaviours](behaviours.md) entry it did not have — §5, *accepted gaps*, is where
 a bounded shortfall with a named closing mechanism goes, and the mechanism is "a rescan", which is
-not something a client can ask for. Recorded here rather than written there because a change is in
-flight against that document.
+not something a client can ask for. **Written at 008 T14**, sharing one row with the tvOS client's
+§4.1, because it is one branch and the two symptoms are the same skip.
 
 ### 5.2 The capped renderer stream is sized for `wav`, and the client asks for FLAC
 
@@ -511,9 +511,12 @@ would take them:
 | [§5.5](#55-localaddress-is-plain-http-at-defaults-and-an-operator-can-take-that-away), [§5.7](#57-a-suspended-preload-is-an-idle-connection-a-deployment-can-cut) | Prose: a sentence in behaviours §4.2, a paragraph of deployment guidance |
 | [§3](#3-the-twenty-seven-operations-and-the-one-that-is-not-in-the-55) | A 009 scope decision, taken when 009's spec is accepted |
 
-Three [behaviours](behaviours.md) entries are owed and none is written here, because a change is in
-flight against that document: §5.1's accepted-gap entry (§5), §5.5's sentence on §4.2's argument,
-and §5.2's note that the pipe destination costs a container its own self-description (§3.3).
+Three [behaviours](behaviours.md) entries were owed here and **two are now written**, both at 008
+T14 because both describe what 008 ships: §5.1's accepted-gap entry (§5), and §5.2's and §5.3's
+shared note that the pipe destination costs a container its own self-description, which landed in
+§3.3 as a divergence rather than as a footnote. **§5.5's sentence on §4.2's argument stays owed** —
+it is about `LocalAddress` at tier 1 and tier 2, which is 001's field and a deployment-guidance
+change, so it belongs neither to 008 nor to 011.
 
 ## 8. What this document does not do
 
