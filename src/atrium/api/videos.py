@@ -3,13 +3,14 @@
 
 Two routes, one behaviour, and the suffix is not part of it. `stream.{container}` names the
 container a client would like; on a `static=true` request that decides the `Content-Type` and
-nothing else, and on any other request it is T7's problem. Everything both routes do lives in
-`api/delivery.py`, which is where the range negotiation, the label and the header set are.
+nothing else, and on any other request it decides what the output is muxed into. Everything both
+routes do lives in `api/delivery.py`, which is where the range negotiation, the label, the header
+set and the produced half are.
 
-**This module claims only the static half.** A request without `static=true` is a remux or a
-re-encode, and feature 008 lands those at T7 - until then such a request is refused rather than
-answered wrongly, which is safe precisely because `"008"` is not in `IMPLEMENTED_FEATURES` and no
-conformance is claimed for this route yet.
+**The two halves answer differently on purpose.** `static=true` is the original bytes, sized and
+range-capable; anything else is produced - a remux, served sized because Atrium writes it to
+scratch first (the divergence of behaviours section 3.3, AC-15), or a re-encode, chunked with
+`Accept-Ranges: none` because its length is not known until the last frame (AC-17).
 
 See specs/008-playback-negotiation-and-delivery/spec.md sections 3.5 and 3.7.
 """
@@ -18,11 +19,17 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 from starlette.responses import Response
 
-from atrium.api.delivery import CONTAINER_PATTERN, static_response
-from atrium.compat.errors import DeliveryNotFoundError
+from atrium.api.delivery import (
+    CONTAINER_PATTERN,
+    DeliveryParameters,
+    produced_response,
+    static_response,
+    video_parameters,
+    with_container,
+)
 from atrium.compat.guids import WireGuid
 
 router = APIRouter(tags=["Videos"])
@@ -30,11 +37,17 @@ router = APIRouter(tags=["Videos"])
 UNSUFFIXED = "/Videos/{itemId}/stream"
 SUFFIXED = "/Videos/{itemId}/stream.{container}"
 
+#: The query set both routes bind, declared once in `api/delivery.py` and reached as a dependency
+#: - which `compat/query_params.py` walks into when it builds the case-insensitive spelling table,
+#: so a parameter declared here canonicalises exactly like one in a handler's own signature.
+Parameters = Annotated[DeliveryParameters, Depends(video_parameters)]
+
 
 @router.get(UNSUFFIXED)
 async def get_video_stream(
     request: Request,
     itemId: WireGuid,  # noqa: N803 - the reference's spellings, throughout
+    parameters: Parameters,
     static: Annotated[bool | None, Query()] = None,
     container: Annotated[str | None, Query(pattern=CONTAINER_PATTERN)] = None,
 ) -> Response:
@@ -49,7 +62,7 @@ async def get_video_stream(
     `Content-Type: video/x-matroska` the suffixed form does, over the same original bytes
     `[probe: tools/probe_range_matrix.py, Jellyfin 10.11.11, 2026-08-29]`.
     """
-    return _serve(request, itemId, container, static=static)
+    return await _serve(request, itemId, with_container(parameters, container), static=static)
 
 
 @router.get(SUFFIXED)
@@ -57,26 +70,25 @@ async def get_video_stream_by_container(
     request: Request,
     itemId: WireGuid,  # noqa: N803
     container: Annotated[str, Path(pattern=CONTAINER_PATTERN)],
+    parameters: Parameters,
     static: Annotated[bool | None, Query()] = None,
 ) -> Response:
     """`GetVideoStreamByContainer` `[spec: GetVideoStreamByContainer]`: the container in the path.
 
-    The same answer as the route above with `?container=` set, byte for byte - which is what makes
-    a mismatched suffix a label and not a request to convert anything.
+    On a static request this is the same answer as the route above with `?container=` set, byte
+    for byte - which is what makes a mismatched suffix a label and not a request to convert
+    anything. On a produced one it is what the output is muxed into, and a container no muxer
+    writes is the measured `500` rather than a conversion nobody can perform.
     """
-    return _serve(request, itemId, container, static=static)
+    return await _serve(request, itemId, with_container(parameters, container), static=static)
 
 
-def _serve(
-    request: Request, item_id: str, container: str | None, *, static: bool | None
+async def _serve(
+    request: Request, item_id: str, parameters: DeliveryParameters, *, static: bool | None
 ) -> Response:
     if not static:
-        # ⚠️ **Temporary, and only until T7.** A non-static request is a remux or a re-encode and
-        # this task has no process behind it, so the route refuses in the shape it is measured to
-        # refuse in rather than serving the source bytes behind a label that promises a
-        # conversion. T7 replaces this branch with the real answer.
-        raise DeliveryNotFoundError
-    return static_response(request, item_id, container)
+        return await produced_response(request, item_id, parameters, is_video_route=True)
+    return static_response(request, item_id, parameters.container, parameters.media_source_id)
 
 
 __all__ = ["SUFFIXED", "UNSUFFIXED", "router"]

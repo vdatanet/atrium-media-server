@@ -896,6 +896,15 @@ v10.11.11]`, which is the same "decided by where it happened" rule the table sta
 down because the third shape had been met only at `4xx`s that were not `404`s, and "an item that
 could not be found is problem details" reads like a rule until this pair breaks it.
 
+**And at `400` and `500` as well, measured at 008 T7.** The delivery routes answer *every* refusal
+they decide themselves in this one shape: a `mediaSourceId` naming no source is a `400` and an
+unparseable one a `500` (§3.9), while a container no muxer writes — `stream.banana`,
+`?container=banana`, or `stream.mp3` on a film — is a `500` carrying `Accept-Ranges: none`, because
+the produced path writes that header before it asks the encoder for anything
+`[probe: tools/probe_progressive_delivery.py, Jellyfin 10.11.11, 2026-08-29]`. Four statuses, one
+body: on these routes the status *is* the whole difference, which is what the golden responses
+compare bytes for.
+
 **The `errors` map's *message* is per annotation, and one more of them is reproduced exactly.** A
 value failing a declared **pattern** answers `The field container must match the regular expression
 '^[a-zA-Z0-9\-\._,|]{0,40}$'.` — the expression itself, not the value the client sent, with the
@@ -1344,11 +1353,23 @@ retries, and the playlists carry lengths too
 **Depends on it:** negatively — DLNA renderers refuse a stream with no size, which is why clients
 that cast run a local sizing proxy.
 
+**A `Range` on a progressive answer is not merely unhonoured, it is unread.** Measured at 008 T7
+on a remux: `bytes=100-199`, a suffix range, a single byte and an unreadable `bytes=abc-def` each
+answer the identical `200` with no `Content-Range` and the body from its first byte
+`[probe: tools/probe_progressive_delivery.py, Jellyfin 10.11.11, 2026-08-29]`. That is the reading
+[008 plan §6.8](../../specs/008-playback-negotiation-and-delivery/plan.md#68-measured-at-the-gate-and-what-stays-owed)
+left owed: the *sized* case has five shapes with two answers, and the chunked case has one answer
+for every shape there is.
+
 **Atrium does:** HLS exactly as the reference — sized, range-capable segments are parity now,
 not a divergence — and **diverges on the progressive routes wherever the size is knowable**:
 remuxed output whose size is computable or which is written somewhere seekable sends
 `Content-Length` and honours `Range`. Same reasoning as §3.2 — a client cannot branch on a
-response being more correct.
+response being more correct. Implemented at 008 T7: a remux is produced to scratch under a name
+derived from the command and the file's change signal, so the size is known before the first byte
+leaves and a `Range` is served from what the first request produced. The divergence is exactly a
+size and a range unit — the produced answer carries no `Last-Modified`, because the reference
+sends none and bytes that did not exist a second ago have no modification time worth inventing.
 
 **The one place Atrium does not diverge** is a progressive re-encode whose final length is unknown
 until the last frame. That answers chunked, exactly as the reference does, because the alternative
@@ -1509,6 +1530,46 @@ does today, it keeps working when the request succeeds instead.
 **Atrium does: diverge — answer the request.** When the client names no codec, the transcoding
 container's own codec is the target, and the response is a real stream. Recorded in
 [008 §3.6](../../specs/008-playback-negotiation-and-delivery/spec.md).
+
+### 3.9 An unparseable `mediaSourceId` is a 500 where a well-formed one is a 400 — class A, diverged
+
+**Jellyfin does:** answer a delivery request whose `mediaSourceId` names no source of the item in
+one of **two** ways, split by whether the string happens to parse as a GUID. The resolution
+compares the parameter against each of the item's sources and then, only when none matched,
+*parses* it to ask whether it is the item's own identifier
+`[source: Jellyfin.Api/Helpers/StreamingHelpers.cs:136-140 @ v10.11.11]`. A well-formed
+identifier that matches nothing reaches the parse, survives it, leaves the media source null and
+is refused as an argument failure: `400`, `text/plain`, the fixed 25 bytes. One that is not an
+identifier at all throws `FormatException` out of the parse, and `FormatException` is not a type
+the error middleware maps — so it falls to the default and answers `500` in the same shape
+`[source: Jellyfin.Api/Middleware/ExceptionMiddleware.cs GetStatusCode @ v10.11.11]`. Measured on
+both halves of the same route, `static=true` and produced, all four identical
+`[probe: tools/probe_progressive_delivery.py, Jellyfin 10.11.11, 2026-08-29]`. Still present on
+upstream `master` at 2026-08-07, so §3.0.1 tie-break 2 reads **not judged** and weighs nothing.
+
+**Depends on it:** nothing that a `400` breaks. A client only ever sends a `mediaSourceId` it was
+handed by a negotiation, and those are always well-formed; the `500` is reachable by a
+hand-written or corrupted URL. A client meeting it either shows an error — which it still does —
+or retries, because `5xx` is the retriable class, and a retry of a request that can never succeed
+is not a behaviour worth preserving.
+
+**Atrium does: diverge — the `400`, for both.** Class A's default, and the two arguments that
+carry it past §3.0.2's ban on inventing a third behaviour:
+
+- **The `400` is not invented.** Both values mean the same thing — *this names no source of this
+  item* — and the `400` is the answer the reference itself gives that sentence one value away, in
+  the same error shape, on the same parameter, on the same route. What is dropped is a split the
+  reference draws by accident of ordering, not a behaviour it chose.
+- **Replicating it costs code that exists only to fail worse.** §3.0.0: the natural implementation
+  compares the identifier against the item's sources and refuses when none matches, which is one
+  refusal. Reproducing the reference would mean adding a parse whose sole purpose is to throw, and
+  where the evidence is balanced the side that requires deliberately writing bug code needs the
+  stronger argument.
+
+The divergence takes §3.0.3's second shape — strictly more correct on a path that previously
+failed — and is asserted as one parametrised row in
+`tests/conformance/test_progressive_delivery.py`, so the two values are visibly one answer.
+Recorded in [008 §3.5](../../specs/008-playback-negotiation-and-delivery/spec.md#35-delivery-the-rules-that-apply-to-every-route).
 
 ## 4. Deliberate exceptions
 

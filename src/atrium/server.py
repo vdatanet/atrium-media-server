@@ -78,6 +78,7 @@ from atrium.db.engine import (
 from atrium.db.repositories import SessionRepository, UserDataRepository
 from atrium.db.schema import ensure_current
 from atrium.lifecycle import Readiness, ReadinessMiddleware
+from atrium.media.ffmpeg import ProductionLedger
 from atrium.users import passwords as password_module
 from atrium.users.playing import NowPlayingRegistry, PlayingNow
 from atrium.users.service import Authenticator
@@ -210,6 +211,12 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
             # the crash this design already accepts losing thirty seconds to.
             with suppress(SQLAlchemyError):
                 registry.flush()
+            # Every encoder this application started, stopped. 008 T12 owns the sweep that also
+            # clears the scratch these left behind; what belongs here is the narrower promise the
+            # ledger already makes - the server does not outlive its own processes.
+            productions: ProductionLedger | None = getattr(_app.state, "productions", None)
+            if productions is not None:
+                await productions.shutdown()
             # Returns every pooled connection, which is what closes the WAL cleanly. Without it a
             # test that builds hundreds of instances leaves hundreds of open files behind.
             engine.dispose()

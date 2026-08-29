@@ -228,6 +228,7 @@ class StreamPlan:              # one per output stream
     bitrate: int | None
     channels: int | None
     sample_rate: int | None
+    bit_depth: int | None      # added at T7: the one condition the ladder read and could not carry
 
 @dataclass(frozen=True)
 class Decision:
@@ -256,6 +257,13 @@ downstream, and **nothing on the wire distinguishes them** — `reasons` says wh
 failed, not which rung was reached; nothing in a `StreamPlan` ever exceeds the source (no
 upscaling, AC-9) or the profile (AC-8), sample rate included — the ceiling itself, not the
 reference's ladder step (behaviours §3.7).
+
+`bit_depth` arrived at **T7**, and it is the field whose absence AC-8 could not survive.
+`VideoBitDepth` is in the ladder's reason map — a profile that rejects ten-bit h264 refuses direct
+play over it — and the plan had nowhere to carry the answer, so the transcode that refusal produced
+would have handed the same client ten-bit h264 again: libx264 keeps the source's depth unless told
+otherwise. Derived by the same `ceiling` the other five use, and stated to the encoder only where it
+is below what arrived.
 
 Two of those are not what the first draft of this section said, and both were measured rather
 than reasoned `[probe: tools/probe_decision_ladder.py, Jellyfin 10.11.11, 2026-08-29]`.
@@ -481,6 +489,44 @@ is knowable, the §3.5 divergence: a remux produced to scratch first, and a WAV 
 length is computable from sample count, so AC-20's valid-RIFF answer carries a real
 `Content-Length` (behaviours §3.2's decided divergence, both symptoms).
 
+**A `stream` request is a device profile with the client's own words in it** (T7). The query
+parameters describe an output — these codecs, inside these ceilings — and `media/decision.py`
+already turns exactly that into stream plans, so `api/delivery.py` synthesises a `DeviceProfile`
+with one `TranscodingProfile` and the ceilings as `CodecProfile` conditions, and runs the same
+`decide()`. That is §6.6's shape one task early, and it is what keeps copy-or-encode a single
+rule: a codec the client did not name is the source's own, so a bare request remuxes; a codec it
+named that the source does not have is an encode; a ceiling below the source is an encode. The
+synthesised profile lists **no** direct-play entry, which is right — `static=true` is the direct
+play on these routes, and everything else is a production. No policy gate is applied: these routes
+take no user at all (§6.5's first paragraph), so there is no account whose permissions could be
+read, and AC-31's delivery half stays T13's.
+
+**Two destinations, decided by whether any stream is re-encoded.** A `REMUX` is produced to a
+scratch file named after the command and the file's `(size, mtime_ns)` — spec §3.4 makes a remux's
+byte-identity global, so a second request for the same thing serves what the first produced, and
+that is what makes `Range` on it cheap rather than an encode per seek. Published with a rename, so
+a half-written file is never visible under the name anything serves. A `TRANSCODE` is written to a
+**pipe** and streamed as it is produced; the first block is read before the response is returned,
+so an encoder that dies on the way up answers the measured `500` instead of an empty `200`. A piped
+mp4 carries `-movflags frag_keyframe+empty_moov+default_base_moof`, because an index cannot be
+written last to something that cannot be seeked — our own answer to our own choice of pipe, and one
+no client can observe: spec §6 already declines to byte-compare produced output.
+
+**Every ceiling is passed to the encoder only where it is below what arrived.** A `StreamPlan`
+always states a number — `min(profile, source)`, and the source's own where the profile stated none
+— so passing them all means telling the encoder to reproduce the source exactly. Measured on the
+fixture matrix as two `500`s: `-ar 96000` at a `libmp3lame` that stops at 48 000, and `-b:a` at the
+FLAC source's lossless rate. Left off, ffmpeg negotiates values the encoder supports, which is what
+the reference's own invocation gets by leaving the same arguments off. The rule is uniform across
+the scale filter, the pixel format, the bitrates, the channel count and the sample rate, and it is
+also AC-9 read structurally: a plan equal to the source produces no `-vf` at all, so there is
+nothing that *could* upscale.
+
+`media/ffmpeg.py` holds a `ProductionLedger` — the set of live processes, one per application,
+reached the way `api/images.py` reaches its cache. It exists because AC-26's "the work stops" is
+only checkable against something that holds the live set, and T11's `TranscodeManager` keys
+sessions on top of it rather than replacing it. `server.py`'s lifespan stops what is left.
+
 ### 6.6 `/universal`
 
 The parameter set synthesises a device profile exactly as the reference's controller does —
@@ -524,12 +570,19 @@ the ceilings a plan holds. What stays owed to the task list:
   (`TranscodeManager.cs`), the numbers are read when the sweep is built.
 * ~~**The delivery-route error shapes** (§7): an unknown item on `/stream`~~ — **discharged at T6
   for the four `stream` routes**, and it is the third shape rather than the problem details the
-  §7 table's "007-measured refusal family" implied. A **malformed range on a chunked response** is
-  still owed, by T7, and the sized case is measured: every unreadable `Range` is a `200` with the
-  whole body. The refusal shapes of `/universal`, the playlists and the segments remain owed to
-  the tasks that land them, folded into a probe battery.
-* **AC-26's disconnect timing** needs a fixture client that drops mid-body; it is an Atrium-side
-  test, with the reference's own behaviour spot-checked by hand at the task.
+  §7 table's "007-measured refusal family" implied. ~~A **malformed range on a chunked response**~~
+  — **discharged at T7**: on a chunked answer *every* `Range` is ignored, readable or not, so the
+  sized case's five-shape table has no counterpart here at all (behaviours §3.3). The refusal
+  shapes of `/universal`, the playlists and the segments remain owed to the tasks that land them,
+  folded into a probe battery.
+* ~~**AC-26's disconnect timing** needs a fixture client that drops mid-body~~ — **discharged at
+  T7**, and the client had to be written rather than configured: **httpx's ASGI transport cannot
+  drop a connection.** It drives the application to completion and hands back a buffered body, so
+  every "streaming" test in this repository is really a buffered one, and a test that opened a
+  stream and broke out of the loop would have been asserting against a response that had already
+  finished. `tests/conformance/test_progressive_delivery.py` calls the application directly and
+  returns `http.disconnect` from `receive` as soon as the first body chunk is sent, which is what
+  a dropped connection *is* at the ASGI boundary.
 
 ## 7. Failure handling
 
@@ -540,7 +593,10 @@ the ceilings a plan holds. What stays owed to the task list:
 | Unknown or invisible item on any delivery route | Item lookup by id, no user | **The third shape** — `404`, `text/plain`, the fixed 25 bytes — on the four `stream` routes, measured at T6; the remaining routes are measured as they land | — |
 | A container outside the reference's spelling rule on a `stream` route | The declared pattern | `400` problem details keyed `container`, naming the expression; decided before the lookup (T6, measured) | — |
 | An item whose file is gone since the scan | `stat` fails | The same third-shape `404`. ⚠️ Not measured: it needs a file deleted underneath a live reference | Rescan |
-| ffmpeg dies mid-production | Process exit observed by the manager | In-flight segment requests answer `500`; session torn down, scratch removed | Client re-negotiates |
+| A `mediaSourceId` naming no part of the item | Compared against the item's derived source ids | **The third shape at `400`** on both halves of the route, where the reference answers `400` to a well-formed value and `500` to an unparseable one (T7, measured; behaviours §3.9) | — |
+| A produced request into a container nothing can mux | No muxer for the container, or a muxer the streams do not fit | **The third shape at `500`**, carrying `Accept-Ranges: none` — parity, measured on `stream.banana`, `?container=banana` and `stream.mp3` on a film (T7) | — |
+| A produced request for a file nothing has inspected | No probe row for the part | The same `500`: there are no streams to copy, no codecs to compare and no indexes to map. `static=true` is unaffected | Rescan |
+| ffmpeg dies mid-production | Process exit observed by the manager | In-flight segment requests answer `500`; session torn down, scratch removed. Before the first byte, the progressive routes answer the third shape at `500` (T7) | Client re-negotiates |
 | Client disconnects mid-response | Response lifecycle | Production cancelled, session reaped after grace (spec §3.8) | — |
 | Segment requested past the playlist | Bounds check on the plan | `404` | — |
 | `DELETE /Videos/ActiveEncodings`, unknown session | Registry miss | `204` — fire-and-forget, nothing to stop | — |

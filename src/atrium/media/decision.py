@@ -165,6 +165,16 @@ class StreamPlan:
     channels: int | None = None
     sample_rate: int | None = None
 
+    bit_depth: int | None = None
+    """The video depth the output is produced at, clamped like every other ceiling.
+
+    Added at 008 T7, because it is the one condition the ladder was already *reading* -
+    `VideoBitDepth` is in `_REASON_FOR` and refuses direct play - and the plan had nowhere to
+    carry the answer to. Without it a client that rejects ten-bit h264 is answered with a
+    transcode that hands it ten-bit h264 anyway, since libx264 keeps the source's depth: a
+    refusal at the client's decoder, far from the cause, which is exactly what spec section 3.4
+    says the feature exists to prevent (AC-8)."""
+
 
 @dataclass(frozen=True, slots=True)
 class Decision:
@@ -791,6 +801,7 @@ def _plan_video(
             width=stream.width,
             height=stream.height,
             bitrate=stream.bitrate,
+            bit_depth=stream.bit_depth,
         )
     codec = _first_codec(target.video_codec)
     bitrate_ceiling = ceiling(
@@ -811,6 +822,16 @@ def _plan_video(
             stream.height,
         ),
         bitrate=_clamped(bitrate_ceiling, stream.bitrate or source.bitrate),
+        bit_depth=_clamped(
+            ceiling(
+                profile,
+                CodecKind.VIDEO,
+                codec,
+                target.container,
+                ConditionProperty.VIDEO_BIT_DEPTH,
+            ),
+            stream.bit_depth,
+        ),
     )
 
 

@@ -579,6 +579,33 @@ def probe(path: Path) -> Mapping[str, object]:
     return parsed
 
 
+def frame_count(path: Path) -> int:
+    """How many video frames a file really holds, counted rather than read off a header.
+
+    `nb_frames` is a container field and a fragmented mp4 - what a progressive re-encode streams
+    out of a pipe - does not carry one, so a delivered stream and a source file cannot be compared
+    through it. Decoding and counting answers for both, which is what AC-7's "same frame count as
+    the source" needs to mean anything.
+    """
+    output = _run(
+        [
+            binary("ffprobe"),
+            "-hide_banner",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-count_frames",
+            "-show_entries",
+            "stream=nb_read_frames",
+            "-of",
+            "csv=p=0",
+            path.as_posix(),
+        ]
+    )
+    return int(output.strip().rstrip(","))
+
+
 def keyframe_seconds(path: Path) -> tuple[float, ...]:
     """Every keyframe's presentation time, in order. What plan section 6.4 aligns segments to."""
     output = _run(
@@ -694,6 +721,7 @@ __all__ = [
     "build_media_files",
     "build_scanned_media_world",
     "ffmpeg_version",
+    "frame_count",
     "keyframe_seconds",
     "missing_binaries",
     "probe",

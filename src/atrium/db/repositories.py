@@ -36,7 +36,14 @@ from sqlalchemy.orm import Session as OrmSession
 from atrium.compat.dates import utc_now
 from atrium.compat.guids import new_id
 from atrium.db import models
-from atrium.domain.items import BY_NAME, CollectionType, Item, ItemType, MediaSource
+from atrium.domain.items import (
+    BY_NAME,
+    MEDIA_TYPE_OF,
+    CollectionType,
+    Item,
+    ItemType,
+    MediaSource,
+)
 from atrium.domain.library import Library
 from atrium.domain.media import (
     DeliveredFile,
@@ -1602,4 +1609,28 @@ class MediaFileRepository:
                 .order_by(models.LibraryRoot.path)
             ).all()
         )
-        return DeliveredFile(library_roots=roots, relative_path=relative_path)
+        return DeliveredFile(
+            library_roots=roots,
+            relative_path=relative_path,
+            library_id=item.library_id,
+            part_index=part_index,
+            # The item's own kind, read from the one table that already states it rather than
+            # from the file: a track with cover art has a video stream and is negotiated as
+            # audio all the same (008 T4).
+            is_video=MEDIA_TYPE_OF.get(ItemType(item.type)) == "Video",
+        )
+
+    def parts(self, item_id: str) -> tuple[str, ...]:
+        """Every part's relative path, in part order - what a `mediaSourceId` is resolved against.
+
+        The identifiers themselves are not stored and never were: a source id is a *derivation*
+        from the item and the file (`media/info.py`, Principle VII), so the caller derives them
+        rather than this querying a column that does not exist.
+        """
+        return tuple(
+            self._session.scalars(
+                select(models.ItemSource.relative_path)
+                .where(models.ItemSource.item_id == item_id)
+                .order_by(models.ItemSource.part_index)
+            ).all()
+        )

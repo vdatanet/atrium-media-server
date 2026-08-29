@@ -181,6 +181,37 @@ class DeliveryNotFoundError(Exception):
     """
 
 
+class DeliverySourceError(Exception):
+    """A `mediaSourceId` names no part of this item. The third shape at **`400`**, measured.
+
+    The reference answers exactly this for a well-formed identifier that matches no source and is
+    not the item's own - and answers **`500`** for one that is not an identifier at all, because
+    the fallback comparison parses the string before comparing it and a `FormatException` is not
+    one of the types its middleware maps `[source:
+    Jellyfin.Api/Helpers/StreamingHelpers.cs:136-140,
+    Jellyfin.Api/Middleware/ExceptionMiddleware.cs GetStatusCode @ v10.11.11]`, `[probe:
+    tools/probe_progressive_delivery.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+    **Atrium answers this `400` for both**, which is the divergence argued in behaviours section
+    3.9: one refusal for one meaning, in the shape the reference already sends for the
+    neighbouring value of the same parameter.
+    """
+
+
+class DeliveryProductionError(Exception):
+    """Nothing could be produced for this request. The third shape at `500`, measured.
+
+    Three measured rows, one answer: a container no muxer writes (`stream.banana`,
+    `?container=banana`) and a container that cannot hold the streams it was handed
+    (`stream.mp3` on a film) each answer `500`, `text/plain`, the fixed 25 bytes - and they do it
+    with `Accept-Ranges: none` already on the response, because the produced path writes that
+    header before it starts anything `[probe: tools/probe_progressive_delivery.py, Jellyfin
+    10.11.11, 2026-08-29]`. This is plan section 7's "ffmpeg dies" row reached before the first
+    byte rather than after it, and replication rather than a decision: a failed production is a
+    `500` on both servers.
+    """
+
+
 class ImageNotFoundError(Exception):
     """The item exists and has no image of that type. Answered with the fourth shape.
 
@@ -363,7 +394,7 @@ async def forbidden_handler(_request: Request, _exc: Exception) -> Response:
     return empty_error(403)
 
 
-def controller_error(status_code: int) -> Response:
+def controller_error(status_code: int, headers: dict[str, str] | None = None) -> Response:
     """The third shape: a status, `text/plain`, and the reference's fixed sentence.
 
     The content type is set as a **header** rather than through `media_type`, which is not
@@ -376,7 +407,7 @@ def controller_error(status_code: int) -> Response:
     return Response(
         content=CONTROLLER_ERROR_BODY,
         status_code=status_code,
-        headers={"Content-Type": CONTROLLER_ERROR_TYPE},
+        headers={"Content-Type": CONTROLLER_ERROR_TYPE, **(headers or {})},
     )
 
 
@@ -408,6 +439,20 @@ def message_error(status_code: int, message: str) -> Response:
 
 async def delivery_not_found_handler(_request: Request, _exc: Exception) -> Response:
     return controller_error(404)
+
+
+async def delivery_source_handler(_request: Request, _exc: Exception) -> Response:
+    return controller_error(400)
+
+
+async def delivery_production_handler(_request: Request, _exc: Exception) -> Response:
+    """The `500` a production that could not start answers, with the header it already wrote.
+
+    `Accept-Ranges: none` rides on the refusal because the reference sets it before the encoder
+    is asked for anything and the failure happens after that - measured, and the reason this
+    handler exists rather than the request reusing `controller_error(500)`.
+    """
+    return controller_error(500, headers={"Accept-Ranges": "none"})
 
 
 async def image_not_found_handler(_request: Request, exc: Exception) -> Response:
@@ -456,6 +501,10 @@ EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     # delivery routes answer the third shape where every other `404` in this project answers
     # problem details (behaviours section 1.11, measured 2026-08-29).
     DeliveryNotFoundError: delivery_not_found_handler,
+    # 008 T7's two, and they are the same shape at two statuses: `mediaSourceId` naming no part
+    # is the measured `400`, and a production that could not start is the measured `500`.
+    DeliverySourceError: delivery_source_handler,
+    DeliveryProductionError: delivery_production_handler,
     RequestValidationError: validation_handler,
     HTTPException: routing_handler,
 }
@@ -475,6 +524,8 @@ __all__ = [
     "AccountUnavailableError",
     "ClientAuthorizationError",
     "DeliveryNotFoundError",
+    "DeliveryProductionError",
+    "DeliverySourceError",
     "ExceptionHandler",
     "ForbiddenError",
     "ImageNotFoundError",

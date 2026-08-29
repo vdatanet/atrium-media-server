@@ -258,6 +258,17 @@ class DeliveredFile:
     library_roots: tuple[str, ...]
     relative_path: str
 
+    library_id: str | None = None
+    """Which library holds it. Needed to read the part's stored inspection back, because a probe
+    row is keyed `(library_id, relative_path)` and not by a path (008 T2)."""
+
+    part_index: int = 0
+    """Which part of the item this file is - zero unless a `mediaSourceId` named a later one."""
+
+    is_video: bool = False
+    """The **item's** kind, not the file's. A music track with cover art carries a video stream
+    and is still negotiated as audio, which is the rule `decide()` was given at 008 T4."""
+
     def absolute_path(self) -> str | None:
         """The file, rebuilt under the first root the library declares.
 
