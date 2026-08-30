@@ -498,7 +498,7 @@ numbered by position, and a WebVTT cue's free-text name has nowhere to go.
 
 ## T6 — `media/extract.py`: one process, one cache entry, one lock
 
-- [ ] **Changes:** `media/extract.py` — the one impure module — with `readable(...)`: an external
+- [x] **Changes:** `media/extract.py` — the one impure module — with `readable(...)`: an external
   stream in a covered format read from its own file with its **encoding detected** rather than
   assumed; an embedded stream, or an external `.mks`, extracted by one ffmpeg invocation to `srt`
   (or to its own spelling where the codec is `ass` or `ssa`); an external stream in a text format
@@ -516,6 +516,81 @@ numbered by position, and a WebVTT cue's free-text name has nowhere to go.
   concurrent calls for one key start **one**; the image track raises before the ledger is ever
   touched; and `uv run pytest tests/unit/test_import_directions.py -q` for the sweep.
 - **Spec reference:** §3.5, AC-14; plan §6.7
+
+**Done (2026-08-30).** The four branches were the four the plan named and the module is the size it
+said. **What was wrong is what the artefact those branches produce actually contains — and a
+client can see it.**
+
+**The extracted file is not what ffmpeg wrote.** After extracting a track to `.ass` the reference
+replaces `,Arial,` with `,Arial Unicode MS,` in the finished file and rewrites it **only where that
+changed something** `[source: MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:751, 928-957
+@ v10.11.11]` — and the rewrite goes back out through a writer that emits the UTF-8 preamble where
+ffmpeg's muxer emits none, so the substituted font and the **byte order mark** arrive together or
+not at all — and the two callers of that substitution do not test the same thing, which is the
+reference's own asymmetry and not a simplification: after an extraction it looks at the output's
+name and passes `.ssa` over, and after a conversion it acts on the output whatever it is called
+`[source: SubtitleEncoder.cs:452 @ v10.11.11]`. Read first, then measured, because a reading is not
+a measurement and this one is
+reachable from outside: the same-format short circuit hands the artefact straight back, so
+`Stream.ass` on an *embedded* `ass` track is the only view a client has of what an extraction
+wrote. `tools/probe_subtitle_delivery.py` gained a **seventh battery** for it and the run reached
+**both** forms `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`: a track
+whose style named Arial answers `Style: Default,Arial Unicode MS,30,…` under a leading mark, and a
+track whose style named `sans-serif` answers ffmpeg's own bytes with no mark. The battery asserts
+the biconditional rather than a byte string, and says which forms a run reached, because whether a
+library holds an Arial-styled track is a fact about the library.
+
+**And the sentence that produced it was read as saying something it does not say.** *"Extracted by
+one ffmpeg invocation to `srt` (or to its own spelling where the codec is `ass` or `ssa`)"* — this
+task's own Changes bullet and [plan §6.7](plan.md#67-the-fetch-routes-readable-converted-windowed)
+alike — names the **format of the artefact**. What `-c:s` is given is a *different rule* with a
+different list: the reference copies the bitstream of anything copyable — `ass`, `ssa`, `srt`,
+`subrip` — and encodes to SubRip only what it cannot `[source: SubtitleEncoder.cs:485-493, 629 @
+v10.11.11]`. So an embedded `subrip` track is `-c:s copy` into an `.srt`; written as read, it would
+have been `-c:s srt`, which decodes and re-encodes every cue of every track in a library for
+nothing, and would have passed a cue comparison while changing the bytes of every `Stream.srt`
+the short circuit answers. `tests/unit/test_subtitle_extract.py` asserts the argument, not only the
+answer.
+
+**Three smaller ones, all from the same read.** The reference extracts **every** extractable track
+of a source in *one* invocation with a `-map`/output pair each `[source: SubtitleEncoder.cs:495-556,
+608-654 @ v10.11.11]` where this module extracts the one it was asked for — the artefacts are
+identical and the difference is what a first fetch pays for. A **non-zero exit is not by itself a
+failure** there: a run fails only where its output is missing or empty `[source:
+SubtitleEncoder.cs:704-763 @ v10.11.11]`, so the artefact is the test and the encoder's complaints
+are logged. And the reference's parser table is built by **reflection over a subtitle library's
+whole format set** `[source: MediaBrowser.MediaEncoding/Subtitles/SubtitleEditParser.cs:96-134 @
+v10.11.11]`, so it parses some dozens of extensions natively where [plan §5](plan.md#5-contracts)'s
+`READABLE` is three families: the ffmpeg fallback both servers have catches more files here than
+there, on the same cues.
+
+**And one line of the cache key addressed the wrong file.** [Plan
+§6.7](plan.md#67-the-fetch-routes-readable-converted-windowed) keys the artefact on *the media
+file's* `(size, mtime_ns)`, which is right for a track inside the container and wrong for the two
+branches that read a file beside it: an `.mks` and a sidecar the ffmpeg fallback normalises are
+extracted from the **sidecar's** bytes, and a sidecar can be replaced without the film being
+touched at all — after which every fetch would answer the previous subtitle for as long as the
+artefact survived. The key is the extracted file's own signal, which is the same argument
+`images/cache.py`'s tag paragraph makes and which §6.7 now states; the `stat` that reads it is one
+of the two places plan §7's *"a sidecar the scan recorded is gone at fetch time"* is noticed, the
+other being the read itself on the branch that opens the sidecar directly.
+
+**One thing is a decision rather than a finding, and it is recorded as owed.** *"Its encoding
+detected rather than assumed"* is a statistical detector on the reference and three steps here — a
+byte order mark, then strict UTF-8, then one declared single-byte fallback. Every file that is
+UTF-8 or carries a mark is read identically on both, which is every file any fixture here holds; a
+legacy file outside the fallback's range decodes differently, or not at all. The alternative is a
+new runtime dependency, which is not an implementation detail, so it is stated in [plan
+§6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed) and left to the user rather
+than taken here.
+
+**And the sweep the task points at could not hold two names.**
+`test_import_directions.py`'s `SUPERVISED_THROUGH_THE_LEDGER` was a single string with one test
+reading it, and its second half looked for the literal `_ledger.start(` — the private attribute
+008's manager happens to use. Naming a second module meant making it a tuple, parametrising, and
+asserting `ledger.start(` so a module that is *handed* a ledger satisfies it too. Both halves stay:
+reaching for no spawner of its own, **and** reaching the ledger's — the first alone would pass for
+a module that had quietly stopped starting processes.
 
 ## T7 — The two fetch routes, the format battery, and the short circuit that contradicts AC-10
 

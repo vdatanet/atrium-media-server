@@ -121,8 +121,12 @@ takes "seconds" unless its name says so.
 **Serialisation is opt-out, not opt-in.** The base response model emits PascalCase; producing a
 non-conforming body requires a deliberate override, which the conformance sweep then fails.
 
-**External processes are supervised.** Every `ffmpeg` invocation belongs to a tracked session with
-an owner, a timeout and a kill path. `DELETE /Videos/ActiveEncodings` must actually stop something.
+**External processes are supervised.** Every `ffmpeg` invocation is held by the one ledger that
+lists what this server is running, with an owner, a timeout and a kill path.
+`DELETE /Videos/ActiveEncodings` must actually stop something. **The ledger is the lower layer and
+a session is not the only owner**: a playback session owns its encoder *through* the ledger (008),
+and a subtitle extraction, which has no session at all, is listed there just the same (011).
+`tests/unit/test_import_directions.py` sweeps for the rule rather than trusting it.
 
 **Configuration is a file, not an environment.** A single config file plus a data directory, so an
 instance is reproducible and a bug report can carry its configuration.

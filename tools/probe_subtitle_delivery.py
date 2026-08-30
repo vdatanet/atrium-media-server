@@ -3,7 +3,7 @@
 """What the two subtitle addresses answer: to a caller with no credential, to a window, to a
 format the server cannot make, and to every way of naming a stream that is not there.
 
-specs/011 §3.5 and §3.7, OQ-6, OQ-8 and OQ-11. Six batteries:
+specs/011 §3.5 and §3.7, OQ-6, OQ-8 and OQ-11. Seven batteries:
 
 - **the credential** (OQ-6): both routes with no token, with an unknown token, with the token in
   the header and with it in the query string. The reference declares a requirement on one route
@@ -22,6 +22,11 @@ specs/011 §3.5 and §3.7, OQ-6, OQ-8 and OQ-11. Six batteries:
   lands on one depends on the library, so the run says which of the two it proved;
 - **the formats**: every spelling a client can put in the address, including one the server
   cannot produce and one that turns the cue list into JSON;
+- **the extracted artefact**: what an embedded `ass` track answers when the format asked for is
+  the one it is already in - which is the extraction itself, handed back by the same-format short
+  circuit. It is the only way from outside to see what the reference's extraction wrote, and it
+  carries the thing no format specification predicts: the font substitution the reference performs
+  on a `.ass` after extracting it, and the byte order mark that arrives with it and only with it;
 - **the refusals** (OQ-8): each row of 011 §3.7 on each route, as bytes rather than as a status.
 
 Read-only by default. `--allow-writes` adds the one case that makes the reference work: asking
@@ -485,6 +490,113 @@ def _format_battery(server: Server, probe: Probe, address: Address) -> list[bool
     ]
 
 
+#: How many tracks the artefact battery is allowed to make the reference extract. Each miss is a
+#: full demux of a film for a few kilobytes of text - 33 to 40 seconds each, measured - and the
+#: battery stops as soon as it has seen both forms of the answer.
+ARTEFACT_CANDIDATES = 3
+
+
+def _artefact_battery(server: Server, probe: Probe) -> list[bool]:
+    """What the reference's own extraction wrote, read back through the same-format short circuit.
+
+    `Stream.ass` on an **embedded** `ass` track is answered before anything is parsed - the
+    requested format equals the format the readable file is in, so the file's bytes are handed
+    back whole. Those bytes are the artefact, which is the only thing about extraction a client
+    can see, and they are not what ffmpeg wrote: the reference replaces `,Arial,` with
+    `,Arial Unicode MS,` in a freshly extracted `.ass` and rewrites the file **only if that
+    changed something**, through a writer that emits the UTF-8 preamble.
+
+    So the claim measured here is a biconditional rather than a byte string: the substituted font
+    and the byte order mark arrive **together or not at all**. A run says which forms it reached,
+    because whether a library holds a track whose style names Arial is a fact about the library.
+    """
+    found = server.get(
+        "/Items",
+        UserId=server.user_id,
+        IncludeItemTypes="Movie,Episode",
+        Recursive="true",
+        Limit=400,
+        Fields="MediaStreams",
+    )
+    candidates = []
+    for row in found.get("Items", []):
+        streams = row.get("MediaStreams") or []
+        subtitles = [one for one in streams if one.get("Type") == "Subtitle"]
+        embedded = [
+            one
+            for one in subtitles
+            if not one.get("IsExternal") and str(one.get("Codec", "")).lower() == "ass"
+        ]
+        if not embedded:
+            continue
+        # The reference extracts *every* extractable track of a source in one invocation, so the
+        # cheapest candidate is the one with fewest of them rather than the first one seen.
+        extractable = [
+            one
+            for one in subtitles
+            if one.get("IsTextSubtitleStream") or str(one.get("Codec", "")).upper() == "PGSSUB"
+        ]
+        candidates.append((len(extractable), row["Id"], int(embedded[0]["Index"])))
+    if not candidates:
+        probe.note(
+            "no item in this library carries an embedded `ass` subtitle track, so the extracted "
+            "artefact could not be read back: the same-format short circuit needs a track whose "
+            "own format is one a client can ask for by name, and `srt` is not one - an embedded "
+            "subrip track is extracted to `srt` too, so `Stream.srt` on it reaches the same "
+            "shortcut and the same reading. What this battery did NOT measure is the font "
+            "substitution and the byte order mark that comes with it"
+        )
+        probe.observe("the extracted artefact", "not reached: no embedded `ass` track")
+        return []
+
+    candidates.sort()
+    seen = []
+    for _, item_id, index in candidates[:ARTEFACT_CANDIDATES]:
+        source = resolve_subtitled_source(server, item_id)
+        address = Address(item_id, source.source_id, index)
+        status, _, body = server.get_streaming(address.whole("ass"), 100_000, send_token=False)
+        style = next(
+            (
+                line
+                for line in body.decode("utf-8", "replace").splitlines()
+                if line.startswith("Style:")
+            ),
+            "no Style line",
+        )
+        substituted = b",Arial Unicode MS," in body
+        marked = body.startswith(b"\xef\xbb\xbf")
+        seen.append((substituted, marked, b",Arial," in body))
+        probe.observe(
+            "Stream.ass on embedded ass " + item_id[:8] + "/" + str(index),
+            f"{status}, {len(body)} bytes; font substituted: {substituted}; "
+            f"byte order mark: {marked}; {style[:96]}",
+        )
+        if len({one[0] for one in seen}) == 2:
+            break
+
+    forms = {one[0] for one in seen}
+    probe.observe(
+        "the two forms of the artefact",
+        "reached {}".format(
+            "both - one track whose style named Arial and one whose style did not"
+            if len(forms) == 2
+            else (
+                "only the substituted form; no track here has a style naming another font, so "
+                "'no substitution, no mark' is NOT measured by this run"
+                if forms == {True}
+                else "only the unsubstituted form; no track here has an Arial style, so "
+                "'substitution brings the mark' is NOT measured by this run"
+            )
+        ),
+    )
+    return [
+        # The whole claim: the mark is on exactly the files the substitution rewrote, and no
+        # answer still carries the font the reference replaces.
+        all(substituted == marked for substituted, marked, _ in seen),
+        not any(original for _, _, original in seen),
+    ]
+
+
 def _refusal_battery(
     server: Server, probe: Probe, source: SubtitledSource, address: Address, allow_writes: bool
 ) -> list[bool]:
@@ -572,6 +684,7 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
     checks.extend(_window_battery(server, probe, source, address))
     checks.extend(_boundary_battery(server, probe, source, address))
     checks.extend(_format_battery(server, probe, address))
+    checks.extend(_artefact_battery(server, probe))
     checks.extend(_refusal_battery(server, probe, source, address, args.allow_writes))
 
     if all(checks):
@@ -587,7 +700,11 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
             "where one window ends and the next begins is answered by BOTH of them: both ends of "
             "the selection are inclusive and consecutive windows are handed the same position, "
             "so the windows of a track concatenate to the track plus one repeat per such cue - "
-            "one millisecond off the boundary the same cue is answered once",
+            "one millisecond off the boundary the same cue is answered once. And the extraction "
+            "behind all of it does not hand back what ffmpeg wrote: an extracted .ass has "
+            ",Arial, replaced with ,Arial Unicode MS, and is rewritten only where that changed "
+            "something, so the substituted font and the byte order mark arrive together or not "
+            "at all",
             matches_documentation=None,
         )
     else:
