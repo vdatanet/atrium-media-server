@@ -1945,8 +1945,14 @@ mean inventing a locale setting in order to write a number wrongly. The invarian
 what the reference itself writes on an English-configured host, which is the majority case and
 the one every published Jellyfin playlist example shows.
 
-Recorded at 011's spec review on 2026-08-29 and owed to the task that implements
-[011 §3.5](../../specs/011-subtitle-delivery/spec.md).
+Recorded at 011's spec review on 2026-08-29 and **shipped at 011 T8 on 2026-08-30**, which is the
+change that served the route. A window's duration is rendered from an exact tick count rather than
+through a float, and a whole window is still written `30` and not `30.0` — so the divergence is
+visible on the last window of a track and nowhere else. Two tests hold it: one sets a
+comma-decimal locale and renders the reference's own measured runtime, whose last window reads
+`7,851` there and `7.851` here, and one asserts the whole playlist a route answers over HTTP.
+Neither depends on the host having that locale, which Principle VII forbids; setting one only
+makes them harder to pass.
 
 ### 3.13 An un-inspectable source is advertised, and the address it is given answers `500` — class A, deferred
 

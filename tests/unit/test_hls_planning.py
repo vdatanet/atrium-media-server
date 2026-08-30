@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The cadence arithmetic and the two playlist renderers, against the measured reference bytes.
+"""The cadence arithmetic and the three playlist renderers, against the measured reference bytes.
 
 Plan section 6.8 left one reading owed to 008 T10 - "the exact rounding rule behind the measured
 3.004 s" - and this file is the golden that pins it. What is pinned is the **rule**, at five
@@ -10,10 +10,18 @@ out to be a fact about one film's stored frame rate, and the same arithmetic ove
 Every expected value here was measured `[probe: tools/probe_hls.py, Jellyfin 10.11.11,
 2026-08-29]`. `tests/conformance/test_hls_playlists.py` proves the routes reach this module; what
 is proven here is the arithmetic and the bytes.
+
+**The third renderer is 011's subtitle playlist**, added at T8, and its numbers come from a
+different run `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. One of
+them is written differently on purpose: a window duration carries the invariant decimal point
+where the reference writes the server's own separator (behaviours section 3.12, 011 AC-16), and
+the locale test at the bottom of this file is the only thing here that can fail if that ever
+becomes a locale-sensitive format.
 """
 
 from __future__ import annotations
 
+import locale
 from typing import Any
 
 import pytest
@@ -28,6 +36,8 @@ from atrium.media.hls import (
     media_playlist,
     plan_segments,
     segment_extension,
+    subtitle_playlist,
+    window_duration_text,
 )
 
 #: The frame rate the measured film reports and the reference put in its `MaxFramerate`. Not
@@ -456,3 +466,125 @@ def test_the_entrance_names_the_codec_even_where_the_query_never_did() -> None:
     assert lines[4] == "main.m3u8?VideoCodec=h264&AllowVideoStreamCopy=false"
     assert "VIDEO-RANGE=HLG" in lines[1], "an HLG copy is labelled by its own transfer"
     assert "VIDEO-RANGE=SDR" in lines[3]
+
+
+# ------------------------------------------------------------------------------------------
+# The subtitle playlist, byte for byte - and the one number this project writes differently
+# ------------------------------------------------------------------------------------------
+
+#: The measured source: a runtime of 5 407.851 s answered 181 windows at 30 s, whose last
+#: `#EXTINF` read `7,851` on a Spanish-configured host `[probe:
+#: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`.
+MEASURED_RUNTIME_TICKS = 54_078_510_000
+MEASURED_WINDOWS = 181
+
+#: Locales whose decimal separator is a comma. The first one this host can set is used; a host
+#: that can set none still runs every assertion, because what is asserted is that the output does
+#: not move - Principle VII forbids a test that depends on the host's locale, and this one only
+#: gets *harder* where a comma locale exists.
+COMMA_LOCALES = ("es_ES.UTF-8", "es_ES.utf8", "de_DE.UTF-8", "fr_FR.UTF-8", "pt_BR.UTF-8")
+
+
+def test_the_subtitle_playlist_is_the_measured_header_and_entry() -> None:
+    """The five header lines in **this** route's order, and one entry per window.
+
+    Not the media playlist's order: the target duration comes first here and the playlist type
+    last, and the target duration is the *requested* window length rather than the longest entry -
+    which is visible precisely because the last window is shorter than it.
+    """
+    body = subtitle_playlist(MEASURED_RUNTIME_TICKS, 30, "TOKEN")
+
+    lines = body.splitlines()
+    assert lines[:5] == [
+        "#EXTM3U",
+        "#EXT-X-TARGETDURATION:30",
+        "#EXT-X-VERSION:3",
+        "#EXT-X-MEDIA-SEQUENCE:0",
+        "#EXT-X-PLAYLIST-TYPE:VOD",
+    ]
+    assert lines[5] == "#EXTINF:30,"
+    assert lines[6] == (
+        "stream.vtt?CopyTimestamps=true&AddVttTimeMap=true"
+        "&StartPositionTicks=0&EndPositionTicks=300000000&ApiKey=TOKEN"
+    )
+    entries = [line for line in lines if not line.startswith("#")]
+    assert len(entries) == MEASURED_WINDOWS
+    assert lines[-1] == "#EXT-X-ENDLIST"
+    assert body.endswith("#EXT-X-ENDLIST\n")
+    assert "\r" not in body
+
+
+def test_the_last_window_is_the_remainder_and_its_end_is_the_runtime() -> None:
+    """The grid advances by the requested length and the tail is what is left of the runtime."""
+    lines = subtitle_playlist(MEASURED_RUNTIME_TICKS, 30, "TOKEN").splitlines()
+
+    assert lines[-3] == "#EXTINF:7.851,"
+    assert lines[-2].endswith(
+        f"&StartPositionTicks=54000000000&EndPositionTicks={MEASURED_RUNTIME_TICKS}&ApiKey=TOKEN"
+    )
+
+
+def test_a_runtime_that_divides_exactly_has_no_partial_window() -> None:
+    """Every `#EXTINF` a whole number, written the way the reference writes one - `30`, not
+    `30.0`. The divergence below is visible on the last window and nowhere else."""
+    lines = subtitle_playlist(120 * 10_000_000, 30, None).splitlines()
+
+    assert [line for line in lines if line.startswith("#EXTINF")] == ["#EXTINF:30,"] * 4
+    assert lines[6].endswith("&ApiKey="), "a caller with no token writes an empty parameter"
+
+
+@pytest.mark.parametrize(("runtime", "window"), [(0, 30), (-1, 30), (10_000_000, 0)])
+def test_a_playlist_needs_a_positive_runtime_and_a_positive_window(
+    runtime: int, window: int
+) -> None:
+    """Both are the route's `400` before this is called; the guard is here because a window of
+    zero would not terminate the loop."""
+    with pytest.raises(ValueError, match="positive"):
+        subtitle_playlist(runtime, window, "TOKEN")
+
+
+@pytest.mark.parametrize(
+    ("ticks", "text"),
+    [
+        (300_000_000, "30"),
+        (78_510_000, "7.851"),
+        (10_000_000, "1"),
+        (12_345_678, "1.2345678"),
+        (1, "0.0000001"),
+    ],
+)
+def test_a_window_duration_is_written_with_a_point_and_no_trailing_zeros(
+    ticks: int, text: str
+) -> None:
+    assert window_duration_text(ticks) == text
+
+
+def test_ac16_the_decimal_point_survives_a_locale_that_writes_a_comma() -> None:
+    """AC-16 and behaviours section 3.12, from below.
+
+    The reference appends this number as a `double`, which formats in the **server's** culture:
+    a Spanish-configured host writes `#EXTINF:7,851,`, which an HLS parser reads as a duration of
+    `7` and a title of `851`. Atrium has no server locale to reproduce that from, so it writes the
+    invariant point always - and this test is the only thing that can fail if that ever becomes a
+    locale-sensitive format.
+
+    The locale is set where the host has one; a host with none still runs the assertions, because
+    Principle VII forbids a test that depends on the host's locale.
+    """
+    previous = locale.setlocale(locale.LC_ALL)
+    applied = None
+    try:
+        for candidate in COMMA_LOCALES:
+            try:
+                locale.setlocale(locale.LC_ALL, candidate)
+            except locale.Error:
+                continue
+            applied = candidate
+            break
+        body = subtitle_playlist(MEASURED_RUNTIME_TICKS, 30, "TOKEN")
+    finally:
+        locale.setlocale(locale.LC_ALL, previous)
+
+    durations = [line for line in body.splitlines() if line.startswith("#EXTINF")]
+    assert "#EXTINF:7.851," in durations, f"under {applied or 'the host locale'}"
+    assert not any("," in line[len("#EXTINF:") : -1] for line in durations)

@@ -780,7 +780,7 @@ answers the other, which is exactly what T2's own amendment is about.
 
 ## T8 — The playlist route, the invariant decimal point, and a refusal that names the wrong parameter
 
-- [ ] **Changes:** `GetSubtitlePlaylist` in `api/subtitles.py`, requiring a caller and resolving
+- [x] **Changes:** `GetSubtitlePlaylist` in `api/subtitles.py`, requiring a caller and resolving
   the item **through 005's visibility query**, which is why its refusals are the negotiation's
   shapes and not the fetch routes'. `media/hls.py` gains `subtitle_playlist` — its **own**
   rendering, not `media_playlist`'s: different header order, different entry shape, and sharing
@@ -810,6 +810,73 @@ answers the other, which is exactly what T2's own amendment is about.
   answer `200` for a stream that does not exist, and every entry of a real playlist fetched **as
   written**, lower-case `stream.vtt` included.
 - **Spec reference:** §3.5, §3.7, AC-13, AC-16; plan §6.6, §6.8
+
+**Done (2026-08-30).** The playlist is the size the task said and the invariant decimal point cost
+nothing. **What both documents had wrong is the lookup in front of it: they describe the visibility
+query and the route has two more questions before it, and each one is a different refusal.**
+
+**"Resolve the item through 005's visibility query" is half of it, and the other half is a `404`
+nothing had written down.** The reference asks for a **video**, not for an item `[source:
+Jellyfin.Api/Controllers/SubtitleController.cs:350-354 @ v10.11.11]`, so an item that exists, is
+visible and is not one — a series, an audio track — is the same problem-details `404` as an
+identifier nothing holds. [Spec §3.7](spec.md#37-error-paths) has a **dash** in that cell, and an
+implementation cannot leave one there: something has to be answered. Measured beside the fetch
+route's `500` for the *same* series identifier in one run
+`[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. Written without it, an
+audio item would have answered `500` here — the fetch routes' answer, on the route that shares
+none of theirs.
+
+**And the all-zero identifier is refused *before* the lookup, which is why it is not the `404`.**
+The table says a well-formed identifier naming nothing is `404` on this route and the all-zero form
+is `400`, and nothing said why: the reference's retrieval throws on an empty identifier ahead of any
+lookup at all `[source: Emby.Server.Implementations/Library/LibraryManager.cs:1357-1361 @
+v10.11.11]`. The fetch routes cannot show that difference — both of *their* answers are that
+`400` — so T7's `present()` collapsed the two correctly and the same shape here answered `404` to
+a row measured at `400`. **The table caught it**: the row was written before the guard was, and it
+failed on the first run.
+
+**The malformed-identifier row is measured, and the plan's reading was right.** The same value
+answers `400` on both routes and the problem details name **`itemId`** on the playlist where they
+name `routeItemId` on the fetch, read out of the two bodies in one run rather than off either
+declaration. Same probe.
+
+**Which is where this task's own statement and [plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed)
+disagree, and the disagreement is about whose decision it is.** This statement says *"the spec
+table is corrected in this change"*; §6.8 says the two owed rows are *"corrections to the accepted
+spec"*, and the standing rule in this feature — T5's amendment, T6's dependency question, T7's two
+— is that an accepted document is amended by the user and not by the task that finds the reason to.
+**So the measurement was taken and the rows were not.** §3.7 now carries a note beside the table
+giving each of the three cells its measurement and the wording it would take, with the rows
+unchanged and the gap named; the route and its tests answer what was measured. That is the one
+thing in this change that is deliberately incomplete, and it is incomplete on purpose.
+
+**The no-runtime row could not be measured, and the reason is sharper than the plan's.** §6.8 said
+*"the probe's own source selection excludes it deliberately"*, which reads as a limitation of the
+probe. It is not: **the library has no such source to select.** The battery now searches every media
+source of every video item and all 2 480 state a runtime — and the route asks for a video *before*
+it reads one, so a source of any other type never reaches that check at all. A runtime is written by
+the scan that creates the item, so the state cannot be built from outside a server; 012's own probe
+had to construct a library to reach the neighbouring condition. The row stays a `[source:]` reading,
+the run reports the miss every time, and Atrium answers the reading's `400`.
+
+**AC-16's verification asked for something that cannot fail, and asking for it would have broken a
+principle.** *"A partial last window written with a decimal point under `LC_ALL=es_ES.UTF-8` — the
+test sets the locale, which is the only way it can fail"*: a duration rendered from an exact tick
+count is not locale-sensitive in this language at all, so the locale cannot make it fail — and a
+test that *required* `es_ES.UTF-8` would depend on the host having it, which Principle VII forbids
+and which the CI image, generating no locales, would fail on. The test sets the first comma-decimal
+locale the host can set (this machine sets `es_ES.UTF-8`; the runner sets none) and asserts
+unconditionally either way. It
+is a guard against the format ever becoming locale-sensitive rather than a reproduction of the
+defect, which is what behaviours §3.12 argues in the first place.
+
+**Two smaller ones.** The fixture's runtime is 4.021 s and not 4.0, so whether a window is
+fractional is a fact about the extraction build — the conformance test therefore compares the whole
+document against the runtime the wire states, and the *guaranteed* fractional case is pinned in a
+unit test on the reference's own measured 5 407.851 s, whose last window reads `7,851` there and
+`7.851` here. And `#EXT-X-TARGETDURATION` is the **requested** window length rather than the longest
+entry, which is the opposite of `media_playlist` two functions away and the clearest single reason
+the two renderers are not one.
 
 ## T9 — The negotiation's subtitle half: profiles, the ladder, and three parameters in an address
 

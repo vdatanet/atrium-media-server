@@ -39,7 +39,11 @@ specs/011 §3.5 and §3.7, OQ-6, OQ-8 and OQ-11. Eight batteries:
 - **the refusals** (OQ-8): each row of 011 §3.7 on each route, as bytes rather than as a status -
   plus the row T7 needed and the table did not have, an item that **is** there and holds nothing
   servable, which is what says whether the fetch route's `400` is about the identifier or about
-  there being nothing to convert.
+  there being nothing to convert. T8 added the playlist column of three of them: the parameter a
+  malformed identifier names, read out of the body rather than assumed, because the two routes
+  declare that path segment under different names; the same existing-but-empty item, which the
+  playlist route answers a `404` where the fetch route answers `500`; and a source with no
+  runtime, which is searched for and **reported as a miss when the library holds none**.
 
 Read-only by default. `--allow-writes` adds the one case that makes the reference work: asking
 for an *image* subtitle track as text, which it attempts with ffmpeg for some tens of seconds
@@ -913,6 +917,54 @@ def _artefact_battery(server: Server, probe: Probe) -> list[bool]:
     ]
 
 
+#: The item types the playlist route can serve. Its own lookup asks for a *video* and answers the
+#: framework's not-found result for anything else `[source:
+#: Jellyfin.Api/Controllers/SubtitleController.cs:350-354 @ v10.11.11]`, so a source with no
+#: runtime that is not one of these never reaches the runtime check at all - which is what the
+#: search below has to say when it finds none.
+VIDEO_TYPES = "Movie,Episode,Video,MusicVideo,Trailer"
+
+
+def _a_video_without_a_runtime(server: Server) -> tuple[str, str] | tuple[None, int]:
+    """One video source whose runtime is absent or not positive, or how many were checked.
+
+    011 plan §6.8 leaves this owed: the reference refuses such a source on its own argument check
+    and no row of §3.7 says so, because the probe's own source selection *requires* a runtime. The
+    state cannot be constructed from outside - a runtime is written by the scan that created the
+    item - so this either finds one in the library or reports that the library has none, which is
+    a fact about the library rather than about the server.
+    """
+    found = server.get(
+        "/Items",
+        UserId=server.user_id,
+        IncludeItemTypes=VIDEO_TYPES,
+        Recursive="true",
+        Limit=5000,
+        Fields="MediaSources",
+    )
+    checked = 0
+    for row in found.get("Items") or []:
+        for one in row.get("MediaSources") or []:
+            checked += 1
+            if not one.get("RunTimeTicks"):
+                return str(row["Id"]), str(one.get("Id") or row["Id"])
+    return None, checked
+
+
+def _parameter_named(body: bytes) -> str | None:
+    """The single key of a problem-details `errors` map, which is the parameter that would not bind.
+
+    Read out of the body rather than assumed, because the whole point of the row is that the two
+    routes name different parameters for the same malformed value.
+    """
+    try:
+        errors = json.loads(body.decode("utf-8")).get("errors") or {}
+    except (ValueError, UnicodeDecodeError):
+        return None
+    keys = list(errors)
+    return keys[0] if len(keys) == 1 else None
+
+
 def _a_series(server: Server) -> str | None:
     """One series identifier, which is an item that exists and has no media source of any kind."""
     found = server.get(
@@ -930,6 +982,13 @@ def _refusal_battery(
     One row is 011 T7's own: an item that **is** there and holds nothing servable - a series - is
     a different answer from an identifier nothing holds at all, and a route that resolved the two
     the same way would answer the wrong status to one of them.
+
+    Three more are 011 T8's, and two of them are the rows plan §6.8 left owed to it: the
+    malformed-identifier refusal on the **playlist** route, which §3.7 records as naming
+    `routeItemId` from a run that only ever asked the fetch route; and a source with no runtime,
+    which the source selection at the top of this file excludes on purpose and which is therefore
+    searched for here rather than assumed present. The third is the playlist column of the row T7
+    added, which the table leaves as a dash.
     """
     unknown = Address(UNKNOWN_ITEM, UNKNOWN_ITEM, source.text_index())
     empty = Address(EMPTY_GUID, EMPTY_GUID, source.text_index())
@@ -943,6 +1002,10 @@ def _refusal_battery(
         ("empty identifier, fetch", empty.whole()),
         ("empty identifier, playlist", empty.playlist()),
         ("malformed identifier, fetch", "/Videos/not-a-guid/x/Subtitles/0/Stream.vtt"),
+        (
+            "malformed identifier, playlist",
+            "/Videos/not-a-guid/x/Subtitles/0/subtitles.m3u8?SegmentLength=30",
+        ),
         ("media source names nothing, fetch", bad_source.whole()),
         ("media source names nothing, playlist", bad_source.playlist()),
         ("index names no stream, fetch", no_stream.whole()),
@@ -961,10 +1024,30 @@ def _refusal_battery(
         cases.append(
             ("item exists and holds nothing servable, fetch", Address(series, series, 0).whole())
         )
+        # The same identifier on the playlist route, whose own lookup asks for a video: §3.7 has a
+        # dash in this cell and an implementation cannot leave one there.
+        cases.append(
+            (
+                "item exists and holds nothing servable, playlist",
+                Address(series, series, 0).playlist(),
+            )
+        )
+    without_runtime, detail = _a_video_without_a_runtime(server)
+    if without_runtime is not None:
+        cases.append(
+            (
+                "source states no runtime, playlist",
+                Address(without_runtime, str(detail), 0).playlist(),
+            )
+        )
     answers = {}
+    bodies = {}
     for label, path in cases:
-        status, headers, body = server.get_streaming(path, 300)
+        # Long enough for a whole problem-details body, because two of these rows are about the
+        # parameter *named* inside one; `_shape` still prints only its first hundred bytes.
+        status, headers, body = server.get_streaming(path, 1500)
         answers[label] = status
+        bodies[label] = body
         probe.observe(label, _shape(status, headers, body))
     if source.image and allow_writes:
         path = Address.of(source, source.image_index()).whole()
@@ -982,6 +1065,29 @@ def _refusal_battery(
             "is NOT measured by this run - which is the row that says whether the fetch route's "
             "400 is about the identifier naming nothing or about there being nothing to convert"
         )
+    if without_runtime is None:
+        probe.note(
+            f"'a source with no runtime' is NOT measured by this run: all {detail} media sources "
+            f"of the {VIDEO_TYPES} items in this library state one, and the playlist route asks "
+            f"for a video before it reads a runtime, so a source of any other type never reaches "
+            f"that check. A runtime is written by the scan that creates the item, so the state "
+            f"cannot be constructed from outside; the row stays a reading `[source: "
+            f"Jellyfin.Api/Controllers/SubtitleController.cs:356-363 @ v10.11.11]` until a "
+            f"library carries such a file - a fact about the library, not about the server"
+        )
+    named = _parameter_named(bodies.get("malformed identifier, playlist", b""))
+    probe.observe(
+        "the parameter a malformed identifier names, per route",
+        "playlist: {}, fetch: {}".format(
+            named or "none", _parameter_named(bodies["malformed identifier, fetch"]) or "none"
+        ),
+    )
+    if named != "routeItemId":
+        probe.note(
+            f"011 spec §3.7 says both routes answer problem details naming `routeItemId`; the "
+            f"playlist route names `{named}`. The row was measured on the fetch route alone and "
+            f"generalised, and the two routes declare that path parameter under different names"
+        )
     return [
         # Two different refusals for two different misses: an unknown identifier is a 500 on the
         # fetch route, while the empty one is refused by a guard before any lookup.
@@ -997,6 +1103,22 @@ def _refusal_battery(
         answers["empty identifier, fetch"] == 400,
         answers["empty identifier, playlist"] == 400,
         answers["malformed identifier, fetch"] == 400,
+        answers["malformed identifier, playlist"] == 400,
+        # The row plan §6.8 predicted from the declaration: the playlist route names its own path
+        # parameter, which is not the one the fetch routes name.
+        named == "itemId",
+        # And the cell §3.7 leaves as a dash: the playlist route's lookup asks for a video, so an
+        # item that exists and is not one is the negotiation's 404 rather than the fetch's 500.
+        *(
+            [answers["item exists and holds nothing servable, playlist"] == 404]
+            if series is not None
+            else []
+        ),
+        *(
+            [answers["source states no runtime, playlist"] == 400]
+            if without_runtime is not None
+            else []
+        ),
         answers["media source names nothing, fetch"] == 500,
         answers["media source names nothing, playlist"] == 500,
         answers["index names no stream, fetch"] == 500,
@@ -1062,7 +1184,10 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
             "the two with no row in the label lookup - subrip and webvtt - answer a body under "
             "application/octet-stream rather than failing on it. The deprecated query parameters "
             "are bound and beat the address: ?format= changes the format, ?index= changes the "
-            "track, and a start position in the query beats the one in the path",
+            "track, and a start position in the query beats the one in the path. And the two "
+            "routes do not name the same parameter for the same malformed identifier: the "
+            "playlist route's problem details name itemId where the fetch route's name "
+            "routeItemId, because each names its own path segment",
             matches_documentation=None,
         )
     else:
