@@ -700,15 +700,39 @@ so adding a row would be choosing a label where the reference chooses none. And 
 second view of the short circuit below: `Stream.subrip` **renders** where `Stream.srt` hands the
 file back, so one format answers two different bodies under two spellings.
 
-**AC-10's first contradiction is a measurement now, and the amendment is still the user's.** The
-battery asks `Stream.srt?StartPositionTicks=…&EndPositionTicks=…` on a SubRip track and gets the
-**whole track** — 84 858 bytes, identical to the unwindowed request, on the ticks-in-path route
-too, with and without the copy switch. Plan §6.8 says in as many words that amending an accepted
-criterion is the user's to take, so this task measured it, reproduced it, wrote the test, recorded
-it in [spec §3.5](spec.md#35-fetching-a-subtitle) with the recommended clause beside it, and left
-AC-10's wording alone. **AC-9's clause is left the same way**: §6.8 offered it to T7 or to T12, and
-T7 wrote AC-9's test deriving the extraction offset off the container rather than asserting a
-literal, which makes the test exact on both ffmpeg builds whichever way the wording goes.
+**AC-10's first contradiction is a measurement now, and the criterion states it.** The battery
+asks `Stream.srt?StartPositionTicks=…&EndPositionTicks=…` on a SubRip track and gets the **whole
+track** — 84 858 bytes, identical to the unwindowed request, on the ticks-in-path route too, with
+and without the copy switch. [Plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed)
+says in as many words that amending an accepted criterion is the user's to take, so this task
+measured it, reproduced it, wrote the test, wrote the clause out in
+[spec §3.5](spec.md#35-fetching-a-subtitle) — **and put it to the user rather than taking it. The
+answer was to take it here.** AC-10 carries *"…and no others, except where the requested format is
+the one the track is already in, which answers the whole track, unwindowed and unrebased"*, under
+the `[probe:]` citation it was measured with rather than the `[source:]` it was found with.
+
+**AC-9 went the same way, and it is a narrowing rather than a widening.** §6.8 offered it to T7 or
+to T12: *"timings that match the source's"* is exact only where the container begins at zero, and
+where it does not an extracted cue carries the container's own start time — 21 ms on ffmpeg 6.1
+and nothing on 9.0 for the same bytes (T6). The criterion now says so, and says it as the
+**parity** it is: a reference server on the same build answers the same offset, because its own
+extraction passes no `-copyts` either, so this is precision about what was always true rather than
+a divergence being admitted. The test reads that offset with `tests/fixtures/media.py`'s
+`extraction_offset_seconds` rather than asserting a literal, which is what makes it exact on both
+builds and still failing on a dropped cue, a mangled timing or the wrong stream mapped.
+
+**The deferral both of them were offered was declined, and the reason is a rule rather than a
+preference.** [AGENTS.md](../../AGENTS.md) has documentation moving with the code *in the same
+commit* — *"a behaviour change whose spec is updated in a follow-up is an incomplete change, not a
+fast one"* — and this is the shape T5's boundary repeat already took: measured, then amended
+inside its own change. Parking either would have left a knowingly false criterion standing across
+T8, T9, T10 and T11, which are four tasks written by people reading it.
+
+**One thing the amendments deliberately do not do.** Neither criterion names a module, a function
+or a test file: [AGENTS.md](../../AGENTS.md)'s *"no technology names in `spec.md`"* outranks the
+convenience of pointing at the helper, so AC-9 says the offset is *read off the container being
+extracted* and `extraction_offset_seconds` is named in [plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed)
+and here, where it belongs.
 
 **The address is not the last word, and the plan had one of its parameters backwards.** Four
 deprecated query parameters — `itemId`, `mediaSourceId`, `index`, `format` — are bound on the

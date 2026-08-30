@@ -595,7 +595,7 @@ async def test_a_format_nothing_writes_is_refused_before_any_file_is_opened(
 async def test_a_window_on_the_format_the_track_is_already_in_answers_the_whole_track(
     client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
 ) -> None:
-    """The measured contradiction of AC-10 as written.
+    """The exception AC-10 states, measured before it was written into the criterion.
 
     A windowed `Stream.srt` on a SubRip track is answered before anything is parsed, so the window
     and both switches are ignored and the whole track comes back - on the ticks-in-path route as

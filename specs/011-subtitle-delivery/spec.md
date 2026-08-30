@@ -4,7 +4,7 @@ title: Subtitle delivery
 status: Accepted
 created: 2026-08-29
 updated: 2026-08-30
-amended: 2026-08-30 at the tasks gate — §3.4 and AC-5 said the master playlist's *variant line* gains the subtitle group, which was true while the master answered exactly one variant and stopped being true on the day 008's own T15 gave an HDR stream copy a standard-range entrance beside it; the reference gives the group to every variant it writes, so the criterion is written against every variant line and an entrance with no subtitles is the failure it now catches. And §3.2's text/image split reads a codec spelling the file itself does not report: four subtitle codecs are renamed when a file is inspected, and against the unrenamed spellings the rule inverts on the two commonest image formats in a real library; and 2026-08-30 by T2 — the inversion is the **DVD and digital-broadcast bitmap** names alone, the servable-alone flag inverts with the split rather than following it (`PGSSUB` is servable where `DVDSUB` is not), and both facts are stated on every stream of every kind, `false` on everything that is not a subtitle; and 2026-08-30 by T5 — AC-10's *"the concatenation of every window of a track is the whole track"* is false of a cue that starts exactly on a window boundary, which two consecutive windows both answer because their shared boundary position is inclusive at each end: read off the reference first, then **measured** on it, in the constructed form and through the reference's own generated playlist alike. And §3.5 now says, also measured, that a converted document carries a region declaration and a placement setting on every cue's timing line, which is where a player puts the text and which a cue-by-cue check cannot see; and 2026-08-30 by T7 — §3.5 gains the eleven format spellings with the label and the byte order mark of each read off a run, of which `subrip` and `webvtt` answer a **body** under `application/octet-stream` where both documents had predicted a refusal, the four deprecated query parameters that override the address, the query start position that beats the one in the path, and the same-format short circuit measured with a window on it — which contradicts AC-10 and is recorded beside it rather than folded into it, because plan §6.8 makes that amendment the user's; and §3.7 gains a row nothing had measured, an item that **exists** and holds nothing servable, which answers `500` where an identifier naming nothing answers `400` and which is what an implementation has to know before it can answer either
+amended: 2026-08-30 at the tasks gate — §3.4 and AC-5 said the master playlist's *variant line* gains the subtitle group, which was true while the master answered exactly one variant and stopped being true on the day 008's own T15 gave an HDR stream copy a standard-range entrance beside it; the reference gives the group to every variant it writes, so the criterion is written against every variant line and an entrance with no subtitles is the failure it now catches. And §3.2's text/image split reads a codec spelling the file itself does not report: four subtitle codecs are renamed when a file is inspected, and against the unrenamed spellings the rule inverts on the two commonest image formats in a real library; and 2026-08-30 by T2 — the inversion is the **DVD and digital-broadcast bitmap** names alone, the servable-alone flag inverts with the split rather than following it (`PGSSUB` is servable where `DVDSUB` is not), and both facts are stated on every stream of every kind, `false` on everything that is not a subtitle; and 2026-08-30 by T5 — AC-10's *"the concatenation of every window of a track is the whole track"* is false of a cue that starts exactly on a window boundary, which two consecutive windows both answer because their shared boundary position is inclusive at each end: read off the reference first, then **measured** on it, in the constructed form and through the reference's own generated playlist alike. And §3.5 now says, also measured, that a converted document carries a region declaration and a placement setting on every cue's timing line, which is where a player puts the text and which a cue-by-cue check cannot see; and 2026-08-30 by T7 — §3.5 gains the eleven format spellings with the label and the byte order mark of each read off a run, of which `subrip` and `webvtt` answer a **body** under `application/octet-stream` where both documents had predicted a refusal, the four deprecated query parameters that override the address, the query start position that beats the one in the path, and the same-format short circuit measured with a window on it — which contradicts AC-10 and is recorded beside it rather than folded into it, because plan §6.8 makes that amendment the user's; and §3.7 gains a row nothing had measured, an item that **exists** and holds nothing servable, which answers `500` where an identifier naming nothing answers `400` and which is what an implementation has to know before it can answer either; and 2026-08-30 by T7, at the user's decision — **AC-9 and AC-10 both state what was measured, in this change rather than at a later gate**, because documentation moves with the code in the same commit and T8 through T11 are written by people reading them. AC-10 gains the same-format short circuit: a windowed fetch whose requested format is the one the track is already in answers the **whole track**, unwindowed and unrebased, on both fetch routes and under either timestamp switch — read off the reference first, then measured on it, which is why the clause carries a `[probe:]` and not the `[source:]` it was found with. AC-9 is narrowed rather than widened: the timings match the source's exactly where the container begins at zero and are offset by the container's own start time where it does not, which is **parity stated precisely** — a reference server on the same extraction build answers the same offset, because it asks for no timestamp preservation either — and the criterion is checked against the offset read off the container rather than against a literal, so it holds on both builds. Plan §6.8 had left both to a later gate; the deferral was declined
 depends_on: [003, 005, 008]
 ---
 
@@ -535,14 +535,15 @@ MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:144-155 @ v10.11.11]`, s
 unreachable from a playlist — every entry names `stream.vtt`, and no track a client reaches is
 already WebVTT — and one hand-made request away.
 
-> ⚠️ **This contradicts AC-10 as written, and the criterion is *not* amended here.** *"A windowed
-> fetch answers the cues of that window and no others"* is true of every window a client reaches
-> by following an address and false of that one request.
-> [Plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed) says the amendment
-> is the user's to take, so T7 measured it and left the wording alone. The recommended clause is
-> the same shape as the one AC-10 already carries for the boundary repeat: *"…and no others,
-> **except where the requested format is the one the track is already in, which answers the whole
-> track**"*.
+> ⚠️ **This contradicted AC-10 as written, and AC-10 now carries it.** *"A windowed fetch answers
+> the cues of that window and no others"* is true of every window a client reaches by following an
+> address and was false of that one request, so the criterion states the exception itself rather
+> than pointing at prose that states it — the same shape as the clause it already carries for the
+> boundary repeat, and with the same `[probe:]` citation, because this was measured before it was
+> written. [Plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed) had left
+> the amendment to be taken at a later gate; it was taken here instead, because documentation
+> moves with the code in the same commit and four tasks after this one are written by people
+> reading AC-10.
 
 > ⚠️ **The last window's duration is written in the server's locale.** A partial window comes back
 > as `#EXTINF:7,851,` on a Spanish-configured server, which an HLS parser reads as a duration of
@@ -717,12 +718,37 @@ remembered, which is the same line 008 draws for `DefaultSubtitleStreamIndex` an
    the route is declared under.
    *(Written as a traversal rather than as a string comparison: the failure this feature exists to
    prevent is an announcement that leads nowhere — §3.4 and §3.7.)*
-9. A whole-file fetch of a text track answers its cues, in the requested format, with timings that
-   match the source's.
-10. A windowed fetch answers the cues of that window and no others; with the copy switch their
-    timings are the source's and without it they are the window's; and the concatenation of every
-    window of a track is the whole track, **plus one repeat of every cue that starts exactly on a
-    window boundary**. Measured, both ways round: a cue at 37.802 s is answered by the window
+9. A whole-file fetch of a text track answers its cues, in the requested format, with timings
+   that match the source's — **exactly where the container begins at zero, and offset by the
+   container's own start time where it does not**. That offset is not this server's and not a
+   tolerance: an extracted track is expressed on a timeline beginning at the container's start
+   time, which is the earliest of all its streams', so one frame of audio encoder priming read as
+   a *negative* start time carries every cue of the subtitle track beside it forward by exactly
+   that much — 21 ms on one extraction tool's build and nothing on another, for the same bytes
+   `[probe: two builds of the extraction tool over the generated fixtures, 2026-08-30]`. **A
+   reference server on the same build answers the same offset**, because its own extraction asks
+   for no timestamp preservation either `[source:
+   MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:629-646 @ v10.11.11]`, so this
+   criterion states parity precisely rather than recording a divergence. It is checked against the
+   offset read **off the container being extracted** rather than against a literal, which is what
+   makes it exact on either build and still failing on a dropped cue, a mangled timing or the
+   wrong track. Narrowed at T7, which owns this criterion's test, from the finding T6 measured.
+10. A windowed fetch answers the cues of that window and no others — **except where the
+    requested format is the one the track is already in, which answers the whole track,
+    unwindowed and unrebased**; with the copy switch their timings are the source's and without it
+    they are the window's; and the concatenation of every window of a track is the whole track,
+    **plus one repeat of every cue that starts exactly on a window boundary**.
+
+    The exception is the reference's own short circuit: it hands back the readable file before it
+    parses anything, so the window and both timestamp switches are ignored `[source:
+    MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:144-155 @ v10.11.11]` — measured on
+    both fetch routes, with and without the copy switch, and the same body byte for byte as the
+    unwindowed request (§3.5)
+    `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. It is unreachable
+    from a playlist, whose every entry names one format no extracted track is already in, and one
+    hand-made request away. Added at T7, which measured it rather than reading it.
+
+    The repeat is measured, both ways round: a cue at 37.802 s is answered by the window
     ending there **and** by the window starting there, and the same cue one millisecond off the
     boundary is answered by the earlier window alone — and the reference's *own* playlist reaches
     it, a cue at 3 282 s falling on the grid at a window length of 6 s and coming back from both

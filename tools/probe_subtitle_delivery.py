@@ -686,7 +686,8 @@ def _conversion_battery(server: Server, probe: Probe, address: Address) -> list[
 
     * **the same-format short circuit, with a window on it.** `Stream.srt` on a SubRip track is
       answered before anything is parsed, so the window and both switches are ignored - which is
-      what AC-10's *"a windowed fetch answers the cues of that window and no others"* is false of;
+      the clause AC-10 gained for it: *"a windowed fetch answers the cues of that window and no
+      others, except where the requested format is the one the track is already in"*;
     * **the SubRip writer renumbers from one.** Invisible on the short-circuited spelling and
       visible on `subrip` beside it, which renders: a window starting ten minutes in comes back
       numbered `1` while the same window's `json` states the identifier the file wrote down;
