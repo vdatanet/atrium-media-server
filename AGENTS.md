@@ -23,7 +23,8 @@ that found the reference writes the track name itself, so the localised property
 is one 011 cannot. **[Its twelve-task list was accepted the same day](specs/011-subtitle-delivery/tasks.md)**,
 at a gate whose sharpest finding was a plan sentence that had been true when it was written: the
 manifest's subtitle group goes on *"the variant line"*, and 008's own T15 had given an HDR stream
-copy a second variant hours earlier — so **011 is ready for code, starting at its T1**.
+copy a second variant hours earlier — so **011 is the feature in code**, at the first unticked task
+in [its list](specs/011-subtitle-delivery/tasks.md).
 **[012's spec was accepted on 2026-08-29](specs/012-negotiation-inputs/spec.md)**,
 at a gate that answered its nine open questions with two new probes and two extended ones and
 withdrew one of the two client findings it was built on. **009 and 010 are specified only, their

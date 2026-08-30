@@ -540,7 +540,8 @@ its flags and its title came out identical. **OQ-7, resolved.** Same probe.
    address carries. AC-12 is written for this: removing the file must renumber them back.
 
 **One place the reference looks that no probe here can reach**: the item's own internal metadata
-directory, where the reference puts a subtitle it downloaded or extracted. No route exposes it, so
+directory, where the reference puts a subtitle it downloaded or extracted `[source:
+MediaBrowser.Providers/MediaInfo/MediaInfoResolver.cs:216-226 @ v10.11.11]`. No route exposes it, so
 its contribution to a source's stream list is a bound rather than a measurement — and it is a bound
 this feature can live inside, because v1 neither downloads nor stores extracted subtitles (§2).
 

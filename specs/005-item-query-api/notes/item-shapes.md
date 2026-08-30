@@ -106,7 +106,8 @@ list rows and full bodies alike. `ParentId` arrived as an explicit `null` on 2 o
 
 The entry is not deleted and the configuration it cites is not disputed — something overrides it
 for at least these two properties. **What that something is has not been established from here**:
-this repository has no `reference/` checkout at the moment, so the cause is unmeasured and the
+this repository had no `reference/` checkout when this was written on 2026-08-27, so the cause is
+unmeasured and the
 entry now records the exception with its measurement instead of a mechanism.
 
 It matters well beyond 005. §1.7 says Atrium omits nulls *in the base model, rather than per
