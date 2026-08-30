@@ -249,6 +249,11 @@ PURE_WHEREVER_THEY_LIVE = (
     # `media/labels.py` beside it is a measured lookup table and nothing else.
     "compat/ranges.py",
     "media/labels.py",
+    # 011 T5. `media/subtitles.py` is one half of a deliberate split (011 plan section 3): the
+    # cue list is values and `media/extract.py` beside it is the only thing that starts a
+    # process. A version of this module that could open the subtitle file would erase the split
+    # and take a scratch directory into every cue test.
+    "media/subtitles.py",
 )
 
 #: `compat/` belongs here for the same reason it belongs in the domain rule: it exists to know

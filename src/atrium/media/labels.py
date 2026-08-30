@@ -26,6 +26,24 @@ nothing: `stream.banana?static=true` on an mp4 answers `video/mp4`, measured, an
 the fallback is `application/octet-stream` `[source:
 Jellyfin.Api/Controllers/VideosController.cs:470,
 MediaBrowser.Controller/MediaEncoding/EncodingJobInfo.cs:545-558 @ v10.11.11]`.
+
+## The subtitle rows, and the two spellings that deliberately have none
+
+011 plan section 6.8 sends the fetch formats here rather than to a second table, and it is the
+same table on the reference too: a `static=true` delivery and a subtitle fetch both resolve their
+label through one lookup on `file.{container}` `[source:
+Jellyfin.Api/Controllers/SubtitleController.cs:261,274,
+MediaBrowser.Model/Net/MimeTypes.cs:158-181 @ v10.11.11]`. `.ass` and `.ssa` are an explicit
+override in that file; the other four fall through to a third-party table this project cannot
+cite, so they are **read rather than measured** and 011 T7 owes them a run of
+`tools/probe_subtitle_delivery.py`'s format battery, which prints the `Content-Type` of every
+format it fetches.
+
+**`subrip` and `webvtt` have a writer and no row, on both servers.** They are the two spellings
+011's writable set carries that the reference's own label lookup cannot answer, so it renders the
+document and then fails on the label rather than sending it. Adding a row for either would answer
+a body where the reference answers nothing, which is the delta Principle I forbids - so the gap is
+reproduced by leaving them out, and the status the reference ends on is T7's to measure.
 """
 
 from __future__ import annotations
@@ -81,6 +99,16 @@ MEDIA_TYPES: dict[str, str] = {
     # Named by every HLS client and held by no library, so 008's playlist routes read them here
     # rather than writing a second table.
     "m3u8": "application/vnd.apple.mpegurl",
+    # The six formats 011's fetch routes write. `ass` and `ssa` are the reference's own override
+    # `[source: MediaBrowser.Model/Net/MimeTypes.cs:82-83 @ v10.11.11]`; the other four fall
+    # through to the third-party table behind it and are read rather than measured until 011 T7
+    # runs the format battery. `subrip` and `webvtt` have no row on purpose - see the docstring.
+    "ass": "text/x-ssa",
+    "ssa": "text/x-ssa",
+    "srt": "application/x-subrip",
+    "vtt": "text/vtt",
+    "json": "application/json",
+    "ttml": "application/ttml+xml",
 }
 
 

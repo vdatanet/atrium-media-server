@@ -4,7 +4,7 @@ title: Subtitle delivery
 status: Accepted
 created: 2026-08-29
 updated: 2026-08-30
-amended: 2026-08-30 at the tasks gate — §3.4 and AC-5 said the master playlist's *variant line* gains the subtitle group, which was true while the master answered exactly one variant and stopped being true on the day 008's own T15 gave an HDR stream copy a standard-range entrance beside it; the reference gives the group to every variant it writes, so the criterion is written against every variant line and an entrance with no subtitles is the failure it now catches. And §3.2's text/image split reads a codec spelling the file itself does not report: four subtitle codecs are renamed when a file is inspected, and against the unrenamed spellings the rule inverts on the two commonest image formats in a real library; and 2026-08-30 by T2 — the inversion is the **DVD and digital-broadcast bitmap** names alone, the servable-alone flag inverts with the split rather than following it (`PGSSUB` is servable where `DVDSUB` is not), and both facts are stated on every stream of every kind, `false` on everything that is not a subtitle
+amended: 2026-08-30 at the tasks gate — §3.4 and AC-5 said the master playlist's *variant line* gains the subtitle group, which was true while the master answered exactly one variant and stopped being true on the day 008's own T15 gave an HDR stream copy a standard-range entrance beside it; the reference gives the group to every variant it writes, so the criterion is written against every variant line and an entrance with no subtitles is the failure it now catches. And §3.2's text/image split reads a codec spelling the file itself does not report: four subtitle codecs are renamed when a file is inspected, and against the unrenamed spellings the rule inverts on the two commonest image formats in a real library; and 2026-08-30 by T2 — the inversion is the **DVD and digital-broadcast bitmap** names alone, the servable-alone flag inverts with the split rather than following it (`PGSSUB` is servable where `DVDSUB` is not), and both facts are stated on every stream of every kind, `false` on everything that is not a subtitle; and 2026-08-30 by T5 — AC-10's *"the concatenation of every window of a track is the whole track"* is false of a cue that starts exactly on a window boundary, which two consecutive windows both answer because their shared boundary position is inclusive at each end, and §3.5 now says that a converted document carries a region declaration and a placement setting on every cue's timing line, which is where a player puts the text and which a cue-by-cue check cannot see
 depends_on: [003, 005, 008]
 ---
 
@@ -475,6 +475,25 @@ map switch prepends a mapping line into the header **and drops the byte order ma
 answer starts with, because the body is rebuilt to insert it. The playlist sets both. **OQ-11,
 resolved.** Same probe.
 
+**The mapping line is inserted wherever the format's own name appears, not only at the top.** The
+rewrite is a plain replacement over the finished document, so a cue whose text contains the word
+gets a mapping line of its own — and the switch is read against one spelling of the format and not
+against the alias beside it `[source: Jellyfin.Api/Controllers/SubtitleController.cs:250-262 @
+v10.11.11]`.
+
+**The document a client is given is not the minimal one, and the difference is on screen.** A
+converted subtitle in the format the manifest names carries a **region declaration** in its
+header and a placement setting on **every** cue's timing line `[source:
+MediaBrowser.MediaEncoding/Subtitles/VttWriter.cs:23-40 @ v10.11.11]` — which is where a player
+puts the text. A header of the format name alone, with bare timing lines, is well formed, holds
+the same cues, and positions them somewhere else. Two smaller shapes of the same kind: a cue
+whose end does not follow its start is pushed out by one millisecond by that writer alone, and
+the cue-list format renumbers its cues from one, discarding whatever the source called them
+`[source: MediaBrowser.MediaEncoding/Subtitles/VttWriter.cs:34-38, SrtWriter.cs:32 @ v10.11.11]`.
+This is read from the reference rather than measured against it, and [§6](#6-conformance) carries
+it as the second thing asserted as bytes: a check that only compared cues would pass on a
+document that placed every one of them somewhere else.
+
 > ⚠️ **The last window's duration is written in the server's locale.** A partial window comes back
 > as `#EXTINF:7,851,` on a Spanish-configured server, which an HLS parser reads as a duration of
 > `7`. Recorded as a reference defect and diverged from at
@@ -641,7 +660,14 @@ remembered, which is the same line 008 draws for `DefaultSubtitleStreamIndex` an
    match the source's.
 10. A windowed fetch answers the cues of that window and no others; with the copy switch their
     timings are the source's and without it they are the window's; and the concatenation of every
-    window of a track is the whole track.
+    window of a track is the whole track, **plus one repeat of every cue that starts exactly on a
+    window boundary**. That last clause is not slack in the criterion: consecutive windows are
+    handed the *same* boundary position — one window's end is the next one's start — and both
+    ends of the selection are inclusive, so a cue that begins on a multiple of the window length
+    is delivered by two windows `[source:
+    MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:100-112,
+    Jellyfin.Api/Controllers/SubtitleController.cs:394-405 @ v10.11.11]`. A cue merely straddling
+    a boundary is delivered once, by the earlier window.
 11. A subtitle file placed beside a media file and then scanned becomes an external subtitle
     stream on that item's source, is counted by `HasSubtitles`, and is fetchable through the same
     routes as an embedded one — with its language, its flags and its title read from its name by
@@ -684,6 +710,13 @@ attributes, and how they round a timestamp — differences no player sees. What 
 property a client depends on: *the cues, their text and their timings are the source's*. A byte
 comparison here would be asserting that Atrium ships the reference's converter, which is not a
 compatibility claim — the same argument 008 §6 makes for transcoded bytes.
+
+**A converted document's own framing is the exception inside that exception, and it is asserted as
+bytes.** The header a format declares, the placement setting on each cue's timing line, the
+millisecond a zero-length cue is pushed out by and the byte order mark five of the six writable
+formats begin with are not properties of the cue list and are not whitespace either — they decide
+where a player draws the text and what the time map switch has to drop (§3.5). Those are pinned
+literally; everything between them stays a cue comparison.
 
 **The manifest is the exception, and it is asserted as bytes.** Everything in a media entry except
 `NAME` is mechanical, and `NAME` is the one attribute this feature knowingly diverges on (§3.2), so

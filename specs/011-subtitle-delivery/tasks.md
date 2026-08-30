@@ -383,7 +383,7 @@ having a longer name, and the test plants exactly that file one directory up.
 
 ## T5 — `media/subtitles.py`: the cue list, and the labels beside it
 
-- [ ] **Changes:** `media/subtitles.py` — pure — with `Cue`, `parse` over the three readable
+- [x] **Changes:** `media/subtitles.py` — pure — with `Cue`, `parse` over the three readable
   families, `window` (skip-while / take-while as **prefix** operations rather than predicates,
   which is what the reference does and what answers a different set of cues on a real file), and
   `render` answering **bytes** for the writable set, byte order mark included where the
@@ -398,6 +398,67 @@ having a longer name, and the test plants exactly that file one directory up.
   answering no cues, the time-map rewrite **and the byte order mark it drops**, and every writer's
   output re-parsed back to the same cues (AC-9, AC-10, AC-14).
 - **Spec reference:** §3.5, AC-9, AC-10, AC-14; plan §5, §6.7
+
+**Done (2026-08-30).** The task statement asked for a cue list and the cue list was the easy half.
+**What the documents had wrong is what a document made of cues also carries — and one of the
+sixteen criteria is false because of where a cue is allowed to sit.**
+
+**AC-10 has a second contradiction and this one is on every window of every track.** Plan §6.8
+already owed one — the same-format short circuit, which needs a hand-made request. This one needs
+nothing: the skip keeps a cue whose start *equals* the window's start, the take keeps a cue whose
+start *equals* the window's end, and [the playlist](plan.md#66-the-playlist-route) hands
+consecutive windows the **same** boundary tick — one window's `EndPositionTicks` is the next
+one's `StartPositionTicks` `[source:
+MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:100-112,
+Jellyfin.Api/Controllers/SubtitleController.cs:394-405 @ v10.11.11]`. So a cue starting on a
+multiple of the window length is **delivered twice**, with the file's own timings both times
+because the playlist sets the copy switch, and *"the concatenation of every window of a track is
+the whole track"* is false by exactly those repeats. A cue merely straddling a boundary is not
+repeated — the next window's skip drops it for ending before its start — so it is the exact hit
+and only the exact hit. Found by the coverage row this task's verification asks for, on a cue list
+whose third cue happened to sit at 60.0 s in a 30 s grid; it would have passed on any other
+number. AC-10 carries the clause now, and the repeat is reproduced, because narrowing either end
+drops a cue the reference sends.
+
+**A document is not only its cues, and neither document said so.** [Spec
+§6](spec.md#6-conformance) makes converted text a cue-by-cue assertion on the argument that two
+converters disagree only on whitespace and rounding. They do not. The reference's `vtt` writer
+emits a **`Region:` declaration** in the header and ends **every** cue's timing line with
+`region:subtitle line:90%` `[source: MediaBrowser.MediaEncoding/Subtitles/VttWriter.cs:23-40 @
+v10.11.11]` — and `stream.vtt` is what [every playlist entry
+names](spec.md#35-fetching-a-subtitle), so that writer is the entire subtitle path for the video
+client. A `WEBVTT\n\n` header with bare timing lines holds the same cues, parses identically,
+passes a cue-by-cue check, and puts the text somewhere else on the screen. Two smaller ones from
+the same read: the `vtt` writer is the only one that **edits a timing**, pushing a cue whose end
+does not follow its start out by a millisecond, and the `srt` writer **renumbers from one**, so
+*"every writer's output re-parsed back to the same cues"* is false of the identifier on the one
+writer that had one to keep. Spec §3.5, spec §6 and plan §6.7 step 4 all carry it now, and the
+framing is asserted as bytes.
+
+**Plan §6.7's byte-order-mark list is four formats and it is five.** `ttml` writes through the
+same text writer as `srt`, `vtt`, `ass` and `ssa` and emits the same preamble `[source:
+MediaBrowser.MediaEncoding/Subtitles/TtmlWriter.cs:23 @ v10.11.11]`; only `json` writes bytes
+directly. And step 5's *"replace the leading `WEBVTT`"* is a replacement over the **whole**
+document, so a cue whose text contains the word gets a mapping line of its own — and the switch is
+read against the spelling `vtt` and never against `webvtt` beside it, which shares the writer and
+not the branch.
+
+**Two spellings of the writable set can be written and cannot be fetched.** `subrip` and `webvtt`
+reach a writer, and the label lookup a fetch resolves its `Content-Type` through has a row for
+neither `[source: Jellyfin.Api/Controllers/SubtitleController.cs:261,274,
+MediaBrowser.Model/Net/MimeTypes.cs:158-181 @ v10.11.11]` — so the reference renders the whole
+document and then has nothing to send it under. `media/labels.py` gets **no row for either**,
+because a row would answer a body where the reference answers none; the six that do have rows are
+there, `ttml` among them, which plan §6.8's own list of media types had left out. What the
+reference ends on for those two is T7's to measure: its format battery asked for six spellings and
+never asked for these.
+
+Two smaller things. **The reference's parser table is keyed on a file *extension***, so `subrip`
+and `webvtt` cannot arrive at `parse` there at all — `READABLE` naming them is a liberality
+nothing can reach rather than a claim, and the plan says so now. And `Cue.identifier` is a
+**number in string form on every path**, because it is built from a paragraph's number: `srt`
+keeps its file's own (a document numbered from 311 answers `"311"`), `ass`, `ssa` and `vtt` are
+numbered by position, and a WebVTT cue's free-text name has nowhere to go.
 
 ## T6 — `media/extract.py`: one process, one cache entry, one lock
 
