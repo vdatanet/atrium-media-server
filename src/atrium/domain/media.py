@@ -246,6 +246,28 @@ def renumber(
 
 
 @dataclass(frozen=True, slots=True)
+class DiscoveredSubtitles:
+    """One file found beside a media file, and the subtitle streams inside it.
+
+    **A file rather than a stream, because the change signal belongs to the file.** An `.mks` can
+    hold several tracks and they share one `(size, mtime_ns)`; a record per stream would carry
+    that pair several times and let two copies of it disagree. The storage denormalises it back
+    out per row, which is a storage decision (011 plan section 4) and not this record's shape.
+
+    `streams` carry their demuxer index as `file_index`. Their wire index is not decided here and
+    is not stored anywhere: `renumber` derives it from the order these files were found in.
+    """
+
+    external_path: str
+    """Relative to the library root, forward slashes - the same spelling `media_probes` uses."""
+
+    size: int
+    mtime_ns: int
+
+    streams: tuple[InspectedStream, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class MediaInspection:
     """One media file, opened.
 
@@ -350,6 +372,7 @@ __all__ = [
     "IMPLAUSIBLE_FRAME_RATE",
     "UNSTATED_FILE_INDEX",
     "DeliveredFile",
+    "DiscoveredSubtitles",
     "InspectedStream",
     "MediaInspection",
     "StreamKind",

@@ -1,19 +1,31 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""the four subtitle codec spellings the wire disagrees with
+"""subtitle streams found beside the media, and the four codec spellings the wire disagrees with
 
 Revision ID: 0007
 Revises: 0006
 Created: 2026-08-30
 
-**The file is named for the revision's full scope and holds half of it.** 011 plan section 4 gives
-`0007` two jobs - the codec rewrite below and the `media_external_streams` table - and T2 lands the
-first. T4 adds the table to this same revision.
+**Two jobs in one revision**, as 011 plan section 4 declares: the `media_external_streams` table
+below, added by T4, and the codec rewrite added by T2. They are one revision because they are one
+change of mind about what a subtitle stream is - a library scanned by 008 holds neither the table
+nor the spellings, and there is no state in which one is wanted without the other.
 
-**Until it does, this is a data migration: it changes no schema.** It rewrites rows, which is the
-one thing the migration sweep cannot see - so it says so here, the way an irreversible revision has
-to say so, and `tests/unit/test_migrations.py` reads this line rather than reporting the revision
-as one that changed nothing. **The declaration comes out when T4 adds the table**, because it will
-have stopped being true.
+*T2's docstring declared this revision a data migration, because until the table arrived it changed
+no schema and `tests/unit/test_migrations.py` reads that declaration rather than reporting a
+revision that changed nothing. The declaration is gone with this change, because it has stopped
+being true - which is what T2 said would happen.*
+
+## The table
+
+One row per subtitle stream found in a file beside the media file. `models.MediaExternalStreamRow`
+carries the reasoning for its columns; the two that decide the shape are `ordinal`, which is what
+turns a set of files into stream indices, and the per-row `(size, mtime_ns)`, which is the change
+signal that makes discovery reachable on a scan that would otherwise skip the media file entirely.
+
+**No index beyond the primary key.** Every read is `(library_id, relative_path)` for one item's
+files, which is that key's own prefix.
+
+## The rewrite
 
 Four subtitle codecs are renamed by the reference *during inspection*, before anything reads them:
 `dvb_subtitle` becomes `DVBSUB`, `dvb_teletext` becomes `DVBTXT`, `dvd_subtitle` becomes `DVDSUB`
@@ -41,7 +53,7 @@ inspection tool never emits `DVDSUB` and the reference never emits `dvd_subtitle
 Only `type = 'subtitle'` rows are touched, which is where the reference does the rename - it sits
 inside the branch that handles a subtitle stream.
 
-See specs/011-subtitle-delivery/plan.md section 6.1 and 011 T2.
+See specs/011-subtitle-delivery/plan.md sections 4 and 6.1, and 011 T2 and T4.
 """
 
 from __future__ import annotations
@@ -50,6 +62,8 @@ from collections.abc import Mapping, Sequence
 
 import sqlalchemy as sa
 from alembic import op
+
+from atrium.db.types import UtcDateTime
 
 revision: str = "0007"
 down_revision: str | None = "0006"
@@ -89,8 +103,35 @@ def _rewrite(mapping: Mapping[str, str]) -> None:
 
 
 def upgrade() -> None:
+    op.create_table(
+        "media_external_streams",
+        sa.Column("library_id", sa.String(32), nullable=False),
+        sa.Column("relative_path", sa.String(), nullable=False),
+        sa.Column("ordinal", sa.Integer(), nullable=False),
+        sa.Column("external_path", sa.String(), nullable=False),
+        sa.Column("size", sa.BigInteger(), nullable=False),
+        sa.Column("mtime_ns", sa.BigInteger(), nullable=False),
+        sa.Column("stream_index", sa.Integer(), nullable=False),
+        sa.Column("codec", sa.String(), nullable=True),
+        sa.Column("language", sa.String(), nullable=True),
+        sa.Column("title", sa.String(), nullable=True),
+        sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("is_forced", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("is_hearing_impaired", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("probed_at", UtcDateTime(), nullable=False),
+        sa.PrimaryKeyConstraint(
+            "library_id", "relative_path", "ordinal", name="pk_media_external_streams"
+        ),
+        sa.ForeignKeyConstraint(
+            ["library_id", "relative_path"],
+            ["media_probes.library_id", "media_probes.relative_path"],
+            ondelete="CASCADE",
+            name="fk_media_external_streams_probe",
+        ),
+    )
     _rewrite(RENAMED)
 
 
 def downgrade() -> None:
     _rewrite({renamed: raw for raw, renamed in RENAMED.items()})
+    op.drop_table("media_external_streams")

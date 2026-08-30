@@ -68,7 +68,7 @@ import os
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from sqlalchemy.orm import Session as OrmSession
 
@@ -76,13 +76,13 @@ from atrium.compat.dates import utc_now
 from atrium.db.repositories import ItemRepository, MediaProbeRepository, MetadataRepository
 from atrium.domain.items import IN_THE_TREE, PARENT_OF, Item, ItemType
 from atrium.domain.library import Library
-from atrium.domain.media import MediaInspection
+from atrium.domain.media import DiscoveredSubtitles, InspectedStream, MediaInspection
 from atrium.library.identity import ensure_unique
-from atrium.library.naming import MetadataSource
+from atrium.library.naming import ExternalName, MetadataSource, parse_external
 from atrium.library.report import Phase, Progress, ProgressSink, ScanReport, Uninspected, silent
 from atrium.library.resolver import Resolution, resolve
 from atrium.library.walker import Candidate, Skipped, WalkResult, walk
-from atrium.media.probe import InspectionError, ProberUnavailableError
+from atrium.media.probe import InspectionError, ProberUnavailableError, inspect_subtitle
 from atrium.media.probe import inspect as inspect_media
 from atrium.metadata.model import RefreshMode
 from atrium.metadata.refresh import pending_and_touched, refresh_items
@@ -99,6 +99,10 @@ DEFAULT_REMOVAL_THRESHOLD = 0.25
 #: of them would cost a process launch and a refusal - so those suites pass a stub and keep their
 #: speed, while a real server gets the real prober by default.
 MediaProber = Callable[[Path], MediaInspection]
+
+#: What a scan calls to find out what is inside a file beside the media. A second seam for the
+#: same reason as the first: the 003 and 004 fixtures place `.srt` files that are dummy bytes.
+SubtitleProber = Callable[[Path], "tuple[InspectedStream, ...]"]
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +169,7 @@ def scan(
     removal_threshold: float = DEFAULT_REMOVAL_THRESHOLD,
     confirm_removals: bool = False,
     prober: MediaProber | None = None,
+    subtitle_prober: SubtitleProber | None = None,
     progress: ProgressSink = silent,
 ) -> ScanReport:
     """Bring the database into line with what is on disk.
@@ -265,7 +270,14 @@ def scan(
     # `unchanged_paths`: those compare against `item_sources`, which is in step with the disk long
     # before any probe row exists, so reusing them would leave a library permanently uninspected.
     inspected, uninspected = _inspect_media(
-        library, session, paths, walked, prober or inspect_media, deep=deep, report=report
+        library,
+        session,
+        paths,
+        walked,
+        prober or inspect_media,
+        subtitle_prober or inspect_subtitle,
+        deep=deep,
+        report=report,
     )
 
     now = utc_now()
@@ -351,6 +363,7 @@ def _inspect_media(
     roots: Sequence[Path],
     walked: WalkResult,
     prober: MediaProber,
+    subtitle_prober: SubtitleProber,
     *,
     deep: bool,
     report: _Reporter,
@@ -370,21 +383,41 @@ def _inspect_media(
     Writes inside the caller's transaction, like everything else here.
     """
     probes = MediaProbeRepository(session)
+    beside = _sidecars_by_media_file(walked)
     inspected = 0
     failed: list[Uninspected] = []
     total = len(walked.candidates)
     for done, candidate in enumerate(walked.candidates, start=1):
         report(Phase.INSPECTING, done, total)
-        if not deep and probes.current(
+        found = beside.get(candidate.relative_path, ())
+        # **Two signals, compared independently, and the second is why discovery works at all.**
+        # Dropping an `.srt` beside a film moves nothing about the film's own bytes, so the first
+        # comparison says "unchanged" and the file is never reopened. The second compares the set
+        # of sidecars the walk found against the set stored, and a difference re-inspects the
+        # sidecars **whatever the first one said** (011 plan section 6.2). A changed film
+        # re-inspects the film; a changed sidecar set re-inspects the sidecars; a deep scan does
+        # both.
+        media_is_current = not deep and probes.current(
             library.id, candidate.relative_path, candidate.size, candidate.mtime_ns
-        ):
+        )
+        sidecars_are_current = not deep and probes.external_signal(
+            library.id, candidate.relative_path
+        ) == frozenset((one.relative_path, one.size, one.mtime_ns) for one in found)
+        if media_is_current and sidecars_are_current:
             continue
         try:
-            probes.put(
-                library.id,
-                candidate.relative_path,
-                prober(_absolute(roots, candidate.relative_path)),
-            )
+            if not media_is_current:
+                probes.put(
+                    library.id,
+                    candidate.relative_path,
+                    prober(_absolute(roots, candidate.relative_path)),
+                )
+            if not sidecars_are_current:
+                probes.put_external(
+                    library.id,
+                    candidate.relative_path,
+                    _inspect_sidecars(roots, found, candidate.relative_path, subtitle_prober),
+                )
         except ProberUnavailableError as exc:
             logger.error(
                 "library %s: no media inspection is possible, so no item will have a media "
@@ -398,6 +431,124 @@ def _inspect_media(
             continue
         inspected += 1
     return inspected, tuple(failed)
+
+
+def _sidecars_by_media_file(walked: WalkResult) -> dict[str, tuple[Candidate, ...]]:
+    """Which discovered subtitle files belong to which media file, by the stem rule of spec §3.6.
+
+    **Directory by directory, because that is the reference's own scope**: it lists the folder the
+    media file sits in and matches within it `[source:
+    MediaBrowser.Providers/MediaInfo/MediaInfoResolver.cs:234-250 @ v10.11.11]`. A stem match
+    across directories would let one film claim another's file for having a longer name.
+
+    One sidecar can belong to **more than one** media file, and that is the reference's answer
+    rather than an oversight: `Film.srt` beside both `Film.mkv` and `Film.Extended.mkv` is claimed
+    by neither exclusively - the second's stem does not match, but `Film.Extended.srt` would be
+    claimed by `Film.mkv` as a title of "Extended". Nothing here has to break a tie, because a
+    claim is per media file and the ordinals are per media file too.
+
+    Sorted by `external_path`, which is the ordering that decides every wire index (011 plan
+    section 6.2): the reference's own order is its directory enumeration's, and a stream index
+    that depended on a filesystem's enumeration order would name different tracks on two servers.
+    """
+    by_directory: dict[str, list[Candidate]] = {}
+    for one in walked.subtitles:
+        by_directory.setdefault(_directory_of(one.relative_path), []).append(one)
+
+    claimed: dict[str, tuple[Candidate, ...]] = {}
+    for candidate in walked.candidates:
+        here = by_directory.get(_directory_of(candidate.relative_path))
+        if not here:
+            continue
+        stem = PurePosixPath(candidate.relative_path).stem
+        mine = [
+            one
+            for one in here
+            if parse_external(PurePosixPath(one.relative_path).name, stem) is not None
+        ]
+        if mine:
+            claimed[candidate.relative_path] = tuple(
+                sorted(mine, key=lambda one: one.relative_path)
+            )
+    return claimed
+
+
+def _directory_of(relative_path: str) -> str:
+    return str(PurePosixPath(relative_path).parent)
+
+
+def _inspect_sidecars(
+    roots: Sequence[Path],
+    found: Sequence[Candidate],
+    media_relative_path: str,
+    prober: SubtitleProber,
+) -> list[DiscoveredSubtitles]:
+    """Open each claimed file and merge what its name said with what its demuxer said.
+
+    **The merge is three rules, not one, and each of them is the reference's** `[source:
+    MediaBrowser.Providers/MediaInfo/MediaInfoResolver.cs:117-125, 337-345 @ v10.11.11]`:
+
+    * `is_forced` and `is_hearing_impaired` are OR-ed - a flag the file itself carries is kept
+      even when the name does not say so - while `is_default` is **assigned** from the name. So a
+      sidecar whose own disposition says default and whose name does not is not default.
+    * The **file's** title and language win, and the name's fill a gap rather than replacing one.
+      It decides nothing for a plain `.srt`, which carries neither, and everything for an `.mks`
+      that does.
+    * A file holding **more than one** subtitle stream gets none of the three flags at all: the
+      branch that applies them is the one-stream branch. `.srt` never reaches this; `.mks` always
+      does.
+
+    None of the three is measurable against a reference library - its external streams are `srt`,
+    `ass` and `vtt` files carrying no internal title, language or disposition, so every rule there
+    has one input and agrees with itself (011 plan section 6.2). They are read, and the fixture is
+    what proves this reproduction.
+
+    **A file that cannot be inspected costs itself and nothing else**, which is 003 section 3.7's
+    rule one level down: the media file keeps its own streams and its other sidecars, and the next
+    scan retries. A `ProberUnavailableError` is not caught here - it is true of every file at once
+    and the caller stops the phase on it.
+    """
+    stem = PurePosixPath(media_relative_path).stem
+    discovered: list[DiscoveredSubtitles] = []
+    for one in found:
+        name = parse_external(PurePosixPath(one.relative_path).name, stem)
+        if name is None:  # pragma: no cover - the claim was made by this same rule
+            continue
+        try:
+            streams = prober(_absolute(roots, one.relative_path))
+        except ProberUnavailableError:
+            raise
+        except InspectionError as exc:
+            logger.info("skipping %s: %s", one.relative_path, exc)
+            continue
+        if not streams:
+            continue
+        discovered.append(
+            DiscoveredSubtitles(
+                external_path=one.relative_path,
+                size=one.size,
+                mtime_ns=one.mtime_ns,
+                streams=tuple(_merged(stream, name, alone=len(streams) == 1) for stream in streams),
+            )
+        )
+    return discovered
+
+
+def _merged(stream: InspectedStream, name: ExternalName, *, alone: bool) -> InspectedStream:
+    """One discovered stream, with what its filename claimed applied over it."""
+    return replace(
+        stream,
+        is_external=True,
+        title=stream.title if stream.title else name.title,
+        language=stream.language if stream.language else name.language,
+        is_default=name.is_default if alone else stream.is_default,
+        is_forced=(name.is_forced or stream.is_forced) if alone else stream.is_forced,
+        is_hearing_impaired=(
+            (name.is_hearing_impaired or stream.is_hearing_impaired)
+            if alone
+            else stream.is_hearing_impaired
+        ),
+    )
 
 
 def _absolute(roots: Sequence[Path], relative_path: str) -> Path:
@@ -545,13 +696,17 @@ def _walk_every_root(
     """
     candidates: list[Candidate] = []
     skipped: list[Skipped] = []
+    subtitles: list[Candidate] = []
     for done, root in enumerate(paths, start=1):
         result = walk(root, library.collection_type)
         candidates.extend(result.candidates)
         skipped.extend(result.skipped)
+        subtitles.extend(result.subtitles)
         if report is not None:
             report(Phase.WALKING, done, len(paths), str(root))
-    return WalkResult(candidates=tuple(candidates), skipped=tuple(skipped))
+    return WalkResult(
+        candidates=tuple(candidates), skipped=tuple(skipped), subtitles=tuple(subtitles)
+    )
 
 
 class _Reporter:

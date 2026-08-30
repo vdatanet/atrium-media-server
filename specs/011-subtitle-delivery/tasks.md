@@ -313,7 +313,7 @@ distinction is the reference's own and the matrix carries the row so nobody tidi
 
 ## T4 — The sidecars land in rows, and a default scan notices them
 
-- [ ] **Changes:** migration `0007_external_subtitle_streams` gains `media_external_streams` as
+- [x] **Changes:** migration `0007_external_subtitle_streams` gains `media_external_streams` as
   [plan §4](plan.md#4-data-model) declares it, reversible. **T2 created that revision** and it
   holds the codec rewrite; adding the table means deleting the *"until it does, this is a data
   migration"* paragraph from its docstring, because `tests/unit/test_migrations.py` reads that
@@ -340,6 +340,46 @@ distinction is the reference's own and the matrix carries the row so nobody tidi
   whole point: run deep and the test passes with the second signal deleted. `BuiltMedia.copy_into`
   is the supported way to get a tree that may be written to, and `sidecar_path_of` names the file.
 - **Spec reference:** §3.6, AC-11, AC-12; plan §4, §6.2
+
+**Done (2026-08-30).** The second change signal was the part this task was written around and it
+worked first time. **What did not was a third reader nobody had counted, and the test that caught
+it is a test about money rather than about subtitles.** A listing page hydrates its inspections in
+statements that do not grow with the page, and `inspection_of` is the one conversion both readers
+share — so renumbering inside it means `item_queries.py` must fetch the discovered rows too, or a
+page answers a stream list that is short *and* misnumbered, with `HasSubtitles` false on exactly
+the item AC-11 is about. Nothing in this task's statement mentions `item_queries.py`. What found it
+was `test_the_statement_count_is_what_the_plan_says_it_is` failing 17 against 18: a guard written
+for a different reason, spending its budget on the right thing. The count is now declared in both
+places that hold it.
+
+**`_walk_every_root` silently dropped the third output, and every assertion still passed.** The
+merge across roots rebuilds `WalkResult` field by field, so a new field is absent by default rather
+than by decision — the sidecar was found by the walk, discarded on the way out, and the scan
+discovered nothing with no error anywhere. Four tests failed with an empty set and one line fixed
+all four. **A dataclass that is reconstructed rather than copied has no protection against a field
+being added to it**, which is worth knowing before the next output lands there.
+
+**The merge is three rules and `put_external` takes files, not streams.** T3's reading is
+implemented as read: `is_default` assigned from the filename, `is_forced` and `is_hearing_impaired`
+OR-ed, the file's own title and language winning over the name's, and a multi-stream sidecar
+getting no filename flags at all. Plan §5's contract says `put_external(..., streams)` and it is
+`files` here — an `.mks` holds several tracks behind **one** `(size, mtime_ns)`, and a per-stream
+argument carries that pair once per track with nothing keeping the copies equal. `DiscoveredSubtitles`
+is the record; the table still denormalises the pair per row, because that is where the ordinal
+lives.
+
+**`put` was storing the wire index, and it had been right until this task.** `media_streams.stream_index`
+is a demuxer index by declaration, and `put` wrote `one.index` — equal to it on a fresh inspection,
+and *not* equal on an inspection that had been read back through `renumber`. Nothing round-trips one
+today, so this is a hazard closed rather than a bug fixed; it is one line and the alternative was
+leaving a loaded gun in the one place the two numberings are supposed to never meet.
+
+Two smaller things. A subtitle file **settles** like a candidate — a half-copied `.srt` inspected
+mid-write would store a cue list nobody wrote — but silently, with no second `Skipped` entry,
+because it already has one for its extension and the operator's count must not move; there is a
+test for the count in both directions. And the claim is scoped **per directory**, which is the
+reference's own scope: a stem match across directories would let one film claim another's file for
+having a longer name, and the test plants exactly that file one directory up.
 
 ## T5 — `media/subtitles.py`: the cue list, and the labels beside it
 
