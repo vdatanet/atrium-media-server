@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-30
 accepted: 2026-08-30
-amended: 2026-08-30 at the tasks gate — four things this plan could not have known or did not check. §6.5's "the variant line gains the group" was written while the master answered one variant and 008's T15 amended that the same day, so the group goes through `_variant` and every entrance carries it. §6.1's "lookup on the codec spelling" reads a spelling `media/probe.py` does not store: the reference renames four subtitle codecs inside its own probe normalisation, `dvd_subtitle` contains no `dvdsub`, and applied to ffprobe's own name the rule answers *text* for every DVD and DVB subtitle track there is — so the rename moves to inspection and migration 0007 rewrites the four values. §8's embedded image subtitle track cannot be encoded by ffmpeg at all, and the fixture writes a PGS bitstream itself. And §6.2's "eight regional rows" are nine, two of which are not regional tags
+amended: 2026-08-30 at the tasks gate — four things this plan could not have known or did not check. §6.5's "the variant line gains the group" was written while the master answered one variant and 008's T15 amended that the same day, so the group goes through `_variant` and every entrance carries it. §6.1's "lookup on the codec spelling" reads a spelling `media/probe.py` does not store: the reference renames four subtitle codecs inside its own probe normalisation, `dvd_subtitle` contains no `dvdsub`, and applied to ffprobe's own name the rule answers *text* for every DVD and DVB subtitle track there is — so the rename moves to inspection and migration 0007 rewrites the four values. §8's embedded image subtitle track cannot be encoded by ffmpeg at all, and the fixture writes a PGS bitstream itself. And §6.2's "eight regional rows" are nine, two of which are not regional tags; and 2026-08-30 by T1 — §8's hand-written bitstream is four display sets rather than two at the same 434 bytes, and building it found two hazards the plan states now rather than letting a later task meet them: a subtitle input that does not start at zero is rebased onto its own start time and costs the text track beside it every cue but the first, and `-shortest` lets a subtitle track bound the whole file
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -882,10 +882,27 @@ Presentation Graphic Stream encoder at all, and its bitmap encoders refuse a tex
 *"Subtitle encoding currently only possible from text to text or bitmap to bitmap"* — so
 `-c:s dvdsub` over the generated `.srt` fails and the matrix's generate-with-ffmpeg rule has
 nothing to ask for. The entry therefore writes the **bitstream itself**: a 434-byte PGS of five
-segment types, one 32×8 run-length object and two display sets, which demuxes as
-`hdmv_pgs_subtitle` and muxes in with `-c:s copy` (measured at the gate, 2026-08-30). It is still
-generated rather than checked in, which is the module's own rule, and the entry carrying it is
-Matroska because mp4 accepts neither PGS nor DVD subtitles.
+segment types, one 32×8 run-length object and **four display sets — one that draws the block and
+one that erases it, for each of the two cues** (the gate's own sentence said two, which is half a
+file; T1 reproduced the byte count exactly and counted the sets) — which demuxes as
+`hdmv_pgs_subtitle` and muxes in with `-c:s copy` (measured at the gate, 2026-08-30, rebuilt by
+T1 on the same day). It is still generated rather than checked in, which is the module's own rule,
+and the entry carrying it is Matroska because mp4 accepts neither PGS nor DVD subtitles.
+
+**Two things about muxing a subtitle track that T1 paid for, and that no later task should
+rediscover.** Both are the class 008 T1 named — a muxer quietly not doing what it was asked — and
+both are recorded in `tests/fixtures/media.py`'s own docstring:
+
+* **A bitstream that does not start at zero moves, and takes a cue off the track beside it.**
+  ffmpeg rebases each input on that input's own start time, so a PGS whose first display set sits
+  at 0.5 s arrives 0.5 s early — every cue of it — and, under `-shortest`, the `subrip` track
+  muxed beside it keeps only its first cue; at 1.0 s it keeps one of three. The symptom lands on
+  the *other* track, which is why nothing downstream would have pointed at the bitstream. The
+  writer refuses a late cue list rather than trusting a caller to remember.
+* **`-shortest` means the shortest stream, and a subtitle track is one.** A four-second film whose
+  cues stop at 3.0 s came out **3.007 s long**, video and audio truncated with them. The flag was
+  belt-and-braces — both synthetic sources already carry an explicit duration — so it is simply
+  dropped for an entry that declares a subtitle.
 
 **The sidecar must not go beside a film 008's tests already assert about.** Placing it there
 renumbers that film's streams, which is this feature working correctly and 008's `audioStreamIndex`
