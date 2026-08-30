@@ -4,7 +4,7 @@ title: Subtitle delivery
 status: Accepted
 created: 2026-08-29
 updated: 2026-08-30
-amended: 2026-08-30 at the tasks gate — §3.4 and AC-5 said the master playlist's *variant line* gains the subtitle group, which was true while the master answered exactly one variant and stopped being true on the day 008's own T15 gave an HDR stream copy a standard-range entrance beside it; the reference gives the group to every variant it writes, so the criterion is written against every variant line and an entrance with no subtitles is the failure it now catches. And §3.2's text/image split reads a codec spelling the file itself does not report: four subtitle codecs are renamed when a file is inspected, and against the unrenamed spellings the rule inverts on the two commonest image formats in a real library; and 2026-08-30 by T2 — the inversion is the **DVD and digital-broadcast bitmap** names alone, the servable-alone flag inverts with the split rather than following it (`PGSSUB` is servable where `DVDSUB` is not), and both facts are stated on every stream of every kind, `false` on everything that is not a subtitle; and 2026-08-30 by T5 — AC-10's *"the concatenation of every window of a track is the whole track"* is false of a cue that starts exactly on a window boundary, which two consecutive windows both answer because their shared boundary position is inclusive at each end: read off the reference first, then **measured** on it, in the constructed form and through the reference's own generated playlist alike. And §3.5 now says, also measured, that a converted document carries a region declaration and a placement setting on every cue's timing line, which is where a player puts the text and which a cue-by-cue check cannot see; and 2026-08-30 by T7 — §3.5 gains the eleven format spellings with the label and the byte order mark of each read off a run, of which `subrip` and `webvtt` answer a **body** under `application/octet-stream` where both documents had predicted a refusal, the four deprecated query parameters that override the address, the query start position that beats the one in the path, and the same-format short circuit measured with a window on it — which contradicts AC-10 and is recorded beside it rather than folded into it, because plan §6.8 makes that amendment the user's; and §3.7 gains a row nothing had measured, an item that **exists** and holds nothing servable, which answers `500` where an identifier naming nothing answers `400` and which is what an implementation has to know before it can answer either; and 2026-08-30 by T7, at the user's decision — **AC-9 and AC-10 both state what was measured, in this change rather than at a later gate**, because documentation moves with the code in the same commit and T8 through T11 are written by people reading them. AC-10 gains the same-format short circuit: a windowed fetch whose requested format is the one the track is already in answers the **whole track**, unwindowed and unrebased, on both fetch routes and under either timestamp switch — read off the reference first, then measured on it, which is why the clause carries a `[probe:]` and not the `[source:]` it was found with. AC-9 is narrowed rather than widened: the timings match the source's exactly where the container begins at zero and are offset by the container's own start time where it does not, which is **parity stated precisely** — a reference server on the same extraction build answers the same offset, because it asks for no timestamp preservation either — and the criterion is checked against the offset read off the container rather than against a literal, so it holds on both builds. Plan §6.8 had left both to a later gate; the deferral was declined; and 2026-08-30 by T8, at the user's decision — **§3.7's playlist column is corrected in three cells, in the change that measured them.** The table was drafted from a run that asked the fetch route almost every question, and its shape invites a reader to assume that where both routes answer they answer alike; on these three they do not. The malformed-identifier refusal names **`itemId`** on the playlist and `routeItemId` on the fetch routes, because each names its own path segment — measured, both bodies in one run, where the row had generalised the fetch route's answer to a route that had never been asked. An item that **exists and is not a video** — a series, an audio track — is the playlist's problem-details `404` where the fetch routes answer `500` for that same identifier, because the playlist's own lookup asks for a video and not for an item: that cell was a **dash**, and the dash is what let an implementation reuse the fetch routes' lookup and answer `500` to an item this route refuses one question earlier. And a source with **no runtime** had no row at all and now has one, marked ⚠️ **read rather than measured**: the reference refuses it on its own argument check at the same status and the same bytes as a zero window length, and it could not be measured because every media source of every video item in the measured library states a runtime and the route asks for a video before it reads one — a fact about libraries, since a runtime is written by the scan that creates an item and the state cannot be produced from outside a server. The run reports that miss on every run. Plan §6.8 had made two of the three the user's; the deferral was declined, for the reason AC-9 and AC-10 were taken at T7 — documentation moves with the code in the same commit, and T9 through T12 are written by people reading this table
+amended: 2026-08-30 at the tasks gate — §3.4 and AC-5 said the master playlist's *variant line* gains the subtitle group, which was true while the master answered exactly one variant and stopped being true on the day 008's own T15 gave an HDR stream copy a standard-range entrance beside it; the reference gives the group to every variant it writes, so the criterion is written against every variant line and an entrance with no subtitles is the failure it now catches. And §3.2's text/image split reads a codec spelling the file itself does not report: four subtitle codecs are renamed when a file is inspected, and against the unrenamed spellings the rule inverts on the two commonest image formats in a real library; and 2026-08-30 by T2 — the inversion is the **DVD and digital-broadcast bitmap** names alone, the servable-alone flag inverts with the split rather than following it (`PGSSUB` is servable where `DVDSUB` is not), and both facts are stated on every stream of every kind, `false` on everything that is not a subtitle; and 2026-08-30 by T5 — AC-10's *"the concatenation of every window of a track is the whole track"* is false of a cue that starts exactly on a window boundary, which two consecutive windows both answer because their shared boundary position is inclusive at each end: read off the reference first, then **measured** on it, in the constructed form and through the reference's own generated playlist alike. And §3.5 now says, also measured, that a converted document carries a region declaration and a placement setting on every cue's timing line, which is where a player puts the text and which a cue-by-cue check cannot see; and 2026-08-30 by T7 — §3.5 gains the eleven format spellings with the label and the byte order mark of each read off a run, of which `subrip` and `webvtt` answer a **body** under `application/octet-stream` where both documents had predicted a refusal, the four deprecated query parameters that override the address, the query start position that beats the one in the path, and the same-format short circuit measured with a window on it — which contradicts AC-10 and is recorded beside it rather than folded into it, because plan §6.8 makes that amendment the user's; and §3.7 gains a row nothing had measured, an item that **exists** and holds nothing servable, which answers `500` where an identifier naming nothing answers `400` and which is what an implementation has to know before it can answer either; and 2026-08-30 by T7, at the user's decision — **AC-9 and AC-10 both state what was measured, in this change rather than at a later gate**, because documentation moves with the code in the same commit and T8 through T11 are written by people reading them. AC-10 gains the same-format short circuit: a windowed fetch whose requested format is the one the track is already in answers the **whole track**, unwindowed and unrebased, on both fetch routes and under either timestamp switch — read off the reference first, then measured on it, which is why the clause carries a `[probe:]` and not the `[source:]` it was found with. AC-9 is narrowed rather than widened: the timings match the source's exactly where the container begins at zero and are offset by the container's own start time where it does not, which is **parity stated precisely** — a reference server on the same extraction build answers the same offset, because it asks for no timestamp preservation either — and the criterion is checked against the offset read off the container rather than against a literal, so it holds on both builds. Plan §6.8 had left both to a later gate; the deferral was declined; and 2026-08-30 by T8, at the user's decision — **§3.7's playlist column is corrected in three cells, in the change that measured them.** The table was drafted from a run that asked the fetch route almost every question, and its shape invites a reader to assume that where both routes answer they answer alike; on these three they do not. The malformed-identifier refusal names **`itemId`** on the playlist and `routeItemId` on the fetch routes, because each names its own path segment — measured, both bodies in one run, where the row had generalised the fetch route's answer to a route that had never been asked. An item that **exists and is not a video** — a series, an audio track — is the playlist's problem-details `404` where the fetch routes answer `500` for that same identifier, because the playlist's own lookup asks for a video and not for an item: that cell was a **dash**, and the dash is what let an implementation reuse the fetch routes' lookup and answer `500` to an item this route refuses one question earlier. And a source with **no runtime** had no row at all and now has one, marked ⚠️ **read rather than measured**: the reference refuses it on its own argument check at the same status and the same bytes as a zero window length, and it could not be measured because every media source of every video item in the measured library states a runtime and the route asks for a video before it reads one — a fact about libraries, since a runtime is written by the scan that creates an item and the state cannot be produced from outside a server. The run reports that miss on every run. Plan §6.8 had made two of the three the user's; the deferral was declined, for the reason AC-9 and AC-10 were taken at T7 — documentation moves with the code in the same commit, and T9 through T12 are written by people reading this table; and 2026-08-30 by T9 — **§3.3 gains a rule that inverts this feature's own assumption about who its subtitle half touches, and two criteria are narrowed against it.** The delivery method of the *selected* track is a direct-play condition on the reference: a track the client could only be shown by burning in refuses direct play with `SubtitleCodecNotSupported`, so the same file, the same client and the same profile answer a direct play with no track named and a transcode with one — measured on both sides, an external text profile keeping direct play for a `subrip` track and losing it for the image track in the same file, and an index naming no stream costing nothing. AC-15's *"nothing changes what a direct-played file answers"* was therefore false of exactly the request this feature exists to serve, and it now says so. AC-2's *"and a delivery address naming it"* was false too, in two directions: the index and the method are both dropped where the delivery method is *external* and the index is dropped where it is `-1`, while a request asking for burn-in puts the index back and appends its own flag to the end of the address. §3.2 gains the start position that address carries — zero on every playlist answer, the negotiation's own seek on a progressive one — and the flag stated beside every external address. And §3.3 records what plan §6.8 left owed: the five members of the delivery-method vocabulary bind case-insensitively and by ordinal on a request body, while a word that is no member is a `400`, which is the shape 012 measured for a query value
 depends_on: [003, 005, 008]
 ---
 
@@ -217,7 +217,13 @@ tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`.
 **The delivery method is resolved for every subtitle stream, not for the selected one.** A source
 with six subtitle streams answers six methods, whatever the request selected. The address is
 narrower: `DeliveryUrl` is emitted only for the streams whose method is *external*, because that
-is the only method whose answer is a URL the client fetches itself. Same probe.
+is the only method whose answer is a URL the client fetches itself, and it is the one property
+that brings a companion — the flag saying the address is not a remote one is stated beside it and
+on no other stream. Same probe. **That address carries a start position, and it is not always
+zero**: it is zero on every answer whose delivery is a playlist, which forces it so because a
+playlist preserves timings, and it is the negotiation's own seek where the answer is a progressive
+production — a body asking to start ten minutes in is answered an address ten minutes in
+`[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
 
 The text/image split decides everything downstream. A text track is a cue list and can be
 converted, served alone and announced; an image track is a sequence of bitmaps and can be none of
@@ -346,6 +352,39 @@ That override already works for audio and is dropped for subtitles
 ([client-atrium-tvos §4.3](../../docs/compatibility/client-atrium-tvos.md#43-the-clients-track-override-works-for-audio-and-is-dropped-for-subtitles)),
 and §3.4's measurement promotes that line from *"a line inside §4.2"* to the **only** thing that
 makes a manifest announce anything. AC-4.
+
+**Naming a track can cost a source its direct play, and neither this section nor the plan said
+so.** The delivery method of the *selected* track is resolved a second time, against the file
+exactly as it stands, and the answer is a direct-play condition like a codec or a container: a
+track the client will take as a separate file, embedded in the container, or dropped leaves the
+answer alone, and a track it could only be shown by burning in refuses direct play, with
+`SubtitleCodecNotSupported` beside whatever else was refused. So the same file, the same client
+and the same profile answer a direct play with no track named and a transcode with one. Measured
+on both sides of the discrimination: an external text profile keeps direct play for the `subrip`
+track of a file and loses it for the image track in that same file, a profile that declares
+nothing loses it for either, and an index naming **no** stream costs nothing at all — there is no
+track to resolve a method for `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11,
+2026-08-30]`. AC-15 is narrowed against this, and the ordering it implies is not circular: the
+refusal reads the method the file would get *at direct play*, where the manifest method is not
+available, and the answer the client is finally given reads it again against whatever the
+negotiation landed on.
+
+**The address names the track only where the client is not fetching it for itself.** A negotiation
+that selected a track writes the index and the method into the delivery address, with two
+subtractions and one override: the index and the method are both dropped where the method is
+*external* — the client was already handed that track's own address, so there is nothing for the
+delivery route to do — and the index is dropped where it is `-1`, which names no track; and a body
+asking for burn-in puts the index back beside an external method, because the delivery route needs
+one to honour, while leaving the method dropped. That body also appends its own flag to the end of
+the address, after everything else it carries. All four measured in one run
+`[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`; AC-2 states the
+narrowed form rather than the unconditional one it was drafted with.
+
+**And the vocabulary is read loosely and refused strictly.** A profile entry naming its delivery
+method in any case — `hls` where the model spells it `Hls` — is answered identically to the
+declared spelling, as is the member's ordinal; a word that is no member at all is a `400`. Four
+classes, one run, on a request body: the same shape 012 measured for a value in a query string,
+which is where this question came from. Same probe.
 
 **The method.** The client's profile declares, per subtitle format, how it will take that format:
 embedded in the container, as a separate file, as a separate stream in the manifest, burned in, or
@@ -714,10 +753,18 @@ remembered, which is the same line 008 draws for `DefaultSubtitleStreamIndex` an
    addition, a delivery method on every subtitle stream and a delivery address on every stream
    whose method is external.
 2. A negotiation carrying a subtitle index **and the matching media source** answers a source
-   whose stated default subtitle track is the one named, and a delivery address naming it; the
+   whose stated default subtitle track is the one named, and — where the track's own delivery
+   method is not *external* and the index is not `-1` — a delivery address naming it; the
    same negotiation without the media source answers as though no index had been sent. A
    negotiation carrying neither answers **no default subtitle track**, which is §3.3's measured
    answer for a server that keeps no per-user subtitle preference.
+
+   The two subtractions are the reference's own and were measured at T9, which is why this
+   criterion no longer says the address names the track unconditionally: a client that will fetch
+   the file for itself was already handed that file's address, and `-1` names no track at all. A
+   request that asks for burn-in puts the index back and leaves the method out, and the address
+   then ends with that request's own flag `[probe: tools/probe_subtitle_negotiation.py, Jellyfin
+   10.11.11, 2026-08-30]`.
 3. A profile that declares no subtitle handling negotiates exactly as it does today except that
    every subtitle stream now states a delivery method of `Encode` — the answer §3.3 measured, and
    the one property that changes.
@@ -800,7 +847,17 @@ remembered, which is the same line 008 draws for `DefaultSubtitleStreamIndex` an
 14. A subtitle fetched twice answers the same bytes.
 15. Nothing in this feature changes what a **direct-played** file answers: the negotiation, the
     source list and the delivery of a file the client reads byte for byte are unchanged, except
-    for the stream properties AC-1 and AC-3 add.
+    for the stream properties AC-1 and AC-3 add — **and except where the request names a subtitle
+    track the client cannot take**, which is not a direct play any more and never was on the
+    reference either.
+
+    Narrowed at T9, which measured it. The *selected* track's delivery method is a direct-play
+    condition: a track the client will take as a separate file, embedded, or dropped changes
+    nothing, and a track it could only be shown by burning in refuses direct play with
+    `SubtitleCodecNotSupported` (§3.3). So the unchanged half is asserted on a file with no
+    subtitle stream at all and the narrowing is asserted on both sides of the discrimination —
+    the same file and the same profile, one index kept and one lost
+    `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
 16. A subtitle window's declared duration is written with a decimal point whatever the host is
     configured for — the divergence
     [behaviours §3.12](../../docs/compatibility/behaviours.md#312-a-subtitle-playlists-window-durations-are-written-in-the-servers-locale--class-b-diverged)

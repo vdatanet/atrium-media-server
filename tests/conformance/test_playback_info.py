@@ -40,10 +40,12 @@ from atrium.server import create_app
 from atrium.users.policy import AUDIO_TRANSCODING, REMUXING, VIDEO_TRANSCODING
 from tests.conformance.test_golden import STATE
 from tests.fixtures.media import (
+    BOTH_SUBTITLE_KINDS,
     DIRECT_PLAY,
     REJECTED_AUDIO,
     REJECTED_CONTAINER,
     REJECTED_VIDEO,
+    UNCONVERTIBLE_SUBTITLE,
     BuiltMedia,
     MediaFile,
     ScannedMediaWorld,
@@ -115,7 +117,16 @@ def _container(one: MediaFile) -> str:
 
     `mp4` rather than the six-name demuxer family, because that is what a client writes - and the
     containment rule splits both sides, which is what makes the two match (008 T4).
+
+    **Matroska is the second family with a comma in it**, and it arrived with 011's subtitled
+    entries. `mkv` rather than `matroska` and rather than `mp4`, because inspection *renames* that
+    family down to one name where it leaves the mp4 one six long (008 spec section 3.1) - so the
+    stored container is `mkv` and a profile naming anything else refuses it, which would make
+    every subtitle answer below attributable to a container rejection instead of to the rule
+    under test.
     """
+    if one.demuxers.startswith("matroska"):
+        return "mkv"
     return "mp4" if "," in one.demuxers else one.demuxers
 
 
@@ -708,3 +719,415 @@ async def test_a_photo_entry_in_a_profile_is_dropped_rather_than_refused(
     document = await negotiate(client, item.id, {"DeviceProfile": with_photos})
 
     assert flags(document) == (True, True, True)
+
+
+# ------------------------------------------------------------------------------------------
+# The subtitle half - 011 AC-1, AC-2, AC-3, AC-15
+# ------------------------------------------------------------------------------------------
+#
+# `tests/unit/test_media_decision.py` owns the ladder. What is proven here is the wiring: that
+# `SubtitleProfiles` reaches it, that the posted index is read on the reference's own condition,
+# and that the answers reach the wire under the reference's own property names.
+
+#: What a client that will fetch subtitle files for itself declares.
+EXTERNAL_VTT = {"Format": "vtt", "Method": "External"}
+#: What a client that wants them announced in the manifest declares.
+MANIFEST_VTT = {"Format": "vtt", "Method": "Hls"}
+
+
+def takes_subtitles(one: MediaFile, *subtitles: dict[str, Any]) -> dict[str, Any]:
+    """A profile that direct-plays this file and declares these subtitle entries."""
+    document = accepting(one)
+    document["SubtitleProfiles"] = list(subtitles)
+    return document
+
+
+def refuses_container(one: MediaFile, *subtitles: dict[str, Any]) -> dict[str, Any]:
+    """The same, with the container rejected - so the answer is a transcode over the same file."""
+    document = profile([{"Container": "nothingatall", "Type": "Video"}])
+    document["SubtitleProfiles"] = list(subtitles)
+    return document
+
+
+def subtitle_streams(document: dict[str, Any]) -> list[dict[str, Any]]:
+    source = document["MediaSources"][0]
+    return [one for one in source["MediaStreams"] if one["Type"] == "Subtitle"]
+
+
+async def test_ac1_a_negotiated_source_states_a_delivery_method_on_every_subtitle_stream(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """Every stream, not the selected one - measured on a source with six of them.
+
+    The image track is what makes this discriminating: under a text-only profile it is the row
+    that has to answer `Encode`, and a ladder that only ever answered for the chosen track would
+    pass a narrower test.
+    """
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+    document = await negotiate(
+        client, item.id, {"DeviceProfile": takes_subtitles(BOTH_SUBTITLE_KINDS, EXTERNAL_VTT)}
+    )
+
+    answered = {one["Index"]: one["DeliveryMethod"] for one in subtitle_streams(document)}
+    kinds = {one["Index"]: one["IsTextSubtitleStream"] for one in subtitle_streams(document)}
+    assert len(answered) == 2, "the entry carries one text track and one image track"
+    text = next(index for index, is_text in kinds.items() if is_text)
+    image = next(index for index, is_text in kinds.items() if not is_text)
+    assert answered[text] == "External"
+    assert answered[image] == "Encode"
+
+
+async def test_ac3_a_profile_that_declares_no_subtitle_handling_answers_encode_on_every_track(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """Burn-in is the answer the reference gives, not a branch it avoids (spec section 3.3)."""
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+    document = await negotiate(
+        client, item.id, {"DeviceProfile": takes_subtitles(BOTH_SUBTITLE_KINDS)}
+    )
+
+    assert flags(document) == (True, True, True), "declaring nothing about subtitles costs nothing"
+    assert {one["DeliveryMethod"] for one in subtitle_streams(document)} == {"Encode"}
+
+
+async def test_ac3_the_unconvertible_format_reaches_encode_under_a_vtt_only_profile(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """`ass` is text, is servable alone, and still cannot be converted *from* - so it is the row
+    that makes `Encode` reachable for a text track with no image stream involved."""
+    item = served[1].of(UNCONVERTIBLE_SUBTITLE)
+    document = await negotiate(
+        client, item.id, {"DeviceProfile": takes_subtitles(UNCONVERTIBLE_SUBTITLE, EXTERNAL_VTT)}
+    )
+
+    embedded = next(one for one in subtitle_streams(document) if not one["IsExternal"])
+    sidecar = next(one for one in subtitle_streams(document) if one["IsExternal"])
+    assert embedded["Codec"] == "ass"
+    assert embedded["DeliveryMethod"] == "Encode"
+    assert sidecar["DeliveryMethod"] == "External", (
+        "the sidecar beside it is convertible to vtt, so the two are the discriminating pair"
+    )
+
+
+async def test_ac1_a_bare_read_states_neither_the_method_nor_the_address(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The two negotiated properties are absent from every read that negotiated nothing - the
+    item route and the profile-less `GET` alike (spec section 3.2)."""
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+    bare = (await _item(client, item.id))["MediaSources"][0]["MediaStreams"]
+    for one in (stream for stream in bare if stream["Type"] == "Subtitle"):
+        assert "DeliveryMethod" not in one
+        assert "DeliveryUrl" not in one
+        assert one["IsTextSubtitleStream"] in (True, False), "the file facts are stated anyway"
+
+    answered = await client.get(f"/Items/{item.id}/PlaybackInfo", headers=HEADERS)
+    assert answered.status_code == 200
+    for one in subtitle_streams(dict(answered.json())):
+        assert "DeliveryMethod" not in one
+
+
+async def test_ac1_the_delivery_address_is_written_for_the_external_streams_alone(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """`DeliveryUrl` names `GetSubtitleWithTicks` - the route with the start position in the path,
+    which is why that route is in the surface at all (spec section 2)."""
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+    document = await negotiate(
+        client, item.id, {"DeviceProfile": takes_subtitles(BOTH_SUBTITLE_KINDS, EXTERNAL_VTT)}
+    )
+    source = document["MediaSources"][0]
+    external = [one for one in subtitle_streams(document) if one["DeliveryMethod"] == "External"]
+    burned = [one for one in subtitle_streams(document) if one["DeliveryMethod"] == "Encode"]
+
+    assert len(external) == 1
+    assert external[0]["DeliveryUrl"] == (
+        f"/Videos/{dashed(item.id)}/{source['Id']}"
+        f"/Subtitles/{external[0]['Index']}/0/Stream.vtt?ApiKey={TOKEN}"
+    )
+    assert external[0]["IsExternalUrl"] is False
+    assert all("DeliveryUrl" not in one for one in burned)
+
+
+async def test_ac2_an_index_is_read_only_where_the_body_also_names_the_source(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The measurement that settles the third-party lead spec section 3.3 was built on: without
+    the media source id the index is dropped in **silence**, and the answer is the default - which
+    for this server is no default at all."""
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+    named = await negotiate(
+        client,
+        item.id,
+        {"DeviceProfile": takes_subtitles(BOTH_SUBTITLE_KINDS, EXTERNAL_VTT)},
+    )
+    text = next(one["Index"] for one in subtitle_streams(named) if one["IsTextSubtitleStream"])
+    source_id = named["MediaSources"][0]["Id"]
+
+    body = {"DeviceProfile": takes_subtitles(BOTH_SUBTITLE_KINDS, EXTERNAL_VTT)}
+    with_source = await negotiate(
+        client, item.id, {**body, "SubtitleStreamIndex": text, "MediaSourceId": source_id}
+    )
+    without_source = await negotiate(client, item.id, {**body, "SubtitleStreamIndex": text})
+    neither = await negotiate(client, item.id, body)
+
+    assert with_source["MediaSources"][0]["DefaultSubtitleStreamIndex"] == text
+    assert "DefaultSubtitleStreamIndex" not in without_source["MediaSources"][0]
+    assert "DefaultSubtitleStreamIndex" not in neither["MediaSources"][0], (
+        "no per-user subtitle preference means no default track (AC-2, OQ-12)"
+    )
+
+
+async def test_ac2_an_index_naming_no_stream_is_restated_rather_than_refused(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+    source_id = (await _item(client, item.id))["MediaSources"][0]["Id"]
+    for named in (-1, 99):
+        document = await negotiate(
+            client,
+            item.id,
+            {
+                "DeviceProfile": takes_subtitles(BOTH_SUBTITLE_KINDS, EXTERNAL_VTT),
+                "SubtitleStreamIndex": named,
+                "MediaSourceId": source_id,
+            },
+        )
+        assert document["MediaSources"][0]["DefaultSubtitleStreamIndex"] == named
+        assert flags(document) == (True, True, True), (
+            "an index naming no stream resolves no method, so it refuses no direct play"
+        )
+
+
+async def test_naming_a_track_the_profile_cannot_take_costs_the_source_its_direct_play(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The finding neither 011 document had, at the HTTP boundary.
+
+    The same file and the same direct-play entry: naming the text track under an external `vtt`
+    profile keeps direct play, and naming the image track loses it with `SubtitleCodecNotSupported`
+    `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
+    """
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+    body = {"DeviceProfile": takes_subtitles(BOTH_SUBTITLE_KINDS, EXTERNAL_VTT)}
+    listed = await negotiate(client, item.id, body)
+    source_id = listed["MediaSources"][0]["Id"]
+    text = next(one["Index"] for one in subtitle_streams(listed) if one["IsTextSubtitleStream"])
+    image = next(
+        one["Index"] for one in subtitle_streams(listed) if not one["IsTextSubtitleStream"]
+    )
+
+    kept = await negotiate(
+        client, item.id, {**body, "SubtitleStreamIndex": text, "MediaSourceId": source_id}
+    )
+    lost = await negotiate(
+        client, item.id, {**body, "SubtitleStreamIndex": image, "MediaSourceId": source_id}
+    )
+
+    assert flags(kept) == (True, True, True)
+    assert flags(lost) == (False, False, True)
+    assert "TranscodeReasons=SubtitleCodecNotSupported" in lost["MediaSources"][0]["TranscodingUrl"]
+
+
+async def test_the_address_carries_the_index_and_the_method_at_their_measured_positions(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """`SubtitleStreamIndex` straight after `AudioStreamIndex`, `SubtitleMethod` straight after
+    `Tag` - asserted as substrings of the whole address, whose anatomy is pinned as one string by
+    `test_the_transcoding_url_is_the_measured_anatomy_exactly`."""
+    world = served[1]
+    item = world.of(BOTH_SUBTITLE_KINDS)
+    listed = await negotiate(
+        client, item.id, {"DeviceProfile": refuses_container(BOTH_SUBTITLE_KINDS, MANIFEST_VTT)}
+    )
+    source_id = listed["MediaSources"][0]["Id"]
+    text = next(one["Index"] for one in subtitle_streams(listed) if one["IsTextSubtitleStream"])
+
+    document = await negotiate(
+        client,
+        item.id,
+        {
+            "DeviceProfile": refuses_container(BOTH_SUBTITLE_KINDS, MANIFEST_VTT),
+            "SubtitleStreamIndex": text,
+            "MediaSourceId": source_id,
+        },
+    )
+    url = document["MediaSources"][0]["TranscodingUrl"]
+    tag = media_etag(world.files.path_of(BOTH_SUBTITLE_KINDS).stat().st_mtime_ns)
+
+    audio = next(
+        one for one in document["MediaSources"][0]["MediaStreams"] if one["Type"] == "Audio"
+    )
+    assert f"&AudioStreamIndex={audio['Index']}&SubtitleStreamIndex={text}&" in url
+    assert f"&Tag={tag}&SubtitleMethod=Hls&" in url
+    assert "&EnableSubtitlesInManifest=" not in url, "the profile did not declare the flag"
+
+
+async def test_the_external_method_drops_the_index_from_the_address(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """A client that fetches the track itself was already handed its address, so the parameter is
+    not repeated - and `SubtitleMethod` is dropped with it. Both conditions read the *resolved*
+    method rather than the declared one."""
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+    listed = await negotiate(
+        client, item.id, {"DeviceProfile": refuses_container(BOTH_SUBTITLE_KINDS, EXTERNAL_VTT)}
+    )
+    source_id = listed["MediaSources"][0]["Id"]
+    text = next(one["Index"] for one in subtitle_streams(listed) if one["IsTextSubtitleStream"])
+
+    document = await negotiate(
+        client,
+        item.id,
+        {
+            "DeviceProfile": refuses_container(BOTH_SUBTITLE_KINDS, EXTERNAL_VTT),
+            "SubtitleStreamIndex": text,
+            "MediaSourceId": source_id,
+        },
+    )
+    url = document["MediaSources"][0]["TranscodingUrl"]
+    assert "&SubtitleStreamIndex=" not in url
+    assert "&SubtitleMethod=" not in url
+
+
+async def test_always_burn_in_keeps_the_index_and_appends_its_own_flag(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The disjunct 011 plan section 6.3 left out, and the parameter that comes with it.
+
+    The flag is appended **after** `TranscodeReasons`, in a lower camel case nothing else in this
+    address uses, because the reference appends it once the address is already built
+    `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
+    """
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+    listed = await negotiate(
+        client, item.id, {"DeviceProfile": refuses_container(BOTH_SUBTITLE_KINDS, EXTERNAL_VTT)}
+    )
+    source_id = listed["MediaSources"][0]["Id"]
+    text = next(one["Index"] for one in subtitle_streams(listed) if one["IsTextSubtitleStream"])
+
+    document = await negotiate(
+        client,
+        item.id,
+        {
+            "DeviceProfile": refuses_container(BOTH_SUBTITLE_KINDS, EXTERNAL_VTT),
+            "SubtitleStreamIndex": text,
+            "MediaSourceId": source_id,
+            "AlwaysBurnInSubtitleWhenTranscoding": True,
+        },
+    )
+    url = document["MediaSources"][0]["TranscodingUrl"]
+    assert f"&SubtitleStreamIndex={text}&" in url
+    assert "&SubtitleMethod=" not in url, "the disjunct is on the index alone, not on the method"
+    assert url.endswith("&alwaysBurnInSubtitleWhenTranscoding=true")
+
+
+async def test_the_manifest_flag_reaches_the_address_and_nothing_else(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """OQ-1's answer, written down as an address: the reference's own negotiation writes the flag
+    and the route it addresses cannot read it (spec section 3.4)."""
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+    declaring = refuses_container(BOTH_SUBTITLE_KINDS, MANIFEST_VTT)
+    declaring["TranscodingProfiles"] = [{**TS_HLS, "EnableSubtitlesInManifest": True}]
+
+    document = await negotiate(client, item.id, {"DeviceProfile": declaring})
+    url = document["MediaSources"][0]["TranscodingUrl"]
+    assert "&EnableSubtitlesInManifest=True&RequireAvc=false&" in url, (
+        "written as .NET spells a boolean, between TranscodingMaxAudioChannels and RequireAvc"
+    )
+
+
+async def test_a_progressive_transcode_carries_the_seek_into_the_subtitle_address(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """Plan section 6.3 said the start position is zero for every request this feature can
+    produce. It is zero for every HLS answer, which forces it so - and it is the negotiation's own
+    seek on a progressive one `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11,
+    2026-08-30]`."""
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+    progressive = refuses_container(BOTH_SUBTITLE_KINDS, EXTERNAL_VTT)
+    progressive["TranscodingProfiles"] = [
+        {
+            "Container": "mp4",
+            "Type": "Video",
+            "VideoCodec": "h264",
+            "AudioCodec": "aac",
+            "Protocol": "http",
+            "Context": "Streaming",
+        }
+    ]
+
+    document = await negotiate(
+        client, item.id, {"DeviceProfile": progressive, "StartTimeTicks": 6_000_000_000}
+    )
+    external = [one for one in subtitle_streams(document) if one["DeliveryMethod"] == "External"]
+    assert external, "the text track resolves to External on this profile"
+    assert "/Subtitles/" in external[0]["DeliveryUrl"]
+    assert "/6000000000/Stream.vtt" in external[0]["DeliveryUrl"]
+
+
+async def test_a_declared_method_binds_in_any_case_and_by_ordinal(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """011 plan section 6.8's owed row, paid.
+
+    `hls`, `HLS` and the ordinal `3` all answer what `Hls` answers, on a request **body** - the
+    same four classes 012's gate found for an enum-typed query parameter. A strictly-cased enum
+    here would refuse a body the reference accepts `[probe:
+    tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
+    """
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+
+    async def resolved(method: Any) -> dict[int, str]:
+        document = await negotiate(
+            client,
+            item.id,
+            {
+                "DeviceProfile": refuses_container(
+                    BOTH_SUBTITLE_KINDS, {"Format": "vtt", "Method": method}
+                )
+            },
+        )
+        return {one["Index"]: one["DeliveryMethod"] for one in subtitle_streams(document)}
+
+    declared = await resolved("Hls")
+    assert "Hls" in declared.values(), "the control row"
+    assert await resolved("hls") == declared
+    assert await resolved("HLS") == declared
+    assert await resolved(3) == declared
+    assert await resolved("ExTeRnAl") != declared
+
+
+async def test_a_method_that_is_no_member_at_all_is_the_validation_400(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The half of the same measurement that is a refusal rather than a leniency: an unreadable
+    token inside a body is a `400` here as it is for every other enum this body carries."""
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+    answered = await client.post(
+        f"/Items/{item.id}/PlaybackInfo",
+        json={
+            "DeviceProfile": refuses_container(
+                BOTH_SUBTITLE_KINDS, {"Format": "vtt", "Method": "banana"}
+            )
+        },
+        headers=HEADERS,
+    )
+    assert answered.status_code == 400
+    assert answered.json()["title"] == "One or more validation errors occurred."
+
+
+async def test_ac15_a_direct_played_file_answers_what_it_answered_before(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """AC-15: nothing this feature adds changes a direct play - and the entry it is asserted on
+    has no subtitle stream at all, so the properties AC-1 and AC-3 add have nowhere to appear."""
+    item = served[1].of(DIRECT_PLAY)
+    document = await negotiate(client, item.id, {"DeviceProfile": accepting(DIRECT_PLAY)})
+    source = document["MediaSources"][0]
+
+    assert flags(document) == (True, True, True)
+    assert "TranscodingUrl" not in source
+    assert "DefaultSubtitleStreamIndex" not in source
+    assert not [one for one in source["MediaStreams"] if one["Type"] == "Subtitle"]

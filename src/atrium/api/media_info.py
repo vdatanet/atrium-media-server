@@ -51,10 +51,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from enum import Enum
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import Field, ValidationError
+from pydantic import BeforeValidator, Field, ValidationError
 
 from atrium.api.delivery import policy_of
 from atrium.api.deps import get_sessions, require_user
@@ -150,6 +150,74 @@ class TranscodingProfileDto(AtriumModel):
     segment_length: int = 0
     break_on_non_key_frames: bool = False
     enable_audio_vbr_encoding: bool = True
+    enable_subtitles_in_manifest: bool = False
+    """Bound at 011 T9, and honoured exactly as far as the reference honours it: it reaches the
+    delivery address and stops there, because the route that address names cannot read it (011
+    spec section 3.4)."""
+
+
+#: The ordinal each member of the delivery-method vocabulary carries in the reference's own enum
+#: `[source: MediaBrowser.Model/Dlna/SubtitleDeliveryMethod.cs @ v10.11.11]`. Written out rather
+#: than taken from declaration order, because a reordering here would silently rebind a number.
+SUBTITLE_METHOD_ORDINALS: dict[int, ladder.SubtitleMethod] = {
+    0: ladder.SubtitleMethod.ENCODE,
+    1: ladder.SubtitleMethod.EMBED,
+    2: ladder.SubtitleMethod.EXTERNAL,
+    3: ladder.SubtitleMethod.HLS,
+    4: ladder.SubtitleMethod.DROP,
+}
+
+
+def _bound_subtitle_method(value: Any) -> Any:
+    """The three ways the reference's binder accepts a delivery method, and the one it refuses.
+
+    Measured in one run, all four classes: `hls` and `HLS` bind exactly as `Hls` does, the
+    ordinal `3` binds to the same member, and `banana` is a `400` - which is the same shape 012's
+    gate found for an enum-typed *query* parameter, arriving here on a request **body**
+    `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
+
+    Anything this function does not recognise is handed to the model unchanged, so the refusal is
+    the framework's validation `400` rather than a second refusal invented here.
+
+    **What is lenient is the binder rather than this one enum**, and the same run says so: a
+    direct-play entry typed `"video"` rather than `"Video"` binds and direct-plays on the
+    reference. So `ProfileType`, `ConditionType`, `ConditionProperty` and `CodecKind` - all bound
+    in this same body and all matched case-sensitively here - are each a `400` where the reference
+    answers `200`. Making that general is a change to `compat/model.py`, which every request model
+    inherits; it is 008's to answer, and it is recorded in 011 plan section 6.8 rather than taken
+    in this change.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        wanted = value.lower()
+        return next(
+            (one for one in ladder.SubtitleMethod if one.value.lower() == wanted),
+            value,
+        )
+    if isinstance(value, int):
+        return SUBTITLE_METHOD_ORDINALS.get(value, value)
+    return value
+
+
+class SubtitleProfileDto(AtriumModel):
+    """`[spec: SubtitleProfile]`: one subtitle format, and how this client will take it.
+
+    Four of the five properties, because `DidlMode` is a DLNA-era string the negotiation never
+    reads; it is dropped by `extra="ignore"` like every other unread property of a real profile.
+
+    **`Method` defaults to `Encode`**, which is the member the reference's enum defaults to and is
+    measured: an entry with no `Method` key at all answers `Encode` on every stream, which is
+    indistinguishable from declaring nothing - because no pass of the ladder can return that
+    member `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
+    """
+
+    format: str | None = None
+    method: Annotated[ladder.SubtitleMethod, BeforeValidator(_bound_subtitle_method)] = (
+        ladder.SubtitleMethod.ENCODE
+    )
+    language: str | None = None
+    container: str | None = None
 
 
 class CodecProfileDto(AtriumModel):
@@ -164,18 +232,23 @@ class CodecProfileDto(AtriumModel):
 
 
 class DeviceProfileDto(AtriumModel):
-    """`[spec: DeviceProfile]`, narrowed to the four lists a negotiation reads.
+    """`[spec: DeviceProfile]`, narrowed to the five lists a negotiation reads.
 
-    The document a client sends carries more - a name, an identifier, subtitle and container
-    profiles, a dozen DLNA-era fields - and `extra="ignore"` (the base model's) drops them. Not
-    laxity: v1 negotiates nothing about subtitles, and a field bound here would be a field
-    somebody later assumes is honoured.
+    The document a client sends carries more - a name, an identifier, container profiles, a dozen
+    DLNA-era fields - and `extra="ignore"` (the base model's) drops them.
+
+    **`SubtitleProfiles` is the fifth, and it arrived at 011 T9.** Until then this docstring said
+    "v1 negotiates nothing about subtitles, and a field bound here would be a field somebody
+    later assumes is honoured", which was the right rule and is now discharged rather than
+    deleted: every entry here is read by `media/decision.py`'s ladder, and every subtitle stream
+    of a negotiated source states the delivery method it produced.
     """
 
     max_streaming_bitrate: int | None = None
     direct_play_profiles: list[DirectPlayProfileDto] = Field(default_factory=list)
     transcoding_profiles: list[TranscodingProfileDto] = Field(default_factory=list)
     codec_profiles: list[CodecProfileDto] = Field(default_factory=list)
+    subtitle_profiles: list[SubtitleProfileDto] = Field(default_factory=list)
 
 
 class PlaybackInfoDto(AtriumModel):
@@ -275,6 +348,7 @@ def profile_of(stated: DeviceProfileDto) -> ladder.DeviceProfile:
                 segment_length=one.segment_length or None,
                 break_on_non_key_frames=one.break_on_non_key_frames,
                 enable_audio_vbr_encoding=one.enable_audio_vbr_encoding,
+                enable_subtitles_in_manifest=one.enable_subtitles_in_manifest,
             )
             for one in stated.transcoding_profiles
             if one.type in NEGOTIABLE
@@ -289,6 +363,15 @@ def profile_of(stated: DeviceProfileDto) -> ladder.DeviceProfile:
             )
             for one in stated.codec_profiles
         ),
+        subtitle_profiles=tuple(
+            ladder.SubtitleProfile(
+                format=one.format,
+                method=one.method,
+                language=one.language,
+                container=one.container,
+            )
+            for one in stated.subtitle_profiles
+        ),
     )
 
 
@@ -299,7 +382,14 @@ def _switches(body: PlaybackInfoDto, *, names_this_source: bool) -> ladder.Switc
     reference's own condition and is observable: a body naming an audio index without naming a
     source is answered with the default track `[source:
     Jellyfin.Api/Helpers/MediaInfoHelper.cs:206-211 @ v10.11.11]`, `[probe: manual requests via
-    tools/_probe.py, Jellyfin 10.11.11, 2026-08-29]`.
+    tools/_probe.py, Jellyfin 10.11.11, 2026-08-29]`. **`SubtitleStreamIndex` is on the same
+    line of the same condition**, so 011 joins it as a field rather than as a branch: an index
+    posted without the source id is dropped in silence and the answer states no default track
+    `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
+
+    `AlwaysBurnInSubtitleWhenTranscoding` is **not** behind that gate - it is set on the options
+    outside the block that reads it - and it is read only by the delivery address (011 plan
+    section 6.3).
     """
     return ladder.Switches(
         enable_direct_play=body.enable_direct_play,
@@ -310,6 +400,8 @@ def _switches(body: PlaybackInfoDto, *, names_this_source: bool) -> ladder.Switc
         max_streaming_bitrate=body.max_streaming_bitrate,
         max_audio_channels=body.max_audio_channels,
         audio_stream_index=body.audio_stream_index if names_this_source else None,
+        subtitle_stream_index=body.subtitle_stream_index if names_this_source else None,
+        always_burn_in_subtitle_when_transcoding=body.always_burn_in_subtitle_when_transcoding,
     )
 
 
@@ -368,6 +460,19 @@ def _annotate(
     wire.supports_transcoding = decided.supports_transcoding
     if decided.audio is not None:
         wire.default_audio_stream_index = decided.audio.source_index
+    # **Before the early return, because a direct play carries them too.** The reference writes
+    # the subtitle answers off the stream description whatever the play method was, so a source
+    # the client will read byte for byte still states a delivery method on every subtitle stream
+    # `[source: Jellyfin.Api/Helpers/MediaInfoHelper.cs:334, 470-492 @ v10.11.11]`,
+    # `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
+    wire.default_subtitle_stream_index = decided.subtitle_index
+    _annotate_subtitles(
+        wire,
+        decided,
+        item_id=item_id,
+        api_key=extract_token(request),
+        start_time_ticks=start_time_ticks,
+    )
     if wire.supports_direct_play or not (wire.supports_transcoding or wire.supports_direct_stream):
         return
     if inspection is None or decided.target is None:  # pragma: no cover - defended, not expected
@@ -388,6 +493,68 @@ def _annotate(
         start_time_ticks=start_time_ticks,
         is_video=is_video,
     )
+
+
+def _annotate_subtitles(
+    wire: media_info.MediaSourceInfo,
+    decided: ladder.Decision,
+    *,
+    item_id: str,
+    api_key: str | None,
+    start_time_ticks: int | None,
+) -> None:
+    """The delivery method on every subtitle stream, and an address on the external ones.
+
+    **The address is narrower than the method**: `DeliveryUrl` is written only where the method
+    is `External`, because that is the only method whose answer is a URL the client fetches for
+    itself - a manifest track is addressed by the manifest, an embedded one by the container it
+    is in, and a burned-in one by nothing `[probe: tools/probe_subtitle_negotiation.py, Jellyfin
+    10.11.11, 2026-08-30]`.
+
+    `IsExternalUrl` is `false` beside it on every one of them: the alternative branch hands back
+    the stream's own path for a source that is not a local file, and v1 has no such source
+    `[source: MediaBrowser.Model/Dlna/StreamInfo.cs:1251-1272 @ v10.11.11]`.
+    """
+    answers = {one.index: one for one in decided.subtitles}
+    if not answers:
+        return
+    start = _subtitle_start_ticks(decided, start_time_ticks)
+    for stream in wire.media_streams or ():
+        answer = answers.get(stream.index)
+        if answer is None:
+            continue
+        stream.delivery_method = answer.method.value
+        if answer.method is not ladder.SubtitleMethod.EXTERNAL:
+            continue
+        address = (
+            f"/Videos/{urls.dashed(item_id)}/{wire.id}"
+            f"/Subtitles/{stream.index}/{start}/Stream.{answer.format or ''}"
+        )
+        stream.delivery_url = f"{address}?ApiKey={api_key}" if api_key else address
+        stream.is_external_url = False
+
+
+def _subtitle_start_ticks(decided: ladder.Decision, start_time_ticks: int | None) -> int:
+    """Where a subtitle address starts, which is not always zero.
+
+    011 plan section 6.3 said it is zero for every request this feature can produce. It is zero
+    for every **HLS** answer, which forces it so because a playlist preserves timestamps - and it
+    is the negotiation's own seek on a progressive transcode, measured: a body carrying
+    `StartTimeTicks` against an `http` transcoding target answers
+    `.../Subtitles/9/6000000000/Stream.vtt` `[source:
+    MediaBrowser.Model/Dlna/StreamInfo.cs:1179-1181 @ v10.11.11]`, `[probe:
+    tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`. The reference's own
+    ordering comment says as much - it writes the subtitle addresses *after* the start position
+    is set, on purpose.
+
+    The third input is the transcoding profile's `CopyTimestamps`, which this server binds
+    nowhere and which is `false` for every profile it can read.
+    """
+    if decided.sub_protocol == urls.HLS:
+        return 0
+    if decided.outcome in (ladder.Outcome.REMUX, ladder.Outcome.TRANSCODE):
+        return start_time_ticks or 0
+    return 0
 
 
 def _device_id(request: Request) -> str | None:
