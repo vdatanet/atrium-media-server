@@ -3,7 +3,7 @@
 """What the two subtitle addresses answer: to a caller with no credential, to a window, to a
 format the server cannot make, and to every way of naming a stream that is not there.
 
-specs/011 §3.5 and §3.7, OQ-6, OQ-8 and OQ-11. Seven batteries:
+specs/011 §3.5 and §3.7, OQ-6, OQ-8 and OQ-11. Eight batteries:
 
 - **the credential** (OQ-6): both routes with no token, with an unknown token, with the token in
   the header and with it in the query string. The reference declares a requirement on one route
@@ -21,13 +21,25 @@ specs/011 §3.5 and §3.7, OQ-6, OQ-8 and OQ-11. Seven batteries:
   can always be constructed from a cue's own start, and whether the reference's *own* grid ever
   lands on one depends on the library, so the run says which of the two it proved;
 - **the formats**: every spelling a client can put in the address, including one the server
-  cannot produce and one that turns the cue list into JSON;
+  cannot produce, one that turns the cue list into JSON, and the three the first draft of this
+  battery never asked for - `ttml`, which the reference writes and nothing had requested, and
+  `subrip` and `webvtt`, the two spellings that reach a writer and have no row in the label
+  lookup. It reads the `Content-Type` and the byte order mark of every one of them off the run
+  rather than off a paragraph, which is what plan §6.8 asks for;
+- **the conversion** (AC-10): the same-format short circuit *with a window on it*, the SubRip
+  renumbering, the deprecated query aliases that override the address, which of two start
+  positions wins when both are given, and whether a cue whose end does not follow its start is
+  pushed out by a millisecond. The last of those is a fact about the library rather than about
+  the server, so the battery says whether it reached one;
 - **the extracted artefact**: what an embedded `ass` track answers when the format asked for is
   the one it is already in - which is the extraction itself, handed back by the same-format short
   circuit. It is the only way from outside to see what the reference's extraction wrote, and it
   carries the thing no format specification predicts: the font substitution the reference performs
   on a `.ass` after extracting it, and the byte order mark that arrives with it and only with it;
-- **the refusals** (OQ-8): each row of 011 §3.7 on each route, as bytes rather than as a status.
+- **the refusals** (OQ-8): each row of 011 §3.7 on each route, as bytes rather than as a status -
+  plus the row T7 needed and the table did not have, an item that **is** there and holds nothing
+  servable, which is what says whether the fetch route's `400` is about the identifier or about
+  there being nothing to convert.
 
 Read-only by default. `--allow-writes` adds the one case that makes the reference work: asking
 for an *image* subtitle track as text, which it attempts with ffmpeg for some tens of seconds
@@ -40,6 +52,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 from typing import Any
 
 from _playback import (
@@ -57,10 +70,36 @@ UNKNOWN_ITEM = "deadbeefdeadbeefdeadbeefdeadbeef"
 EMPTY_GUID = "00000000000000000000000000000000"
 UNKNOWN_TOKEN = "0123456789abcdef0123456789abcdef"  # noqa: S105 - a probe input, not a credential
 
-#: The formats a client can name in the address. `js` is the reference's own alias for `json`.
-FORMATS = ("vtt", "srt", "ass", "ssa", "json", "js", "sub", "xyz")
+#: The formats a client can name in the address. `js` is the reference's own alias for `json`;
+#: `subrip` and `webvtt` are the two the writer table admits and the label lookup does not; `sub`
+#: and `xyz` are the two nothing writes.
+FORMATS = ("vtt", "srt", "ass", "ssa", "json", "js", "ttml", "subrip", "webvtt", "sub", "xyz")
+
+#: What each format is expected to be labelled with, and whether its body is expected to begin
+#: with the UTF-8 preamble. Written down so the run *checks* rather than only prints: five rows
+#: were measured at 011 T5 and the other four are this battery's own.
+LABELS = {
+    "vtt": "text/vtt",
+    "srt": "application/x-subrip",
+    "ass": "text/x-ssa",
+    "ssa": "text/x-ssa",
+    "json": "application/json",
+    "js": "application/json",
+    "ttml": "application/ttml+xml",
+    "subrip": "application/octet-stream",
+    "webvtt": "application/octet-stream",
+}
+
+#: The UTF-8 preamble the reference's text writers emit. `json` writes bytes and has none, and
+#: neither has an answer handed back by the same-format short circuit rather than rendered.
+BYTE_ORDER_MARK = b"\xef\xbb\xbf"
 
 TICKS_PER_SECOND = 10_000_000
+
+#: How many external text tracks the conversion battery reads looking for a cue whose end does
+#: not follow its start. External streams are read from their own file with no extraction, so
+#: each is one cheap request - unlike an embedded track, whose first fetch demuxes a film.
+BUMP_CANDIDATES = 12
 
 
 def _shape(status: int, headers: dict[str, str], body: bytes) -> str:
@@ -102,8 +141,13 @@ class Address:
             return self.base + "/subtitles.m3u8"
         return self.base + "/subtitles.m3u8?SegmentLength=" + str(segment_length)
 
-    def whole(self, fmt: str = "vtt") -> str:
-        return self.base + "/Stream." + fmt
+    def whole(self, fmt: str = "vtt", query: str = "") -> str:
+        return f"{self.base}/Stream.{fmt}{'?' + query if query else ''}"
+
+    def at(self, start: int, fmt: str = "vtt", query: str = "") -> str:
+        """The ticks-in-path form: `GetSubtitleWithTicks`, which the negotiation's own address
+        names, so a client following what it was handed lands here and not on the other route."""
+        return f"{self.base}/{start}/Stream.{fmt}{'?' + query if query else ''}"
 
     def window(self, start: int, end: int, switches: str = "") -> str:
         return f"{self.base}/stream.vtt?StartPositionTicks={start}&EndPositionTicks={end}{switches}"
@@ -464,11 +508,27 @@ def _first_cue_seconds(text: str) -> float | None:
 
 
 def _format_battery(server: Server, probe: Probe, address: Address) -> list[bool]:
+    """Every spelling a client can put in the address: its status, its label and its first bytes.
+
+    The label is the row `media/labels.py` carries and the mark is the row `media/subtitles.py`
+    carries, and both are read **off this run** rather than off a paragraph, which is what plan
+    §6.8 asks for. Three of the eleven spellings had never been asked for at all: `ttml`, which
+    the reference writes, and `subrip` and `webvtt`, which reach a writer and have no row in the
+    label lookup - so what they end on was a reading until now.
+    """
     answers = {}
+    labels = {}
+    marks = {}
     for fmt in FORMATS:
         status, headers, body = server.get_streaming(address.whole(fmt), 200, send_token=False)
         answers[fmt] = status
+        labels[fmt] = (headers.get("Content-Type") or "").split(";")[0]
+        marks[fmt] = body.startswith(BYTE_ORDER_MARK)
         probe.observe("Stream." + fmt, _shape(status, headers, body))
+    probe.observe(
+        "the byte order mark, by format",
+        ", ".join(f"{fmt}: {'yes' if marks[fmt] else 'no'}" for fmt in LABELS),
+    )
     lower_status, _, lower = server.get_streaming(
         address.base + "/stream.vtt", 200, send_token=False
     )
@@ -478,15 +538,270 @@ def _format_battery(server: Server, probe: Probe, address: Address) -> list[bool
         f"{lower_status} and {upper_status}, "
         + ("same first bytes" if lower == upper else "different first bytes"),
     )
+    _, whole_headers, _ = server.get_streaming(address.whole("vtt"), 200, send_token=False)
+    named = sorted(whole_headers)
+    probe.observe("the header set of a fetch", ", ".join(named))
     return [
-        answers["vtt"] == 200,
-        answers["srt"] == 200,
-        answers["json"] == 200,
-        answers["js"] == 200,
+        # Everything the writer table admits answers, including the three this battery had never
+        # asked for - so `ttml` is not a refusal to invent, and `subrip` and `webvtt` are not one
+        # either: the label falls back rather than failing.
+        *(answers[fmt] == 200 for fmt in LABELS),
+        answers["sub"] == 400,
         answers["xyz"] == 400,
+        # The label of every one of them, measured. `subrip` and `webvtt` reach `MimeTypes` with
+        # a name it has no row for, and the framework's file result defaults the type rather than
+        # refusing - which is how a format with no media type still answers a body.
+        *(labels[fmt] == LABELS[fmt] for fmt in LABELS),
+        # The mark is on every *rendered* document but `json`'s, and absent from the one answer
+        # that is not rendered at all: `Stream.srt` on a SubRip track is the readable file handed
+        # back by the same-format short circuit.
+        all(marks[fmt] for fmt in ("vtt", "ass", "ssa", "ttml", "subrip", "webvtt")),
+        not any(marks[fmt] for fmt in ("json", "js", "srt")),
         # The manifest and the playlist both write the route in lower case; the reference's own
         # declaration spells it with a capital. A client following either has to be served.
         lower_status == 200 and upper_status == 200 and lower == upper,
+        # No `Accept-Ranges` and no `Last-Modified`: a converted subtitle is a body built for the
+        # request, and the reference offers nothing to range over or revalidate against.
+        "Content-Length" in whole_headers,
+        not {"Accept-Ranges", "ETag", "Last-Modified", "Content-Disposition"} & set(whole_headers),
+    ]
+
+
+def _numbering_of(document: bytes) -> list[str]:
+    """The cue numbers a SubRip document states, in order."""
+    text = document.decode("utf-8", "replace").removeprefix("﻿")
+    lines = text.replace("\r\n", "\n").split("\n")
+    return [
+        line.strip()
+        for index, line in enumerate(lines)
+        if line.strip().isdigit() and index + 1 < len(lines) and "-->" in lines[index + 1]
+    ]
+
+
+def _cue_events(server: Server, path: str) -> list[dict[str, Any]]:
+    """One track's cues as the `json` writer states them: identifiers and tick positions."""
+    status, _, payload = server.get_streaming(path, 8_000_000, send_token=False)
+    if status != 200:
+        return []
+    try:
+        events = json.loads(payload.decode("utf-8"))["TrackEvents"]
+    except (ValueError, KeyError, UnicodeDecodeError):
+        return []
+    return [one for one in events if isinstance(one, dict)]
+
+
+def _bump_battery(server: Server, probe: Probe) -> list[bool]:
+    """Whether a cue whose end does not follow its start is pushed out by one millisecond.
+
+    Read off `VttWriter` at 011 T5 and owed a measurement since. **It is reachable only if a real
+    file holds such a cue**, which is a fact about the library and not about the server, so this
+    reports the miss rather than inferring the answer from the read.
+
+    Only **external** text tracks are searched: they are read from their own file with no
+    extraction, so each is one cheap request, where an embedded track's first fetch demuxes a
+    whole film.
+    """
+    externals = []
+    for candidate in find_subtitled_sources(server):
+        for stream in candidate.subtitles:
+            if stream.get("IsExternal") and stream.get("IsTextSubtitleStream"):
+                externals.append((candidate.item_id, int(stream["Index"])))
+
+    scanned = 0
+    cues = 0
+    for item_id, index in externals[:BUMP_CANDIDATES]:
+        source = resolve_subtitled_source(server, item_id)
+        address = Address(item_id, source.source_id, index)
+        events = _cue_events(server, address.whole("json"))
+        if not events:
+            continue
+        scanned += 1
+        cues += len(events)
+        found = [
+            one for one in events if int(one["EndPositionTicks"]) <= int(one["StartPositionTicks"])
+        ]
+        if not found:
+            continue
+        start = int(found[0]["StartPositionTicks"])
+        status, _, body = server.get_streaming(
+            address.whole(
+                "vtt",
+                f"StartPositionTicks={start}&EndPositionTicks={start + TICKS_PER_SECOND}"
+                "&CopyTimestamps=true",
+            ),
+            2_000,
+            send_token=False,
+        )
+        timing = next(
+            (line for line in body.decode("utf-8", "replace").splitlines() if "-->" in line),
+            "no timing line",
+        )
+        probe.observe(
+            "a cue whose end does not follow its start",
+            f"{item_id[:8]}/{index} states {found[0]['StartPositionTicks']} -> "
+            f"{found[0]['EndPositionTicks']}; the vtt of that window reads {timing!r} ({status})",
+        )
+        return [_millisecond_apart(timing)]
+
+    probe.note(
+        f"the one-millisecond end bump is NOT measured by this run: {scanned} external text "
+        f"tracks holding {cues} cues between them were read and not one states a cue whose end "
+        "does not follow its start, which is what the WebVTT writer edits. It stays a reading "
+        "`[source: MediaBrowser.MediaEncoding/Subtitles/VttWriter.cs:34-38 @ v10.11.11]` until a "
+        "library carries such a file - the miss is a fact about the library, not about the server"
+    )
+    probe.observe(
+        "a cue whose end does not follow its start",
+        f"not reached: none in {cues} cues across {scanned} external text tracks",
+    )
+    return []
+
+
+def _millisecond_apart(timing: str) -> bool:
+    """Whether a WebVTT timing line states an end exactly one millisecond after its start."""
+    halves = timing.split("-->")
+    if len(halves) != 2:
+        return False
+    try:
+        start, end = (_clock_seconds(half.strip().split(" ")[0]) for half in halves)
+    except ValueError:
+        return False
+    return abs((end - start) - 0.001) < 0.0005
+
+
+def _clock_seconds(stamp: str) -> float:
+    parts = stamp.replace(",", ".").split(":")
+    if len(parts) == 3:
+        return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+    if len(parts) == 2:
+        return int(parts[0]) * 60 + float(parts[1])
+    raise ValueError(stamp)
+
+
+def _conversion_battery(server: Server, probe: Probe, address: Address) -> list[bool]:
+    """What happens between the readable file and the document, measured from outside.
+
+    Four things the plan and the spec had read rather than measured, and all four are one request
+    each on a track whose own format a client can name:
+
+    * **the same-format short circuit, with a window on it.** `Stream.srt` on a SubRip track is
+      answered before anything is parsed, so the window and both switches are ignored - which is
+      what AC-10's *"a windowed fetch answers the cues of that window and no others"* is false of;
+    * **the SubRip writer renumbers from one.** Invisible on the short-circuited spelling and
+      visible on `subrip` beside it, which renders: a window starting ten minutes in comes back
+      numbered `1` while the same window's `json` states the identifier the file wrote down;
+    * **the deprecated query aliases override the address.** `?format=` and `?index=` are declared
+      obsolete and are still bound, so a client sending one gets a different track or a different
+      format than the path names;
+    * **which of two start positions wins.** The ticks-in-path route takes the query's when both
+      are given, which is the opposite of the direction plan §6.7 stated.
+    """
+    whole_status, _, whole = server.get_streaming(address.whole("srt"), 400_000, send_token=False)
+    start = 600 * TICKS_PER_SECOND
+    end = 660 * TICKS_PER_SECOND
+    window = f"StartPositionTicks={start}&EndPositionTicks={end}&CopyTimestamps=true"
+    short_status, _, shorted = server.get_streaming(
+        address.whole("srt", window), 400_000, send_token=False
+    )
+    ticked_status, _, ticked = server.get_streaming(
+        address.at(start, "srt", f"EndPositionTicks={end}&CopyTimestamps=true"),
+        400_000,
+        send_token=False,
+    )
+    probe.observe(
+        "Stream.srt with a window on it",
+        f"{short_status}, {len(shorted)} bytes against the whole track's {len(whole)} "
+        f"({whole_status}): "
+        + ("the window was ignored" if shorted == whole else "the window was applied"),
+    )
+    probe.observe(
+        "the same window through the ticks-in-path route",
+        f"{ticked_status}, {len(ticked)} bytes: "
+        + ("the window was ignored" if ticked == whole else "the window was applied"),
+    )
+
+    rendered_status, rendered_headers, rendered = server.get_streaming(
+        address.whole("subrip", window), 400_000, send_token=False
+    )
+    numbers = _numbering_of(rendered)
+    events = _cue_events(server, address.whole("json", window))
+    identifiers = [str(one.get("Id")) for one in events]
+    probe.observe(
+        "the same window under `subrip`, which renders",
+        f"{rendered_status}, {rendered_headers.get('Content-Type')}, {len(rendered)} bytes, "
+        f"numbered from {numbers[0] if numbers else 'nothing'!r} "
+        f"({len(numbers)} cues); the `json` of the identical window calls the first cue "
+        f"{identifiers[0] if identifiers else 'nothing'!r}",
+    )
+
+    alias_status, alias_headers, aliased = server.get_streaming(
+        address.whole("vtt", "format=srt"), 400_000, send_token=False
+    )
+    index_status, _, _index_body = server.get_streaming(
+        address.whole("vtt", "index=99"), 200, send_token=False
+    )
+    probe.observe(
+        "Stream.vtt?format=srt",
+        f"{alias_status}, {alias_headers.get('Content-Type')}, {len(aliased)} bytes: "
+        + ("the query won" if aliased == whole else "the path won"),
+    )
+    probe.observe(
+        "Stream.vtt?index=99, on a track that exists",
+        f"{index_status}: " + ("the query won" if index_status == 500 else "the path won"),
+    )
+
+    both_status, _, both = server.get_streaming(
+        address.at(
+            start, "vtt", f"StartPositionTicks=0&EndPositionTicks={end}&CopyTimestamps=true"
+        ),
+        400_000,
+        send_token=False,
+    )
+    path_only_status, _, path_only = server.get_streaming(
+        address.at(start, "vtt", f"EndPositionTicks={end}&CopyTimestamps=true"),
+        400_000,
+        send_token=False,
+    )
+    both_first = _first_cue_seconds(both.decode("utf-8", "replace"))
+    path_first = _first_cue_seconds(path_only.decode("utf-8", "replace"))
+    probe.observe(
+        "a start position in the path AND in the query",
+        f"{both_status}: the first cue is at {both_first}s where the path alone answers "
+        f"{path_first}s ({path_only_status}) - "
+        + ("the query won" if (both_first or 0) < (path_first or 0) else "the path won"),
+    )
+
+    map_status, _, mapped = server.get_streaming(
+        address.whole("webvtt", "AddVttTimeMap=true"), 400, send_token=False
+    )
+    probe.observe(
+        "Stream.webvtt?AddVttTimeMap=true",
+        f"{map_status}: mapping line {'present' if b'X-TIMESTAMP-MAP' in mapped else 'absent'}, "
+        f"byte order mark {'kept' if mapped.startswith(BYTE_ORDER_MARK) else 'dropped'}",
+    )
+
+    return [
+        # AC-10's first contradiction, measured: the short circuit ignores the window whichever
+        # route asks for it.
+        whole_status == 200 and short_status == 200 and shorted == whole,
+        ticked_status == 200 and ticked == whole,
+        # And the spelling beside it renders, which is what makes the first row a short circuit
+        # rather than a track with no cues in that window.
+        rendered_status == 200 and rendered != whole and len(rendered) < len(whole),
+        bool(numbers) and numbers[0] == "1",
+        bool(identifiers) and identifiers[0] != "1",
+        # The obsolete aliases are bound and win.
+        alias_status == 200
+        and aliased == whole
+        and alias_headers.get("Content-Type") == LABELS["srt"],
+        index_status == 500,
+        # And so does the query's start position, over the one in the path.
+        both_status == 200 and path_only_status == 200 and both != path_only,
+        both_first is not None and path_first is not None and both_first < path_first,
+        # The time map is read against `vtt` and not against the alias sharing its writer.
+        map_status == 200
+        and b"X-TIMESTAMP-MAP" not in mapped
+        and mapped.startswith(BYTE_ORDER_MARK),
     ]
 
 
@@ -597,10 +912,24 @@ def _artefact_battery(server: Server, probe: Probe) -> list[bool]:
     ]
 
 
+def _a_series(server: Server) -> str | None:
+    """One series identifier, which is an item that exists and has no media source of any kind."""
+    found = server.get(
+        "/Items", UserId=server.user_id, IncludeItemTypes="Series", Recursive="true", Limit=1
+    )
+    rows = found.get("Items") or []
+    return str(rows[0]["Id"]) if rows else None
+
+
 def _refusal_battery(
     server: Server, probe: Probe, source: SubtitledSource, address: Address, allow_writes: bool
 ) -> list[bool]:
-    """OQ-8: each row of §3.7, on each route."""
+    """OQ-8: each row of §3.7, on each route.
+
+    One row is 011 T7's own: an item that **is** there and holds nothing servable - a series - is
+    a different answer from an identifier nothing holds at all, and a route that resolved the two
+    the same way would answer the wrong status to one of them.
+    """
     unknown = Address(UNKNOWN_ITEM, UNKNOWN_ITEM, source.text_index())
     empty = Address(EMPTY_GUID, EMPTY_GUID, source.text_index())
     bad_source = Address(source.item_id, "deadbeef", source.text_index())
@@ -626,6 +955,11 @@ def _refusal_battery(
         cases.append(
             ("index names a video stream, fetch", Address.of(source, video[0]["Index"]).whole())
         )
+    series = _a_series(server)
+    if series is not None:
+        cases.append(
+            ("item exists and holds nothing servable, fetch", Address(series, series, 0).whole())
+        )
     answers = {}
     for label, path in cases:
         status, headers, body = server.get_streaming(path, 300)
@@ -641,10 +975,24 @@ def _refusal_battery(
             "the image-subtitle case is skipped without --allow-writes: the reference does not "
             "refuse it up front, it starts an extraction and refuses tens of seconds later"
         )
+    if series is None:
+        probe.note(
+            "this library holds no series, so 'an item that exists and holds nothing servable' "
+            "is NOT measured by this run - which is the row that says whether the fetch route's "
+            "400 is about the identifier naming nothing or about there being nothing to convert"
+        )
     return [
         # Two different refusals for two different misses: an unknown identifier is a 500 on the
         # fetch route, while the empty one is refused by a guard before any lookup.
         answers["unknown item, playlist"] == 404,
+        answers["unknown item, fetch"] == 400,
+        # And the split the two above cannot show on their own: an item that IS there with
+        # nothing to convert is the 500, so the 400 is about the identifier naming nothing.
+        *(
+            [answers["item exists and holds nothing servable, fetch"] == 500]
+            if series is not None
+            else []
+        ),
         answers["empty identifier, fetch"] == 400,
         answers["empty identifier, playlist"] == 400,
         answers["malformed identifier, fetch"] == 400,
@@ -684,6 +1032,8 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
     checks.extend(_window_battery(server, probe, source, address))
     checks.extend(_boundary_battery(server, probe, source, address))
     checks.extend(_format_battery(server, probe, address))
+    checks.extend(_conversion_battery(server, probe, address))
+    checks.extend(_bump_battery(server, probe))
     checks.extend(_artefact_battery(server, probe))
     checks.extend(_refusal_battery(server, probe, source, address, args.allow_writes))
 
@@ -704,7 +1054,14 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
             "behind all of it does not hand back what ffmpeg wrote: an extracted .ass has "
             ",Arial, replaced with ,Arial Unicode MS, and is rewritten only where that changed "
             "something, so the substituted font and the byte order mark arrive together or not "
-            "at all",
+            "at all. And a window is not always a window: asking for the format the track is "
+            "already in answers the WHOLE track, unwindowed, on both fetch routes - while the "
+            "spelling beside it renders that same window and numbers it from 1, discarding the "
+            "identifier the file wrote down. Every writable spelling answers, ttml included, and "
+            "the two with no row in the label lookup - subrip and webvtt - answer a body under "
+            "application/octet-stream rather than failing on it. The deprecated query parameters "
+            "are bound and beat the address: ?format= changes the format, ?index= changes the "
+            "track, and a start position in the query beats the one in the path",
             matches_documentation=None,
         )
     else:

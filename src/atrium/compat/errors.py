@@ -235,6 +235,42 @@ class DeliveryProductionError(Exception):
     """
 
 
+class SubtitleRequestError(Exception):
+    """A subtitle fetch was asked for something it will not do. The third shape at `400`.
+
+    Three measured conditions, one answer: an item identifier that names nothing (the all-zero
+    form included), a format outside the writable set, and an **image** track asked for as text
+    `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`.
+
+    They are one class because they are one class on the reference: each of the three reaches an
+    `ArgumentException` - a null item, an unknown writer, a conversion that cannot be made - and
+    its middleware maps that type and only that type to `400` `[source:
+    Jellyfin.Api/Middleware/ExceptionMiddleware.cs:123-136 @ v10.11.11]`. Everything else on the
+    same route falls through to `500`, which is `SubtitleUnavailableError` below.
+
+    Not a `DeliverySourceError` despite sharing its wire shape: that one means *this identifier
+    names no source of this item*, and on these two routes that same condition answers `500`.
+    Sharing the class would have made the difference invisible at the place that raises it.
+    """
+
+
+class SubtitleUnavailableError(Exception):
+    """A subtitle fetch found nothing to convert, or could not convert it. The `500` shape.
+
+    Four measured conditions: a `mediaSourceId` naming no source, an index naming no stream, an
+    index naming a video or an audio stream, and a negative index - each of them a lookup that
+    finds nothing where the reference takes the first match of a sequence and throws
+    `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. A failed
+    extraction joins them, which is the same `500` for the same reason: nothing came back.
+
+    `text/plain`, the fixed 25 bytes, and **no `Accept-Ranges`** - which is why this does not
+    reuse `DeliveryProductionError`. That one writes `Accept-Ranges: none` onto its refusal
+    because the produced delivery path had already written the header before the failure; a
+    subtitle fetch never writes one at all, measured on every row of the table
+    (011 spec section 3.5).
+    """
+
+
 class ImageNotFoundError(Exception):
     """The item exists and has no image of that type. Answered with the fourth shape.
 
@@ -478,6 +514,20 @@ async def delivery_production_handler(_request: Request, _exc: Exception) -> Res
     return controller_error(500, headers={"Accept-Ranges": "none"})
 
 
+async def subtitle_request_handler(_request: Request, _exc: Exception) -> Response:
+    return controller_error(400)
+
+
+async def subtitle_unavailable_handler(_request: Request, _exc: Exception) -> Response:
+    """The `500` a subtitle fetch answers when there was nothing to convert.
+
+    Plain `controller_error(500)` and not `delivery_production_handler`: the two say the same
+    twenty-five bytes at the same status, and the delivery one carries `Accept-Ranges: none`
+    which these routes never send (011 spec section 3.5).
+    """
+    return controller_error(500)
+
+
 async def image_not_found_handler(_request: Request, exc: Exception) -> Response:
     message = str(exc) if isinstance(exc, ImageNotFoundError) else NOT_FOUND_TITLE
     return message_error(404, message)
@@ -528,6 +578,11 @@ EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     # is the measured `400`, and a production that could not start is the measured `500`.
     DeliverySourceError: delivery_source_handler,
     DeliveryProductionError: delivery_production_handler,
+    # 011 T7's two, and they are the same shape at two statuses again - but split differently
+    # from the pair above: on the subtitle fetch routes a `mediaSourceId` naming nothing is the
+    # `500` and not the `400`, which is the whole reason they are their own classes.
+    SubtitleRequestError: subtitle_request_handler,
+    SubtitleUnavailableError: subtitle_unavailable_handler,
     RequestValidationError: validation_handler,
     HTTPException: routing_handler,
 }
@@ -556,6 +611,8 @@ __all__ = [
     "InvalidCredentialsError",
     "ItemNotFoundError",
     "NotFoundError",
+    "SubtitleRequestError",
+    "SubtitleUnavailableError",
     "UnauthenticatedError",
     "account_unavailable_handler",
     "client_authorization_handler",

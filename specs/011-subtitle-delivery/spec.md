@@ -4,7 +4,7 @@ title: Subtitle delivery
 status: Accepted
 created: 2026-08-29
 updated: 2026-08-30
-amended: 2026-08-30 at the tasks gate — §3.4 and AC-5 said the master playlist's *variant line* gains the subtitle group, which was true while the master answered exactly one variant and stopped being true on the day 008's own T15 gave an HDR stream copy a standard-range entrance beside it; the reference gives the group to every variant it writes, so the criterion is written against every variant line and an entrance with no subtitles is the failure it now catches. And §3.2's text/image split reads a codec spelling the file itself does not report: four subtitle codecs are renamed when a file is inspected, and against the unrenamed spellings the rule inverts on the two commonest image formats in a real library; and 2026-08-30 by T2 — the inversion is the **DVD and digital-broadcast bitmap** names alone, the servable-alone flag inverts with the split rather than following it (`PGSSUB` is servable where `DVDSUB` is not), and both facts are stated on every stream of every kind, `false` on everything that is not a subtitle; and 2026-08-30 by T5 — AC-10's *"the concatenation of every window of a track is the whole track"* is false of a cue that starts exactly on a window boundary, which two consecutive windows both answer because their shared boundary position is inclusive at each end: read off the reference first, then **measured** on it, in the constructed form and through the reference's own generated playlist alike. And §3.5 now says, also measured, that a converted document carries a region declaration and a placement setting on every cue's timing line, which is where a player puts the text and which a cue-by-cue check cannot see
+amended: 2026-08-30 at the tasks gate — §3.4 and AC-5 said the master playlist's *variant line* gains the subtitle group, which was true while the master answered exactly one variant and stopped being true on the day 008's own T15 gave an HDR stream copy a standard-range entrance beside it; the reference gives the group to every variant it writes, so the criterion is written against every variant line and an entrance with no subtitles is the failure it now catches. And §3.2's text/image split reads a codec spelling the file itself does not report: four subtitle codecs are renamed when a file is inspected, and against the unrenamed spellings the rule inverts on the two commonest image formats in a real library; and 2026-08-30 by T2 — the inversion is the **DVD and digital-broadcast bitmap** names alone, the servable-alone flag inverts with the split rather than following it (`PGSSUB` is servable where `DVDSUB` is not), and both facts are stated on every stream of every kind, `false` on everything that is not a subtitle; and 2026-08-30 by T5 — AC-10's *"the concatenation of every window of a track is the whole track"* is false of a cue that starts exactly on a window boundary, which two consecutive windows both answer because their shared boundary position is inclusive at each end: read off the reference first, then **measured** on it, in the constructed form and through the reference's own generated playlist alike. And §3.5 now says, also measured, that a converted document carries a region declaration and a placement setting on every cue's timing line, which is where a player puts the text and which a cue-by-cue check cannot see; and 2026-08-30 by T7 — §3.5 gains the eleven format spellings with the label and the byte order mark of each read off a run, of which `subrip` and `webvtt` answer a **body** under `application/octet-stream` where both documents had predicted a refusal, the four deprecated query parameters that override the address, the query start position that beats the one in the path, and the same-format short circuit measured with a window on it — which contradicts AC-10 and is recorded beside it rather than folded into it, because plan §6.8 makes that amendment the user's; and §3.7 gains a row nothing had measured, an item that **exists** and holds nothing servable, which answers `500` where an identifier naming nothing answers `400` and which is what an implementation has to know before it can answer either
 depends_on: [003, 005, 008]
 ---
 
@@ -494,7 +494,55 @@ measured**: a cue whose end does not follow its start is pushed out by one milli
 writer alone, and the cue-list format renumbers its cues from one, discarding whatever the source
 called them `[source: MediaBrowser.MediaEncoding/Subtitles/VttWriter.cs:34-38, SrtWriter.cs:32 @
 v10.11.11]`. Neither is reachable from a playlist a client follows, and each is one row of the
-same battery away.
+same battery away. **One of the two is now measured**: a window that starts past the first cue,
+asked for under the spelling that renders rather than the one the short circuit answers, comes
+back numbered from `1` where the same window's cue-list answer calls the first cue `131`
+`[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. The millisecond is
+**not**, and the run says why: 5 983 cues across twelve tracks read from files beside the media,
+and not one of them states an end that does not follow its start. It stays a reading until a
+library carries such a file, which is a fact about the library and not about the server.
+
+**Every spelling the writers admit answers, and two of them answer under a label nothing chose.**
+The eleven a client can put in the address were measured in one run, and three of them had never
+been asked for `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`:
+
+| Spelling | Answer | Content type |
+|---|---|---|
+| `vtt`, `srt`, `ass`, `ssa`, `json`, `js` | `200` | `text/vtt`, `application/x-subrip`, `text/x-ssa` twice, `application/json` twice |
+| `ttml` | `200` | `application/ttml+xml` |
+| `subrip`, `webvtt` | **`200`** | `application/octet-stream` |
+| `sub`, `xyz` | `400`, `text/plain` | — |
+
+`subrip` and `webvtt` are the two spellings the reference can write and has **no media type
+for**, and the answer is not the refusal that suggests: the document is rendered and the response
+falls back to the type an unrecognised container gets rather than refusing. So a format with no
+media type is still a body — and it is a *different* body from the one its canonical spelling
+answers, because `Stream.subrip` converts where `Stream.srt` short-circuits (below). The byte
+order mark is on every converted document but the cue-list one, `ttml` included.
+
+**The address is not the last word: four deprecated query parameters override it.** `itemId`,
+`mediaSourceId`, `index` and `format` are declared obsolete and still bound, and each beats the
+path segment beside it — `Stream.vtt?format=srt` answers SubRip under `application/x-subrip`, and
+`Stream.vtt?index=` naming no stream answers that index's refusal. On the route with the start
+position in its path, a `StartPositionTicks` in the **query** wins as well: the same address
+carrying both answers the track from its first cue. Same probe.
+
+**Asking for the format the track is already in answers the whole track, window and all.** The
+answer is decided before anything is parsed, so both timestamp switches and both position
+parameters are ignored: `Stream.srt` on a SubRip track answers the identical 84 858 bytes with a
+window on it and without one, on both fetch routes `[source:
+MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:144-155 @ v10.11.11]`, same probe. It is
+unreachable from a playlist — every entry names `stream.vtt`, and no track a client reaches is
+already WebVTT — and one hand-made request away.
+
+> ⚠️ **This contradicts AC-10 as written, and the criterion is *not* amended here.** *"A windowed
+> fetch answers the cues of that window and no others"* is true of every window a client reaches
+> by following an address and false of that one request.
+> [Plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed) says the amendment
+> is the user's to take, so T7 measured it and left the wording alone. The recommended clause is
+> the same shape as the one AC-10 already carries for the boundary repeat: *"…and no others,
+> **except where the requested format is the one the track is already in, which answers the whole
+> track**"*.
 
 > ⚠️ **The last window's duration is written in the server's locale.** A partial window comes back
 > as `#EXTINF:7,851,` on a Spanish-configured server, which an HLS parser reads as a duration of
@@ -576,13 +624,14 @@ Measured per route, because 008 found delivery-route refusals splitting across t
 |---|---|---|
 | Caller has no token, or an unknown one | `401`, no body | `200` — the cues (§3.5) |
 | Item id is well formed and names nothing | `404`, problem details | `400`, `text/plain` `Error processing request.` |
+| Item id names an item **with nothing servable** — a series, an audio track | — | `500`, `text/plain` |
 | Item id is the all-zero identifier | `400`, `text/plain` | `400`, `text/plain` |
 | Item id is not an identifier at all | `400`, problem details naming `routeItemId` | `400`, problem details naming `routeItemId` |
 | Media source names nothing on the item | `500`, `text/plain` | `500`, `text/plain` |
 | Index names no stream | **`200`** — a full playlist | `500`, `text/plain` |
 | Index names a video or audio stream | **`200`** — a full playlist | `500`, `text/plain` |
 | Index is negative | **`200`** — a full playlist | `500`, `text/plain` |
-| Index names an **image** subtitle, text format asked for | — | `400`, `text/plain`, after ~20 s of extraction |
+| Index names an **image** subtitle, text format asked for | — | `400`, `text/plain`, after ~20 s of extraction. **Atrium: the same status and the same bytes, before any process starts** |
 | Format in the address cannot be produced | — | `400`, `text/plain` |
 | Window length absent | `400`, problem details naming `segmentLength` | — |
 | Window length is zero | `400`, `text/plain` | — |
@@ -603,6 +652,16 @@ is `text/plain` `Error processing request.` with no `Content-Length`. Both are s
 names — with one extension: §1.11 records the `text/plain` shape for a controller refusing at
 `4xx`, and these two routes reach the identical 25-byte body at **`500`** as well, on every
 condition that reaches a lookup and finds nothing.
+
+**And the split between those two statuses on the fetch route is *whether the item is there*, not
+what was wrong with the request.** An identifier nothing holds is a `400`; an item that exists and
+has nothing to convert — a series, an audio track, a source no `mediaSourceId` matches, an index
+naming no subtitle — is a `500`, measured on all four `[probe:
+tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. That is the reverse of the pair
+008 measured on its four delivery routes, where the *item* is the `404` and the **source** is the
+`400`, so a route that resolved the two the same way would answer the wrong status to one of them.
+The third row of the table is this feature's: it was measured because an implementation cannot
+answer the first row without knowing which side of it an existing-but-empty item falls on.
 
 ## 4. Data the feature owns
 
@@ -721,9 +780,10 @@ bytes.** The header a format declares, the placement setting on each cue's timin
 millisecond a zero-length cue is pushed out by and the byte order mark five of the six writable
 formats begin with are not properties of the cue list and are not whitespace either — they decide
 where a player draws the text and what the time map switch has to drop (§3.5). The first two and
-the mark are measured on the wire
-`[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`; the millisecond is
-read. Those are pinned literally; everything between them stays a cue comparison.
+the mark are measured on the wire — the mark on every spelling, `ttml` included
+`[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`; **the renumbering is
+measured too**, and the millisecond alone is still read, for the reason §3.5 gives. Those are
+pinned literally; everything between them stays a cue comparison.
 
 **The manifest is the exception, and it is asserted as bytes.** Everything in a media entry except
 `NAME` is mechanical, and `NAME` is the one attribute this feature knowingly diverges on (§3.2), so

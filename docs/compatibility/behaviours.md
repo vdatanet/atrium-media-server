@@ -864,7 +864,18 @@ none `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:39-41 @ v10.11.1
 tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]`. That does not soften the heading: the routes a
 bare URL is handed to are the ones that require nothing, and a playlist is followed by a player that
 already holds a token. It does mean the split is genuinely **per action** rather than "delivery
-requires none" — three of the seven delivery routes require a credential and four do not.
+requires none".
+
+**Two more require none, added at 011 T7**, and they are the two a subtitle playlist's own entries
+point at: `GET /Videos/{id}/{sourceId}/Subtitles/{index}/Stream.{format}` and its ticks-in-path
+form answer `200` with the cues to a request carrying no token, an unknown token or `?ApiKey=`
+alike, measured in the same run in which the subtitle *playlist* beside them refuses the first two
+with the empty `401` `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-29]`.
+The reference's own controller carries the authorization attribute on the playlist action alone
+`[source: Jellyfin.Api/Controllers/SubtitleController.cs:208, 338-345 @ v10.11.11]`. Atrium does
+the same, so the count is now **six of nine require nothing** and three do —
+`/Audio/{id}/universal` and the two HLS playlists — with the subtitle playlist joining the three
+when 011 T8 lands it.
 
 What 002 records is the consequence, so that whoever takes it takes it knowingly: on the
 reference **an item id is a capability**, and any divergence 006 or 008 chooses is one a client can
