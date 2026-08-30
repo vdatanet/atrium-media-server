@@ -35,16 +35,19 @@ label through one lookup on `file.{container}` `[source:
 Jellyfin.Api/Controllers/SubtitleController.cs:261,274,
 MediaBrowser.Model/Net/MimeTypes.cs:158-181 @ v10.11.11]`. `.ass` and `.ssa` are an explicit
 override in that file; the other four fall through to a third-party table this project cannot
-cite. **Five of the six are measured** - `text/vtt`, `application/x-subrip`, `text/x-ssa` on both
-of `ass` and `ssa`, and `application/json` on both of `json` and its alias `js`
-`[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. `ttml` is the one
-still read: that battery has never asked for it, and 011 T7 owes it the row.
+cite. **All six are measured** - `text/vtt`, `application/x-subrip`, `text/x-ssa` on both of `ass`
+and `ssa`, `application/json` on both of `json` and its alias `js`, and `application/ttml+xml`
+`[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`.
 
-**`subrip` and `webvtt` have a writer and no row, on both servers.** They are the two spellings
-011's writable set carries that the reference's own label lookup cannot answer, so it renders the
-document and then fails on the label rather than sending it. Adding a row for either would answer
-a body where the reference answers nothing, which is the delta Principle I forbids - so the gap is
-reproduced by leaving them out, and the status the reference ends on is T7's to measure.
+**`subrip` and `webvtt` have a writer and no row, on both servers - and they still answer.** They
+are the two spellings 011's writable set carries that the reference's own label lookup cannot
+answer, and the first draft of this paragraph concluded it therefore fails on the label. It does
+not: a lookup with no row and no default hands back nothing, and the framework's file result
+**defaults the content type**. Measured at 011 T7: both answer `200` with the whole rendered
+document under `application/octet-stream`, which is `DEFAULT_MEDIA_TYPE` below
+`[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. So the gap is still
+reproduced by leaving them out - the fetch route falls through to the default and lands on the
+same string - and adding a row would be choosing a label where the reference chooses none.
 """
 
 from __future__ import annotations
@@ -102,9 +105,9 @@ MEDIA_TYPES: dict[str, str] = {
     "m3u8": "application/vnd.apple.mpegurl",
     # The six formats 011's fetch routes write. `ass` and `ssa` are the reference's own override
     # `[source: MediaBrowser.Model/Net/MimeTypes.cs:82-83 @ v10.11.11]`; the other four fall
-    # through to the third-party table behind it. All but `ttml` are measured `[probe:
-    # tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`; `ttml` is read, and 011
-    # T7 owes it the row. `subrip` and `webvtt` have no row on purpose - see the docstring.
+    # through to the third-party table behind it. All six measured `[probe:
+    # tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`, `ttml` at 011 T7.
+    # `subrip` and `webvtt` have no row on purpose - see the docstring.
     "ass": "text/x-ssa",
     "ssa": "text/x-ssa",
     "srt": "application/x-subrip",

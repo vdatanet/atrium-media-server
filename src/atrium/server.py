@@ -48,6 +48,7 @@ from atrium.api import (
     resume,
     search,
     similar,
+    subtitles,
     system,
     tv_shows,
     universal_audio,
@@ -124,6 +125,7 @@ ROUTERS = (
     videos.router,
     dynamic_hls.router,
     hls_segment.router,
+    subtitles.router,
     items.router,
 )
 

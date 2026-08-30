@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-30
 accepted: 2026-08-30
-amended: 2026-08-30 at the tasks gate — four things this plan could not have known or did not check. §6.5's "the variant line gains the group" was written while the master answered one variant and 008's T15 amended that the same day, so the group goes through `_variant` and every entrance carries it. §6.1's "lookup on the codec spelling" reads a spelling `media/probe.py` does not store: the reference renames four subtitle codecs inside its own probe normalisation, `dvd_subtitle` contains no `dvdsub`, and applied to ffprobe's own name the rule answers *text* for every DVD and DVB subtitle track there is — so the rename moves to inspection and migration 0007 rewrites the four values. §8's embedded image subtitle track cannot be encoded by ffmpeg at all, and the fixture writes a PGS bitstream itself. And §6.2's "eight regional rows" are nine, two of which are not regional tags; and 2026-08-30 by T1 — §8's hand-written bitstream is four display sets rather than two at the same 434 bytes, and building it found two hazards the plan states now rather than letting a later task meet them: a subtitle input that does not start at zero is rebased onto its own start time and costs the text track beside it every cue but the first, and `-shortest` lets a subtitle track bound the whole file; and 2026-08-30 by T2 — §6.1's *"every DVD and DVB subtitle track"* is the two **bitmap** names alone: `hdmv_pgs_subtitle` already contains `pgs` and `dvb_teletext` is text either way, so only `dvd_subtitle` and `dvb_subtitle` invert and the fixture's own image track cannot prove the rename. `SupportsExternalStream` inverts with them and is not "not an image" — `PGSSUB` is true where `DVDSUB` is false — and both facts are answered on every stream of every kind rather than on subtitles alone; and 2026-08-30 by T3 — §6.2's merge sentence was wrong three ways (`IsDefault` is assigned rather than OR-ed, the file's own title and language win over the name's, and a multi-stream sidecar gets no filename flags at all), and §6.8's one unmeasured branch is three: the probe now reports which branches a run reaches, and `default` and the name-spelled language join `hin` among the ones the reference library never touches; and 2026-08-30 by T5 — §6.7 step 4 named four formats that carry a byte order mark and there are five (`ttml` is one), step 5's "replace the leading `WEBVTT`" is a replacement over the whole document and is read against `vtt` and not `webvtt`, §3's "five writers" are six, and the writers' own framing — a region declaration, a placement setting on every timing line, a millisecond added to a zero-length cue, a renumbering from one — is bytes a cue comparison cannot see. Three new rows in §6.8: AC-10 has a second contradiction that every window can reach — **measured** on the reference in both the constructed form and through its own generated playlist, after being read — the same-format short circuit's unwindowed half is measured too and only its windowed half stays owed, and `subrip` and `webvtt` have a writer and no media type, so `media/labels.py` gives them no row. Five of the six fetch media types are measured now; `ttml` is the one still read; and 2026-08-30 by T6 — §6.7's four lines about `media/extract.py` named the artefact's **format** and were read as naming the codec argument: the reference copies the bitstream of anything copyable and encodes only what it cannot, so a `subrip` track is `-c:s copy` and never `-c:s srt`. And the artefact is not what ffmpeg wrote at all — an extracted `.ass` has `,Arial,` replaced with `,Arial Unicode MS,` and is rewritten **only where that changed something**, through a writer that adds a byte order mark, so the substituted font and the mark arrive together or not at all: measured in both forms through the same-format short circuit, which is also the first measurement of what that short circuit hands back. Four smaller ones: the reference extracts **every** extractable track of a source in one invocation where this module extracts the one it was asked for, a non-zero exit is not by itself a failure there (the artefact is the test), and its parser table is built by reflection over a whole format library, so §6.7's ffmpeg fallback catches more files here than there, and §6.7's cache key named the **media** file's change signal where two of the branches read a file beside it, so a replaced sidecar would have been answered with the previous subtitle. §6.7 also gains what CI found and this machine could not: an extracted cue carries the container's own start time, one AAC frame of encoder priming makes that **negative** on ffmpeg 6.1 and zero on 9.0 for the same bytes, so every cue of a track beside an AAC stream extracts 21 ms late on the build most CI runs use — reproduced rather than fixed, because the reference passes no `-copyts` either and adding one answers a `.ts` recording's cues an hour late. New in §6.8: AC-9's *"timings that match the source's"* is exact only where the container starts at zero, left to T7 or T12; and the encoding detection is three steps and no statistics against the reference's statistical detector, put to the user as a gate question because the alternative is a runtime dependency — **decided: keep the rule, add nothing, record the limit** at behaviours §5.11 as an accepted gap with a detector behind the same function as its closing mechanism, and §5 rather than §3 because what differs is the cue text a player draws
+amended: 2026-08-30 at the tasks gate — four things this plan could not have known or did not check. §6.5's "the variant line gains the group" was written while the master answered one variant and 008's T15 amended that the same day, so the group goes through `_variant` and every entrance carries it. §6.1's "lookup on the codec spelling" reads a spelling `media/probe.py` does not store: the reference renames four subtitle codecs inside its own probe normalisation, `dvd_subtitle` contains no `dvdsub`, and applied to ffprobe's own name the rule answers *text* for every DVD and DVB subtitle track there is — so the rename moves to inspection and migration 0007 rewrites the four values. §8's embedded image subtitle track cannot be encoded by ffmpeg at all, and the fixture writes a PGS bitstream itself. And §6.2's "eight regional rows" are nine, two of which are not regional tags; and 2026-08-30 by T1 — §8's hand-written bitstream is four display sets rather than two at the same 434 bytes, and building it found two hazards the plan states now rather than letting a later task meet them: a subtitle input that does not start at zero is rebased onto its own start time and costs the text track beside it every cue but the first, and `-shortest` lets a subtitle track bound the whole file; and 2026-08-30 by T2 — §6.1's *"every DVD and DVB subtitle track"* is the two **bitmap** names alone: `hdmv_pgs_subtitle` already contains `pgs` and `dvb_teletext` is text either way, so only `dvd_subtitle` and `dvb_subtitle` invert and the fixture's own image track cannot prove the rename. `SupportsExternalStream` inverts with them and is not "not an image" — `PGSSUB` is true where `DVDSUB` is false — and both facts are answered on every stream of every kind rather than on subtitles alone; and 2026-08-30 by T3 — §6.2's merge sentence was wrong three ways (`IsDefault` is assigned rather than OR-ed, the file's own title and language win over the name's, and a multi-stream sidecar gets no filename flags at all), and §6.8's one unmeasured branch is three: the probe now reports which branches a run reaches, and `default` and the name-spelled language join `hin` among the ones the reference library never touches; and 2026-08-30 by T5 — §6.7 step 4 named four formats that carry a byte order mark and there are five (`ttml` is one), step 5's "replace the leading `WEBVTT`" is a replacement over the whole document and is read against `vtt` and not `webvtt`, §3's "five writers" are six, and the writers' own framing — a region declaration, a placement setting on every timing line, a millisecond added to a zero-length cue, a renumbering from one — is bytes a cue comparison cannot see. Three new rows in §6.8: AC-10 has a second contradiction that every window can reach — **measured** on the reference in both the constructed form and through its own generated playlist, after being read — the same-format short circuit's unwindowed half is measured too and only its windowed half stays owed, and `subrip` and `webvtt` have a writer and no media type, so `media/labels.py` gives them no row. Five of the six fetch media types are measured now; `ttml` is the one still read; and 2026-08-30 by T6 — §6.7's four lines about `media/extract.py` named the artefact's **format** and were read as naming the codec argument: the reference copies the bitstream of anything copyable and encodes only what it cannot, so a `subrip` track is `-c:s copy` and never `-c:s srt`. And the artefact is not what ffmpeg wrote at all — an extracted `.ass` has `,Arial,` replaced with `,Arial Unicode MS,` and is rewritten **only where that changed something**, through a writer that adds a byte order mark, so the substituted font and the mark arrive together or not at all: measured in both forms through the same-format short circuit, which is also the first measurement of what that short circuit hands back. Four smaller ones: the reference extracts **every** extractable track of a source in one invocation where this module extracts the one it was asked for, a non-zero exit is not by itself a failure there (the artefact is the test), and its parser table is built by reflection over a whole format library, so §6.7's ffmpeg fallback catches more files here than there, and §6.7's cache key named the **media** file's change signal where two of the branches read a file beside it, so a replaced sidecar would have been answered with the previous subtitle. §6.7 also gains what CI found and this machine could not: an extracted cue carries the container's own start time, one AAC frame of encoder priming makes that **negative** on ffmpeg 6.1 and zero on 9.0 for the same bytes, so every cue of a track beside an AAC stream extracts 21 ms late on the build most CI runs use — reproduced rather than fixed, because the reference passes no `-copyts` either and adding one answers a `.ts` recording's cues an hour late. New in §6.8: AC-9's *"timings that match the source's"* is exact only where the container starts at zero, left to T7 or T12; and the encoding detection is three steps and no statistics against the reference's statistical detector, put to the user as a gate question because the alternative is a runtime dependency — **decided: keep the rule, add nothing, record the limit** at behaviours §5.11 as an accepted gap with a detector behind the same function as its closing mechanism, and §5 rather than §3 because what differs is the cue text a player draws; and 2026-08-30 by T7 — §6.7 had the start position the wrong way round: the ticks-in-path route takes the **query's** where both are given, not the path's, measured; the four deprecated query parameters override the address and had gone unmentioned; §6.8's *"`subrip` and `webvtt` … cannot be fetched at all"* is false, the two answer a body under `application/octet-stream`; `ttml`'s media type and mark, all six labels, and the SubRip renumbering are measured rather than read, while the millisecond end-bump is reported as a **miss** because no file in the reference library has such a cue; and §5's `readable` gains a bytes-level twin, because the short circuit hands the artefact over as it lies and decoding it would eat the byte order mark an extracted `.ass` carries. And §6.8's two rows that read as owed to a later gate are closed: **AC-9 and AC-10 were both measured, referred to the user, and amended in this same change** — the deferral this plan anticipated was declined, because documentation moves with the code in the same commit and T8 through T11 are written by people reading those criteria
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -316,11 +316,23 @@ answers it is `json`.
 **`media/extract.py`** — the one impure module:
 
 ```python
-async def readable(
+async def verbatim(
     ledger: ffmpeg.ProductionLedger, cache: Path, file: DeliveredFile,
     inspection: MediaInspection, stream: InspectedStream,
-) -> tuple[str, str]               # (the cue text, the format it is in)
+) -> tuple[bytes, str]             # (the readable file's bytes, the format they are in)
+
+async def readable(...) -> tuple[str, str]   # the same answer, decoded
+def as_text(raw: bytes) -> str               # the decode, for a caller holding the bytes
 ```
+
+**Two entry points, added at T7, and the difference is a byte order mark.** `readable` is what
+anything wanting cues calls. `verbatim` is what the fetch route calls, because §6.7's same-format
+short circuit hands the readable file over *as it lies*: an artefact the font substitution
+rewrote begins with the UTF-8 preamble, and answering the decoded text re-encoded would drop it.
+The two branches differ on the reference too — a file beside the media is decoded and re-encoded
+before anything sees it, an artefact is opened raw `[source:
+MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:169-193 @ v10.11.11]` — so `verbatim`
+reproduces that split and `readable` is `as_text(verbatim(...))`.
 
 Callers may assume: the answer is cached under a digest of the media file's `(library_id,
 relative_path, size, mtime_ns)`, the stream's wire index and the format, so a second call runs no
@@ -344,6 +356,11 @@ and `master_playlist` gains `subtitles: Sequence[AnnouncedSubtitle] = ()`.
 **`MediaProbeRepository`** gains `put_external(library_id, relative_path, streams)` and returns
 renumbered inspections from `get` and `current` — the existing two readers, unchanged in
 signature. A caller cannot obtain an un-renumbered inspection, which is the point.
+
+**`MediaFileRepository`** gains `present(item_id) -> bool`, added at T7 and used by nothing else.
+The four delivery routes never ask whether an item exists as distinct from whether it has a file,
+because a `404` covers both; the subtitle fetch splits its refusal on exactly that question
+(§6.7), and `locate` answers `None` to both halves of it.
 
 ## 6. Algorithms
 
@@ -743,14 +760,36 @@ mechanism to add — and asserting it is AC-8's traversal doing its job.
 ### 6.7 The fetch routes: readable, converted, windowed
 
 `GET …/Subtitles/{index}/Stream.{format}` and its ticks-in-path form share one handler, as the
-reference's do, with the path's start position taking the place of the query's. **Neither
-requires a caller** — measured `200` with no credential at all — so both resolve the item
-through `MediaFileRepository` by identifier alone, exactly as 008's four `stream` routes do,
-and neither applies a visibility predicate. Both accept the token in the query string, which is
-how the addresses in §6.5 and §6.6 work at all.
+reference's do, with the path's start position **standing in for** the query's — and where both
+are given the **query wins**, which is the opposite of what this sentence used to say and is one
+request to check: the same address carrying `…/6000000000/Stream.vtt?StartPositionTicks=0`
+answers the track from its first cue `[probe: tools/probe_subtitle_delivery.py, Jellyfin
+10.11.11, 2026-08-30]`, and the reference's own second action passes `startPositionTicks ??
+routeStartPositionTicks` `[source: Jellyfin.Api/Controllers/SubtitleController.cs:312-325 @
+v10.11.11]`. **Neither requires a caller** — measured `200` with no credential at all — so both
+resolve the item through `MediaFileRepository` by identifier alone, exactly as 008's four
+`stream` routes do, and neither applies a visibility predicate. Both accept the token in the
+query string, which is how the addresses in §6.5 and §6.6 work at all.
+
+**Four more parameters are bound than the path declares, and each one beats the path.** `itemId`,
+`mediaSourceId`, `index` and `format` are declared obsolete on the reference and are still
+honoured over the route values `[spec: GetSubtitle]`: `Stream.vtt?format=srt` answers SubRip
+under `application/x-subrip` and `Stream.vtt?index=` naming no stream answers that index's
+refusal, same probe. Binding only the path would answer a different track, or a different format,
+to any client that sends one.
 
 `js` is an alias for `json`, mapped before anything else. A format outside the writable set is the
-controller refusal at `400`, decided before any file is opened.
+controller refusal at `400`, decided before any file is opened — **which is one step earlier than
+the reference decides it**, since its writer lookup runs after the extraction, so `Stream.xyz` on
+a track nothing has extracted pays for a demux before its refusal. The status and the twenty-five
+bytes are identical; only the latency differs, which is the same trade the image branch below
+takes.
+
+**The refusals split on whether the item is there**, and that is why this route does not reuse
+`api/delivery.py`'s `locate`: that helper resolves the `mediaSourceId` first, and here an
+identifier nothing holds is a `400` while an item that exists with nothing servable on it — a
+series, an audio track — is a `500`, measured on both. So the item is asked about first, through
+`MediaFileRepository.present`, and everything after it is the `500`.
 
 **The writable set is the reference's own six and not the five that were measured.** The probe
 asked for `vtt`, `srt`, `ass`, `ssa`, `json` and `js` and got them, and asked for `xyz` and got
@@ -855,8 +894,19 @@ lock is specified here rather than left to be discovered under load.
 
 1. If the requested format equals the format the readable file is in, **the file's bytes are
    answered verbatim** — the window and both switches are ignored. That is the reference's own
-   short circuit `[source: MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:145-155 @
-   v10.11.11]`, and §6.8 records that it contradicts AC-10 read literally.
+   short circuit `[source: MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:144-155 @
+   v10.11.11]`, **measured with a window on it** at T7 — `Stream.srt` on a SubRip track answers
+   the identical 84 858 bytes windowed and unwindowed, through both fetch routes, while
+   `Stream.subrip` beside it renders that same window `[probe: tools/probe_subtitle_delivery.py,
+   Jellyfin 10.11.11, 2026-08-30]`. It contradicted AC-10 read literally, and **AC-10 now states
+   the exception itself** rather than this section carrying it alone (§6.8).
+   **The comparison is against the spelling the request used**, after the `js` mapping and nothing
+   else, which is what makes `subrip` render where `srt` short-circuits.
+   *The bytes are the file's and not a re-encode of its text*: an extracted `.ass` carries the
+   byte order mark the font substitution put on it, and decoding it in order to hand it back would
+   eat that mark. `media/extract.py` therefore answers **bytes** at this boundary (`verbatim`) and
+   text at the other one (`readable`), which is the reference's own split — it re-encodes a file
+   beside the media and opens an artefact raw `[source: SubtitleEncoder.cs:169-193 @ v10.11.11]`.
 2. Otherwise parse, then filter: **skip** cues from the front while either end sits before the
    start position, then, when an end position above zero was given, **take** cues from the front
    while their start is at or before it. Both are prefix operations rather than predicates, so a
@@ -878,11 +928,15 @@ lock is specified here rather than left to be discovered under load.
    answer declares a region and puts a placement setting on every timing line — **measured**,
    header and cue line both `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11,
    2026-08-30]` — while its writer pushing a cue whose end does not follow its start out by a
-   millisecond, and `srt` renumbering from one and discarding the identifier, are **read**
+   millisecond, and `srt` renumbering from one and discarding the identifier, were **read**
    `[source: MediaBrowser.MediaEncoding/Subtitles/VttWriter.cs:34-38, SrtWriter.cs:32 @
-   v10.11.11]`. The same run measures the mark on `vtt`, `ass` and `ssa` and its absence on
-   `json`; `ttml`'s is the one still read. Spec §3.5 carries all three; the writers reproduce
-   them.
+   v10.11.11]`. **T7 measured the second of those and `ttml`'s mark with it**: a window starting
+   past the first cue comes back numbered from `1` under `subrip`, where the same window's `json`
+   calls the first cue `131`, and every rendered document but the cue-list one begins with the
+   preamble. The millisecond is the one thing here still read, and the probe reports it as a
+   **miss** rather than inferring it — 5 983 cues across twelve tracks read from files beside
+   the media, and not one with an end that does not follow its start. Spec §3.5 carries all three; the
+   writers reproduce them.
 5. With `AddVttTimeMap` on a `vtt` answer, replace **every** occurrence of `WEBVTT` — the
    reference rewrites the finished document with a plain string replacement, so a cue whose text
    contains the word gets a mapping line of its own — with
@@ -904,17 +958,27 @@ What follows is what this plan read rather than measured, or found and could not
 owed a row in the task list, and the first two are corrections to the accepted spec rather than
 gaps in it.
 
-* **The same-format short circuit contradicts AC-10 as written.** A windowed fetch whose requested
-  format equals the format the track is already in answers the **whole track**, unwindowed and
-  unrebased, because the reference returns the readable file's bytes before it parses anything
+* **The same-format short circuit contradicted AC-10 as written, and AC-10 now states it.** A
+  windowed fetch whose requested format equals the format the track is already in answers the
+  **whole track**, unwindowed and unrebased, because the reference returns the readable file's
+  bytes before it parses anything
   `[source: MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:144-155 @ v10.11.11]`. It is
   unreachable from a manifest — the playlist always names `stream.vtt` and an extracted track is
   `srt` or `ass` — and it is one request away by hand: `Stream.srt?StartPositionTicks=…` on a
-  subrip track. AC-10's "a windowed fetch answers the cues of that window and no others" is true
-  of every window a client reaches by following an address and false of that one. **The amendment
-  is the user's to take**, at the tasks gate, because the spec is accepted and this is a reading
-  rather than a measurement; the probe that settles it is one row in
-  `tools/probe_subtitle_delivery.py`'s format battery.
+  subrip track. AC-10's "a windowed fetch answers the cues of that window and no others" was true
+  of every window a client reaches by following an address and false of that one. **Measured at
+  T7 and no longer a reading**: the conversion battery asks for that exact request and gets the
+  whole track back — 84 858 bytes windowed and unwindowed, on the ticks-in-path route as well,
+  with `Stream.subrip` beside it rendering the same window to prove the comparison is against the
+  requested spelling `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`.
+  The behaviour is reproduced, spec §3.5 records the measurement, and **AC-10 now carries the
+  clause**: *"…and no others, except where the requested format is the one the track is already
+  in, which answers the whole track, unwindowed and unrebased"*, with the `[probe:]` citation it
+  was measured under rather than the `[source:]` it was found with. The amendment was put to the
+  user rather than taken — the spec is accepted and a measurement is a reason to amend rather than
+  a licence to — and **the answer was to take it in this change**: documentation moves with the
+  code in the same commit, and leaving the criterion knowingly false across T8, T9, T10 and T11
+  would leave four tasks written by people reading it. **Nothing here is owed any longer.**
 * **AC-10 has a second contradiction, this one every window of every track can reach, and it is
   measured.** Both ends of the cue selection are inclusive and §6.6's grid hands consecutive
   windows the *same* boundary position `[source:
@@ -932,14 +996,13 @@ gaps in it.
   of every window of a track is the whole track"* is false by exactly those repeats; the spec is
   amended against the measurement, and the repeat is reproduced because narrowing either end
   would drop a cue the reference delivers.
-* **The same-format short circuit's unwindowed half is now measured, and its windowed half is
-  still what the first bullet above owes.** The battery's `Stream.srt` row answers **84 858 bytes
-  with no byte order mark**, `\r\n` inside a cue's text and the file's own numbering, where every
-  converted format on the same track carries the mark — which is the readable file's own bytes
-  handed back rather than a rendered document `[probe: tools/probe_subtitle_delivery.py, Jellyfin
-  10.11.11, 2026-08-30]`. What that run does *not* ask is the same request with a
-  `StartPositionTicks` on it, which is the row that turns AC-10's first contradiction from a
-  reading into a measurement. It stays owed to T7.
+* **The same-format short circuit is measured in both halves now.** The battery's `Stream.srt`
+  row answers **84 858 bytes with no byte order mark**, `\r\n` inside a cue's text and the file's
+  own numbering, where every converted format on the same track carries the mark — which is the
+  readable file's own bytes handed back rather than a rendered document `[probe:
+  tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. **T7 added the windowed
+  half**, which is the row that turned AC-10's first contradiction from a reading into a
+  measurement; see the first bullet above.
   **And T6 used the same short circuit to measure what it hands back**, which is the only view
   from outside of what an extraction wrote: `Stream.ass` on an *embedded* `ass` track answers the
   artefact, and the artefact is not ffmpeg's output — the font substitution and the byte order
@@ -962,9 +1025,12 @@ gaps in it.
   finding §2.1 hands on about `"Hls"` versus `"hls"` in a delivery address. This plan matches the
   five members case-insensitively, which is what an enum-typed parameter does on the other side;
   one probe row settles it either way.
-* **`ttml` is written and has never been asked for**, which is the row above seen from the probe's
-  side: the format battery covers six spellings and the reference's writer table has a seventh
-  (§6.7). One row settles it.
+* **`ttml` is written and had never been asked for**, which is the row above seen from the
+  probe's side: the format battery covered six spellings and the reference's writer table has a
+  seventh (§6.7). **Settled at T7**: `Stream.ttml` answers `200`, `application/ttml+xml`, with the
+  byte order mark `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`, so
+  leaving it out of the writable set would have invented a refusal and its media-type row is no
+  longer read.
 * **Three branches of the sidecar name rule are read, not measured, and this bullet named one
   of them.** The probe now reports which branches a run took, and against the reference library it
   reaches `forced`, `language`, `hearing impaired` and `title` and misses `default`, `hin` and
@@ -986,22 +1052,25 @@ gaps in it.
   `application/x-subrip`, `application/json` and — the row this bullet used to leave out —
   `application/ttml+xml` come from the third-party table the reference's own falls through to,
   which is not a file this project can cite. The subtitle playlist's label is the `m3u8` row that
-  table already has. **Five of the six are now measured** — `text/vtt`, `application/x-subrip`,
-  `text/x-ssa` on both of `ass` and `ssa`, and `application/json` on both of `json` and `js`,
-  read off the `Content-Type` the format battery prints `[probe:
-  tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. `ttml` is the one still
-  read, because the battery has never asked for it — which is the bullet below.
-* **Two spellings of the writable set have a writer and no media type, and cannot be fetched at
-  all.** `subrip` and `webvtt` reach a writer `[source:
+  table already has. **All six are measured now**, read off the `Content-Type` the format battery
+  prints: `text/vtt`, `application/x-subrip`, `text/x-ssa` on both of `ass` and `ssa`,
+  `application/json` on both of `json` and `js`, and — added at T7 — `application/ttml+xml`
+  `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. Nothing in this
+  table is read any longer.
+* **Two spellings of the writable set have a writer and no media type, and this bullet said they
+  could not be fetched at all. They can.** `subrip` and `webvtt` reach a writer `[source:
   MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:275-291 @ v10.11.11]` and the label
-  lookup above has a row for neither, so the reference renders the whole document and then has no
-  content type to send it under. `media/labels.py` therefore has **no row for either** — adding
-  one would answer a body where the reference answers none — and T7 owes the two spellings a row
-  in the format battery, which asked for six and never asked for these. It is the same shape as
-  the `ttml` bullet below seen from the other side: one is written and never asked for, these two
-  are asked-for-able and cannot be written out.
-* **AC-9's *"timings that match the source's"* is exact only where the container starts at zero,
-  and this is the user's to take or leave.** §6.7's measurement says an extracted cue carries the
+  lookup above has a row for neither — but a lookup with no row and no default hands back `null`,
+  and the framework's file result **defaults the content type** rather than refusing. Measured at
+  T7: both answer `200` with the whole rendered document under `application/octet-stream`
+  `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. `media/labels.py`
+  still has **no row for either**, and now for the right reason: the route falls through to
+  `DEFAULT_MEDIA_TYPE`, which is that same string, so adding a row would be inventing a label the
+  reference does not choose. And the pair is a second view of the short circuit — `Stream.subrip`
+  renders where `Stream.srt` hands the file back, so the two answer different bytes for one
+  format.
+* **AC-9's *"timings that match the source's"* was exact only where the container starts at zero,
+  and the criterion now says so.** §6.7's measurement says an extracted cue carries the
   container's own start offset, which one AAC frame of encoder priming makes **negative** on a
   build that reads the priming that way — so on ffmpeg 6.1 a cue the file states at 0.000 arrives
   at 0.021, on this server *and on a reference running the same binary*. AC-9 as a **parity**
@@ -1009,7 +1078,27 @@ gaps in it.
   the file it is short by the offset. Nothing here depends on the difference — 21 ms is half a
   frame at 25 fps — and the criterion's own test is T7's, so whether the wording gains the clause
   belongs to T7 or to T12's acceptance map rather than to the task that measured it. Recorded so
-  it is not discovered a third time.
+  it is not discovered a third time. **Taken at T7, in the same change as AC-10's and by the same
+  decision.** The criterion now says the timings match the source's *exactly where the container
+  begins at zero, and are offset by the container's own start time where it does not* — narrowed
+  rather than widened, and stated as the **parity** it is, because a reference server on the same
+  extraction build answers the same offset. Its test reads that offset with
+  `tests/fixtures/media.py`'s `extraction_offset_seconds` rather than asserting a literal, which is
+  what makes the criterion exact on ffmpeg 6.1 and on 9.0 alike while still failing on a dropped
+  cue, a mangled timing or the wrong stream mapped. **Nothing here is owed any longer, and nothing
+  is left to T12's acceptance map.**
+* **One writer shape is measured and the other could not be, and the probe says which.** T5 read
+  two things off the writers that a cue comparison cannot see. The `srt` renumbering is
+  **measured** now: a window starting past the first cue answers `1` under `subrip` where the same
+  window's `json` calls that cue `131` `[probe: tools/probe_subtitle_delivery.py, Jellyfin
+  10.11.11, 2026-08-30]`. The **millisecond end-bump is not**, and the reason is the library rather
+  than the server: the conversion battery reads twelve text tracks from files beside the media —
+  5 983 cues, no extraction, so it is cheap — and none of them states a cue whose end does not
+  follow its start, which is the only input that reaches that branch. It stays a `[source:]`
+  reading, the probe reports the miss on every run rather than inferring it, and it closes the day
+  a library carries such a file. Nothing here depends on it: a zero-length cue is written one
+  millisecond long instead of zero, on a document no fixture and no file in the reference library
+  produces.
 * **A sidecar's encoding is detected with three steps and no statistics, and that is a decision
   rather than a measurement.** The reference runs a statistical detector — a port of the universal
   charset detector — over the bytes and can name any of some thirty encodings; T6 reads a byte

@@ -32,10 +32,14 @@ detail into the reason this module renders a header at all:
   well-formed, parses identically and puts the text somewhere else on the screen.
 * **A WebVTT cue whose end does not follow its start is pushed out by one millisecond**, rather
   than written as it is `[source: MediaBrowser.MediaEncoding/Subtitles/VttWriter.cs:34-38 @
-  v10.11.11]`. It is the one writer that edits a timing.
+  v10.11.11]`. It is the one writer that edits a timing, and it is the one shape here still
+  **read**: 011 T7's probe looked for a real cue to ask the reference with and found none in 5 983
+  of them, so the run reports the miss rather than inferring the answer.
 * **SubRip renumbers from 1** and discards the identifier the cue arrived with `[source:
-  MediaBrowser.MediaEncoding/Subtitles/SrtWriter.cs:32 @ v10.11.11]`. Only the JSON writer
-  answers `Cue.identifier` at all.
+  MediaBrowser.MediaEncoding/Subtitles/SrtWriter.cs:32 @ v10.11.11]` - measured at 011 T7, where a
+  window starting past the first cue answers `1` under the spelling that renders while the same
+  window's JSON calls that cue `131` `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11,
+  2026-08-30]`. Only the JSON writer answers `Cue.identifier` at all.
 * **`\\n` in the text is a two-character escape, and it is handled in opposite directions.** SubRip
   and WebVTT replace a literal backslash-`n` with a **space**, TTML with `<br/>`, and both are
   case-insensitive; ASS and SSA go the other way, replacing a real line break with a literal
@@ -48,8 +52,8 @@ detail into the reason this module renders a header at all:
   four - and the mark is measurable from outside, because dropping it is the only thing the time
   map switch does to the header (spec section 3.5). Measured on `vtt`, `ass` and `ssa`, and its
   absence measured on `json` and `js`
-  `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`; `ttml` is the one
-  spelling that battery has never asked for.
+  `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]` - and `ttml`'s
+  measured at 011 T7, which is the spelling that battery had never asked for.
 
 ## The time map, and why it is a replacement rather than a prefix
 
@@ -127,13 +131,15 @@ READABLE: Final[tuple[str, ...]] = ("srt", "subrip", "vtt", "webvtt", "ass", "ss
 #: plus `js` `[source: MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:259-301,
 #: Jellyfin.Api/Controllers/SubtitleController.cs:231-234 @ v10.11.11]`.
 #:
-#: **Two of these cannot be fetched, and it is not this module that refuses them.** `subrip` and
-#: `webvtt` have a writer and no media type: the label a fetch answers comes from a table keyed on
+#: **Two of these have a writer and no media type, and they are fetched all the same.** `subrip`
+#: and `webvtt` reach a writer, and the label a fetch answers comes from a table keyed on
 #: `file.{format}` that has a row for neither `[source:
 #: Jellyfin.Api/Controllers/SubtitleController.cs:261,274,
-#: MediaBrowser.Model/Net/MimeTypes.cs:158-181 @ v10.11.11]`, so the reference renders the
-#: document and then fails on the label. `media/labels.py` therefore has no row for either, and
-#: T7 owes the two spellings a probe row.
+#: MediaBrowser.Model/Net/MimeTypes.cs:158-181 @ v10.11.11]` - so the reference renders the whole
+#: document and the framework's file result then *defaults* the type rather than failing on it.
+#: Measured at 011 T7: `200` under `application/octet-stream` for both `[probe:
+#: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. `media/labels.py` still has
+#: no row for either, which is what makes the route fall through to that same default.
 WRITABLE: Final[tuple[str, ...]] = (
     "srt",
     "subrip",

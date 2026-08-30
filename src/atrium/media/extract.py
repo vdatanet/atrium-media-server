@@ -6,7 +6,13 @@ once the text is in hand. Getting the text in hand is this module, and it is the
 ffmpeg does for subtitles (011 plan section 6.7): nothing here converts a format, filters a cue or
 writes a document.
 
-    readable(...) -> (the text of the track, the format that text is in)
+    verbatim(...) -> (the bytes of the readable file, the format they are in)
+    readable(...) -> the same answer, decoded
+
+**Two entry points and the difference is a byte order mark.** The fetch route reaches `verbatim`,
+because the same-format short circuit hands the readable file over as it lies and the mark on an
+extracted `.ass` is part of what a client receives (011 T7); anything that wants cues reaches
+`readable`, which is `verbatim` decoded.
 
 **Three inputs, one answer, and the branch is the reference's own chain** `[source:
 MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:195-254 @ v10.11.11]`:
@@ -194,6 +200,36 @@ async def readable(
     Raises `ImageSubtitleError` for a track made of pictures, before anything is opened, and
     `ffmpeg.ProductionError` for everything else that can go wrong: no ffmpeg, a file that is
     gone, an extraction that produced nothing, text nothing can decode.
+
+    **The text form of `verbatim` below**, which is what the fetch route reaches instead: the
+    same-format short circuit hands the readable file over as *bytes*, and a byte order mark is
+    part of that answer (011 T7). Anything that wants cues wants this one.
+    """
+    raw, current = await verbatim(ledger, cache, file, inspection, stream)
+    return as_text(raw), current
+
+
+async def verbatim(
+    ledger: ffmpeg.ProductionLedger,
+    cache: Path,
+    file: DeliveredFile,
+    inspection: MediaInspection,
+    stream: InspectedStream,
+) -> tuple[bytes, str]:
+    """The readable file's **bytes**, exactly as the same-format short circuit hands them back.
+
+    Two branches and they differ by more than where the file is, which is the reference's own
+    split `[source: MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:169-193 @ v10.11.11]`:
+    a file **beside the media** is decoded and re-encoded as UTF-8 before anything sees it, so
+    what a client gets is the converted bytes and never the file's own - byte order mark included,
+    which means dropped. An **artefact** is opened raw, so whatever the extraction left in it is
+    what arrives: `Stream.ass` on an embedded `ass` track answers the substituted font *and* the
+    mark that came with it, measured `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11,
+    2026-08-30]`.
+
+    Answering text and re-encoding it in the caller would collapse that difference, because the
+    mark is consumed by the decode - which is the whole reason this function exists beside
+    `readable`.
     """
     if stream.kind is not StreamKind.SUBTITLE:
         raise ffmpeg.ProductionError(
@@ -210,9 +246,10 @@ async def readable(
     if external is not None:
         current = _suffix_format(external)
         if external.suffix.lower() != MATROSKA_SUBTITLE_SUFFIX and current in subtitles.READABLE:
-            return _read(external), current
+            return _read(external).encode("utf-8"), current
 
-    return await _extracted(ledger, cache, file, inspection, stream, external)
+    target, fmt = await _extracted(ledger, cache, file, inspection, stream, external)
+    return _raw(target), fmt
 
 
 # ------------------------------------------------------------------------------------------
@@ -291,8 +328,11 @@ async def _extracted(
     inspection: MediaInspection,
     stream: InspectedStream,
     external: Path | None,
-) -> tuple[str, str]:
-    """The artefact for this track, produced if it is not already there.
+) -> tuple[Path, str]:
+    """Where the artefact for this track is, produced if it is not already there.
+
+    The **path** and not its contents, because the two callers want different things out of it:
+    `verbatim` wants the bytes as they lie and `readable` wants them decoded.
 
     The lock is held across the existence check *and* the production, which is what makes a burst
     of a hundred requests one extraction: a version that checked first and locked afterwards would
@@ -319,7 +359,7 @@ async def _extracted(
                 return _extract_command(source, stream, destination)
 
             await _produce(ledger, command, target, converting=normalising)
-    return _read(target), fmt
+    return target, fmt
 
 
 def _change_signal(path: Path) -> tuple[int, int]:
@@ -505,28 +545,41 @@ def _substitute_font(path: Path, *, whatever_it_is_called: bool) -> None:
 # ------------------------------------------------------------------------------------------
 
 
-def _read(path: Path) -> str:
-    """One subtitle file as text, in whatever encoding it turns out to be in.
+def _raw(path: Path) -> bytes:
+    """One subtitle file's bytes.
 
-    Bytes first and decoded here rather than through a text-mode read, because a text-mode read
-    translates line endings - and the bytes of a file whose format is already the one being asked
-    for are answered verbatim, so `\\r\\n` inside a cue is part of the answer rather than noise
-    (plan section 6.7 step 1).
+    Bytes and not a text-mode read, because a text-mode read translates line endings - and the
+    bytes of a file whose format is already the one being asked for are answered verbatim, so
+    `\\r\\n` inside a cue is part of the answer rather than noise (plan section 6.7 step 1).
     """
     try:
-        raw = path.read_bytes()
+        return path.read_bytes()
     except OSError as exc:
         raise ffmpeg.ProductionError(
             f"the subtitle at {path} cannot be read: {exc.strerror}"
         ) from exc
+
+
+def as_text(raw: bytes) -> str:
+    """One subtitle document as text, in whatever encoding it turns out to be in.
+
+    Public because the fetch route holds the bytes `verbatim` answered and has to parse them when
+    the requested format is not the one they are already in; the rule is `_detect`'s and there is
+    one of it.
+    """
     encoding = _detect(raw)
     try:
         return raw.decode(encoding)
     except (UnicodeDecodeError, LookupError) as exc:
         raise ffmpeg.ProductionError(
-            f"the subtitle at {path} is not text in any encoding this server can read; it was "
-            f"read as {encoding}"
+            f"a subtitle of {len(raw)} bytes is not text in any encoding this server can read; "
+            f"it was read as {encoding}"
         ) from exc
+
+
+def _read(path: Path) -> str:
+    """One subtitle file as text: its bytes, decoded by the rule above."""
+    return as_text(_raw(path))
 
 
 def _encoding_of(path: Path) -> str:
@@ -603,5 +656,7 @@ __all__ = [
     "OWN_FORMAT_CODECS",
     "TIMEOUT_SECONDS",
     "ImageSubtitleError",
+    "as_text",
     "readable",
+    "verbatim",
 ]

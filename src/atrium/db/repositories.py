@@ -1745,6 +1745,19 @@ class MediaFileRepository:
             is_video=MEDIA_TYPE_OF.get(ItemType(item.type)) == "Video",
         )
 
+    def present(self, item_id: str) -> bool:
+        """Whether an item with this identifier is here at all, files or no files.
+
+        The four delivery routes never ask - a `404` is a `404` whether the item is missing or its
+        file is - but 011's subtitle fetch splits its refusal on exactly this question: an
+        identifier nothing holds is a `400` and an item that *is* here and has nothing servable is
+        a `500`, measured on a series id and on an audio track in one run
+        `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. Without this
+        the two would be one answer, because `locate` returns `None` for both.
+        """
+        item = self._session.get(models.Item, item_id)
+        return item is not None and item.removed_at is None
+
     def parts(self, item_id: str) -> tuple[str, ...]:
         """Every part's relative path, in part order - what a `mediaSourceId` is resolved against.
 

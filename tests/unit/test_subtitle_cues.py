@@ -360,6 +360,11 @@ def test_subrip_renumbers_from_one_and_discards_the_identifier() -> None:
     reference too** `[source: MediaBrowser.MediaEncoding/Subtitles/SrtWriter.cs:32 @ v10.11.11]`:
     the writer numbers by position. A track numbered from 311 comes back numbered from 1, which
     is why the round trip above compares text and timings and this row compares the rest.
+
+    Read at 011 T5 and **measured at T7**, which is the only way to see it from outside: a window
+    starting past the first cue comes back numbered from `1` under the spelling that renders,
+    where the same window's cue-list answer calls that cue `131`
+    `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`.
     """
     numbered = parse(SRT_DOCUMENT, "srt")
     assert [cue.identifier for cue in numbered] == ["311", "312"]
@@ -561,20 +566,27 @@ def test_every_fetchable_format_has_the_label_the_reference_answers(
 ) -> None:
     """`ass` and `ssa` are the reference's own override `[source:
     MediaBrowser.Model/Net/MimeTypes.cs:82-83 @ v10.11.11]`; the other four fall through to a
-    third-party table this project cannot cite. Five of the six are measured
-    `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`; `ttml` is the one
-    still read, because that battery has never asked for it, and 011 T7 owes it the row.
+    third-party table this project cannot cite. **All six are measured**
+    `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]` - `ttml` at 011 T7,
+    which is the one spelling that battery had never asked for.
     """
     assert MEDIA_TYPES[container] == expected
 
 
 @pytest.mark.parametrize("spelling", ["subrip", "webvtt"])
 def test_the_two_spellings_with_a_writer_and_no_media_type_have_no_row(spelling: str) -> None:
-    """**They are writable and not fetchable**, on both servers. The reference renders the
-    document and then resolves its label from a lookup on `file.{format}` that has no row for
-    either `[source: Jellyfin.Api/Controllers/SubtitleController.cs:261,274,
-    MediaBrowser.Model/Net/MimeTypes.cs:158-181 @ v10.11.11]`. A row here would answer a body
-    where the reference answers none, so the gap is reproduced by leaving it.
+    """**They are writable, they have no media type, and they are fetched all the same.** The
+    reference renders the document and then resolves its label from a lookup on `file.{format}`
+    that has no row for either `[source: Jellyfin.Api/Controllers/SubtitleController.cs:261,274,
+    MediaBrowser.Model/Net/MimeTypes.cs:158-181 @ v10.11.11]` - and a lookup with no row hands
+    back nothing, which the response then *defaults* rather than refusing on. Measured at 011 T7:
+    `200` under `application/octet-stream` for both `[probe: tools/probe_subtitle_delivery.py,
+    Jellyfin 10.11.11, 2026-08-30]`.
+
+    The rows stay absent, and that is what produces the measured answer rather than contradicting
+    it: `media_type_of` returns `None` and `api/subtitles.py` falls through to
+    `DEFAULT_MEDIA_TYPE`, which is that same string. Adding a row would be choosing a label where
+    the reference chooses none.
     """
     assert spelling in WRITABLE
     assert spelling not in MEDIA_TYPES
