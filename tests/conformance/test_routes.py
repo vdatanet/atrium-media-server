@@ -49,28 +49,7 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 #: so that no route can ship ahead of the feature that specifies it - and, just as importantly, so
 #: that a feature marked `Implemented` whose route is not registered fails here rather than in
 #: somebody's client. 004 joined at T15, which is the line this file's own comment promised.
-IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007", "008"})
-
-#: 011 arrives across three route-bearing tasks - the two fetch routes (T7), the playlist (T8) and
-#: the manifest's subtitle half (T11, which adds no path) - and the exact-set check below has to
-#: stay meaningful in between, so the routes that have landed are listed here. It is deleted at
-#: T12, when `"011"` joins the set above. 002, 005, 006, 007 and 008 each used exactly this
-#: device, and all five lists are gone.
-INTERIM_011 = frozenset(
-    {
-        ("GET", "/Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/subtitles.m3u8"),
-        (
-            "GET",
-            "/Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}"
-            "/Stream.{routeFormat}",
-        ),
-        (
-            "GET",
-            "/Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}"
-            "/{routeStartPositionTicks}/Stream.{routeFormat}",
-        ),
-    }
-)
+IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007", "008", "011"})
 
 
 def _load_surface_parser() -> Any:
@@ -148,12 +127,12 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     would pass it. This one fails until `IMPLEMENTED_FEATURES` names the feature - a line that gets
     changed on purpose, in the change that finishes it.
 
-    002 arrived across two tasks, 005 across seven, 006 across five, 007 across three and 008
-    across eight, and for the changes between them this set was accompanied by an explicit list of
-    the individual routes that had landed. All five lists are gone: `INTERIM_008` was deleted at
-    008 T14, in the change that put `"008"` in the set above, and what it was holding open - the
-    eleven routes of `surface.yaml` - is now counted against the file. `INTERIM_011` above is the
-    sixth, and it goes the same way at 011 T12.
+    002 arrived across two tasks, 005 across seven, 006 across five, 007 across three, 008 across
+    eight and 011 across two, and for the changes between them this set was accompanied by an
+    explicit list of the individual routes that had landed. All six lists are gone: `INTERIM_011`
+    was the last, deleted at 011 T12 in the change that put `"011"` in the set above, and what it
+    was holding open - the three subtitle routes of `surface.yaml` - is now counted against the
+    file rather than against a list here.
 
     **One route 008 serves is knowingly narrower than the reference's**, and it is recorded here
     because nothing else in this file would say so: `/Audio/{itemId}/universal` with
@@ -164,17 +143,7 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     playlist pair is a surface decision under AGENTS.md's "Adding an endpoint" procedure, and it
     is on 008's list of what it owes the features after it.
     """
-    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES) | INTERIM_011
-
-
-def test_the_interim_list_names_routes_the_surface_file_really_has(app: FastAPI) -> None:
-    """An interim entry is a route that has landed early, not a route invented here.
-
-    Without this, a typo in `INTERIM_011` would widen the check above by exactly the string it
-    misspelled and nothing would notice until the list was deleted.
-    """
-    assert surface_paths(frozenset({"011"})) >= INTERIM_011
-    assert documented_paths(app) >= INTERIM_011
+    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES)
 
 
 def test_an_unlisted_route_fails_the_check(app: FastAPI) -> None:

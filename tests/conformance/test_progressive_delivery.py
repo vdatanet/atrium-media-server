@@ -52,6 +52,7 @@ from tests.fixtures.media import (
     REJECTED_VIDEO,
     TWO_PARTER_FIRST,
     TWO_PARTER_SECOND,
+    UNCONVERTIBLE_SUBTITLE,
     BuiltMedia,
     MediaFile,
     ScannedMediaWorld,
@@ -216,6 +217,36 @@ async def test_a_bare_non_static_request_produces_into_the_sources_own_container
     assert answered.status_code == 200
     assert answered.headers["Content-Type"] == "video/x-matroska"
     assert answered.headers["Accept-Ranges"] == "bytes"
+
+
+async def test_a_film_with_a_file_beside_it_produces_the_streams_the_plan_named(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld], tmp_path: Path
+) -> None:
+    """**011 T12's finding, end to end: the number the plan speaks is not the number ffmpeg
+    counts.**
+
+    A subtitle file discovered beside the media is numbered *ahead of* the container's own
+    streams, so on this entry - the one in the matrix with a file beside it - the video is wire 1
+    and demuxer 0, and the audio is wire 2 and demuxer 1. A plan carries the wire number, because
+    that is what a client sends and what the answer states back; `-map 0:N` counts the demuxer's,
+    so a command built from the wire number copies the **audio** where the plan said video and
+    refuses the whole production.
+
+    Nothing in 008 could see it: the sidecar was deliberately put beside a film 008 asserts
+    nothing about, precisely so that discovering it would not move an index another test had
+    pinned - which left every produced-bytes test in this repository running over a source with no
+    external stream.
+    """
+    item_id = item_of(served, UNCONVERTIBLE_SUBTITLE)
+
+    answered = await client.get(
+        f"/Videos/{item_id}/stream.mkv", params={"videoCodec": "h264", "audioCodec": "aac"}
+    )
+
+    assert answered.status_code == 200, answered.text
+    streams = streams_by_kind(inspected(answered.content, tmp_path, "beside.mkv"))
+    assert streams["video"]["codec_name"] == "h264"
+    assert streams["audio"]["codec_name"] == "aac"
 
 
 # ------------------------------------------------------------------------------------------

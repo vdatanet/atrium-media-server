@@ -122,10 +122,11 @@ say how it will be proven is not finished.
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Implemented** | **Implemented** | **Implemented** |
 | [009](009-playlists/) | Playlists | Draft | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
-| [011](011-subtitle-delivery/) | Subtitle delivery | **Accepted** | **Accepted** | **Accepted** |
+| [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
 
-**001 through 008 are implemented**, 008 on 2026-08-29 across fourteen tasks. Its spec and plan
+**001 through 008 are implemented, and 011 with them** — 008 on 2026-08-29 across fourteen tasks,
+011 on 2026-08-31 across twelve. Its spec and plan
 were accepted the same day, at a review that wrote and ran the five probes its open questions had
 been citing prospectively — all twelve OQs answered, five claims overturned (the policy story, the
 body's `EnableTranscoding` switch, `static=true` as an error, `enableRedirection`'s `302`, and the
@@ -138,11 +139,12 @@ mandatory `deviceId` decides nothing (T12), and a `SegmentKeepSeconds` that is a
 the client rather than a file age (T13). **009 and 010 remain drafts**, and their open
 questions are the standing review agenda —
 [what 008 owes them](008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
-is written down rather than remembered. **011's spec was accepted the same day**, at its own
-measurement gate, and its plan and task list on 2026-08-30, so it is no longer one of the drafts
-and it is ready for code; **012 was opened as one on 2026-08-29 and accepted at its own gate the
-same day**, so the drafts are 009 and 010. The lowest-numbered feature that is not implemented is
-**009**, so its spec review is the next gate, and that list is one of its inputs.
+and [what 011 does](011-subtitle-delivery/tasks.md#what-this-feature-owes-the-next-ones) are
+written down rather than remembered. **011's spec was accepted on the same day as 008's**, at its
+own measurement gate, its plan and task list on 2026-08-30, and the twelve tasks ran from
+2026-08-30 to 2026-08-31; **012 was opened on 2026-08-29 and accepted at its own gate the same
+day**, so the drafts are 009 and 010. The lowest-numbered feature that is not implemented is
+**009**, so its spec review is the next gate, and both those lists are inputs to it.
 
 **008's own closing task found the class it exists to catch.** The acceptance map is where a
 criterion and the test that proves it are put on one line, and doing that showed two criteria whose
@@ -201,6 +203,25 @@ now because no fixture had a subtitle stream; the embedded **image** subtitle tr
 needs cannot be encoded by ffmpeg at all, so it is written as a bitstream by hand; and the sidecar
 naming rule's *"eight regional rows"* are nine, two of which are not regional. **Twelve tasks**,
 ordered so that the two stream numberings land before any address carries one.
+
+**It shipped on 2026-08-31, and its own closing task found the sharpest thing in the feature.**
+Twelve tasks, every one of them finding something a document had wrong, which is why the spec
+carries nine amendments and not one: the manifest lever is the delivery method **alone** and the
+stream index decides only which entry is the default (T11); a windowed fetch of the format a track
+is already in answers the whole track (T7); a cue sitting exactly on a window boundary is delivered
+**twice** (T5); the marker for a stream with no language is `Undefined` and not the `Und` the
+assembly falls back to (T10); and naming a subtitle track the client cannot take costs the source
+its **direct play**, which made AC-15 false of exactly the request the feature exists to serve
+(T9). Then T12, writing the acceptance map, found that the plan's own risk register had predicted
+the feature's one real defect and prescribed a mitigation that could not catch it: `-map` was given
+the **wire** stream index where ffmpeg counts the demuxer's, so every remux, transcode and HLS
+segment of a film with a subtitle file beside it mapped one stream too far — a remux of the one
+such fixture answers `200` carrying no video stream at all. Nothing saw it because every
+produced-bytes test in the repository ran over a source with no external stream, T1 having put the
+sidecar beside a film 008 asserts nothing about for exactly that reason. Four criteria were also
+mapped to tests that proved less than their names, and the definition of done's *two* divergences
+are three: burn-in is the answer the reference gives for every track no profile fits, and v1 says
+the word and produces the frames without the cues.
 
 **Its scope argument is the roadmap's *"008 is one feature, not two"* read backwards.** The two
 client traces

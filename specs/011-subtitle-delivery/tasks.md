@@ -1,13 +1,14 @@
 ---
 feature: 011-subtitle-delivery
 title: Subtitle delivery — tasks
-status: Accepted
+status: Implemented
 created: 2026-08-30
-updated: 2026-08-30
+updated: 2026-08-31
 accepted: 2026-08-30
+implemented: 2026-08-31
 amended: 2026-08-30 at the gate — 008's amendment of the same day gave the master playlist more than one variant and the subtitle group belongs on all of them; the codec spelling the text/image split reads is not the spelling this server stores; ffmpeg cannot encode the image subtitle track the fixture needs; and the sidecar language rule's "eight regional rows" are nine, two of which are not regional. See "What the gate changed"; and 2026-08-30 by T11 — the gate's own row for T11, and the ordering paragraph above it, say the only lever is `SubtitleMethod=Hls` **beside a `SubtitleStreamIndex`**. Measured, the method announces on its own: no index, `-1` and an index naming no stream each announce every text track, and the index decides only which entry is the default. The wording came from spec §3.4, which is amended with AC-5 in T11's change; plan §6.5's condition never asked for the index and needed no correction there
 plan_status_required: Accepted
-plan_status_actual: Accepted
+plan_status_actual: Implemented
 ---
 
 # 011 — Tasks
@@ -1237,7 +1238,7 @@ closes that row once rather than correcting it four times, which is what this li
 
 ## T12 — The acceptance map, the exact route set, and 011 is Implemented
 
-- [ ] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_011` — sixteen rows, each
+- [x] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_011` — sixteen rows, each
   naming its test; `IMPLEMENTED_FEATURES` gains `"011"` and `INTERIM_011` is deleted; `spec.md`,
   `plan.md` and this file are marked `Implemented`; `specs/README.md`'s table and narrative,
   `docs/roadmap.md` and `AGENTS.md`'s "where the project is" say so; the
@@ -1254,41 +1255,144 @@ closes that row once rather than correcting it four times, which is what this li
   not against this list's prose (007 T13's lesson, and 008 T14's).
 - **Spec reference:** §5, §6
 
+**Done (2026-08-31).** The map is sixteen rows and the three status lines are flipped. **What
+writing it found is what this task exists to find, and the sharpest of it is not a criterion at
+all: [plan §9](plan.md#9-risks)'s first risk had fired, and the mitigation it prescribed could not
+have caught it.**
+
+**`-map` was handed the wire index, so every film with a subtitle file beside it produced the
+wrong streams.** [Plan §5](plan.md#5-contracts) states the contract in as many words — *"`file_index`
+is only ever an ffmpeg number: `media/ffmpeg.py` maps `0:{stream.file_index}` and nothing else may
+read it"* — and `media/ffmpeg.py` mapped `0:{plan.source_index}`, which is the **wire** number: what
+a client sends as `AudioStreamIndex`, what `DefaultAudioStreamIndex` states back, what the
+transcoding URL repeats. A discovered subtitle file is numbered *ahead of* the container's own
+streams, so on `The Unconvertible` — the one matrix entry with a file beside it — the video is wire
+1 and demuxer 0, and `-c:v copy` was given the audio. Measured rather than reasoned: a remux of that
+film answers **`200` with no video stream in the body at all**, which is a client handed a video file
+with no picture and no error to explain it. `media/extract.py` has read `file_index` since T6. The
+two numberings meet in exactly two places and only one of them knew it.
+
+**Nothing could have seen it, and the reason is two documents that were each right on their own.**
+§9's risk is this failure spelled out to its symptom — *"a delivery command maps the wrong track,
+silently, only on items that have a sidecar"* — and the mitigation beside it is a unit test that the
+two numbers differ wherever externals exist. That test exists and passes: it is a claim about
+`renumber`, and the class also holds everything that *reads* what `renumber` produced. Beside it,
+[T1](#t1--the-world-gets-subtitles-two-entries-one-sidecar-and-a-bitstream-ffmpeg-will-not-encode)
+put the sidecar beside a film 008 asserts nothing about — the right call, for a written reason —
+which left every produced-bytes test in this repository running over a source with no external
+stream. A correct rule, a correct precaution, and the defect between them. The fix is one
+expression and the tests are two, both failing without it: a command row over a source whose two
+numbers are **stated apart** — an `InspectedStream` mirrors an unstated `file_index` onto its
+`index`, so a source built the ordinary way agrees with itself whichever number is read, which is
+why the existing mapping test could not reach this — and a produced-bytes row over the sidecar'd
+film. §8 and §9 of the plan say so now.
+
+**Four criteria named tests that proved less than the criterion**, the failure this project keeps
+meeting and the one 008 T14 met twice:
+
+* **AC-1 says *a listing row and a bare item*** and only the bare item had ever been asked. A list
+  row carries its streams only when the request asks for them, so the request the criterion is
+  about was the one nothing sent.
+* **AC-11's *"is counted by `HasSubtitles`"*** was asserted on a film that carries an embedded
+  track as well, so it passed with every discovered stream filtered out. It is asserted on the
+  discovered streams alone now, which is the claim OQ-7 measured.
+* **AC-12's *"affects neither the item nor its user data"*** had no test of any kind. The
+  identifier is the load-bearing half — 003 derives it from the path and user data hangs off it
+  with no foreign key — so a scan that re-created the item around the file would orphan a history
+  silently and pass every other assertion in that file.
+* **Two rows of [§3.7](spec.md#37-error-paths) had nothing**, and they are on the two routes that
+  answer differently for the same identifier: the fetch routes' `500` for an item that exists and
+  holds nothing servable — the row T7 shaped the whole lookup around, where an identifier naming
+  nothing is the `400` — and the playlist's refusal of a source that states **no runtime**, the row
+  marked ⚠️ *read, not measured* because no reference library can be put into that state from
+  outside. Atrium can, from a test.
+
+**And the definition of done's *two* divergences are three.** Burn-in is the third and it is the
+largest: `Encode` is the reference's per-stream answer for **every** track no declared profile fits
+(§3.3, OQ-5), naming such a track costs the source its direct play on both servers (T9), and this
+server then produces the frames without the cues. It is an accepted gap and not a divergence — a
+bounded shortfall with a closing mechanism, which is the roadmap's text-rendering stack — so it is
+[behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) and not §3, and the
+argument §3 would demand is one this feature could not make. **Which is why that row is narrowed
+rather than closed.** This task's own statement says the subtitle row is *"closed rather than
+corrected again"*, and closing it to nothing would have deleted the only record of the one thing
+this server says and does not do — and made two accepted sentences false, spec §2 and OQ-5 both
+calling this gap *"already recorded"*. The `HasSubtitles` row is closed outright, the
+no-per-user-preference row stays as the statement says, and the localised-properties row stays
+because `NAME` is written in one place and withheld in another.
+
+**Two smaller ones.** [Spec §6](spec.md#6-conformance)'s *"golden per profile class"* and
+*"golden manifest per address class"* are pinned whole-response assertions rather than
+`tests/golden/` files, which is the reading 008 T14 ticked the same line under and the only one
+available for a manifest whose numbers come from the machine's own encoder. And the definition of
+done's *"`-map` … has exactly one call site"* is two, one per module: `media/extract.py`'s and
+`media/ffmpeg.py`'s, both reading `file_index` now, and the bullet says so rather than being
+ticked as written.
+
 ---
 
 ## Definition of done
 
 The feature is done when **all** of these hold:
 
-- [ ] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all sixteen —
-      has a passing test, by name, in `FEATURE_011`.
-- [ ] Every endpoint reaches the level [spec §6](spec.md#6-conformance) declares: the three L3
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all sixteen —
+      has a passing test, by name, in `FEATURE_011`. **Four of the sixteen named tests that proved
+      less than the criterion said**, and the assertions they were missing are written: AC-1's
+      listing row, AC-11's `HasSubtitles` on the discovered streams alone, AC-12's item and user
+      data, and two rows of §3.7 (T12's note).
+- [x] Every endpoint reaches the level [spec §6](spec.md#6-conformance) declares: the three L3
       surfaces carry goldens (the stream properties per kind, the negotiation per profile class,
       the manifest per address class) and the four L2 rows carry their shape, cue,
       fixture-mutation and table-driven error assertions. **The differential half of L3 is
-      [010](../010-conformance-harness/)'s**, as it is for every feature before this one.
-- [ ] The three routes are served, `"011"` is in `IMPLEMENTED_FEATURES`, `INTERIM_011` is gone,
-      and no route exists outside [`surface.yaml`](../../docs/compatibility/surface.yaml).
-- [ ] **Nothing burns anything in.** `media/ffmpeg.py` gains no subtitle filter and no second
+      [010](../010-conformance-harness/)'s**, as it is for every feature before this one. *"Golden"
+      is a pinned whole-response assertion here and a `tests/golden/` file only for the stream
+      properties, which is the reading 008 T14 ticked this line under: a manifest's numbers come
+      from the machine's own encoder, so a file-based golden would fail in CI for a difference that
+      is not one in behaviour.*
+- [x] The three routes are served, `"011"` is in `IMPLEMENTED_FEATURES`, `INTERIM_011` is gone,
+      and no route exists outside [`surface.yaml`](../../docs/compatibility/surface.yaml) —
+      counted against the file rather than against this list's prose, the sixth and last of the
+      interim lists to go.
+- [x] **Nothing burns anything in.** `media/ffmpeg.py` gains no subtitle filter and no second
       filter path; `Encode` is a word this server says, per stream, exactly where the reference
-      says it.
-- [ ] **The two numberings never meet outside `renumber`.** `media_streams.stream_index` is a
-      demuxer index, `media_external_streams` has no wire column, `-map` reads `file_index` and
-      has exactly one call site, and a unit test asserts the two differ wherever externals exist.
-- [ ] The **two** divergences ship as behaviours records them: [§3.12](../../docs/compatibility/behaviours.md#312-a-subtitle-playlists-window-durations-are-written-in-the-servers-locale--class-b-diverged)
+      says it. **Saying it and not doing it is a client-visible gap**, and T12 records it as one:
+      [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)'s subtitle row
+      is narrowed to exactly this rather than closed.
+- [x] **The two numberings never meet outside `renumber`.** `media_streams.stream_index` is a
+      demuxer index and `media_external_streams` has no wire column. **The rest of this line was
+      false until T12**: `-map` has **two** call sites, one per module, and `media/ffmpeg.py`'s read
+      the *wire* index while `media/extract.py`'s read the demuxer one — so every produced body of a
+      film with a file beside it mapped one stream too far. Both read `file_index` now, the unit
+      test asserting the two differ wherever externals exist is joined by one asserting what the
+      **command** reads, and a produced-bytes test runs over the sidecar'd film.
+- [x] The **two** divergences ship as behaviours records them: [§3.12](../../docs/compatibility/behaviours.md#312-a-subtitle-playlists-window-durations-are-written-in-the-servers-locale--class-b-diverged)
       (the invariant decimal point) and §5's localised-properties row (the `NAME` attribute's
       invariant assembly, now written in one place and withheld in another). **Every other
       response is byte-identical to the measured reference**, `LANGUAGE`, `FORCED`, `DEFAULT` and
       `URI` included — and the one place that sentence is knowingly weaker is latency: an image
       track's `400` arrives here without the reference's twenty seconds of attempted extraction.
-- [ ] The owed readings are paid with citations in place: AC-10 against the same-format short
+      **This bullet said two and there are three observable differences**: a produced video whose
+      selected track resolved to `Encode` carries the cues on the reference and not here. It is an
+      accepted gap rather than a divergence — §3 would demand the argument that no client can see
+      it, and a viewer can — so it is
+      [§5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)'s narrowed subtitle row
+      and the roadmap's own exclusion, and the count above is left as it was written with the
+      correction beside it (008 T14's shape).
+- [x] The owed readings are paid with citations in place: AC-10 against the same-format short
       circuit (T7), the playlist route's `itemId` (T8), the no-runtime row (T8), the lower-case
       `SubtitleMethod` (T11), `ttml` and the fetch formats' media types (T7), and the `hin` branch
-      reported on rather than assumed (T3).
-- [ ] Anything learned during implementation is back in `spec.md`, `plan.md` or
+      reported on rather than assumed (T3). Three readings stay readings and each says so on its
+      own row, and each is a fact about what a reference library can be put into rather than a gap
+      in a probe: the reference's refusal of a source with no runtime, the millisecond a zero-length
+      cue is pushed out by, and the three language-tag shapes T10's index resolves and the
+      reference's platform lookup does not.
+- [x] Anything learned during implementation is back in `spec.md`, `plan.md` or
       [`behaviours.md`](../../docs/compatibility/behaviours.md) in the same change that learned
-      it, with provenance.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+      it, with provenance — nine amendments on the spec's frontmatter, twelve on the plan's, and
+      the user's decision taken on each of the six occasions a task asked for one.
+- [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`, with
+      [`specs/README.md`](../README.md)'s table and narrative, [`docs/roadmap.md`](../../docs/roadmap.md),
+      [`README.md`](../../README.md) and [`AGENTS.md`](../../AGENTS.md) saying the same thing.
 
 ---
 
@@ -1309,3 +1413,66 @@ The feature is done when **all** of these hold:
   ([spec §7.2](spec.md#72-the-one-question-no-probe-here-can-answer)) is a question for the
   trace's author. The route is in either way, every criterion is written against the manifest's
   traversal, and the ordering above does not depend on the answer (plan §6.8's last bullet).
+
+---
+
+## What this feature owes the next ones
+
+**010 collects most of it**, because a differential is the only thing that can ask these — and two
+of the rows are ones a differential will *not* find on its own, so they are named comparisons
+rather than sweeps:
+
+* **The manifest's `NAME` attribute**, the one place this feature knowingly diverges. The
+  differential compares `#EXT-X-MEDIA` entries with `NAME` **masked** and compares that attribute
+  against the invariant form ([spec §6](spec.md#6-conformance)); a reference configured in any
+  culture but English disagrees on every announced track, and
+  [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)'s
+  localised-properties row is the answer. Its language-name half carries a **measured bound** and
+  not a claim: five of the 29 language tags a real library holds have a display name no platform
+  culture equals, and three tag *shapes* — a two-letter tag, a bibliographic code — name no
+  platform culture at all there and do name a row here (T10). A run against a library holding one
+  closes what T10's could not reach.
+* **The subtitle playlist's decimal point**
+  ([behaviours §3.12](../../docs/compatibility/behaviours.md#312-a-subtitle-playlists-window-durations-are-written-in-the-servers-locale--class-b-diverged)).
+  A byte comparison of the two playlists flags every fractional last window against a
+  comma-writing host, and the entry is the answer. With `NAME` above it is the second and last
+  subtitle response that differs **by design**; the attributes a client branches on — `URI`,
+  `LANGUAGE`, `FORCED`, `DEFAULT` — are byte-identical.
+* **Burn-in, and a differential cannot see it** — [§5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)'s
+  narrowed subtitle row. Spec §6 declines to byte-compare produced media, so comparing bodies will
+  report nothing; what says it is a **named** comparison — negotiate a track whose method resolves
+  to `Encode` on both servers, produce a few seconds, and look for the cues in the frames. The same
+  request also loses direct play on both, so the shapes agree and only the pixels differ.
+* **An image track's `400` arrives here without the reference's twenty seconds** of attempted
+  extraction. Same status, same twenty-five bytes, and a differential that measures latency will
+  see it; it is the one place this feature is knowingly faster.
+* **The two rows that are still readings**, each reported as a miss by its own probe on every run
+  rather than inferred: a media source that states **no runtime**, which no reference library can
+  be put into from outside (T8), and the **millisecond** a zero-length cue is pushed out by, which
+  needs a file whose cue ends before it starts — 5 983 cues of a real library hold none (T7).
+* **A subtitle file in a legacy encoding**
+  ([behaviours §5.11](../../docs/compatibility/behaviours.md#511-a-subtitle-file-in-a-legacy-encoding-is-decoded-by-a-rule-and-not-by-a-detector)):
+  a rule of three steps here against a statistical detector there, closed by putting a detector
+  behind the same function with its runtime dependency argued in an ADR, on the day a real library
+  needs one. A differential over an all-UTF-8 library will never raise it.
+
+**Two are another feature's, and both were measured here rather than guessed:**
+
+* **The four enums 008 binds are case-sensitive here and lenient there** (T9). A direct-play entry
+  typed `"video"` binds and direct-plays on the reference and is a `400` here; what is lenient is
+  the *binder*, not one enum, so the fix is `compat/model.py` — which every request model in the
+  project inherits — and it belongs to whoever owns that model. 011 fixed only the vocabulary 011
+  added. [012's OQ-4](../012-negotiation-inputs/spec.md) was widened rather than corrected in the
+  same change, so there is one description of this and not two.
+* **`&allowVideoStreamCopy=false` and `&allowAudioStreamCopy=false`** come off the same three lines
+  of the reference as the burn-in flag T9 implemented, and Atrium honours both switches in the
+  decision while repeating neither in the address. They are about audio and video copying and they
+  are 008's ([plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed)).
+
+**And one lesson rather than a row, for whoever adds the filter path burn-in needs.** The wire
+index and the demuxer index part company on exactly the items this feature creates, and T12 found
+`-map` reading the wrong one on both command builders — after [plan §9](plan.md#9-risks) had named
+that failure and prescribed a mitigation that proves a property of `renumber` instead. Any new
+`-map`, any new `-vf` that names a stream, reads `file_index`; and the test that catches it is one
+over a source whose two numbers are **stated apart**, because a stream built the ordinary way
+mirrors one onto the other and agrees with itself either way.

@@ -14,12 +14,14 @@ This file is the map, and it fails three ways:
 It asserts that the tests **exist**, not that they pass; the suite they are in does that. What it
 protects is the *mapping*, which is the part that rots quietly.
 
-**It was written for one feature and now carries eight.** 002 T18 turned one specification path and
+**It was written for one feature and now carries nine.** 002 T18 turned one specification path and
 one map into a table of them, betting that adding 003 would then be one entry and one dictionary
 rather than a third copy of this file. It was: nothing below changed shape for 003, and the diff
 that added it is a dictionary and a line in `FEATURES`. That is the whole of what the restructure
 was for, and it is recorded here because a restructure nobody checks the payoff of is a refactor
-that might have been a waste.
+that might have been a waste. **011 is the ninth and the first that is not the next number**: 009
+and 010 are specified and unimplemented, and `test_every_implemented_feature_has_a_map` reads the
+status table rather than a list here, so the gap costs nothing.
 
 **003's map is the widest**, and the reason is that 003 has no HTTP surface: its criteria are proven
 against fixtures at four different levels - the naming corpus, the resolver, a real scan into a real
@@ -880,6 +882,160 @@ FEATURE_008: dict[int, tuple[str, ...]] = {
 }
 
 
+#: 011's map, and the first that carries a **traversal**. Three criteria - AC-4, AC-8 and AC-11 -
+#: are about an address leading somewhere, so the tests they name follow a manifest to a playlist
+#: to a document of cues rather than comparing strings; a manifest and a playlist can both be
+#: well formed and lead nowhere, and only following them says so.
+#:
+#: **Four rows here are the ones T12 found unasserted**, each a criterion whose named tests proved
+#: something narrower than the criterion said. AC-1 said *a listing row and a bare item* and only
+#: the bare item had ever been asked; AC-11's `HasSubtitles` was asserted on a film that carries an
+#: embedded track as well, so it passed with every discovered stream filtered out; AC-12's *"affects
+#: neither the item nor its user data"* had nothing at all; and two rows of the section 3.7 table
+#: AC-13 is written against had no test - the fetch routes' `500` for an item that exists with
+#: nothing servable, which is the row the lookup's whole shape turns on, and the playlist's refusal
+#: of a source that states no runtime.
+#:
+#: Like 008's, this map carries a **marker**: most of these tests need ffmpeg and ffprobe on the
+#: machine, so on a run with `-m "not ffmpeg"` the criterion is mapped and deselected. The checks
+#: below assert that the names exist, not that they ran.
+FEATURE_011: dict[int, tuple[str, ...]] = {
+    1: (
+        "tests.conformance.test_media_shapes:test_the_two_file_facts_are_answered_on_every_stream_of_every_kind",
+        # The half the criterion names first and nothing asked for until T12: a list row carries
+        # its streams only when the request asks, so this is the request that can fail.
+        "tests.conformance.test_media_shapes:test_the_two_file_facts_are_on_a_listing_row_too",
+        "tests.conformance.test_media_shapes:test_a_subtitle_track_reaches_the_wire_under_the_renamed_spelling",
+        "tests.unit.test_media_info:test_the_split_and_the_servable_rule_are_lookups_on_the_spelling",
+        "tests.unit.test_media_info:test_the_two_renamed_spellings_that_invert_are_the_reason_the_rename_exists",
+        "tests.unit.test_media_info:test_a_stream_that_is_not_a_subtitle_answers_false_to_both",
+        "tests.conformance.test_playback_info:test_ac1_a_negotiated_source_states_a_delivery_method_on_every_subtitle_stream",
+        "tests.conformance.test_playback_info:test_ac1_the_delivery_address_is_written_for_the_external_streams_alone",
+        "tests.conformance.test_playback_info:test_ac1_a_bare_read_states_neither_the_method_nor_the_address",
+    ),
+    2: (
+        "tests.conformance.test_playback_info:test_ac2_an_index_is_read_only_where_the_body_also_names_the_source",
+        "tests.conformance.test_playback_info:test_ac2_an_index_naming_no_stream_is_restated_rather_than_refused",
+        "tests.conformance.test_playback_info:test_the_address_carries_the_index_and_the_method_at_their_measured_positions",
+        # The two subtractions T9 measured, which is why the criterion no longer says the address
+        # names the track unconditionally - and the request that puts the index back.
+        "tests.conformance.test_playback_info:test_the_external_method_drops_the_index_from_the_address",
+        "tests.conformance.test_playback_info:test_an_index_of_minus_one_is_dropped_from_the_address_where_a_missing_one_is_not",
+        "tests.conformance.test_playback_info:test_always_burn_in_keeps_the_index_and_appends_its_own_flag",
+        "tests.unit.test_media_decision:test_no_track_named_proposes_no_default_at_all",
+        "tests.unit.test_media_decision:test_an_index_naming_no_stream_costs_nothing_and_is_still_restated",
+    ),
+    3: (
+        "tests.conformance.test_playback_info:test_ac3_a_profile_that_declares_no_subtitle_handling_answers_encode_on_every_track",
+        "tests.conformance.test_playback_info:test_ac3_the_unconvertible_format_reaches_encode_under_a_vtt_only_profile",
+        "tests.unit.test_media_decision:test_a_delivery_method_is_answered_for_every_subtitle_stream",
+        "tests.unit.test_media_decision:test_convertibility_is_not_the_same_question_as_being_text",
+    ),
+    4: (
+        "tests.conformance.test_subtitle_manifest:test_ac4_the_index_in_the_address_selects_the_track_that_is_served",
+    ),
+    5: (
+        "tests.conformance.test_subtitle_manifest:test_ac5_an_announcement_is_the_measured_line_verbatim",
+        "tests.conformance.test_subtitle_manifest:test_ac5_every_variant_of_a_multi_variant_master_ends_in_the_group",
+        "tests.conformance.test_subtitle_manifest:test_a_sidecars_announcement_carries_the_external_word_and_its_own_language",
+        # The index's whole job, measured at T11 against a criterion that had it as half the lever.
+        "tests.conformance.test_subtitle_manifest:test_the_index_is_not_part_of_the_lever_and_only_decides_the_default",
+        "tests.unit.test_hls_planning:test_an_announcement_is_the_measured_line_and_the_address_carries_thirty_and_a_token",
+        "tests.unit.test_hls_planning:test_the_group_goes_on_every_variant_including_the_sdr_entrance",
+    ),
+    6: (
+        "tests.conformance.test_subtitle_manifest:test_ac6_a_request_that_names_no_manifest_method_answers_the_same_bytes",
+        "tests.conformance.test_subtitle_manifest:test_the_method_binds_in_any_case_and_by_ordinal_and_refuses_nothing",
+        "tests.conformance.test_subtitle_manifest:test_a_source_with_no_text_subtitle_stream_is_never_given_a_group",
+        "tests.unit.test_hls_planning:test_a_master_with_nothing_announced_is_the_playlist_it_was_before",
+    ),
+    7: (
+        "tests.conformance.test_subtitle_manifest:test_ac7_an_image_index_still_announces_every_text_track_with_no_default",
+    ),
+    8: (
+        "tests.conformance.test_subtitle_manifest:test_ac8_every_announced_address_and_every_window_is_fetched_as_written",
+        "tests.conformance.test_subtitle_playlist:test_ac8_every_entry_is_fetched_by_following_it_as_written",
+        "tests.conformance.test_subtitle_fetch:test_both_spellings_of_the_route_answer_the_same_bytes",
+    ),
+    9: (
+        "tests.conformance.test_subtitle_fetch:test_ac9_a_whole_file_fetch_answers_the_declared_cues_with_the_files_timings",
+        "tests.unit.test_subtitle_extract:test_an_embedded_text_track_comes_back_as_the_declared_cue_list",
+        "tests.unit.test_subtitle_cues:test_every_readable_writer_round_trips_the_cues_and_their_timings",
+    ),
+    10: (
+        "tests.conformance.test_subtitle_fetch:test_ac10_a_window_answers_its_own_cues_and_the_copy_switch_decides_their_timings",
+        # The exception T7 measured and the user took into the criterion: the requested format is
+        # the one the track is already in, so the readable file is handed back unwindowed.
+        "tests.conformance.test_subtitle_fetch:test_a_window_on_the_format_the_track_is_already_in_answers_the_whole_track",
+        "tests.conformance.test_subtitle_fetch:test_the_short_circuit_hands_back_the_artefact_and_not_a_rendered_document",
+        "tests.unit.test_subtitle_cues:test_the_windows_of_a_track_concatenate_back_to_the_track",
+        "tests.unit.test_subtitle_cues:test_a_cue_that_starts_on_a_window_boundary_is_answered_by_two_windows",
+    ),
+    11: (
+        "tests.library.test_sidecar_discovery:test_a_sidecar_appears_and_disappears_and_the_indices_follow_it",
+        "tests.unit.test_external_naming:test_the_filename_matrix",
+        "tests.unit.test_subtitle_extract:test_a_sidecar_in_a_covered_format_is_read_without_a_process",
+        "tests.unit.test_subtitle_extract:test_the_command_copies_a_copyable_codec_and_maps_the_demuxer_index",
+        # "Fetchable through the same routes as an embedded one", asserted by fetching it: both
+        # traversals below end on the sidecar's own cues rather than on the container's.
+        "tests.conformance.test_subtitle_manifest:test_ac4_the_index_in_the_address_selects_the_track_that_is_served",
+        "tests.conformance.test_subtitle_manifest:test_ac8_every_announced_address_and_every_window_is_fetched_as_written",
+    ),
+    12: (
+        "tests.library.test_sidecar_discovery:test_a_sidecar_appears_and_disappears_and_the_indices_follow_it",
+        # The clause nothing asserted until T12. The identifier is derived from the path and user
+        # data hangs off it with no foreign key, so a scan that re-created the item around the
+        # file would orphan a history and pass every other assertion in that file.
+        "tests.library.test_sidecar_discovery:test_the_film_and_a_viewers_progress_survive_the_file_arriving_and_leaving",
+        "tests.unit.test_domain_media:test_removing_a_sidecar_puts_every_index_back_where_it_was",
+    ),
+    13: (
+        "tests.conformance.test_subtitle_playlist:test_a_caller_with_no_token_and_one_with_an_unknown_token_are_the_same_empty_401",
+        "tests.conformance.test_subtitle_playlist:test_an_item_that_names_nothing_is_the_problem_details_404",
+        "tests.conformance.test_subtitle_playlist:test_an_item_that_exists_and_is_not_a_video_is_the_same_404",
+        "tests.conformance.test_subtitle_playlist:test_the_all_zero_identifier_is_the_controller_refusal_at_400",
+        "tests.conformance.test_subtitle_playlist:test_an_identifier_that_is_not_one_names_this_routes_own_parameter",
+        "tests.conformance.test_subtitle_playlist:test_a_media_source_that_names_nothing_is_the_500",
+        # The row marked "read, not measured" on the reference, asserted here on a state this
+        # server can be put into. Written at T12, which found the row untested.
+        "tests.conformance.test_subtitle_playlist:test_a_source_that_states_no_runtime_is_the_controller_refusal",
+        "tests.conformance.test_subtitle_playlist:test_an_index_naming_no_subtitle_is_still_a_whole_playlist",
+        "tests.conformance.test_subtitle_playlist:test_a_window_length_that_will_not_bind_is_problem_details_naming_it",
+        "tests.conformance.test_subtitle_playlist:test_a_window_length_of_zero_is_the_controller_refusal",
+        "tests.conformance.test_subtitle_fetch:test_neither_credential_changes_the_answer",
+        "tests.conformance.test_subtitle_fetch:test_an_item_that_names_nothing_is_the_controller_refusal_at_400",
+        # The third row of the table, and the one the fetch routes' lookup is shaped by: an item
+        # that is there with nothing servable is the `500` where an identifier naming nothing is
+        # the `400`. Written at T12, which found it unasserted.
+        "tests.conformance.test_subtitle_fetch:test_an_item_that_exists_with_nothing_servable_is_the_500",
+        "tests.conformance.test_subtitle_fetch:test_an_identifier_that_is_not_one_is_problem_details_naming_the_route_parameter",
+        "tests.conformance.test_subtitle_fetch:test_a_media_source_that_names_nothing_is_the_500",
+        "tests.conformance.test_subtitle_fetch:test_an_index_that_names_no_text_subtitle_is_the_500",
+        "tests.conformance.test_subtitle_fetch:test_an_image_track_asked_for_as_text_is_refused_at_400_without_a_process",
+        "tests.conformance.test_subtitle_fetch:test_a_format_nothing_writes_is_refused_before_any_file_is_opened",
+        "tests.conformance.test_subtitle_fetch:test_a_window_whose_end_precedes_its_start_is_a_body_with_no_cues",
+    ),
+    14: (
+        "tests.conformance.test_subtitle_fetch:test_ac14_a_subtitle_fetched_twice_answers_the_same_bytes",
+        "tests.unit.test_subtitle_extract:test_a_second_call_for_the_same_key_starts_no_process",
+        "tests.unit.test_subtitle_cues:test_the_same_cues_render_to_the_same_bytes_twice",
+    ),
+    15: (
+        "tests.conformance.test_playback_info:test_ac15_a_direct_played_file_answers_what_it_answered_before",
+        # The narrowing T9 measured, on both sides of the discrimination: the same file and the
+        # same profile, one index kept and one lost.
+        "tests.conformance.test_playback_info:test_naming_a_track_the_profile_cannot_take_costs_the_source_its_direct_play",
+        "tests.unit.test_media_decision:test_naming_a_track_the_client_cannot_take_costs_the_source_its_direct_play",
+        "tests.unit.test_media_decision:test_the_manifest_method_cannot_save_a_direct_play_because_it_is_not_reachable_there",
+    ),
+    16: (
+        "tests.conformance.test_subtitle_playlist:test_ac16_a_partial_window_is_written_with_a_decimal_point",
+        "tests.unit.test_hls_planning:test_ac16_the_decimal_point_survives_a_locale_that_writes_a_comma",
+        "tests.unit.test_hls_planning:test_a_window_duration_is_written_with_a_point_and_no_trailing_zeros",
+    ),
+}
+
+
 FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "001-server-identity-and-discovery": FEATURE_001,
     "002-authentication-users-and-sessions": FEATURE_002,
@@ -889,6 +1045,7 @@ FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "006-images": FEATURE_006,
     "007-user-data-and-playstate": FEATURE_007,
     "008-playback-negotiation-and-delivery": FEATURE_008,
+    "011-subtitle-delivery": FEATURE_011,
 }
 
 

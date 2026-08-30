@@ -31,10 +31,12 @@ from typing import Any
 import httpx
 import pytest
 from fastapi import FastAPI, Request
+from sqlalchemy import update
 
 from atrium.api.deps import require_user
 from atrium.compat.errors import CONTROLLER_ERROR_BODY, CONTROLLER_ERROR_TYPE
 from atrium.config.paths import DataPaths
+from atrium.db import models
 from atrium.db.repositories import UserRepository
 from atrium.domain.items import ItemType
 from atrium.domain.user import User
@@ -434,6 +436,36 @@ async def test_an_index_naming_no_subtitle_is_still_a_whole_playlist(
     entry = served_playlist.text.splitlines()[6]
     followed = await client.get(f"/Videos/{item_id}/{item_id}/Subtitles/99/{entry}")
     assert followed.status_code == 500
+
+
+async def test_a_source_that_states_no_runtime_is_the_controller_refusal(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """Section 3.7's one ⚠️ row - read on the reference and not measurable there.
+
+    Every media source of every video item in the measured library states a runtime, and the route
+    asks for a *video* before it reads one, so nothing of another type reaches the check at all
+    (T8). A runtime is written by the scan that creates the item, so the state cannot be produced
+    from outside a server - which is why the reading stands there and why it is asserted here, on
+    a state this server can be put into: a stored inspection that states none.
+
+    The **order** is what makes it a row of its own rather than a duplicate of the window length
+    below: the window length is valid here, so only the runtime can be answering.
+    """
+    item_id, index, _runtime = await subtitled(client, served)
+    with served[0].state.sessions.begin() as opened:
+        changed = opened.execute(
+            update(models.MediaProbe)
+            .where(models.MediaProbe.relative_path == BOTH_SUBTITLE_KINDS.path)
+            .values(runtime_ticks=None)
+        )
+        assert changed.rowcount == 1, "the film under test has no stored inspection to blank"
+
+    answered = await client.get(address(item_id, index), params={"SegmentLength": 30})
+
+    assert answered.status_code == 400
+    assert answered.headers["Content-Type"] == CONTROLLER_ERROR_TYPE
+    assert answered.content == CONTROLLER_ERROR_BODY
 
 
 @pytest.mark.parametrize("query", [{}, {"SegmentLength": "abc"}])

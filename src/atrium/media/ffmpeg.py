@@ -530,7 +530,7 @@ def _stream_arguments(
     source is not an instruction.
     """
     selector = "v" if video else "a"
-    argv = ["-map", f"0:{plan.source_index}"]
+    argv = ["-map", f"0:{_demuxer_index(plan, stream)}"]
     if plan.action is StreamAction.COPY:
         return [*argv, f"-c:{selector}", "copy"]
 
@@ -553,6 +553,28 @@ def _stream_arguments(
         if _below(plan.sample_rate, None if stream is None else stream.sample_rate):
             argv += ["-ar", str(plan.sample_rate)]
     return argv
+
+
+def _demuxer_index(plan: StreamPlan, stream: InspectedStream | None) -> int:
+    """Which stream of the **file** `-map` names, which is not the number the plan carries.
+
+    A plan's `source_index` is the **wire** index: the number a client sends as
+    `AudioStreamIndex`, the number `DefaultAudioStreamIndex` states back and the number the
+    transcoding URL repeats. ffmpeg's `0:N` counts the *demuxer's* streams, and 011 made the two
+    part company - a subtitle file discovered beside the media is numbered ahead of the
+    container's own, so every stream inside the file gains one wire index per discovered file
+    (`domain/media.renumber`). Mapping the wire number would hand `-c:v copy` the audio track on
+    every film with an `.srt` beside it.
+
+    `media/extract.py` has said `0:{file_index}` since 011 T6 and this line said `0:{index}`
+    until 011 T12, which is the whole of the bug: the two numberings meet in exactly two places
+    and only one of them knew it.
+
+    A plan whose index names no stream keeps the number it was given - there is nothing to
+    translate it with, and the command was going to name a stream the file has not got either
+    way.
+    """
+    return plan.source_index if stream is None else stream.file_index
 
 
 def _below(planned: int | None, arrived: int | None) -> bool:
@@ -609,8 +631,11 @@ def default_stream_indexes(source: MediaInspection, *, is_video: bool) -> tuple[
     """The streams a request that names none is about: the first video, and the default audio.
 
     Returned as a pair rather than looked up twice, because a plan that addressed one stream and
-    a command that mapped another would be a silent mismatch - `-map 0:{index}` is the only place
-    the number is ever used.
+    a command that mapped another would be a silent mismatch.
+
+    **Wire indexes, like every other number a plan carries**: what a client sends and what the
+    answer states back. `_demuxer_index` is where that number becomes the one ffmpeg counts, and
+    it is the only place the two numberings meet here.
     """
     video = None
     if is_video:

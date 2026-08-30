@@ -282,6 +282,34 @@ async def test_the_two_file_facts_are_answered_on_every_stream_of_every_kind(
     )
 
 
+async def test_the_two_file_facts_are_on_a_listing_row_too(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """AC-1's other half, and the half nothing asserted until T12.
+
+    The criterion says *a listing row and a bare item*, because the reference states both on every
+    read (011 spec section 3.2) - and a list row carries its streams only when the request asks for
+    them, so the request that can fail is this one. The row's list is compared with the bare item's
+    as well as with the two expected answers: a builder that answered one stream shape on a row and
+    another on an item would satisfy the properties and still be wrong.
+    """
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+
+    answered = await client.get("/Items", params={"ids": item.id, "fields": "MediaStreams"})
+
+    assert answered.status_code == 200
+    row = answered.json()["Items"][0]
+    subtitles = [one for one in row["MediaStreams"] if one["Type"] == "Subtitle"]
+    assert {one["Codec"]: one["IsTextSubtitleStream"] for one in subtitles} == {
+        "subrip": True,
+        "PGSSUB": False,
+    }
+    assert all(one["SupportsExternalStream"] is True for one in subtitles)
+    assert row["MediaStreams"] == (await body_of(client, item.id))["MediaStreams"], (
+        "the row's streams and the bare item's disagreed about the same file"
+    )
+
+
 async def test_a_row_of_a_subtitled_film_says_so(
     client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
 ) -> None:

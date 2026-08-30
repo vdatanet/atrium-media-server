@@ -12,26 +12,28 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001 through 008 are implemented** — **[008](specs/008-playback-negotiation-and-delivery/)
+**Features 001 through 008 are implemented, and 011 with them.** **[008](specs/008-playback-negotiation-and-delivery/)
 landed on 2026-08-29 across fourteen tasks**, spec, plan and tasks all accepted the same day and
 every one of the fourteen finding something the documents had wrong. Playback is therefore in: the
 negotiation, the four `stream` routes, `/universal`, the HLS playlists and segments, and a
-supervised encoder per play session. **[011's spec was accepted on 2026-08-29](specs/011-subtitle-delivery/spec.md)** at its own
-measurement gate — twelve open questions answered by five new probes, four of them overturned —
-and **[its plan was accepted on 2026-08-30](specs/011-subtitle-delivery/plan.md)** — the plan
-that found the reference writes the track name itself, so the localised property 008 withholds
-is one 011 cannot. **[Its twelve-task list was accepted the same day](specs/011-subtitle-delivery/tasks.md)**,
-at a gate whose sharpest finding was a plan sentence that had been true when it was written: the
-manifest's subtitle group goes on *"the variant line"*, and 008's own T15 had given an HDR stream
-copy a second variant hours earlier — so **011 is the feature in code**, at the first unticked task
-in [its list](specs/011-subtitle-delivery/tasks.md).
+supervised encoder per play session. **[011](specs/011-subtitle-delivery/) landed on 2026-08-31
+across twelve tasks**, three days after its spec was accepted at its own measurement gate — twelve
+open questions answered by five new probes, four of them overturned — and every one of the twelve
+finding something the documents had wrong, which is why its spec carries nine amendments and not
+one. Subtitles are therefore in: the two file facts on every stream, the negotiation's per-stream
+delivery method, the manifest's `#EXT-X-MEDIA` block and the group on every variant, the three
+delivery routes, and subtitle files sitting beside the media — discovered, numbered ahead of the
+container's own streams, and served. Not burned in, which is
+[the roadmap's exclusion row](docs/roadmap.md#out-of-scope-and-why) and the one subtitle gap left in
+[behaviours §5](docs/compatibility/behaviours.md#5-accepted-gaps-in-v1).
 **[012's spec was accepted on 2026-08-29](specs/012-negotiation-inputs/spec.md)**,
 at a gate that answered its nine open questions with two new probes and two extended ones and
 withdrew one of the two client findings it was built on. **009 and 010 are specified only, their
 specs still drafts**, so 009's spec review is the next gate of the loop. What each implemented feature leaves the ones
 after it is written at the end of its own task list rather than here, so it cannot go stale:
 [008's](specs/008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
-is the longest, and 010 collects most of it;
+is the longest and 010 collects most of it, with
+[011's](specs/011-subtitle-delivery/tasks.md#what-this-feature-owes-the-next-ones) beside it;
 [007's](specs/007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones),
 [005's](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones) and
 [006's](specs/006-images/tasks.md#what-this-feature-owes-the-next-ones) stand beside it, with 004's
@@ -134,6 +136,7 @@ reasoning:
 | 012 gate | Answer nine open questions and accept a spec | **The feature turned out to be half the size it looked, and the half that went was one already reported to the user.** A listing on a stock reference answers a never-opened source exactly the way Atrium does — empty streams, no runtime, three flags `true`, no address — so the music client's four losses are **parity**, not a gap. What is not parity is the negotiation: it **opens the file inside the request**, comes back fully annotated in 0.20 s, and **keeps** what it learns, so the next listing carries it. *"One root cause, two clients"* survives, through the write rather than the read. Plus an answer nobody predicted: an **audio** item with no audio stream refuses the whole body with `400` where a video item answers `200`, and the address that `200` hands over resolves to a live playlist answering `500`. The protocol question needed four classes where the draft had two — altered cases bind, ordinals bind (`2` comes back as the number `2`), an empty string takes the default, and only an unbindable word refuses. And the initialisation-segment restart the client contract sized as a defect is guarded by a file check every producing session has already satisfied: 0.03 s against 0.69 s, nothing discarded |
 | 008 T9 | Answer two broken WAV routes and pay a prior-probe debt | **Both prior-probe claims moved when the probe was finally written.** The `500` has two causes, not one — a `wav` extension inferred as a *codec* never reaches the PCM bug at all — and the headerless body comes from the **transcoding** container, so the acceptance criterion's `Container=wav` named a request that answers mp3 on both servers. And the divergence has no chunked form: a WAV states its length inside the body, so a piped one says `ffffffff` |
 | 011 tasks | Review a twelve-item list against an accepted plan | **The plan's manifest section had been true when it was written, and stopped being true the same day.** 008 was amended hours earlier to offer an HDR stream copy a standard-range entrance, so "the variant line gains the subtitle group" would have shipped an entrance with no subtitles to exactly the client the entrance exists for — the reference gives the group to every variant it writes. Three more: the text/image split reads a codec spelling **the file does not report**, because four subtitle codecs are renamed at inspection, and against the unrenamed names the rule inverts on every DVD and broadcast track there is — a property 008 already emits, invisible because no fixture had a subtitle stream; the embedded **image** subtitle track the fixture needs cannot be encoded by ffmpeg at all, so it is a bitstream written by hand; and a sidecar's language rule names "the eight regional rows" of a table that has nine, two of them not regional |
+| 011 T12 | Write the acceptance map and flip three status lines | **A risk the plan had named fired, and the mitigation it prescribed could not have caught it.** `-map 0:{N}` was handed the **wire** stream index where ffmpeg counts the demuxer's, so every remux, transcode and HLS segment of a film with a subtitle file beside it mapped one stream too far: measured, a remux of the one matrix entry with a sidecar answers `200` carrying **no video stream at all**. Plan §5 states the contract — `media/ffmpeg.py` maps `file_index` — §9 predicted this exact failure, and the test it prescribed asserts a property of `renumber` rather than of anything that reads it; meanwhile T1 had deliberately put the sidecar beside a film 008 asserts nothing about, which left every produced-bytes test in the repository running over a source with no external stream. Four criteria were mapped to tests that proved less than their names: AC-1's *listing row* had only ever been asked as a bare item, AC-11's `HasSubtitles` was asserted on a film carrying an embedded track too, AC-12's *"affects neither the item nor its user data"* had nothing at all, and two rows of the §3.7 table had no test. And the definition of done's two divergences are two: burn-in is a **third** observable difference, and it is an accepted gap rather than a divergence |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one
 question each, and a plain `urllib` request answers the rest.
