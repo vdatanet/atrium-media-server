@@ -439,8 +439,11 @@ costs more security than the parameters buy.
 in [ADR-0006](../../docs/decisions/0006-password-hashing.md). The short version: importing is not a
 goal, and it would fix the project to a KDF chosen for compatibility rather than for strength.
 
-**Store tokens in plain text, as the reference does.** No compatibility cost either way, since a
-stored token never reaches a client. Hashing is a few lines and it means a leaked database does not
+**Store tokens in plain text, as the reference does** `[source:
+src/Jellyfin.Database/Jellyfin.Database.Implementations/Entities/Security/Device.cs:29,52 @
+v10.11.11]` — a GUID generated at construction and held in an unconstrained `string` column, with
+no hash and no transformation anywhere between. No compatibility cost either way, since a stored
+token never reaches a client. Hashing is a few lines and it means a leaked database does not
 hand over live sessions.
 
 **42 typed policy columns.** Complete and honest about the shape, dishonest about the meaning: a
