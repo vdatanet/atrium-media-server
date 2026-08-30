@@ -347,6 +347,123 @@ def test_a_video_profile_never_names_a_spatial_format() -> None:
 
 
 # ------------------------------------------------------------------------------------------
+# The two file facts, and the spelling they read
+# ------------------------------------------------------------------------------------------
+
+
+#: Every spelling the rule has an opinion about, and what it answers. The **renamed** spellings
+#: are what a stream carries once it has been inspected; the four beside them are what the
+#: inspection tool itself reports, and are here to hold the claim that the rename is load-bearing
+#: rather than cosmetic. Measured against the wire for the four that a real library has: `DVDSUB`
+#: is the one subtitle codec here that cannot be served on its own `[probe:
+#: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`.
+SUBTITLE_SPELLINGS = [
+    # The renamed spellings, which is what `media/probe.py` stores.
+    ("PGSSUB", False, True),
+    ("DVDSUB", False, False),
+    ("DVBSUB", False, False),
+    ("DVBTXT", True, True),
+    # The tool's own spellings. Two of the four answer the same either way - which is why the
+    # only image track the fixture matrix can build proves nothing about the rename.
+    ("hdmv_pgs_subtitle", False, True),
+    ("dvb_teletext", True, True),
+    ("dvd_subtitle", True, True),
+    ("dvb_subtitle", True, True),
+    # Text formats, and the two bare extensions that are image formats by being the whole name.
+    ("subrip", True, True),
+    ("ass", True, True),
+    ("webvtt", True, True),
+    ("mov_text", True, True),
+    ("sup", False, True),
+    ("sub", False, False),
+    # `microdvd` is text however it is spelled, because it shares `.sub` with an image format.
+    ("microdvd", True, True),
+]
+
+
+@pytest.mark.parametrize(("codec", "text", "servable"), SUBTITLE_SPELLINGS)
+def test_the_split_and_the_servable_rule_are_lookups_on_the_spelling(
+    codec: str, text: bool, servable: bool
+) -> None:
+    """One table, two properties, and the two rows that matter are `dvd_subtitle` and `DVDSUB`.
+
+    They are the same track before and after inspection, and they answer **opposite** things: read
+    against the tool's own name, every DVD subtitle in a library is text, servable alone, offered
+    in a manifest and offered for conversion.
+    """
+    wire = stream_of(InspectedStream(index=2, kind=StreamKind.SUBTITLE, codec=codec))
+    assert (wire.is_text_subtitle_stream, wire.supports_external_stream) == (text, servable)
+
+
+def test_the_two_renamed_spellings_that_invert_are_the_reason_the_rename_exists() -> None:
+    """The table above, stated as the claim it holds, so deleting a row cannot quietly weaken it.
+
+    `hdmv_pgs_subtitle` already contains `pgs` and `dvb_teletext` is text under either name, so
+    two of the four renames change no answer at all - and the one image codec the fixture matrix
+    can produce is one of those two.
+    """
+    from atrium.media.probe import RENAMED_SUBTITLE_CODECS
+
+    answers = {codec: (text, servable) for codec, text, servable in SUBTITLE_SPELLINGS}
+    inverted = [
+        raw for raw, renamed in RENAMED_SUBTITLE_CODECS.items() if answers[raw] != answers[renamed]
+    ]
+    assert sorted(inverted) == ["dvb_subtitle", "dvd_subtitle"]
+
+
+@pytest.mark.parametrize("kind", [StreamKind.VIDEO, StreamKind.AUDIO, StreamKind.DATA])
+def test_a_stream_that_is_not_a_subtitle_answers_false_to_both(kind: StreamKind) -> None:
+    """Non-nullable on the reference and emitted on every stream, `false` on 1 021 of them that
+    are not subtitles `[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`.
+    The codec below is a subtitle spelling on purpose: the rules read the stream's *kind* first,
+    which is where the reference puts the test too."""
+    wire = stream_of(InspectedStream(index=0, kind=kind, codec="subrip"))
+    assert (wire.is_text_subtitle_stream, wire.supports_external_stream) == (False, False)
+
+
+def test_a_subtitle_with_no_codec_is_text_only_when_it_came_from_a_file() -> None:
+    """The one branch that is not a lookup: a container track nobody could name is not text, and
+    a file beside the media is, because its format is its extension."""
+    container = stream_of(InspectedStream(index=2, kind=StreamKind.SUBTITLE, codec=None))
+    beside = stream_of(
+        InspectedStream(index=0, kind=StreamKind.SUBTITLE, codec=None, is_external=True)
+    )
+    assert (container.is_text_subtitle_stream, container.supports_external_stream) == (False, False)
+    assert (beside.is_text_subtitle_stream, beside.supports_external_stream) == (True, True)
+
+
+def test_an_external_image_subtitle_can_still_be_served_on_its_own() -> None:
+    """A `.sup` beside a film: not text, and servable anyway - the first clause of the rule is
+    `IsExternal`, not `IsTextSubtitleStream`."""
+    wire = stream_of(
+        InspectedStream(index=0, kind=StreamKind.SUBTITLE, codec="sup", is_external=True)
+    )
+    assert not wire.is_text_subtitle_stream
+    assert wire.supports_external_stream
+
+
+def test_the_five_properties_this_task_declares_and_does_not_fill_stay_absent() -> None:
+    """`Score` is emitted by nothing at all and the other four are answered elsewhere - two by a
+    negotiation, one by the files discovered beside the media. Declared so the field order is the
+    pinned document's, and absent from a bare read on the reference too: none of the four on any
+    of 1 968 streams, and `Path` on the 14 that came from a file `[probe:
+    tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`."""
+    body = stream_of(a_video()).model_dump_json()
+    for absent in ("Score", "DeliveryMethod", "DeliveryUrl", "IsExternalUrl", "Path"):
+        assert f'"{absent}"' not in body
+
+
+def test_the_two_file_facts_sit_between_the_index_and_the_pixel_format() -> None:
+    """Field order is contract here, and the whole run is one contiguous block in the pinned
+    document `[spec: MediaStream]`. A byte comparison sees this; a parsed one does not."""
+    body = stream_of(a_video(pixel_format="yuv420p")).model_dump_json()
+    assert (
+        '"Index":0,"IsExternal":false,"IsTextSubtitleStream":false,'
+        '"SupportsExternalStream":false,"PixelFormat":"yuv420p"'
+    ) in body
+
+
+# ------------------------------------------------------------------------------------------
 # The item's own media properties
 # ------------------------------------------------------------------------------------------
 

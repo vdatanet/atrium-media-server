@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Which files beside a media file the reference turns into subtitle streams, and what it reads
-out of their names.
+"""Which files beside a media file the reference turns into subtitle streams, what it reads out of
+their names, and what it calls the codec of every subtitle stream it has.
 
-specs/011 §3.6 and OQ-7. A naming question, and naming questions have been the most expensive
-class in this repository - so this probe does not describe the rule, it **reproduces** it and
-then checks the reproduction against the library the server already has.
+specs/011 §3.6, §3.2 and OQ-7. A naming question, and naming questions have been the most
+expensive class in this repository - so this probe does not describe the rules, it **reproduces**
+them and then checks the reproduction against the library the server already has.
+
+The second battery is a different naming question with the same shape. Four subtitle codecs are
+renamed when a file is inspected, and the text/image split and the servable-alone rule are both
+written against the renamed spelling - so the battery reports the `Codec`,
+`IsTextSubtitleStream` and `SupportsExternalStream` of every subtitle stream it can reach, and
+predicts the last two from the first.
 
 For every item whose source carries an external subtitle stream, the probe reads the directory
 the media file lives in through `/Environment/DirectoryContents` - the read-only filesystem view
@@ -46,6 +52,65 @@ HEARING_IMPAIRED_FLAGS = ("cc", "hi", "sdh")
 
 #: How many items to reproduce the rule over. Every one of them costs one directory listing.
 SAMPLE = 8
+
+#: What the inspection tool reports for four subtitle codecs, and what the reference renames each
+#: to before anything reads it `[source:
+#: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:632-652, 765-768 @ v10.11.11]`.
+#: Seeing any *key* of this table on the wire would mean the rename does not happen, or does not
+#: happen before the properties below are answered.
+RENAMED_SUBTITLE_CODECS = {
+    "dvb_subtitle": "DVBSUB",
+    "dvb_teletext": "DVBTXT",
+    "dvd_subtitle": "DVDSUB",
+    "hdmv_pgs_subtitle": "PGSSUB",
+}
+
+#: The contiguous run of properties between `Index` and `PixelFormat` in the pinned document, minus
+#: `IsExternal` which 008 already emits. Counted rather than assumed: which of them a **bare** read
+#: carries decides which a stream model may declare without inventing bytes, and four of them are
+#: answers to a negotiation rather than facts about a file.
+NEIGHBOURING_PROPERTIES = (
+    "Score",
+    "DeliveryMethod",
+    "DeliveryUrl",
+    "IsExternalUrl",
+    "IsTextSubtitleStream",
+    "SupportsExternalStream",
+    "Path",
+)
+
+
+def is_text_format(codec: str) -> bool:
+    """Whether a codec spelling names a text subtitle format
+    `[source: MediaBrowser.Model/Entities/MediaStream.cs:751-761 @ v10.11.11]`."""
+    lowered = codec.lower()
+    if "microdvd" in lowered:
+        return True
+    return not (
+        "pgs" in lowered or "dvdsub" in lowered or "dvbsub" in lowered or lowered in ("sup", "sub")
+    )
+
+
+def is_pgs_format(codec: str) -> bool:
+    """Whether it names the Blu-ray bitmap format
+    `[source: MediaBrowser.Model/Entities/MediaStream.cs:765-771 @ v10.11.11]`."""
+    lowered = codec.lower()
+    return "pgs" in lowered or lowered == "sup"
+
+
+def predict_file_facts(stream: dict[str, Any]) -> tuple[bool, bool]:
+    """What the two file facts should be, from the codec spelling and nothing else.
+
+    A stream with no codec at all is text only when it came from a file beside the media
+    `[source: MediaBrowser.Model/Entities/MediaStream.cs:639-654 @ v10.11.11]`, and everything
+    that is not a subtitle answers `false` to both.
+    """
+    external = bool(stream.get("IsExternal"))
+    codec = stream.get("Codec") or ""
+    if stream.get("Type") != "Subtitle" or (not codec and not external):
+        return False, external
+    text = is_text_format(codec)
+    return text, external or text or is_pgs_format(codec)
 
 
 class Cultures:
@@ -168,21 +233,106 @@ def _reproduce(server: Server, probe: Probe, cultures: Cultures, item_id: str) -
     return True, summary + "; every field reproduced"
 
 
+def _codec_spellings(probe: Probe, sources: list[Any]) -> list[bool]:
+    """Every subtitle stream this library can reach, by codec, with the two file facts.
+
+    Read off the same listing the naming battery uses, so it costs no extra request. Four things
+    are checked and each is a different claim: that no spelling the *inspection tool* uses reaches
+    the wire, that both facts reproduce from the spelling alone, that both are answered - as
+    `false` - on video and audio streams too, and which of the properties beside them a **bare**
+    read carries at all.
+    """
+    tally: dict[tuple[str, bool, bool, bool], int] = {}
+    mismatches = []
+    other_kinds: dict[tuple[str, bool, bool], int] = {}
+    present: dict[str, int] = dict.fromkeys(NEIGHBOURING_PROPERTIES, 0)
+    streams_seen = 0
+    for source in sources:
+        for stream in source.source.get("MediaStreams") or []:
+            streams_seen += 1
+            for name in NEIGHBOURING_PROPERTIES:
+                present[name] += 1 if name in stream else 0
+            codec = stream.get("Codec") or ""
+            text = stream.get("IsTextSubtitleStream")
+            supports = stream.get("SupportsExternalStream")
+            if stream.get("Type") != "Subtitle":
+                key = (str(stream.get("Type")), bool(text), bool(supports))
+                if "IsTextSubtitleStream" not in stream or "SupportsExternalStream" not in stream:
+                    mismatches.append(f"{stream.get('Type')} {codec}: a file fact is absent")
+                other_kinds[key] = other_kinds.get(key, 0) + 1
+                continue
+            external = bool(stream.get("IsExternal"))
+            row = (codec, bool(text), bool(supports), external)
+            tally[row] = tally.get(row, 0) + 1
+            predicted = predict_file_facts(stream)
+            if predicted != (bool(text), bool(supports)):
+                mismatches.append(
+                    f"{codec}: predicted {predicted}, reported {(bool(text), bool(supports))}"
+                )
+
+    for row in sorted(tally, key=str):
+        codec, text, supports, external = row
+        probe.observe(
+            f"{codec} x{tally[row]}",
+            f"IsTextSubtitleStream={text}, SupportsExternalStream={supports}, "
+            f"IsExternal={external}",
+        )
+    probe.observe(
+        "the same two facts on everything that is not a subtitle",
+        ", ".join(
+            f"{kind} x{count}: {text}/{supports}"
+            for (kind, text, supports), count in sorted(other_kinds.items(), key=str)
+        )
+        or "no other streams",
+    )
+
+    probe.observe(
+        f"the run between Index and PixelFormat, over {streams_seen} streams",
+        ", ".join(f"{name} on {count}" for name, count in present.items()),
+    )
+    # The two file facts on every stream, the four negotiation answers on none, and the path only
+    # where a stream came from a file. That is what makes declaring the other five cost no bytes.
+    as_expected = (
+        present["IsTextSubtitleStream"] == streams_seen
+        and present["SupportsExternalStream"] == streams_seen
+        and not any(present[name] for name in ("Score", "DeliveryMethod", "DeliveryUrl"))
+        and not present["IsExternalUrl"]
+        and present["Path"] == sum(count for (_, _, _, ext), count in tally.items() if ext)
+    )
+
+    spellings = {codec.lower() for codec, _, _, _ in tally}
+    unrenamed = sorted(spellings & set(RENAMED_SUBTITLE_CODECS))
+    images = sorted(codec for codec, text, _, _ in tally if not text)
+    probe.observe("image subtitle spellings reached", images or "none in this library")
+    if mismatches:
+        probe.observe("streams whose facts do not follow from the spelling", mismatches[:4])
+    if unrenamed:
+        probe.observe("spellings the inspection tool would have used", unrenamed)
+    if not images:
+        probe.note(
+            "no image subtitle stream in this library, so the half of the split that inverts "
+            "when the rename is skipped was not exercised. Point the probe at a library holding "
+            "a Blu-ray or DVD subtitle track to reach it"
+        )
+    return [not mismatches, not unrenamed, bool(images), as_expected]
+
+
 def run(server: Server) -> Probe:
     probe = Probe(
         script="probe_sidecar_subtitles.py",
         question=(
-            "Which files beside a media file become subtitle streams, and what does the "
-            "reference read out of their names?"
+            "Which files beside a media file become subtitle streams, what does the reference "
+            "read out of their names, and what does it call a subtitle stream's codec?"
         ),
         document="specs/011-subtitle-delivery/spec.md",
-        section="§3.6, OQ-7",
+        section="§3.6, §3.2, OQ-7",
         expectation=None,
     )
     cultures = Cultures(server.get("/Localization/Cultures"))
     probe.observe("language tokens the server recognises", len(cultures.by_token))
 
-    candidates = [c for c in find_subtitled_sources(server) if c.external]
+    subtitled = find_subtitled_sources(server)
+    candidates = [c for c in subtitled if c.external]
     if not candidates:
         raise ProbeError(
             "no item in this library carries an external subtitle stream, so the rule has "
@@ -214,6 +364,11 @@ def run(server: Server) -> Probe:
 
     codecs = sorted({(s.get("Codec") or "?").lower() for c in candidates for s in c.external})
     probe.observe("codecs reported for the discovered files", codecs)
+
+    # The codec-spelling battery, over every subtitle stream in the library rather than only the
+    # discovered ones: the four renames concern container tracks and this is where they show.
+    checks += _codec_spellings(probe, subtitled)
+
     probe.note(
         "the reference looks in one more place than this probe can see: the item's own internal "
         "metadata directory, which is where it puts a subtitle it downloaded or extracted. No "
@@ -235,7 +390,13 @@ def run(server: Server) -> Probe:
             "hearing-impaired - and everything unclaimed becomes the stream's title. The "
             "discovered streams are then numbered **first**, ahead of the container's own, so "
             "putting a file beside a film renumbers every audio and video stream it has; and "
-            "HasSubtitles counts them, which is the half 008 §3.1 recorded as missing",
+            "HasSubtitles counts them, which is the half 008 §3.1 recorded as missing. And the "
+            "codec a subtitle stream reports is the **renamed** spelling, never the inspection "
+            "tool's: PGSSUB and DVDSUB rather than hdmv_pgs_subtitle and dvd_subtitle. Both file "
+            "facts follow from that spelling alone, on every subtitle stream in the library, and "
+            "both are answered as false on every stream that is not a subtitle - so DVDSUB, "
+            "which is neither text nor a Presentation Graphic Stream, is the one subtitle codec "
+            "here that cannot be served on its own",
             matches_documentation=None,
         )
     else:

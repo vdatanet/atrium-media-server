@@ -19,6 +19,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+import sqlalchemy as sa
 from alembic import command
 from alembic.script import Script, ScriptDirectory
 from sqlalchemy import Engine, inspect
@@ -35,6 +36,14 @@ REVISION_ID = re.compile(r"\A\d{4}\Z")
 #: What a revision that cannot be rolled back has to contain. Spelled out rather than inferred,
 #: because "the downgrade looked empty to me" is not a decision anybody made.
 IRREVERSIBLE = "irreversible"
+
+#: What a revision that rewrites **rows** rather than columns has to contain. `schema_of` reads the
+#: schema, so a data migration is invisible to it and would otherwise be reported as a revision
+#: that changed nothing - which is a real failure and the one this sweep exists to catch. The
+#: allowance is the same shape as `IRREVERSIBLE` on purpose: the sweep cannot see the change, so
+#: the revision declares it, and "changed nothing" stays a failure everywhere else. Added by 011
+#: T2, whose `0007` is the first revision here that touches no schema.
+DATA_ONLY = "data migration"
 
 
 def revisions() -> list[Script]:
@@ -141,6 +150,7 @@ def test_every_revision_applies_and_rolls_back(
     """
     script = next(one for one in revisions() if one.revision == revision)
     previous = script.down_revision or "base"
+    docstring = ((script.doc or "") + (script.longdoc or "")).lower()
 
     if previous != "base":
         move(engine, paths, str(previous))
@@ -148,14 +158,17 @@ def test_every_revision_applies_and_rolls_back(
 
     move(engine, paths, revision)
     after = schema_of(engine)
-    assert after != before or not after, f"{revision} changed nothing"
+    assert after != before or not after or DATA_ONLY in docstring, (
+        f"{revision} changed nothing. A revision that rewrites rows rather than columns is "
+        f"allowed - it has to declare itself a {DATA_ONLY!r} in its docstring, because this "
+        f"sweep reads the schema and cannot see what it did"
+    )
 
     move(engine, paths, str(previous))
     back = schema_of(engine)
 
     if back != before:
-        docstring = (script.doc or "") + (script.longdoc or "")
-        assert IRREVERSIBLE in docstring.lower(), (
+        assert IRREVERSIBLE in docstring, (
             f"{revision} does not restore the schema and does not say so. A migration that cannot "
             f"be reversed is allowed - it has to declare it in its docstring and say why, so that "
             f"irreversibility is a decision rather than an oversight (plan section 4). "
@@ -187,6 +200,204 @@ def test_the_history_replays_to_the_same_schema(engine: Engine, paths: DataPaths
     move(engine, paths, "base")
     move(engine, paths, "head")
     assert schema_of(engine) == first
+
+
+# --------------------------------------------------------------------------------------------
+# 0007, which is the only revision here that moves rows instead of columns
+# --------------------------------------------------------------------------------------------
+
+
+#: What 008 stored, and what 011 T2 renames it to. Asserted here on the **value**, because two of
+#: the four answer the text/image split identically before and after the rename - so a test that
+#: checked the split would pass with half the rewrite deleted. The disagreement itself is
+#: `tests/unit/test_media_info.py`'s table.
+CODEC_RENAMES = (
+    ("dvb_subtitle", "DVBSUB"),
+    ("dvb_teletext", "DVBTXT"),
+    ("dvd_subtitle", "DVDSUB"),
+    ("hdmv_pgs_subtitle", "PGSSUB"),
+)
+
+
+def seed_streams(engine: Engine) -> None:
+    """One probed file, with one subtitle row per rename plus two rows the rewrite must not
+    touch: a `subrip` subtitle, and a **video** stream whose codec is spelled like one of the
+    four - which is the row that fails if the `type` clause is dropped."""
+    named = [raw for raw, _ in CODEC_RENAMES]
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text("INSERT INTO libraries (id, name, collection_type) VALUES (:i, :n, 'movies')"),
+            {"i": "1" * 32, "n": "Films"},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO media_probes (library_id, relative_path, size, mtime_ns, container,"
+                " format_names, probed_at) VALUES (:l, 'A Film.mkv', 1, 1, 'mkv', 'matroska,webm',"
+                " '2026-08-30 00:00:00.000000+00:00')"
+            ),
+            {"l": "1" * 32},
+        )
+        rows = [{"i": index, "t": "subtitle", "c": codec} for index, codec in enumerate(named)] + [
+            {"i": len(named), "t": "subtitle", "c": "subrip"},
+            {"i": len(named) + 1, "t": "video", "c": "dvd_subtitle"},
+        ]
+        for row in rows:
+            connection.execute(
+                sa.text(
+                    "INSERT INTO media_streams (library_id, relative_path, stream_index, type,"
+                    " codec) VALUES (:l, 'A Film.mkv', :i, :t, :c)"
+                ),
+                {"l": "1" * 32, **row},
+            )
+
+
+def codecs(engine: Engine) -> list[tuple[str, str]]:
+    with engine.connect() as connection:
+        return [
+            (str(one), str(two))
+            for one, two in connection.execute(
+                sa.text("SELECT type, codec FROM media_streams ORDER BY stream_index")
+            ).all()
+        ]
+
+
+def test_0007_rewrites_the_four_subtitle_spellings_and_puts_them_back(
+    engine: Engine, paths: DataPaths
+) -> None:
+    """The rewrite, up and down, against rows written the way a 008 scan wrote them.
+
+    Asserted on the stored **value**, not on anything derived from it: `hdmv_pgs_subtitle` already
+    contains `pgs` and `dvb_teletext` is text either way, so a test that only checked the
+    text/image split would pass with the whole migration deleted.
+    """
+    move(engine, paths, "0006")
+    seed_streams(engine)
+    before = codecs(engine)
+    assert before == [
+        *(("subtitle", raw) for raw, _ in CODEC_RENAMES),
+        ("subtitle", "subrip"),
+        ("video", "dvd_subtitle"),
+    ]
+
+    move(engine, paths, "0007")
+    assert codecs(engine) == [
+        *(("subtitle", renamed) for _, renamed in CODEC_RENAMES),
+        ("subtitle", "subrip"),
+        ("video", "dvd_subtitle"),
+    ], "a subtitle spelling was missed, or a stream that is not a subtitle was renamed"
+
+    move(engine, paths, "0006")
+    assert codecs(engine) == before, "the downgrade did not put the spellings back"
+
+
+def test_0007_replayed_over_the_same_rows_lands_on_the_same_values(
+    engine: Engine, paths: DataPaths
+) -> None:
+    """Up, down, up, over rows rather than over columns.
+
+    The schema half of this is `test_the_history_replays_to_the_same_schema`; a data migration
+    needs the same claim made about what it wrote, because a restored backup and a fresh install
+    otherwise differ in the rows.
+    """
+    move(engine, paths, "0006")
+    seed_streams(engine)
+
+    move(engine, paths, "0007")
+    once = codecs(engine)
+    move(engine, paths, "0006")
+    move(engine, paths, "0007")
+
+    assert codecs(engine) == once
+
+
+def test_0007_writes_names_it_does_not_read_which_is_why_running_it_twice_is_safe() -> None:
+    """What the test above cannot reach, stated as the property it rests on.
+
+    Alembic stamps a revision, so nothing here can apply `0007` twice in a row - and "a database
+    migrated twice is a database migrated once" is not a claim about Alembic. It is a claim about
+    the table: the names the rewrite looks for and the names it writes are **disjoint**, in both
+    directions, so a second pass over the same rows would match nothing.
+    """
+    renamed = next(one for one in revisions() if one.revision == "0007").module.RENAMED
+
+    reads = {one.lower() for one in renamed}
+    writes = {one.lower() for one in renamed.values()}
+    assert not reads & writes
+    assert dict(CODEC_RENAMES) == renamed, (
+        "this file's table and the migration's have drifted apart"
+    )
+
+
+#: A second revision that does nothing at all and declares nothing - the failure the `DATA_ONLY`
+#: allowance must not have turned off. `0001` is here only so that the schema is non-empty by the
+#: time `0002` is asked to change it.
+IDLE = '''"""adds nothing and says nothing about it
+
+Revision ID: {revision}
+Revises: {down}
+"""
+
+from __future__ import annotations
+
+import sqlalchemy as sa
+from alembic import op
+
+revision = "{revision}"
+down_revision = {down!r}
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    {up}
+
+
+def downgrade() -> None:
+    {down_body}
+'''
+
+
+def test_the_sweep_still_fails_a_revision_that_changes_nothing_and_says_nothing(
+    engine: Engine, paths: DataPaths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The other half of the `DATA_ONLY` allowance: it is a declaration, not an escape.
+
+    A revision whose `upgrade()` does nothing and whose docstring says nothing still has to fail,
+    or one line added for `0007` would have switched the sweep's sharpest assertion off for every
+    revision at once. The condition is evaluated here rather than restated, so it cannot drift
+    from the one the sweep uses.
+    """
+    import shutil
+
+    location = tmp_path / "idle"
+    (location / "versions").mkdir(parents=True)
+    shutil.copy(schema.SCRIPT_LOCATION / "env.py", location / "env.py")
+    shutil.copy(schema.SCRIPT_LOCATION / "script.py.mako", location / "script.py.mako")
+    (location / "versions" / "0001_kept.py").write_text(
+        IDLE.format(
+            revision="0001",
+            down=None,
+            up='op.create_table("kept", sa.Column("id", sa.Integer(), primary_key=True))',
+            down_body='op.drop_table("kept")',
+        ),
+        encoding="utf-8",
+    )
+    (location / "versions" / "0002_idle.py").write_text(
+        IDLE.format(revision="0002", down="0001", up="pass", down_body="pass"),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(schema, "SCRIPT_LOCATION", location)
+
+    move(engine, paths, "0001")
+    before = schema_of(engine)
+    move(engine, paths, "0002")
+    after = schema_of(engine)
+
+    script = next(one for one in revisions() if one.revision == "0002")
+    docstring = ((script.doc or "") + (script.longdoc or "")).lower()
+    assert not (after != before or not after or DATA_ONLY in docstring), (
+        "the sweep would have let a revision that does nothing through"
+    )
 
 
 def test_upgrading_from_an_empty_file_reaches_head(paths: DataPaths) -> None:

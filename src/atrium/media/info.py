@@ -26,11 +26,13 @@ vanishing from a client's view.
   the reference's on every track rather than a missing one.
 * `IsAVC`, `TimeBase` and `NalLengthSize` are read from the demuxer and are not columns of
   migration 0006. Emitting them means a further migration, which is not this change.
-* `IsTextSubtitleStream`, `SupportsExternalStream`, `DeliveryMethod` and `DeliveryUrl` describe how
-  a subtitle would be *delivered*, and v1 serves no subtitle. They arrive with the feature that
-  serves them.
+* `DeliveryMethod`, `DeliveryUrl` and `Path` are declared and left empty here. The first two are
+  answers to a *negotiation* rather than facts about a file, and the third arrives with the
+  subtitle files discovered beside the media. `Score` is emitted by nothing at all: the reference
+  scores only the streams a user's subtitle mode selected, and v1 keeps no mode.
 
-See specs/008-playback-negotiation-and-delivery/spec.md section 3.1 and plan section 6.1.
+See specs/008-playback-negotiation-and-delivery/spec.md section 3.1 and plan section 6.1, and
+specs/011-subtitle-delivery/spec.md section 3.2 and plan section 6.1.
 """
 
 from __future__ import annotations
@@ -85,6 +87,12 @@ NO_SPATIAL_FORMAT = "None"
 #: MediaBrowser.Controller/Entities/BaseItem.cs:391 @ v10.11.11]`
 HD_HEIGHT = 720
 
+#: The two codec spellings that mean an image subtitle by being the *whole* name rather than by
+#: being contained in one - the bare file extensions, which is what a stream read out of a
+#: `.sup` or a `.sub` is named after. Containment would be wrong here: `subrip` contains `sub`.
+#: `[source: MediaBrowser.Model/Entities/MediaStream.cs:751-761 @ v10.11.11]`
+IMAGE_SUBTITLE_SPELLINGS = frozenset({"sup", "sub"})
+
 
 class MediaStream(AtriumModel):
     """One elementary stream on the wire, in the pinned document's field order.
@@ -130,7 +138,27 @@ class MediaStream(AtriumModel):
     type: str
     aspect_ratio: str | None = None
     index: int
+    #: Never set. The reference scores only the streams a user's subtitle *mode* selected and a
+    #: mode of `None` scores none, which is the mode v1 has - so this falls to null suppression on
+    #: every stream, exactly as it does for a `SubtitleMode: None` user of the reference `[source:
+    #: Emby.Server.Implementations/Library/MediaStreamSelector.cs:97-152 @ v10.11.11]`.
+    score: int | None = None
     is_external: bool = False
+    #: Answers to a negotiation rather than facts about a file, and absent from a bare read
+    #: `[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`. 011 T9 fills
+    #: them where a source has been negotiated.
+    delivery_method: str | None = None
+    delivery_url: str | None = None
+    is_external_url: bool | None = None
+    #: **Both are non-nullable on the reference and are answered for every stream**, video, audio
+    #: and cover art included, where they are `false` - measured on 1 968 streams, 947 of them
+    #: subtitles `[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`. They
+    #: read the codec spelling `media/probe.py` normalised, never the file.
+    is_text_subtitle_stream: bool = False
+    supports_external_stream: bool = False
+    #: The subtitle file this stream was read out of, and nothing else: absent on every container
+    #: stream on the wire. 011 T4 fills it for the streams it discovers.
+    path: str | None = None
     pixel_format: str | None = None
     #: Declared a double upstream and always integral in practice - ffprobe reports a whole
     #: number - so the same union keeps `31` from becoming `31.0`.
@@ -348,6 +376,65 @@ def _reference_frame_rate(
     return real
 
 
+def is_text_subtitle(stream: InspectedStream) -> bool:
+    """Whether this stream is a subtitle track made of *text* rather than of pictures.
+
+    **A lookup on the codec spelling, not an inspection of the file.** Everything counts as text
+    except a codec containing `pgs`, `dvdsub` or `dvbsub`, or spelled exactly `sup` or `sub` - and
+    `microdvd` is exempted from the whole rule, because that text format shares the `.sub`
+    extension with an image one `[source: MediaBrowser.Model/Entities/MediaStream.cs:751-761 @
+    v10.11.11]`. A stream with no codec at all is text only when it came from a file beside the
+    media `[source: MediaBrowser.Model/Entities/MediaStream.cs:639-654 @ v10.11.11]`.
+
+    The spelling it reads is the one `media/probe.py` normalised. Against the tool's own names the
+    rule inverts on `dvd_subtitle` and `dvb_subtitle`, which contain neither `dvdsub` nor `dvbsub`
+    until they have been renamed - so every DVD subtitle track in a library would be announced as
+    text, offered in a manifest and offered for conversion.
+    """
+    if stream.kind is not StreamKind.SUBTITLE:
+        return False
+    codec = stream.codec or ""
+    if not codec and not stream.is_external:
+        return False
+    lowered = codec.lower()
+    if "microdvd" in lowered:
+        return True
+    return not (
+        "pgs" in lowered
+        or "dvdsub" in lowered
+        or "dvbsub" in lowered
+        or lowered in IMAGE_SUBTITLE_SPELLINGS
+    )
+
+
+def is_pgs_subtitle(stream: InspectedStream) -> bool:
+    """Whether this is a Presentation Graphic Stream track - the Blu-ray bitmap format.
+
+    Its own rule rather than "not text": the two disagree on every DVD and broadcast bitmap
+    format, and that disagreement is the whole of `supports_external_stream` for those `[source:
+    MediaBrowser.Model/Entities/MediaStream.cs:765-771 @ v10.11.11]`.
+    """
+    if stream.kind is not StreamKind.SUBTITLE:
+        return False
+    codec = stream.codec or ""
+    if not codec and not stream.is_external:
+        return False
+    lowered = codec.lower()
+    return "pgs" in lowered or lowered == "sup"
+
+
+def supports_external_stream(stream: InspectedStream) -> bool:
+    """Whether this stream can be served on its own, away from the file it sits in.
+
+    A file beside the media can, a text track can, and a Presentation Graphic Stream track can -
+    everything else, a DVD bitmap track included, cannot `[source:
+    Emby.Server.Implementations/Library/MediaSourceManager.cs:112-129 @ v10.11.11]`. Measured on a
+    real library, `PGSSUB` answers `true` and `DVDSUB` answers `false` `[probe:
+    tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`.
+    """
+    return stream.is_external or is_text_subtitle(stream) or is_pgs_subtitle(stream)
+
+
 def stream_of(stream: InspectedStream) -> MediaStream:
     """One stored stream as the wire shape."""
     average = _frame_rate(stream.average_framerate)
@@ -386,6 +473,8 @@ def stream_of(stream: InspectedStream) -> MediaStream:
         aspect_ratio=stream.aspect_ratio,
         index=stream.index,
         is_external=stream.is_external,
+        is_text_subtitle_stream=is_text_subtitle(stream),
+        supports_external_stream=supports_external_stream(stream),
         pixel_format=stream.pixel_format,
         level=stream.level,
         is_anamorphic=stream.is_anamorphic,
@@ -537,6 +626,8 @@ __all__ = [
     "as_single",
     "has_subtitles",
     "is_hd",
+    "is_pgs_subtitle",
+    "is_text_subtitle",
     "item_container",
     "item_streams",
     "media_etag",
@@ -546,4 +637,5 @@ __all__ = [
     "source_of",
     "sources_for",
     "stream_of",
+    "supports_external_stream",
 ]

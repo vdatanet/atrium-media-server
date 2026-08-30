@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-30
 accepted: 2026-08-30
-amended: 2026-08-30 at the tasks gate — four things this plan could not have known or did not check. §6.5's "the variant line gains the group" was written while the master answered one variant and 008's T15 amended that the same day, so the group goes through `_variant` and every entrance carries it. §6.1's "lookup on the codec spelling" reads a spelling `media/probe.py` does not store: the reference renames four subtitle codecs inside its own probe normalisation, `dvd_subtitle` contains no `dvdsub`, and applied to ffprobe's own name the rule answers *text* for every DVD and DVB subtitle track there is — so the rename moves to inspection and migration 0007 rewrites the four values. §8's embedded image subtitle track cannot be encoded by ffmpeg at all, and the fixture writes a PGS bitstream itself. And §6.2's "eight regional rows" are nine, two of which are not regional tags; and 2026-08-30 by T1 — §8's hand-written bitstream is four display sets rather than two at the same 434 bytes, and building it found two hazards the plan states now rather than letting a later task meet them: a subtitle input that does not start at zero is rebased onto its own start time and costs the text track beside it every cue but the first, and `-shortest` lets a subtitle track bound the whole file
+amended: 2026-08-30 at the tasks gate — four things this plan could not have known or did not check. §6.5's "the variant line gains the group" was written while the master answered one variant and 008's T15 amended that the same day, so the group goes through `_variant` and every entrance carries it. §6.1's "lookup on the codec spelling" reads a spelling `media/probe.py` does not store: the reference renames four subtitle codecs inside its own probe normalisation, `dvd_subtitle` contains no `dvdsub`, and applied to ffprobe's own name the rule answers *text* for every DVD and DVB subtitle track there is — so the rename moves to inspection and migration 0007 rewrites the four values. §8's embedded image subtitle track cannot be encoded by ffmpeg at all, and the fixture writes a PGS bitstream itself. And §6.2's "eight regional rows" are nine, two of which are not regional tags; and 2026-08-30 by T1 — §8's hand-written bitstream is four display sets rather than two at the same 434 bytes, and building it found two hazards the plan states now rather than letting a later task meet them: a subtitle input that does not start at zero is rebased onto its own start time and costs the text track beside it every cue but the first, and `-shortest` lets a subtitle track bound the whole file; and 2026-08-30 by T2 — §6.1's *"every DVD and DVB subtitle track"* is the two **bitmap** names alone: `hdmv_pgs_subtitle` already contains `pgs` and `dvb_teletext` is text either way, so only `dvd_subtitle` and `dvb_subtitle` invert and the fixture's own image track cannot prove the rename. `SupportsExternalStream` inverts with them and is not "not an image" — `PGSSUB` is true where `DVDSUB` is false — and both facts are answered on every stream of every kind rather than on subtitles alone
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -349,10 +349,10 @@ own probe normalisation, before any consumer sees them — `dvb_subtitle`→`DVB
 `dvb_teletext`→`DVBTXT`, `dvd_subtitle`→`DVDSUB`, `hdmv_pgs_subtitle`→`PGSSUB` `[source:
 MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:632-652, 765-768 @ v10.11.11]` — and
 `"dvd_subtitle"` contains no `dvdsub`. Applied to ffprobe's own `codec_name`, the rule answers
-*text* for every DVD and DVB subtitle track there is, which is AC-1 and AC-7 failing together on
-any real library. The renamed spelling is also what `MediaStream.Codec` carries on the wire —
-`PGSSUB`, `DVDSUB` and `DVBTXT` all appear beside `subrip`, `ass` and `webvtt` `[probe: manual
-requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]` — so this is a property **008
+*text* for every DVD and DVB **bitmap** subtitle track there is, which is AC-1 and AC-7 failing
+together on any real library. The renamed spelling is also what `MediaStream.Codec` carries on the
+wire — `PGSSUB`, `DVDSUB` and `DVBTXT` all appear beside `subrip`, `ass` and `webvtt` `[probe:
+tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]` — so this is a property **008
 already emits differently**, invisible until now because no fixture had a subtitle stream. The
 rename therefore goes in `media/probe.py`, where the reference puts it and where one spelling then
 reaches `media/info.py`, `media/decision.py` and `media/extract.py` alike; a rename applied only
@@ -361,12 +361,21 @@ declares. Migration 0007 rewrites the four values in `media_streams`, because a 
 008 scan otherwise keeps a spelling the wire disagrees with and its media file's change signal
 will never move.
 
+**Only two of the four renames change an answer**, measured at T2, and which two decides what can
+prove the rename: `hdmv_pgs_subtitle` already contains `pgs` and `dvb_teletext` is text either
+way, so the split moves for `dvd_subtitle` and `dvb_subtitle` alone. The one image codec the
+fixture matrix can build is a Presentation Graphic Stream — the case the rename does *not* rescue
+— so the proof is a table over the spellings plus the `Codec` a scanned file answers on the wire,
+never the text flag of the fixture's own image track.
+
 `SupportsExternalStream` is `is_external or is_text_subtitle or is_pgs`, where PGS is a codec
 containing `pgs` or spelled `sup` `[source:
 Emby.Server.Implementations/Library/MediaSourceManager.cs:112-129,
-MediaBrowser.Model/Entities/MediaStream.cs:765-771 @ v10.11.11]`. It is answered
-for subtitle streams and left at the model's `false` for everything else, which is what the
-reference's own two call sites do.
+MediaBrowser.Model/Entities/MediaStream.cs:765-771 @ v10.11.11]`. **It is not "not an image"**:
+`PGSSUB` answers `true` and `DVDSUB` answers `false`, which is the second property the rename
+inverts. The reference resolves it for every stream it hands out and it lands `false` on
+everything that is not a subtitle, video, audio and cover art included `[probe:
+tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`.
 
 **`Score` is emitted by nothing.** The reference sets it only for the streams a user's subtitle
 *mode* selected, and a mode of `None` sets none at all `[source:

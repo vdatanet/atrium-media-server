@@ -4,7 +4,7 @@ title: Subtitle delivery
 status: Accepted
 created: 2026-08-29
 updated: 2026-08-30
-amended: 2026-08-30 at the tasks gate — §3.4 and AC-5 said the master playlist's *variant line* gains the subtitle group, which was true while the master answered exactly one variant and stopped being true on the day 008's own T15 gave an HDR stream copy a standard-range entrance beside it; the reference gives the group to every variant it writes, so the criterion is written against every variant line and an entrance with no subtitles is the failure it now catches. And §3.2's text/image split reads a codec spelling the file itself does not report: four subtitle codecs are renamed when a file is inspected, and against the unrenamed spellings the rule inverts on the two commonest image formats in a real library
+amended: 2026-08-30 at the tasks gate — §3.4 and AC-5 said the master playlist's *variant line* gains the subtitle group, which was true while the master answered exactly one variant and stopped being true on the day 008's own T15 gave an HDR stream copy a standard-range entrance beside it; the reference gives the group to every variant it writes, so the criterion is written against every variant line and an entrance with no subtitles is the failure it now catches. And §3.2's text/image split reads a codec spelling the file itself does not report: four subtitle codecs are renamed when a file is inspected, and against the unrenamed spellings the rule inverts on the two commonest image formats in a real library; and 2026-08-30 by T2 — the inversion is the **DVD and digital-broadcast bitmap** names alone, the servable-alone flag inverts with the split rather than following it (`PGSSUB` is servable where `DVDSUB` is not), and both facts are stated on every stream of every kind, `false` on everything that is not a subtitle
 depends_on: [003, 005, 008]
 ---
 
@@ -206,6 +206,14 @@ preferences selected `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.1
 file facts belong wherever a stream is emitted, and only the two negotiation answers are decided
 here.
 
+**"Wherever a stream is emitted" is literal: both are stated on every stream of every kind**, and
+are `false` on everything that is not a subtitle — video, audio and the cover-art streams a
+library has — rather than being left off a stream they cannot describe. Measured on 1 968 streams,
+947 of them subtitles: both properties on all 1 968; the score, the delivery method, the delivery
+address and the external-address flag on none of them; and the file path on the fourteen streams
+that came from a file beside the media and no others `[probe:
+tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`.
+
 **The delivery method is resolved for every subtitle stream, not for the selected one.** A source
 with six subtitle streams answers six methods, whatever the request selected. The address is
 narrower: `DeliveryUrl` is emitted only for the streams whose method is *external*, because that
@@ -230,11 +238,22 @@ two digital-broadcast spellings, the DVD one and the Blu-ray one become `DVBSUB`
 `DVDSUB` and `PGSSUB` — and every later reader, the split included, sees the renamed form; it is
 also the spelling a subtitle stream's codec carries on the wire `[source:
 MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:632-652, 765-768 @ v10.11.11]`,
-`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`. Read against the
-unrenamed spellings the rule inverts on the two commonest image formats in a real library — the
-DVD one is not a name containing `dvdsub` until it has been renamed — so a server that announced
-the file's own spelling would announce every DVD and broadcast subtitle track as text. AC-1's
-"differ in the first of them" is a claim about the renamed spelling.
+`[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`. AC-1's "differ in the
+first of them" is a claim about the renamed spelling.
+
+**Two of the four renames change an answer and two do not**, measured while implementing the rule
+on 2026-08-30, and which two matters because it decides what can prove the rename at all. The
+Blu-ray name already contains `pgs` before it is renamed and the broadcast *teletext* one is a
+text format under either spelling; it is the **DVD** and **digital-broadcast bitmap** names that
+invert, because neither contains `dvdsub` or `dvbsub` until it has been renamed. So a server that
+kept the file's own spelling would announce every DVD subtitle track in a library as text —
+twenty of them on the reference library measured, against 338 Blu-ray tracks that would have
+survived the mistake. Same probe.
+
+**The servable-alone flag inverts with it, and it is not "not an image".** A Blu-ray bitmap track
+*can* be served on its own and a DVD bitmap track cannot, so the two commonest image formats
+answer that property differently: `PGSSUB` is `true` and `DVDSUB` is `false`, measured on every
+subtitle stream of a real library. Same probe.
 
 **The delivery-method property is an answer to a negotiation, not a fact about a file.** The same
 track answers differently for two clients, and differently for the same client direct-playing and
