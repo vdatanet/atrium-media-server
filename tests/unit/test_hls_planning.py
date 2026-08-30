@@ -29,6 +29,7 @@ import pytest
 from atrium.domain.media import InspectedStream, StreamKind, VideoRange, VideoRangeType
 from atrium.media.decision import StreamAction, StreamPlan
 from atrium.media.hls import (
+    AnnouncedSubtitle,
     Segment,
     buckets_allowed,
     cadence_milliseconds,
@@ -37,6 +38,7 @@ from atrium.media.hls import (
     plan_segments,
     segment_extension,
     subtitle_playlist,
+    subtitle_uri,
     window_duration_text,
 )
 
@@ -466,6 +468,107 @@ def test_the_entrance_names_the_codec_even_where_the_query_never_did() -> None:
     assert lines[4] == "main.m3u8?VideoCodec=h264&AllowVideoStreamCopy=false"
     assert "VIDEO-RANGE=HLG" in lines[1], "an HLG copy is labelled by its own transfer"
     assert "VIDEO-RANGE=SDR" in lines[3]
+
+
+# ------------------------------------------------------------------------------------------
+# The announcement block, and the group on every variant (011 T11)
+# ------------------------------------------------------------------------------------------
+
+
+def _announced(index: int, **overrides: object) -> AnnouncedSubtitle:
+    fields: dict[str, object] = {
+        "index": index,
+        "name": "English - SUBRIP",
+        "language": "eng",
+        "is_forced": False,
+        "is_default": False,
+        "uri": subtitle_uri("SOURCE", index, "TOKEN"),
+    }
+    fields.update(overrides)
+    return AnnouncedSubtitle(**fields)  # type: ignore[arg-type]
+
+
+def test_an_announcement_is_the_measured_line_and_the_address_carries_thirty_and_a_token() -> None:
+    """The `#EXT-X-MEDIA` line verbatim: eight attributes in the measured order, the literal
+    group, `AUTOSELECT=YES` unconditionally, and an address that names a *playlist* with the
+    hard-coded thirty-second window and the caller's own token
+    `[probe: tools/probe_subtitle_manifest.py, Jellyfin 10.11.11, 2026-08-29]`."""
+    body = master_playlist(
+        query="",
+        video=None,
+        audio=None,
+        source_video=None,
+        frame_rate=None,
+        subtitles=(_announced(3, is_default=True, is_forced=True),),
+    )
+
+    assert body.splitlines()[1] == (
+        '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="English - SUBRIP",'
+        "DEFAULT=YES,FORCED=YES,AUTOSELECT=YES,"
+        'URI="SOURCE/Subtitles/3/subtitles.m3u8?SegmentLength=30&ApiKey=TOKEN",LANGUAGE="eng"'
+    )
+
+
+def test_a_caller_with_no_token_and_a_request_with_no_source_leave_both_values_empty() -> None:
+    """The reference's own `string.Format` of a null, on both: the parameter stays and its value
+    is empty. The `mediaSourceId` half is unreachable there - the master playlist declares it
+    required - and reachable here because 008 binds it optionally
+    `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`."""
+    assert subtitle_uri(None, 0, None) == "/Subtitles/0/subtitles.m3u8?SegmentLength=30&ApiKey="
+
+
+def test_the_group_goes_on_every_variant_including_the_sdr_entrance() -> None:
+    """**The tasks gate's finding, at the level it is decided.**
+
+    An HDR copy is offered a standard-range entrance beside it, and the reference hands its
+    subtitle group to every playlist line it appends. Written on the first line's construction,
+    the entrance - which exists so that a client unable to render the copy has somewhere to go -
+    would be the one variant offering no subtitles `[source:
+    Jellyfin.Api/Helpers/DynamicHlsHelper.cs:213-315, 325-345 @ v10.11.11]`, `[probe: manual
+    requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`.
+    """
+    hdr = InspectedStream(
+        index=0,
+        kind=StreamKind.VIDEO,
+        codec="hevc",
+        width=1920,
+        height=1080,
+        level=120,
+        profile="Main 10",
+        video_range=VideoRange.HDR,
+        video_range_type=VideoRangeType.HLG,
+    )
+
+    lines = master_playlist(
+        query="",
+        video=_copy("hevc", 1, width=1920, height=1080),
+        audio=None,
+        source_video=hdr,
+        frame_rate=None,
+        subtitles=(_announced(2), _announced(3)),
+    ).splitlines()
+
+    assert [line[:12] for line in lines] == [
+        "#EXTM3U",
+        "#EXT-X-MEDIA",
+        "#EXT-X-MEDIA",
+        "#EXT-X-STREA",
+        "main.m3u8",
+        "#EXT-X-STREA",
+        "main.m3u8?Vi",
+    ], "the block goes before the first variant, and both variants are still written"
+    for variant in (lines[3], lines[5]):
+        assert variant.endswith(',SUBTITLES="subs"')
+
+
+def test_a_master_with_nothing_announced_is_the_playlist_it_was_before() -> None:
+    """011 AC-6 at this level: no announcements, no group, no `SUBTITLES` attribute anywhere -
+    which is also what a source with no *text* subtitle stream answers, because its caller
+    announces nothing for it."""
+    body = master_playlist(query="?A=1", video=None, audio=None, source_video=None, frame_rate=None)
+
+    assert "SUBTITLES=" not in body
+    assert "#EXT-X-MEDIA" not in body
 
 
 # ------------------------------------------------------------------------------------------

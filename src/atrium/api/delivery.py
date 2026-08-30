@@ -180,6 +180,16 @@ class DeliveryParameters:
     allow_video_stream_copy: bool = True
     allow_audio_stream_copy: bool = True
 
+    subtitle_stream_index: int | None = None
+    """The track a client asks for on the delivery request itself, which is how the video client
+    changes subtitle track mid-playback (011 AC-4, client-atrium-tvos section 4.3). Only the
+    master playlist reads it, and only to decide which announcement carries `DEFAULT=YES`."""
+
+    subtitle_method: str | None = None
+    """How that client will take the track, **unbound to the enumeration on purpose**. A word that
+    is no member is a `200` announcing nothing on the reference rather than a `400`, so the value
+    is carried as it arrived and read through `decision.method_named` (011 spec section 3.4)."""
+
 
 def video_parameters(
     mediaSourceId: Annotated[str | None, Query()] = None,  # noqa: N803 - the wire's spellings
@@ -197,6 +207,8 @@ def video_parameters(
     startTimeTicks: Annotated[int | None, Query()] = None,  # noqa: N803
     allowVideoStreamCopy: Annotated[bool | None, Query()] = None,  # noqa: N803
     allowAudioStreamCopy: Annotated[bool | None, Query()] = None,  # noqa: N803
+    subtitleStreamIndex: Annotated[int | None, Query()] = None,  # noqa: N803
+    subtitleMethod: Annotated[str | None, Query()] = None,  # noqa: N803
 ) -> DeliveryParameters:
     """The query set the two `/Videos` routes declare, bound once.
 
@@ -208,6 +220,25 @@ def video_parameters(
     **`container` is deliberately not here.** It is a path parameter on one route of each pair and
     a query parameter on the other, and a dependency declaring it would collide with the path's
     own on the suffixed form. Each route binds its own and hands it to `with_container`.
+
+    **`subtitleMethod` carries no validation pattern and `subtitleStreamIndex` is an `int`, and
+    the asymmetry is the reference's.** A method that is no member of the vocabulary is a `200`
+    announcing nothing there, because Jellyfin binds a nullable enum through a binder that
+    swallows the conversion failure; an index that is not a number is the framework's problem
+    details naming `subtitleStreamIndex`. Both measured in one run
+    `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`. A pattern on
+    the method would refuse where the reference answers, so there is none.
+
+    **`EnableSubtitlesInManifest` is deliberately not bound.** The master playlist route does not
+    accept it, measured, and an unbound parameter is ignored on both servers - so not binding it
+    is the parity answer and is what holds 011 AC-6's third case (011 spec section 3.4).
+
+    Both subtitle parameters belong in this shared set rather than on the master playlist alone,
+    because the reference declares them on the two `/Videos/{itemId}/stream` routes as well
+    `[source: Jellyfin.Api/Controllers/VideosController.cs:350-351, 591-592 @ v10.11.11]`. Nothing
+    here reads them on those two - the manifest is their only reader, because the thing the
+    reference does with them there is burn a track into the picture and 011 burns nothing in. Its
+    **audio** controller declares neither, which is why `audio_parameters` below passes neither.
     """
     return DeliveryParameters(
         media_source_id=mediaSourceId,
@@ -227,6 +258,8 @@ def video_parameters(
         # bare request a remux rather than a re-encode of everything it was handed.
         allow_video_stream_copy=allowVideoStreamCopy is not False,
         allow_audio_stream_copy=allowAudioStreamCopy is not False,
+        subtitle_stream_index=subtitleStreamIndex,
+        subtitle_method=subtitleMethod,
     )
 
 

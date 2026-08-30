@@ -125,8 +125,11 @@ class SubtitleMethod(Enum):
 
     The value is the wire spelling, which is what `MediaStream.DeliveryMethod` carries and what a
     delivery address spells `SubtitleMethod=`. Reading one back is case-insensitive on the
-    reference and refusing one is not: `hls`, `HLS` and the ordinal `3` all bind where `banana`
-    is a `400` `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
+    reference and refusing one is not: on a request **body**, `hls`, `HLS` and the ordinal `3` all
+    bind where `banana` is a `400` `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11,
+    2026-08-30]`. **The same word in a query string is read the same way and refused differently**
+    - `banana` there is a `200` that announces nothing, because the binder behind a nullable enum
+    parameter swallows the conversion failure and leaves the parameter unset (`method_named`).
     """
 
     ENCODE = "Encode"
@@ -134,6 +137,77 @@ class SubtitleMethod(Enum):
     EXTERNAL = "External"
     HLS = "Hls"
     DROP = "Drop"
+
+
+#: The ordinal each member of the delivery-method vocabulary carries in the reference's own enum
+#: `[source: MediaBrowser.Model/Dlna/SubtitleDeliveryMethod.cs @ v10.11.11]`. Written out rather
+#: than taken from declaration order, because a reordering here would silently rebind a number.
+#:
+#: It lives beside the enumeration rather than beside either binder because **both** binders read
+#: it: a profile entry's `Method` on a request body (011 T9, `api/media_info.py`) and a delivery
+#: address's `SubtitleMethod` in a query string (011 T11, `api/delivery.py`). Two copies of this
+#: table would be two answers to one question about the reference.
+SUBTITLE_METHOD_ORDINALS: Final[dict[int, SubtitleMethod]] = {
+    0: SubtitleMethod.ENCODE,
+    1: SubtitleMethod.EMBED,
+    2: SubtitleMethod.EXTERNAL,
+    3: SubtitleMethod.HLS,
+    4: SubtitleMethod.DROP,
+}
+
+
+#: Each member's name, folded, against the ordinal it carries - the inverse of the table above,
+#: built once so the two can never disagree.
+_SUBTITLE_METHOD_NAMES: Final[dict[str, int]] = {
+    member.value.lower(): ordinal for ordinal, member in SUBTITLE_METHOD_ORDINALS.items()
+}
+
+
+def method_named(value: str | None) -> SubtitleMethod | None:
+    """Which member a **query string** spells, or `None` for anything that names no member.
+
+    Measured on the master playlist route in one run `[probe: manual requests via
+    tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`. `hls`, `HLS` and `hLs` announce exactly what
+    `Hls` announces; so do the member's ordinal `3`, a signed `+3` and a padded ` 3 `. `banana`,
+    an empty value, `3.0`, `--3`, a non-ASCII digit and the out-of-range ordinal `9` each announce
+    nothing at all.
+
+    **That last class is the finding, and it is not the shape the same word has on a request
+    body.** A word that is no member refuses a body with `400`; here it is a `200` with no
+    announcement, because Jellyfin binds every *nullable enum* parameter through a binder of its
+    own that catches the conversion failure and simply leaves the value unset `[source:
+    Jellyfin.Api/ModelBinders/NullableEnumModelBinder.cs:26-46,
+    Jellyfin.Api/ModelBinders/NullableEnumModelBinderProvider.cs:14-25 @ v10.11.11]`. So the
+    parameter is bound as a plain string with no pattern and read through this function: a
+    declared pattern would refuse where the reference answers.
+
+    **A comma-separated list is one value, and its parts are OR-ed** - the platform conversion
+    behind that binder accepts one whatever the enumeration says about flags, and this one says
+    nothing. It is reproduced rather than left as a delta because the difference is *observable*:
+    `Embed,External` is `1 | 2`, which is the manifest method's own ordinal, so the reference
+    announces every text track for it and a server reading only the first name would announce
+    none. Measured on both sides of that - `External,External` and `External,Encode` announce
+    nothing, `1,2` and `Embed,Embed,External` announce, and one unparseable part fails the whole
+    value. Same run.
+    """
+    if value is None:
+        return None
+    combined = 0
+    for part in value.split(","):
+        ordinal = _ordinal_of(part.strip())
+        if ordinal is None:
+            return None
+        combined |= ordinal
+    return SUBTITLE_METHOD_ORDINALS.get(combined)
+
+
+def _ordinal_of(part: str) -> int | None:
+    """One name or one number, as the platform conversion reads it: a sign and ASCII digits, or a
+    member's name folded. Anything else is unreadable, and unreadable is not an error here."""
+    digits = part[1:] if part[:1] in {"+", "-"} else part
+    if digits.isascii() and digits.isdigit():
+        return int(part)
+    return _SUBTITLE_METHOD_NAMES.get(part.lower())
 
 
 #: The three methods a **direct play** survives. Anything else on the *selected* track refuses
@@ -1550,6 +1624,7 @@ __all__ = [
     "DIRECT_PLAYABLE_SUBTITLE_METHODS",
     "EVERY_PERMISSION",
     "EVERY_SWITCH_ON",
+    "SUBTITLE_METHOD_ORDINALS",
     "CodecKind",
     "CodecProfile",
     "ConditionProperty",
@@ -1571,6 +1646,7 @@ __all__ = [
     "TranscodingProfile",
     "ceiling",
     "decide",
+    "method_named",
     "refused_by_policy",
     "subtitle_answers",
 ]

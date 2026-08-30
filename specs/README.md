@@ -173,13 +173,15 @@ the feature is for: **the master playlist does not accept the manifest flag at a
 condition the spec had read as *"a manifest delivery method **or** the profile asking"* has only
 one reachable half — and the reference's own negotiation writes the unreadable flag into the
 address it hands the client. What announces a subtitle is the delivery **address** naming the
-manifest method beside a stream index, which is the client-side override the trace had sized as
-*"a line inside"* the main work. Beside it: burn-in is not a branch the reference avoids but the
-answer it gives on every track no profile fits; the default track is **never** the highest-scoring
-stream, because the score is only ever read to detect a tie; a posted subtitle index is dropped
-in silence unless the request also names the media source; and the surface grew by **three** rows
-rather than two, because a negotiation's own `DeliveryUrl` names a third operation. Two defects
-nobody asked about: a subtitle playlist's window durations are written in the *server's locale*
+manifest method, which is the client-side override the trace had sized as *"a line inside"* the
+main work. *(The gate's wording said "beside a stream index"; 011 T11 measured that the method
+alone announces every text track and the index decides only which one is the default — which is
+what makes an override a client performs by hand work at all.)* Beside it: burn-in is not a branch
+the reference avoids but the answer it gives on every track no profile fits; the default track is
+**never** the highest-scoring stream, because the score is only ever read to detect a tie; a
+posted subtitle index is dropped in silence unless the request also names the media source; and
+the surface grew by **three** rows rather than two, because a negotiation's own `DeliveryUrl`
+names a third operation. Two defects nobody asked about: a subtitle playlist's window durations are written in the *server's locale*
 (behaviours §3.12), and the playlist route never reads the stream index it is given, so a playlist
 for a stream that does not exist is a `200` whose every entry is a `500`. And the two Principle I
 questions the spec parked were measured rather than argued: an honest `Content-Length` is an

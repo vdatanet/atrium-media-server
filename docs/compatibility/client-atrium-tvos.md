@@ -90,14 +90,14 @@ specification section, a document line or a source line.
 | §1 Two round trips: the second sets both switches false and takes HLS | [008 §3.3](../../specs/008-playback-negotiation-and-delivery/spec.md): a step removed by the request is not silently substituted — the ladder falls through to transcode, with a `TranscodingUrl` | ✅ |
 | §1 `Size` is the byte length of the file being served | Read from the stored part, so it survives a missing inspection ([`media/info.py:427`](../../src/atrium/media/info.py)) — one of the three obligations of [§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect) | ✅ |
 | §1 `MediaStreams[].IsTextSubtitleStream` | Emitted on every stream since 011 T2, beside `SupportsExternalStream`, read off the codec spelling the reference renames at inspection ([`media/info.py`](../../src/atrium/media/info.py), [`media/probe.py`](../../src/atrium/media/probe.py)) | ✅ |
-| §1 `DeviceProfile.TranscodingProfiles[].EnableSubtitlesInManifest: true` | Not a field of the bound model ([`api/media_info.py:134-152`](../../src/atrium/api/media_info.py)), so `extra="ignore"` drops it ([`compat/model.py:67`](../../src/atrium/compat/model.py)) | 🔴 [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
+| §1 `DeviceProfile.TranscodingProfiles[].EnableSubtitlesInManifest: true` | Bound since 011 T9 ([`api/media_info.py`](../../src/atrium/api/media_info.py)) and **read by nothing, which is parity**: the reference writes it into the delivery address and the route that address names does not accept it either (011 §3.4, measured) | ✅, and the flag is not what makes subtitles appear — see [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
 | §1 `DeviceProfile.TranscodingProfiles[].Protocol` selects HLS | Compared case-sensitively against `"hls"` ([`media/urls.py:202`](../../src/atrium/media/urls.py), [`:236`](../../src/atrium/media/urls.py)) where `/universal` normalises ([`api/universal_audio.py:267`](../../src/atrium/api/universal_audio.py)) | 🟠 [§4.6](#46-two-spellings-of-hls-and-only-one-of-them-selects-hls) |
 | §2 `Range` must answer `206`, never `200` | [`compat/ranges.py:87-140`](../../src/atrium/compat/ranges.py): a well-formed `bytes=lo-hi` inside the file is `PARTIAL_CONTENT`, always — one of the three obligations of [§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect) | ✅ |
 | §2 `static=true` is the original container bytes | [behaviours §2.20](behaviours.md#220-statictrue-serves-the-original-bytes-the-urls-container-is-only-a-label), implemented at 008 T6 — one of the three obligations of [§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect) | ✅ |
 | §3 The master carries `VIDEO-RANGE`, `CODECS`, `FRAME-RATE` | [`media/hls.py:357-364`](../../src/atrium/media/hls.py) writes all three, on every variant | ✅ |
-| §3 The master announces subtitle tracks | `#EXT-X-STREAM-INF` lines and nothing else — no `#EXT-X-MEDIA` tag exists anywhere in `src/`, and no variant carries a `SUBTITLES` attribute | 🔴 [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
-| §3 `…/Subtitles/{index}/Stream.vtt` when the manifest carries none | Not a row of [`surface.yaml`](surface.yaml), and L0 forbids serving what is not listed | 🔴 [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
-| §3 `AudioStreamIndex`/`SubtitleStreamIndex` overridden on the stream URL | The audio half is a delivery parameter and is honoured ([`api/delivery.py:166`](../../src/atrium/api/delivery.py), [`:625`](../../src/atrium/api/delivery.py)); the subtitle half is not one at all | 🟠 [§4.3](#43-the-clients-track-override-works-for-audio-and-is-dropped-for-subtitles) |
+| §3 The master announces subtitle tracks | Since 011 T11: one `#EXT-X-MEDIA:TYPE=SUBTITLES` per text subtitle stream, and **every** variant line ends in the group — the standard-range entrance beside an HDR copy included ([`media/hls.py`](../../src/atrium/media/hls.py)) — when the delivery address names the manifest method | ✅ |
+| §3 `…/Subtitles/{index}/Stream.vtt` when the manifest carries none | Three rows of [`surface.yaml`](surface.yaml) since 011's spec gate, served since 011 T7 and T8 ([`api/subtitles.py`](../../src/atrium/api/subtitles.py)) — whole, windowed, and with the start position in the path | ✅ |
+| §3 `AudioStreamIndex`/`SubtitleStreamIndex` overridden on the stream URL | The audio half is a delivery parameter and is honoured ([`api/delivery.py`](../../src/atrium/api/delivery.py)); the subtitle half is one too since 011 T11, and the master playlist reads it beside `SubtitleMethod` | ✅ [§4.3](#43-the-clients-track-override-works-for-audio-and-is-dropped-for-subtitles) |
 | §3 `GET /Sessions?deviceId=…` for copy verification | The route takes no `deviceId` ([`api/sessions.py:287-293`](../../src/atrium/api/sessions.py)) | 🟠 [§4.4](#44-get-sessions-takes-no-deviceid-and-the-client-sends-one) |
 | §3 `DELETE /Videos/ActiveEncodings` on every re-negotiation | 008 T12: keyed on the play session, and it stops the encoder rather than answering `204` and lying | ✅ |
 | §3 Workaround 1 — the fMP4 init segment starts a second transcode | Reproduced ([`media/sessions.py:499-506`](../../src/atrium/media/sessions.py)) | 🔴 [§4.5](#45-the-fmp4-init-segment-restarts-the-encoder-which-is-the-defect-the-client-pre-warms-to-dodge) |
@@ -316,25 +316,44 @@ its cast-to-a-capped-renderer path, because it never asked a question it could b
 
 ### 4.2 v1 has no way to deliver a subtitle, and this client has one way to receive one
 
-This is the gap with consequences, and the 2026-08-28 trace called it correctly. What has changed
-is that it is now four facts about merged code rather than three about specifications — and the
-fourth of them was closed on 2026-08-30, which is why it reads the other way round:
+**Closed on 2026-08-30 by [011](../../specs/011-subtitle-delivery/) T11**, and the four facts
+below are kept as they were written because what closed each of them is the useful part. Today the
+master playlist this client is handed carries one `#EXT-X-MEDIA:TYPE=SUBTITLES` per text subtitle
+track and every variant line ends in the group; the address of each announcement is a per-track
+playlist, and every window of that playlist is a WebVTT fetch. **The one thing that did not happen
+is the thing this section predicted would**: the client's `DeviceProfile` flag is not the lever and
+cannot be — the reference's own master playlist route does not accept it either (011 §3.4), so
+what announces a track is `SubtitleMethod=Hls` in the delivery address. That is the *other* half of
+this client's own behaviour, §4.3, which this section had sized as a line inside it.
+
+This was the gap with consequences, and the 2026-08-28 trace called it correctly. What had changed
+by 2026-08-30 was that it was four facts about merged code rather than three about
+specifications — and the fourth of them was closed first, which is why it reads the other way
+round:
 
 - `GetSubtitle` is not among the 55, and [008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)
   excludes *"subtitle extraction, conversion and delivery as a separate route"*. `Stream.vtt` is
-  not a row of [`surface.yaml`](surface.yaml), and L0 forbids serving a route that is not listed;
-- **the master playlist announces no subtitle track.**
-  [`media/hls.py:336-354`](../../src/atrium/media/hls.py) writes `#EXTM3U` and one
+  not a row of [`surface.yaml`](surface.yaml), and L0 forbids serving a route that is not listed.
+  **Closed by 011's own spec gate, which added three rows rather than two**, and served at 011 T7
+  and T8: the whole-track fetch, its windowed form, and the ticks-in-path form a negotiation's own
+  `DeliveryUrl` names;
+- **the master playlist announces no subtitle track.** It wrote `#EXTM3U` and one
   `#EXT-X-STREAM-INF` per variant — one, or two where an HDR source is stream-copied and the
   second is its standard-range entrance ([008 §3.7](../../specs/008-playback-negotiation-and-delivery/spec.md#37-video-delivery),
-  corrected 2026-08-30) — and nothing else. No `#EXT-X-MEDIA` tag is written anywhere in `src/`
-  and no variant carries a `SUBTITLES` attribute; the only match for that prefix is
-  `#EXT-X-MEDIA-SEQUENCE`, which is a different tag in a different playlist;
+  corrected 2026-08-30) — and nothing else. **Closed at 011 T11**
+  ([`media/hls.py`](../../src/atrium/media/hls.py)'s `master_playlist`): the block is written
+  before the first variant and **every** variant line ends in `,SUBTITLES="subs"`, the entrance
+  included — an entrance with no subtitle group would be this client losing them for the very
+  reason the entrance exists;
 - **`EnableSubtitlesInManifest` is not a field of the profile model.**
-  [`api/media_info.py:134-152`](../../src/atrium/api/media_info.py) declares eleven properties of a
-  `TranscodingProfile` and that is not one of them, so `extra="ignore"`
-  ([`compat/model.py:67`](../../src/atrium/compat/model.py)) drops it on arrival. The client sends
-  it `true` on every transcoding profile and this server never sees it;
+  [`api/media_info.py`](../../src/atrium/api/media_info.py) declared eleven properties of a
+  `TranscodingProfile` and that was not one of them, so `extra="ignore"`
+  ([`compat/model.py:67`](../../src/atrium/compat/model.py)) dropped it on arrival. The client
+  sends it `true` on every transcoding profile. **Bound at 011 T9 and read by nothing, which is
+  parity**: the reference writes it into the delivery address it hands back and the route that
+  address names cannot read it either (011 §3.4, measured), so a client asking for subtitles the
+  way the reference's own model says to ask gets a manifest with none. This client's flag is
+  therefore not what makes its subtitles appear;
 - `IsTextSubtitleStream` **is emitted since 011 T2 (2026-08-30)**, on every stream and beside
   `SupportsExternalStream`, so the client's own input to *which* subtitle indexes it would put in
   the manifest query is now there. It was the first of the four pieces of work below and it is
@@ -349,18 +368,20 @@ shows no subtitles at all, and the client will not compensate.
 
 **The blast radius is smaller than it first looks, and the shape of it decides the fix:**
 
-| Playback path | Subtitles |
-|---|---|
-| On-device remux, embedded tracks | Fine **where the track is SubRip**, which is all the client's own demuxer reads `[client-author: 2026-08-29]`: the bytes are inside the file it is reading, and anything else among them is not rendered ([§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect)) |
-| Anything delivered over server HLS (remux or transcode) | None |
-| External sidecar files (`.srt` beside the media), any path | None, and none reachable |
+| Playback path | Subtitles, before 011 | Since 011 T11 (2026-08-30) |
+|---|---|---|
+| On-device remux, embedded tracks | Fine **where the track is SubRip**, which is all the client's own demuxer reads `[client-author: 2026-08-29]`: the bytes are inside the file it is reading, and anything else among them is not rendered ([§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect)) | Unchanged |
+| Anything delivered over server HLS (remux or transcode) | None | Announced, per text track, **when the delivery address names the manifest method** — which is §4.3's line, not this section's |
+| External sidecar files (`.srt` beside the media), any path | None, and none reachable | Discovered, numbered ahead of the container's own tracks, announced and served like an embedded one |
 
-Which means the obvious fix is the wrong one: **adding `GetSubtitle` as a 56th endpoint would not
-help this client**, because on the Jellyfin path it never asks. The only lever that reaches it is
-the manifest, and the manifest costs the WebVTT extraction 008 excluded. Four pieces of work, in
-dependency order: emit `IsTextSubtitleStream` (**done, 011 T2**); bind
-`EnableSubtitlesInManifest`; extract and serve WebVTT; announce the tracks. The first two are cheap
-and buy nothing alone.
+Which means the obvious fix was the wrong one: **adding `GetSubtitle` as a 56th endpoint would not
+have helped this client**, because on the Jellyfin path it never asks. The only lever that reaches
+it is the manifest, and the manifest cost the WebVTT extraction 008 excluded. Four pieces of work,
+in dependency order: emit `IsTextSubtitleStream` (**011 T2**); bind `EnableSubtitlesInManifest`
+(**011 T9** — bound, and read by nothing, which is what the reference does); extract and serve
+WebVTT (**011 T5 to T8**); announce the tracks (**011 T11**). All four are done, and the second
+turned out to buy nothing not because it is cheap but because the parameter decides nothing on
+either server.
 
 **One correction to this repository was owed here, and it was owed on 2026-08-28 too**: the
 subtitle row of [behaviours §5](behaviours.md#5-accepted-gaps-in-v1) said subtitles are *"delivered
@@ -370,6 +391,10 @@ exactly the claim the acceptance map exists to catch. The row now carries the th
 table above, and names [011](../../specs/011-subtitle-delivery/) as the mechanism that closes it.
 
 ### 4.3 The client's track override works for audio, and is dropped for subtitles
+
+**Closed on 2026-08-30 by [011](../../specs/011-subtitle-delivery/) T11.** The heading is kept
+because other documents link to it and because what it names is still the finding; the subtitle
+half is no longer dropped. Read the two paragraphs after the audio one for what changed.
 
 The 2026-08-28 trace recorded this as one gap — *"the track indices in a `TranscodingUrl`'s query
 are unspecified"* — and asked for one acceptance criterion covering both. Implemented, it split in
@@ -382,18 +407,27 @@ half.
 client named and falls back to the first only when there is no match. That is the client's
 workaround working exactly as it needs to.
 
-`SubtitleStreamIndex` is not a delivery parameter at all. It appears on the `PlaybackInfo` body
-([`api/media_info.py:194`](../../src/atrium/api/media_info.py)) and on the playstate reports, and
-nowhere in [`api/delivery.py`](../../src/atrium/api/delivery.py). A delivery request carrying it is
-silently dropped, which is the reference's documented treatment of an unrecognised query value
-([behaviours §1.12](behaviours.md#112-an-unrecognised-query-value-is-ignored-not-rejected)) and is
+`SubtitleStreamIndex` **was not a delivery parameter at all**, and is one since 011 T11
+(2026-08-30). It used to appear on the `PlaybackInfo` body
+([`api/media_info.py`](../../src/atrium/api/media_info.py)) and on the playstate reports and
+nowhere in [`api/delivery.py`](../../src/atrium/api/delivery.py), so a delivery request carrying it
+was silently dropped — the reference's documented treatment of an unrecognised query value
+([behaviours §1.12](behaviours.md#112-an-unrecognised-query-value-is-ignored-not-rejected)), and
 therefore invisible.
 
-**Today this costs nothing**, and the reason is §4.2: there is no subtitle to select on the HLS
-path, so a parameter naming one has nothing to decide. **It stops costing nothing the moment §4.2
-is closed**, and it will not announce itself when it does — the manifest work will look finished
-and the "change the subtitle track" path will silently keep the default. Whoever does §4.2 owns
-this line.
+It is now bound in [`api/delivery.py`](../../src/atrium/api/delivery.py)'s shared video parameter
+set beside `SubtitleMethod`, and the master playlist reads both: the method decides whether tracks
+are announced at all, and the index decides which announcement carries `DEFAULT=YES`. So the
+client's rewrite of the address it was handed selects the track it names, which is this criterion
+(011 AC-4) end to end — the manifest entry, the per-track playlist it addresses and the cues that
+playlist's windows answer.
+
+**This line said it would stop costing nothing the moment §4.2 closed, and that it would not
+announce itself when it did.** Both were right, and the measurement sharpened the first: it is not
+merely that the index would be ignored — the reference's master playlist route does not need it at
+all, so an implementation reading §4.2's own summary would have required the pair and announced
+**nothing** to a client that sent only the method. The lever is the method; the index is this
+line. Whoever did §4.2 owned this line, and 011 T11 did both.
 
 The contract's own claim about the reference — that it builds `TranscodingUrl` from the source's
 *default* tracks and ignores the indexes posted in `PlaybackInfo`, which is why the client rewrites

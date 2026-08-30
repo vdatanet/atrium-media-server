@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-30
 updated: 2026-08-30
 accepted: 2026-08-30
-amended: 2026-08-30 at the gate — 008's amendment of the same day gave the master playlist more than one variant and the subtitle group belongs on all of them; the codec spelling the text/image split reads is not the spelling this server stores; ffmpeg cannot encode the image subtitle track the fixture needs; and the sidecar language rule's "eight regional rows" are nine, two of which are not regional. See "What the gate changed"
+amended: 2026-08-30 at the gate — 008's amendment of the same day gave the master playlist more than one variant and the subtitle group belongs on all of them; the codec spelling the text/image split reads is not the spelling this server stores; ffmpeg cannot encode the image subtitle track the fixture needs; and the sidecar language rule's "eight regional rows" are nine, two of which are not regional. See "What the gate changed"; and 2026-08-30 by T11 — the gate's own row for T11, and the ordering paragraph above it, say the only lever is `SubtitleMethod=Hls` **beside a `SubtitleStreamIndex`**. Measured, the method announces on its own: no index, `-1` and an index naming no stream each announce every text track, and the index decides only which entry is the default. The wording came from spec §3.4, which is amended with AC-5 in T11's change; plan §6.5's condition never asked for the index and needed no correction there
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -41,11 +41,14 @@ which is a prerequisite of a manifest that leads anywhere (T11). AC-8's traversa
 and it belongs to the task that closes the loop.
 
 **The manifest is the feature, not a line inside it.** The master playlist route does not accept
-the manifest flag at all — OQ-1 died on that — so the **only** lever is `SubtitleMethod=Hls` beside
-a `SubtitleStreamIndex` in the delivery address, which is the client-side track override
+the manifest flag at all — OQ-1 died on that — so the **only** lever is `SubtitleMethod=Hls` in
+the delivery address, which is the client-side track override
 [client-atrium-tvos §4.3](../../docs/compatibility/client-atrium-tvos.md#43-the-clients-track-override-works-for-audio-and-is-dropped-for-subtitles)
 sized as *"a line inside §4.2"*. Binding the two parameters (AC-4) and announcing the tracks
-(AC-5) are therefore one task, T11, and it is the largest here.
+(AC-5) are therefore one task, T11, and it is the largest here. *(This paragraph said
+`SubtitleMethod=Hls` **beside a `SubtitleStreamIndex`**, following spec §3.4; T11 measured that
+the method announces on its own and the index decides only which entry is the default — so the
+override works for a client that sends either, which is the point of the override.)*
 
 **Routes land across three tasks, so the exact-set check carries an interim list.**
 `test_no_route_ships_ahead_of_its_feature` asserts the served routes equal the surface of the
@@ -1089,7 +1092,7 @@ means a second and deliberately worse lookup, and the difference lands inside th
 
 ## T11 — The manifest: two bound parameters, the group on every variant, and AC-8's traversal
 
-- [ ] **Changes:** `api/delivery.video_parameters` gains `subtitleStreamIndex` and
+- [x] **Changes:** `api/delivery.video_parameters` gains `subtitleStreamIndex` and
   `subtitleMethod`, **neither with a validation pattern**, because an unrecognised value is
   ignored and not refused: `SubtitleMethod=banana` is no method, not a `400`. The five members are
   matched case-insensitively, which is what an enum-typed parameter does on the other side — and
@@ -1125,6 +1128,112 @@ means a second and deliberately worse lookup, and the difference lands inside th
   written**, asserting a `200` and a non-empty body at every hop. A manifest and a playlist can
   both be well formed and lead nowhere, and only following them says so.
 - **Spec reference:** §3.4, AC-4, AC-5, AC-6, AC-7, AC-8; plan §6.5, §6.8
+
+**Done (2026-08-30).** The block, the group on every variant and the traversal are the shape the
+task describes, and `_variant` was the right place for the group. **What was wrong is the lever
+itself: this statement, spec §3.4, AC-5, the ordering paragraph at the top of this file and
+`specs/README.md`'s narrative all say the lever is `SubtitleMethod=Hls` *beside a
+`SubtitleStreamIndex`*, and the index is no part of it.**
+
+**The method announces on its own.** An address naming the manifest method with **no index at
+all** announces every text subtitle stream of the source, and so does one naming `-1` and one
+naming a stream that does not exist; what the index decides is which entry carries `DEFAULT=YES`,
+and nothing at all when it matches no announced stream `[probe: manual requests via
+tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`, `[source:
+Jellyfin.Api/Helpers/DynamicHlsHelper.cs:192-210, 603-612 @ v10.11.11]`. That is not a detail on
+this route: **the whole reason this task exists is a client that rewrites the address it was
+handed** ([client-atrium-tvos §4.3](../../docs/compatibility/client-atrium-tvos.md#43-the-clients-track-override-works-for-audio-and-is-dropped-for-subtitles)),
+and a server requiring the pair would have announced **nothing** to a client that sent one of
+them - the manifest would have looked finished and the failure would have been invisible, which is
+the exact shape §4.3 warned about in a different place. Spec §3.4 and AC-5 are amended here, with
+the four other documents that repeat the sentence swept with them.
+
+**And [plan §6.5](plan.md#65-the-manifest-extends-008-64) had it right where the spec had it
+wrong**, which is worth recording because the two disagreed and nothing said so: its condition is
+*"only when `subtitleMethod` is `Hls` and the source has at least one text subtitle stream"*, with
+no index in it. An implementer reconciling the two would have taken the accepted spec. The plan is
+amended for two other things instead (below).
+
+**The owed row needed the measurement it was owed, and the prior held for three classes of four.**
+`SubtitleMethod=hls`, `HLS`, `hLs` and the ordinal `3` in a query string announce exactly what
+`Hls` announces, as T9's body-side run predicted. **A word that is no member does not refuse**: it
+is a `200` announcing nothing, and so are an ordinal naming no member and an empty value - where
+the same word on a request **body** is a `400`. The reason is a binder rather than a rule about
+query values: Jellyfin binds every *nullable enum* parameter through one of its own that catches
+the conversion failure and leaves the value unset `[source:
+Jellyfin.Api/ModelBinders/NullableEnumModelBinder.cs:26-46,
+Jellyfin.Api/ModelBinders/NullableEnumModelBinderProvider.cs:14-25 @ v10.11.11]`. **And the
+parameter beside it in the same address does refuse**: `SubtitleStreamIndex=banana` is the
+framework's problem details naming it, because that one is typed. One address, two subtitle
+parameters, two different answers to an unreadable value - which is why the row said *measure*
+rather than *infer*. The ordinal table moves from `api/media_info.py` to `media/decision.py`
+beside the enumeration, because both binders now read it.
+
+**And the vocabulary had one more class in it than any document imagined, which is the row that
+kept a crash out of the server.** A comma-separated value is **one** value whose parts are
+combined: `Embed,External` is `1 | 2`, the manifest method's own ordinal, so the reference
+announces every text track for it, while `External,External` announces none and one unreadable
+part makes the whole value unreadable - measured on all four, so the combination is discriminated
+rather than assumed. Reproducing it is ten lines and skipping it would have been a delta on a
+request that is one hand-written address away. Asking those four questions is also what found the
+first draft of this function reading an ordinal with a bare integer conversion: `--3` and a
+non-ASCII digit each **raised** there, which is a `500` where the reference answers `200` with no
+announcement. Both are rows of the table now.
+
+**Two smaller corrections to plan §6.5, both measured in the same run.** It says an unrecognised
+method is ignored *"because an unrecognised value must be ignored rather than refused (behaviours
+§1.12)"* - the right answer from the wrong rule, and the right rule is narrower and stronger. And
+it says a master playlist asked for with no `mediaSourceId` *"announces the reference's own broken
+address"*: that parameter is declared **required** there, so it is problem details naming it and
+no manifest is answered at all. The empty address is a branch only 008's optional binding makes
+reachable here, on a request the reference refuses; the reference's `string.Format` of a null is
+reproduced for it and narrowing 008's binding is left where it belongs.
+
+**The multi-variant case is measured, and the gate's warning about this probe was right.**
+`_variant_line` returned the first `#EXT-X-STREAM-INF` and only that one, so the question could
+not be asked; it is `_variant_lines` now. Against an HDR source whose video is copied the
+reference answers **three** variants - the copy, an hevc entrance and an h264 one, the operator
+having permitted the encoder Atrium has no knob for - and **all three** end in `,SUBTITLES="subs"`.
+Atrium answers two of those three and both carry it.
+
+**No fixture can be both high dynamic range and subtitled, and the reason is a pair of container
+facts already in the matrix.** `high_range` has to be mp4 because the Matroska muxer drops its
+colour statement, and mp4 accepts neither image subtitle codec; `both_subtitle_kinds` has to be
+Matroska for the mirror of that reason. So AC-5's second half is asserted on an HDR film with a
+**sidecar** beside it, generated into this module's own tree the way
+`tests/conformance/test_hls_playlists.py` generates its Matroska sibling - which paid for itself
+twice, because it is also the assertion that a track discovered beside the media is announced like
+one inside the container, at the wire index T3's renumbering gives it. Measured on the reference
+first, on a source whose three announced entries are all files beside it.
+
+**AC-8's traversal follows addresses and it had to be pointed at the right track to start.** The
+negotiation cannot select the `ass` track for a manifest at all - `ass` converts neither from nor
+to, so it answers `Encode` under a `vtt`-only profile, which is AC-3 - so the traversal negotiates
+for the sidecar. The `ass` track is *announced* anyway, because the filter is on the stream kind
+and not on the selection, so both entries are still walked: manifest entry, per-track playlist,
+every window of it, cues at the end, each hop resolved with `httpx.URL.join` against the previous
+document so the lower-case `stream.vtt` is asked for exactly as written. AC-4 is the same walk
+twice on a source with **two** text tracks whose cues differ, once per index, asserting the cues
+that come back are the named track's - which is a claim that can fail.
+
+**The token is `compat/auth.extract_token`'s, as the gate's own note said, and reaching the branch
+where there is none took work.** A negotiated address carries the caller's token in its own query
+string (008's `ApiKey`), so even a request with no header presents one - which is the reassuring
+half: every announced address a client actually walks is credentialled. The test strips the
+parameter to reach the empty form at all.
+
+**One thing this task did not run, and the reason.** `probe_subtitle_manifest.py` gates itself
+behind `--allow-writes` because its lever and anatomy batteries negotiate, and this task was to
+probe the reference **read-only**; the whole script was therefore not run. Both batteries added
+here build the master address by hand and negotiate nothing, so both were run against the live
+reference on their own - twenty-one checks, all green, no play session opened - and every new claim
+above carries `[probe: manual requests via tools/_probe.py, …]`, which is the form the tasks gate
+used for the same question. Nothing is inferred from a run that did not happen.
+
+**And one row left alone deliberately.** [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)'s
+subtitle row still says the master announces no `#EXT-X-MEDIA` tag, which stopped being true in
+this change - as its sidecar clause stopped being true at T4 and its delivery clause at T7. T12
+closes that row once rather than correcting it four times, which is what this list already says.
 
 ## T12 — The acceptance map, the exact route set, and 011 is Implemented
 
