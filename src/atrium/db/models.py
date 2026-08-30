@@ -814,6 +814,13 @@ class MediaProbe(Base):
         order_by="MediaStreamRow.stream_index",
     )
 
+    external_streams: Mapped[list[MediaExternalStreamRow]] = relationship(
+        back_populates="probe",
+        lazy="raise",
+        cascade="all, delete-orphan",
+        order_by="MediaExternalStreamRow.ordinal",
+    )
+
 
 class MediaStreamRow(Base):
     """One elementary stream inside a probed file.
@@ -840,8 +847,12 @@ class MediaStreamRow(Base):
 
     library_id: Mapped[str] = mapped_column(ID, primary_key=True)
     relative_path: Mapped[str] = mapped_column(String, primary_key=True)
-    #: The demuxer's own numbering, kept rather than re-derived: every delivery command addresses
-    #: a stream by it, so a renumbering here would map a request onto a different track.
+    #: **The demuxer's own numbering, and never the wire's.** Every delivery command addresses a
+    #: stream by this number - `-map 0:{n}` - so it is stored exactly as the file reports it. The
+    #: index a client sends is derived on read by `domain.media.renumber`, because a subtitle file
+    #: beside the media takes indices 0..k-1 and pushes every stream here up by k (011 plan
+    #: section 5). Storing the wire number would make that derivation a rewrite of this table
+    #: every time a sidecar appeared or vanished.
     stream_index: Mapped[int] = mapped_column(Integer, primary_key=True)
 
     #: The demuxer's vocabulary, with `unknown` for a kind this build does not recognise - a
@@ -878,8 +889,9 @@ class MediaStreamRow(Base):
     is_hearing_impaired: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=false()
     )
-    #: Always false while nothing inspects a sidecar subtitle. The column exists because the wire
-    #: flag does, and an external stream is a row like any other when one arrives.
+    #: Always false on this table, and that is structural rather than a gap: a stream discovered
+    #: in a file beside the media is a `MediaExternalStreamRow`, and the two never mix. The column
+    #: exists because the wire flag does and every row here answers it the same way.
     is_external: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
 
     bitrate: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -901,3 +913,76 @@ class MediaStreamRow(Base):
     is_anamorphic: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
     probe: Mapped[MediaProbe] = relationship(back_populates="streams", lazy="raise")
+
+
+class MediaExternalStreamRow(Base):
+    """One subtitle stream found in a file sitting **beside** the media file.
+
+    A table of its own rather than a flag on `media_streams`, and the reason is the numbering
+    rather than tidiness. These streams are numbered **first** - an item whose subtitles are all
+    files answers them at 0, 1, 2 and the container's own video and audio begin at 3, measured
+    `[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-29]` - so a wire index
+    is a function of how many files were found this scan, and there is no wire column here at all.
+    `domain.media.renumber` derives it on every read; nothing stores it, which is why removing a
+    sidecar needs no cleanup path (011 AC-12).
+
+    **The change signal is per row, and it is what makes discovery reachable at all.** Dropping an
+    `.srt` beside a film changes nothing about the film's own `(size, mtime_ns)`, so the media
+    file's signal says "unchanged" and its inspection is skipped. The scan compares this set
+    instead, independently (011 plan section 6.2).
+    """
+
+    __tablename__ = "media_external_streams"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["library_id", "relative_path"],
+            ["media_probes.library_id", "media_probes.relative_path"],
+            ondelete="CASCADE",
+            name="fk_media_external_streams_probe",
+        ),
+    )
+
+    library_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    #: The **media** file this sidecar belongs to, keyed the way `media_streams` is keyed.
+    relative_path: Mapped[str] = mapped_column(String, primary_key=True)
+    #: Position among this media file's discovered streams, and the only ordering there is. It is
+    #: what decides the wire index, written by the scan in sorted order of `external_path`.
+    #:
+    #: **It serves a query pattern rather than recording a fact**, which is what a later reader
+    #: will try to normalise away: the fact is a set of files, and this turns that set into stream
+    #: indices. Sorting at read time instead would work until two paths sorted differently under
+    #: two collations, and a stream index that moves between reads is a delivery address that
+    #: names two different tracks.
+    ordinal: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    #: The subtitle file, relative to the library root - never absolute, for the reason every
+    #: stored path here is relative: a remount must change nothing.
+    external_path: Mapped[str] = mapped_column(String, nullable=False)
+
+    #: The sidecar's **own** change signal, not the media file's.
+    size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    mtime_ns: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    #: The demuxer's index *inside the sidecar*. Zero for a plain `.srt`; an `.mks` can hold
+    #: several, and each is a row.
+    stream_index: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    #: The merged answer: what the demuxer said about the file, with the filename's flags applied
+    #: over it (011 plan section 6.2). Normalised the way `media_streams.codec` is - `PGSSUB`,
+    #: never `hdmv_pgs_subtitle` - because the text/image split reads this value.
+    codec: Mapped[str | None] = mapped_column(String, nullable=True)
+    language: Mapped[str | None] = mapped_column(String, nullable=True)
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    is_forced: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    is_hearing_impaired: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false()
+    )
+
+    #: When the sidecar was inspected. Required and read back, for the reason
+    #: `media_probes.probed_at` is: revision 0005 exists because two columns that were written and
+    #: never read looked empty on every refresh.
+    probed_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+
+    probe: Mapped[MediaProbe] = relationship(back_populates="external_streams", lazy="raise")

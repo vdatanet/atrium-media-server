@@ -47,11 +47,13 @@ from atrium.domain.items import (
 from atrium.domain.library import Library
 from atrium.domain.media import (
     DeliveredFile,
+    DiscoveredSubtitles,
     InspectedStream,
     MediaInspection,
     StreamKind,
     VideoRange,
     VideoRangeType,
+    renumber,
 )
 from atrium.domain.playstate import UserItemData
 from atrium.domain.session import AccessToken, IssuedToken, Session
@@ -1426,13 +1428,21 @@ def _stream(row: models.MediaStreamRow) -> InspectedStream:
 
 
 def inspection_of(
-    row: models.MediaProbe, streams: Sequence[models.MediaStreamRow]
+    row: models.MediaProbe,
+    streams: Sequence[models.MediaStreamRow],
+    externals: Sequence[models.MediaExternalStreamRow] = (),
 ) -> MediaInspection:
-    """Two rows into the domain record, ADR-0003's direction.
+    """Three sets of rows into the domain record, ADR-0003's direction.
 
-    Public because `item_queries.py` hydrates a whole page's inspections in two statements rather
-    than asking this repository once per file, and both readers must produce the same record from
-    the same rows - a second conversion is a second answer waiting to happen.
+    Public because `item_queries.py` hydrates a whole page's inspections in three statements
+    rather than asking this repository once per file, and both readers must produce the same
+    record from the same rows - a second conversion is a second answer waiting to happen.
+
+    **This is where the two numberings meet, and it is the only place.** The stored
+    `stream_index` of a container stream is a demuxer index; the wire index every caller above
+    this line reads is derived here by `renumber`, which puts the discovered files at 0..k-1 and
+    pushes the container's own up by k (011 plan section 5). A caller cannot obtain an
+    un-renumbered inspection, because there is no path to one.
     """
     keyframes = row.video_keyframes
     return MediaInspection(
@@ -1444,7 +1454,27 @@ def inspection_of(
         bitrate=row.bitrate,
         video_keyframes=None if keyframes is None else tuple(int(one) for one in keyframes),
         probed_at=row.probed_at,
-        streams=tuple(_stream(one) for one in streams),
+        streams=renumber(
+            [_stream(one) for one in streams], [_external_stream(one) for one in externals]
+        ),
+    )
+
+
+def _external_stream(row: models.MediaExternalStreamRow) -> InspectedStream:
+    """One discovered subtitle stream. Its wire index is not read from the row - there is no wire
+    column - and `renumber` supplies it from the ordinal the rows came back in."""
+    return InspectedStream(
+        index=row.ordinal,
+        kind=StreamKind.SUBTITLE,
+        file_index=row.stream_index,
+        external_path=row.external_path,
+        codec=row.codec,
+        language=row.language,
+        title=row.title,
+        is_default=row.is_default,
+        is_forced=row.is_forced,
+        is_hearing_impaired=row.is_hearing_impaired,
+        is_external=True,
     )
 
 
@@ -1466,11 +1496,34 @@ class MediaProbeRepository:
         self._session = session
 
     def get(self, library_id: str, relative_path: str) -> MediaInspection | None:
-        """The stored inspection, however old it is."""
+        """The stored inspection, however old it is - renumbered, like every read here."""
         row = self._session.get(models.MediaProbe, (library_id, relative_path))
         if row is None:
             return None
-        return inspection_of(row, self._streams(library_id, relative_path))
+        return inspection_of(
+            row,
+            self._streams(library_id, relative_path),
+            self._external_streams(library_id, relative_path),
+        )
+
+    def external_signal(
+        self, library_id: str, relative_path: str
+    ) -> frozenset[tuple[str, int, int]]:
+        """The `(external_path, size, mtime_ns)` of every sidecar stored beside this media file.
+
+        **The second change signal, and the reason discovery is reachable on an ordinary scan.**
+        Dropping an `.srt` beside a film changes nothing about the film's own size or modification
+        time, so `current` still answers "unchanged" and the file is never reopened. This is the
+        comparison the scan makes instead, and it is independent of that one (011 plan section
+        6.2).
+
+        A set rather than a list: two sidecars swapping ordinals is not a change, and a file
+        appearing or vanishing is.
+        """
+        return frozenset(
+            (one.external_path, one.size, one.mtime_ns)
+            for one in self._external_streams(library_id, relative_path)
+        )
 
     def current(
         self, library_id: str, relative_path: str, size: int, mtime_ns: int
@@ -1520,7 +1573,11 @@ class MediaProbeRepository:
                 models.MediaStreamRow(
                     library_id=library_id,
                     relative_path=relative_path,
-                    stream_index=one.index,
+                    # The **demuxer** index. `one.index` is the wire number and is equal to this
+                    # on a fresh inspection - but a caller that read an inspection back and put it
+                    # again would be storing a number `renumber` had already moved, and the
+                    # second store would move it again.
+                    stream_index=one.file_index,
                     type=one.kind.value,
                     codec=one.codec,
                     codec_tag=one.codec_tag,
@@ -1557,6 +1614,74 @@ class MediaProbeRepository:
                 )
             )
         self._session.flush()
+
+    def put_external(
+        self,
+        library_id: str,
+        relative_path: str,
+        files: Sequence[DiscoveredSubtitles],
+    ) -> None:
+        """Replace the whole discovered set for one media file. Never a merge.
+
+        **A merge is AC-12 failing in the least visible way available.** It would leave a row for
+        a file that is gone, at an ordinal that shifts every index after it - so an address a
+        client minted before the sidecar was deleted would name a different track, and nothing
+        would look wrong from the outside. The same reason `put` replaces stream rows.
+
+        **The argument is a sequence of files, not of streams**, which is a widening of plan
+        section 5's `put_external(..., streams)`: an `.mks` holds several tracks behind one
+        `(size, mtime_ns)`, and a per-stream argument would carry that pair once per track with
+        nothing keeping the copies equal. The ordinals run across the whole flattened sequence,
+        because an ordinal numbers a *stream* - that is what a wire index counts.
+
+        The order given is the order stored, and the caller is the scan, which orders by
+        `external_path` (011 plan section 6.2). It is not re-derived here: a second sort is a
+        second answer.
+        """
+        self._session.execute(
+            delete(models.MediaExternalStreamRow).where(
+                models.MediaExternalStreamRow.library_id == library_id,
+                models.MediaExternalStreamRow.relative_path == relative_path,
+            )
+        )
+        self._session.flush()
+        ordinal = 0
+        for file in files:
+            for one in file.streams:
+                self._session.add(
+                    models.MediaExternalStreamRow(
+                        library_id=library_id,
+                        relative_path=relative_path,
+                        ordinal=ordinal,
+                        external_path=file.external_path,
+                        size=file.size,
+                        mtime_ns=file.mtime_ns,
+                        stream_index=one.file_index,
+                        codec=one.codec,
+                        language=one.language,
+                        title=one.title,
+                        is_default=one.is_default,
+                        is_forced=one.is_forced,
+                        is_hearing_impaired=one.is_hearing_impaired,
+                        probed_at=utc_now(),
+                    )
+                )
+                ordinal += 1
+        self._session.flush()
+
+    def _external_streams(
+        self, library_id: str, relative_path: str
+    ) -> list[models.MediaExternalStreamRow]:
+        return list(
+            self._session.scalars(
+                select(models.MediaExternalStreamRow)
+                .where(
+                    models.MediaExternalStreamRow.library_id == library_id,
+                    models.MediaExternalStreamRow.relative_path == relative_path,
+                )
+                .order_by(models.MediaExternalStreamRow.ordinal)
+            )
+        )
 
     def _streams(self, library_id: str, relative_path: str) -> list[models.MediaStreamRow]:
         return list(

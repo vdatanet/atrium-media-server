@@ -29,6 +29,7 @@ from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
 from atrium.domain.items import CollectionType
+from atrium.library.naming.external import SUBTITLE_EXTENSIONS
 
 #: Extensions that become items, per collection type.
 #:
@@ -181,6 +182,19 @@ class WalkResult:
     candidates: tuple[Candidate, ...] = ()
     skipped: tuple[Skipped, ...] = field(default_factory=tuple)
 
+    subtitles: tuple[Candidate, ...] = field(default_factory=tuple)
+    """Files carrying one of the nine extensions the reference admits as an external subtitle
+    `[source: Emby.Naming/Common/NamingOptions.cs:163-174 @ v10.11.11]`, statted like a candidate.
+
+    **They are in `skipped` as well, and that is deliberate.** A subtitle produces no item, the
+    scan report counts files that produced none, and moving these out of that count would change
+    an operator-facing number to record something the operator did not ask about. This is the same
+    set seen a second way, not a set taken out of the first.
+
+    Which media file each belongs to is not decided here - it is a question about two names and
+    `library/naming/external.py` answers it (011 plan section 6.2).
+    """
+
     def reasons(self) -> dict[Skip, int]:
         """How many files each reason accounted for, which is what a scan summary reports."""
         counts: dict[Skip, int] = {}
@@ -203,6 +217,7 @@ def found(root: Path, collection_type: CollectionType) -> WalkResult:
     extensions = EXTENSIONS[collection_type]
     candidates: list[Candidate] = []
     skipped: list[Skipped] = []
+    subtitles: list[Candidate] = []
 
     def unreadable(error: OSError) -> None:
         # `os.walk` discards directory errors unless given this, and the default is the dangerous
@@ -231,6 +246,20 @@ def found(root: Path, collection_type: CollectionType) -> WalkResult:
             reason = _refuse(filename, relative_directory, extensions)
             if reason is not None:
                 skipped.append(Skipped(relative, reason))
+                # A subtitle file is refused for its extension and then looked at again, because
+                # it is not a candidate and is not nothing either. Only that refusal: a hidden or
+                # excluded file stays walked past, which is 003's rule and not this feature's to
+                # loosen.
+                if reason is Skip.EXTENSION and _is_subtitle(filename):
+                    stat = _stat_or_none(here / filename)
+                    if stat is not None and stat.st_size > 0:
+                        subtitles.append(
+                            Candidate(
+                                relative_path=relative,
+                                size=stat.st_size,
+                                mtime_ns=stat.st_mtime_ns,
+                            )
+                        )
                 continue
             try:
                 stat = (here / filename).stat()
@@ -244,7 +273,9 @@ def found(root: Path, collection_type: CollectionType) -> WalkResult:
                 Candidate(relative_path=relative, size=stat.st_size, mtime_ns=stat.st_mtime_ns)
             )
 
-    return WalkResult(candidates=tuple(candidates), skipped=tuple(skipped))
+    return WalkResult(
+        candidates=tuple(candidates), skipped=tuple(skipped), subtitles=tuple(subtitles)
+    )
 
 
 def settle(root: Path, first: WalkResult) -> WalkResult:
@@ -277,7 +308,38 @@ def settle(root: Path, first: WalkResult) -> WalkResult:
             )
         )
 
-    return WalkResult(candidates=tuple(candidates), skipped=tuple(skipped))
+    # Subtitles settle too, and silently: a half-copied `.srt` inspected mid-write would store a
+    # cue list nobody wrote. What it does **not** get is a second `Skipped` entry - it already has
+    # one, for its extension, and counting it twice would move the operator's number.
+    subtitles: list[Candidate] = []
+    for subtitle in first.subtitles:
+        settled = _stat_or_none(root / subtitle.relative_path)
+        if settled is None or settled.st_size != subtitle.size:
+            continue
+        subtitles.append(
+            Candidate(
+                relative_path=subtitle.relative_path,
+                size=settled.st_size,
+                mtime_ns=settled.st_mtime_ns,
+            )
+        )
+
+    return WalkResult(
+        candidates=tuple(candidates), skipped=tuple(skipped), subtitles=tuple(subtitles)
+    )
+
+
+def _is_subtitle(filename: str) -> bool:
+    return PurePosixPath(filename).suffix.lower() in SUBTITLE_EXTENSIONS
+
+
+def _stat_or_none(path: Path) -> os.stat_result | None:
+    """`stat`, or nothing. A file that vanished between the listing and the call is not an error
+    here: the candidate path already reports one, and a subtitle reports its extension."""
+    try:
+        return path.stat()
+    except OSError:
+        return None
 
 
 def is_extra(relative_path: str) -> bool:

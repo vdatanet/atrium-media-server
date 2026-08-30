@@ -692,6 +692,24 @@ class ItemQueryRepository:
         ):
             streams.setdefault((one.library_id, one.relative_path), []).append(one)
 
+        # **A third statement, and a listing is wrong without it.** These are the subtitle streams
+        # discovered in files beside the media, and they are numbered *ahead of* the container's
+        # own - so a page hydrated from the two statements above would answer a stream list that
+        # is both short and misnumbered, and `HasSubtitles` would be false on an item whose
+        # subtitles are all files (011 AC-11). Page-independent, like the two above it.
+        externals: dict[tuple[str, str], list[models.MediaExternalStreamRow]] = {}
+        for external in self._session.scalars(
+            select(models.MediaExternalStreamRow)
+            .where(
+                tuple_(
+                    models.MediaExternalStreamRow.library_id,
+                    models.MediaExternalStreamRow.relative_path,
+                ).in_(wanted)
+            )
+            .order_by(models.MediaExternalStreamRow.ordinal)
+        ):
+            externals.setdefault((external.library_id, external.relative_path), []).append(external)
+
         collected: dict[str, tuple[MediaInspection | None, ...]] = {}
         for row in rows:
             parts = sorted(sources.get(row.id, ()), key=lambda one: one.part_index)
@@ -700,7 +718,7 @@ class ItemQueryRepository:
             collected[row.id] = tuple(
                 None
                 if (key := (row.library_id, one.relative_path)) not in found
-                else inspection_of(found[key], streams.get(key, []))
+                else inspection_of(found[key], streams.get(key, []), externals.get(key, []))
                 for one in parts
             )
         return collected

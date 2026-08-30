@@ -435,7 +435,7 @@ def supports_external_stream(stream: InspectedStream) -> bool:
     return stream.is_external or is_text_subtitle(stream) or is_pgs_subtitle(stream)
 
 
-def stream_of(stream: InspectedStream) -> MediaStream:
+def stream_of(stream: InspectedStream, root: str | None = None) -> MediaStream:
     """One stored stream as the wire shape."""
     average = _frame_rate(stream.average_framerate)
     real = _frame_rate(stream.framerate)
@@ -473,6 +473,16 @@ def stream_of(stream: InspectedStream) -> MediaStream:
         aspect_ratio=stream.aspect_ratio,
         index=stream.index,
         is_external=stream.is_external,
+        # **Absolute on the wire and relative in storage**, which is the rule every path in this
+        # project follows and the reason `MediaSourceInfo.path` is built the same way one line
+        # above: a remount must change nothing that is stored. Absent on every container stream,
+        # measured - the reference answers `Path` on the streams that came from a file and on no
+        # others `[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`.
+        path=(
+            None
+            if root is None or stream.external_path is None
+            else f"{root.rstrip('/')}/{stream.external_path}"
+        ),
         is_text_subtitle_stream=is_text_subtitle(stream),
         supports_external_stream=supports_external_stream(stream),
         pixel_format=stream.pixel_format,
@@ -518,7 +528,7 @@ def source_of(
         e_tag=None if part.mtime_ns is None else media_etag(part.mtime_ns),
         run_time_ticks=None if inspection is None else inspection.runtime_ticks,
         video_type=VIDEO_FILE if is_video else None,
-        media_streams=[stream_of(one) for one in streams],
+        media_streams=[stream_of(one, root) for one in streams],
         media_attachments=[],
         formats=[],
         bitrate=None if inspection is None else inspection.bitrate,
@@ -578,11 +588,17 @@ def item_container(item: Item, inspections: Sequence[MediaInspection | None]) ->
     return _extension(item.sources[0].relative_path) if item.sources else None
 
 
-def item_streams(inspections: Sequence[MediaInspection | None]) -> list[MediaStream]:
+def item_streams(
+    inspections: Sequence[MediaInspection | None], root: str | None = None
+) -> list[MediaStream]:
     """The item-level `MediaStreams`: part zero's, and only part zero's. `[source:
-    Emby.Server.Implementations/Dto/DtoService.cs:1151-1170 @ v10.11.11]`"""
+    Emby.Server.Implementations/Dto/DtoService.cs:1151-1170 @ v10.11.11]`
+
+    `root` is what a discovered subtitle stream's `Path` is rebuilt from, the same way a media
+    source's own is; without it those streams answer no path, which is the honest answer for a
+    library whose root nothing here can name."""
     first = inspections[0] if inspections else None
-    return [] if first is None else [stream_of(one) for one in first.streams]
+    return [] if first is None else [stream_of(one, root) for one in first.streams]
 
 
 def primary_video_stream(

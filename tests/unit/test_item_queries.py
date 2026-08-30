@@ -457,10 +457,16 @@ def test_the_statement_count_is_what_the_plan_says_it_is(
     ancestors above and for the same reason - a page carries `Container`, `HasSubtitles` and
     `VideoType` on a *bare* row, so a hydrator that fetched inspections only when something asked
     for `MediaSources` would need them anyway on every list of films, and a count that depended on
-    what the page happened to hold would make the equality here meaningless."""
+    what the page happened to hold would make the equality here meaningless.
+
+    **A third since 011 T4**: the subtitle streams discovered in files beside the media. It is not
+    optional and it is not conditional - those streams are numbered *ahead of* the container's
+    own, so a page hydrated without them answers wrong indices for the video and audio it does
+    carry, and `HasSubtitles` is false on an item whose subtitles are all files (AC-11). One
+    statement for the page, like its two neighbours."""
     with query_counter.watching(engine):
         repository.run(ItemQuery(user=world.everyone, limit=10))
-    assert len(query_counter) == 17, query_counter.report()
+    assert len(query_counter) == 18, query_counter.report()
 
 
 def test_a_page_with_no_files_costs_the_same_as_a_page_of_films(

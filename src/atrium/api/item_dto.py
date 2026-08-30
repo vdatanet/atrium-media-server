@@ -513,7 +513,7 @@ def _media_streams(one: HydratedItem, ctx: BuildContext) -> list[Any] | None:
     An empty list rather than absence would be a claim - "this file has no streams" - about a file
     nothing has opened, and the two are not the same answer.
     """
-    return media_info.item_streams(one.probes) or None
+    return media_info.item_streams(one.probes, _root_of(one, ctx)) or None
 
 
 def _dimension(one: HydratedItem, pick: Callable[[Any], int | None]) -> int | None:

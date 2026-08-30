@@ -160,6 +160,32 @@ def inspect(path: Path, ffprobe: str = FFPROBE) -> MediaInspection:
     )
 
 
+def inspect_subtitle(path: Path, ffprobe: str = FFPROBE) -> tuple[InspectedStream, ...]:
+    """The subtitle streams inside one file sitting beside a media file.
+
+    **The extension does not decide what is in it, which is the whole reason this opens the
+    file.** A `.sub` is `microdvd` - a text format - or `dvd_subtitle` - an image one - depending
+    on its bytes, and that is exactly the split `IsTextSubtitleStream` turns on (011 plan section
+    6.1). An `.mks` is a Matroska container and can hold several tracks, so this takes **every**
+    subtitle stream rather than assuming one.
+
+    Streams that are not subtitles are dropped rather than refused: a `.mks` may carry a font
+    attachment, and a file whose only stream is a video one is not a subtitle file at all - it
+    comes back empty and the caller discovers nothing, which is the same answer as a file that
+    holds no subtitle track.
+
+    No change signal and no container: the walk already statted this file, and what a sidecar's
+    demuxer calls itself is a fact about a stream here rather than about a source.
+    """
+    executable = _executable(ffprobe)
+    parsed = _run_json(executable, path)
+    return tuple(
+        _stream(one)
+        for one in parsed.get("streams", ())
+        if isinstance(one, Mapping) and _kind(one.get("codec_type")) is StreamKind.SUBTITLE
+    )
+
+
 # --------------------------------------------------------------------------------------------
 # Running the tool
 # --------------------------------------------------------------------------------------------
