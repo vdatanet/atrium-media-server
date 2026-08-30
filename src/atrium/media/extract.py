@@ -147,11 +147,17 @@ _MARKS: Final[tuple[tuple[bytes, str], ...]] = (
 
 #: What a text file that is neither marked nor valid UTF-8 is read as. **A choice, and the one
 #: place this module is weaker than the reference**, which runs a statistical detector over the
-#: bytes and can name any of some thirty encodings. This project has no such detector and adding a
-#: dependency for one is not this task's to take, so the fallback is the encoding a Western
-#: subtitle file that is not UTF-8 almost always is - and it is a fallback that can *fail*, which
-#: is what keeps "a file nobody can decode answers a refusal" reachable rather than serving
-#: mojibake for every byte sequence. See plan section 6.8.
+#: bytes and can name any of some thirty encodings. This project has no such detector and the
+#: decision - taken at 011 T6 - was to record the limit rather than add a runtime dependency for
+#: it, so the fallback is the encoding a Western subtitle file that is not UTF-8 almost always is.
+#: It is a fallback that can *fail*, which is deliberate: `latin-1` would decode every byte
+#: sequence there is and turn an unreadable file into plausible nonsense, where this one leaves
+#: the refusal reachable.
+#:
+#: **This is an accepted gap and not a safe divergence**, because what differs is the cue text a
+#: player draws: `docs/compatibility/behaviours.md` section 5.11, with the closing mechanism -
+#: a detector behind `_detect`, its dependency argued in an ADR on the day a real library needs
+#: one.
 FALLBACK_ENCODING: Final = "cp1252"
 
 #: The encodings ffmpeg converts on its own and refuses to be told about - stating one answers
@@ -540,7 +546,12 @@ def _detect(raw: bytes) -> str:
     detector over the bytes and can name any of some thirty encodings, and this names four with
     certainty and guesses once. Every subtitle file that is UTF-8, or that carries a mark, is
     read identically on both; a legacy file outside the fallback's range decodes to different
-    text here, or to none. Recorded in plan section 6.8 rather than hidden.
+    text here, or to none.
+
+    **Decided and recorded, not deferred**: `docs/compatibility/behaviours.md` section 5.11 is the
+    accepted gap, and it is a gap rather than one of section 3's deliberate divergences because
+    what differs is the text a player draws, which is the one thing a client cannot fail to
+    observe. The closing mechanism is a detector here, behind this function.
     """
     for mark, encoding in _MARKS:
         if raw.startswith(mark):

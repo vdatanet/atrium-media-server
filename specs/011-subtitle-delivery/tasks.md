@@ -580,9 +580,15 @@ detected rather than assumed"* is a statistical detector on the reference and th
 byte order mark, then strict UTF-8, then one declared single-byte fallback. Every file that is
 UTF-8 or carries a mark is read identically on both, which is every file any fixture here holds; a
 legacy file outside the fallback's range decodes differently, or not at all. The alternative is a
-new runtime dependency, which is not an implementation detail, so it is stated in [plan
-§6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed) and left to the user rather
-than taken here.
+new runtime dependency, which is not an implementation detail, so it was put to the user rather
+than taken here — and **the answer was the rule, no dependency, and the limit written down** as
+[behaviours §5.11](../../docs/compatibility/behaviours.md#511-a-subtitle-file-in-a-legacy-encoding-is-decoded-by-a-rule-and-not-by-a-detector),
+closed on the day a real library needs a detector by putting one behind the same function with its
+dependency argued in an ADR. **§5 and not §3**, and that is the load-bearing half of the answer: a
+§3 divergence has to carry the argument that no client can observe the difference, and what differs
+here is the **cue text a player draws** — filing it as a safe divergence would have been claiming
+something untrue. [Plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed)'s row
+now says decided rather than owed.
 
 **And the sweep the task points at could not hold two names.**
 `test_import_directions.py`'s `SUPERVISED_THROUGH_THE_LEDGER` was a single string with one test

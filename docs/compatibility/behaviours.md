@@ -2119,6 +2119,7 @@ undocumented bug.
 | **A container that has lost every file is still returned** ([003 §3.8](../../specs/003-library-configuration-and-scanning/spec.md#38-scanning-and-change-detection)) | An empty series or album in a library, with nothing under it | A query-time filter in 005: a container with no visible children is not offered. See §5.2 |
 | **No loudness scan** ([004 §3.3](../../specs/004-metadata-resolution/spec.md#33-embedded-tags)) | On a server whose operator enabled the reference's opt-in scan, `NormalizationGain` absent where it would have a computed value. Tag-carried gains are unaffected | 008, which brings the decoder the scan needs. See §5.4 |
 | **A stream carries no `DisplayTitle` and no `Localized*` names** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A track picker with nothing to label its rows: the reference sends one localised string per stream — `Español - MP3 - Stereo - Predeterminado` on a Spanish server — and Atrium sends none. **[011 §3.4](../../specs/011-subtitle-delivery/spec.md) is where this stops being only a label**: a manifest entry's `NAME` is required, and the reference fills it from exactly this string | The localisation the strings are assembled from — which is two sources, not one: the flag words come from the server's own translation table and the language name from the platform's culture data, in the server's configured interface culture `[probe: tools/probe_subtitle_manifest.py, Jellyfin 10.11.11, 2026-08-29]`. An English-only approximation would differ from the reference on **every** track rather than be absent on it, which is the worse of the two |
+| **A subtitle file's encoding is decided by a rule, not by a detector** ([011 §3.5, §3.6](../../specs/011-subtitle-delivery/spec.md)) | On a file that is UTF-8 or carries a byte order mark — the overwhelming majority — nothing. On a subtitle file in a legacy single-byte encoding outside `cp1252`, **different cue text**: the words a player draws are not the words in the file, and where a byte is one `cp1252` does not define, the fetch answers the `500` a failed extraction does | A detector behind the one function that makes the choice, with its runtime dependency argued in an ADR on the day a real library needs it. See §5.11 |
 | **A stream carries no `IsAVC`, `TimeBase` or `NalLengthSize`** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Three properties absent on every stream | Columns migration 0006 does not have; they arrive with the migration that adds them, and nothing in v1 reads them |
 | **`HasSubtitles` counts only the streams inside the container** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A film whose only subtitles are `.srt` files beside it reads as having none, where the reference reads `true` `[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-29]` | [011 §3.6](../../specs/011-subtitle-delivery/spec.md), which discovers them. Closing it moves more than the flag: the discovered streams are numbered **ahead of** the container's own, so a file appearing beside a film renumbers every audio and video stream it has |
 | **Dolby Vision and HDR10+ are not classified** ([008 §3.1, §3.7](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A Dolby Vision or HDR10+ film's master playlist carries no `SUPPLEMENTAL-CODECS`, and its copied segments are tagged `hvc1` where the reference tags `dvh1` — because the file is inspected here as the HDR10 file its colour metadata claims `[probe: tools/probe_transcode_decision.py, Jellyfin 10.11.11, 2026-08-29]` | Reading the Dolby Vision configuration record and the HDR10+ marker out of a stream's side data, which is where that signal lives. See §5.10 |
@@ -2402,6 +2403,56 @@ HDR10+ marker — a stream's side data rather than its colour metadata — which
 members and the profile and level the attribute is assembled from. The two emissions then follow
 from data that exists, and so does [§3.4](#34-hdr10-metadata-stripped-from-clients-that-asked-for-it--class-b-no-compensation)'s
 divergence, which is written as a decision and is today equally unreachable for the same reason.
+
+### 5.11 A subtitle file in a legacy encoding is decoded by a rule and not by a detector
+
+**Jellyfin does:** run a **statistical detector** over the bytes of a subtitle file beside the
+media before reading a cue out of it — a port of Mozilla's universal charset detector, carried as
+a dependency `[source:
+MediaBrowser.MediaEncoding/MediaBrowser.MediaEncoding.csproj:30 @ v10.11.11]` — and read the file
+back through whatever encoding it names, in both of the two places that need one: the read that
+produces the cues `[source:
+MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:169-193 @ v10.11.11]`, and the name handed
+to ffmpeg as `-sub_charenc` when a format its own parsers do not cover is converted `[source:
+SubtitleEncoder.cs:965-995 @ v10.11.11]`. A detector of that kind names any of some thirty
+encodings from the byte statistics alone, so a Cyrillic, Greek or Japanese subtitle file written
+before UTF-8 was universal is read correctly without anything being declared anywhere.
+
+**Depends on it:** every client that displays a subtitle. This is not a property a client branches
+on — it is the **cue text itself**, and a player draws exactly the characters the server decoded.
+That is why this entry is here and not in [§3](#3-defects): a §3 divergence
+has to carry the argument that no client can observe the difference, and a client observes this one
+directly, as the wrong letters on the screen.
+
+**Atrium does:** decide by a rule with three steps and no statistics
+(`media/extract.py`'s `_detect`): a **byte order mark** decides outright — the four a text file
+can begin with, each read through the codec that consumes the mark rather than leaving it in the
+text — then **strict UTF-8**, then a single declared fallback of `cp1252`.
+
+* **Where the two agree, which is nearly everywhere.** Every subtitle file that is UTF-8, with or
+  without a mark, and every UTF-16 or UTF-32 file that carries one, decodes to the same text on
+  both servers. That is the overwhelming majority of what a library holds, all of what any fixture
+  in this repository holds, and everything either analysed client has been observed to fetch.
+* **Where they diverge.** A file in a legacy single-byte encoding that is *not* `cp1252` —
+  `cp1251`, `iso-8859-7`, Shift-JIS and their neighbours — is decoded here as `cp1252` and comes
+  back as mojibake, where the reference names the encoding and comes back correct. A file holding a
+  byte `cp1252` leaves undefined refuses instead: the fetch answers the `500` a failed extraction
+  answers, which is [011 plan §7](../../specs/011-subtitle-delivery/plan.md)'s own row for text
+  nothing can decode.
+* **Why the fallback is `cp1252` and not `latin-1`.** `latin-1` decodes every byte sequence there
+  is, so it would turn *every* unreadable file into plausible-looking nonsense and make the refusal
+  above unreachable. `cp1252` covers the same Western European files a real library holds and still
+  has undefined bytes, so "this is not text in any encoding this server can read" stays a thing the
+  server can say.
+
+**Closing mechanism:** a detector behind `_detect`, which is one function with one call site
+on each of the two paths — the same two the reference detects on — and a **runtime dependency
+argued in an [ADR](../decisions/) at that point rather than now**.
+[`pyproject.toml`](../../pyproject.toml)'s own rule is that the dependency set says what the code
+needs rather than what the roadmap intends, and nothing in v1 has yet met a file it decodes
+wrongly; the day a real library produces one is the day the argument has an input it does not
+have today. Decided at 011 T6, where the choice was raised as a gate question and answered as a
+documented gap rather than as a dependency.
 
 ## 6. Non-improvements
 
