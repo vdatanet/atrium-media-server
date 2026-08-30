@@ -34,6 +34,7 @@ from atrium.domain.user import User
 from atrium.server import create_app
 from tests.conformance.test_golden import STATE
 from tests.fixtures.media import (
+    BOTH_SUBTITLE_KINDS,
     DIRECT_PLAY,
     REJECTED_CONTAINER,
     TWO_PARTER_FIRST,
@@ -206,8 +207,8 @@ async def test_a_bare_row_of_a_film_carries_the_three_ungated_media_properties(
 ) -> None:
     """`Container`, `VideoType` and - where it is true - `HasSubtitles`, with no `fields` at all.
 
-    The generated matrix has no subtitle track anywhere, so this asserts the *absent* half of the
-    conditional pair; the seeded world's goldens carry the present half.
+    This entry carries no subtitle track, so it asserts the *absent* half of the conditional pair;
+    the present half is the entry that does, two tests below.
     """
     answered = await client.get("/Items", params={"ids": served[1].of(DIRECT_PLAY).id})
     assert answered.status_code == 200
@@ -215,8 +216,80 @@ async def test_a_bare_row_of_a_film_carries_the_three_ungated_media_properties(
 
     assert row["Container"] == DIRECT_PLAY.demuxers
     assert row["VideoType"] == "VideoFile"
-    assert "HasSubtitles" not in row, "no fixture file has a subtitle track"
+    assert "HasSubtitles" not in row, (
+        "this entry gained a subtitle track and is no longer the absent half of the pair"
+    )
     assert "MediaSources" not in row, "MediaSources is gated and nothing asked for it"
+
+
+async def test_a_subtitle_track_reaches_the_wire_under_the_renamed_spelling(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The file says `hdmv_pgs_subtitle`; the wire says `PGSSUB`, and 008 stored the first.
+
+    Compared against the fixture's own declaration put through the rename table, so the assertion
+    is "the file has this track and the wire renames it" rather than a string written twice. The
+    flags come along because the matrix split them deliberately between the two tracks: a track's
+    properties cannot be attributed to the wrong stream and pass.
+    """
+    from atrium.media.probe import RENAMED_SUBTITLE_CODECS
+
+    body = await body_of(client, served[1].of(BOTH_SUBTITLE_KINDS).id)
+    subtitles = [one for one in body["MediaStreams"] if one["Type"] == "Subtitle"]
+
+    assert len(subtitles) == len(BOTH_SUBTITLE_KINDS.subtitles)
+    for declared, wire in zip(BOTH_SUBTITLE_KINDS.subtitles, subtitles, strict=True):
+        assert wire["Codec"] == RENAMED_SUBTITLE_CODECS.get(declared.codec, declared.codec)
+        assert wire["Language"] == declared.language
+        assert wire["Title"] == declared.title
+        assert wire["IsForced"] == declared.forced
+        assert wire["IsHearingImpaired"] == declared.hearing_impaired
+        assert not wire["IsExternal"]
+
+    assert [one["Codec"] for one in subtitles] == ["subrip", "PGSSUB"], (
+        "the matrix stopped carrying one text track and one image track"
+    )
+
+
+async def test_the_two_file_facts_are_answered_on_every_stream_of_every_kind(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """AC-1's first half, over a file that was really scanned.
+
+    The text track and the image track differ in the first fact and agree on the second, because
+    a Presentation Graphic Stream is servable on its own - which is where "not text" and "not
+    servable" come apart, measured as `DVDSUB` answering `false` to the second on a real library
+    `[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`. And every video and
+    audio stream in the file answers `false` to both, which is what the reference does rather than
+    leaving them off a stream they cannot describe.
+    """
+    body = await body_of(client, served[1].of(BOTH_SUBTITLE_KINDS).id)
+    by_codec = {one["Codec"]: one for one in body["MediaStreams"]}
+
+    assert by_codec["subrip"]["IsTextSubtitleStream"] is True
+    assert by_codec["PGSSUB"]["IsTextSubtitleStream"] is False
+    assert by_codec["subrip"]["SupportsExternalStream"] is True
+    assert by_codec["PGSSUB"]["SupportsExternalStream"] is True
+
+    for stream in body["MediaStreams"]:
+        if stream["Type"] == "Subtitle":
+            continue
+        assert stream["IsTextSubtitleStream"] is False
+        assert stream["SupportsExternalStream"] is False
+
+    assert body["MediaSources"][0]["MediaStreams"] == body["MediaStreams"], (
+        "the source's list and the item's disagreed about the same file"
+    )
+
+
+async def test_a_row_of_a_subtitled_film_says_so(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The present half of the conditional pair the entry above asserts absent, now that the
+    matrix has a file with a subtitle track in it."""
+    answered = await client.get("/Items", params={"ids": served[1].of(BOTH_SUBTITLE_KINDS).id})
+    assert answered.status_code == 200
+    assert answered.json()["Items"][0]["HasSubtitles"] is True
 
 
 async def test_a_track_carries_a_container_and_no_video_properties(

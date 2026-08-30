@@ -111,7 +111,10 @@ information, channel layout, sample rate, language, and the default/forced/exter
 > every track rather than be absent on it. `IsAVC`, `TimeBase` and `NalLengthSize` are read from
 > the demuxer and are not among the fields inspection records. `IsTextSubtitleStream`,
 > `SupportsExternalStream`, `DeliveryMethod` and `DeliveryUrl` describe how a subtitle would be
-> delivered, and v1 delivers none.
+> delivered, and v1 delivers none. **The first two are emitted since 011 T2 (2026-08-30)**, which
+> found them to be facts about the file rather than about a delivery — stated by the reference on
+> every stream of every kind, and read off a codec spelling 008 was storing under the file's own
+> name rather than the reference's. The other two are still owed, to 011 T9.
 
 > **A multi-part film's parts are media sources here and separate items in the reference.** The
 > reference builds a source per *item* — itself plus its linked and local alternate versions —

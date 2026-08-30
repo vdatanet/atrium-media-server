@@ -89,7 +89,7 @@ specification section, a document line or a source line.
 | §1 `TranscodingUrl` present whenever direct is refused | The reference's own condition, transcribed ([`api/media_info.py:381-388`](../../src/atrium/api/media_info.py)) — except in the case above, where nothing runs at all | ✅ / 🔴 |
 | §1 Two round trips: the second sets both switches false and takes HLS | [008 §3.3](../../specs/008-playback-negotiation-and-delivery/spec.md): a step removed by the request is not silently substituted — the ladder falls through to transcode, with a `TranscodingUrl` | ✅ |
 | §1 `Size` is the byte length of the file being served | Read from the stored part, so it survives a missing inspection ([`media/info.py:427`](../../src/atrium/media/info.py)) — one of the three obligations of [§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect) | ✅ |
-| §1 `MediaStreams[].IsTextSubtitleStream` | Deliberately not emitted ([008 `spec.md:111`](../../specs/008-playback-negotiation-and-delivery/spec.md)) | 🔴 [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
+| §1 `MediaStreams[].IsTextSubtitleStream` | Emitted on every stream since 011 T2, beside `SupportsExternalStream`, read off the codec spelling the reference renames at inspection ([`media/info.py`](../../src/atrium/media/info.py), [`media/probe.py`](../../src/atrium/media/probe.py)) | ✅ |
 | §1 `DeviceProfile.TranscodingProfiles[].EnableSubtitlesInManifest: true` | Not a field of the bound model ([`api/media_info.py:134-152`](../../src/atrium/api/media_info.py)), so `extra="ignore"` drops it ([`compat/model.py:67`](../../src/atrium/compat/model.py)) | 🔴 [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
 | §1 `DeviceProfile.TranscodingProfiles[].Protocol` selects HLS | Compared case-sensitively against `"hls"` ([`media/urls.py:202`](../../src/atrium/media/urls.py), [`:236`](../../src/atrium/media/urls.py)) where `/universal` normalises ([`api/universal_audio.py:267`](../../src/atrium/api/universal_audio.py)) | 🟠 [§4.6](#46-two-spellings-of-hls-and-only-one-of-them-selects-hls) |
 | §2 `Range` must answer `206`, never `200` | [`compat/ranges.py:87-140`](../../src/atrium/compat/ranges.py): a well-formed `bytes=lo-hi` inside the file is `PARTIAL_CONTENT`, always — one of the three obligations of [§3.2](#32-on-device-remux-is-a-placement-of-work-not-only-a-way-round-a-defect) | ✅ |
@@ -317,7 +317,8 @@ its cast-to-a-capped-renderer path, because it never asked a question it could b
 ### 4.2 v1 has no way to deliver a subtitle, and this client has one way to receive one
 
 This is the gap with consequences, and the 2026-08-28 trace called it correctly. What has changed
-is that it is now four facts about merged code rather than three about specifications:
+is that it is now four facts about merged code rather than three about specifications — and the
+fourth of them was closed on 2026-08-30, which is why it reads the other way round:
 
 - `GetSubtitle` is not among the 55, and [008 §2](../../specs/008-playback-negotiation-and-delivery/spec.md)
   excludes *"subtitle extraction, conversion and delivery as a separate route"*. `Stream.vtt` is
@@ -334,9 +335,10 @@ is that it is now four facts about merged code rather than three about specifica
   `TranscodingProfile` and that is not one of them, so `extra="ignore"`
   ([`compat/model.py:67`](../../src/atrium/compat/model.py)) drops it on arrival. The client sends
   it `true` on every transcoding profile and this server never sees it;
-- `IsTextSubtitleStream` is deliberately not emitted on any stream
-  ([008 `spec.md:111`](../../specs/008-playback-negotiation-and-delivery/spec.md)), which removes
-  the client's own input to *which* subtitle indexes it would put in the manifest query.
+- `IsTextSubtitleStream` **is emitted since 011 T2 (2026-08-30)**, on every stream and beside
+  `SupportsExternalStream`, so the client's own input to *which* subtitle indexes it would put in
+  the manifest query is now there. It was the first of the four pieces of work below and it is
+  done; the three that reach this client are not.
 
 The client's side of it `[client-contract: 2026-08-29, §1, §3]`: for a server it has identified as
 Jellyfin it expects `EXT-X-MEDIA:TYPE=SUBTITLES` in the master, requested through the
@@ -356,8 +358,9 @@ shows no subtitles at all, and the client will not compensate.
 Which means the obvious fix is the wrong one: **adding `GetSubtitle` as a 56th endpoint would not
 help this client**, because on the Jellyfin path it never asks. The only lever that reaches it is
 the manifest, and the manifest costs the WebVTT extraction 008 excluded. Four pieces of work, in
-dependency order: emit `IsTextSubtitleStream`; bind `EnableSubtitlesInManifest`; extract and serve
-WebVTT; announce the tracks. The first two are cheap and buy nothing alone.
+dependency order: emit `IsTextSubtitleStream` (**done, 011 T2**); bind
+`EnableSubtitlesInManifest`; extract and serve WebVTT; announce the tracks. The first two are cheap
+and buy nothing alone.
 
 **One correction to this repository was owed here, and it was owed on 2026-08-28 too**: the
 subtitle row of [behaviours §5](behaviours.md#5-accepted-gaps-in-v1) said subtitles are *"delivered

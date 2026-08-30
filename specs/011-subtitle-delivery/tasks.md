@@ -80,7 +80,7 @@ plan could not have accounted for because it landed after the plan was accepted:
 | The draft said | It was |
 |---|---|
 | The `#EXT-X-MEDIA` block is announced and **the** variant line gains `,SUBTITLES="subs"` last ([plan §6.5](plan.md#65-the-manifest-extends-008-64), [spec §3.4](spec.md#34-the-manifest), AC-5) | **There is more than one variant line now.** 008 was amended on 2026-08-30 (its T15, merged as `cab9443`): against an HDR source whose video is stream-copied, `media/hls.py`'s `master_playlist` appends an h264 SDR entrance beside the copy, so the master carries **two** `#EXT-X-STREAM-INF` lines where it carried one. The reference hands its `subtitleGroup` to *every* one of its own `AppendPlaylist` calls — the copy, the h264 entrance, the two codec entrances, the level-5.0 rewrite and both adaptive-bitrate variants `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:213-315, 325-345 @ v10.11.11]`, confirmed on the wire against an HDR film negotiated for a copy: three variants, all three ending `,SUBTITLES="subs"` `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`. Written as one line, the SDR entrance — which exists precisely so that a client that cannot render HDR has somewhere to go — would be the one variant offering no subtitles. Plan §6.5, spec §3.4 and AC-5 are corrected to **every** variant line in this change; T11 renders it through `_variant` and folds the HDR case into `probe_subtitle_manifest.py`, whose `_variant_line` returns the **first** `#EXT-X-STREAM-INF` and only that one, which is why the gate's own probe could not have seen this |
-| The text/image split is a lookup on the codec spelling, so no column and no migration is needed ([plan §6.1](plan.md#61-the-two-file-facts-extends-008-61), [spec §3.2](spec.md#32-which-streams-are-subtitles-and-which-of-those-are-text)) | **Not the spelling this server stores.** The reference **renames four subtitle codecs during inspection** — `dvb_subtitle`→`DVBSUB`, `dvb_teletext`→`DVBTXT`, `dvd_subtitle`→`DVDSUB`, `hdmv_pgs_subtitle`→`PGSSUB` `[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:632-652, 765-768 @ v10.11.11]` — and only then does the substring rule read them. `media/probe.py` stores ffprobe's `codec_name` verbatim, and `"dvd_subtitle"` contains no `dvdsub`: applied as written, **every DVD and DVB subtitle track in a library is announced as text**, offered in a manifest and offered for conversion, which is AC-1 and AC-7 failing together. The four normalised spellings are also what `Codec` carries on the wire — `PGSSUB`, `DVDSUB` and `DVBTXT` all appear beside `subrip`, `ass` and `webvtt` on a real library `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]` — so this is a property **008 already emits differently** and no fixture had a subtitle stream to catch it. T2 owns it, normalises where the reference does, and migration 0007 rewrites the four spellings in `media_streams` |
+| The text/image split is a lookup on the codec spelling, so no column and no migration is needed ([plan §6.1](plan.md#61-the-two-file-facts-extends-008-61), [spec §3.2](spec.md#32-which-streams-are-subtitles-and-which-of-those-are-text)) | **Not the spelling this server stores.** The reference **renames four subtitle codecs during inspection** — `dvb_subtitle`→`DVBSUB`, `dvb_teletext`→`DVBTXT`, `dvd_subtitle`→`DVDSUB`, `hdmv_pgs_subtitle`→`PGSSUB` `[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:632-652, 765-768 @ v10.11.11]` — and only then does the substring rule read them. `media/probe.py` stores ffprobe's `codec_name` verbatim, and `"dvd_subtitle"` contains no `dvdsub`: applied as written, **every DVD and digital-broadcast bitmap subtitle track in a library is announced as text**, offered in a manifest and offered for conversion, which is AC-1 and AC-7 failing together. *(Corrected at T2 from "every DVD and DVB": only `dvd_subtitle` and `dvb_subtitle` invert. `hdmv_pgs_subtitle` already contains `pgs` and `dvb_teletext` is text either way - so the two that do not move are the two a fixture could have been built on, and the split alone cannot prove the rename.)* The four normalised spellings are also what `Codec` carries on the wire — `PGSSUB`, `DVDSUB` and `DVBTXT` all appear beside `subrip`, `ass` and `webvtt` on a real library `[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]` — so this is a property **008 already emits differently** and no fixture had a subtitle stream to catch it. T2 owns it, normalises where the reference does, and migration 0007 rewrites the four spellings in `media_streams` |
 | The fixture gains an embedded **image** subtitle track ([plan §8](plan.md#8-testing-strategy)) | **ffmpeg cannot make one.** There is no PGS encoder, and a text-to-bitmap conversion is refused outright — `Subtitle encoding currently only possible from text to text or bitmap to bitmap` — so `-c:s dvdsub` over an `.srt` fails and the matrix's generate-with-ffmpeg rule has nothing to ask for. Measured at the gate: a **434-byte PGS bitstream written by hand** — five segment types, one 32×8 run-length object, four display sets (one that draws and one that erases, per cue; this row said two, and T1 reproduced the byte count exactly and counted them) — demuxes as `hdmv_pgs_subtitle` and muxes into Matroska beside a `subrip` track with `-c:s copy`. T1 builds it that way, and the entry that carries it is Matroska because mp4 accepts neither PGS nor DVD subtitles. It is still *generated, never checked in*, which is what the fixture module's own rule asks for |
 | A sidecar's language is the culture row's `Name` when it contains a `-` — *"the eight regional rows, `zh-hk` and its siblings"* ([plan §6.2](plan.md#62-discovery-the-name-rule-and-the-two-numberings-extends-003-64-and-008-61) step 4) | **Nine of the 192 rows, and two of them are not regional tags at all**: `Greek, Modern (1453-)` and `Luba-Katanga`, both in `metadata/cultures.py` and both in what `/Localization/Cultures` serves. The rule is the reference's own `[source: Emby.Naming/ExternalFiles/ExternalPathParser.cs @ v10.11.11]` and reproducing it is parity — a Greek sidecar's language *is* written `Greek, Modern (1453-)` there — but "eight regional rows" describes a table this project does not have, and the two non-regional rows are table rows of T3's matrix rather than a footnote |
 
@@ -168,7 +168,7 @@ a property of the generated `.srt` rather than of the declaration.
 
 ## T2 — The two file facts, and the codec spelling the split actually reads
 
-- [ ] **Changes:** `media/probe.py` normalises the four subtitle codec spellings the reference
+- [x] **Changes:** `media/probe.py` normalises the four subtitle codec spellings the reference
   normalises at inspection `[source:
   MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:632-652, 765-768 @ v10.11.11]`, and
   migration `0007` rewrites those four values in `media_streams` so a library scanned by 008 does
@@ -192,6 +192,47 @@ a property of the generated `.srt` rather than of the declaration.
   holding an image subtitle track: the battery has to report `PGSSUB` or `DVDSUB` rather than
   ffprobe's own spelling, or the normalisation is in the wrong place.
 - **Spec reference:** §3.2, AC-1; plan §6.1
+
+**Done (2026-08-30).** The rename was correct and the **verification above could not have caught
+it being wrong.** *"T1's image track answers `IsTextSubtitleStream: false`"* passes with the whole
+normalisation deleted: `hdmv_pgs_subtitle` already contains `pgs`, and `dvb_teletext` is text under
+either spelling — so **only `dvd_subtitle` and `dvb_subtitle` move**, and neither is a codec this
+matrix can produce (ffmpeg has both encoders and refuses text-to-bitmap, which is T1's finding). The one image format the fixture matrix can build is precisely the one of the four the
+rename does not rescue. What proves it is the stored **value** — the wire says `PGSSUB` where the
+file says `hdmv_pgs_subtitle` — and a table over the four spellings beside their renamed forms,
+which is a unit test rather than a fixture. The gate's row, spec §3.2 and plan §6.1 are corrected
+from *"every DVD and DVB subtitle track"* to the two bitmap names.
+
+**The second file fact inverts too, and it is not "not an image".** `SupportsExternalStream` is
+`false` on `DVDSUB` and `true` on `PGSSUB` — a Blu-ray bitmap track can be served on its own and a
+DVD one cannot — so the unrenamed spelling would have made every DVD track claim it was servable
+as well as text. Measured on 947 subtitle streams of a real library, every one of which reproduces
+both facts from its codec alone; and both are answered on **every stream of every kind**, `false`
+on the 1 021 beside them that are not subtitles, cover art included.
+
+**A data migration is invisible to the migration sweep, which reports it as a revision that
+changed nothing.** `0007` rewrites rows and no columns, and `tests/unit/test_migrations.py`'s
+*"{revision} changed nothing"* fired on it — correctly, for a check that reads the schema.
+`DATA_ONLY` is now the same device `IRREVERSIBLE` already was: the sweep cannot see the change, so
+the revision declares it in its docstring, and a revision that does nothing and says nothing still
+fails. That declaration **comes out at T4**, which adds the table to the same revision and makes
+it untrue; the migration's docstring says so.
+
+**Telling a row apart, and migrating twice.** There is no flag: the value is the marker, because
+the two spellings are disjoint — `codec = 'dvd_subtitle'` on a subtitle row is a pre-0007 row and
+`DVDSUB` is a post-0007 one, and the inspection tool never emits the second. So the rewrite is
+idempotent - a second pass finds none of the four names it reads - and the downgrade is exact. All
+three are tests, and the idempotence one is a claim about the **table** rather than about the
+migration runner: Alembic stamps a revision, so nothing can apply `0007` twice in a row, and what
+makes a database migrated twice a database migrated once is that what it writes is outside what it
+reads.
+
+Two smaller things. The file is `0007_external_subtitle_streams.py`, the name plan §4 gives it,
+even though T2's half of it is the codec rewrite — the table T4 adds is what the name is for.
+And the four properties this task declares and does not fill (`Score`, `DeliveryMethod`,
+`DeliveryUrl`, `IsExternalUrl`) are **absent from a bare read on the reference too** — on 0 of
+1 968 streams — so declaring them costs no wire bytes today, and `Path` is on the 14 that came
+from a file.
 
 ## T3 — Two pure tables: the filename rule and the two numberings
 
@@ -226,7 +267,11 @@ a property of the generated `.srt` rather than of the declaration.
 ## T4 — The sidecars land in rows, and a default scan notices them
 
 - [ ] **Changes:** migration `0007_external_subtitle_streams` gains `media_external_streams` as
-  [plan §4](plan.md#4-data-model) declares it, reversible. `library/walker.py` grows a third
+  [plan §4](plan.md#4-data-model) declares it, reversible. **T2 created that revision** and it
+  holds the codec rewrite; adding the table means deleting the *"until it does, this is a data
+  migration"* paragraph from its docstring, because `tests/unit/test_migrations.py` reads that
+  sentence as the declaration that the revision changes no schema — and once the table is there it
+  is not true. `library/walker.py` grows a third
   output — every file carrying one of the nine subtitle extensions, statted like a candidate,
   **still reported as skipped** so the operator-facing count does not move. `media/probe.py` gains
   `inspect_subtitle`, because `.sub` is a text format or an image one depending on the bytes and

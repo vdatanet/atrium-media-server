@@ -17,6 +17,10 @@ because they are properties of the file: the container normalisation, whether a 
 interlaced or anamorphic, the dynamic range, the junk-tag rule. Each cites where the behaviour was
 read. What is *not* here is the single container a media source reports - see `_normalise_format`.
 
+**One thing is renamed rather than derived**, and it has to happen here: four subtitle codecs are
+rewritten during inspection, so every consumer - the text/image split, a negotiation's format
+comparison, the `Codec` a client reads - sees one spelling. See `RENAMED_SUBTITLE_CODECS`.
+
 **Optional means measured.** Against the fixture matrix on 2026-08-29, a Matroska stream reports
 no `bit_rate` at all, no `language` tag where the same content in mp4 carries `und`, and the
 four-zero `codec_tag` placeholder; and a file the tool opens happily can have no duration at all
@@ -74,6 +78,23 @@ HDR_TRANSFERS = {
 #: reference discards rather than storing. Matroska reports it for every stream. Same source as
 #: the rename table.
 CODEC_TAG_PLACEHOLDER = "[0]"
+
+#: Subtitle codec names the reference rewrites **during inspection**, and what it rewrites them
+#: to. `[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:632-652, 765-768 @
+#: v10.11.11]`
+#:
+#: The rename happens here, before anything reads a codec, because it is the renamed spelling that
+#: every later rule is written against - the text/image split, the servable-alone rule and the
+#: `Codec` a client reads are all one string. Only two of the four change any answer, and neither
+#: is the one a fixture can produce: `hdmv_pgs_subtitle` already contains `pgs` and `dvb_teletext`
+#: is text under either spelling, while `dvd_subtitle` and `dvb_subtitle` contain neither `dvdsub`
+#: nor `dvbsub` and are read as **text** until they have been renamed.
+RENAMED_SUBTITLE_CODECS = {
+    "dvb_subtitle": "DVBSUB",
+    "dvb_teletext": "DVBTXT",
+    "dvd_subtitle": "DVDSUB",
+    "hdmv_pgs_subtitle": "PGSSUB",
+}
 
 #: The handler names a muxer writes when nobody named the track. The reference falls back to
 #: `handler_name` for a missing stream title and skips exactly these, which is why an mp4 audio
@@ -278,7 +299,7 @@ def _stream(raw: Mapping[str, Any]) -> InspectedStream:
     return InspectedStream(
         index=_integer(raw.get("index")) or 0,
         kind=kind,
-        codec=_text(raw.get("codec_name")),
+        codec=_codec(kind, _text(raw.get("codec_name"))),
         codec_tag=_codec_tag(raw),
         profile=_text(raw.get("profile")),
         # Passed through as reported, negative sentinel included: the reference stores this
@@ -323,6 +344,19 @@ def _kind(value: Any) -> StreamKind:
         return StreamKind(str(value))
     except ValueError:
         return StreamKind.UNKNOWN
+
+
+def _codec(kind: StreamKind, codec: str | None) -> str | None:
+    """What the file reports, with the four subtitle renames applied.
+
+    Subtitles only, which is where the reference does it: the rename sits inside the branch that
+    handles a subtitle stream, so a video codec that happened to be spelled one of these four
+    would be left alone. Matched without regard to case, as the reference matches it; the tool
+    reports these four in lower case.
+    """
+    if kind is not StreamKind.SUBTITLE or codec is None:
+        return codec
+    return RENAMED_SUBTITLE_CODECS.get(codec.lower(), codec)
 
 
 def _codec_tag(raw: Mapping[str, Any]) -> str | None:
