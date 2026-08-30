@@ -1136,6 +1136,45 @@ def subtitle_packet_seconds(path: Path, ordinal: int) -> tuple[float, ...]:
     return tuple(float(line.rstrip(",")) for line in output.split() if line.rstrip(","))
 
 
+def extraction_offset_seconds(path: Path) -> float:
+    """What this ffmpeg build adds to every timestamp it extracts out of this file.
+
+    **A property of the tool and of the audio track, not of the subtitles.** ffmpeg expresses an
+    output on a timeline that starts at the *container's* start time, so an extracted subtitle
+    comes out at `the time the file states it` minus that start time - and the start time is the
+    earliest of all the streams'. An AAC encoder emits one frame of priming before the first real
+    sample, which lands in Matroska as a first audio timestamp of **-21 ms** (1024 samples at the
+    48 kHz these entries declare is 21.33 ms), so the container starts before zero and every cue
+    of the subtitle track beside it is extracted 21 ms **late**.
+
+    It is one build's reading and not another's: ffmpeg 6.1 reports that negative start time for
+    these files and ffmpeg 9.0 reports zero **for the same bytes**, so this is the demuxer's
+    handling of the codec delay rather than anything the mux wrote differently. Measured on
+    2026-08-30 across both, with `flac` audio and with no audio at all answering zero on both -
+    which is what identifies the priming as the cause.
+
+    So a test that asserts extracted cue times reads this and adds it, rather than asserting a
+    literal that is true of one build. That is a derivation and not a tolerance: it is exact on
+    every build, and any real failure - a dropped cue, the wrong stream mapped, a mangled timing -
+    still fails.
+    """
+    output = _run(
+        [
+            binary("ffprobe"),
+            "-hide_banner",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=start_time",
+            "-of",
+            "csv=p=0",
+            path.as_posix(),
+        ]
+    )
+    stated = output.strip().rstrip(",")
+    return 0.0 if stated in {"", "N/A"} else -float(stated)
+
+
 def keyframe_seconds(path: Path) -> tuple[float, ...]:
     """Every keyframe's presentation time, in order. What plan section 6.4 aligns segments to."""
     output = _run(
@@ -1260,6 +1299,7 @@ __all__ = [
     "binary",
     "build_media_files",
     "build_scanned_media_world",
+    "extraction_offset_seconds",
     "ffmpeg_version",
     "frame_count",
     "generate",

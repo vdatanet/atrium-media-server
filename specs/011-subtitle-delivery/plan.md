@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-30
 accepted: 2026-08-30
-amended: 2026-08-30 at the tasks gate — four things this plan could not have known or did not check. §6.5's "the variant line gains the group" was written while the master answered one variant and 008's T15 amended that the same day, so the group goes through `_variant` and every entrance carries it. §6.1's "lookup on the codec spelling" reads a spelling `media/probe.py` does not store: the reference renames four subtitle codecs inside its own probe normalisation, `dvd_subtitle` contains no `dvdsub`, and applied to ffprobe's own name the rule answers *text* for every DVD and DVB subtitle track there is — so the rename moves to inspection and migration 0007 rewrites the four values. §8's embedded image subtitle track cannot be encoded by ffmpeg at all, and the fixture writes a PGS bitstream itself. And §6.2's "eight regional rows" are nine, two of which are not regional tags; and 2026-08-30 by T1 — §8's hand-written bitstream is four display sets rather than two at the same 434 bytes, and building it found two hazards the plan states now rather than letting a later task meet them: a subtitle input that does not start at zero is rebased onto its own start time and costs the text track beside it every cue but the first, and `-shortest` lets a subtitle track bound the whole file; and 2026-08-30 by T2 — §6.1's *"every DVD and DVB subtitle track"* is the two **bitmap** names alone: `hdmv_pgs_subtitle` already contains `pgs` and `dvb_teletext` is text either way, so only `dvd_subtitle` and `dvb_subtitle` invert and the fixture's own image track cannot prove the rename. `SupportsExternalStream` inverts with them and is not "not an image" — `PGSSUB` is true where `DVDSUB` is false — and both facts are answered on every stream of every kind rather than on subtitles alone; and 2026-08-30 by T3 — §6.2's merge sentence was wrong three ways (`IsDefault` is assigned rather than OR-ed, the file's own title and language win over the name's, and a multi-stream sidecar gets no filename flags at all), and §6.8's one unmeasured branch is three: the probe now reports which branches a run reaches, and `default` and the name-spelled language join `hin` among the ones the reference library never touches; and 2026-08-30 by T5 — §6.7 step 4 named four formats that carry a byte order mark and there are five (`ttml` is one), step 5's "replace the leading `WEBVTT`" is a replacement over the whole document and is read against `vtt` and not `webvtt`, §3's "five writers" are six, and the writers' own framing — a region declaration, a placement setting on every timing line, a millisecond added to a zero-length cue, a renumbering from one — is bytes a cue comparison cannot see. Three new rows in §6.8: AC-10 has a second contradiction that every window can reach — **measured** on the reference in both the constructed form and through its own generated playlist, after being read — the same-format short circuit's unwindowed half is measured too and only its windowed half stays owed, and `subrip` and `webvtt` have a writer and no media type, so `media/labels.py` gives them no row. Five of the six fetch media types are measured now; `ttml` is the one still read
+amended: 2026-08-30 at the tasks gate — four things this plan could not have known or did not check. §6.5's "the variant line gains the group" was written while the master answered one variant and 008's T15 amended that the same day, so the group goes through `_variant` and every entrance carries it. §6.1's "lookup on the codec spelling" reads a spelling `media/probe.py` does not store: the reference renames four subtitle codecs inside its own probe normalisation, `dvd_subtitle` contains no `dvdsub`, and applied to ffprobe's own name the rule answers *text* for every DVD and DVB subtitle track there is — so the rename moves to inspection and migration 0007 rewrites the four values. §8's embedded image subtitle track cannot be encoded by ffmpeg at all, and the fixture writes a PGS bitstream itself. And §6.2's "eight regional rows" are nine, two of which are not regional tags; and 2026-08-30 by T1 — §8's hand-written bitstream is four display sets rather than two at the same 434 bytes, and building it found two hazards the plan states now rather than letting a later task meet them: a subtitle input that does not start at zero is rebased onto its own start time and costs the text track beside it every cue but the first, and `-shortest` lets a subtitle track bound the whole file; and 2026-08-30 by T2 — §6.1's *"every DVD and DVB subtitle track"* is the two **bitmap** names alone: `hdmv_pgs_subtitle` already contains `pgs` and `dvb_teletext` is text either way, so only `dvd_subtitle` and `dvb_subtitle` invert and the fixture's own image track cannot prove the rename. `SupportsExternalStream` inverts with them and is not "not an image" — `PGSSUB` is true where `DVDSUB` is false — and both facts are answered on every stream of every kind rather than on subtitles alone; and 2026-08-30 by T3 — §6.2's merge sentence was wrong three ways (`IsDefault` is assigned rather than OR-ed, the file's own title and language win over the name's, and a multi-stream sidecar gets no filename flags at all), and §6.8's one unmeasured branch is three: the probe now reports which branches a run reaches, and `default` and the name-spelled language join `hin` among the ones the reference library never touches; and 2026-08-30 by T5 — §6.7 step 4 named four formats that carry a byte order mark and there are five (`ttml` is one), step 5's "replace the leading `WEBVTT`" is a replacement over the whole document and is read against `vtt` and not `webvtt`, §3's "five writers" are six, and the writers' own framing — a region declaration, a placement setting on every timing line, a millisecond added to a zero-length cue, a renumbering from one — is bytes a cue comparison cannot see. Three new rows in §6.8: AC-10 has a second contradiction that every window can reach — **measured** on the reference in both the constructed form and through its own generated playlist, after being read — the same-format short circuit's unwindowed half is measured too and only its windowed half stays owed, and `subrip` and `webvtt` have a writer and no media type, so `media/labels.py` gives them no row. Five of the six fetch media types are measured now; `ttml` is the one still read; and 2026-08-30 by T6 — §6.7's four lines about `media/extract.py` named the artefact's **format** and were read as naming the codec argument: the reference copies the bitstream of anything copyable and encodes only what it cannot, so a `subrip` track is `-c:s copy` and never `-c:s srt`. And the artefact is not what ffmpeg wrote at all — an extracted `.ass` has `,Arial,` replaced with `,Arial Unicode MS,` and is rewritten **only where that changed something**, through a writer that adds a byte order mark, so the substituted font and the mark arrive together or not at all: measured in both forms through the same-format short circuit, which is also the first measurement of what that short circuit hands back. Four smaller ones: the reference extracts **every** extractable track of a source in one invocation where this module extracts the one it was asked for, a non-zero exit is not by itself a failure there (the artefact is the test), and its parser table is built by reflection over a whole format library, so §6.7's ffmpeg fallback catches more files here than there, and §6.7's cache key named the **media** file's change signal where two of the branches read a file beside it, so a replaced sidecar would have been answered with the previous subtitle. §6.7 also gains what CI found and this machine could not: an extracted cue carries the container's own start time, one AAC frame of encoder priming makes that **negative** on ffmpeg 6.1 and zero on 9.0 for the same bytes, so every cue of a track beside an AAC stream extracts 21 ms late on the build most CI runs use — reproduced rather than fixed, because the reference passes no `-copyts` either and adding one answers a `.ts` recording's cues an hour late. New in §6.8: AC-9's *"timings that match the source's"* is exact only where the container starts at zero, left to T7 or T12; and the encoding detection is three steps and no statistics against the reference's statistical detector, put to the user as a gate question because the alternative is a runtime dependency — **decided: keep the rule, add nothing, record the limit** at behaviours §5.11 as an accepted gap with a detector behind the same function as its closing mechanism, and §5 rather than §3 because what differs is the cue text a player draws
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -764,28 +764,92 @@ struck twice. It is written, and it is one more row the format battery owes (§6
 
 * an **external** stream whose format the parsers cover is read from its own file, with its
   encoding detected rather than assumed — a subtitle file is the one input in this project that is
-  routinely not UTF-8;
+  routinely not UTF-8. **Three steps and no statistics**, which is where this module is knowingly
+  weaker than the reference: a byte order mark decides outright, then strict UTF-8, then one
+  declared single-byte fallback. The reference runs a statistical detector over the bytes and can
+  name any of some thirty encodings, and this project has none and adds no dependency for one
+  (§6.8);
 * an **embedded** stream, or an external `.mks`, is extracted by one ffmpeg invocation to `srt`
   (or to its own spelling where the codec is `ass` or `ssa`), which is the reference's rule
-  `[source: MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:458-470 @ v10.11.11]`;
+  `[source: MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:458-470 @ v10.11.11]`.
+  **That names the artefact's format and not the codec argument, which is a different rule**: the
+  reference copies the bitstream of anything copyable — `ass`, `ssa`, `srt`, `subrip` and the
+  image format v1 never reaches — and encodes to SubRip only what it cannot copy `[source:
+  SubtitleEncoder.cs:485-493, 629 @ v10.11.11]`. So a `subrip` track is `-c:s copy` into an
+  `.srt`, and asking `-c:s srt` for it would decode and re-encode every cue for nothing.
+  T6 extracts the **one** track it was asked for where the reference extracts every extractable
+  track of the source in a single invocation with a `-map`/output pair each `[source:
+  SubtitleEncoder.cs:495-556, 608-654 @ v10.11.11]`; the artefacts are identical either way, and
+  what differs is that a first fetch here pays for one track rather than for all of them;
 * an external stream in a text format the parsers do not cover is normalised to `srt` by one
-  ffmpeg invocation, which is the reference's fallback for the same case;
+  ffmpeg invocation, which is the reference's fallback for the same case — **and this fallback
+  catches more files than the reference's does**, because the reference's parser table is built by
+  reflection over a subtitle library's whole format set and covers some dozens of extensions
+  `[source: MediaBrowser.MediaEncoding/Subtitles/SubtitleEditParser.cs:96-134 @ v10.11.11]` where
+  §5's `READABLE` is three families. The cues are the same either way; which side of the fallback
+  a `.smi` lands on is not;
 * an **image** stream raises before any of that. The reference attempts the extraction and refuses
   about twenty seconds later with `400`; Atrium answers the same status and the same twenty-five
   bytes without starting a process. The only difference is latency, which is the shape 008's OQ-9
   already accepted — the same answer, byte for byte, sooner.
 
+**An extracted cue's time is a function of the ffmpeg that extracted it, and the command stays the
+reference's anyway.** ffmpeg expresses an output on a timeline beginning at the *container's* start
+time, which is the earliest of all its streams'; one AAC frame of encoder priming lands in Matroska
+as a first audio timestamp of **-21 ms** (1024 samples at 48 kHz is 21.33 ms), so a container whose
+audio is AAC starts *before* zero and every cue of the subtitle track beside it is extracted 21 ms
+**late**. It is a reading rather than a writing: ffmpeg 6.1 reports that negative start time and
+ffmpeg 9.0 reports zero **for the same bytes**, and the same mux with `flac` audio, or with no
+audio at all, starts at zero on both — which is what identifies the priming as the cause
+`[probe: two ffmpeg builds over tests/fixtures/media.py's own commands, 2026-08-30]`.
+
+**Atrium reproduces it, and the alternative was measured before that was decided.** The
+reference's extraction passes no `-copyts` `[source:
+MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:629-646 @ v10.11.11]`, so a reference
+server on the same build answers the same 21 ms — this is parity, not a shortfall, and it is
+[008's own rule](../008-playback-negotiation-and-delivery/plan.md) that produced bytes are a
+function of the encoder. Adding `-copyts` fixes this file and **breaks a worse case**: on a
+container whose start time is *positive* — the shape a `.ts` recording with a PCR offset has — it
+answers cues at their absolute container time, so a cue an hour in comes back at `01:00:00` where
+the reference answers `00:00:00` and every window a client follows comes back empty. Measured on
+both, on ffmpeg 6.1, the same day. The rule that would be right for both signs — subtract the
+start time, but never let a negative one push a cue forward — is not an ffmpeg flag and needs a
+container start time this project does not store, which is a column and a migration rather than a
+line here.
+
+**The artefact is not what ffmpeg wrote, and the difference is on the wire.** After extracting to
+`.ass` the reference replaces `,Arial,` with `,Arial Unicode MS,` in the finished file and rewrites
+it **only where that changed something** — and the rewrite goes back out through a writer that
+emits the UTF-8 preamble where ffmpeg's muxer emits none, so the substituted font and the **byte
+order mark** arrive together or not at all `[source: SubtitleEncoder.cs:751, 928-957 @ v10.11.11]`.
+Measured in both forms, through the same-format short circuit that hands this artefact straight
+back: a track whose style named Arial answers `Style: Default,Arial Unicode MS,30,…` under a
+leading mark, and a track whose style named another font answers ffmpeg's own bytes with no mark
+`[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. Reproduced, including
+the asymmetry between its two callers: after an *extraction* the reference tests the output's name
+for the three characters `ass`, so `.ssa` is passed over, and after a *conversion* it acts on the
+output whatever it is called `[source: SubtitleEncoder.cs:452, 751 @ v10.11.11]` — a substitution
+that changes nothing on any real file and is reproduced rather than tidied away. A run's exit code
+decides nothing either — the reference fails an extraction only where the output is missing or
+empty `[source: SubtitleEncoder.cs:704-763 @ v10.11.11]`, so the artefact is the test and the
+encoder's complaints are logged rather than raised on.
+
 The produced text lands in `cache/subtitles/<digest>.<format>`, the digest over the media file's
-`(library_id, relative_path, size, mtime_ns)`, the stream's wire index and the extracted format,
-written to a temporary name and published by rename — `images/cache.py`'s shape, chosen over 008's
-scratch root because an extracted subtitle is a derived artefact of a file rather than of a
-session, and because clearing it at every startup would re-run ffmpeg for every restart. It is not
-a `TranscodeSession`: no ping timer, no throttle, no segment deletion, no reap. **It is still in
-the ledger**, because every process this server starts is, and because a client that opens a
-playlist of a hundred windows fetches them in bursts: `readable` holds a per-digest lock so the
-hundredth request waits on the first extraction instead of starting a hundredth ffmpeg. That
-burst is the failure mode the image cache never faces and the reason the lock is specified here
-rather than left to be discovered under load.
+`(library_id, relative_path)`, the **extracted file's own** `(size, mtime_ns)`, the stream's wire
+index and the extracted format, written to a temporary name and published by rename —
+`images/cache.py`'s shape, chosen over 008's scratch root because an extracted subtitle is a
+derived artefact of a file rather than of a session, and because clearing it at every startup
+would re-run ffmpeg for every restart. **The change signal is the file the bytes are read from and
+not always the film**, which this section used to say it was: a track inside the container is
+keyed on the film's, and a track read out of an `.mks` or a sidecar the fallback normalises is
+keyed on the *sidecar's* — a sidecar can be replaced without the film being touched, and keyed on
+the film alone the next fetch would answer the previous subtitle for as long as the artefact
+survived. It is not a `TranscodeSession`: no ping timer, no throttle, no segment deletion, no
+reap. **It is still in the ledger**, because every process this server starts is, and because a
+client that opens a playlist of a hundred windows fetches them in bursts: `readable` holds a
+per-digest lock so the hundredth request waits on the first extraction instead of starting a
+hundredth ffmpeg. That burst is the failure mode the image cache never faces and the reason the
+lock is specified here rather than left to be discovered under load.
 
 **Conversion, windowing and rendering** are then pure:
 
@@ -876,6 +940,12 @@ gaps in it.
   10.11.11, 2026-08-30]`. What that run does *not* ask is the same request with a
   `StartPositionTicks` on it, which is the row that turns AC-10's first contradiction from a
   reading into a measurement. It stays owed to T7.
+  **And T6 used the same short circuit to measure what it hands back**, which is the only view
+  from outside of what an extraction wrote: `Stream.ass` on an *embedded* `ass` track answers the
+  artefact, and the artefact is not ffmpeg's output — the font substitution and the byte order
+  mark that comes with it are §6.7's, measured in both of their forms. Writing the short circuit
+  itself into the spec is still T7's, along with AC-10's amendment; what is settled early is the
+  shape of what it will be handing over.
 * **The playlist route's malformed-identifier row names the wrong parameter.** Spec §3.7 says both
   routes answer problem details naming `routeItemId`; the probe measured only the fetch route
   (`tools/probe_subtitle_delivery.py`, the `malformed identifier, fetch` case), and the playlist
@@ -930,6 +1000,32 @@ gaps in it.
   in the format battery, which asked for six and never asked for these. It is the same shape as
   the `ttml` bullet below seen from the other side: one is written and never asked for, these two
   are asked-for-able and cannot be written out.
+* **AC-9's *"timings that match the source's"* is exact only where the container starts at zero,
+  and this is the user's to take or leave.** §6.7's measurement says an extracted cue carries the
+  container's own start offset, which one AAC frame of encoder priming makes **negative** on a
+  build that reads the priming that way — so on ffmpeg 6.1 a cue the file states at 0.000 arrives
+  at 0.021, on this server *and on a reference running the same binary*. AC-9 as a **parity**
+  statement holds unchanged, and that is what this feature is for; as an absolute statement about
+  the file it is short by the offset. Nothing here depends on the difference — 21 ms is half a
+  frame at 25 fps — and the criterion's own test is T7's, so whether the wording gains the clause
+  belongs to T7 or to T12's acceptance map rather than to the task that measured it. Recorded so
+  it is not discovered a third time.
+* **A sidecar's encoding is detected with three steps and no statistics, and that is a decision
+  rather than a measurement.** The reference runs a statistical detector — a port of the universal
+  charset detector — over the bytes and can name any of some thirty encodings; T6 reads a byte
+  order mark where there is one, then strict UTF-8, then falls back to one declared single-byte
+  encoding. **Every file both servers agree about is every file that is UTF-8 or carries a mark**,
+  which is the overwhelming majority and the whole of what any fixture here holds; a legacy file
+  outside the fallback's range decodes to different text on Atrium, or to none. The alternative is
+  a new runtime dependency, which is not an implementation detail and was **the user's to take**.
+  Nothing is owed a probe: the divergence is in this server's own reading, not in a claim about
+  the reference. **Taken at T6, and it is no longer owed**: keep the rule, add no dependency, and
+  record the limit as an accepted gap at
+  [behaviours §5.11](../../docs/compatibility/behaviours.md#511-a-subtitle-file-in-a-legacy-encoding-is-decoded-by-a-rule-and-not-by-a-detector),
+  whose closing mechanism is a detector behind the one function that makes the choice with its
+  dependency argued in an ADR then rather than now. **§5 and not §3**, because a §3 entry has to
+  carry the argument that no client can observe the difference and what differs here is the cue
+  text a player draws.
 * **`SubtitleCodec` is not written into a delivery address.** The reference writes it for an
   `Embed` method with a declared codec list, and v1 embeds nothing and binds no such list. It is a
   missing parameter on a branch v1 cannot reach, recorded so it is not mistaken for an oversight.

@@ -343,17 +343,24 @@ def _assert_opens_nothing(module: Path, described: str) -> None:
 #: noticing.
 MAY_START_A_PROCESS = ("media/probe.py", "media/ffmpeg.py")
 
-#: The owner the task list expected to need an exemption. Checked explicitly rather than left to
-#: the sweep, because "it happens not to import subprocess today" and "it starts its processes
-#: through the ledger on purpose" are the same test result and different facts.
-SUPERVISED_THROUGH_THE_LEDGER = "media/sessions.py"
+#: The modules that start processes and are **not** exempt, because they start them through the
+#: ledger. Checked explicitly rather than left to the sweep, because "it happens not to import
+#: subprocess today" and "it starts its processes through the ledger on purpose" are the same test
+#: result and different facts - and the second is the one that has to stay true.
+#:
+#: `media/sessions.py` is 008's encoder manager. `media/extract.py` joined it at 011 T6: it is the
+#: one impure module of the subtitle feature, it runs an ffmpeg per track that has no artefact
+#: yet, and a version of it that reached for its own `create_subprocess_exec` would pass the sweep
+#: below by not being swept - which is exactly how a process this server started would stop being
+#: one the ledger lists.
+SUPERVISED_THROUGH_THE_LEDGER = ("media/sessions.py", "media/extract.py")
 
 
 def package_modules() -> list[Path]:
     return sorted(PACKAGE.rglob("*.py"))
 
 
-@pytest.mark.parametrize("relative", [*MAY_START_A_PROCESS, SUPERVISED_THROUGH_THE_LEDGER])
+@pytest.mark.parametrize("relative", [*MAY_START_A_PROCESS, *SUPERVISED_THROUGH_THE_LEDGER])
 def test_the_supervised_modules_exist_to_be_checked(relative: str) -> None:
     """A renamed module would otherwise make the sweep below pass by exempting nothing."""
     assert (PACKAGE / relative).exists(), f"{relative} does not exist under atrium/"
@@ -411,17 +418,22 @@ def test_the_two_supervised_modules_really_do_start_processes() -> None:
         )
 
 
-def test_the_transcode_manager_starts_its_encoders_through_the_ledger() -> None:
-    """008 T11's own shape, asserted rather than described.
+@pytest.mark.parametrize("relative", SUPERVISED_THROUGH_THE_LEDGER)
+def test_a_supervised_module_starts_its_processes_through_the_ledger(relative: str) -> None:
+    """008 T11's own shape, asserted rather than described, and 011 T6's beside it.
 
-    The manager decides *which* process to start and *when* to kill it; the ledger is what
-    actually spawns and reaps. Written down here because the alternative reads identically in a
-    diff - a `create_subprocess_exec` inside the manager would work, pass every segment test, and
-    quietly make the ledger a partial list of what this server is running.
+    Each of these decides *which* process to start and *when* to stop waiting for it; the ledger
+    is what actually spawns, drains and reaps. Written down here because the alternative reads
+    identically in a diff - a `create_subprocess_exec` inside either one would work, pass every
+    test it has, and quietly make the ledger a partial list of what this server is running.
+
+    Both halves are asserted: it reaches for no spawner of its own, **and** it reaches the
+    ledger's. Only the first would pass for a module that had stopped starting processes at all,
+    which is a different fact and not this one.
     """
-    module = PACKAGE / SUPERVISED_THROUGH_THE_LEDGER
+    module = PACKAGE / relative
     assert process_spawners(module) == []
-    assert "_ledger.start(" in module.read_text(encoding="utf-8")
+    assert "ledger.start(" in module.read_text(encoding="utf-8")
 
 
 # ------------------------------------------------------------------------------------------
