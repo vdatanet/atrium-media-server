@@ -552,8 +552,12 @@ same pieces by hand, which tests a composition nobody runs. All 186 existing tes
 the real one unchanged, which is the useful part of the answer.
 
 **No documentation routes are served.** The reference serves its OpenAPI document at
-`/api-docs/openapi.json`; that route is not in `surface.yaml` and no analysed client asks for it
-(Principle VI). The document is still *generated* — `app.openapi()` builds it — which is what
+`/api-docs/openapi.json` `[source:
+Jellyfin.Server/Extensions/ApiApplicationBuilderExtensions.cs:36-39,
+Jellyfin.Server/Extensions/ApiServiceCollectionExtensions.cs:203 @ v10.11.11]` — a route template
+of `{documentName}/openapi.json` over a document named `api-docs`, which is the whole of the
+address; that route is not in `surface.yaml` and no analysed client asks for it (Principle VI).
+The document is still *generated* — `app.openapi()` builds it — which is what
 [ADR-0002](../../docs/decisions/0002-python-and-the-runtime-stack.md) chose FastAPI for. A test
 asserts both halves.
 
