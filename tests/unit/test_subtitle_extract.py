@@ -19,6 +19,21 @@ each branch exists for rather than the branch itself:
 real files, and what is instrumented is the one question a test cannot otherwise ask: *was a
 process started this time?* A mock would also have to answer *what did ffmpeg write*, which is
 the part that has to be true.
+
+## An extracted cue's time is a function of the ffmpeg that extracted it
+
+Found by CI, which runs the distribution's ffmpeg 6.1 where this machine runs 9.0: **every cue of
+the embedded track came back 21 milliseconds late there and on time here**, and the cause is one
+frame of AAC encoder priming in the audio track *beside* the subtitles. ffmpeg expresses its
+output on a timeline starting at the container's start time, that start time is the earliest of
+all the streams', and 6.1 reads the priming as a first audio timestamp of -21 ms where 9.0 reads
+zero **for the same bytes** (see `tests/fixtures/media.extraction_offset_seconds`).
+
+So exactly **one** test below asserts cue timings, and it asserts them against the offset read off
+the file rather than against a literal - a derivation, exact on every build, that still fails on a
+dropped cue, a mangled timing or the wrong stream. The two tests that used to assert timings in
+passing now assert the cue **text**, which is what each of them was really for: it is the text
+that says which track was mapped.
 """
 
 from __future__ import annotations
@@ -46,6 +61,7 @@ from tests.fixtures.media import (
     BuiltMedia,
     Cue,
     MediaFile,
+    extraction_offset_seconds,
 )
 
 #: The library identifier every `DeliveredFile` here carries. Any string does: it is one component
@@ -105,6 +121,34 @@ def declared(cues: Sequence[Cue]) -> list[tuple[float, float, str]]:
     return [(cue.start_seconds, cue.end_seconds, cue.text) for cue in cues]
 
 
+def declared_after_extraction(path: Path, cues: Sequence[Cue]) -> list[tuple[float, float, str]]:
+    """The declared cue list as an **extraction of this file by this ffmpeg** must answer it.
+
+    The only thing added is the offset the tool itself applies, read off the container with
+    `ffprobe` (see the module docstring), and rounded to the millisecond the readable formats
+    carry. Nothing here is a tolerance: on a build that shifts nothing the offset is zero and the
+    assertion is the declaration exactly, and on one that shifts it the amount is not this test's
+    guess but the file's own statement.
+    """
+    offset = extraction_offset_seconds(path)
+    return [
+        (round(cue.start_seconds + offset, 3), round(cue.end_seconds + offset, 3), cue.text)
+        for cue in cues
+    ]
+
+
+def cue_seconds_to_the_millisecond(
+    cues: Sequence[subtitles.Cue],
+) -> list[tuple[float, float, str]]:
+    """A parsed cue list at the resolution SubRip and WebVTT write."""
+    return [(round(start, 3), round(end, 3), text) for start, end, text in cue_seconds(cues)]
+
+
+def cue_texts(cues: Sequence[subtitles.Cue]) -> list[str]:
+    """What each cue says, which is what identifies the track it came out of."""
+    return [cue.text for cue in cues]
+
+
 # ------------------------------------------------------------------------------------------
 # The embedded track
 # ------------------------------------------------------------------------------------------
@@ -118,9 +162,15 @@ async def test_an_embedded_text_track_comes_back_as_the_declared_cue_list(
 
     Compared against the matrix's own declaration rather than against a literal, which is what
     makes it an assertion about the extraction instead of about this test.
+
+    **This is the one test here that asserts cue timings**, and it asserts them shifted by the
+    offset the extracting ffmpeg applies to this file - zero on a build that reads the audio's
+    encoder priming as nothing, and one AAC frame on a build that reads it as a negative container
+    start time (module docstring). The declaration is still the source of every number.
     """
     entry = BOTH_SUBTITLE_KINDS
-    inspection = probe.inspect(media_files.path_of(entry))
+    path = media_files.path_of(entry)
+    inspection = probe.inspect(path)
     stream = subtitle_stream(inspection, "subrip")
     ledger = CountingLedger()
 
@@ -129,7 +179,9 @@ async def test_an_embedded_text_track_comes_back_as_the_declared_cue_list(
     )
 
     assert fmt == extract.DEFAULT_FORMAT
-    assert cue_seconds(subtitles.parse(text, fmt)) == declared(CUES)
+    assert cue_seconds_to_the_millisecond(subtitles.parse(text, fmt)) == declared_after_extraction(
+        path, CUES
+    )
     assert len(ledger.started) == 1
     assert not ledger.live, "the extraction was left in the ledger after it finished"
 
@@ -169,8 +221,10 @@ async def test_the_command_copies_a_copyable_codec_and_maps_the_demuxer_index(
     assert f"0:{stream.file_index}" in argv
     assert f"0:{stream.index}" not in argv
     assert argv[argv.index("-c:s") + 1] == "copy"
-    # And the map was the right one: the cues are the text track's, not the picture track's.
-    assert cue_seconds(subtitles.parse(text, extract.DEFAULT_FORMAT)) == declared(CUES)
+    # And the map was the right one: the cues are the text track's, not the picture track's. The
+    # **text** says that and the timings do not - they carry the extracting build's own offset
+    # (module docstring), and one test owning that claim is enough.
+    assert cue_texts(subtitles.parse(text, extract.DEFAULT_FORMAT)) == [cue.text for cue in CUES]
 
 
 @pytest.mark.ffmpeg
@@ -250,7 +304,10 @@ async def test_an_extracted_ass_carries_the_substituted_font_and_the_mark_that_c
     assert extract.ASS_FONT not in text
     stored = next(iter(cache.glob("*.ass")))
     assert stored.read_bytes().startswith(subtitles.BYTE_ORDER_MARK)
-    assert cue_seconds(subtitles.parse(text, fmt)) == declared(CUES)
+    # The cues prove the substitution did not damage the document it rewrote. By text, for the
+    # reason the module docstring gives - and this format's own resolution is a centisecond, so
+    # it could not carry the offset exactly even where a build applies one.
+    assert cue_texts(subtitles.parse(text, fmt)) == [cue.text for cue in CUES]
 
 
 # ------------------------------------------------------------------------------------------

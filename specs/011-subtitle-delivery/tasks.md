@@ -590,6 +590,60 @@ here is the **cue text a player draws** — filing it as a safe divergence would
 something untrue. [Plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed)'s row
 now says decided rather than owed.
 
+**And then CI failed where the local gate was green, on three tests, for a reason no reading would
+have produced: an extracted cue's time is a function of the ffmpeg that extracted it.** Every cue
+of the embedded track came back **21 ms late** on CI's ffmpeg 6.1.1 and on time on this machine's
+9.0.1. Confirmed with `ffprobe` rather than assumed, and the cause is not the subtitles at all:
+ffmpeg expresses an output on a timeline beginning at the **container's** start time, that start
+time is the earliest of *all* the streams', and one AAC frame of encoder priming — 1024 samples at
+the 48 kHz these entries declare, 21.33 ms — lands in Matroska as a first audio timestamp of
+**-21 ms**. So the container starts before zero and every cue of the subtitle track **beside** the
+audio is pushed forward by exactly that. It is [T1's own hazard](#t1--the-world-gets-subtitles-two-entries-one-sidecar-and-a-bitstream-ffmpeg-will-not-encode)
+one feature on, from the other direction: there a bitstream that did not start at zero moved and
+took the track beside it, here an *audio* track that does not start at zero moves the subtitles.
+
+**It is a reading and not a writing, which is what decided the fix.** ffmpeg 6.1 reports the
+negative start time and ffmpeg 9.0 reports zero **for the same bytes** — each build reads both
+builds' files the same way as itself — and the same mux with `flac` audio, or with no audio at
+all, starts at zero on both. So no fixture change would have been a fix; it would have been a
+fixture chosen to stop a test failing.
+
+**Reproduced rather than corrected, and the alternative was measured before that was decided.**
+The reference's extraction passes no `-copyts` `[source:
+MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:629-646 @ v10.11.11]`, so a reference
+server on the same build answers the same 21 ms: this is **parity**, not a shortfall. And
+`-copyts` — the one flag that fixes it — was tried on ffmpeg 6.1 and **breaks a worse case**: on a
+container whose start time is *positive*, which is what a `.ts` recording with a PCR offset has,
+it answers a cue an hour in at `01:00:00` where the reference answers `00:00:00`, so every window
+a client follows comes back empty. Trading 21 ms on one file class for an hour on another is not a
+correctness fix. The rule that would be right for both signs — subtract the start time, never let
+a negative one push a cue forward — is no ffmpeg flag and needs a container start time nothing
+here stores.
+
+**So the assertion moved, and it moved to a derivation rather than to a tolerance.**
+`tests/fixtures/media.py` gains `extraction_offset_seconds`, which reads the offset off the
+container with `ffprobe`, and **one** test asserts cue timings: the declared list plus that offset,
+exact on every build, still failing on a dropped cue, a mangled timing or the wrong stream mapped.
+The two tests that asserted timings *in passing* now assert the cue **text**, which is what each
+was actually for — the text is what says which of the two subtitle tracks was mapped. A test
+loosened until it passes would have been the thing this repository calls not-a-test; this one
+asserts more than it did, because the offset is now named and read rather than assumed to be zero.
+
+**Two things checked while the two builds were both in hand, because nobody had had that
+comparison before.** The fixture's byte-for-byte invariant **holds within a build and not across
+them** — 59 237 bytes on 6.1 against 59 240 on 9.0 for one entry — which is exactly what
+`digest_of` mixing the `ffmpeg -version` line into the cache directory name is for, so the digest
+is doing what it claims and not less. And the **whole suite was run against ffmpeg 6.1.1-3ubuntu5**
+in Ubuntu 24.04, CI's own build: the three cue assertions above were the only version-dependent
+ones in it.
+
+**One thing this leaves for a later gate.** AC-9's *"timings that match the source's"* is exact
+only where the container starts at zero; where it does not, an extracted cue carries that offset —
+here **and** on a reference running the same binary, so the criterion holds as the parity
+statement it is written for and is short of absolute.
+[Plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed)
+records it for T7, which owns AC-9's test, or for T12's acceptance map.
+
 **And the sweep the task points at could not hold two names.**
 `test_import_directions.py`'s `SUPERVISED_THROUGH_THE_LEDGER` was a single string with one test
 reading it, and its second half looked for the literal `_ledger.start(` — the private attribute
