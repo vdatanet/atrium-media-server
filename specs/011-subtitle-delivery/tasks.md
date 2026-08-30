@@ -236,7 +236,7 @@ from a file.
 
 ## T3 — Two pure tables: the filename rule and the two numberings
 
-- [ ] **Changes:** `library/naming/external.py` — pure — reproduces the stem match and the
+- [x] **Changes:** `library/naming/external.py` — pure — reproduces the stem match and the
   right-to-left read of [spec §3.6](spec.md#36-subtitles-beside-the-media): the default and forced
   vocabularies match by **containment**, the hearing-impaired one by **equality**, the language
   lookup runs before the hearing-impaired vocabulary and matches a culture's display name, its
@@ -263,6 +263,53 @@ from a file.
   exactly the number of external streams**, which is the assertion that catches the whole class
   where "the indices are contiguous" would not.
 - **Spec reference:** §3.6, AC-11; plan §5, §6.2
+
+**Done (2026-08-30).** The rule reproduced, and **the reproduction that proved it was carrying a
+second mistake of exactly the class this task was written to find.** Plan §6.8 owed one unmeasured
+branch, the `hin` collision. The probe now says which branches a run took, and against the
+reference library it reaches four and misses **three**: `default`, `hin`, and *a language written
+as a name rather than as a code* — the last of which the gate's own reproduction got **wrong**, not
+merely unexercised. `Cultures.find` returned the three-letter code for every row, which is right
+for 183 of the 192 and wrong for the nine the tasks gate had just corrected the plan about; it
+agreed with the server on all six items anyway, because no sidecar in that library names one of
+the nine. A rule and its check were both wrong in the same direction, and only counting what ran
+separated them. Each of the three is one filename away from measured — `Film.default.srt`,
+`Film.spa.hi.srt`, `Film.ell.srt` — and plan §6.8 now names all three instead of one.
+
+**"First row wins" is not a tie-break, it decides a spelling.** Five culture rows carry `zho` and
+two carry `spa`, and the matrix row for it was written asserting `zh-hk` — the wrong answer, caught
+by the table. `Chinese` is the first of the five and its name has no dash, so `film.zho.srt` is
+`zho`; three of the other four are `zh-hk`, `zh-cn` and `zh-tw`, whose names *are* what gets
+written down — so a lookup built last-wins answers `zh-tw` for a filename that never mentioned
+Taiwan. The same shape sits behind `spa`, whose second row is `es-419`.
+
+**The merge is three rules and plan §6.2 was wrong about all three** `[source:
+MediaBrowser.Providers/MediaInfo/MediaInfoResolver.cs:117-125, 337-345 @ v10.11.11]`, read here
+because T3 owns the rule the merge consumes and corrected in the plan rather than left for T4 to
+re-derive: `IsDefault` is **assigned** from the filename where the other two flags are OR-ed, so a
+sidecar the demuxer calls default and the name does not is not default; the **file's** title and
+language win and the name's fill a gap, which is the opposite of *"the title from the name replaces
+the file's own"*; and a sidecar holding more than one stream — an `.mks`, never an `.srt` — gets
+none of the three flags at all. None of it is measurable on the reference library: its fourteen
+external streams carry no internal title, language or disposition, so every merge rule there has
+one input and agrees with itself. T4 implements them as read, and owes the reading a fixture.
+
+**`file_index` is mirrored, not required, and the mirror is the honest value.** Plan §5 declares it
+beside `index` with no default; required, it would have written the same number twice on thirty
+construction sites and left the thirty-first free to write a different one. Unstated it reads back
+as `index`, which is exactly what is true before anything renumbers — a container's fourth stream
+*is* the wire's fourth stream until a file turns up beside it. The sentinel never survives
+construction, so `-map 0:{file_index}` needs no guard. And because `renumber` reads `file_index`
+rather than `index`, renumbering an already-renumbered list answers what renumbering once did,
+which is what lets T4 renumber on **every** repository read without tracking whether it already
+has.
+
+Two smaller things. The stem guard rejects `film2.srt` and `film 2.eng.srt` for `film.mkv` and the
+delimiter is the whole reason — a `startswith` would hand one film's subtitle to another, and the
+row is in the matrix rather than in a comment. And `Title` has three values, not two: `None` for a
+bare stem, `None` for a name whose every token was claimed, and the **empty string** for
+`film..srt`, whose one token is empty and which nothing claims. Faithful rather than desirable; the
+distinction is the reference's own and the matrix carries the row so nobody tidies it away.
 
 ## T4 — The sidecars land in rows, and a default scan notices them
 

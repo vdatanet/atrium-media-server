@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-29
 updated: 2026-08-30
 accepted: 2026-08-30
-amended: 2026-08-30 at the tasks gate — four things this plan could not have known or did not check. §6.5's "the variant line gains the group" was written while the master answered one variant and 008's T15 amended that the same day, so the group goes through `_variant` and every entrance carries it. §6.1's "lookup on the codec spelling" reads a spelling `media/probe.py` does not store: the reference renames four subtitle codecs inside its own probe normalisation, `dvd_subtitle` contains no `dvdsub`, and applied to ffprobe's own name the rule answers *text* for every DVD and DVB subtitle track there is — so the rename moves to inspection and migration 0007 rewrites the four values. §8's embedded image subtitle track cannot be encoded by ffmpeg at all, and the fixture writes a PGS bitstream itself. And §6.2's "eight regional rows" are nine, two of which are not regional tags; and 2026-08-30 by T1 — §8's hand-written bitstream is four display sets rather than two at the same 434 bytes, and building it found two hazards the plan states now rather than letting a later task meet them: a subtitle input that does not start at zero is rebased onto its own start time and costs the text track beside it every cue but the first, and `-shortest` lets a subtitle track bound the whole file; and 2026-08-30 by T2 — §6.1's *"every DVD and DVB subtitle track"* is the two **bitmap** names alone: `hdmv_pgs_subtitle` already contains `pgs` and `dvb_teletext` is text either way, so only `dvd_subtitle` and `dvb_subtitle` invert and the fixture's own image track cannot prove the rename. `SupportsExternalStream` inverts with them and is not "not an image" — `PGSSUB` is true where `DVDSUB` is false — and both facts are answered on every stream of every kind rather than on subtitles alone
+amended: 2026-08-30 at the tasks gate — four things this plan could not have known or did not check. §6.5's "the variant line gains the group" was written while the master answered one variant and 008's T15 amended that the same day, so the group goes through `_variant` and every entrance carries it. §6.1's "lookup on the codec spelling" reads a spelling `media/probe.py` does not store: the reference renames four subtitle codecs inside its own probe normalisation, `dvd_subtitle` contains no `dvdsub`, and applied to ffprobe's own name the rule answers *text* for every DVD and DVB subtitle track there is — so the rename moves to inspection and migration 0007 rewrites the four values. §8's embedded image subtitle track cannot be encoded by ffmpeg at all, and the fixture writes a PGS bitstream itself. And §6.2's "eight regional rows" are nine, two of which are not regional tags; and 2026-08-30 by T1 — §8's hand-written bitstream is four display sets rather than two at the same 434 bytes, and building it found two hazards the plan states now rather than letting a later task meet them: a subtitle input that does not start at zero is rebased onto its own start time and costs the text track beside it every cue but the first, and `-shortest` lets a subtitle track bound the whole file; and 2026-08-30 by T2 — §6.1's *"every DVD and DVB subtitle track"* is the two **bitmap** names alone: `hdmv_pgs_subtitle` already contains `pgs` and `dvb_teletext` is text either way, so only `dvd_subtitle` and `dvb_subtitle` invert and the fixture's own image track cannot prove the rename. `SupportsExternalStream` inverts with them and is not "not an image" — `PGSSUB` is true where `DVDSUB` is false — and both facts are answered on every stream of every kind rather than on subtitles alone; and 2026-08-30 by T3 — §6.2's merge sentence was wrong three ways (`IsDefault` is assigned rather than OR-ed, the file's own title and language win over the name's, and a multi-stream sidecar gets no filename flags at all), and §6.8's one unmeasured branch is three: the probe now reports which branches a run reaches, and `default` and the name-spelled language join `hin` among the ones the reference library never touches
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -447,10 +447,25 @@ hearing-impaired.
 the extension does not: `.sub` is `microdvd` or `dvd_subtitle` depending on the bytes, and that is
 exactly the split §6.1 turns on. `media/probe.inspect_subtitle` runs the same prober 008 already
 supervises and takes **every** subtitle stream the file holds, which is one for an `.srt` and
-possibly several for an `.mks`. The filename's flags are OR-ed over the demuxer's — the reference
-keeps a forced flag the file itself carries even when the name does not say so `[source:
-MediaBrowser.Providers/MediaInfo/MediaInfoResolver.cs:117-125 @ v10.11.11]` — and the title from
-the name replaces the file's own.
+possibly several for an `.mks`. **The merge is three different rules and T3's reading corrected all three of
+them** `[source: MediaBrowser.Providers/MediaInfo/MediaInfoResolver.cs:117-125, 337-345 @
+v10.11.11]`:
+
+* `IsForced` and `IsHearingImpaired` are OR-ed — the reference keeps a flag the file itself
+  carries even when the name does not say so — but `IsDefault` is **assigned** from the name, so a
+  sidecar whose own disposition says default and whose name does not is *not* default.
+* The **file's** title and language win, and the name's fill a gap rather than replacing one. This
+  plan said the opposite. It makes no difference to a plain `.srt`, which carries neither, and it
+  decides both on an `.mks` that does.
+* A sidecar holding **more than one** stream gets none of the three flags at all: the branch that
+  applies them is the one-stream branch, and the many-stream branch sets only the path, the
+  external flag and the two fill-ins. `.srt` never reaches it and `.mks` always does.
+
+None of the three is measurable against the reference library the probe runs on: its fourteen
+external streams are `srt`, `ass` and `vtt` files that carry no internal title, language or
+disposition, so every merge rule has one input and agrees with itself
+`[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`. T4 implements them as
+read and owes the reading a fixture rather than a probe.
 
 **Discovered files are ordered by `external_path`, and that is a decision rather than a copy.**
 The reference's order is its directory enumeration's, which is the filesystem's; the probe's
@@ -823,11 +838,18 @@ gaps in it.
 * **`ttml` is written and has never been asked for**, which is the row above seen from the probe's
   side: the format battery covers six spellings and the reference's writer table has a seventh
   (§6.7). One row settles it.
-* **The `hin` branch of the sidecar name rule is read, not measured.** A second language token
+* **Three branches of the sidecar name rule are read, not measured, and this bullet named one
+  of them.** The probe now reports which branches a run took, and against the reference library it
+  reaches `forced`, `language`, `hearing impaired` and `title` and misses `default`, `hin` and
+  *a language written as a name* `[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11,
+  2026-08-30]`. The `hin` branch is the one this bullet was written for — a second language token
   behind a first that resolved to Hindi takes the language and sets the hearing-impaired flag
-  `[source: Emby.Naming/ExternalFiles/ExternalPathParser.cs @ v10.11.11]`; the gate's own
-  reproduction does not carry the branch and the library it ran against has no filename that
-  reaches it, so the probe passed without exercising it (§6.2).
+  `[source: Emby.Naming/ExternalFiles/ExternalPathParser.cs @ v10.11.11]` — and it is joined by the
+  `default` vocabulary, which no filename in that library uses, and by the nine culture rows whose
+  language is written as a name rather than as a code (§6.2 step 4), which no sidecar there names.
+  Each is one filename away from being measured: `Film.spa.hi.srt`, `Film.default.srt` and
+  `Film.ell.srt` reach the three. Until a library carries them, agreement on 947 subtitle streams
+  is agreement about the four branches the run took.
 * **The fetch formats' media types are read, not measured**, and they land as new rows in
   `media/labels.py`'s existing table. `text/x-ssa` for `ass` and `ssa` is explicit `[source:
   MediaBrowser.Model/Net/MimeTypes.cs:82-83 @ v10.11.11]`; `text/vtt`, `application/x-subrip` and
