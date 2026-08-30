@@ -973,9 +973,17 @@ binds and direct-plays on the reference — one row, asked precisely because the
 fact about how a body is read. `ProfileType`, `ConditionType`, `ConditionProperty` and `CodecKind`
 are all matched **case-sensitively** here, so each of the four is a `400` on Atrium where the
 reference answers `200`. Making that general is a change to `compat/model.py`, which every request
-model in the project inherits; it is 008's question and the user's, so it is measured and recorded
-in [plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed) rather than fixed
-sideways under this task's name.
+model in the project inherits, so T9 fixed only the vocabulary T9 added.
+
+**Measured here, owned there, and it widened an answer that had already been accepted.** [012's
+OQ-4](../012-negotiation-inputs/spec.md#7-open-questions-and-what-measuring-them-did) answers this
+question for the **protocol** value alone — `Hls`, `HLS` and `hLs` all bind, and this server's
+comparison does not — and 012 is accepted and unimplemented, so an implementer reading it would
+have written the narrow fix and rediscovered the general case, which is this repository paying
+twice for one measurement. At the user's decision OQ-4 is **widened rather than corrected**, in
+this change, with an `amended:` line on 012's own frontmatter saying that the amendment came from
+another feature's task. [Plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed)
+**points at** that row instead of restating it, so there is one description of this and not two.
 
 Three smaller ones. **`Drop` is a member no answer can carry** — the two embedded passes return an
 `Embed` profile and the two external passes an `External` or an `Hls` one, so a declared `Drop`

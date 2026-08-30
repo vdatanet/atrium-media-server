@@ -1122,14 +1122,19 @@ gaps in it.
   *declares*. The other side of the same word — `SubtitleMethod=hls` as a query parameter of the
   master playlist route — is T11's, folded into `tools/probe_subtitle_manifest.py`'s lever
   battery, and the measurement here is a strong prior for it rather than a substitute.
-* **And the same run measured a delta this task did not take, on four enums 008 binds.** What is
-  lenient there is the *binder*, not one enum: a direct-play entry typed `"Type": "video"` rather
-  than `"Video"` binds and direct-plays on the reference, measured in the same run
-  `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`. `ProfileType`,
-  `ConditionType`, `ConditionProperty` and `CodecKind` are all matched **case-sensitively** here,
-  so each of the four is a `400` on Atrium where the reference answers `200`. Making it general is
-  a change to `compat/model.py`, which every request model in the project inherits, so it is 008's
-  question and the user's; T9 measured it, recorded it here, and fixed only the field T9 added.
+* **The same run measured a delta this task did not take, and it belongs to another feature.**
+  What is lenient on the reference is the *binder* rather than one enum: a direct-play entry typed
+  `"Type": "video"` binds and direct-plays there, measured beside the delivery-method row above
+  `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`. **[012's
+  OQ-4](../012-negotiation-inputs/spec.md#7-open-questions-and-what-measuring-them-did) is where
+  that answer lives**, widened from the protocol value to the binder in the same change as this
+  bullet and at the user's decision; it names the four further enumerated values this body carries
+  and what each of them answers. Nothing is restated here, so the two cannot drift. What is this
+  plan's to record is the shape of the fix and why T9 did not make it: `ProfileType`,
+  `ConditionType`, `ConditionProperty` and `CodecKind` are matched case-sensitively in
+  `api/media_info.py` and `media/decision.py`, and closing all four is one change to
+  `compat/model.py`, which every request model in the project inherits — so T9 fixed only the
+  vocabulary T9 added, with a before-validator on that field alone.
 * **`ttml` is written and had never been asked for**, which is the row above seen from the
   probe's side: the format battery covered six spellings and the reference's writer table has a
   seventh (§6.7). **Settled at T7**: `Stream.ttml` answers `200`, `application/ttml+xml`, with the

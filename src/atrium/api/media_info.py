@@ -184,8 +184,9 @@ def _bound_subtitle_method(value: Any) -> Any:
     reference. So `ProfileType`, `ConditionType`, `ConditionProperty` and `CodecKind` - all bound
     in this same body and all matched case-sensitively here - are each a `400` where the reference
     answers `200`. Making that general is a change to `compat/model.py`, which every request model
-    inherits; it is 008's to answer, and it is recorded in 011 plan section 6.8 rather than taken
-    in this change.
+    inherits, so this change fixes only the vocabulary it adds. **The answer lives in 012's
+    OQ-4**, widened from the protocol value to the binder by the measurement above; 011 plan
+    section 6.8 points at it rather than restating it, and so does this.
     """
     if isinstance(value, bool):
         return value
