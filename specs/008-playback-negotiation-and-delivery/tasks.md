@@ -413,7 +413,7 @@ The whole body is optional in the same measurement (`EmptyBodyBehavior.Allow`): 
 would refuse a request the reference answers with a full negotiation.
 
 **AC-31 was unreachable, because nothing had ever read the three permissions.** [002
-§3.5](../002-authentication-users-and-sessions/spec.md#35-get-usersuserid--getuserbyid) moved
+§3.5](../002-authentication-users-and-sessions/spec.md#35-the-user-object) moved
 `EnableVideoPlaybackTranscoding`, `EnableAudioPlaybackTranscoding` and `EnablePlaybackRemuxing`
 into the enforced set on 2026-08-27 — "any flag whose feature arrives must be enforced in the same
 change" — and the code never followed: `users/policy.py` still declared eleven honoured properties

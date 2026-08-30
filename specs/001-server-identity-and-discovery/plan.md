@@ -240,7 +240,9 @@ the validator in §8 is. A missing entry fails a test rather than reaching a cli
 ### 6.2 Date serialisation
 
 The reference emits .NET round-trip format: seven fractional digits and a `Z`
-(`2025-06-19T00:00:00.0000000Z`). Python's `datetime` carries **six**, so the seventh digit is
+(`2025-06-19T00:00:00.0000000Z`) ([behaviours
+§1.2](../../docs/compatibility/behaviours.md#12-dates-carry-up-to-seven-fractional-digits), where
+the measurement lives). Python's `datetime` carries **six**, so the seventh digit is
 always zero — which is correct, not a compromise, because a hundred-nanosecond unit is not
 representable in `datetime` and the reference's own values are microsecond-derived in practice.
 
