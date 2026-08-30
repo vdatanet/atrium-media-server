@@ -81,7 +81,7 @@ plan could not have accounted for because it landed after the plan was accepted:
 |---|---|
 | The `#EXT-X-MEDIA` block is announced and **the** variant line gains `,SUBTITLES="subs"` last ([plan §6.5](plan.md#65-the-manifest-extends-008-64), [spec §3.4](spec.md#34-the-manifest), AC-5) | **There is more than one variant line now.** 008 was amended on 2026-08-30 (its T15, merged as `cab9443`): against an HDR source whose video is stream-copied, `media/hls.py`'s `master_playlist` appends an h264 SDR entrance beside the copy, so the master carries **two** `#EXT-X-STREAM-INF` lines where it carried one. The reference hands its `subtitleGroup` to *every* one of its own `AppendPlaylist` calls — the copy, the h264 entrance, the two codec entrances, the level-5.0 rewrite and both adaptive-bitrate variants `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:213-315, 325-345 @ v10.11.11]`, confirmed on the wire against an HDR film negotiated for a copy: three variants, all three ending `,SUBTITLES="subs"` `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`. Written as one line, the SDR entrance — which exists precisely so that a client that cannot render HDR has somewhere to go — would be the one variant offering no subtitles. Plan §6.5, spec §3.4 and AC-5 are corrected to **every** variant line in this change; T11 renders it through `_variant` and folds the HDR case into `probe_subtitle_manifest.py`, whose `_variant_line` returns the **first** `#EXT-X-STREAM-INF` and only that one, which is why the gate's own probe could not have seen this |
 | The text/image split is a lookup on the codec spelling, so no column and no migration is needed ([plan §6.1](plan.md#61-the-two-file-facts-extends-008-61), [spec §3.2](spec.md#32-which-streams-are-subtitles-and-which-of-those-are-text)) | **Not the spelling this server stores.** The reference **renames four subtitle codecs during inspection** — `dvb_subtitle`→`DVBSUB`, `dvb_teletext`→`DVBTXT`, `dvd_subtitle`→`DVDSUB`, `hdmv_pgs_subtitle`→`PGSSUB` `[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:632-652, 765-768 @ v10.11.11]` — and only then does the substring rule read them. `media/probe.py` stores ffprobe's `codec_name` verbatim, and `"dvd_subtitle"` contains no `dvdsub`: applied as written, **every DVD and DVB subtitle track in a library is announced as text**, offered in a manifest and offered for conversion, which is AC-1 and AC-7 failing together. The four normalised spellings are also what `Codec` carries on the wire — `PGSSUB`, `DVDSUB` and `DVBTXT` all appear beside `subrip`, `ass` and `webvtt` on a real library `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]` — so this is a property **008 already emits differently** and no fixture had a subtitle stream to catch it. T2 owns it, normalises where the reference does, and migration 0007 rewrites the four spellings in `media_streams` |
-| The fixture gains an embedded **image** subtitle track ([plan §8](plan.md#8-testing-strategy)) | **ffmpeg cannot make one.** There is no PGS encoder, and a text-to-bitmap conversion is refused outright — `Subtitle encoding currently only possible from text to text or bitmap to bitmap` — so `-c:s dvdsub` over an `.srt` fails and the matrix's generate-with-ffmpeg rule has nothing to ask for. Measured at the gate: a **434-byte PGS bitstream written by hand** — five segment types, one 32×8 run-length object, two display sets — demuxes as `hdmv_pgs_subtitle` and muxes into Matroska beside a `subrip` track with `-c:s copy`. T1 builds it that way, and the entry that carries it is Matroska because mp4 accepts neither PGS nor DVD subtitles. It is still *generated, never checked in*, which is what the fixture module's own rule asks for |
+| The fixture gains an embedded **image** subtitle track ([plan §8](plan.md#8-testing-strategy)) | **ffmpeg cannot make one.** There is no PGS encoder, and a text-to-bitmap conversion is refused outright — `Subtitle encoding currently only possible from text to text or bitmap to bitmap` — so `-c:s dvdsub` over an `.srt` fails and the matrix's generate-with-ffmpeg rule has nothing to ask for. Measured at the gate: a **434-byte PGS bitstream written by hand** — five segment types, one 32×8 run-length object, four display sets (one that draws and one that erases, per cue; this row said two, and T1 reproduced the byte count exactly and counted them) — demuxes as `hdmv_pgs_subtitle` and muxes into Matroska beside a `subrip` track with `-c:s copy`. T1 builds it that way, and the entry that carries it is Matroska because mp4 accepts neither PGS nor DVD subtitles. It is still *generated, never checked in*, which is what the fixture module's own rule asks for |
 | A sidecar's language is the culture row's `Name` when it contains a `-` — *"the eight regional rows, `zh-hk` and its siblings"* ([plan §6.2](plan.md#62-discovery-the-name-rule-and-the-two-numberings-extends-003-64-and-008-61) step 4) | **Nine of the 192 rows, and two of them are not regional tags at all**: `Greek, Modern (1453-)` and `Luba-Katanga`, both in `metadata/cultures.py` and both in what `/Localization/Cultures` serves. The rule is the reference's own `[source: Emby.Naming/ExternalFiles/ExternalPathParser.cs @ v10.11.11]` and reproducing it is parity — a Greek sidecar's language *is* written `Greek, Modern (1453-)` there — but "eight regional rows" describes a table this project does not have, and the two non-regional rows are table rows of T3's matrix rather than a footnote |
 
 And two things the review confirmed rather than changed, each worth a line because a task would
@@ -108,7 +108,7 @@ otherwise re-derive it:
 
 ## T1 — The world gets subtitles: two entries, one sidecar, and a bitstream ffmpeg will not encode
 
-- [ ] **Changes:** `tests/fixtures/media.py`'s `MediaFile` grows a subtitle declaration — per
+- [x] **Changes:** `tests/fixtures/media.py`'s `MediaFile` grows a subtitle declaration — per
   track, the codec, the language, the title and the three flags — and the builder writes them:
   a **text** track from a generated `.srt` of a known, tiny cue list, and an **image** track from
   a PGS bitstream the module writes itself (there is no encoder for one; see "What the gate
@@ -134,6 +134,37 @@ otherwise re-derive it:
 renumbers that film's streams — this feature working correctly — and 008's `audioStreamIndex`
 assertions would fail for a reason that looks like a bug in T3's renumbering. That is why both
 entries are new rather than tracks added to `direct_play` or `long_take`.
+
+**Done (2026-08-30).** The bitstream was the part this task was warned about, and it was the part
+that went right: 434 bytes, first time, `hdmv_pgs_subtitle` on the nose. What cost two runs was
+the ordinary half — **the two hazards are both about a subtitle track being treated as a stream
+like any other, and both land on a file nobody was editing.**
+
+**`-shortest` means the shortest stream, and a subtitle track is one.** The flag has been on every
+video entry since 008 T1, where it was belt-and-braces: both synthetic sources already carry an
+explicit duration, so nothing was ever bounded by it. Give the same entry a subtitle track whose
+cues stop at 3.0 s and the four-second film comes out **3.007 s**, video and audio truncated to the
+last cue — `duration` failing against its own declaration, on an entry whose subtitle assertions
+all pass. It is dropped for an entry that declares a subtitle, and the invariant test's existing
+duration row is what caught it.
+
+**A bitstream that does not start at zero moves, and takes a cue off the track beside it.** ffmpeg
+rebases each input on that input's own start time, so a PGS whose first display set sits at 0.5 s
+arrives half a second early — every cue of it — and, under `-shortest`, the `subrip` track muxed
+beside it keeps **one cue out of two**; at 1.0 s it keeps one of three. Nothing warns, both tracks
+probe to the right codec and the right flags, and the symptom is on the *other* track. `pgs_bitstream`
+refuses a late cue list rather than trusting a caller to remember, and the cue list every embedded
+track carries therefore starts at zero. The sidecar's does not — nothing muxes it — which is what
+gives §3.5's two window switches a source they can be told apart on.
+
+Three smaller things. The gate's *"two display sets"* is four in a 434-byte file, one that draws
+and one that erases per cue; the byte count reproduced exactly, so plan §8 and the row above are
+corrected on the count and not on the number. An entry with a subtitle needs `-map` per stream,
+because ffmpeg's own selection takes the best video, the best audio and **one** subtitle — an
+entry with two would have silently shipped one, which is why the per-entry test now asserts the
+subtitle count in both directions. And `-disposition:s:N` is written even when no flag is set: left
+unstated, ffmpeg carries the input file's own disposition through, so *"no flags"* would have been
+a property of the generated `.srt` rather than of the declaration.
 
 ## T2 — The two file facts, and the codec spelling the split actually reads
 
@@ -208,12 +239,14 @@ entries are new rather than tracks added to `direct_play` or `long_take`.
   discovered streams and stays absent on container ones.
 - **Depends on:** T1, T2, T3
 - **Verified by:** `uv run pytest tests/library/test_sidecar_discovery.py tests/unit/test_repositories.py tests/unit/test_migrations.py -q`
-  — the mutation test in 003 AC-11's own shape: scan, assert the indices; place the sidecar, scan
-  again with a **default** scan, assert the discovered stream at index 0, the video and audio each
-  moved by one, `HasSubtitles` true and the file's own `(size, mtime_ns)` untouched; remove it,
-  scan again, assert every index back where it was and the item's user data unchanged (AC-11,
-  AC-12). The middle scan being a default one is the whole point: run deep and the test passes
-  with the second signal deleted.
+  — the mutation test in 003 AC-11's own shape. **T1 ships the sidecar inside the built tree**, so
+  the "before" state is made rather than found: copy the tree out, delete the sidecar, scan, assert
+  the indices; put it back, scan again with a **default** scan, assert the discovered stream at
+  index 0, the video and audio each moved by one, `HasSubtitles` true and the film's own
+  `(size, mtime_ns)` untouched; delete it again, scan again, assert every index back where it was
+  and the item's user data unchanged (AC-11, AC-12). The middle scan being a default one is the
+  whole point: run deep and the test passes with the second signal deleted. `BuiltMedia.copy_into`
+  is the supported way to get a tree that may be written to, and `sidecar_path_of` names the file.
 - **Spec reference:** §3.6, AC-11, AC-12; plan §4, §6.2
 
 ## T5 — `media/subtitles.py`: the cue list, and the labels beside it

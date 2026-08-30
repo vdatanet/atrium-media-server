@@ -27,11 +27,15 @@ from pathlib import Path
 import pytest
 
 from atrium.domain.items import ItemType
+from tests.fixtures.library.generate import FIXED_MTIME_NS
 from tests.fixtures.media import (
+    BOTH_SUBTITLE_KINDS,
+    CUES,
     DIRECT_PLAY,
     FILMS,
     HIGH_RANGE,
     HIGH_RATE_AUDIO,
+    IMAGE_SUBTITLE_CODEC,
     LONG_TAKE,
     MATRIX,
     REJECTED_AUDIO,
@@ -40,15 +44,24 @@ from tests.fixtures.media import (
     TRACKS,
     TWO_PARTER_FIRST,
     TWO_PARTER_SECOND,
+    UNCONVERTIBLE_SUBTITLE,
     BuiltMedia,
+    Cue,
     MediaFile,
     ScannedMediaWorld,
     generate,
     keyframe_seconds,
+    pgs_bitstream,
     probe,
+    srt_document,
+    subtitle_packet_seconds,
 )
 
 pytestmark = pytest.mark.ffmpeg
+
+#: The entries that carry a subtitle track at all, derived rather than listed: an entry added later
+#: is covered by everything below without anybody extending a tuple.
+SUBTITLED: tuple[MediaFile, ...] = tuple(one for one in MATRIX if one.subtitles)
 
 
 def stream_of(probed: Mapping[str, object], kind: str) -> Mapping[str, object]:
@@ -81,6 +94,13 @@ def test_a_generated_file_probes_to_its_declaration(
     assert container["format_name"] == entry.demuxers
     assert float(container["duration"]) == pytest.approx(entry.duration_seconds, abs=0.05)  # type: ignore[arg-type]
 
+    # Both directions, like the transfer characteristics below: a declared track has to be there
+    # and an undeclared one has to be absent. Without the second half, ffmpeg's own stream
+    # selection could quietly add or drop one and every entry would still pass.
+    assert len([one for one in probed["streams"] if one["codec_type"] == "subtitle"]) == len(  # type: ignore[attr-defined]
+        entry.subtitles
+    )
+
     audio = stream_of(probed, "audio")
     assert audio["codec_name"] == entry.audio_codec
     assert int(audio["sample_rate"]) == entry.sample_rate  # type: ignore[arg-type]
@@ -108,6 +128,126 @@ def test_a_generated_file_probes_to_its_declaration(
     ):
         if declared is not None:
             assert video.get(field) == declared  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("entry", SUBTITLED, ids=lambda one: one.key)
+def test_every_declared_subtitle_track_probes_to_its_declaration(
+    entry: MediaFile, media_files: BuiltMedia
+) -> None:
+    """The codec, the language, the title, the three flags and the cues, read back off the file.
+
+    Nothing in the matrix had a subtitle stream before 011, so every one of these is a property no
+    existing assertion could have caught going wrong - and two of them were measured wrong on the
+    way in: a bitstream that did not start at zero arrived shifted, and took the later cues of the
+    text track beside it (`tests/fixtures/media.py`'s docstring).
+    """
+    path = media_files.path_of(entry)
+    probed = probe(path)
+    found = [one for one in probed["streams"] if one["codec_type"] == "subtitle"]  # type: ignore[attr-defined]
+    assert len(found) == len(entry.subtitles)
+
+    for ordinal, (track, stream) in enumerate(zip(entry.subtitles, found, strict=True)):
+        assert stream["codec_name"] == track.codec, track.reason
+        assert stream["tags"]["language"] == track.language
+        assert stream["tags"]["title"] == track.title
+        for flag, declared in (
+            ("default", track.default),
+            ("forced", track.forced),
+            ("hearing_impaired", track.hearing_impaired),
+        ):
+            assert bool(stream["disposition"][flag]) is declared, f"{track.title}: {flag}"
+
+        # A text track writes one packet per cue; an image one writes a display set to draw the
+        # block and another to erase it, so its packets are the starts *and* the ends. Both are
+        # asserted as a whole set rather than as a first element, because a shifted stream keeps
+        # its packet count and only moves them.
+        times = {round(one, 3) for one in subtitle_packet_seconds(path, ordinal)}
+        expected = {cue.start_seconds for cue in track.cues}
+        if track.is_image:
+            expected |= {cue.end_seconds for cue in track.cues}
+        assert times == expected, f"{track.title}: the muxed cues are not the declared ones"
+
+
+def test_the_hand_written_bitstream_is_the_one_the_plan_measured(tmp_path: Path) -> None:
+    """The image track's whole reason for being hand-written, proven on its own.
+
+    ffmpeg has no Presentation Graphic Stream encoder and refuses text-to-bitmap outright, so the
+    only way to have an image subtitle in the matrix is to write the bytes - and the only way to
+    know they are a subtitle is to hand them to a demuxer, which is what this does.
+    """
+    drawn = pgs_bitstream(CUES)
+    # Plan section 8 records this number; a matrix that changed the cue list would move it, and
+    # the sentence would have to move with it rather than quietly become false.
+    assert len(drawn) == 434
+
+    written = tmp_path / "drawn.sup"
+    written.write_bytes(drawn)
+    probed = probe(written)
+    assert format_of(probed)["format_name"] == "sup"
+    stream = stream_of(probed, "subtitle")
+    assert stream["codec_name"] == IMAGE_SUBTITLE_CODEC
+    assert float(format_of(probed)["start_time"]) == 0.0, (  # type: ignore[arg-type]
+        "a stream that starts late is rebased onto its own start time when it is muxed"
+    )
+
+
+def test_a_bitstream_that_starts_late_is_refused_rather_than_muxed() -> None:
+    """The refusal is the fixture's, not ffmpeg's: ffmpeg accepts the file and silently moves it.
+
+    Measured 2026-08-30 - a first display set at 0.5 s put every cue of the image track half a
+    second early and left the `subrip` track beside it with one cue out of two; at 1.0 s it left
+    one out of three. The symptom appears on the other track, which is why nothing downstream
+    would have pointed here.
+    """
+    with pytest.raises(ValueError, match="rebase"):
+        pgs_bitstream((Cue(0.5, 1.5, "late"), Cue(2.0, 3.0, "later")))
+    with pytest.raises(ValueError):
+        pgs_bitstream(())
+
+
+@pytest.mark.parametrize("entry", [one for one in MATRIX if one.sidecars], ids=lambda one: one.key)
+def test_a_sidecar_is_written_beside_its_film_with_the_cues_it_declares(
+    entry: MediaFile, media_files: BuiltMedia
+) -> None:
+    """The file 011 discovers, and the one thing about it that is not in its name: its cues."""
+    for sidecar in entry.sidecars:
+        path = media_files.sidecar_path_of(entry, sidecar)
+        assert path.is_file(), sidecar.reason
+        assert path.parent == media_files.path_of(entry).parent
+        assert path.read_text(encoding="utf-8") == srt_document(sidecar.cues)
+        assert path.stat().st_mtime_ns == FIXED_MTIME_NS, (
+            "a sidecar carries its own change signal, so an unstamped one would make the scan "
+            "that notices it untestable"
+        )
+
+        probed = probe(path)
+        assert stream_of(probed, "subtitle")["codec_name"] == "subrip"
+        assert {round(one, 3) for one in subtitle_packet_seconds(path, 0)} == {
+            cue.start_seconds for cue in sidecar.cues
+        }
+
+
+def test_the_subtitle_sources_never_land_in_the_tree(media_files: BuiltMedia) -> None:
+    """A muxed track's source file is scaffolding; a sidecar is a fixture.
+
+    The distinction has teeth: every subtitle file in the tree is one 011's walk will claim, so a
+    stray `.srt` left behind by the builder would put a stream on an item nobody declared - and
+    renumber that item's audio and video, which is 008's assertions failing for a reason that
+    looks like a bug in the renumbering.
+    """
+    declared = {
+        media_files.sidecar_path_of(entry, sidecar)
+        for entry in MATRIX
+        for sidecar in entry.sidecars
+    }
+    assert declared, "the matrix would prove nothing about discovery with no file to discover"
+
+    found = {
+        path
+        for path in media_files.base.rglob("*")
+        if path.is_file() and path.suffix.lower() in {".srt", ".sup", ".ass", ".vtt", ".sub"}
+    }
+    assert found == declared
 
 
 def test_the_matrix_is_a_matrix() -> None:
@@ -147,9 +287,51 @@ def test_the_matrix_is_a_matrix() -> None:
         "two identical parts would let 'the sources came back in part order' pass by accident"
     )
 
+    images = [one for one in MATRIX for track in one.subtitles if track.is_image]
+    assert images == [BOTH_SUBTITLE_KINDS], (
+        "the text/image split needs exactly one image track, and needs it beside a text one so "
+        "the two answers are attributable to the streams and not to the file"
+    )
+    assert {track.codec for track in BOTH_SUBTITLE_KINDS.subtitles} == {
+        "subrip",
+        IMAGE_SUBTITLE_CODEC,
+    }
+    assert all(one.muxer == "matroska" for one in SUBTITLED), (
+        "mp4 takes neither an image subtitle nor `ass`, so a subtitled entry has no other "
+        "container available"
+    )
+
+    unconvertible = {track.codec for track in UNCONVERTIBLE_SUBTITLE.subtitles}
+    assert unconvertible == {"ass"}
+    assert unconvertible.isdisjoint(
+        {
+            track.codec
+            for one in MATRIX
+            for track in one.subtitles
+            if one is not UNCONVERTIBLE_SUBTITLE
+        }
+    ), "AC-3 needs the format nothing converts from to be the one entry nothing else shares"
+
+    for entry in MATRIX:
+        for sidecar in entry.sidecars:
+            assert sidecar.name.startswith(f"{entry.stem}."), (
+                "a name that does not begin with the film's own stem is claimed by nothing"
+            )
+            beside = {
+                one.path
+                for one in MATRIX
+                if one is not entry and Path(one.path).parent == Path(entry.path).parent
+            }
+            assert not beside, (
+                f"{entry.key} shares a directory with {beside}, so its sidecar could be claimed "
+                "by a film whose streams another feature's tests already number"
+            )
+
     assert len({one.key for one in MATRIX}) == len(MATRIX)
     assert len({one.path for one in MATRIX}) == len(MATRIX)
     assert all(one.reason for one in MATRIX), "an entry with no reason is one nobody dares delete"
+    assert all(track.reason for one in MATRIX for track in one.subtitles)
+    assert all(sidecar.reason for one in MATRIX for sidecar in one.sidecars)
 
 
 def test_the_segmentable_entry_has_keyframes_on_its_declared_cadence(
@@ -176,19 +358,31 @@ def test_the_segmentable_entry_has_keyframes_on_its_declared_cadence(
     ), "the short entries are short precisely so this one is the segmentable case"
 
 
-def test_two_builds_of_one_entry_are_byte_identical(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "matroska",
+    (TWO_PARTER_FIRST, BOTH_SUBTITLE_KINDS, UNCONVERTIBLE_SUBTITLE),
+    ids=lambda one: one.key,
+)
+def test_two_builds_of_one_entry_are_byte_identical(matroska: MediaFile, tmp_path: Path) -> None:
     """The bit-exact flags, checked where the muxer that needed them lives.
 
     Matroska stamps a random `SegmentUID` and the wall clock unless the *output* context is
     bit-exact - and at the same file size, so 003's `(size, mtime_ns)` change signal would never
     have noticed the difference (`tests/fixtures/media.py` says what that measured).
+
+    Re-proven for the subtitled entries rather than assumed from the two-parter: bit-exactness is
+    a property of where the flags sit on the command line, and the command line now carries a
+    muxed-in subtitle source, a text encoder and a disposition per track.
     """
-    matroska = TWO_PARTER_FIRST
     assert matroska.muxer == "matroska"
     first = generate(matroska, tmp_path / "one")
     second = generate(matroska, tmp_path / "two")
     assert first.read_bytes() == second.read_bytes()
     assert first.stat().st_mtime_ns == second.stat().st_mtime_ns
+    for sidecar in matroska.sidecars:
+        beside = first.with_name(sidecar.name)
+        assert beside.read_bytes() == second.with_name(sidecar.name).read_bytes()
+        assert beside.stat().st_mtime_ns == FIXED_MTIME_NS
 
 
 # ------------------------------------------------------------------------------------------
@@ -269,3 +463,20 @@ def test_every_scanned_source_points_at_a_file_that_exists(
             assert resolved.stat().st_size == source.size
             seen += 1
     assert seen == len(MATRIX)
+
+
+def test_a_sidecar_is_in_the_tree_and_is_nobody_s_source(
+    scanned_media_world: ScannedMediaWorld,
+) -> None:
+    """A subtitle file produces no item and backs no source, at any point in this feature.
+
+    Stated because it is what the count above is silently relying on: 003 skips a `.srt` for its
+    extension, and an extension list that ever admitted one would turn every sidecar into a film
+    - passing the count by adding both an item and a source.
+    """
+    names = {sidecar.name for entry in MATRIX for sidecar in entry.sidecars}
+    assert names
+
+    for item in scanned_media_world.items.values():
+        for source in item.sources:
+            assert Path(source.relative_path).name not in names, item.name
