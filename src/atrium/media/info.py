@@ -26,10 +26,12 @@ vanishing from a client's view.
   the reference's on every track rather than a missing one.
 * `IsAVC`, `TimeBase` and `NalLengthSize` are read from the demuxer and are not columns of
   migration 0006. Emitting them means a further migration, which is not this change.
-* `DeliveryMethod`, `DeliveryUrl` and `Path` are declared and left empty here. The first two are
-  answers to a *negotiation* rather than facts about a file, and the third arrives with the
-  subtitle files discovered beside the media. `Score` is emitted by nothing at all: the reference
-  scores only the streams a user's subtitle mode selected, and v1 keeps no mode.
+* `DeliveryMethod`, `DeliveryUrl` and `IsExternalUrl` are declared and left empty *here*, and
+  filled by the negotiation: they are answers to one rather than facts about a file, so
+  `api/media_info.py` writes them onto the streams of a source it has negotiated about and every
+  bare read leaves them absent (011 T9). `Path` arrives with the subtitle files discovered beside
+  the media. `Score` is emitted by nothing at all: the reference scores only the streams a user's
+  subtitle mode selected, and v1 keeps no mode.
 
 See specs/008-playback-negotiation-and-delivery/spec.md section 3.1 and plan section 6.1, and
 specs/011-subtitle-delivery/spec.md section 3.2 and plan section 6.1.
@@ -146,7 +148,8 @@ class MediaStream(AtriumModel):
     is_external: bool = False
     #: Answers to a negotiation rather than facts about a file, and absent from a bare read
     #: `[probe: tools/probe_sidecar_subtitles.py, Jellyfin 10.11.11, 2026-08-30]`. 011 T9 fills
-    #: them where a source has been negotiated.
+    #: them from `api/media_info.py`: a delivery method on every subtitle stream of a negotiated
+    #: source, and the address and its flag on the streams whose method is `External` alone.
     delivery_method: str | None = None
     delivery_url: str | None = None
     is_external_url: bool | None = None
@@ -393,10 +396,26 @@ def is_text_subtitle(stream: InspectedStream) -> bool:
     """
     if stream.kind is not StreamKind.SUBTITLE:
         return False
-    codec = stream.codec or ""
-    if not codec and not stream.is_external:
+    if not stream.codec and not stream.is_external:
         return False
-    lowered = codec.lower()
+    return is_text_format(stream.codec)
+
+
+def is_text_format(spelling: str | None) -> bool:
+    """The same rule over a bare format name, which is what a *profile* declares.
+
+    The reference splits the two: `IsTextSubtitleStream` is the property of a stream and
+    `IsTextFormat` is the static rule behind it, and the negotiation's subtitle ladder compares
+    the two against each other - a profile's declared format has to be the same *kind* as the
+    stream for that profile to serve it `[source:
+    MediaBrowser.Model/Entities/MediaStream.cs:751-761,
+    MediaBrowser.Model/Dlna/StreamBuilder.cs:1476, 1564 @ v10.11.11]`.
+
+    **An absent format is text**, because every clause of the rule is a negation: a profile that
+    declares no format at all matches a text stream and never an image one. That is not an edge
+    case invented here - it is what a `{"Method": "External"}` entry with no `Format` does.
+    """
+    lowered = (spelling or "").lower()
     if "microdvd" in lowered:
         return True
     return not (
@@ -643,6 +662,7 @@ __all__ = [
     "has_subtitles",
     "is_hd",
     "is_pgs_subtitle",
+    "is_text_format",
     "is_text_subtitle",
     "item_container",
     "item_streams",

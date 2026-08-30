@@ -52,16 +52,38 @@ are all denied at once, and an audio item turns on the audio permission alone
 Jellyfin.Api/Helpers/MediaInfoHelper.cs:278-293 @ v10.11.11]`. Even the all-denied answer is
 flags, never an error.
 
-See specs/008-playback-negotiation-and-delivery/plan.md sections 5 and 6.2.
+**The subtitle half arrived at 011 T9**, and it is not a second ladder beside this one - it hangs
+off the same answer, because the reference resolves a delivery method *per subtitle stream* from
+the play method this ladder chose `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:1442-1590 @
+v10.11.11]`, `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`. Two
+things about it are worth knowing before reading `subtitle_answers`:
+
+* **There is an answer for every subtitle stream**, not only for the selected one, and the answer
+  is `Encode` wherever nothing the client declared fits - which is most of a real track list under
+  a text-only profile, and every stream of a profile that declares no subtitle handling at all.
+  Nothing is ever burned in here; `Encode` is a word this server says exactly where the reference
+  says it (011 spec section 3.3).
+* **The selected track feeds back into direct play**, which neither 011 document said. A source
+  whose *named* subtitle track resolves - at direct play, against the source's own container - to
+  anything but `External`, `Embed` or `Drop` is refused direct play with
+  `SubtitleCodecNotSupported`, so the same file and the same profile direct-play with no index
+  named and transcode with one. Measured on both sides of the discrimination: an external `vtt`
+  profile keeps direct play for a `subrip` track and loses it for an image track, and an index
+  naming no stream costs nothing at all.
+
+See specs/008-playback-negotiation-and-delivery/plan.md sections 5 and 6.2, and
+specs/011-subtitle-delivery/plan.md section 6.3.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Final
+from typing import Final, NamedTuple
 
 from atrium.domain.media import InspectedStream, MediaInspection, StreamKind
+from atrium.media.info import is_text_format, is_text_subtitle, supports_external_stream
 
 # ------------------------------------------------------------------------------------------------
 # What the ladder answers
@@ -88,6 +110,84 @@ class StreamAction(Enum):
 
     COPY = "copy"
     ENCODE = "encode"
+
+
+class SubtitleMethod(Enum):
+    """How one subtitle track would reach this client, in the reference's own five spellings.
+
+    `[source: MediaBrowser.Model/Dlna/SubtitleDeliveryMethod.cs @ v10.11.11]`
+
+    **`DROP` is a member no answer carries.** The ladder's two embedded passes can only return an
+    `Embed` profile and its two external passes only an `External` or an `Hls` one, so `Drop`
+    exists in the vocabulary a client may *declare* and never in the vocabulary this server
+    answers - and a declared `Drop` entry is therefore a track the ladder falls past. It is here
+    because a client sends it, not because anything here produces it.
+
+    The value is the wire spelling, which is what `MediaStream.DeliveryMethod` carries and what a
+    delivery address spells `SubtitleMethod=`. Reading one back is case-insensitive on the
+    reference and refusing one is not: `hls`, `HLS` and the ordinal `3` all bind where `banana`
+    is a `400` `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
+    """
+
+    ENCODE = "Encode"
+    EMBED = "Embed"
+    EXTERNAL = "External"
+    HLS = "Hls"
+    DROP = "Drop"
+
+
+#: The three methods a **direct play** survives. Anything else on the *selected* track refuses
+#: direct play with `SubtitleCodecNotSupported` `[source:
+#: MediaBrowser.Model/Dlna/StreamBuilder.cs:1297-1309 @ v10.11.11]`.
+DIRECT_PLAYABLE_SUBTITLE_METHODS: Final = frozenset(
+    {SubtitleMethod.DROP, SubtitleMethod.EXTERNAL, SubtitleMethod.EMBED}
+)
+
+#: The sub-protocol whose manifest can carry a subtitle track, spelled as the wire spells it.
+HLS_SUB_PROTOCOL: Final = "hls"
+
+#: What a stream with no language of its own is matched as. `[source:
+#: MediaBrowser.Model/Dlna/SubtitleProfile.cs:48-61 @ v10.11.11]`
+UNDECLARED_LANGUAGE: Final = "und"
+
+#: The two spellings a track cannot be converted *from*, and also the two it cannot be converted
+#: *to*. One list, read twice, which is the reference's own shape `[source:
+#: MediaBrowser.Model/Entities/MediaStream.cs:773-805 @ v10.11.11]`.
+UNCONVERTIBLE_SUBTITLE_FORMATS: Final = frozenset({"ass", "ssa"})
+
+#: The containers a *transcode* may embed a subtitle into, and the ones it may not - asked in
+#: that order, because a container in neither list is refused `[source:
+#: MediaBrowser.Model/Dlna/StreamBuilder.cs:1522-1538 @ v10.11.11]`.
+EMBED_REFUSING_CONTAINERS: Final = "ts,mpegts,mp4"
+EMBED_ADMITTING_CONTAINERS: Final = "mkv,matroska"
+
+
+@dataclass(frozen=True, slots=True)
+class SubtitleProfile:
+    """One entry of a client's `SubtitleProfiles`: a format, and how it will take that format.
+
+    `language` is a comma-separated list read by the same three rules as every other list here,
+    with an empty one admitting every language. `container` is read by the embedded passes alone.
+    """
+
+    format: str | None = None
+    method: SubtitleMethod = SubtitleMethod.ENCODE
+    language: str | None = None
+    container: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SubtitleAnswer:
+    """What would happen to one subtitle stream, for this client, on this negotiation.
+
+    `format` is the matched profile's declared format, and on the `Encode` fallback it is the
+    **stream's own codec** rather than nothing - which is what makes the fallback a statement
+    about the track rather than an absence.
+    """
+
+    index: int
+    method: SubtitleMethod
+    format: str | None
 
 
 class TranscodeReason(Enum):
@@ -200,6 +300,25 @@ class Decision:
     """**A claim about what this profile leaves producible, not about this answer.** A profile the
     source satisfies still answers `true` here when a transcoding target exists, and `false` when
     none does - measured on the same accepting profile with and without one."""
+
+    subtitles: tuple[SubtitleAnswer, ...] = ()
+    """One answer per subtitle stream of the source, in stream order - **not** one for the
+    selected track (011 spec section 3.2, measured on a source with six of them).
+
+    Empty when the client sent no profile at all, because the reference annotates nothing then:
+    a `GET /PlaybackInfo` and a `POST` with no device profile both answer subtitle streams with
+    no `DeliveryMethod` on any of them, where a `POST` carrying a profile with an *empty*
+    `SubtitleProfiles` list answers `Encode` on every one. The distinction is the same one rule 1
+    already draws for the ladder itself."""
+
+    subtitle_index: int | None = None
+    """The track the request named, restated - even when it names no stream, and even when it is
+    `-1`, both of which come back as themselves.
+
+    `None` when the request named none, and **v1 proposes no default**: the reference's own
+    answer for that case is the source's stated default, which is computed from a per-user
+    subtitle mode and language preference 011 section 2 excludes, and a `SubtitleMode: None` user
+    is answered no default at all (011 spec section 3.3, OQ-12)."""
 
     target: TranscodingProfile | None = None
     """The client's own entry this answer was built from, `None` when nothing is produced.
@@ -379,6 +498,11 @@ class TranscodingProfile:
     segment_length: int | None = None
     break_on_non_key_frames: bool = False
     enable_audio_vbr_encoding: bool = True
+    enable_subtitles_in_manifest: bool = False
+    """Read by nothing here and copied into the delivery address, which is the whole of its
+    life: the route that address names cannot read the parameter it is given (011 spec section
+    3.4). Bound because a client that parses the address it was handed is why OQ-8 made the
+    anatomy exact."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -410,6 +534,7 @@ class DeviceProfile:
     direct_play_profiles: tuple[DirectPlayProfile, ...] = ()
     transcoding_profiles: tuple[TranscodingProfile, ...] = ()
     codec_profiles: tuple[CodecProfile, ...] = ()
+    subtitle_profiles: tuple[SubtitleProfile, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -432,6 +557,20 @@ class Switches:
 
     max_audio_channels: int | None = None
     audio_stream_index: int | None = None
+    subtitle_stream_index: int | None = None
+    """Read on the same condition as `audio_stream_index`: only where the body also named this
+    media source. Both are dropped in silence otherwise `[source:
+    Jellyfin.Api/Helpers/MediaInfoHelper.cs:206-211 @ v10.11.11]`."""
+
+    always_burn_in_subtitle_when_transcoding: bool = False
+    """**Read by the address and by nothing else**, which is its whole effect on a negotiation:
+    it keeps `SubtitleStreamIndex` in a `TranscodingUrl` whose delivery method is `External` -
+    where the parameter is otherwise dropped - and appends its own lower-camel-cased flag to the
+    end of that address `[source: MediaBrowser.Model/Dlna/StreamInfo.cs:960,
+    Jellyfin.Api/Helpers/MediaInfoHelper.cs:325-328 @ v10.11.11]`, `[probe:
+    tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`. It changes no delivery
+    method and burns nothing in here: 011 section 2 excludes burn-in and this server never
+    produces one."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -713,30 +852,298 @@ def _selected_audio(source: MediaInspection, index: int | None) -> InspectedStre
     return next((one for one in audio if one.is_default), audio[0])
 
 
+def _selected_subtitle(source: MediaInspection, index: int | None) -> InspectedStream | None:
+    """The subtitle stream this negotiation named, by **wire** index, or `None`.
+
+    Unlike `_selected_audio` there is no fallback: an index naming no subtitle stream selects
+    nothing at all, and the reference then resolves no method for a selected track and refuses
+    nothing - measured, on an index of 99 and on `-1`, both of which are still restated back to
+    the client as the source's default `[probe: tools/probe_subtitle_negotiation.py, Jellyfin
+    10.11.11, 2026-08-30]`.
+    """
+    if index is None:
+        return None
+    return next(
+        (one for one in source.streams if one.kind is StreamKind.SUBTITLE and one.index == index),
+        None,
+    )
+
+
+def _supports_language(entry: SubtitleProfile, language: str | None) -> bool:
+    """Whether this profile entry admits a stream in this language.
+
+    An entry that names no language admits every one, and a stream that declares none is matched
+    as `und` - so a profile listing `und` matches exactly the unlanguaged tracks.
+    """
+    if not entry.language:
+        return True
+    return _csv_contains(entry.language, language or UNDECLARED_LANGUAGE)
+
+
+def _same_spelling(one: str | None, other: str | None) -> bool:
+    """Case-insensitive equality with .NET's null rules, which are not Python's.
+
+    `string.Equals(null, null)` is true and `string.Equals(null, "")` is false, so a profile that
+    declares no format matches a stream with no codec and nothing else. Reproduced rather than
+    collapsed, because the collapsed form would match an empty-string format against a null codec
+    on every stream a failed inspection produced.
+    """
+    if one is None or other is None:
+        return one is None and other is None
+    return one.lower() == other.lower()
+
+
+def _convertible_to(stream: InspectedStream, target: str | None) -> bool:
+    """Whether this track can be *converted* into that format.
+
+    **Convertibility is not "is text".** A track already in `ass` or `ssa` cannot be converted
+    from, and neither can be converted to - so an `ass` track under a `vtt`-only external profile
+    reaches the burn-in fallback, which is a real row of a real track list `[source:
+    MediaBrowser.Model/Entities/MediaStream.cs:773-805 @ v10.11.11]`.
+    """
+    if not is_text_subtitle(stream):
+        return False
+    if (stream.codec or "").lower() in UNCONVERTIBLE_SUBTITLE_FORMATS:
+        return False
+    return (target or "").lower() not in UNCONVERTIBLE_SUBTITLE_FORMATS
+
+
+def _embed_supported(container: str | None) -> bool:
+    """Whether a **transcode** into this container may embed a subtitle at all.
+
+    Asked in the reference's own order and not as one membership test: `ts`, `mpegts` and `mp4`
+    are refused by name, `mkv` and `matroska` are admitted by name, and a container in neither
+    list - `mov`, say - is refused for not being admitted rather than for being refused.
+    """
+    if not container:
+        return False
+    if _csv_contains(container, EMBED_REFUSING_CONTAINERS):
+        return False
+    return _csv_contains(container, EMBED_ADMITTING_CONTAINERS)
+
+
+def _embedded_profile(
+    stream: InspectedStream,
+    profiles: Sequence[SubtitleProfile],
+    *,
+    transcoding: bool,
+    container: str | None,
+    allow_conversion: bool,
+) -> SubtitleProfile | None:
+    """One pass over the client's entries looking for an `Embed` that fits (steps 1 and 2)."""
+    for entry in profiles:
+        if entry.method is not SubtitleMethod.EMBED:
+            continue
+        if not _supports_language(entry, stream.language):
+            continue
+        if not _csv_contains(entry.container, container):
+            continue
+        if transcoding and not _embed_supported(container):
+            continue
+        if allow_conversion:
+            if is_text_subtitle(stream) and _convertible_to(stream, entry.format):
+                return entry
+        elif is_text_subtitle(stream) == is_text_format(entry.format) and _same_spelling(
+            entry.format, stream.codec
+        ):
+            return entry
+    return None
+
+
+def _external_profile(
+    stream: InspectedStream,
+    profiles: Sequence[SubtitleProfile],
+    *,
+    transcoding: bool,
+    allow_conversion: bool,
+) -> SubtitleProfile | None:
+    """One pass looking for an `External` or `Hls` entry that fits (steps 3 and 4).
+
+    **The two methods gate on kind differently**, which is the detail that decides what an image
+    track can reach: `External` wants the entry's declared format to be the same kind as the
+    stream, so an image track matches an image-format external entry; `Hls` wants the stream to
+    be text and never looks at the entry's format at all. And `Hls` is skipped outright unless
+    the play method is a transcode, which is the mechanical reason a direct-played source
+    announces nothing in a manifest.
+
+    The reference asks its encoder here whether it can extract the stream's codec, and that
+    answer is an unconditional `true` `[source:
+    MediaBrowser.MediaEncoding/Encoder/MediaEncoder.cs:1331-1335 @ v10.11.11]` - so it is not
+    reproduced as a branch: a branch there would be a refusal the reference never makes. The
+    infinite-stream guard beside it is likewise unreachable, because v1 has no live sources.
+    """
+    text = is_text_subtitle(stream)
+    for entry in profiles:
+        if entry.method not in (SubtitleMethod.EXTERNAL, SubtitleMethod.HLS):
+            continue
+        if entry.method is SubtitleMethod.HLS and not transcoding:
+            continue
+        if not _supports_language(entry, stream.language):
+            continue
+        fits = (
+            text == is_text_format(entry.format)
+            if entry.method is SubtitleMethod.EXTERNAL
+            else text
+        )
+        if not fits:
+            continue
+        if _same_spelling(stream.codec, entry.format):
+            return entry
+        if not allow_conversion:
+            continue
+        if text and supports_external_stream(stream) and _convertible_to(stream, entry.format):
+            return entry
+    return None
+
+
+def _subtitle_answer(
+    stream: InspectedStream,
+    profiles: Sequence[SubtitleProfile],
+    *,
+    transcoding: bool,
+    container: str | None,
+    sub_protocol: str | None,
+) -> SubtitleAnswer:
+    """The reference's four-step ladder for one stream, and its `Encode` fallback.
+
+    The embedded half is skipped entirely for an external stream, and for an HLS transcode -
+    there is nothing to embed a sidecar into and a manifest carries its own tracks - so a
+    sidecar's answer is always one of the external half's or the fallback.
+    """
+    if not stream.is_external and not (transcoding and sub_protocol == HLS_SUB_PROTOCOL):
+        for allow_conversion in (False, True):
+            found = _embedded_profile(
+                stream,
+                profiles,
+                transcoding=transcoding,
+                container=container,
+                allow_conversion=allow_conversion,
+            )
+            if found is not None:
+                return SubtitleAnswer(stream.index, found.method, found.format)
+    for allow_conversion in (False, True):
+        found = _external_profile(
+            stream, profiles, transcoding=transcoding, allow_conversion=allow_conversion
+        )
+        if found is not None:
+            return SubtitleAnswer(stream.index, found.method, found.format)
+    return SubtitleAnswer(stream.index, SubtitleMethod.ENCODE, stream.codec)
+
+
+def subtitle_answers(
+    source: MediaInspection,
+    profiles: Sequence[SubtitleProfile],
+    *,
+    outcome: Outcome,
+    container: str | None,
+    sub_protocol: str | None,
+) -> tuple[SubtitleAnswer, ...]:
+    """One answer per subtitle stream, in stream order - the whole of 011 plan section 6.3.
+
+    `container` is the container the answer would be delivered in: the transcoding target's on a
+    produced answer and the source's own narrowed to a single name on a direct play, which is
+    what the reference hands its own resolution. It is read by the embedded passes and by nothing
+    else.
+
+    A **remux** is a transcode here, because it is one there: the reference sets
+    `PlayMethod.Transcode` for every answer that is not a direct play, whether or not a stream
+    survives the copy.
+    """
+    transcoding = outcome in (Outcome.REMUX, Outcome.TRANSCODE)
+    return tuple(
+        _subtitle_answer(
+            one,
+            profiles,
+            transcoding=transcoding,
+            container=container,
+            sub_protocol=sub_protocol,
+        )
+        for one in source.streams
+        if one.kind is StreamKind.SUBTITLE
+    )
+
+
+def _single_container(
+    container: str | None,
+    profile: DeviceProfile,
+    kind: MediaKind,
+    entry: DirectPlayProfile | None,
+) -> str | None:
+    """A stored demuxer list narrowed to the one name a direct play would report.
+
+    The first member of the list the client can open wins, and a list nothing opens is passed
+    through whole `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs
+    NormalizeMediaSourceFormatIntoSingleContainer @ v10.11.11]`. **Not the same rule as
+    `media/info.py`'s `source_container`**, which is a listing's answer and lets the file's own
+    extension win: this one is the negotiation's, and it reads the client's profile.
+
+    Narrowed against the matched direct-play entry alone where there is one, which is what the
+    reference passes when it builds the answer, and against every entry of the kind otherwise.
+    """
+    if not container or "," not in container:
+        return container
+    candidates = (entry,) if entry is not None else profile.direct_play_profiles
+    for member in container.split(","):
+        for one in candidates:
+            if one.type is kind and _csv_contains(one.container, member):
+                return member
+    return container
+
+
+class DirectPlayCheck(NamedTuple):
+    """Whether direct play survives, and - when it does - the entry that admitted it.
+
+    `reasons` is `None` exactly when direct play is not refused, and the entry is then the one
+    whose container the answer reports. `None` rather than an empty set, because an **empty set
+    of reasons is reachable while direct play still fails**: a profile that lists no direct-play
+    entry has nothing to complain about and still cannot direct play, and the reference calls
+    that `DirectPlayError`. Collapsing the two would answer direct play to a profile that permits
+    none.
+    """
+
+    entry: DirectPlayProfile | None
+    reasons: set[TranscodeReason] | None
+
+
 def _direct_play_reasons(
     source: MediaInspection,
     profile: DeviceProfile,
     video: InspectedStream | None,
     audio: InspectedStream | None,
+    subtitle: InspectedStream | None,
     max_bitrate: int | None,
     *,
     is_video: bool,
-) -> set[TranscodeReason] | None:
-    """Why direct play is refused - `None` when it is not refused at all.
-
-    `None` rather than an empty set, because an **empty set of reasons is reachable while direct
-    play still fails**: a profile that lists no direct-play entry has nothing to complain about
-    and still cannot direct play, and the reference calls that `DirectPlayError`. Collapsing the
-    two would answer direct play to a profile that permits none.
+) -> DirectPlayCheck:
+    """Why direct play is refused, and the entry that admitted it when it is not.
 
     One `DirectPlayProfile` has to admit the container **and** both codecs; the entry that gets
     furthest - fewest complaints - is the one whose reasons are reported, so a profile listing
     four containers does not answer with four copies of the same complaint. On top of that the
     codec conditions have to hold and the source has to fit inside the streaming bitrate.
+
+    **And the selected subtitle track is a complaint like any other.** The reference resolves its
+    delivery method here too - at direct play, against the source's own stored container, with no
+    sub-protocol - and adds `SubtitleCodecNotSupported` to *every* entry's failures when the
+    answer is not external, embedded or dropped `[source:
+    MediaBrowser.Model/Dlna/StreamBuilder.cs:1297-1309 @ v10.11.11]`. So a track the client can
+    take as a separate file keeps its direct play and one it can only be shown by burning in
+    loses it, on the same file and the same profile
+    `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
     """
     kind = MediaKind.VIDEO if is_video else MediaKind.AUDIO
     entries = [one for one in profile.direct_play_profiles if one.type is kind]
     shared: set[TranscodeReason] = set()
+    if subtitle is not None:
+        chosen = _subtitle_answer(
+            subtitle,
+            profile.subtitle_profiles,
+            transcoding=False,
+            container=source.container,
+            sub_protocol=None,
+        )
+        if chosen.method not in DIRECT_PLAYABLE_SUBTITLE_METHODS:
+            shared.add(TranscodeReason.SUBTITLE_CODEC_NOT_SUPPORTED)
     if is_video and video is not None:
         shared |= _failures(
             profile, CodecKind.VIDEO, video.codec, source.container, _video_values(source, video)
@@ -762,10 +1169,10 @@ def _direct_play_reasons(
         if audio is not None and not _csv_contains(entry.audio_codec, audio.codec):
             found.add(TranscodeReason.AUDIO_CODEC_NOT_SUPPORTED)
         if not found:
-            return None
+            return DirectPlayCheck(entry, None)
         if best is None or len(found) < len(best):
             best = found
-    return best if best is not None else set()
+    return DirectPlayCheck(None, best if best is not None else set())
 
 
 def _plan_video(
@@ -981,10 +1388,16 @@ def decide(
     """
     video = source.video if is_video else None
     audio = _selected_audio(source, switches.audio_stream_index)
+    # The subtitle half is the *video* builder's alone: the reference's audio builder never reads
+    # a subtitle index, so an audio item answers no default subtitle track however the body asks.
+    wanted_subtitle = switches.subtitle_stream_index if is_video else None
+    subtitle = _selected_subtitle(source, wanted_subtitle)
 
     if profile is None:
         # Rule 1, and only this half of it: a client that has not described itself is not a
-        # client that permits nothing. Every flag true, no URL, nothing to explain.
+        # client that permits nothing. Every flag true, no URL, nothing to explain - and no
+        # delivery method on any subtitle stream, which is measured and is why `subtitles` is
+        # empty here rather than a list of fallbacks.
         return Decision(
             outcome=Outcome.DIRECT_PLAY,
             reasons=(),
@@ -996,8 +1409,24 @@ def decide(
         )
 
     max_bitrate = switches.max_streaming_bitrate or profile.max_streaming_bitrate
-    refused = _direct_play_reasons(source, profile, video, audio, max_bitrate, is_video=is_video)
+    kind = MediaKind.VIDEO if is_video else MediaKind.AUDIO
+    entry, refused = _direct_play_reasons(
+        source, profile, video, audio, subtitle, max_bitrate, is_video=is_video
+    )
+
+    def answered(
+        outcome: Outcome, container: str | None, sub_protocol: str | None
+    ) -> tuple[SubtitleAnswer, ...]:
+        return subtitle_answers(
+            source,
+            profile.subtitle_profiles,
+            outcome=outcome,
+            container=container,
+            sub_protocol=sub_protocol,
+        )
+
     if refused is None and switches.enable_direct_play:
+        played = _single_container(source.container, profile, kind, entry)
         return Decision(
             outcome=Outcome.DIRECT_PLAY,
             reasons=(),
@@ -1006,17 +1435,32 @@ def decide(
             video=None,
             audio=None,
             supports_transcoding=_can_produce(source, profile, switches, policy, is_video=is_video),
+            subtitles=answered(Outcome.DIRECT_PLAY, played, None),
+            subtitle_index=wanted_subtitle,
         )
     # `EnableDirectPlay: false` on a profile the source satisfies, and a profile with no
     # direct-play entry at all, both land on the same one reason: direct play failed with
     # nothing to blame it on.
     reasons = refused or {TranscodeReason.DIRECT_PLAY_ERROR}
 
+    # A refusal still answers a delivery method per stream: the reference's builder returns a
+    # stream description whatever the play method was, and the annotation runs off that.
+    nothing = Decision(
+        outcome=Outcome.NONE,
+        reasons=(),
+        container=None,
+        sub_protocol=None,
+        video=None,
+        audio=None,
+        supports_transcoding=False,
+        subtitles=answered(Outcome.NONE, None, None),
+        subtitle_index=wanted_subtitle,
+    )
     if not _may_process(policy, is_video=is_video):
-        return NOTHING_PLAYABLE
+        return nothing
     chosen = _choose_target(source, profile, video, audio, max_bitrate, switches, is_video=is_video)
     if chosen is None:
-        return NOTHING_PLAYABLE
+        return nothing
     target, video_plan, audio_plan = chosen
     plans = [one for one in (video_plan, audio_plan) if one is not None]
     outcome = (
@@ -1032,6 +1476,8 @@ def decide(
         video=video_plan,
         audio=audio_plan,
         supports_transcoding=True,
+        subtitles=answered(outcome, target.container, target.protocol),
+        subtitle_index=wanted_subtitle,
         target=target,
     )
 
@@ -1101,6 +1547,7 @@ def _can_produce(
 
 
 __all__ = [
+    "DIRECT_PLAYABLE_SUBTITLE_METHODS",
     "EVERY_PERMISSION",
     "EVERY_SWITCH_ON",
     "CodecKind",
@@ -1116,10 +1563,14 @@ __all__ = [
     "ProfileCondition",
     "StreamAction",
     "StreamPlan",
+    "SubtitleAnswer",
+    "SubtitleMethod",
+    "SubtitleProfile",
     "Switches",
     "TranscodeReason",
     "TranscodingProfile",
     "ceiling",
     "decide",
     "refused_by_policy",
+    "subtitle_answers",
 ]

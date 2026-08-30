@@ -32,7 +32,16 @@ Three spellings that are easy to lose and impossible to guess:
   name is lowercased. The reference strips spaces from these values rather than encoding them,
   which is why `Constrained Baseline` arrives as `constrainedbaseline`.
 
-See specs/008-playback-negotiation-and-delivery/plan.md section 6.3.
+**Three subtitle parameters arrived at 011 T9**, at three measured positions - the index straight
+after `AudioStreamIndex`, the manifest flag between `TranscodingMaxAudioChannels` and `RequireAvc`,
+the method straight after `Tag` - and each of the three is written on a condition rather than
+whenever it has a value `[source: MediaBrowser.Model/Dlna/StreamInfo.cs:960-963, 1067-1070,
+1111-1114 @ v10.11.11]`, `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11,
+2026-08-30]`. A fourth, `alwaysBurnInSubtitleWhenTranscoding`, is appended after everything in a
+lower camel case nothing else here uses, because the reference appends it outside `ToUrl`.
+
+See specs/008-playback-negotiation-and-delivery/plan.md section 6.3 and
+specs/011-subtitle-delivery/plan.md section 6.3.
 """
 
 from __future__ import annotations
@@ -48,6 +57,7 @@ from atrium.media.decision import (
     DeviceProfile,
     StreamAction,
     StreamPlan,
+    SubtitleMethod,
     Switches,
     ceiling,
 )
@@ -162,6 +172,9 @@ def transcoding_url(
         add("AudioCodec", ",".join(audio_codecs))
     if audio is not None:
         add("AudioStreamIndex", audio.source_index)
+    subtitle_method = _subtitle_method(decision)
+    if _names_the_subtitle_index(decision, switches):
+        add("SubtitleStreamIndex", decision.subtitle_index)
 
     audio_bitrate = audio.bitrate if audio is not None else None
     video_bitrate = _video_bitrate(
@@ -221,16 +234,40 @@ def transcoding_url(
         add("RequireNonAnamorphic", _dotnet_bool(True))
     if target.max_audio_channels is not None:
         add("TranscodingMaxAudioChannels", target.max_audio_channels)
+    if target.enable_subtitles_in_manifest:
+        # **The parameter the route it addresses cannot read.** The master playlist does not bind
+        # it - it belongs to the live-stream playlist, which is out of scope - so a client that
+        # asks for subtitles in the manifest the reference's own way is handed an address that
+        # says so and a manifest that ignores it (011 spec section 3.4, OQ-1). Written because a
+        # client parses this URL, and because writing it costs one bound boolean.
+        add("EnableSubtitlesInManifest", _dotnet_bool(True))
     add("RequireAvc", _lowercase_bool(_requires(profile, ConditionProperty.IS_AVC)))
     add("EnableAudioVbrEncoding", _lowercase_bool(target.enable_audio_vbr_encoding))
     if tag:
         add("Tag", tag)
+    if decision.subtitle_index is not None and subtitle_method not in (
+        None,
+        SubtitleMethod.EXTERNAL,
+    ):
+        add("SubtitleMethod", subtitle_method.value)
+    # `SubtitleCodec` is the reference's fourth subtitle parameter and its position is here, right
+    # below the method. It is written only for an `Embed` method with a declared codec list; v1
+    # binds no such list and embeds nothing, so it is a missing parameter on a branch v1 cannot
+    # reach (011 plan section 6.8), recorded rather than left silent.
 
     for name, value in _stream_options(video_stream, copied_audio):
         add(name, value)
 
     if decision.reasons:
         add("TranscodeReasons", ",".join(decision.reasons))
+    if switches.always_burn_in_subtitle_when_transcoding:
+        # Appended after everything, including the reasons, and spelled in the lower camel case
+        # nothing else in this URL uses - because the reference appends it outside `ToUrl`, once
+        # the address is already built `[source: Jellyfin.Api/Helpers/MediaInfoHelper.cs:325-328 @
+        # v10.11.11]`, `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11,
+        # 2026-08-30]`. It asks the delivery route to burn a subtitle in, which this server never
+        # does (011 spec section 3.3) - reproduced in the address because a client parses it.
+        add("alwaysBurnInSubtitleWhenTranscoding", _lowercase_bool(True))
 
     prefix = "videos" if is_video else "audio"
     if decision.sub_protocol == HLS:
@@ -239,6 +276,39 @@ def transcoding_url(
         suffix = f".{decision.container}" if decision.container else ""
         path = f"/{prefix}/{dashed(item_id)}/stream{suffix}?"
     return path + "".join(parts)
+
+
+def _subtitle_method(decision: Decision) -> SubtitleMethod | None:
+    """The delivery method of the *selected* track, or `None` when none was selected.
+
+    An index naming no subtitle stream still selects: the reference resolves no method for it and
+    the field keeps its default member, so `SubtitleMethod=Encode` is written for an index of 99
+    on a source that has no stream 99 `[probe: tools/probe_subtitle_negotiation.py, Jellyfin
+    10.11.11, 2026-08-30]`.
+    """
+    if decision.subtitle_index is None:
+        return None
+    for answer in decision.subtitles:
+        if answer.index == decision.subtitle_index:
+            return answer.method
+    return SubtitleMethod.ENCODE
+
+
+def _names_the_subtitle_index(decision: Decision, switches: Switches) -> bool:
+    """Whether the address repeats the selected index back.
+
+    Three conditions, and the third is the one 011 plan section 6.3 leaves out: the index is
+    dropped for an `External` method - the client fetches that track itself, from the address
+    the negotiation already gave it - **unless** the body asked for burn-in, which is a request
+    the delivery route needs the index to honour. And `-1` is never written, because it names no
+    track at all `[source: MediaBrowser.Model/Dlna/StreamInfo.cs:960-963 @ v10.11.11]`,
+    `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
+    """
+    if decision.subtitle_index is None or decision.subtitle_index == -1:
+        return False
+    if switches.always_burn_in_subtitle_when_transcoding:
+        return True
+    return _subtitle_method(decision) is not SubtitleMethod.EXTERNAL
 
 
 def _video_bitrate(

@@ -3,7 +3,7 @@
 """Which subtitle properties a source carries where, how a delivery method is chosen for each
 stream, whether the index a client posts is honoured, and what actually picks the default track.
 
-specs/011 §3.2 and §3.3, OQ-2, OQ-5 and OQ-12. Four batteries:
+specs/011 §3.2 and §3.3, OQ-2, OQ-5 and OQ-12. Seven batteries:
 
 - **where the properties live** (OQ-2): the same source read four ways - a bare listing row, a
   bare item, a negotiation with no profile, a negotiation with one - because 011 §3.2 names four
@@ -13,12 +13,25 @@ specs/011 §3.2 and §3.3, OQ-2, OQ-5 and OQ-12. Four batteries:
   declaring nothing at all, over a text track and an image track, which is the branch 011 §3.3
   says the reference never has to answer;
 - **the index a client posts**: with a media source named and without one, and out of range;
+- **the spelling of a declared method** (011 plan §6.8's owed row): the five members of the
+  delivery-method vocabulary posted in four spellings - the declared one, lower case, upper case
+  and a word that is no member at all - plus the ordinal and an entry that declares no method,
+  because a strictly-bound enum would refuse a body the reference accepts; and one row on the
+  *neighbouring* question, a direct-play entry typed `video` rather than `Video`, because what is
+  measured here is the binder rather than one enum;
+- **the selected track against direct play**: the same accepting profile with and without a
+  subtitle index, which is where the *selected* stream's resolved method decides whether the
+  source can be direct-played at all;
+- **the three parameters in an address**: whole negotiated addresses rather than a grep, so a
+  drifted ordering is visible, plus the burn-in flag that overrides one of the three conditions
+  and the subtitle address's own start position on the one answer shape that can carry a
+  non-zero one;
 - **the default track and its score** (OQ-12, `--allow-writes`): a throwaway user whose subtitle
   mode and language preference the probe flips, the score recomputed from each stream's own
   flags and compared with the emitted one, and - when the library offers two streams that tie
   at the top - the profile's tie-break measured as a discriminating pair.
 
-The fourth battery needs an administrator, because the score is a function of a *user's*
+The last battery needs an administrator, because the score is a function of a *user's*
 preferences and the only way to vary them is to own an account. It creates `atrium-probe-subs`,
 flips its configuration, and deletes it on the way out including on failure.
 
@@ -51,6 +64,7 @@ SUBTITLE_PROPERTIES = (
     "SupportsExternalStream",
     "DeliveryMethod",
     "DeliveryUrl",
+    "IsExternalUrl",
     "Score",
     "Path",
 )
@@ -251,6 +265,278 @@ def _index_battery(server: Server, probe: Probe, source: SubtitledSource) -> lis
     ]
 
 
+def _spelling_battery(server: Server, probe: Probe, source: SubtitledSource) -> list[bool]:
+    """011 plan §6.8's owed row: how a declared delivery method is spelled, and what refuses.
+
+    The value is the same enum the delivery address later carries as `SubtitleMethod`, so what
+    binds here is what a second implementation must bind. Six spellings of one entry, each on a
+    profile that rejects the container so the manifest method is reachable, and each read back
+    through the method the text track resolves to.
+    """
+    text = source.text_index()
+    cases: tuple[tuple[str, Any], ...] = (
+        ("declared spelling 'Hls'", "Hls"),
+        ("lower case 'hls'", "hls"),
+        ("upper case 'HLS'", "HLS"),
+        ("mixed case 'ExTeRnAl'", "ExTeRnAl"),
+        ("no member at all, 'banana'", "banana"),
+        ("the ordinal 3", 3),
+    )
+    answers: dict[str, str] = {}
+    for label, spelling in cases:
+        profile = _reject_container([{"Format": "vtt", "Method": spelling}])
+        status, answered = negotiate(server, source.item_id, profile)
+        one = (answered.get("MediaSources") or [{}])[0]
+        resolved = {
+            s["Index"]: s.get("DeliveryMethod")
+            for s in one.get("MediaStreams") or []
+            if s.get("Type") == "Subtitle"
+        }
+        answers[label] = f"{status}, stream {text} = {resolved.get(text)}"
+        probe.observe(label, answers[label])
+        session = answered.get("PlaySessionId")
+        if session:
+            stop_encoding(server, session)
+
+    # An entry with no Method key at all: the member the enum defaults to, which is the one no
+    # pass of the ladder can ever return - so it is indistinguishable from declaring nothing.
+    status, answered = negotiate(server, source.item_id, _reject_container([{"Format": "vtt"}]))
+    one = (answered.get("MediaSources") or [{}])[0]
+    absent = {
+        s["Index"]: s.get("DeliveryMethod")
+        for s in one.get("MediaStreams") or []
+        if s.get("Type") == "Subtitle"
+    }
+    probe.observe("no Method key on the entry", f"{status}, stream {text} = {absent.get(text)}")
+    session = answered.get("PlaySessionId")
+    if session:
+        stop_encoding(server, session)
+
+    # The neighbouring question, asked because the answer above is a fact about the *binder* and
+    # not about this one enum: 008 binds four more enums in this same body and matches them
+    # case-sensitively. One row says whether that is a delta.
+    lowered = base_profile([{"Container": "mkv,mp4,avi,mov,ts", "Type": "video"}])
+    lowered["SubtitleProfiles"] = [{"Format": "vtt", "Method": "External"}]
+    status, answered = negotiate(server, source.item_id, lowered)
+    one = (answered.get("MediaSources") or [{}])[0]
+    probe.observe(
+        "a direct-play entry typed 'video' rather than 'Video'",
+        f"{status}, SupportsDirectPlay={one.get('SupportsDirectPlay')}",
+    )
+    session = answered.get("PlaySessionId")
+    if session:
+        stop_encoding(server, session)
+    probe.note(
+        "the same leniency reaches every enum this body carries, not only the delivery method: a "
+        "direct-play entry typed 'video' binds and direct-plays"
+        if status == 200 and one.get("SupportsDirectPlay")
+        else "the delivery method is lenient and the profile type is not, which would be a "
+        "distinction no client could have learned - see the observation above"
+    )
+
+    declared = answers["declared spelling 'Hls'"]
+    insensitive = all(
+        answers[label] == declared for label in ("lower case 'hls'", "upper case 'HLS'")
+    )
+    probe.note(
+        "the delivery-method vocabulary binds case-insensitively: a client that writes 'hls' "
+        "where the model spells it 'Hls' is answered identically, so a strictly-cased enum "
+        "would refuse a body this server accepts"
+        if insensitive
+        else "the delivery-method vocabulary is case-sensitive on this server - 'hls' does not "
+        "bind where 'Hls' does, and the answers above say what it does instead"
+    )
+    return [
+        # Whatever the answers are, the two case variants must agree with each other: a server
+        # that bound one and not the other would be a third class nothing predicted.
+        answers["lower case 'hls'"] == answers["upper case 'HLS'"],
+    ]
+
+
+def _direct_play_battery(server: Server, probe: Probe, source: SubtitledSource) -> list[bool]:
+    """Whether naming a subtitle track can cost a source its direct play.
+
+    Neither 011 §3.3 nor plan §6.3 says it can. The reference resolves the *selected* stream's
+    method a second time, at direct play and against the source's own container, and refuses
+    direct play when the answer is neither external, embedded nor dropped - so the same request
+    that direct-plays with no index named is a transcode with one.
+    """
+    text = source.text_index()
+
+    def negotiated(label: str, profile: dict[str, Any], **extras: Any) -> tuple[str, bool]:
+        status, answered = negotiate(server, source.item_id, profile, **extras)
+        one = (answered.get("MediaSources") or [{}])[0]
+        direct = bool(one.get("SupportsDirectPlay")) and not one.get("TranscodingUrl")
+        url = one.get("TranscodingUrl") or ""
+        reasons = next(
+            (p.split("=", 1)[1] for p in url.split("&") if p.startswith("TranscodeReasons=")),
+            "none",
+        )
+        probe.observe(
+            label,
+            f"{status}, SupportsDirectPlay={one.get('SupportsDirectPlay')}, "
+            f"url TranscodeReasons={reasons}, "
+            f"DefaultSubtitleStreamIndex={one.get('DefaultSubtitleStreamIndex')}",
+        )
+        session = answered.get("PlaySessionId")
+        if session:
+            stop_encoding(server, session)
+        return label, direct
+
+    external = _accept_everything([{"Format": "vtt", "Method": "External"}])
+    nothing = _accept_everything([])
+    manifest = _accept_everything([{"Format": "vtt", "Method": "Hls"}])
+    named = {"MediaSourceId": source.source_id}
+
+    _, plain = negotiated("external vtt, no index named", external)
+    _, with_external = negotiated(
+        f"external vtt, index {text} named", external, SubtitleStreamIndex=text, **named
+    )
+    _, with_nothing = negotiated(
+        f"nothing declared, index {text} named", nothing, SubtitleStreamIndex=text, **named
+    )
+    _, with_manifest = negotiated(
+        f"manifest vtt, index {text} named", manifest, SubtitleStreamIndex=text, **named
+    )
+    _, no_such_stream = negotiated(
+        "nothing declared, index 99 named", nothing, SubtitleStreamIndex=99, **named
+    )
+    checks = [
+        plain,
+        with_external,
+        not with_nothing,
+        not with_manifest,
+        no_such_stream,
+    ]
+    probe.note(
+        "naming a subtitle track costs this source its direct play whenever the track's method "
+        "resolves to burn-in: the same profile and the same file direct-play with no index and "
+        "transcode with one, and an index naming no stream costs nothing because there is no "
+        "stream to resolve a method for"
+        if checks[:5] == [True, True, True, True, True]
+        else "the selected track did not change the play method on this source, so the "
+        "direct-play coupling above is not reproduced here - see the observations"
+    )
+    if source.image:
+        image = source.image_index()
+        _, with_image = negotiated(
+            f"external vtt, image index {image} named", external, SubtitleStreamIndex=image, **named
+        )
+        checks.append(not with_image)
+    return checks
+
+
+#: A progressive target, so the negotiated address is a `stream.mp4` and not a playlist. The
+#: subtitle address's start position is zero on every HLS answer by construction, and this is the
+#: only shape that can carry a non-zero one.
+MP4_HTTP_H264 = {
+    "Container": "mp4",
+    "Type": "Video",
+    "VideoCodec": "h264",
+    "AudioCodec": "aac",
+    "Protocol": "http",
+    "Context": "Streaming",
+}
+
+#: Ten minutes, as ticks. Any non-zero seek does; a round one is readable in an address.
+SEEK_TICKS = 6_000_000_000
+
+
+def _address_battery(server: Server, probe: Probe, source: SubtitledSource) -> list[bool]:
+    """The three parameters 011 plan section 6.3 puts in a delivery address, and the fourth
+    condition it leaves out.
+
+    The positions are read off a whole negotiated `TranscodingUrl` rather than off a grep, so an
+    ordering that drifted would be visible; and the subtitle address's own start position is
+    asked for on the one shape that can carry a non-zero one, which the plan says cannot happen.
+    """
+    text = source.text_index()
+    named = {"MediaSourceId": source.source_id}
+
+    def address(label: str, profile: dict[str, Any], **extras: Any) -> str:
+        _, answered = negotiate(server, source.item_id, profile, **extras)
+        one = (answered.get("MediaSources") or [{}])[0]
+        url = one.get("TranscodingUrl") or ""
+        session = answered.get("PlaySessionId")
+        if session:
+            stop_encoding(server, session)
+        probe.observe(label, url or "no TranscodingUrl")
+        return url
+
+    manifest = _reject_container([{"Format": "vtt", "Method": "Hls"}])
+    plain = address(
+        f"manifest vtt, index {text}, address", manifest, SubtitleStreamIndex=text, **named
+    )
+
+    declaring = _reject_container([{"Format": "vtt", "Method": "Hls"}])
+    declaring["TranscodingProfiles"] = [dict(TS_HLS_H264, EnableSubtitlesInManifest=True)]
+    with_flag = address(
+        "the same, transcoding profile declaring the manifest flag",
+        declaring,
+        SubtitleStreamIndex=text,
+        **named,
+    )
+
+    external = _reject_container([{"Format": "vtt", "Method": "External"}])
+    without_burn = address(
+        f"external vtt, index {text}, address", external, SubtitleStreamIndex=text, **named
+    )
+    with_burn = address(
+        "the same, AlwaysBurnInSubtitleWhenTranscoding",
+        external,
+        SubtitleStreamIndex=text,
+        AlwaysBurnInSubtitleWhenTranscoding=True,
+        **named,
+    )
+
+    progressive = _reject_container([{"Format": "vtt", "Method": "External"}])
+    progressive["TranscodingProfiles"] = [MP4_HTTP_H264]
+    _, seeking = negotiate(
+        server,
+        source.item_id,
+        progressive,
+        SubtitleStreamIndex=text,
+        StartTimeTicks=SEEK_TICKS,
+        **named,
+    )
+    one = (seeking.get("MediaSources") or [{}])[0]
+    seeking_url = next(
+        (
+            s.get("DeliveryUrl")
+            for s in one.get("MediaStreams") or []
+            if s.get("Type") == "Subtitle" and s.get("DeliveryUrl")
+        ),
+        "",
+    )
+    probe.observe(
+        "a DeliveryUrl on a progressive transcode seeked to " + str(SEEK_TICKS),
+        seeking_url or "none emitted",
+    )
+    session = seeking.get("PlaySessionId")
+    if session:
+        stop_encoding(server, session)
+
+    probe.note(
+        "the subtitle address's start position is the negotiation's own seek wherever the answer "
+        "is a progressive transcode - it is zero only because every HLS answer forces it to be, "
+        "which is not the same claim"
+        if f"/{SEEK_TICKS}/" in (seeking_url or "")
+        else "the subtitle address carries a zero start position even on a seeked progressive "
+        "transcode, so the plan's claim holds for every shape this run could produce"
+    )
+    return [
+        "&SubtitleStreamIndex=" in plain,
+        "&SubtitleMethod=Hls" in plain,
+        "&EnableSubtitlesInManifest=" not in plain,
+        "&EnableSubtitlesInManifest=True" in with_flag,
+        # The external method drops the index from the address - unless the body asked for
+        # burn-in, which is the disjunct plan section 6.3 leaves out.
+        "&SubtitleStreamIndex=" not in without_burn,
+        "&SubtitleStreamIndex=" in with_burn,
+        with_burn.endswith("&alwaysBurnInSubtitleWhenTranscoding=true"),
+    ]
+
+
 def _score_battery(server: Server, probe: Probe, source: SubtitledSource) -> list[bool]:
     """OQ-12: the score, what it is computed from, and what actually picks the default."""
     me = server.get("/Users/Me")
@@ -419,6 +705,9 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
     checks = _properties_battery(server, probe, source)
     checks.extend(_method_battery(server, probe, source))
     checks.extend(_index_battery(server, probe, source))
+    checks.extend(_spelling_battery(server, probe, source))
+    checks.extend(_direct_play_battery(server, probe, source))
+    checks.extend(_address_battery(server, probe, source))
     if args.allow_writes:
         checks.extend(_score_battery(server, probe, source))
     else:
@@ -438,7 +727,17 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
             "SubtitleStreamIndex is read only when the request also names the matching "
             "MediaSourceId, and is silently dropped otherwise. The default track is not the "
             "highest-scoring stream: the score is read only to detect a tie, and the client's "
-            "profile decides outright when there is one",
+            "profile decides outright when there is one. **Naming a track can cost a source its "
+            "direct play**: the selected stream's method is resolved a second time at direct "
+            "play and refuses it with SubtitleCodecNotSupported whenever the answer is not "
+            "External, Embed or Drop - so the same file and the same profile direct-play with no "
+            "index and transcode with one, while an index naming no stream costs nothing. The "
+            "delivery-method vocabulary binds in any case and by ordinal and refuses an unknown "
+            "word with 400. And the address is three conditions rather than three values: the "
+            "index and the method are dropped for an External method, the index is dropped for "
+            "-1, AlwaysBurnInSubtitleWhenTranscoding puts the index back and appends its own "
+            "lower-camel-cased flag after TranscodeReasons, and the subtitle address's start "
+            "position is the negotiation's own seek wherever the answer is progressive",
             matches_documentation=None,
         )
     else:

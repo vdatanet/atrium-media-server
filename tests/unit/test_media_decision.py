@@ -38,6 +38,8 @@ from atrium.media.decision import (
     PlaybackPolicy,
     ProfileCondition,
     StreamAction,
+    SubtitleMethod,
+    SubtitleProfile,
     Switches,
     TranscodeReason,
     TranscodingProfile,
@@ -803,3 +805,319 @@ def test_a_copy_never_strips_what_the_client_declared() -> None:
 def test_the_same_question_twice_is_the_same_answer() -> None:
     for _, profile, _, _ in RUNGS:
         assert answer(profile) == answer(profile)
+
+
+# ------------------------------------------------------------------------------------------
+# The subtitle half (011 T9)
+# ------------------------------------------------------------------------------------------
+#
+# The rows below are `tools/probe_subtitle_negotiation.py`'s batteries as values: the same profile
+# classes, the same two track kinds, the same two play methods
+# `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`. What is asserted
+# per row is **one answer per subtitle stream**, not one for the selected track, because that is
+# what the reference emits and a table over the chosen one alone would pass with three-quarters of
+# the ladder deleted.
+
+
+def a_subtitle_stream(**overrides: object) -> InspectedStream:
+    values: dict[str, object] = {
+        "index": 2,
+        "kind": StreamKind.SUBTITLE,
+        "codec": "subrip",
+        "language": "eng",
+        "is_default": True,
+    }
+    values.update(overrides)
+    return InspectedStream(**values)  # type: ignore[arg-type]
+
+
+#: The stored spelling of a Blu-ray bitmap track - `media/probe.py` renames it at inspection, and
+#: the split reads the renamed name (011 T2). Written as the wire spells it, so a test that named
+#: ffprobe's own `hdmv_pgs_subtitle` would be testing a string this server never stores.
+IMAGE_CODEC = "PGSSUB"
+
+TEXT_TRACK = a_subtitle_stream(index=2, codec="subrip", language="eng")
+IMAGE_TRACK = a_subtitle_stream(index=3, codec=IMAGE_CODEC, language="spa", is_default=False)
+STYLED_TRACK = a_subtitle_stream(index=4, codec="ass", language="fra", is_default=False)
+SIDECAR_TRACK = a_subtitle_stream(
+    index=0, codec="srt", language="spa", is_default=False, is_external=True, external_path="a.srt"
+)
+
+#: Matroska rather than the mp4 family, because it is the only container an embedded subtitle
+#: survives a transcode into - and because a single-name container keeps the embed rows about the
+#: embed rule rather than about demuxer-list membership.
+SUBTITLED = a_source(
+    a_video_stream(index=0),
+    an_audio_stream(index=1),
+    TEXT_TRACK,
+    IMAGE_TRACK,
+    STYLED_TRACK,
+    container="matroska",
+)
+
+PLAYS_MATROSKA = DirectPlayProfile(container="matroska", video_codec="hevc", audio_codec="ac3")
+#: A target that cannot embed - `ts` is refused by name - beside one that can.
+TS_HLS_MATROSKA = TranscodingProfile(
+    container="ts", video_codec="hevc,h264", audio_codec="ac3,aac", protocol="hls"
+)
+MKV_HTTP = TranscodingProfile(
+    container="mkv", video_codec="hevc,h264", audio_codec="ac3,aac", protocol="http"
+)
+
+EXTERNAL_VTT = SubtitleProfile(format="vtt", method=SubtitleMethod.EXTERNAL)
+MANIFEST_VTT = SubtitleProfile(format="vtt", method=SubtitleMethod.HLS)
+EMBED_SUBRIP = SubtitleProfile(
+    format="subrip", method=SubtitleMethod.EMBED, container="matroska,mkv"
+)
+
+
+def subtitled_profile(
+    *subtitles: SubtitleProfile,
+    direct_play: tuple[DirectPlayProfile, ...] = (PLAYS_MATROSKA,),
+    transcoding: tuple[TranscodingProfile, ...] = (TS_HLS_MATROSKA,),
+) -> DeviceProfile:
+    return DeviceProfile(
+        direct_play_profiles=direct_play,
+        transcoding_profiles=transcoding,
+        subtitle_profiles=subtitles,
+    )
+
+
+def methods(decision: Decision) -> dict[int, SubtitleMethod]:
+    return {one.index: one.method for one in decision.subtitles}
+
+
+#: Refuses the container, so the same profile answers a transcode over the same file.
+REFUSES_MATROSKA = DirectPlayProfile(container="mp4", video_codec="hevc", audio_codec="ac3")
+
+SUBTITLE_ROWS: tuple[tuple[str, DeviceProfile, dict[int, SubtitleMethod]], ...] = (
+    (
+        "external vtt, direct play",
+        subtitled_profile(EXTERNAL_VTT),
+        {2: SubtitleMethod.EXTERNAL, 3: SubtitleMethod.ENCODE, 4: SubtitleMethod.ENCODE},
+    ),
+    (
+        "external vtt, transcode",
+        subtitled_profile(EXTERNAL_VTT, direct_play=(REFUSES_MATROSKA,)),
+        {2: SubtitleMethod.EXTERNAL, 3: SubtitleMethod.ENCODE, 4: SubtitleMethod.ENCODE},
+    ),
+    (
+        "manifest vtt, transcode",
+        subtitled_profile(MANIFEST_VTT, direct_play=(REFUSES_MATROSKA,)),
+        {2: SubtitleMethod.HLS, 3: SubtitleMethod.ENCODE, 4: SubtitleMethod.ENCODE},
+    ),
+    (
+        "manifest vtt, direct play - the method is a transcode method and nothing else fits",
+        subtitled_profile(MANIFEST_VTT),
+        {2: SubtitleMethod.ENCODE, 3: SubtitleMethod.ENCODE, 4: SubtitleMethod.ENCODE},
+    ),
+    (
+        "embedded subrip, direct play",
+        subtitled_profile(EMBED_SUBRIP),
+        {2: SubtitleMethod.EMBED, 3: SubtitleMethod.ENCODE, 4: SubtitleMethod.ENCODE},
+    ),
+    (
+        "embedded subrip, transcode into ts - refused by name",
+        subtitled_profile(EMBED_SUBRIP, direct_play=(REFUSES_MATROSKA,)),
+        {2: SubtitleMethod.ENCODE, 3: SubtitleMethod.ENCODE, 4: SubtitleMethod.ENCODE},
+    ),
+    (
+        "embedded subrip, transcode into mkv - admitted by name",
+        subtitled_profile(EMBED_SUBRIP, direct_play=(REFUSES_MATROSKA,), transcoding=(MKV_HTTP,)),
+        {2: SubtitleMethod.EMBED, 3: SubtitleMethod.ENCODE, 4: SubtitleMethod.ENCODE},
+    ),
+    (
+        "nothing declared, direct play",
+        subtitled_profile(),
+        {2: SubtitleMethod.ENCODE, 3: SubtitleMethod.ENCODE, 4: SubtitleMethod.ENCODE},
+    ),
+    (
+        "nothing declared, transcode",
+        subtitled_profile(direct_play=(REFUSES_MATROSKA,)),
+        {2: SubtitleMethod.ENCODE, 3: SubtitleMethod.ENCODE, 4: SubtitleMethod.ENCODE},
+    ),
+    (
+        "an image-format external profile reaches the image track and nothing else",
+        subtitled_profile(SubtitleProfile(format=IMAGE_CODEC, method=SubtitleMethod.EXTERNAL)),
+        {2: SubtitleMethod.ENCODE, 3: SubtitleMethod.EXTERNAL, 4: SubtitleMethod.ENCODE},
+    ),
+    (
+        "a declared Drop entry is a member no pass can return",
+        subtitled_profile(SubtitleProfile(format="subrip", method=SubtitleMethod.DROP)),
+        {2: SubtitleMethod.ENCODE, 3: SubtitleMethod.ENCODE, 4: SubtitleMethod.ENCODE},
+    ),
+    (
+        "a language-scoped external profile reaches only the tracks in that language",
+        subtitled_profile(
+            SubtitleProfile(format="vtt", method=SubtitleMethod.EXTERNAL, language="fra,spa")
+        ),
+        {2: SubtitleMethod.ENCODE, 3: SubtitleMethod.ENCODE, 4: SubtitleMethod.ENCODE},
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("described", "profile", "expected"), SUBTITLE_ROWS, ids=lambda one: str(one)[:60]
+)
+def test_a_delivery_method_is_answered_for_every_subtitle_stream(
+    described: str, profile: DeviceProfile, expected: dict[int, SubtitleMethod]
+) -> None:
+    """AC-3: one answer per stream, and `Encode` wherever nothing declared fits."""
+    decision = decide(SUBTITLED, profile, Switches(), is_video=True)
+    assert methods(decision) == expected, described
+    assert len(decision.subtitles) == 3, "one answer per subtitle stream, never fewer"
+
+
+def test_the_language_row_reaches_the_track_that_is_in_that_language() -> None:
+    """The other half of the row above: `fra,spa` refuses `eng` and admits `fra` when it can.
+
+    The styled track is `fra` **and** `ass`, so it is refused for being unconvertible rather than
+    for its language - which is why the discrimination is made against a second `fra` track that
+    is `subrip`, and why the row above cannot prove the rule on its own.
+    """
+    french_subrip = a_subtitle_stream(index=5, codec="subrip", language="fra", is_default=False)
+    source = a_source(
+        a_video_stream(index=0),
+        an_audio_stream(index=1),
+        TEXT_TRACK,
+        french_subrip,
+        container="matroska",
+    )
+    scoped = subtitled_profile(
+        SubtitleProfile(format="vtt", method=SubtitleMethod.EXTERNAL, language="fra")
+    )
+    assert methods(decide(source, scoped, Switches(), is_video=True)) == {
+        2: SubtitleMethod.ENCODE,
+        5: SubtitleMethod.EXTERNAL,
+    }
+
+
+def test_convertibility_is_not_the_same_question_as_being_text() -> None:
+    """`ass` is text, can be served alone, and still reaches the burn-in fallback.
+
+    It cannot be converted *from*, and `vtt` is the only format the profile takes - so this is the
+    row that makes `Encode` a real answer for a text track rather than an image-only one (AC-3).
+    """
+    decision = decide(SUBTITLED, subtitled_profile(EXTERNAL_VTT), Switches(), is_video=True)
+    styled = next(one for one in decision.subtitles if one.index == 4)
+    assert styled.method is SubtitleMethod.ENCODE
+    assert styled.format == "ass", "the fallback states the stream's own codec, not nothing"
+
+
+def test_a_profile_naming_ass_cannot_reach_it_either() -> None:
+    """The other half of the same rule: `ass` cannot be converted *to*, so an exact match is the
+    only way a profile that names it ever wins."""
+    exact = subtitled_profile(SubtitleProfile(format="ass", method=SubtitleMethod.EXTERNAL))
+    assert methods(decide(SUBTITLED, exact, Switches(), is_video=True))[4] is (
+        SubtitleMethod.EXTERNAL
+    )
+    other = subtitled_profile(SubtitleProfile(format="ass", method=SubtitleMethod.EXTERNAL))
+    answers = {
+        one.index: one for one in decide(SUBTITLED, other, Switches(), is_video=True).subtitles
+    }
+    assert answers[2].method is SubtitleMethod.ENCODE, "subrip cannot be converted *to* ass"
+
+
+def test_an_external_stream_skips_the_embedded_half_of_the_ladder() -> None:
+    """There is nothing to embed a file that already sits beside the media into.
+
+    The discrimination is the whole point: **one** entry, two text tracks in the same container,
+    and only the one the container holds can take it. The sidecar is `srt` - the entry's own
+    format, so it would match on the first pass if the pass were reached at all.
+    """
+    with_sidecar = a_source(
+        SIDECAR_TRACK,
+        a_video_stream(index=1),
+        an_audio_stream(index=2),
+        TEXT_TRACK,
+        container="matroska",
+    )
+    embed_only = subtitled_profile(
+        SubtitleProfile(format="srt", method=SubtitleMethod.EMBED, container="matroska")
+    )
+    answered = methods(decide(with_sidecar, embed_only, Switches(), is_video=True))
+    assert answered[0] is SubtitleMethod.ENCODE, "the sidecar cannot be embedded"
+    assert answered[2] is SubtitleMethod.EMBED, "the container's own subrip converts to srt"
+
+
+def test_a_client_that_sent_no_profile_is_told_nothing_about_any_subtitle() -> None:
+    """Rule 1's shape again: no profile is not an empty profile, here as everywhere else."""
+    decision = decide(SUBTITLED, None, Switches(), is_video=True)
+    assert decision.subtitles == ()
+    assert methods(decide(SUBTITLED, subtitled_profile(), Switches(), is_video=True)) != {}
+
+
+# ------------------------------------------------------------------------------------------
+# The selected track, and what naming one costs
+# ------------------------------------------------------------------------------------------
+
+
+def test_naming_a_track_the_client_cannot_take_costs_the_source_its_direct_play() -> None:
+    """The finding neither 011 document had: the *selected* track is a direct-play condition.
+
+    Measured on both sides of the discrimination - an external `vtt` profile keeps direct play
+    for the `subrip` track and loses it for the image one - so this is not "a subtitle refuses
+    direct play", it is "a subtitle whose method is not external, embedded or dropped does".
+    """
+    external = subtitled_profile(EXTERNAL_VTT)
+    kept = decide(SUBTITLED, external, Switches(subtitle_stream_index=2), is_video=True)
+    assert kept.outcome is Outcome.DIRECT_PLAY
+
+    lost = decide(SUBTITLED, external, Switches(subtitle_stream_index=3), is_video=True)
+    assert lost.outcome is not Outcome.DIRECT_PLAY
+    assert "SubtitleCodecNotSupported" in lost.reasons
+
+    burned = decide(
+        SUBTITLED, subtitled_profile(), Switches(subtitle_stream_index=2), is_video=True
+    )
+    assert burned.outcome is not Outcome.DIRECT_PLAY
+    assert burned.reasons == ("SubtitleCodecNotSupported",)
+
+
+def test_the_manifest_method_cannot_save_a_direct_play_because_it_is_not_reachable_there() -> None:
+    """The circularity the reference resolves by asking twice: the direct-play check resolves the
+    method *at direct play*, where an `Hls` entry is skipped - so a manifest-only profile loses
+    its direct play and then answers `Hls` on the transcode it was pushed onto."""
+    decision = decide(
+        SUBTITLED, subtitled_profile(MANIFEST_VTT), Switches(subtitle_stream_index=2), is_video=True
+    )
+    # A remux rather than a transcode: both elementary streams still copy, and the subtitle is
+    # the only thing that moved this off direct play.
+    assert decision.outcome is Outcome.REMUX
+    assert "SubtitleCodecNotSupported" in decision.reasons
+    assert methods(decision)[2] is SubtitleMethod.HLS
+
+
+def test_an_index_naming_no_stream_costs_nothing_and_is_still_restated() -> None:
+    """There is no method to resolve for a track that is not there, so nothing is refused - and
+    the index still comes back as the source's stated default, `-1` and `99` alike."""
+    for named in (-1, 99):
+        decision = decide(
+            SUBTITLED, subtitled_profile(), Switches(subtitle_stream_index=named), is_video=True
+        )
+        assert decision.outcome is Outcome.DIRECT_PLAY, named
+        assert decision.subtitle_index == named
+
+
+def test_no_track_named_proposes_no_default_at_all() -> None:
+    """v1 keeps no per-user subtitle mode, so it answers what a `SubtitleMode: None` user is
+    answered: no default track (AC-2, OQ-12). Never the highest-scoring stream."""
+    decision = decide(SUBTITLED, subtitled_profile(EXTERNAL_VTT), Switches(), is_video=True)
+    assert decision.subtitle_index is None
+
+
+def test_an_audio_item_never_reads_a_subtitle_index() -> None:
+    """The reference's audio builder does not look at one, so an audio negotiation answers no
+    default subtitle track however the body asks."""
+    decision = decide(
+        TRACK,
+        DeviceProfile(
+            direct_play_profiles=(
+                DirectPlayProfile(container="flac", audio_codec="flac", type=MediaKind.AUDIO),
+            ),
+            transcoding_profiles=(),
+        ),
+        Switches(subtitle_stream_index=2),
+        is_video=False,
+    )
+    assert decision.subtitle_index is None

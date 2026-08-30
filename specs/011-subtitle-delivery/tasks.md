@@ -883,7 +883,7 @@ the two renderers are not one.
 
 ## T9 — The negotiation's subtitle half: profiles, the ladder, and three parameters in an address
 
-- [ ] **Changes:** `DeviceProfileDto` gains `SubtitleProfiles` — the fifth list it narrows to —
+- [x] **Changes:** `DeviceProfileDto` gains `SubtitleProfiles` — the fifth list it narrows to —
   and `TranscodingProfileDto` gains `EnableSubtitlesInManifest`; 008's comment on that model
   ("v1 negotiates nothing about subtitles, and a field bound here would be a field somebody later
   assumes is honoured") is discharged in the same edit. `media/decision.py` gains `SubtitleMethod`,
@@ -910,6 +910,109 @@ the two renderers are not one.
   **no** `DefaultSubtitleStreamIndex` (AC-2); and the direct-play goldens are unchanged except for
   the properties AC-1 and AC-3 add (AC-15).
 - **Spec reference:** §3.2, §3.3, AC-2, AC-3, AC-15; plan §6.3
+
+**Done (2026-08-30).** The four-step ladder is the four steps the plan named and reproduced
+first time. **What both documents had wrong is the direction the subtitle half runs in: they
+describe it as something read off the ladder's answer, and it is also an input to it — so the one
+criterion that says this feature changes nothing about a direct play is false of exactly the
+request the feature exists to serve.**
+
+**Naming a subtitle track can cost a source its direct play.** The reference resolves the
+*selected* stream's delivery method a second time, at `PlayMethod.DirectPlay` against the source's
+own stored container, and adds `SubtitleCodecNotSupported` to every direct-play entry's failures
+when the answer is not `External`, `Embed` or `Drop` `[source:
+MediaBrowser.Model/Dlna/StreamBuilder.cs:1297-1309 @ v10.11.11]`. Read first and then measured,
+on both sides of the discrimination in one run: the same file and the same profile answer
+`SupportsDirectPlay: true` for the `subrip` track and `false` for the image track beside it, a
+profile that declares nothing loses it for either, an index naming **no** stream costs nothing at
+all, and the address the loss produces carries `TranscodeReasons=SubtitleCodecNotSupported` and
+nothing else `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
+Implemented as the plan described it — `subtitle_answers` applied to a finished `Decision` — a
+client that turns subtitles on for a track it cannot take would have been handed the file to read
+byte for byte, with no subtitle and no transcode, which is the failure this whole feature is
+about. **AC-15 is narrowed and AC-2 with it**, in this change and at the user's decision, for the
+reason T5, T7 and T8 each took the same answer: documentation moves with the code in the same
+commit, and T10 through T12 are written by people reading those criteria.
+
+There is no circularity in asking twice, and that is what makes it implementable: the refusal reads
+the method *at direct play*, where an `Hls` entry is skipped outright, and the answer the client is
+finally given reads it again against the rung that was reached. So a manifest-only profile loses
+its direct play **and then** answers `Hls` on the transcode it was pushed onto — one test, both
+halves.
+
+**AC-2's *"and a delivery address naming it"* was false in two directions, and a third put it
+back.** The index and the method are both dropped from the address where the resolved method is
+`External` — the client was already handed that track's own address — and the index is dropped
+where it is `-1`. Then a body carrying `AlwaysBurnInSubtitleWhenTranscoding: true` writes the index
+back beside an external method and leaves the method out, and appends
+`&alwaysBurnInSubtitleWhenTranscoding=true` after `TranscodeReasons`, in a lower camel case nothing
+else in that address uses. That field has been bound on the request body since 008 and read by
+nothing — the exact shape `DeviceProfileDto`'s own comment warned about — and T9 is the task that
+makes it readable, so it is read here rather than left as a delta on a parameter this task adds.
+All four measured in one run. Same probe.
+
+**And the subtitle address's start position is not always zero.** [Plan §6.3](plan.md#63-the-negotiations-subtitle-half-extends-008-62-and-63)
+said it is `0` for every request this feature can produce. It is `0` for every **HLS** answer,
+which forces it so because a playlist preserves timings, and it is the negotiation's own
+`StartTimeTicks` on a progressive transcode — `…/Subtitles/9/6000000000/Stream.vtt` for a body
+that asked to start ten minutes in. The reference's own ordering comment says as much: it writes
+the subtitle addresses *after* the start position is set, on purpose. Same probe, one new battery.
+
+**The owed row needed four classes where the plan expected two**, and it is the same shape 012's
+gate found for a query value arriving on a request **body**: `hls` and `HLS` bind exactly as `Hls`
+does, the member's **ordinal** binds to the same member, an entry with no `Method` key at all takes
+`Encode` — the one member no pass of the ladder can ever return, so it is indistinguishable from
+declaring nothing — and a word that is no member is a `400`. A pydantic enum is case-sensitive, so
+the field carries a before-validator and the refusal stays the framework's. What is settled is the
+side T9 owns, the value a *profile* declares; `SubtitleMethod=hls` as a query parameter of the
+master playlist is still T11's, now with a strong prior rather than nothing.
+
+**And the same run measured a delta this task did not take, because what is lenient is the
+*binder* and not one enum.** A direct-play entry typed `"Type": "video"` rather than `"Video"`
+binds and direct-plays on the reference — one row, asked precisely because the answer above is a
+fact about how a body is read. `ProfileType`, `ConditionType`, `ConditionProperty` and `CodecKind`
+are all matched **case-sensitively** here, so each of the four is a `400` on Atrium where the
+reference answers `200`. Making that general is a change to `compat/model.py`, which every request
+model in the project inherits, so T9 fixed only the vocabulary T9 added.
+
+**Measured here, owned there, and it widened an answer that had already been accepted.** [012's
+OQ-4](../012-negotiation-inputs/spec.md#7-open-questions-and-what-measuring-them-did) answers this
+question for the **protocol** value alone — `Hls`, `HLS` and `hLs` all bind, and this server's
+comparison does not — and 012 is accepted and unimplemented, so an implementer reading it would
+have written the narrow fix and rediscovered the general case, which is this repository paying
+twice for one measurement. At the user's decision OQ-4 is **widened rather than corrected**, in
+this change, with an `amended:` line on 012's own frontmatter saying that the amendment came from
+another feature's task. [Plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed)
+**points at** that row instead of restating it, so there is one description of this and not two.
+
+Three smaller ones. **`Drop` is a member no answer can carry** — the two embedded passes return an
+`Embed` profile and the two external passes an `External` or an `Hls` one, so a declared `Drop`
+entry is a track the ladder falls past; it is in the vocabulary because a client sends it, not
+because anything produces it. **The output container the `Embed` passes read is not one value**:
+the transcoding target's on a produced answer and the source's own narrowed against the client's
+direct-play entries on a direct play, which is a *different* rule from `media/info.py`'s
+`source_container` (that one is a listing's answer and lets the file's extension win). And
+`profile_of` mapped the subtitle list and **not** `EnableSubtitlesInManifest`, so the flag bound
+cleanly on the model and reached no address at all — caught by the one test that asserts the
+parameter's position rather than its presence, which is why that test compares neighbours and not a
+substring.
+
+**And one thing found while implementing the burn-in flag and deliberately not done.** Two sibling
+suffixes come off the same three lines of the reference — `&allowVideoStreamCopy=false` and
+`&allowAudioStreamCopy=false`, appended whenever the body denied that copy — and Atrium honours
+both switches in the decision while repeating neither in the address. They are about audio and
+video copying, they belong to 008, and they are recorded in
+[plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed) rather than swept in
+under this task's name.
+
+**One test-side finding, on a helper this task only borrowed.** `tests/conformance/test_playback_info.py`'s
+`_container` answered `mp4` for any demuxer list with a comma in it, which is right for the six-name
+mp4 family and wrong for `matroska,webm` — the second family with a comma, and the one both of 011's
+subtitled entries use. Inspection *renames* that family down to `mkv` where it leaves the mp4 one
+six long, so a profile built by that helper refused the container and every subtitle answer would
+have been attributable to a container rejection rather than to the rule under test. It refused
+loudly rather than silently, because the first assertion each new case makes is that the file
+direct-plays.
 
 ## T10 — `media/names.py`: the invariant display title, and what it costs 008
 
@@ -941,7 +1044,11 @@ the two renderers are not one.
   ignored and not refused: `SubtitleMethod=banana` is no method, not a `400`. The five members are
   matched case-insensitively, which is what an enum-typed parameter does on the other side — and
   the lower-case spelling is the row plan §6.8 leaves owed, folded into
-  `tools/probe_subtitle_manifest.py` here. **`EnableSubtitlesInManifest` is deliberately not
+  `tools/probe_subtitle_manifest.py` here. **T9 measured the same word on the body side**: a
+  declared `Method` binds in any case *and by ordinal*, while a word that is no member is a `400`
+  `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]` — a strong prior
+  for this row rather than a substitute for it, because a query value and a body value are refused
+  differently everywhere else in this project (behaviours §1.12). **`EnableSubtitlesInManifest` is deliberately not
   bound**, which is both the parity answer and the cheapest way to hold AC-6's third case.
   `media/hls.py` gains `AnnouncedSubtitle`, `subtitle_uri` and the `#EXT-X-MEDIA` block emitted
   **before** the first `#EXT-X-STREAM-INF`, and `_variant` gains the group so that **every**
