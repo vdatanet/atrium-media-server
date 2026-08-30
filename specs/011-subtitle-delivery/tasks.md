@@ -1016,7 +1016,7 @@ direct-plays.
 
 ## T10 — `media/names.py`: the invariant display title, and what it costs 008
 
-- [ ] **Changes:** `media/names.py` — pure — assembling the reference's own order joined with
+- [x] **Changes:** `media/names.py` — pure — assembling the reference's own order joined with
   ` - `: the language name (or the undefined marker), a hearing-impaired word, a default word, a
   forced word, the **codec upper-cased**, an external word; and where the stream has a title of
   its own, the title leads and each attribute is appended only if the title does not already
@@ -1036,6 +1036,56 @@ direct-plays.
   reads `Spanish; Castilian - Forced - SUBRIP` where an English-configured reference writes
   `Spanish - Forced - SUBRIP`, and an unlanguaged one takes the undefined marker.
 - **Spec reference:** §3.2 (the `NAME` box), OQ-4; plan §6.4
+
+**Done (2026-08-30).** The assembly is the six pieces in the order the task gives, and the module
+is thirty lines. **What was wrong is one of those pieces: the undefined marker is `Undefined`, and
+`Und` — the word the task and plan §6.4 both name, on the argument that the six are "the
+reference's own literals" — is a string no reference of any configuration writes.**
+
+**The literal is real and unreachable, and only a measurement separates those.** `Und` is what the
+assembly writes when the localised property behind it is empty `[source:
+MediaBrowser.Model/Entities/MediaStream.cs:422 @ v10.11.11]`, which is exactly what plan §6.4
+said. But every subtitle stream is filled with all five localised strings on the way out of the
+repository `[source: Jellyfin.Server.Implementations/Item/MediaStreamRepository.cs:156-167 @
+v10.11.11]`, so the fallback is dead code on a served stream: measured, all five present on
+**910 of 910** subtitle streams of a real library `[probe:
+tools/probe_stream_display_title.py, Jellyfin 10.11.11, 2026-08-30]`. What is written is the
+**translation table's** word, and its English row for the marker is `Undefined` `[source:
+Emby.Server.Implementations/Localization/Core/en-US.json:84 @ v10.11.11]` where the four flag
+words agree with their fallbacks letter for letter. So `Und` would have been a **third** string —
+neither the English reference's nor the Spanish one's — which is the precise failure §3.2's own
+definition of the invariant form ("what the reference itself writes on an English-configured
+host") and plan §6.4's language-name paragraph were both written to avoid. Spec §3.2, plan §6.4
+and behaviours §5's localised-properties row are corrected in this change.
+
+**A probe that only described the assembly could not have caught it.** What caught it is that
+`probe_stream_display_title.py` **reproduces** the string instead — every subtitle stream rebuilt
+from its own properties, with the one piece this project cannot compute, the language name, read
+off the streams that state a language and carry no title of their own. 909 of 909 rebuilt exactly,
+every branch of the assembly reached: no language, hearing impaired, default, forced, external,
+and a title that swallows an attribute. Reading the source alone would have reproduced the
+sentence plan §6.4 already had.
+
+**The culture lookup existed and answers this question too, which is the part the task got right.**
+T3's `LANGUAGE_TOKENS` — token to culture row, first row winning — is the reference's own
+localisation lookup and needed no second table (004 T15). Its first-row-wins is load-bearing on
+this side as well: five rows carry `zho` and only the first is the plain `Chinese`, so a last-wins
+index would label every Chinese subtitle track `Chinese (Traditional)`. The index is passed in
+rather than imported, which keeps `media/` free of any dependency on `library/`, and plan §5 is
+corrected: it declared one function and a `CultureIndex` type that does not exist.
+
+**Two things the run could not reach, reported rather than inferred.** The size of the
+language-name divergence on an *English* host cannot be measured from here — the reference
+reachable from this repository is Spanish-configured — so what is stated is a bound: five of the
+29 language tags a real library carries have a display name with an alternate spelling or a
+qualifier and therefore cannot equal a platform name in any culture, and the other 24 are a single
+word. And every one of those 29 tags is a terminological three-letter code, so none of the three
+tag *shapes* the reference resolves differently was exercised: a two-letter tag and a bibliographic
+code name no platform culture at all and are written as the raw tag with the first letter raised
+(`En`, `Ger`), where this project's index answers a name. That is read rather than measured, the
+probe reports the miss on every run, and plan §6.4 records it as left standing — narrowing it
+means a second and deliberately worse lookup, and the difference lands inside the `NAME` divergence
+§3.2 already accepts.
 
 ## T11 — The manifest: two bound parameters, the group on every variant, and AC-8's traversal
 
