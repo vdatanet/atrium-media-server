@@ -322,6 +322,12 @@ def test_a_cue_that_starts_on_a_window_boundary_is_answered_by_two_windows() -> 
     exactly on a multiple of the window length is delivered twice, with the file's own timings
     both times, because the playlist sets the copy switch.
 
+    **Read here first and then measured on the reference**, both ways round: a cue at 37.802 s
+    answered by the window ending there and by the one starting there, and a cue at 3 282 s
+    present in both of the two entries the reference's own playlist writes for that position when
+    they are followed as written
+    `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`.
+
     A cue merely *straddling* a boundary is not: the next window's skip drops it for ending
     before its start. Only the exact hit is in both.
     """
@@ -379,8 +385,10 @@ def test_a_webvtt_answer_declares_a_region_and_places_every_cue_in_it() -> None:
     names `stream.vtt` for every window of every track (spec section 3.4), so this writer is the
     whole subtitle path for the video client - and the reference gives it a `Region:` declaration
     and ends every timing line with the settings that place the cue `[source:
-    MediaBrowser.MediaEncoding/Subtitles/VttWriter.cs:23-40 @ v10.11.11]`. A `WEBVTT` header with
-    bare timing lines parses identically and puts the text somewhere else on the screen.
+    MediaBrowser.MediaEncoding/Subtitles/VttWriter.cs:23-40 @ v10.11.11]`, measured on the wire
+    as exactly this header and `00:00:35.099 --> 00:00:37.185 region:subtitle line:90%`
+    `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. A `WEBVTT` header
+    with bare timing lines parses identically and puts the text somewhere else on the screen.
     """
     lines = render(CUES, "vtt").decode("utf-8-sig").split("\n")
     assert lines[0] == "WEBVTT"
@@ -553,8 +561,9 @@ def test_every_fetchable_format_has_the_label_the_reference_answers(
 ) -> None:
     """`ass` and `ssa` are the reference's own override `[source:
     MediaBrowser.Model/Net/MimeTypes.cs:82-83 @ v10.11.11]`; the other four fall through to a
-    third-party table this project cannot cite, so they are read rather than measured and 011 T7
-    owes them a run of the probe's format battery.
+    third-party table this project cannot cite. Five of the six are measured
+    `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`; `ttml` is the one
+    still read, because that battery has never asked for it, and 011 T7 owes it the row.
     """
     assert MEDIA_TYPES[container] == expected
 

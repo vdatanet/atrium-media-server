@@ -17,12 +17,16 @@ chased.
 ## The five things a naive writer gets wrong
 
 Every one of these was read off the reference's own writers, and none of them is guessable from
-the format specifications:
+the format specifications. Three of the five - the region, the placement setting and the mark -
+were then measured on a running server, which is what turned the first of them from a plausible
+detail into the reason this module renders a header at all:
 
 * **A WebVTT answer carries a region.** The reference writes `WEBVTT`, a blank line, a `Region:`
   declaration, a blank line - and then ends *every* cue's timing line with
   `region:subtitle line:90%` `[source: MediaBrowser.MediaEncoding/Subtitles/VttWriter.cs:23-40 @
-  v10.11.11]`. The manifest names `stream.vtt` for every window of every track (spec section 3.4),
+  v10.11.11]` - measured on the wire as `00:00:35.099 --> 00:00:37.185 region:subtitle line:90%`
+  under that header `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`.
+  The manifest names `stream.vtt` for every window of every track (spec section 3.4),
   so this is the writer every subtitle a client reaches through the HLS path goes through, and
   cue placement is what the two lines decide. A `WEBVTT\\n\\n` header with bare timing lines is
   well-formed, parses identically and puts the text somewhere else on the screen.
@@ -42,7 +46,10 @@ the format specifications:
   `[source: MediaBrowser.MediaEncoding/Subtitles/SrtWriter.cs:22,
   JsonWriter.cs:16 @ v10.11.11]`. **`ttml` is one of the five** - plan section 6.7 step 4 names
   four - and the mark is measurable from outside, because dropping it is the only thing the time
-  map switch does to the header (spec section 3.5).
+  map switch does to the header (spec section 3.5). Measured on `vtt`, `ass` and `ssa`, and its
+  absence measured on `json` and `js`
+  `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`; `ttml` is the one
+  spelling that battery has never asked for.
 
 ## The time map, and why it is a replacement rather than a prefix
 
@@ -78,8 +85,10 @@ reference has.
   *window* that selects no cues is a different thing and answers a body with no cues, which is
   spec section 3.7's last row.
 * **The JSON body escapes fewer characters here than there.** The reference's writer escapes
-  every non-ASCII character and the HTML-sensitive ASCII ones; this one escapes the non-ASCII.
-  Both are the same string to a parser, which is the argument spec section 6 already makes.
+  every non-ASCII character and the HTML-sensitive ASCII ones - measured, a cue arriving as
+  `\\u266A \\u003Ci\\u003E\\u00BFVes a la gente` where this one leaves the angle brackets alone
+  `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. Both are the same
+  string to a parser, which is the argument spec section 6 already makes.
 * **`subrip` and `webvtt` are readable here and are not extensions there.** The reference keys its
   parser table on a **file extension** `[source:
   MediaBrowser.MediaEncoding/Subtitles/SubtitleEditParser.cs:100-136 @ v10.11.11]`, and the
