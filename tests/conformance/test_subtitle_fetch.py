@@ -710,7 +710,9 @@ async def test_an_identifier_that_is_not_one_is_problem_details_naming_the_route
 
     `routeItemId` and not `itemId`: the fetch routes declare their path parameters with the
     `route` prefix, and a refusal that named the query alias beside it would name a parameter the
-    client did not send.
+    client did not send. **The playlist route beside them names `itemId` for the same value** -
+    each route names its own path segment, measured on both in one run and a row of spec section
+    3.7 since 011 T8 (`tests/conformance/test_subtitle_playlist.py`).
     """
     answered = await client.get(
         "/Videos/not-a-guid/not-a-guid/Subtitles/0/Stream.vtt",

@@ -58,6 +58,7 @@ IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007", "008
 #: device, and all five lists are gone.
 INTERIM_011 = frozenset(
     {
+        ("GET", "/Videos/{itemId}/{mediaSourceId}/Subtitles/{index}/subtitles.m3u8"),
         (
             "GET",
             "/Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}"

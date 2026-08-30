@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Segment boundaries predicted from stored data, and the two playlists rendered from them.
+"""Segment boundaries predicted from stored data, and the three playlists rendered from them.
 
 Pure arithmetic and string building: nothing here starts a process, opens a file or knows what a
 session is. That is what makes spec section 3.7's headline measurement possible at all - a media
@@ -7,6 +7,12 @@ playlist of 2 843 segments arriving complete and `ENDLIST`-marked in 0.18 s, bef
 segment exists `[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]`. Boundaries predicted
 from the source are also what makes them **deterministic**, which is AC-22: the same request twice
 is the same list, so a client that lost a segment can ask for it again.
+
+**The third is 011's subtitle playlist**, and it shares nothing with the other two but this
+module's purity: its windows are laid across a runtime rather than planned from keyframes, its
+entries address a different route, and its header order is its own. It lives here because it is
+the same kind of thing - a playlist computed from stored data - and not because any line of it is
+shared (`subtitle_playlist`).
 
 ## The cadence, and the rounding rule behind the measured 3.004 s
 
@@ -282,6 +288,76 @@ def media_playlist(segments: Sequence[Segment], *, query: str, container: str | 
         )
     lines.append("#EXT-X-ENDLIST")
     return "\n".join(lines) + "\n"
+
+
+def subtitle_playlist(runtime_ticks: int, segment_seconds: int, token: str | None) -> str:
+    """One text subtitle track's windows, laid across the source's runtime.
+
+    **Not `media_playlist` with different arguments**, and the difference is not cosmetic: the two
+    have different header orders - this one puts the target duration first and the playlist type
+    last, where the media playlist does the opposite - a different `#EXTINF` line, no target
+    duration derived from the entries, and entries that are addresses of a different route
+    carrying their own switches `[source: Jellyfin.Api/Controllers/SubtitleController.cs:371-409
+    @ v10.11.11]`. Sharing a renderer between them would mean a conditional on every line, and one
+    of the two would end up wrong the first time either changed.
+
+    `#EXT-X-TARGETDURATION` is the **requested** window length rather than the longest entry, so a
+    playlist whose last window is short still declares the full one - which is what the reference
+    writes and what the probe read back.
+
+    The entries name a lower-case `stream.vtt` where the fetch route is declared `Stream.{format}`.
+    That is the reference's own spelling and it is reproduced: a client follows a playlist as
+    written, and 001's relaxed path matching is what makes it answer (011 AC-8).
+
+    `token` is the caller's own credential, appended to every entry because these addresses are
+    followed by a player that carries no header. A caller with none writes an empty `ApiKey=`,
+    which is what the reference's own `string.Format` of a null does.
+    """
+    if runtime_ticks <= 0 or segment_seconds <= 0:
+        # The caller refuses both of these before rendering (`api/subtitles.py`); this guard is
+        # here because a window length of zero would not terminate the loop below.
+        raise ValueError("a subtitle playlist needs a positive runtime and a positive window")
+    window_ticks = segment_seconds * TICKS_PER_SECOND
+    lines = [
+        "#EXTM3U",
+        f"#EXT-X-TARGETDURATION:{segment_seconds}",
+        "#EXT-X-VERSION:3",
+        "#EXT-X-MEDIA-SEQUENCE:0",
+        "#EXT-X-PLAYLIST-TYPE:VOD",
+    ]
+    start = 0
+    while start < runtime_ticks:
+        length = min(runtime_ticks - start, window_ticks)
+        end = min(runtime_ticks, start + window_ticks)
+        lines.append(f"#EXTINF:{window_duration_text(length)},")
+        lines.append(
+            f"stream.vtt?CopyTimestamps=true&AddVttTimeMap=true"
+            f"&StartPositionTicks={start}&EndPositionTicks={end}&ApiKey={token or ''}"
+        )
+        start += window_ticks
+    lines.append("#EXT-X-ENDLIST")
+    return "\n".join(lines) + "\n"
+
+
+def window_duration_text(ticks: int) -> str:
+    """A subtitle window's `#EXTINF` number: `30` for a whole one, `7.851` for a remainder.
+
+    **The decimal point is the divergence** of behaviours section 3.12 and 011 AC-16. The
+    reference appends the duration as a `double`, which formats in the *server's* culture rather
+    than the invariant one, so a Spanish-configured host writes `#EXTINF:7,851,` into a file whose
+    grammar reads that as a duration of `7` and a title of `851` `[probe:
+    tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. Atrium has no server locale
+    to reproduce the defect from, and inventing one in order to write a number wrongly is not
+    replication - so the point is written always, and a whole window is written `30` and not
+    `30.0`, which is what the reference writes for every window but the last.
+
+    `Decimal` and not a float format: a tick count is exact, `10 000 000` ticks is exactly one
+    second, and going through a float would introduce a rounding question that does not exist.
+    """
+    seconds = Decimal(ticks) / Decimal(TICKS_PER_SECOND)
+    # `normalize` drops a trailing zero the division cannot produce today and `"f"` undoes the
+    # exponent form it puts a whole number into - `Decimal("3E+1")` is `30`.
+    return format(seconds.normalize(), "f")
 
 
 def master_playlist(
@@ -579,4 +655,6 @@ __all__ = [
     "plan_segments",
     "requested_seconds",
     "segment_extension",
+    "subtitle_playlist",
+    "window_duration_text",
 ]
