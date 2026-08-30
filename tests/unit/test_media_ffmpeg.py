@@ -132,6 +132,34 @@ def test_the_mapped_streams_are_the_ones_the_plan_names() -> None:
     assert [value for option, value in _pairs(argv) if option == "-map"] == ["0:0", "0:3"]
 
 
+def test_the_map_names_the_demuxer_stream_and_not_the_wire_one() -> None:
+    """**The one place the two numberings meet in this module, and it read the wrong one.**
+
+    A plan's `source_index` is the *wire* index: the number a client sends as `AudioStreamIndex`,
+    the number `DefaultAudioStreamIndex` states back, the number the transcoding URL repeats.
+    `-map 0:N` counts the **demuxer's** streams, and 011 made the two part company - a subtitle
+    file discovered beside the media is numbered ahead of the container's own, so every stream
+    inside the file gains one wire index per discovered file. `media/extract.py` has said
+    `0:{file_index}` since T6; this line said `0:{index}` until T12.
+
+    The test above cannot reach this: an `InspectedStream` mirrors an unstated `file_index` onto
+    its `index`, so a source built the ordinary way agrees with itself whichever number is used.
+    Here the two are stated apart, which is the state `renumber` really produces.
+    """
+    source = _source(_video(index=1, file_index=0), _audio(index=2, file_index=1))
+    decision = _decision(
+        StreamPlan(source_index=1, action=StreamAction.COPY, codec="h264"),
+        StreamPlan(source_index=2, action=StreamAction.COPY, codec="ac3"),
+        outcome=Outcome.REMUX,
+    )
+
+    argv = ffmpeg.command(
+        source, decision, ffmpeg.Output("mkv", "/scratch/out.mkv"), path=SOURCE_PATH
+    )
+
+    assert [value for option, value in _pairs(argv) if option == "-map"] == ["0:0", "0:1"]
+
+
 # ------------------------------------------------------------------------------------------
 # Encoding, and the arguments that are only there when they change something
 # ------------------------------------------------------------------------------------------

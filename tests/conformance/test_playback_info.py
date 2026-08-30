@@ -990,6 +990,41 @@ async def test_the_external_method_drops_the_index_from_the_address(
     assert "&SubtitleMethod=" not in url
 
 
+async def test_an_index_of_minus_one_is_dropped_from_the_address_where_a_missing_one_is_not(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """AC-2's second subtraction, and the pair that makes it a claim rather than a coincidence.
+
+    `-1` names no track at all, so the address does not repeat it back `[source:
+    MediaBrowser.Model/Dlna/StreamInfo.cs:960-963 @ v10.11.11]`, `[probe:
+    tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`. An index naming a stream
+    the source has not got is **not** the same case: it still selects, so `99` is written. A rule
+    written as "drop an index that matches no stream" would answer the same thing for both and be
+    wrong on the second - which is why the two are asked in one test.
+    """
+    item = served[1].of(BOTH_SUBTITLE_KINDS)
+    listed = await negotiate(
+        client, item.id, {"DeviceProfile": refuses_container(BOTH_SUBTITLE_KINDS, MANIFEST_VTT)}
+    )
+    source_id = listed["MediaSources"][0]["Id"]
+
+    async def address_for(index: int) -> str:
+        document = await negotiate(
+            client,
+            item.id,
+            {
+                "DeviceProfile": refuses_container(BOTH_SUBTITLE_KINDS, MANIFEST_VTT),
+                "SubtitleStreamIndex": index,
+                "MediaSourceId": source_id,
+            },
+        )
+        url: str = document["MediaSources"][0]["TranscodingUrl"]
+        return url
+
+    assert "&SubtitleStreamIndex=" not in await address_for(-1)
+    assert "&SubtitleStreamIndex=99&" in await address_for(99)
+
+
 async def test_always_burn_in_keeps_the_index_and_appends_its_own_flag(
     client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
 ) -> None:

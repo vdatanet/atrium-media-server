@@ -130,7 +130,8 @@ on 2026-08-28 and not restated by the 2026-08-29 edition, whose scope excludes b
 | Playback | 5 | 007, 008 | Implemented — `PlaybackInfo` at 008 T5, `DELETE /Videos/ActiveEncodings` at T12 |
 
 The contract's §4 lists seven URLs the client builds by hand rather than through its generated
-client. Four are surface rows; the other three are the interesting ones:
+client. **Five** are surface rows now that 011 serves the subtitle one; the other two are the
+interesting ones:
 
 | Hand-built URL | v1 |
 |---|---|
@@ -139,7 +140,7 @@ client. Four are surface rows; the other three are the interesting ones:
 | `/Videos/{id}/stream?static=true` | `GetVideoStream` (008, implemented at T6) |
 | `/Audio/{id}/stream?static=true` | `GetAudioStream` (008, implemented at T6) — its consumer list was one name short until this document, [§5.2](#52-getaudiostream-is-tagged-with-one-consumer-and-has-two) |
 | ~~`/Users/{id}/Images/Primary`~~ | **Not in v1, and must not be.** The contract marks it a defect in the client — the route does not exist in 10.11 — and asks that it not be served. It is not, and neither is its replacement `GET /UserImage`, which no analysed client calls |
-| `/Videos/{id}/{sourceId}/Subtitles/{index}/Stream.vtt` | Not in v1 — [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
+| `/Videos/{id}/{sourceId}/Subtitles/{index}/Stream.vtt` | `GetSubtitle` (011, implemented at T7) — a surface row since 011's spec gate, and served as written, including the lower-case `stream.vtt` a playlist entry spells it with. This row read *"Not in v1"* until 011 was implemented on 2026-08-31; see [§4.2](#42-v1-has-no-way-to-deliver-a-subtitle-and-this-client-has-one-way-to-receive-one) |
 | `/Videos/{id}/Trickplay/{width}/tiles.m3u8` | Not in v1, and the client has parked the feature `[client-contract: 2026-08-28]`. Agreed on both sides |
 
 **Query parameter names and casing are part of this contract**, because these URLs arrive as the

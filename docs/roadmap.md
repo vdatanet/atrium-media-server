@@ -41,12 +41,20 @@ deletion behind the reference's own operator switches, both off as shipped; and 
 survives none of them. The **Subtitles** row above is the one v1 promise 008 did not deliver — it
 was never 008's to deliver and had no owning feature until 011 was opened on the same day.
 
+**Subtitles shipped on 2026-08-31**, across [011](../specs/011-subtitle-delivery/tasks.md)'s twelve
+tasks: text tracks announced in the HLS manifest when the delivery address names the manifest
+method, a delivery method resolved per stream from the client's profile, three routes serving the
+cues whole and windowed, and subtitle files beside the media discovered by a scan and served like
+any other track. The row's last sentence holds — they are still not painted into frames, which is
+the exclusion below and the one subtitle row left in
+[behaviours §5](compatibility/behaviours.md#5-accepted-gaps-in-v1).
+
 ### Out of scope, and why
 
 | Not in v1 | Reason |
 |---|---|
 | **Hardware-accelerated transcoding** | VAAPI, QSV, NVENC, VideoToolbox: a per-machine hardware surface with its own detection, failure modes and driver matrix. v1 encodes on the CPU — slower, but portable and testable on any machine that can run the test suite |
-| **Subtitle burn-in** | Needs a text-rendering stack (fonts, ASS positioning, shaping) and a second filter path. v1 delivers subtitle files — that half is **011**, and it had no owning feature until 2026-08-29 — but it does not paint them into frames |
+| **Subtitle burn-in** | Needs a text-rendering stack (fonts, ASS positioning, shaping) and a second filter path. v1 delivers subtitle files — that half is **011**, which had no owning feature until 2026-08-29 and shipped on 2026-08-31 — but it does not paint them into frames. 011 measured what that costs and it is not nothing: `Encode` is the reference's per-stream answer for **every** track no declared profile fits, so v1 says the word and produces the frames without the cues ([behaviours §5](compatibility/behaviours.md#5-accepted-gaps-in-v1)) |
 | **Live TV, DVR, tuners** | A separate product with its own hardware surface |
 | **The Jellyfin web UI** | Would add a large endpoint surface whose only consumer is a UI this project is not building |
 | **Plugins** | .NET assembly loading; no Python analogue worth inventing |

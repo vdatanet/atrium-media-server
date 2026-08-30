@@ -35,6 +35,7 @@ from atrium.api.deps import require_user
 from atrium.compat.errors import CONTROLLER_ERROR_BODY, CONTROLLER_ERROR_TYPE
 from atrium.config.paths import DataPaths
 from atrium.db.repositories import MediaProbeRepository, UserRepository
+from atrium.domain.items import ItemType
 from atrium.domain.media import StreamKind
 from atrium.domain.user import User
 from atrium.media import extract, subtitles
@@ -701,6 +702,37 @@ async def test_an_item_that_names_nothing_is_the_controller_refusal_at_400(
         assert answered.status_code == 400, item_id
         assert answered.headers["Content-Type"] == CONTROLLER_ERROR_TYPE
         assert answered.content == CONTROLLER_ERROR_BODY
+
+
+async def test_an_item_that_exists_with_nothing_servable_is_the_500(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The row between this route's two refusals, and the reason the lookup asks about the item
+    **first** - measured at T7 and asserted here at T12, which found it unasserted.
+
+    An identifier nothing holds is the `400` above; an identifier naming an item that **is** here
+    and has no subtitle to convert is the `500`. Both halves are in one test because the split is
+    the assertion: a route that resolved the part before the item - which is what
+    `api/delivery.py`'s `locate` does - answers one status for both rows and passes neither the
+    first row nor this one. The playlist route beside these two answers its problem-details `404`
+    for the same two identifiers (`tests/conformance/test_subtitle_playlist.py`).
+    """
+    world = served[1]
+    audio = world.by_type(ItemType.AUDIO)
+    folders = world.by_type(ItemType.MUSIC_ALBUM)
+    assert audio and folders, "the scanned world holds no audio item and no album to ask about"
+
+    for label, item_id in (("an audio track", audio[0].id), ("an album", folders[0].id)):
+        answered = await client.get(address(item_id, 0))
+
+        assert answered.status_code == 500, label
+        assert answered.headers["Content-Type"] == CONTROLLER_ERROR_TYPE, label
+        assert answered.content == CONTROLLER_ERROR_BODY, label
+
+    missing = await client.get(address(UNKNOWN_ITEM, 0))
+    assert missing.status_code == 400, (
+        "the two statuses split on whether the item is there at all, and they collapsed into one"
+    )
 
 
 async def test_an_identifier_that_is_not_one_is_problem_details_naming_the_route_parameter(
