@@ -3,15 +3,24 @@
 """What makes the HLS master playlist announce a subtitle track, what each announcement says
 verbatim, and where the name it carries comes from.
 
-specs/011 §3.4, OQ-1, OQ-3 and OQ-4. Three batteries:
+specs/011 §3.4, OQ-1, OQ-3 and OQ-4. Five batteries:
 
 - **the lever** (OQ-1): the same master playlist fetched with nothing added, with
   `EnableSubtitlesInManifest=true`, and with each `SubtitleMethod` beside a stream index -
   including an image stream's index, and including the parameter the reference's *own*
   negotiation writes into the address it hands the client;
-- **the anatomy** (OQ-3): the `#EXT-X-MEDIA` lines and the `#EXT-X-STREAM-INF` line verbatim,
-  because a manifest is compared as text by nothing in this repository and as bytes by 010's
-  differential;
+- **the vocabulary** (011 plan §6.8, owed to T11): the same word in five more spellings -
+  altered case, the member's ordinal, an ordinal that is no member, a word that is no member,
+  and an empty value - plus the same address with **no index at all**, because the index turned
+  out not to be part of the lever;
+- **the anatomy** (OQ-3): the `#EXT-X-MEDIA` lines and **every** `#EXT-X-STREAM-INF` line
+  verbatim, because a manifest is compared as text by nothing in this repository and as bytes by
+  010's differential;
+- **the multi-variant case** (011 tasks gate, 2026-08-30): an HDR source whose video is copied is
+  offered SDR entrances beside the copy, and the group belongs to every one of them. The gate
+  could not see this, because this script's own `_variant_line` returned the **first**
+  `#EXT-X-STREAM-INF` and only that one; it is `_variant_lines` now, and the battery reports a
+  miss on a library that holds no HDR source with a text subtitle track;
 - **the name** (OQ-4): what each announcement is called, beside every property that name is
   built from - the stream's title, its language, its flags, its codec - and beside the server's
   own interface culture, which is what decides the language the name is written in.
@@ -21,7 +30,9 @@ playlist's own base and fetched, because an announcement that leads nowhere is t
 feature exists to prevent.
 
 It makes the reference open a play session per negotiation and stops each one on the way out,
-including on failure. It never fetches a segment.
+including on failure. It never fetches a segment. **The two batteries added at T11 build the
+master address by hand and negotiate nothing**, which is what lets the question they answer -
+which spellings of one query value announce a track - be asked without opening a session at all.
 
 Usage:
     python3 tools/probe_subtitle_manifest.py http://your-jellyfin:8096 -u username --allow-writes
@@ -45,8 +56,16 @@ from _probe import Probe, ProbeError, Server, main
 
 REJECTED_CONTAINER = "nothingatall"
 
+#: The group every announcement is put in and every variant line names.
+GROUP = "subs"
+
 #: The exact opening of an announcement, which is half of what OQ-3 asks.
-MEDIA_PREFIX = '#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="'
+MEDIA_PREFIX = f'#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="{GROUP}",NAME="'
+
+#: What a hand-built master address states about the output, so that the two batteries which
+#: negotiate nothing still describe a stream the route can plan. `VideoCodec` is the one that
+#: moves: `copy` is what puts an SDR entrance beside an HDR source.
+HAND_BUILT = "&AudioCodec=aac&SegmentContainer=ts&MinSegments=1"
 
 #: The six properties a stream's display title is assembled from, all of which the reference
 #: localises. 008 §3.1 leaves every one of them absent on purpose.
@@ -76,11 +95,19 @@ def _media_lines(playlist: str) -> list[str]:
     return [line for line in playlist.splitlines() if line.startswith(marker)]
 
 
-def _variant_line(playlist: str) -> str:
-    for line in playlist.splitlines():
-        if line.startswith("#EXT-X-STREAM-INF"):
-            return line
-    return ""
+def _variant_lines(playlist: str) -> list[str]:
+    """**Every** `#EXT-X-STREAM-INF`, which is what this was missing when the gate read it.
+
+    It returned the first one and only the first one, so a master carrying an SDR entrance beside
+    an HDR stream copy looked like a master carrying one variant - and the question *does every
+    variant carry the subtitle group* could not be asked, let alone answered.
+    """
+    return [line for line in playlist.splitlines() if line.startswith("#EXT-X-STREAM-INF")]
+
+
+def _every_variant_names_the_group(playlist: str) -> bool:
+    lines = _variant_lines(playlist)
+    return bool(lines) and all(line.endswith(f'SUBTITLES="{GROUP}"') for line in lines)
 
 
 def _attribute(line: str, name: str) -> str:
@@ -172,14 +199,11 @@ def _lever_battery(server: Server, probe: Probe, source: SubtitledSource) -> lis
             playlist = _fetch(server, url + extra)
             lines = _media_lines(playlist)
             announced[label] = lines
+            variants = _variant_lines(playlist)
+            named = sum(1 for line in variants if f'SUBTITLES="{GROUP}"' in line)
             probe.observe(
                 label,
-                f"{len(lines)} media entries, variant "
-                + (
-                    "names the group"
-                    if 'SUBTITLES="subs"' in _variant_line(playlist)
-                    else "does not"
-                ),
+                f"{len(lines)} media entries, {named} of {len(variants)} variants name the group",
             )
         checks = [
             # The address the reference builds carries the manifest flag; the route it addresses
@@ -202,6 +226,175 @@ def _lever_battery(server: Server, probe: Probe, source: SubtitledSource) -> lis
     finally:
         if session:
             stop_encoding(server, session)
+
+
+def _master_address(source: SubtitledSource, video_codec: str = "h264") -> str:
+    """A master playlist address built by hand, which negotiates nothing and opens no session.
+
+    `mediaSourceId` is declared **required** on this route, so an address without it is problem
+    details naming it rather than the broken announcement 011 plan §6.5 predicted - measured in
+    the same run as the vocabulary below.
+    """
+    return (
+        f"/videos/{dashed(source.item_id)}/master.m3u8"
+        f"?MediaSourceId={source.source_id}&VideoCodec={video_codec}{HAND_BUILT}"
+    )
+
+
+def _vocabulary_battery(server: Server, probe: Probe, source: SubtitledSource) -> list[bool]:
+    """011 plan §6.8's owed row: `SubtitleMethod=hls` as a **query** parameter.
+
+    T9 measured the same word on a request body and found four classes - altered case binds, the
+    ordinal binds, an absent key takes the default, a word that is no member is a `400`. Three of
+    those four carry across and the fourth does not, which is why the row was owed rather than
+    inferred: here a word that is no member is a `200` announcing nothing.
+
+    **And a comma-separated value is one value whose parts are OR-ed**, which the last four cases
+    below discriminate rather than assume: `Embed,External` is `1 | 2`, the manifest method's own
+    ordinal, so it announces where `External,External` does not - and a server reading only the
+    first name would answer the opposite on both.
+
+    The address is built by hand, so this battery costs the server one master playlist per case
+    and opens no play session.
+    """
+    text = source.text_index()
+    base = _master_address(source)
+    cases = [
+        ("Hls", f"&SubtitleStreamIndex={text}&SubtitleMethod=Hls"),
+        ("hls", f"&SubtitleStreamIndex={text}&SubtitleMethod=hls"),
+        ("HLS", f"&SubtitleStreamIndex={text}&SubtitleMethod=HLS"),
+        ("hLs", f"&SubtitleStreamIndex={text}&SubtitleMethod=hLs"),
+        ("the ordinal 3", f"&SubtitleStreamIndex={text}&SubtitleMethod=3"),
+        ("the ordinal 9, no member", f"&SubtitleStreamIndex={text}&SubtitleMethod=9"),
+        ("banana, no member", f"&SubtitleStreamIndex={text}&SubtitleMethod=banana"),
+        ("an empty value", f"&SubtitleStreamIndex={text}&SubtitleMethod="),
+        ("Hls with no index at all", "&SubtitleMethod=Hls"),
+        ("Hls with the index -1", "&SubtitleStreamIndex=-1&SubtitleMethod=Hls"),
+        ("Hls with an index naming nothing", "&SubtitleStreamIndex=999&SubtitleMethod=Hls"),
+        ("an index that is not a number", "&SubtitleStreamIndex=banana&SubtitleMethod=Hls"),
+        (
+            "Embed,External, which is 1|2",
+            f"&SubtitleStreamIndex={text}&SubtitleMethod=Embed%2CExternal",
+        ),
+        ("1,2", f"&SubtitleStreamIndex={text}&SubtitleMethod=1%2C2"),
+        (
+            "External,External, which is 2",
+            f"&SubtitleStreamIndex={text}&SubtitleMethod=External%2CExternal",
+        ),
+        (
+            "Hls,banana, one part unreadable",
+            f"&SubtitleStreamIndex={text}&SubtitleMethod=Hls%2Cbanana",
+        ),
+    ]
+    answers = {}
+    for label, extra in cases:
+        status, _, payload = server.get_streaming(base + extra, 8000)
+        body = payload.decode("utf-8", "replace")
+        answers[label] = (status, _media_lines(body))
+        defaults = [_attribute(line, "DEFAULT") for line in answers[label][1]]
+        probe.observe(
+            "method " + label,
+            f"{status}, {len(answers[label][1])} media entries, DEFAULT={defaults or '-'}",
+        )
+
+    status, _, payload = server.get_streaming(
+        f"/videos/{dashed(source.item_id)}/master.m3u8?VideoCodec=h264{HAND_BUILT}"
+        f"&SubtitleMethod=Hls",
+        300,
+    )
+    probe.observe("no MediaSourceId at all", f"{status}, {payload[:90]!r}")
+
+    announced = len(source.text)
+    return [
+        # The three classes that bind, each answering exactly what the declared spelling answers.
+        answers["Hls"][0] == 200 and len(answers["Hls"][1]) == announced,
+        answers["hls"][1] == answers["Hls"][1],
+        answers["HLS"][1] == answers["Hls"][1],
+        answers["hLs"][1] == answers["Hls"][1],
+        answers["the ordinal 3"][1] == answers["Hls"][1],
+        # The two that do not, and neither of them refuses: this is the half of T9's answer that
+        # does not carry across from a request body.
+        answers["the ordinal 9, no member"] == (200, []),
+        answers["banana, no member"] == (200, []),
+        answers["an empty value"] == (200, []),
+        # The index is not part of the lever. It decides `DEFAULT` and nothing else.
+        len(answers["Hls with no index at all"][1]) == announced,
+        len(answers["Hls with the index -1"][1]) == announced,
+        len(answers["Hls with an index naming nothing"][1]) == announced,
+        all(
+            _attribute(line, "DEFAULT") == "NO"
+            for label in (
+                "Hls with no index at all",
+                "Hls with the index -1",
+                "Hls with an index naming nothing",
+            )
+            for line in answers[label][1]
+        ),
+        # An index that will not bind is the framework's refusal, where a method that will not
+        # bind is not - the asymmetry an implementation has to reproduce.
+        answers["an index that is not a number"][0] == 400,
+        status == 400,
+        # The comma list, on both sides of the discrimination.
+        answers["Embed,External, which is 1|2"][1] == answers["Hls"][1],
+        answers["1,2"][1] == answers["Hls"][1],
+        answers["External,External, which is 2"] == (200, []),
+        answers["Hls,banana, one part unreadable"] == (200, []),
+    ]
+
+
+def _hdr_with_text(server: Server) -> SubtitledSource | None:
+    """A source that is high dynamic range **and** carries a text subtitle track, or None.
+
+    Both halves are needed and neither is common: an HDR source with no text track cannot show
+    the group on its entrances, and a subtitled SDR source has no entrances.
+    """
+    for candidate in find_subtitled_sources(server):
+        if not candidate.text:
+            continue
+        video = [s for s in candidate.source.get("MediaStreams", []) if s.get("Type") == "Video"]
+        if video and (video[0].get("VideoRange") or "").upper() == "HDR":
+            return resolve_subtitled_source(server, candidate.item_id)
+    return None
+
+
+def _multi_variant_battery(server: Server, probe: Probe) -> list[bool]:
+    """The group on **every** variant line, which needs a master that has more than one.
+
+    An HDR source whose video is stream-copied is offered SDR entrances beside the copy, and the
+    reference hands its subtitle group to every playlist line it appends `[source:
+    Jellyfin.Api/Helpers/DynamicHlsHelper.cs:213-315, 325-345 @ v10.11.11]`. Written as one line,
+    the entrance - which exists precisely so that a client unable to render the copy has somewhere
+    to go - would be the one variant offering no subtitles.
+
+    Reports a **miss** rather than inferring anything when the library holds no such source: the
+    question is then unanswered, not answered in the negative.
+    """
+    source = _hdr_with_text(server)
+    if source is None:
+        probe.note(
+            "no source in this library is high dynamic range *and* carries a text subtitle "
+            "track, so whether every variant of a multi-variant master names the subtitle group "
+            "is unmeasured on this run - it needs both halves at once, and neither is common"
+        )
+        return []
+    address = _master_address(source, video_codec="copy")
+    address += f"&SubtitleStreamIndex={source.text_index()}&SubtitleMethod=Hls"
+    status, _, payload = server.get_streaming(address, 8000)
+    playlist = payload.decode("utf-8", "replace")
+    variants = _variant_lines(playlist)
+    named = sum(1 for line in variants if 'SUBTITLES="' + GROUP + '"' in line)
+    probe.observe(
+        "an HDR source, video copied",
+        f"item {source.item_id}, {status}, {len(variants)} variants, "
+        f"{named} of them naming the group",
+    )
+    for line in variants:
+        probe.observe("variant line", line)
+    return [
+        status == 200,
+        len(variants) > 1,
+        _every_variant_names_the_group(playlist),
+    ]
 
 
 def _anatomy_battery(server: Server, probe: Probe, source: SubtitledSource) -> list[bool]:
@@ -229,7 +422,8 @@ def _anatomy_battery(server: Server, probe: Probe, source: SubtitledSource) -> l
             )
         for line in lines:
             probe.observe("media entry", line)
-        probe.observe("variant line", _variant_line(playlist))
+        for line in _variant_lines(playlist):
+            probe.observe("variant line", line)
 
         by_index = {int(s["Index"]): s for s in source.subtitles}
         for line in lines:
@@ -288,7 +482,7 @@ def _anatomy_battery(server: Server, probe: Probe, source: SubtitledSource) -> l
             all(",LANGUAGE=" in line for line in lines),
             all("SegmentLength=30" in _attribute(line, "URI") for line in lines),
             all("ApiKey=" in _attribute(line, "URI") for line in lines),
-            _variant_line(playlist).endswith('SUBTITLES="subs"'),
+            _every_variant_names_the_group(playlist),
             all(status == 200 for status in followed),
         ]
         missing = [s for s in source.text if not s.get("Language")]
@@ -330,19 +524,24 @@ def run(server: Server) -> Probe:
         f"subtitle streams",
     )
     checks = _lever_battery(server, probe, source)
+    checks.extend(_vocabulary_battery(server, probe, source))
     checks.extend(_anatomy_battery(server, probe, source))
+    checks.extend(_multi_variant_battery(server, probe))
 
     if all(checks):
         probe.conclude(
-            "the master playlist has exactly one lever, and it is not the profile flag: the "
-            "route does not bind EnableSubtitlesInManifest at all, so the parameter the "
-            "reference's own negotiation writes into the address changes nothing. What "
-            "announces a track is SubtitleMethod=Hls in the address, which the negotiation "
-            "writes only when a track was selected. One entry per *text* stream then appears, "
-            "whatever the selection is - selecting an image track announces every text track "
-            "with DEFAULT=NO on all of them - each carrying the stream's localised display "
-            "title as its name, a hard-coded SegmentLength=30, and the caller's own token in "
-            "the address",
+            "the master playlist has exactly one lever, and it is neither the profile flag nor "
+            "the stream index: the route does not bind EnableSubtitlesInManifest at all, so the "
+            "parameter the reference's own negotiation writes into the address changes nothing, "
+            "and SubtitleMethod=Hls announces every text track of the source on its own - with "
+            "no index, with -1, and with an index naming no stream alike. The index decides "
+            "which entry carries DEFAULT=YES and nothing else, which is why selecting an image "
+            "track announces every text track with DEFAULT=NO on all of them. The word binds in "
+            "any case and by ordinal, and a word that is no member is a 200 announcing nothing "
+            "rather than the 400 the same word answers on a request body. Every entry carries "
+            "the stream's localised display title as its name, a hard-coded SegmentLength=30 and "
+            "the caller's own token; every variant line of the master ends in the group, the SDR "
+            "entrances beside an HDR stream copy included",
             matches_documentation=None,
         )
     else:

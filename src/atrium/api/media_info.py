@@ -156,25 +156,19 @@ class TranscodingProfileDto(AtriumModel):
     spec section 3.4)."""
 
 
-#: The ordinal each member of the delivery-method vocabulary carries in the reference's own enum
-#: `[source: MediaBrowser.Model/Dlna/SubtitleDeliveryMethod.cs @ v10.11.11]`. Written out rather
-#: than taken from declaration order, because a reordering here would silently rebind a number.
-SUBTITLE_METHOD_ORDINALS: dict[int, ladder.SubtitleMethod] = {
-    0: ladder.SubtitleMethod.ENCODE,
-    1: ladder.SubtitleMethod.EMBED,
-    2: ladder.SubtitleMethod.EXTERNAL,
-    3: ladder.SubtitleMethod.HLS,
-    4: ladder.SubtitleMethod.DROP,
-}
-
-
 def _bound_subtitle_method(value: Any) -> Any:
     """The three ways the reference's binder accepts a delivery method, and the one it refuses.
 
     Measured in one run, all four classes: `hls` and `HLS` bind exactly as `Hls` does, the
     ordinal `3` binds to the same member, and `banana` is a `400` - which is the same shape 012's
-    gate found for an enum-typed *query* parameter, arriving here on a request **body**
+    gate found for an enum-typed value, arriving here on a request **body**
     `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
+
+    **The refusal is the half that does not carry across to a query string**, measured at T11: the
+    same word in a delivery address is a `200` that announces nothing rather than a `400`, because
+    a nullable enum *parameter* binds through a binder that swallows the failure
+    (`media/decision.py`'s `method_named`). The vocabulary is one table - the ordinals live beside
+    the enumeration, read from both sides - and the two refusals are not.
 
     Anything this function does not recognise is handed to the model unchanged, so the refusal is
     the framework's validation `400` rather than a second refusal invented here.
@@ -197,7 +191,7 @@ def _bound_subtitle_method(value: Any) -> Any:
             value,
         )
     if isinstance(value, int):
-        return SUBTITLE_METHOD_ORDINALS.get(value, value)
+        return ladder.SUBTITLE_METHOD_ORDINALS.get(value, value)
     return value
 
 

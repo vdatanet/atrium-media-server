@@ -63,6 +63,7 @@ from atrium.api.delivery import (
     video_parameters,
 )
 from atrium.api.deps import get_paths, require_user
+from atrium.compat.auth import extract_token
 from atrium.compat.errors import (
     DeliveryProductionError,
     DeliverySegmentRequestError,
@@ -71,8 +72,10 @@ from atrium.compat.guids import WireGuid
 from atrium.compat.query_params import ORIGINAL_QUERY_STRING
 from atrium.domain.media import DeliveredFile, MediaInspection
 from atrium.domain.user import User
-from atrium.media import ffmpeg, hls
-from atrium.media.decision import Decision, StreamAction
+from atrium.library.naming.external import LANGUAGE_TOKENS
+from atrium.media import ffmpeg, hls, names
+from atrium.media.decision import Decision, StreamAction, SubtitleMethod, method_named
+from atrium.media.info import is_text_subtitle
 from atrium.media.labels import DEFAULT_MEDIA_TYPE, media_type_of
 from atrium.media.sessions import SegmentPlan, SessionKey, TranscodeManager
 from atrium.media.urls import HLS
@@ -126,6 +129,9 @@ async def get_master_hls_video_playlist(
     has generated, which the operator's server does and v1 does not: the measured 913-byte master
     is this playlist plus that one line. A server with no trickplay images has nothing to
     advertise there, which is an absence rather than a different shape (spec section 3.7).
+
+    **This is also the route 011's whole subtitle announcement hangs off**, and the lever is
+    `SubtitleMethod` in the query and nothing else - see `_announced`.
     """
     inspection, decision, _segments = _planned(
         request, itemId, parameters, segmentContainer, segmentLength
@@ -137,8 +143,56 @@ async def get_master_hls_video_playlist(
         source_video=inspection.video,
         frame_rate=parameters.max_framerate,
         options=request.query_params,
+        subtitles=_announced(request, inspection, parameters),
     )
     return Response(content=body, media_type=PLAYLIST_MEDIA_TYPE, headers=NO_CACHE)
+
+
+def _announced(
+    request: Request, inspection: MediaInspection, parameters: DeliveryParameters
+) -> tuple[hls.AnnouncedSubtitle, ...]:
+    """The `#EXT-X-MEDIA` entries this request earns: one per **text** subtitle stream, or none.
+
+    **One lever, and it is the delivery method alone.** `EnableSubtitlesInManifest` is the other
+    half of the reference's own condition and is unreachable on this route, which does not bind it
+    - so the reference's own negotiation writes a parameter into an address that the route it
+    addresses cannot read `[probe: tools/probe_subtitle_manifest.py, Jellyfin 10.11.11,
+    2026-08-29]`.
+
+    **And the index is not part of the lever, which both documents had the other way round.**
+    Spec section 3.4 said the announcement needs the manifest method *beside a stream index*;
+    measured, `SubtitleMethod=Hls` alone announces every text track of the source, and so does one
+    naming `-1` or a stream that does not exist. What the index decides is which entry carries
+    `DEFAULT=YES` - and nothing at all when it matches no announced stream `[probe: manual
+    requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`, `[source:
+    Jellyfin.Api/Helpers/DynamicHlsHelper.cs:192-210, 603-612 @ v10.11.11]`. That matters to the
+    client this feature exists for: it rewrites the address it was handed rather than
+    re-negotiating, and an implementation that required both would have announced nothing to a
+    client that sent only one of them.
+
+    **The filter is on the stream kind and not on the selection**, which is what makes AC-7 a
+    property rather than a branch: selecting an *image* track still announces every text track,
+    with `DEFAULT=NO` on all of them, because no announced stream matches the selected index.
+
+    The token is `compat/auth.extract_token`'s and not `request.state`'s, which holds only the
+    digest of it - and a player following a `URI` out of a manifest sends no headers, so the
+    address has to carry the caller's own credential (`media/hls.py`'s `subtitle_uri`).
+    """
+    if method_named(parameters.subtitle_method) is not SubtitleMethod.HLS:
+        return ()
+    token = extract_token(request)
+    return tuple(
+        hls.AnnouncedSubtitle(
+            index=stream.index,
+            name=names.display_title(stream, LANGUAGE_TOKENS),
+            language=stream.language or hls.UNKNOWN_LANGUAGE,
+            is_forced=stream.is_forced,
+            is_default=stream.index == parameters.subtitle_stream_index,
+            uri=hls.subtitle_uri(parameters.media_source_id, stream.index, token),
+        )
+        for stream in inspection.streams
+        if is_text_subtitle(stream)
+    )
 
 
 @router.get(MAIN)

@@ -116,6 +116,22 @@ DEFAULT_SEGMENT_CONTAINER: Final = "ts"
 #: The `#EXTINF` number format: six decimals, always, including on a whole number of seconds.
 _SIX_PLACES: Final = Decimal("0.000001")
 
+#: The one group a master playlist puts its subtitle tracks in, and the value every variant line
+#: names. A literal on the reference too - there is no second group and no naming rule `[source:
+#: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:197-199 @ v10.11.11]`.
+SUBTITLE_GROUP: Final = "subs"
+
+#: The window length every announced address asks the subtitle playlist for. **Hard-coded on the
+#: reference**, and not the segment length of the stream it stands beside `[source:
+#: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:613-619 @ v10.11.11]`, `[probe:
+#: tools/probe_subtitle_manifest.py, Jellyfin 10.11.11, 2026-08-29]`.
+ANNOUNCED_WINDOW_SECONDS: Final = 30
+
+#: What `LANGUAGE` says for a stream that states no language. A literal rather than an omission,
+#: measured on the one text track of the reference library that states none `[probe: manual
+#: requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`.
+UNKNOWN_LANGUAGE: Final = "Unknown"
+
 
 @dataclass(frozen=True, slots=True)
 class Segment:
@@ -360,6 +376,63 @@ def window_duration_text(ticks: int) -> str:
     return format(seconds.normalize(), "f")
 
 
+@dataclass(frozen=True, slots=True)
+class AnnouncedSubtitle:
+    """One `#EXT-X-MEDIA` entry of a master playlist: one text subtitle track, addressed.
+
+    Everything here is already decided. `name` is the assembled display title
+    (`media/names.py`), because this module writes strings and does not know what a culture is;
+    `is_default` is the answer to *did the request name this stream*, computed by comparing
+    indices rather than carried as a selection, which is what makes 011 AC-7 fall out - an
+    **image** index matches no announced stream, so every entry reads `DEFAULT=NO`.
+    """
+
+    index: int
+    name: str
+    language: str
+    is_forced: bool
+    is_default: bool
+    uri: str
+
+
+def subtitle_uri(media_source_id: str | None, index: int, token: str | None) -> str:
+    """One announcement's address: a *playlist*, relative to the master's own directory.
+
+    Three things about it are measured and none of them is obvious `[probe:
+    tools/probe_subtitle_manifest.py, Jellyfin 10.11.11, 2026-08-29]`:
+
+    * it addresses `subtitles.m3u8` and not a subtitle file, so a player following it lands on
+      the windowed playlist and only then on the cues;
+    * the window length is **hard-coded thirty seconds** rather than the stream's segment length;
+    * it carries **the caller's own token**, and needs to: the playlist route requires a caller
+      and a player following a `URI` out of a manifest sends no headers of its own.
+
+    `media_source_id` is the request's, written the way the reference writes it - which is with
+    nothing at all where the request named none. That state is unreachable there, because the
+    parameter is declared required and an absent one is problem details naming `mediaSourceId`
+    `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`; it is
+    reachable here only because 008 binds that parameter optionally on every delivery route.
+    """
+    return (
+        f"{media_source_id or ''}/Subtitles/{index}/subtitles.m3u8"
+        f"?SegmentLength={ANNOUNCED_WINDOW_SECONDS}&ApiKey={token or ''}"
+    )
+
+
+def _announcement(subtitle: AnnouncedSubtitle) -> str:
+    """One entry, verbatim: the attributes in the measured order, with no space anywhere.
+
+    `AUTOSELECT=YES` on every entry and `GROUP-ID` a literal `subs`, both unconditional
+    `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:604, 621-628 @ v10.11.11]`.
+    """
+    return (
+        f'#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="{SUBTITLE_GROUP}",NAME="{subtitle.name}"'
+        f",DEFAULT={'YES' if subtitle.is_default else 'NO'}"
+        f",FORCED={'YES' if subtitle.is_forced else 'NO'}"
+        f',AUTOSELECT=YES,URI="{subtitle.uri}",LANGUAGE="{subtitle.language}"'
+    )
+
+
 def master_playlist(
     *,
     query: str,
@@ -368,6 +441,7 @@ def master_playlist(
     source_video: InspectedStream | None,
     frame_rate: float | None,
     options: Mapping[str, str] | None = None,
+    subtitles: Sequence[AnnouncedSubtitle] = (),
 ) -> str:
     """The master playlist: one variant for the negotiation, and an SDR entrance beside an
     HDR stream copy.
@@ -401,6 +475,23 @@ def master_playlist(
     an hevc source is advertised higher there than here. The alternative would be advertising a
     rate the encoder is not aiming at, and the entrance is deliberately not a rung of a ladder:
     it carries the copy's own number, so nothing selects on it.
+
+    **The subtitle group belongs to every variant, and this docstring's neighbour used to say
+    "the variant".** That sentence was written while this function answered exactly one, and 008's
+    own T15 gave an HDR stream copy an SDR entrance beside it hours later. The reference hands its
+    group to *every* playlist line it appends - the copy, the two codec entrances, the h264
+    entrance, the level rewrite and both adaptive-bitrate variants `[source:
+    Jellyfin.Api/Helpers/DynamicHlsHelper.cs:213-315, 325-345 @ v10.11.11]` - measured on the wire
+    against an HDR film copied for a client: three variants, all three ending `,SUBTITLES="subs"`
+    `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`. It has to: the
+    entrance exists so that a client which cannot render the copy has somewhere to go, and an
+    entrance with no subtitle group is that client losing its subtitles for the very reason it was
+    offered the entrance. So the group goes through `_variant`, which both lines already pass
+    through, rather than onto the first line's construction.
+
+    The `#EXT-X-MEDIA` block is written **before** the first `#EXT-X-STREAM-INF`, which is the
+    reference's own order rather than a formatting choice: it appends the announcements and only
+    then the variants `[source: Jellyfin.Api/Helpers/DynamicHlsHelper.cs:207-212 @ v10.11.11]`.
     """
     bandwidth = _bandwidth(video, audio)
     lowered = {name.lower(): value for name, value in (options or {}).items()}
@@ -408,14 +499,19 @@ def master_playlist(
     # neither - so they are computed once, from the copy, and repeated verbatim. The reference
     # reaches the same place by reading them off a state whose only mutation is the output codec.
     shape = _shape(video, source_video, frame_rate)
+    # No announcements, no group - which is also how a source with no *text* subtitle stream
+    # answers a request that asked for one, because the caller announces nothing for it.
+    group = SUBTITLE_GROUP if subtitles else None
 
     lines = ["#EXTM3U"]
+    lines += [_announcement(one) for one in subtitles]
     lines += _variant(
         bandwidth,
         _video_range(video, source_video),
         _codecs(video, audio, source_video, lowered),
         shape,
         f"main.m3u8{query}",
+        group,
     )
     if video is not None and _entrance_applies(video, source_video):
         entrance = replace(video, action=StreamAction.ENCODE, codec=SDR_ENTRANCE_CODEC)
@@ -426,18 +522,31 @@ def master_playlist(
             _codecs(entrance, audio, source_video, lowered),
             shape,
             f"main.m3u8?{_entrance_query(query, SDR_ENTRANCE_CODEC)}",
+            group,
         )
     return "\n".join(lines) + "\n"
 
 
 def _variant(
-    bandwidth: int, video_range: list[str], codecs: str, shape: list[str], uri: str
+    bandwidth: int,
+    video_range: list[str],
+    codecs: str,
+    shape: list[str],
+    uri: str,
+    subtitle_group: str | None = None,
 ) -> list[str]:
-    """One `#EXT-X-STREAM-INF` and the `main.m3u8` line beneath it, in the measured field order."""
+    """One `#EXT-X-STREAM-INF` and the `main.m3u8` line beneath it, in the measured field order.
+
+    `SUBTITLES` is **last**, after the frame rate. It is appended here rather than at either call
+    site so that a variant added later cannot be the one that forgets it.
+    """
     fields = [f"BANDWIDTH={bandwidth}", f"AVERAGE-BANDWIDTH={bandwidth}", *video_range]
     if codecs:
         fields.append(f'CODECS="{codecs}"')
-    return ["#EXT-X-STREAM-INF:" + ",".join([*fields, *shape]), uri]
+    fields += shape
+    if subtitle_group:
+        fields.append(f'SUBTITLES="{subtitle_group}"')
+    return ["#EXT-X-STREAM-INF:" + ",".join(fields), uri]
 
 
 def _shape(
@@ -639,6 +748,7 @@ def _frame_rate(
 
 
 __all__ = [
+    "ANNOUNCED_WINDOW_SECONDS",
     "COPY_SEGMENT_SECONDS",
     "DEFAULT_SEGMENT_CONTAINER",
     "ENCODE_SEGMENT_SECONDS",
@@ -646,7 +756,10 @@ __all__ = [
     "KEYFRAME_EXTRACTION_EXTENSIONS",
     "SDR_ENTRANCE_CODEC",
     "SEGMENT_PREFIX",
+    "SUBTITLE_GROUP",
     "TICKS_PER_SECOND",
+    "UNKNOWN_LANGUAGE",
+    "AnnouncedSubtitle",
     "Segment",
     "buckets_allowed",
     "cadence_milliseconds",
@@ -656,5 +769,6 @@ __all__ = [
     "requested_seconds",
     "segment_extension",
     "subtitle_playlist",
+    "subtitle_uri",
     "window_duration_text",
 ]

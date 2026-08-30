@@ -44,6 +44,7 @@ from atrium.media.decision import (
     TranscodeReason,
     TranscodingProfile,
     decide,
+    method_named,
 )
 from atrium.media.info import stream_of
 
@@ -1121,3 +1122,59 @@ def test_an_audio_item_never_reads_a_subtitle_index() -> None:
         is_video=False,
     )
     assert decision.subtitle_index is None
+
+
+# ------------------------------------------------------------------------------------------
+# The vocabulary in a delivery address (011 T11)
+# ------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("Hls", SubtitleMethod.HLS),
+        ("hls", SubtitleMethod.HLS),
+        ("HLS", SubtitleMethod.HLS),
+        ("hLs", SubtitleMethod.HLS),
+        ("3", SubtitleMethod.HLS),
+        ("Encode", SubtitleMethod.ENCODE),
+        ("0", SubtitleMethod.ENCODE),
+        ("external", SubtitleMethod.EXTERNAL),
+        ("4", SubtitleMethod.DROP),
+        ("+3", SubtitleMethod.HLS),
+        ("  3  ", SubtitleMethod.HLS),
+        # A comma list is one value and its parts are OR-ed, which is observable rather than
+        # academic: `1 | 2` is the manifest method's own ordinal, so these announce.
+        ("Embed,External", SubtitleMethod.HLS),
+        ("1,2", SubtitleMethod.HLS),
+        ("Embed,Embed,External", SubtitleMethod.HLS),
+        ("External,External", SubtitleMethod.EXTERNAL),
+        ("External,Encode", SubtitleMethod.EXTERNAL),
+        ("Hls,banana", None),
+        # The classes that name no member, and none of them refuses: this is the half of the same
+        # word that does **not** carry across from a request body, where an unbindable word is a
+        # `400`. The last four also answered a `200` rather than an exception, which is what a
+        # server reading them with a bare integer conversion would have raised.
+        ("banana", None),
+        ("9", None),
+        ("-1", None),
+        ("", None),
+        ("3.0", None),
+        ("--3", None),
+        ("\u00b2", None),
+        ("9999999999999999999999", None),
+        (None, None),
+    ],
+)
+def test_a_delivery_addresss_method_binds_by_case_and_by_ordinal_and_refuses_nothing(
+    value: str | None, expected: SubtitleMethod | None
+) -> None:
+    """Six spellings measured on the master playlist route in one run, plus the members either
+    side of them `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-30]`.
+
+    An unreadable value answers `None` and the caller announces nothing, which is the reference's
+    own answer: it binds a nullable enum parameter through a binder that catches the conversion
+    failure and leaves the value unset `[source:
+    Jellyfin.Api/ModelBinders/NullableEnumModelBinder.cs:26-46 @ v10.11.11]`.
+    """
+    assert method_named(value) is expected
