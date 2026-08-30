@@ -984,11 +984,12 @@ def _refusal_battery(
     the same way would answer the wrong status to one of them.
 
     Three more are 011 T8's, and two of them are the rows plan §6.8 left owed to it: the
-    malformed-identifier refusal on the **playlist** route, which §3.7 records as naming
+    malformed-identifier refusal on the **playlist** route, which §3.7 had recorded as naming
     `routeItemId` from a run that only ever asked the fetch route; and a source with no runtime,
     which the source selection at the top of this file excludes on purpose and which is therefore
     searched for here rather than assumed present. The third is the playlist column of the row T7
-    added, which the table leaves as a dash.
+    added, which the table had left as a dash. All three rows of §3.7 were corrected at T8 from
+    this battery, so what these cases now do is hold the corrected table rather than propose it.
     """
     unknown = Address(UNKNOWN_ITEM, UNKNOWN_ITEM, source.text_index())
     empty = Address(EMPTY_GUID, EMPTY_GUID, source.text_index())
@@ -1024,8 +1025,8 @@ def _refusal_battery(
         cases.append(
             ("item exists and holds nothing servable, fetch", Address(series, series, 0).whole())
         )
-        # The same identifier on the playlist route, whose own lookup asks for a video: §3.7 has a
-        # dash in this cell and an implementation cannot leave one there.
+        # The same identifier on the playlist route, whose own lookup asks for a video. This cell
+        # was a dash in §3.7 until T8 measured it, and a dash is not something a route can answer.
         cases.append(
             (
                 "item exists and holds nothing servable, playlist",
@@ -1082,11 +1083,12 @@ def _refusal_battery(
             named or "none", _parameter_named(bodies["malformed identifier, fetch"]) or "none"
         ),
     )
-    if named != "routeItemId":
+    if named != "itemId":
         probe.note(
-            f"011 spec §3.7 says both routes answer problem details naming `routeItemId`; the "
-            f"playlist route names `{named}`. The row was measured on the fetch route alone and "
-            f"generalised, and the two routes declare that path parameter under different names"
+            f"011 spec §3.7 says the playlist route answers problem details naming `itemId` and "
+            f"the fetch routes `routeItemId`, each naming its own path segment; this run says the "
+            f"playlist names `{named}`. That row was corrected at T8 from this battery, so a "
+            f"disagreement here means the table has gone false rather than that it was never right"
         )
     return [
         # Two different refusals for two different misses: an unknown identifier is a 500 on the
@@ -1107,8 +1109,9 @@ def _refusal_battery(
         # The row plan §6.8 predicted from the declaration: the playlist route names its own path
         # parameter, which is not the one the fetch routes name.
         named == "itemId",
-        # And the cell §3.7 leaves as a dash: the playlist route's lookup asks for a video, so an
-        # item that exists and is not one is the negotiation's 404 rather than the fetch's 500.
+        # And the cell §3.7 left as a dash until T8: the playlist route's lookup asks for a video,
+        # so an item that exists and is not one is the negotiation's 404 rather than the fetch's
+        # 500.
         *(
             [answers["item exists and holds nothing servable, playlist"] == 404]
             if series is not None

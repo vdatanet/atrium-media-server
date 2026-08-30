@@ -344,11 +344,12 @@ async def test_an_item_that_names_nothing_is_the_problem_details_404(
 async def test_an_item_that_exists_and_is_not_a_video_is_the_same_404(
     client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
 ) -> None:
-    """The cell section 3.7 leaves empty, measured on a series identifier at T8.
+    """The cell section 3.7 left empty until T8, measured on a series identifier.
 
     The reference's own lookup asks for a video, so an item that is there and is not one is the
     `404` an identifier naming nothing gets - where the fetch routes answer `500` for exactly the
-    same item. An audio track is this world's example of it.
+    same item. An audio track is this world's example of it. The dash is what let the first draft
+    of this route reuse the fetch routes' lookup, and the table says `404` now.
     """
     audio = served[1].by_type(ItemType.AUDIO)
     assert audio, "the scanned world holds no audio item, so this row has nothing to run on"
@@ -376,9 +377,10 @@ async def test_an_identifier_that_is_not_one_names_this_routes_own_parameter(
 ) -> None:
     """`itemId` and **not** `routeItemId`, measured at T8.
 
-    Spec section 3.7 says both routes name `routeItemId`; only the fetch route was ever asked, and
-    the two routes declare that path segment under different names. A refusal that named the fetch
-    routes' spelling would name a parameter this route does not have.
+    Spec section 3.7 used to say both routes name `routeItemId`; only the fetch route had ever been
+    asked, and the two declare that path segment under different names. A refusal that named the
+    fetch routes' spelling would name a parameter this route does not have. The second assertion is
+    not redundant with the first: it is what fails if the two ever collapse into one spelling.
     """
     answered = await client.get(
         "/Videos/not-a-guid/not-a-guid/Subtitles/0/subtitles.m3u8", params={"SegmentLength": 30}

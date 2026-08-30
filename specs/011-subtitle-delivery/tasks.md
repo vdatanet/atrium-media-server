@@ -819,8 +819,8 @@ query and the route has two more questions before it, and each one is a differen
 nothing had written down.** The reference asks for a **video**, not for an item `[source:
 Jellyfin.Api/Controllers/SubtitleController.cs:350-354 @ v10.11.11]`, so an item that exists, is
 visible and is not one — a series, an audio track — is the same problem-details `404` as an
-identifier nothing holds. [Spec §3.7](spec.md#37-error-paths) has a **dash** in that cell, and an
-implementation cannot leave one there: something has to be answered. Measured beside the fetch
+identifier nothing holds. [Spec §3.7](spec.md#37-error-paths) had a **dash** in that cell, and an
+implementation cannot leave one there: something has to be answered. The cell says it now. Measured beside the fetch
 route's `500` for the *same* series identifier in one run
 `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`. Written without it, an
 audio item would have answered `500` here — the fetch routes' answer, on the route that shares
@@ -841,14 +841,15 @@ name `routeItemId` on the fetch, read out of the two bodies in one run rather th
 declaration. Same probe.
 
 **Which is where this task's own statement and [plan §6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed)
-disagree, and the disagreement is about whose decision it is.** This statement says *"the spec
-table is corrected in this change"*; §6.8 says the two owed rows are *"corrections to the accepted
+disagreed, and the disagreement was about whose decision it is.** This statement says *"the spec
+table is corrected in this change"*; §6.8 calls the two owed rows *"corrections to the accepted
 spec"*, and the standing rule in this feature — T5's amendment, T6's dependency question, T7's two
 — is that an accepted document is amended by the user and not by the task that finds the reason to.
-**So the measurement was taken and the rows were not.** §3.7 now carries a note beside the table
-giving each of the three cells its measurement and the wording it would take, with the rows
-unchanged and the gap named; the route and its tests answer what was measured. That is the one
-thing in this change that is deliberately incomplete, and it is incomplete on purpose.
+**So the measurements were taken, the rows were put to the user, and the answer was to apply them
+here** — the third time this feature has asked and the third time with the same answer, for the
+reason [AGENTS.md](../../AGENTS.md) gives: documentation moves with the code in the same commit,
+and T9 through T12 are written by people reading this table. All three cells are in §3.7 now, two
+as measurements and the no-runtime row marked ⚠️ read rather than measured.
 
 **The no-runtime row could not be measured, and the reason is sharper than the plan's.** §6.8 said
 *"the probe's own source selection excludes it deliberately"*, which reads as a limitation of the
@@ -857,10 +858,12 @@ source of every video item and all 2 480 state a runtime — and the route asks 
 it reads one, so a source of any other type never reaches that check at all. A runtime is written by
 the scan that creates the item, so the state cannot be built from outside a server; 012's own probe
 had to construct a library to reach the neighbouring condition. The row stays a `[source:]` reading,
-the run reports the miss every time, and Atrium answers the reading's `400`.
+the run reports the miss every time, and Atrium answers the reading's `400`. §3.7 carries it with
+that mark on the row itself, and the reason beside it, because a reader meets the table before
+they meet a plan.
 
-**AC-16's verification asked for something that cannot fail, and asking for it would have broken a
-principle.** *"A partial last window written with a decimal point under `LC_ALL=es_ES.UTF-8` — the
+**AC-16's verification asked for a test that cannot exist, and writing it literally would have
+broken a principle.** *"A partial last window written with a decimal point under `LC_ALL=es_ES.UTF-8` — the
 test sets the locale, which is the only way it can fail"*: a duration rendered from an exact tick
 count is not locale-sensitive in this language at all, so the locale cannot make it fail — and a
 test that *required* `es_ES.UTF-8` would depend on the host having it, which Principle VII forbids
