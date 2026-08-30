@@ -383,7 +383,7 @@ having a longer name, and the test plants exactly that file one directory up.
 
 ## T5 — `media/subtitles.py`: the cue list, and the labels beside it
 
-- [ ] **Changes:** `media/subtitles.py` — pure — with `Cue`, `parse` over the three readable
+- [x] **Changes:** `media/subtitles.py` — pure — with `Cue`, `parse` over the three readable
   families, `window` (skip-while / take-while as **prefix** operations rather than predicates,
   which is what the reference does and what answers a different set of cues on a real file), and
   `render` answering **bytes** for the writable set, byte order mark included where the
@@ -396,8 +396,105 @@ having a longer name, and the test plants exactly that file one directory up.
   readable format, window with and without the copy switch (a cue 36.1 s into the file at 6.1 s in
   a window starting at 30 s without it and at 36.1 s with it), an end position before a start
   answering no cues, the time-map rewrite **and the byte order mark it drops**, and every writer's
-  output re-parsed back to the same cues (AC-9, AC-10, AC-14).
+  output re-parsed back to the same cues (AC-9, AC-10, AC-14). Plus
+  `python3 tools/probe_subtitle_delivery.py` — its **sixth battery**, added here at the user's
+  gate decision, which measures the boundary repeat the coverage row above found rather than
+  leaving AC-10 amended on a reading.
 - **Spec reference:** §3.5, AC-9, AC-10, AC-14; plan §5, §6.7
+
+**Done (2026-08-30).** The task statement asked for a cue list and the cue list was the easy half.
+**What the documents had wrong is what a document made of cues also carries — and one of the
+sixteen criteria is false because of where a cue is allowed to sit.**
+
+**AC-10 has a second contradiction and this one is on every window of every track.** Plan §6.8
+already owed one — the same-format short circuit, which needs a hand-made request. This one needs
+nothing: the skip keeps a cue whose start *equals* the window's start, the take keeps a cue whose
+start *equals* the window's end, and [the playlist](plan.md#66-the-playlist-route) hands
+consecutive windows the **same** boundary tick — one window's `EndPositionTicks` is the next
+one's `StartPositionTicks` `[source:
+MediaBrowser.MediaEncoding/Subtitles/SubtitleEncoder.cs:100-112,
+Jellyfin.Api/Controllers/SubtitleController.cs:394-405 @ v10.11.11]`. So a cue starting on a
+multiple of the window length is **delivered twice**, with the file's own timings both times
+because the playlist sets the copy switch, and *"the concatenation of every window of a track is
+the whole track"* is false by exactly those repeats. Found by the coverage row this task's
+verification asks for, on a cue list whose third cue happened to sit at 60.0 s in a 30 s grid; it
+would have passed on any other number.
+
+**And then it was measured, because a reading is not a measurement and the spec is accepted.**
+The first draft of this note amended AC-10 on a `[source:]` reading alone, which is precisely what
+[AGENTS.md](../../AGENTS.md)'s *"measure the reference before implementing anything"* and plan
+§6.8's *"the amendment is the user's to take"* exist to stop. `tools/probe_subtitle_delivery.py`
+gained a **sixth battery** for it, and the run says the repeat is real, in both forms it can take
+`[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-30]`:
+
+* **constructed** — a boundary built out of a cue's own start at 37.802 s: the window ending there
+  answers 2 cues with the last at 37.802, the window starting there answers 8 with the first at
+  37.802. The same cue **one millisecond off** the boundary is in the earlier window and not in
+  the later one, which is what says this is the exact hit and not a rounding — a straddling cue is
+  dropped by the next window's skip for ending before its start;
+* **through the reference's own playlist** — a cue at 3 282 s, a `SegmentLength=6` grid that lands
+  on it, 2 of the 902 generated entries sharing that position, and the cue present in **both**
+  when they are followed as written, `ApiKey` and both switches included.
+
+The battery reports which of the two forms it reached, the way `probe_sidecar_subtitles.py` and
+`probe_transcode_decision.py` now do: the constructed form is reachable on any track with a cue
+after zero, the playlist form needs a library whose cues land on a whole multiple of some segment
+length, and a run that misses the second says so instead of inferring it. This one reached both.
+AC-10 carries the clause with a `[probe:]` citation, and the repeat is reproduced, because
+narrowing either end drops a cue the reference sends.
+
+**A document is not only its cues, and neither document said so.** [Spec
+§6](spec.md#6-conformance) makes converted text a cue-by-cue assertion on the argument that two
+converters disagree only on whitespace and rounding. They do not. The reference's `vtt` writer
+emits a **`Region:` declaration** in the header and ends **every** cue's timing line with
+`region:subtitle line:90%` `[source: MediaBrowser.MediaEncoding/Subtitles/VttWriter.cs:23-40 @
+v10.11.11]` — measured on the wire in the same run, header and cue line both, the first cue of a
+real track arriving as `00:00:35.099 --> 00:00:37.185 region:subtitle line:90%` — and
+`stream.vtt` is what [every playlist entry names](spec.md#35-fetching-a-subtitle), so that writer
+is the entire subtitle path for the video client. A `WEBVTT\n\n` header with bare timing lines holds the same cues, parses identically,
+passes a cue-by-cue check, and puts the text somewhere else on the screen. Two smaller ones from
+the same read: the `vtt` writer is the only one that **edits a timing**, pushing a cue whose end
+does not follow its start out by a millisecond, and the `srt` writer **renumbers from one**, so
+*"every writer's output re-parsed back to the same cues"* is false of the identifier on the one
+writer that had one to keep. Spec §3.5, spec §6 and plan §6.7 step 4 all carry it now, and the
+framing is asserted as bytes.
+
+**Plan §6.7's byte-order-mark list is four formats and it is five.** `ttml` writes through the
+same text writer as `srt`, `vtt`, `ass` and `ssa` and emits the same preamble `[source:
+MediaBrowser.MediaEncoding/Subtitles/TtmlWriter.cs:23 @ v10.11.11]`; only `json` writes bytes
+directly. And step 5's *"replace the leading `WEBVTT`"* is a replacement over the **whole**
+document, so a cue whose text contains the word gets a mapping line of its own — and the switch is
+read against the spelling `vtt` and never against `webvtt` beside it, which shares the writer and
+not the branch.
+
+**Two spellings of the writable set can be written and cannot be fetched.** `subrip` and `webvtt`
+reach a writer, and the label lookup a fetch resolves its `Content-Type` through has a row for
+neither `[source: Jellyfin.Api/Controllers/SubtitleController.cs:261,274,
+MediaBrowser.Model/Net/MimeTypes.cs:158-181 @ v10.11.11]` — so the reference renders the whole
+document and then has nothing to send it under. `media/labels.py` gets **no row for either**,
+because a row would answer a body where the reference answers none; the six that do have rows are
+there, `ttml` among them, which plan §6.8's own list of media types had left out. What the
+reference ends on for those two is T7's to measure: its format battery asked for six spellings and
+never asked for these. **Five of the six rows are measured now** — `text/vtt`,
+`application/x-subrip`, `text/x-ssa` on both SubStation spellings and `application/json` on both
+of `json` and `js`, read off the same run — and `ttml` is the one still read, for the same reason:
+nothing has asked for it.
+
+**One thing the run paid that nobody asked it to.** `Stream.srt` on a `subrip` track answers
+84 858 bytes with **no byte order mark**, `\r\n` inside a cue's text and the file's own numbering,
+where every converted format on that same track carries the mark — which is the readable file's
+own bytes handed back rather than a rendered document, and is the unwindowed half of [plan
+§6.8](plan.md#68-what-no-probe-here-has-measured-and-what-stays-owed)'s **first** owed bullet
+arriving for free. The windowed half — the same request with a `StartPositionTicks` on it, which
+is what turns that bullet from a reading into a measurement — is not asked by this battery and
+stays owed to T7.
+
+Two smaller things. **The reference's parser table is keyed on a file *extension***, so `subrip`
+and `webvtt` cannot arrive at `parse` there at all — `READABLE` naming them is a liberality
+nothing can reach rather than a claim, and the plan says so now. And `Cue.identifier` is a
+**number in string form on every path**, because it is built from a paragraph's number: `srt`
+keeps its file's own (a document numbered from 311 answers `"311"`), `ass`, `ssa` and `vtt` are
+numbered by position, and a WebVTT cue's free-text name has nowhere to go.
 
 ## T6 — `media/extract.py`: one process, one cache entry, one lock
 

@@ -3,7 +3,7 @@
 """What the two subtitle addresses answer: to a caller with no credential, to a window, to a
 format the server cannot make, and to every way of naming a stream that is not there.
 
-specs/011 §3.5 and §3.7, OQ-6, OQ-8 and OQ-11. Five batteries:
+specs/011 §3.5 and §3.7, OQ-6, OQ-8 and OQ-11. Six batteries:
 
 - **the credential** (OQ-6): both routes with no token, with an unknown token, with the token in
   the header and with it in the query string. The reference declares a requirement on one route
@@ -14,6 +14,12 @@ specs/011 §3.5 and §3.7, OQ-6, OQ-8 and OQ-11. Five batteries:
   this feature at all;
 - **the window** (OQ-11): the two timestamp switches the playlist's own entries set, measured as
   the difference they make to the cues and to the first bytes of the body;
+- **the boundary** (AC-10): whether a cue that starts *exactly* where one window ends and the next
+  begins is answered by both of them. T5 read that off the reference's own selection - both ends
+  inclusive, and consecutive windows handed the same position - and a reading is not a
+  measurement, so this battery asks the server. It reports which form it reached: the boundary
+  can always be constructed from a cue's own start, and whether the reference's *own* grid ever
+  lands on one depends on the library, so the run says which of the two it proved;
 - **the formats**: every spelling a client can put in the address, including one the server
   cannot produce and one that turns the cue list into JSON;
 - **the refusals** (OQ-8): each row of 011 §3.7 on each route, as bytes rather than as a status.
@@ -255,6 +261,187 @@ def _window_battery(
     ]
 
 
+def _stamp_ticks(stamp: str) -> int | None:
+    """One `hh:mm:ss.fff` timestamp as ticks, read as integers so no float rounds a boundary."""
+    cleaned = stamp.strip().replace(",", ".")
+    parts = cleaned.split(":")
+    if len(parts) == 3:
+        hours, minutes, rest = parts
+    elif len(parts) == 2:
+        hours, minutes, rest = "0", parts[0], parts[1]
+    else:
+        return None
+    seconds, _, fraction = rest.partition(".")
+    try:
+        whole = (int(hours) * 3600 + int(minutes) * 60 + int(seconds)) * TICKS_PER_SECOND
+        return whole + int((fraction or "0").ljust(3, "0")[:3]) * 10_000
+    except ValueError:
+        return None
+
+
+def _cue_starts(body: bytes) -> list[int]:
+    """Every cue's start position, in ticks, off a WebVTT body."""
+    starts = []
+    for line in body.decode("utf-8", "replace").splitlines():
+        if "-->" not in line:
+            continue
+        start = _stamp_ticks(line.split("-->")[0])
+        if start is not None:
+            starts.append(start)
+    return starts
+
+
+def _clock(ticks: int) -> str:
+    seconds = ticks / TICKS_PER_SECOND
+    return f"{int(seconds) // 60:02d}:{seconds % 60:06.3f}"
+
+
+def _boundary_battery(
+    server: Server, probe: Probe, source: SubtitledSource, address: Address
+) -> list[bool]:
+    """AC-10: is a cue that starts exactly on a window boundary answered by **both** windows?
+
+    011 T5 read this off the selection - the skip keeps a cue whose start equals the window's
+    start, the take keeps one whose start equals its end, and the playlist hands consecutive
+    windows the same position - and AGENTS.md's rule is that a claim about the reference is
+    measured before it is acted on. So this battery asks.
+
+    **Two forms, and the run says which it reached.** The first constructs the boundary from a
+    cue's own start, which any track with a cue after zero can reach: it measures the selection
+    rule itself. The second uses the reference's *own* generated playlist, which only lands on a
+    cue when the library has one starting on a whole second, because the grid is whole seconds -
+    that one measures whether a real client meets the case, and a run that misses it says so
+    rather than inferring it.
+    """
+    length = 30 * TICKS_PER_SECOND
+    copy = "&CopyTimestamps=true"
+
+    status, _, whole = server.get_streaming(address.whole(), 400_000, send_token=False)
+    starts = _cue_starts(whole)
+    if status != 200 or len(starts) < 2:
+        raise ProbeError(
+            "the whole-file fetch answered fewer than two cues, so no boundary can be built"
+        )
+
+    # The framing of the document these cues arrive in, which the shapes above cut off at 110
+    # bytes: a converted answer declares a region and puts a placement setting on every timing
+    # line, and a check that compared only cues would pass on a document that placed them
+    # somewhere else.
+    timings = [line for line in whole.decode("utf-8", "replace").splitlines() if "-->" in line]
+    probe.observe("the first cue's timing line, whole", repr(timings[0]) if timings else "none")
+
+    # Not the first cue: the window before a boundary has to have somewhere to start.
+    boundary = next((start for start in starts[1:] if start > length), None)
+    if boundary is None:
+        boundary = next((start for start in starts[1:] if start > 0), None)
+    if boundary is None:
+        raise ProbeError("every cue of this track starts at zero, so no boundary can be built")
+    probe.observe(
+        "boundary chosen",
+        f"a cue starting at {boundary} ({_clock(boundary)}), which is where one window "
+        f"ends and the next begins",
+    )
+
+    def answered(start: int, end: int) -> list[int]:
+        _, _, body = server.get_streaming(
+            address.window(start, end, copy), 400_000, send_token=False
+        )
+        return _cue_starts(body)
+
+    before = answered(max(boundary - length, 0), boundary)
+    after = answered(boundary, boundary + length)
+    probe.observe(
+        "the window ending on it",
+        "{} cues, last at {}".format(len(before), _clock(before[-1]) if before else "none"),
+    )
+    probe.observe(
+        "the window starting on it",
+        "{} cues, first at {}".format(len(after), _clock(after[0]) if after else "none"),
+    )
+    repeated = boundary in before and boundary in after
+    probe.observe(
+        "the cue on the boundary",
+        "answered by BOTH windows"
+        if repeated
+        else f"answered by {(boundary in before) + (boundary in after)} window(s)",
+    )
+
+    # The contrast that says it is the exact hit and not a rounding: one millisecond later the
+    # same cue straddles the boundary rather than starting on it, and the later window's skip
+    # drops it for ending before its start.
+    inside = boundary + 10_000
+    straddle_before = answered(max(inside - length, 0), inside)
+    straddle_after = answered(inside, inside + length)
+    straddled = boundary in straddle_before and boundary not in straddle_after
+    probe.observe(
+        "the same cue, one millisecond off the boundary",
+        f"in the earlier window: {boundary in straddle_before}, "
+        f"in the later window: {boundary in straddle_after}",
+    )
+
+    # The reference's own grid is whole seconds, so it only lands on a cue that starts on a
+    # multiple of the segment length - and the longest segment that divides one of this track's
+    # cue starts is the one to ask for, because it is also the shortest playlist.
+    on_a_second: int | None = None
+    segment = 0
+    for candidate in range(30, 0, -1):
+        step = candidate * TICKS_PER_SECOND
+        if source.runtime_ticks // step > 1500:
+            continue  # a playlist of thousands of entries measures nothing this does not
+        landed = next((s for s in starts if s > 0 and s % step == 0), None)
+        if landed is not None:
+            on_a_second, segment = landed, candidate
+            break
+    grid_checks: list[bool] = []
+    if on_a_second is None:
+        shortest = next(
+            (n for n in range(1, 31) if source.runtime_ticks // (n * TICKS_PER_SECOND) <= 1500),
+            30,
+        )
+        probe.note(
+            f"no cue of this track starts on a whole multiple of any segment length between "
+            f"{shortest} and 30 seconds - shorter lengths are skipped because they would ask "
+            f"this {source.runtime_ticks / TICKS_PER_SECOND:.0f}s runtime for a playlist of more "
+            f"than 1500 entries - so the reference's OWN grid has no boundary to land on here and "
+            f"the playlist form of this case was NOT reached. What reaches it is a track with a "
+            f"cue starting on such a multiple. The constructed windows above measure the same "
+            f"selection rule, on the same route, with the same two positions the playlist writes"
+        )
+        probe.observe("the reference's own playlist grid", "not reached on this track")
+    else:
+        seconds = on_a_second // TICKS_PER_SECOND
+        _, _, playlist = server.get_streaming(address.playlist(segment), 4_000_000)
+        entries = [
+            line
+            for line in playlist.decode("utf-8").splitlines()
+            if line and not line.startswith("#")
+        ]
+        pair = [
+            entry
+            for entry in entries
+            if f"StartPositionTicks={on_a_second}&" in entry
+            or f"EndPositionTicks={on_a_second}&" in entry
+        ]
+        probe.observe(
+            "the reference's own playlist grid",
+            f"a cue starts at {seconds}s, so at SegmentLength={segment} the grid has a "
+            f"boundary on it; "
+            f"{len(pair)} of {len(entries)} entries share that position",
+        )
+        seen = []
+        for entry in pair:
+            _, _, body = server.get_streaming(address.base + "/" + entry, 400_000, send_token=False)
+            found = on_a_second in _cue_starts(body)
+            seen.append(found)
+            probe.observe(
+                "follow " + entry.split("&ApiKey")[0],
+                "the boundary cue is {}".format("present" if found else "absent"),
+            )
+        grid_checks = [len(pair) == 2, all(seen)]
+
+    return [repeated, straddled, *grid_checks]
+
+
 def _first_cue_seconds(text: str) -> float | None:
     for line in text.splitlines():
         if "-->" not in line:
@@ -383,6 +570,7 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
     checks = _credential_battery(server, probe, address)
     checks.extend(_playlist_battery(server, probe, source, address))
     checks.extend(_window_battery(server, probe, source, address))
+    checks.extend(_boundary_battery(server, probe, source, address))
     checks.extend(_format_battery(server, probe, address))
     checks.extend(_refusal_battery(server, probe, source, address, args.allow_writes))
 
@@ -395,7 +583,11 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
             "the switches are not decoration - without CopyTimestamps a window is rebased on "
             "itself, and AddVttTimeMap rewrites the header and drops the byte order mark. The "
             "playlist never reads the stream index it is given, so a playlist for a stream that "
-            "does not exist is a 200 whose every entry is a 500",
+            "does not exist is a 200 whose every entry is a 500. And a cue that starts exactly "
+            "where one window ends and the next begins is answered by BOTH of them: both ends of "
+            "the selection are inclusive and consecutive windows are handed the same position, "
+            "so the windows of a track concatenate to the track plus one repeat per such cue - "
+            "one millisecond off the boundary the same cue is answered once",
             matches_documentation=None,
         )
     else:
