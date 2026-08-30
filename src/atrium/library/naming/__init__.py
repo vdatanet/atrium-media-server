@@ -16,6 +16,12 @@ from atrium.library.naming.clean import (
     from_text,
     is_tag,
 )
+from atrium.library.naming.external import (
+    SUBTITLE_EXTENSIONS,
+    ExternalName,
+    language_of,
+    parse_external,
+)
 from atrium.library.naming.movies import MovieParse, group, parse_movie
 from atrium.library.naming.music import (
     PATH_ONLY,
@@ -29,9 +35,11 @@ from atrium.library.naming.series import SPECIALS, EpisodeParse, parse_episode, 
 __all__ = [
     "PATH_ONLY",
     "SPECIALS",
+    "SUBTITLE_EXTENSIONS",
     "AudioParse",
     "CleanName",
     "EpisodeParse",
+    "ExternalName",
     "MetadataSource",
     "MovieParse",
     "PathOnly",
@@ -40,8 +48,10 @@ __all__ = [
     "from_text",
     "group",
     "is_tag",
+    "language_of",
     "parse_audio",
     "parse_episode",
+    "parse_external",
     "parse_movie",
     "season_of_directory",
 ]

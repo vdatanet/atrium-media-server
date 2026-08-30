@@ -22,8 +22,17 @@ and the server did not, or the other way round.
 
 It writes nothing and places no fixture: it measures the library that is there. Two things it
 therefore cannot reach, and says so rather than guessing: the item's own internal metadata
-directory, which is a second place the reference looks and which no API exposes, and any flag
-this library happens not to use.
+directory, which is a second place the reference looks and which no API exposes, and any branch
+of the name rule this library happens not to use.
+
+**The second of those is now reported rather than assumed.** A reproduction that agrees with the
+server on every file it saw has proven the branches it ran and nothing about the others, so the
+run names both sets - the same device `probe_transcode_decision.py` reports a source's video range
+with, and for the same reason: 008's OQ-7 answered for a branch the run never touched. Against the
+reference library it reaches four of the seven and misses three, each read from the reference
+rather than measured until some library carries a filename for it (011 plan §6.8): the `default`
+vocabulary, the `hin` collision, and a language written as a *name* rather than as a three-letter
+code. `Film.default.srt`, `Film.spa.hi.srt` and `Film.ell.srt` are the three filenames.
 
 Usage:
     python3 tools/probe_sidecar_subtitles.py http://your-jellyfin:8096 -u username
@@ -49,6 +58,23 @@ DELIMITERS = (".",)
 DEFAULT_FLAGS = ("default",)
 FORCED_FLAGS = ("foreign", "forced")
 HEARING_IMPAIRED_FLAGS = ("cc", "hi", "sdh")
+
+#: The language whose two-letter code is also a hearing-impaired flag, in the spelling the rule
+#: writes it in. The reference resolves the collision in Hindi's favour and then has a branch for
+#: what happens when a *second* language token turns up behind it.
+HINDI = "hin"
+
+#: Every branch of the read, so a run can say which of them it took. The three the sample library
+#: has never carried are the ones a reproduction can agree on the wire and still have wrong.
+BRANCHES = (
+    "default",
+    "forced",
+    "language",
+    "language written as a name",
+    "hin",
+    "hearing impaired",
+    "title",
+)
 
 #: How many items to reproduce the rule over. Every one of them costs one directory listing.
 SAMPLE = 8
@@ -78,6 +104,12 @@ NEIGHBOURING_PROPERTIES = (
     "SupportsExternalStream",
     "Path",
 )
+
+
+def _reach(reached: set[str] | None, branch: str | None) -> None:
+    """Record that a branch ran. `None` is a branch that did not apply, so callers stay one line."""
+    if reached is not None and branch is not None:
+        reached.add(branch)
 
 
 def is_text_format(codec: str) -> bool:
@@ -114,30 +146,50 @@ def predict_file_facts(stream: dict[str, Any]) -> tuple[bool, bool]:
 
 
 class Cultures:
-    """The server's own language table, which is what turns a filename token into a language."""
+    """The server's own language table, which is what turns a filename token into a language.
+
+    **The spelling written down is not always a three-letter code.** The reference writes the
+    row's `Name` when that name contains a `-` and its three-letter code otherwise `[source:
+    Emby.Naming/ExternalFiles/ExternalPathParser.cs @ v10.11.11]`, so `pt-br` stays `pt-br` and -
+    unintentionally, on the reference's part - a Greek sidecar is written `Greek, Modern (1453-)`.
+    Nine of the 192 rows carry a dash and only seven of them are regional tags.
+    """
 
     def __init__(self, rows: list[dict[str, Any]]) -> None:
         self.by_token: dict[str, str] = {}
+        self.dashed = 0
         for row in rows:
             three = row.get("ThreeLetterISOLanguageName") or ""
             two = row.get("TwoLetterISOLanguageName") or ""
+            name = row.get("Name") or ""
             names = list(row.get("ThreeLetterISOLanguageNames") or [])
-            tokens = [row.get("Name") or "", row.get("DisplayName") or "", two, three, *names]
+            written = name if "-" in name else (three or two)
+            self.dashed += 1 if "-" in name else 0
+            tokens = [name, row.get("DisplayName") or "", two, three, *names]
             for token in tokens:
                 if token:
-                    self.by_token.setdefault(token.lower(), three or two)
+                    self.by_token.setdefault(token.lower(), written)
 
     def find(self, token: str) -> str | None:
         return self.by_token.get(token.lower())
 
 
-def parse_sidecar(filename: str, media_stem: str, cultures: Cultures) -> dict[str, Any] | None:
+def parse_sidecar(
+    filename: str,
+    media_stem: str,
+    cultures: Cultures,
+    reached: set[str] | None = None,
+) -> dict[str, Any] | None:
     """What the reference would make of one file sitting beside one media file.
 
     Reproduced from the reference's behaviour rather than transliterated from it: the stem has to
     match and be followed by a delimiter or nothing, and the rest is read **right to left**, each
     token claimed by the first vocabulary that recognises it, with whatever is left over becoming
     the stream's title.
+
+    `reached` collects the branches this run actually took. A reproduction that agrees with the
+    server on every file it saw has proven the branches it *ran*, and nothing about the ones it
+    did not - which is how 008's OQ-7 came to answer for a branch it never touched.
     """
     stem, dot, extension = filename.rpartition(".")
     if not dot or ("." + extension.lower()) not in SUBTITLE_EXTENSIONS:
@@ -163,22 +215,39 @@ def parse_sidecar(filename: str, media_stem: str, cultures: Cultures) -> dict[st
             break
         slice_ = remaining[cut:]
         token = slice_[1:]
+        named = cultures.find(token)
         if any(flag in token.lower() for flag in DEFAULT_FLAGS):
             parsed["IsDefault"] = True
+            _reach(reached, "default")
         elif any(flag in token.lower() for flag in FORCED_FLAGS):
             parsed["IsForced"] = True
-        elif cultures.find(token) and parsed["Language"] is None:
-            parsed["Language"] = cultures.find(token)
+            _reach(reached, "forced")
+        elif named and parsed["Language"] is None:
+            parsed["Language"] = named
+            _reach(reached, "language")
+            _reach(reached, "language written as a name" if "-" in named else None)
+        elif named and parsed["Language"] == HINDI:
+            # The collision, whole: `hi` is Hindi first, so a second language token behind one
+            # that resolved to Hindi takes the language **and** sets the flag the `hi` in front
+            # of it looked like. Read, never measured - hence the reach report.
+            parsed["IsHearingImpaired"] = True
+            parsed["Language"] = named
+            _reach(reached, "hin")
+            _reach(reached, "language written as a name" if "-" in named else None)
         elif token.lower() in HEARING_IMPAIRED_FLAGS:
             parsed["IsHearingImpaired"] = True
+            _reach(reached, "hearing impaired")
         else:
             title = slice_ + title
+            _reach(reached, "title")
         remaining = remaining[:cut]
     parsed["Title"] = title[1:] if len(title) >= 1 else None
     return parsed
 
 
-def _reproduce(server: Server, probe: Probe, cultures: Cultures, item_id: str) -> tuple[bool, str]:
+def _reproduce(
+    server: Server, probe: Probe, cultures: Cultures, item_id: str, reached: set[str]
+) -> tuple[bool, str]:
     """Predict this item's external subtitle streams from its directory, and compare."""
     item = server.get("/Items/" + item_id, userId=server.user_id)
     path = item.get("Path") or ""
@@ -198,7 +267,7 @@ def _reproduce(server: Server, probe: Probe, cultures: Cultures, item_id: str) -
     folders = [row["Name"] for row in listing if row.get("IsFolder")]
     predicted = []
     for name in names:
-        parsed = parse_sidecar(name, media_stem, cultures)
+        parsed = parse_sidecar(name, media_stem, cultures, reached)
         if parsed is not None:
             predicted.append((name, parsed))
 
@@ -329,7 +398,10 @@ def run(server: Server) -> Probe:
         expectation=None,
     )
     cultures = Cultures(server.get("/Localization/Cultures"))
-    probe.observe("language tokens the server recognises", len(cultures.by_token))
+    probe.observe(
+        "language tokens the server recognises",
+        f"{len(cultures.by_token)} tokens, {cultures.dashed} rows written as a name",
+    )
 
     subtitled = find_subtitled_sources(server)
     candidates = [c for c in subtitled if c.external]
@@ -343,10 +415,36 @@ def run(server: Server) -> Probe:
     )
 
     checks = []
+    reached: set[str] = set()
     for candidate in candidates[:SAMPLE]:
-        ok, summary = _reproduce(server, probe, cultures, candidate.item_id)
+        ok, summary = _reproduce(server, probe, cultures, candidate.item_id, reached)
         probe.observe(candidate.item_id[:8], summary)
         checks.append(ok)
+
+    # **What the run agreed about, and what it only ran past.** A reproduction that matches the
+    # server on every file it saw has proven the branches it took and nothing else, so the branches
+    # are named and the ones that did not run are said out loud rather than counted as agreement.
+    missed = [branch for branch in BRANCHES if branch not in reached]
+    probe.observe(
+        "branches of the name rule this library reached",
+        ", ".join(branch for branch in BRANCHES if branch in reached) or "none",
+    )
+    if missed:
+        probe.observe("branches not reached, and therefore not measured here", ", ".join(missed))
+    if "hin" in missed:
+        probe.note(
+            "no filename in this library puts a second language token behind one that resolved "
+            "to Hindi, so the 'hin' branch above is read from the reference and not measured "
+            f"(011 plan §6.8). A file named 'Film.spa.{HEARING_IMPAIRED_FLAGS[1]}.srt' beside a "
+            "film would reach it: it is Spanish and hearing-impaired, not Hindi"
+        )
+    if "language written as a name" in missed:
+        probe.note(
+            f"none of this library's sidecars names one of the {cultures.dashed} culture rows "
+            "whose language is written as a name rather than as a three-letter code, so that "
+            "half of the lookup was not exercised either. 'Film.ell.srt' reaches it - a Greek "
+            "sidecar's language is written 'Greek, Modern (1453-)'"
+        )
 
     # Two structural consequences of an external stream that no rule about names states.
     sample = resolve_subtitled_source(server, candidates[0].item_id)
@@ -377,8 +475,11 @@ def run(server: Server) -> Probe:
     probe.note(
         "flags this library does not use are read from the reference rather than measured: "
         f"default is {DEFAULT_FLAGS}, forced is {FORCED_FLAGS} and hearing-impaired is "
-        f"{HEARING_IMPAIRED_FLAGS}, all matched between {DELIMITERS[0]!r} delimiters - and 'hi' "
-        "collides with Hindi, which the reference resolves in Hindi's favour"
+        f"{HEARING_IMPAIRED_FLAGS}, all matched between {DELIMITERS[0]!r} delimiters. The first "
+        "two match by containment and the third by equality, so 'forcedspanish' is forced and "
+        f"'{HEARING_IMPAIRED_FLAGS[1]}x' is not hearing-impaired; and "
+        f"'{HEARING_IMPAIRED_FLAGS[1]}' collides with Hindi, which the reference resolves in "
+        "Hindi's favour and then reverses when a second language token turns up behind it"
     )
 
     if all(checks):
@@ -396,7 +497,8 @@ def run(server: Server) -> Probe:
             "facts follow from that spelling alone, on every subtitle stream in the library, and "
             "both are answered as false on every stream that is not a subtitle - so DVDSUB, "
             "which is neither text nor a Presentation Graphic Stream, is the one subtitle codec "
-            "here that cannot be served on its own",
+            "here that cannot be served on its own. The agreement covers the branches the "
+            "observations above say were reached, and no others",
             matches_documentation=None,
         )
     else:

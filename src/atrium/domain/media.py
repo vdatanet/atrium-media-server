@@ -18,7 +18,8 @@ See specs/008-playback-negotiation-and-delivery/plan.md section 4.
 from __future__ import annotations
 
 import struct
-from dataclasses import dataclass, field
+from collections.abc import Sequence
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
 
@@ -26,6 +27,11 @@ from enum import Enum
 #: libraries report 1000 fps for a file that is nothing of the sort. `[source:
 #: MediaBrowser.Model/Entities/MediaStream.cs ReferenceFrameRate @ v10.11.11]`
 IMPLAUSIBLE_FRAME_RATE = 1000.0
+
+#: What `InspectedStream.file_index` holds until somebody states it, at which point it reads back
+#: as the wire index. Negative because no demuxer numbers a stream below zero, so a caller that
+#: reads this value has read one nobody wrote - and `__post_init__` makes sure nobody can.
+UNSTATED_FILE_INDEX = -1
 
 
 def narrow_to_single(value: float) -> float:
@@ -111,7 +117,27 @@ class InspectedStream:
     """
 
     index: int
+    """**The wire number**: what `MediaStream.Index` emits, what `AudioStreamIndex` and
+    `SubtitleStreamIndex` carry, what a delivery address names, and what `decide()` matches a
+    requested track against. Never an argument to ffmpeg."""
+
     kind: StreamKind
+
+    file_index: int = UNSTATED_FILE_INDEX
+    """**The demuxer number**: the stream's index inside the file it came from, and the only thing
+    `-map 0:{n}` may be built from. Never on the wire.
+
+    Left unstated it reads back as `index`, because before anything renumbers, the two *are* the
+    same number: a container's fourth stream is the wire's fourth stream until an external
+    subtitle is discovered beside it. `renumber` is the one place they part company (011 plan
+    section 5), and it reads this field rather than `index`, so renumbering twice answers what
+    renumbering once did.
+    """
+
+    external_path: str | None = None
+    """The subtitle file this stream came out of, relative to the library root, or `None` for one
+    the container itself holds. Relative for the reason 008 T2 gives for every stored path: a
+    remount must change nothing."""
 
     codec: str | None = None
     codec_tag: str | None = None
@@ -145,8 +171,8 @@ class InspectedStream:
     is_forced: bool = False
     is_hearing_impaired: bool = False
     is_external: bool = False
-    """Always false for now: an external subtitle is a separate file, and nothing in this feature
-    inspects one. The column exists because the wire flag does."""
+    """Whether this stream came from a file beside the media rather than from the container. True
+    exactly where `external_path` is set (011 section 3.6); false on everything 008 inspects."""
 
     bitrate: int | None = None
 
@@ -164,6 +190,16 @@ class InspectedStream:
     is_interlaced: bool = False
     is_anamorphic: bool | None = None
 
+    def __post_init__(self) -> None:
+        """Mirror an unstated `file_index` onto `index`, once, at construction.
+
+        Every stream this project builds starts life un-renumbered, and the alternative - making
+        the field required - would have put the same number twice on thirty construction sites
+        and left the thirty-first free to write a different one.
+        """
+        if self.file_index == UNSTATED_FILE_INDEX:
+            object.__setattr__(self, "file_index", self.index)
+
     @property
     def reference_frame_rate(self) -> float | None:
         """The frame rate the reference believes: the average one, unless it is implausible.
@@ -179,6 +215,34 @@ class InspectedStream:
             else real
         )
         return None if chosen is None else narrow_to_single(chosen)
+
+
+def renumber(
+    container: Sequence[InspectedStream], externals: Sequence[InspectedStream]
+) -> tuple[InspectedStream, ...]:
+    """The wire numbering of one source: the discovered files first, the container's own after.
+
+    A subtitle file beside a media file is numbered **ahead of** everything the container holds -
+    externals at 0 to k-1 in the order given, the container's own at k plus its demuxer index -
+    which is measured rather than assumed `[probe: tools/probe_sidecar_subtitles.py, Jellyfin
+    10.11.11, 2026-08-29]`. So dropping an `.srt` beside a film moves every audio and video index
+    it has, and removing the file moves them back (011 AC-11, AC-12).
+
+    **This is the only place the two numbers meet**, and it is why removing a sidecar needs no
+    cleanup path: nothing ever stored a wire index to correct. `media_streams.stream_index` is a
+    demuxer index and `media_external_streams` has no wire column at all, so the arithmetic here
+    is the whole of the answer - and because it reads `file_index` rather than `index`, applying
+    it to an already-renumbered list answers exactly what it answered the first time.
+
+    The order given is the order kept: the repository reads the discovered streams by their
+    `ordinal`, which the scan wrote in sorted order of `external_path` (011 plan section 6.2). A
+    numbering that depended on a filesystem's enumeration order would be a delivery address that
+    named two different tracks on two servers.
+    """
+    offset = len(externals)
+    numbered = [replace(one, index=ordinal) for ordinal, one in enumerate(externals)]
+    numbered += [replace(one, index=offset + one.file_index) for one in container]
+    return tuple(numbered)
 
 
 @dataclass(frozen=True, slots=True)
@@ -284,6 +348,7 @@ class DeliveredFile:
 
 __all__ = [
     "IMPLAUSIBLE_FRAME_RATE",
+    "UNSTATED_FILE_INDEX",
     "DeliveredFile",
     "InspectedStream",
     "MediaInspection",
@@ -291,4 +356,5 @@ __all__ = [
     "VideoRange",
     "VideoRangeType",
     "narrow_to_single",
+    "renumber",
 ]
