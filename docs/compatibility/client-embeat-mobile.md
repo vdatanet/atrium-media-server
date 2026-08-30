@@ -479,7 +479,8 @@ the working version is the one where the number is real.
 every re-request, reconnect and retry becomes a cache hit `[client-contract: 2026-08-29, §4]`.
 
 **Two separable halves, and they have different answers.** Declaring the parameter is a **delta**:
-the reference does not declare it there, and adding a query parameter Jellyfin has not got is the
+the reference does not declare it there `[spec: GetUniversalAudioStream]` — nineteen parameters,
+`playSessionId` not among them — and adding a query parameter Jellyfin has not got is the
 thing Principle I forbids most plainly — even a benign one, even one a client already sends.
 Caching the chunked branch is **not obviously a delta at all**: a client cannot observe a response
 being faster, and §5.4 shows this repository already caches the sized branch on a key that is
