@@ -3,12 +3,17 @@
 
 Two callers, and they hand over different things:
 
-* **`atrium.db.schema`**, at startup, puts a live `Connection` in `config.attributes`. It already
-  has an engine with the pragmas attached, and opening a second one would migrate a database with
-  foreign keys off.
-* **`alembic` on the command line**, during development, hands over nothing. Then the data
-  directory is resolved the same way the server resolves it - `ATRIUM_DATA_DIR`, or the documented
-  default - so `alembic upgrade head` and the server always mean the same file.
+* **`atrium.db.schema`**, at startup, puts a live `Connection` in `config.attributes`, taken from
+  `schema.migration_connection` - which is where the foreign-key pragma is decided.
+* **`alembic` on the command line**, which is the command an operator is told to run, hands over
+  nothing. Then the data directory is resolved the same way the server resolves it -
+  `ATRIUM_DATA_DIR`, or the documented default - so `alembic upgrade head` and the server always
+  mean the same file, and the connection comes from the same helper so that the two paths cannot
+  migrate under different rules.
+
+**A migration runs with foreign keys off, and that is the measured answer rather than the obvious
+one.** With them on, a batch rebuild's `DROP TABLE` cascades every child row away in silence; see
+`schema.migration_connection`, which also checks for orphans before it commits.
 
 The database URL is deliberately **not** in `alembic.ini`. A path in an ini file is a path that
 disagrees with `$ATRIUM_DATA_DIR` eventually, and configparser reads `%` in a path as
@@ -26,6 +31,7 @@ from sqlalchemy import Connection
 from atrium.config.paths import DataPaths, resolve_data_dir
 from atrium.db.engine import create_database_engine
 from atrium.db.models import Base
+from atrium.db.schema import migration_connection
 
 target_metadata = Base.metadata
 
@@ -89,7 +95,7 @@ def run_migrations_online() -> None:
 
     engine = create_database_engine(DataPaths(resolve_data_dir()))
     try:
-        with engine.connect() as connection:
+        with migration_connection(engine) as connection:
             _run(connection)
     finally:
         engine.dispose()

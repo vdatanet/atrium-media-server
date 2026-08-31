@@ -182,6 +182,14 @@ class HydratedItem:
     people: tuple[NameLink, ...] = ()
     artists: tuple[NameLink, ...] = ()
     images: tuple[ImageAssociation, ...] = ()
+    #: A playlist's **stored** media type, and `None` for everything else.
+    #:
+    #: Here rather than on `Item` for the reason this record exists at all: it is not a property
+    #: of anything a scanner reads. Measured, the reference fixes the value when the playlist is
+    #: created and never revises it, so it is a fact about the row and `MEDIA_TYPE_OF` is only the
+    #: fallback behind it `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11,
+    #: 2026-08-31]`. `api/item_dto.py` prefers this when it is set (009 plan section 4.2).
+    media_type: str | None = None
     user_data: UserItemData = field(default_factory=UserItemData)
     parent: Ancestor | None = None
     grandparent: Ancestor | None = None
@@ -1191,9 +1199,10 @@ def _types_of_media(media_types: Iterable[str]) -> list[str]:
     `mediaTypes=Video` the reverse
     `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. Reading the
     type-level fallback here instead claims every playlist for `Audio` and none for `Video`.
-    Nothing observes it until 009 stores a playlist, and closing it needs the column T4 adds -
-    which is why the divergence is named here and in 009 spec section 4 rather than papered over
-    with a type-level guess.
+    The column exists as of T4, so this is now closable, and **T6 owns it**: it is the task that
+    already edits this module's `_visible_to`, and it sits before every route that could expose
+    the difference. Until then the divergence is named here and in 009 spec section 4 rather than
+    papered over with a type-level guess.
     """
     wanted = {one.casefold() for one in media_types}
     return [kind.value for kind, media in MEDIA_TYPE_OF.items() if media.casefold() in wanted]

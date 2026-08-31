@@ -536,7 +536,16 @@ EMITTERS: Mapping[str, Callable[[HydratedItem, BuildContext], Any]] = {
     "ServerId": lambda one, ctx: ctx.server_id,
     "Name": lambda one, ctx: one.item.name,
     "Type": lambda one, ctx: one.item.type.value,
-    "MediaType": lambda one, ctx: MEDIA_TYPE_OF[one.item.type],
+    #: The **stored** value when the row has one, and the type-level map otherwise.
+    #:
+    #: Only a playlist has one. Measured, the reference decides a playlist's media type at
+    #: creation and never revises it - a playlist created empty answers `Audio` after a film is
+    #: added to it, one created from a film answers `Video` after a track is, and the create
+    #: body's own `MediaType` outranks the contents outright
+    #: `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. So
+    #: `MEDIA_TYPE_OF[Playlist]` is exact for a playlist created empty and wrong for every other,
+    #: which is why 009 stores the value per row (009 plan section 4.2) and this reads it.
+    "MediaType": lambda one, ctx: one.media_type or MEDIA_TYPE_OF[one.item.type],
     #: Absent for a by-name row - the reference sends no `IsFolder` for a genre, a music genre or
     #: a year, list row and full body alike
     #: `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.

@@ -23,6 +23,7 @@ import sqlalchemy as sa
 from alembic import command
 from alembic.script import Script, ScriptDirectory
 from sqlalchemy import Engine, inspect
+from sqlalchemy.exc import IntegrityError
 
 from atrium.config.paths import DataPaths
 from atrium.db import schema
@@ -94,10 +95,15 @@ def engine(paths: DataPaths) -> Iterator[Engine]:
 
 
 def move(engine: Engine, paths: DataPaths, target: str) -> None:
-    """Upgrade or downgrade to `target`, over the engine that has the pragmas attached."""
+    """Upgrade or downgrade to `target`, the way the server does it.
+
+    `schema.migration_connection` rather than a bare `engine.begin()`, because the foreign-key
+    pragma decides whether a table rebuild keeps the rows in every table that points at it - so a
+    harness that opened its own connection would test a migration nobody runs.
+    """
     config = schema.alembic_config(paths)
     directory = ScriptDirectory.from_config(config)
-    with engine.begin() as connection:
+    with schema.migration_connection(engine) as connection:
         config.attributes["connection"] = connection
         current = schema.current_revision(engine)
         if target == "base":
@@ -485,3 +491,336 @@ def test_a_revision_that_declares_itself_is_allowed_to_leave_things_behind() -> 
     declared = "drops a column. Irreversible: SQLite cannot restore the data that was in it."
     assert IRREVERSIBLE in declared.lower()
     assert IRREVERSIBLE not in "adds a table".lower()
+
+
+# --------------------------------------------------------------------------------------------
+# 0008, the first rebuild of a **populated** `items`
+# --------------------------------------------------------------------------------------------
+
+
+#: Every type revision 0007 accepts. `Playlist` is deliberately absent - it is what 0008 adds, and
+#: `test_migration_0003.py` asserts 0007 refuses it.
+TYPES_AT_0007 = (
+    "Movie",
+    "Series",
+    "Season",
+    "Episode",
+    "MusicArtist",
+    "MusicAlbum",
+    "Audio",
+    "CollectionFolder",
+    "Genre",
+    "MusicGenre",
+    "Studio",
+    "Person",
+    "Year",
+)
+BY_NAME_AT_0007 = frozenset({"Genre", "MusicGenre", "Studio", "Person", "Year"})
+
+#: Every table with a row that points at an `items` row, and how many rows the seed puts in each.
+#:
+#: **The six with `ON DELETE CASCADE` are the ones at risk**, and the task list named neither
+#: `item_sources` nor the four beside it: it named `item_user_data` and `media_streams`, which
+#: carry no foreign key to `items` at all and could not have been affected, and `item_genres`,
+#: which could. They are all here so the accounting is the schema's rather than a guess.
+SEEDED = {
+    "items": len(TYPES_AT_0007),
+    "item_sources": 1,
+    "item_genres": 1,
+    "item_studios": 1,
+    "item_people": 1,
+    "item_artists": 1,
+    "item_images": 1,
+    "item_user_data": 1,
+    "media_probes": 1,
+    "media_streams": 1,
+}
+
+LIBRARY = "1" * 32
+ACCOUNT = "9" * 32
+
+
+def item_id(kind: str) -> str:
+    return f"{TYPES_AT_0007.index(kind):032d}"
+
+
+def seed_a_populated_library(engine: Engine) -> None:
+    """One row of every type 0007 knows, and one row in every table that references one.
+
+    The film is the item everything hangs off, so that a rebuild which drops child rows drops
+    rows belonging to a type that certainly survives - a seed whose children hung off a by-name
+    row would confuse "the child was deleted" with "the parent was".
+    """
+    film = item_id("Movie")
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text(
+                "INSERT INTO libraries (id, name, collection_type) VALUES (:i, 'Films', 'movies')"
+            ),
+            {"i": LIBRARY},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO users (id, name, name_normalised, password_hash) "
+                "VALUES (:i, 'someone', 'someone', 'x')"
+            ),
+            {"i": ACCOUNT},
+        )
+        for kind in TYPES_AT_0007:
+            connection.execute(
+                sa.text(
+                    "INSERT INTO items (id, library_id, type, name, sort_name, tags) "
+                    "VALUES (:i, :l, :t, :n, :n, '[]')"
+                ),
+                {
+                    "i": item_id(kind),
+                    "l": None if kind in BY_NAME_AT_0007 else LIBRARY,
+                    "t": kind,
+                    "n": f"A {kind}",
+                },
+            )
+        connection.execute(
+            sa.text(
+                "INSERT INTO item_sources (item_id, part_index, relative_path, size, mtime_ns) "
+                "VALUES (:i, 0, 'A Film.mkv', 12, 34)"
+            ),
+            {"i": film},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO item_genres (item_id, position, name, genre_item_id) "
+                "VALUES (:i, 0, 'Drama', :g)"
+            ),
+            {"i": film, "g": item_id("Genre")},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO item_studios (item_id, position, name, studio_item_id) "
+                "VALUES (:i, 0, 'A Studio', :s)"
+            ),
+            {"i": film, "s": item_id("Studio")},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO item_people (item_id, sort_order, person_type, name, person_item_id) "
+                "VALUES (:i, 0, 'Actor', 'Somebody', :p)"
+            ),
+            {"i": film, "p": item_id("Person")},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO item_artists (item_id, credit, position, name, artist_item_id) "
+                "VALUES (:i, 'artist', 0, 'A Band', :a)"
+            ),
+            {"i": item_id("Audio"), "a": item_id("MusicArtist")},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO item_images "
+                "(item_id, image_type, image_index, source_kind, relative_path, width, height, tag)"
+                " VALUES (:i, 'Primary', 0, 'file', 'poster.jpg', 10, 20, :t)"
+            ),
+            {"i": film, "t": "a" * 32},
+        )
+        # No foreign key to `items`, by 007's decision. Seeded so that the assertion covers what
+        # the task list asked for as well as what the schema says is at risk.
+        connection.execute(
+            sa.text(
+                "INSERT INTO item_user_data (user_id, item_key, is_favorite, played, play_count,"
+                " playback_position_ticks) VALUES (:u, :i, 1, 0, 0, 0)"
+            ),
+            {"u": ACCOUNT, "i": film},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO media_probes (library_id, relative_path, size, mtime_ns, container,"
+                " format_names, probed_at) VALUES (:l, 'A Film.mkv', 12, 34, 'mkv',"
+                " 'matroska,webm', '2026-08-31 00:00:00.000000+00:00')"
+            ),
+            {"l": LIBRARY},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO media_streams (library_id, relative_path, stream_index, type, codec)"
+                " VALUES (:l, 'A Film.mkv', 0, 'video', 'h264')"
+            ),
+            {"l": LIBRARY},
+        )
+
+
+def row_counts(engine: Engine) -> dict[str, int]:
+    with engine.connect() as connection:
+        return {
+            # Every name comes from `SEEDED`, a literal in this file.
+            table: int(
+                connection.execute(sa.text(f"SELECT count(*) FROM {table}")).scalar() or 0  # noqa: S608
+            )
+            for table in SEEDED
+        }
+
+
+def items_shape(engine: Engine) -> tuple[list[str], list[tuple[str, str, str]]]:
+    """The index names on `items` and every foreign key any table declares onto it."""
+    with engine.connect() as connection:
+        inspector = inspect(connection)
+        indexes = sorted(index["name"] or "" for index in inspector.get_indexes("items"))
+        references = sorted(
+            (table, "".join(key["constrained_columns"]), key["options"].get("ondelete") or "")
+            for table in inspector.get_table_names()
+            for key in inspector.get_foreign_keys(table)
+            if key["referred_table"] == "items"
+        )
+    return indexes, references
+
+
+def test_0008_rebuilds_items_without_losing_a_row_of_anything_that_points_at_it(
+    engine: Engine, paths: DataPaths
+) -> None:
+    """The failure this revision exists to make impossible, asserted on rows rather than on schema.
+
+    A batch rebuild recreates `items` by dropping the original, and SQLite performs an implicit
+    `DELETE FROM` before the drop when foreign keys are enforced - which fires `ON DELETE CASCADE`
+    on all six tables that point at `items.id`. Measured, that empties them, raises nothing and
+    leaves `PRAGMA foreign_key_check` clean. `schema.migration_connection` is what prevents it, and
+    the test below asserts the loss with the guard removed.
+    """
+    move(engine, paths, "0007")
+    seed_a_populated_library(engine)
+    before, shape = row_counts(engine), items_shape(engine)
+    assert before == SEEDED
+
+    move(engine, paths, "0008")
+
+    assert row_counts(engine) == SEEDED, "the rebuild lost rows out of a table that references it"
+    indexes, references = items_shape(engine)
+    assert indexes == shape[0], "the rebuild dropped an index on items"
+    # A subset rather than an equality, and only in this direction: every reference that existed
+    # is still there, and the one this revision adds is `playlists` pointing back at the row.
+    assert set(shape[1]) <= set(references), "a foreign key onto items did not survive the rebuild"
+    assert set(references) - set(shape[1]) == {("playlists", "item_id", "CASCADE")}
+    with engine.connect() as connection:
+        assert connection.execute(sa.text("PRAGMA foreign_key_check")).all() == []
+        assert connection.execute(
+            sa.text("SELECT relative_path, size, mtime_ns FROM item_sources")
+        ).all() == [("A Film.mkv", 12, 34)], "a row survived with its columns rearranged"
+        types = connection.execute(sa.text("SELECT type FROM items ORDER BY id")).scalars().all()
+        assert list(types) == list(TYPES_AT_0007), "the copy reordered or retyped the rows"
+
+
+def test_0008_rolls_back_without_losing_anything_it_did_not_add(
+    engine: Engine, paths: DataPaths
+) -> None:
+    """Down is a rebuild too, and it drops the playlist rows on purpose - nothing else."""
+    move(engine, paths, "0007")
+    seed_a_populated_library(engine)
+    move(engine, paths, "0008")
+
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text(
+                "INSERT INTO items (id, library_id, type, name, sort_name, tags) "
+                "VALUES (:i, NULL, 'Playlist', 'Road trip', 'Road trip', '[]')"
+            ),
+            {"i": "e" * 32},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO playlists (item_id, owner_user_id, is_public, media_type) "
+                "VALUES (:i, :u, 0, 'Audio')"
+            ),
+            {"i": "e" * 32, "u": ACCOUNT},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO playlist_entries (playlist_id, item_key, ordinal) VALUES (:p, :i, 0)"
+            ),
+            {"p": "e" * 32, "i": item_id("Movie")},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO playlist_shares (playlist_id, user_id, can_edit) VALUES (:p, :u, 1)"
+            ),
+            {"p": "e" * 32, "u": ACCOUNT},
+        )
+
+    move(engine, paths, "0007")
+
+    assert row_counts(engine) == SEEDED, "the downgrade took something that was not a playlist"
+    with engine.connect() as connection:
+        assert connection.execute(sa.text("PRAGMA foreign_key_check")).all() == []
+        gone = {"playlists", "playlist_entries", "playlist_shares"}
+        assert not gone & set(inspect(connection).get_table_names())
+
+
+def test_0008_widens_both_constraints_and_neither_further_than_it_says(
+    engine: Engine, paths: DataPaths
+) -> None:
+    """A playlist inserts, with **no library**, and both halves of that are enforced.
+
+    Two constraints had to move for one type: `ck_items_type` refused the value, and
+    `ck_items_by_name_has_no_library` ties a null library to a named set of types - so a playlist
+    that satisfied the first would still have failed the second in *both* directions.
+    """
+    move(engine, paths, "0008")
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text("INSERT INTO libraries (id, name, collection_type) VALUES (:i,'F','movies')"),
+            {"i": LIBRARY},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO items (id, library_id, type, name, sort_name, tags) "
+                "VALUES (:i, NULL, 'Playlist', 'Road trip', 'Road trip', '[]')"
+            ),
+            {"i": "e" * 32},
+        )
+
+    insert = (
+        "INSERT INTO items (id, library_id, type, name, sort_name, tags) "
+        "VALUES (:i, :l, :t, 'x', 'x', '[]')"
+    )
+    no_library = "ck_items_by_name_has_no_library"
+    # A playlist **with** a library: the constraint is an equivalence, not an exemption.
+    with pytest.raises(IntegrityError, match=no_library), engine.begin() as connection:
+        connection.execute(sa.text(insert), {"i": "d" * 32, "l": LIBRARY, "t": "Playlist"})
+    # A film **without** one still fails, which is the half a looser constraint would have lost.
+    with pytest.raises(IntegrityError, match=no_library), engine.begin() as connection:
+        connection.execute(sa.text(insert), {"i": "c" * 32, "l": None, "t": "Movie"})
+    # And the type list did not become open.
+    with pytest.raises(IntegrityError, match="ck_items_type"), engine.begin() as connection:
+        connection.execute(sa.text(insert), {"i": "b" * 32, "l": LIBRARY, "t": "Nonsense"})
+
+
+def test_the_rebuild_empties_every_cascading_child_when_the_guard_is_taken_away(
+    engine: Engine, paths: DataPaths
+) -> None:
+    """The measurement behind `schema.migration_connection`, kept as a test.
+
+    A guard that cannot fail is decoration. This runs 0008 over the same seed on a plain
+    `engine.begin()` - the connection the harness used before this revision existed, with
+    `PRAGMA foreign_keys=ON` from `db/engine.py` - and asserts the silent loss: every table with
+    `ON DELETE CASCADE` onto `items` comes out empty, nothing raises, and `foreign_key_check` is
+    clean afterwards. Delete the pragma from `migration_connection` and the test above passes for
+    no reason at all.
+    """
+    move(engine, paths, "0007")
+    seed_a_populated_library(engine)
+
+    config = schema.alembic_config(paths)
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "0008")
+
+    lost = {table for table, count in row_counts(engine).items() if count == 0}
+    assert lost == {
+        "item_sources",
+        "item_genres",
+        "item_studios",
+        "item_people",
+        "item_artists",
+        "item_images",
+    }, "the set of tables a rebuild silently empties has changed"
+    with engine.connect() as connection:
+        assert connection.execute(sa.text("PRAGMA foreign_key_check")).all() == [], (
+            "nothing complains, which is the whole problem"
+        )

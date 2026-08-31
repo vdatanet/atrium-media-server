@@ -29,6 +29,8 @@ See specs/002-authentication-users-and-sessions/plan.md section 4 and section 7.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from alembic import command
@@ -36,7 +38,7 @@ from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from alembic.script import ScriptDirectory
 from alembic.util.exc import CommandError
-from sqlalchemy import Engine, inspect
+from sqlalchemy import Connection, Engine, inspect
 from sqlalchemy.exc import SQLAlchemyError
 
 from atrium.config.paths import ConfigurationError, DataPaths
@@ -94,15 +96,58 @@ def _table_names(engine: Engine) -> list[str]:
         return [name for name in inspect(connection).get_table_names() if name != VERSION_TABLE]
 
 
+@contextmanager
+def migration_connection(engine: Engine) -> Iterator[Connection]:
+    """One connection for a migration run: foreign keys **off**, and orphans checked before the
+    commit. Every path that runs a migration goes through here.
+
+    **This is the opposite of what this module used to claim, and the claim was never measured.**
+    The old text said a batch rebuild with foreign keys off "is exactly the migration that leaves
+    an orphan behind". Measured, with the pragma **on**, it is the migration that leaves nothing at
+    all: batch mode rebuilds a table by `DROP TABLE`-ing the original, SQLite performs an implicit
+    `DELETE FROM` before dropping when foreign keys are enforced, and that fires every
+    `ON DELETE CASCADE` pointing at it. A rebuild of a populated `items` empties all six of its
+    child tables, nothing raises, and `PRAGMA foreign_key_check` afterwards is clean - the rows are
+    simply gone. `tests/unit/test_migrations.py` measures both directions.
+
+    So the pragma goes off for the run and the check is done **once, explicitly, before the
+    commit**, which is SQLite's own documented procedure for a schema change. Off without that
+    check would trade a silent deletion for a silent orphan.
+
+    Three details that are not decoration:
+
+    * The pragma is a no-op inside a transaction, so it is set **before** one is opened and
+      restored **after** the commit. Setting it back inside the transaction reads back as `0`.
+    * `rollback()` clears SQLAlchemy's autobegin, which a bare `PRAGMA` statement triggers.
+    * The restore is in a `finally`, because a connection returned to the pool with foreign keys
+      off is a connection that serves the rest of the process without enforcing any of them.
+    """
+    with engine.connect() as connection:
+        connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        connection.rollback()
+        try:
+            with connection.begin():
+                yield connection
+                orphans = connection.exec_driver_sql("PRAGMA foreign_key_check").all()
+                if orphans:
+                    raise ConfigurationError(
+                        f"a migration left rows referring to something that is not there: "
+                        f"{[tuple(row) for row in orphans]}. Nothing has been committed. This is "
+                        f"a bug in this build's migrations, not in your database."
+                    )
+        finally:
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+            connection.rollback()
+
+
 def upgrade_to_head(engine: Engine, paths: DataPaths) -> None:
     """Bring the database to head over the engine that already has the pragmas attached.
 
-    Alembic would happily open its own connection from a URL. It would open one **without** the
-    foreign-key pragma, and a migration that rewrites a table in batch mode with foreign keys off
-    is exactly the migration that leaves an orphan behind.
+    Alembic would happily open its own connection from a URL, and then two connections would be
+    open on one SQLite file with a write in flight on one of them.
     """
     config = alembic_config(paths)
-    with engine.begin() as connection:
+    with migration_connection(engine) as connection:
         config.attributes["connection"] = connection
         command.upgrade(config, "head")
 
@@ -161,5 +206,6 @@ __all__ = [
     "current_revision",
     "ensure_current",
     "head_revision",
+    "migration_connection",
     "upgrade_to_head",
 ]
