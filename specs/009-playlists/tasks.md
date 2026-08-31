@@ -60,7 +60,7 @@ one migration; it is one migration, four maps and a clause.
 
 ## T1 — `domain/playlists.py`: three permission functions and the move, pure
 
-- [ ] **Changes:** new module. `may_read`, `may_edit`, `may_delete` over an owner, a share list and
+- [x] **Changes:** new module. `may_read`, `may_edit`, `may_delete` over an owner, a share list and
   `is_public` — three functions rather than one flag, because only `may_delete` reads
   `is_administrator` and that asymmetry is the spec gate's finding (spec §3.7). `moved(order,
   entry, new_index, visible)` implements plan §6.4: the entry lands immediately before the visible
@@ -74,6 +74,41 @@ one migration; it is one migration, four maps and a clause.
   index returning the order unchanged. **And the second matrix**: the same 25 pairs where the
   caller cannot see `C`, asserting the moved entry's position in the *full* order.
 - **Spec reference:** §3.5, §3.7; plan §5, §6.4
+
+> **Done (2026-08-31).** *Plan §6.4's block, executed as written, produces the reading the probe
+> exists to rule out.* It removed the entry from `full` and not from `visible`, so the visible
+> neighbour is one position too early and the discriminating pair gives `B C A D E` — the
+> pre-removal reading spec §3.5 measured as **wrong** — and its `new_index == len(visible)` has to
+> be `>=` once the reduction happens. The paragraph directly under the block was already assuming
+> the removal the block did not do. With the fix reverted, 23 rows of this task's test fail, 10 of
+> them in the measured matrix.
+>
+> *And the second matrix has no reference answer, where the plan said it was reproducing one.*
+> Plan §6.4 called the two-list rule *"the observable result"* of the reference's arithmetic. The
+> reference bounds `newIndex` against the entries it shows — that part is parity, and it is why an
+> index one past the count is the last position — but it takes the landing neighbour's position in
+> the stored order **before** the entry is removed, so a downward move by a caller who sees less
+> than the whole lands one position short of what they asked for (moving `A` to index 2 of a list
+> whose `C` is hidden leaves `A` at index 1 of that caller's view), and it happily reorders an
+> entry that caller was never shown. Neither is reachable against a reference server: the entries
+> it hides are hidden by a parental-rating check and never by library access, which is
+> behaviours §3.17's own finding. So the rule is Atrium's, argued from that divergence rather than
+> transcribed, an omitted entry is answered as an absent one, and spec §3.5, AC-17, plan §6.4 and
+> behaviours §3.17 say so.
+>
+> *The 25-row matrix was a model derived from one measured pair.* OQ-1 measured `0 → 3` and the
+> boundary battery measured five more, all with source `A`; the other 24 pairs were arithmetic
+> nobody had asked the server about. `probe_playlist_move.py` gains all thirty (source, target)
+> pairs, targets 4 and 5 included, one fresh playlist each: the post-removal reading reproduces
+> the reference on every one, and the one-position clamp is a property of every source rather than
+> of `A`. The test table is that transcription rather than a re-derivation of the model
+> `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-31]`.
+>
+> *Two smaller things.* `moved` raises `MoveIndexOutOfRangeError` — a `ValueError` subclass the route
+> catches by name, because the plain `ValueError` beside it is for a `visible` that is not a
+> sub-sequence of `order`, which is T7 or T11 handing the two lists in the wrong order and is not a
+> client's `400`. And `domain/playlists.py` is the first domain module in the project to raise
+> anything at all.
 
 ## T2 — `ForbiddenError` answers the reference's body, and 005's test moves with it
 

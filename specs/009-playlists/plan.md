@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-31
 updated: 2026-08-31
 accepted: 2026-08-31
-amended: 2026-08-31 at the tasks gate — §1 priced "a playlist is a row in `items`" at one migration; it is one migration, three maps that assert themselves total over a type set, and one clause. The clause is the finding: `_visible_to` exempts rows with no library, a playlist has none, so `/Items?includeItemTypes=Playlist` would have answered every user's private playlists to everybody. §6.5 gains it, and 005's own `MEDIA_TYPE_OF` docstring turns out to have said why `Playlist` was left out of `ItemType` in the first place
+amended: 2026-08-31 at the tasks gate — §1 priced "a playlist is a row in `items`" at one migration; it is one migration, three maps that assert themselves total over a type set, and one clause. The clause is the finding: `_visible_to` exempts rows with no library, a playlist has none, so `/Items?includeItemTypes=Playlist` would have answered every user's private playlists to everybody. §6.5 gains it, and 005's own `MEDIA_TYPE_OF` docstring turns out to have said why `Playlist` was left out of `ItemType` in the first place; and 2026-08-31 by T1 — §6.4's block, executed as written, produces the reading spec §3.5 measured as **wrong**: it removed the entry from `full` and not from `visible`, so the visible neighbour is one too early and the discriminating pair gives `B C A D E`. Both removals now, and `>=` where it said `==`. And its claim to *"reproduce the observable result"* is true only where the caller sees everything: the reference takes the neighbour's position **before** the removal, so on a list with anything hidden a downward move lands one short of where the caller asked — unreachable for the set Atrium hides, which makes the two-list rule Atrium's own rather than a reproduction, and makes an entry the caller cannot see unaddressable. The thirty (source, target) pairs the 25-row matrix was modelling from one measured pair are measured
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -353,27 +353,50 @@ one transaction, because a reader between them would see a gap and page over it.
 
 The one piece of arithmetic this feature cannot simplify, and the reason it is pure.
 
-The reference removes the entry, then inserts it so that it ends at `newIndex` **of the list the
-caller can see**, while the list it actually rewrites is the full one — which is why it computes
-the item *before* the target position in the visible list and translates that back into the full
-order `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:289-345 @ v10.11.11]`.
-Atrium reproduces the observable result and not the code (Principle IV):
+The reference bounds `newIndex` against **the list the caller can see**, and rewrites the full one
+`[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:289-345 @ v10.11.11]`. Atrium
+reproduces the observable result and not the code (Principle IV):
 
 ```
 visible  = the entries this caller may see, in order        (§6.5)
 full     = every entry, in order
-if the entry's index within `visible` is already `new_index`: nothing changes
 if `new_index` is negative or greater than len(visible):    refuse — §6.4.1
-remove the entry from `full`
-if new_index == len(visible):    the entry goes last in `full`
+if the entry is not in `visible`:                           nothing changes
+if the entry's index within `visible` is already `new_index`: nothing changes
+remove the entry from `full` and from `visible`
+if new_index >= len(visible):    the entry goes last in `full`
 else:                            it goes immediately before `visible[new_index]`'s position in `full`
 renumber `full`
 ```
 
+**Both removals, and `>=` rather than `==`.** This block said *"remove the entry from `full`"* and
+tested `new_index == len(visible)` until T1 ran it: with the entry still in `visible`, the visible
+neighbour is one too early and the discriminating pair gives `B C A D E` — the pre-removal reading
+spec §3.5 measured as **wrong**, and the exact answer `probe_playlist_move.py` exists to rule out.
+The paragraph below was already assuming the reduction the block did not do.
+
 **"Immediately before the visible neighbour" is the whole translation**, and it is what makes the
 owner's case and the shared reader's case one rule: when `visible` is `full`, the neighbour's
 position *is* `new_index`, and the algorithm collapses to *"insert at `new_index` after removing"* —
-which is spec §3.5's measured reading, `B C D A E`.
+which is spec §3.5's measured reading, `B C D A E`. Measured on **all thirty** (source, target)
+pairs of `[A B C D E]`, targets past the end included, rather than on the one pair OQ-1 asked
+about `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-31]`.
+
+**Where the caller sees less than the whole, there is no reference answer to reproduce**, and
+saying there was is the other thing this section had wrong. The reference takes the neighbour's
+position in the order *before* the entry is removed and inserts after it, so a downward move of an
+entry that precedes that neighbour lands one position short of where the caller asked — moving `A`
+to index 2 of a list whose `C` is hidden leaves the caller looking at `A` in position 1. It fires
+only for the entries *it* hides, which is a parental-rating check and never a library one
+(behaviours §3.17), so it cannot fire on the set Atrium hides. The rule above is therefore Atrium's,
+argued from §3.17 and from spec §6's *"the one Atrium has to get right is the filtered view its own
+readers get"*, and not a reproduction of anything.
+
+**An entry the caller cannot see is not addressable**, which the block now says in a line of its
+own: it is answered exactly as an entry that is not in the playlist — `204`, nothing changes. The
+reference would move it, because the list it looks the entry up in is not the list it bounded the
+index against. Under §3.17 that entry is one this reader was never shown, so a client cannot have
+been built on reordering it.
 
 #### 6.4.1 The two refusals, which are this feature's third divergence
 
