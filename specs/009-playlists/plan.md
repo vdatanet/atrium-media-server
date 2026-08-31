@@ -5,6 +5,7 @@ status: Accepted
 created: 2026-08-31
 updated: 2026-08-31
 accepted: 2026-08-31
+amended: 2026-08-31 at the tasks gate — §1 priced "a playlist is a row in `items`" at one migration; it is one migration, three maps that assert themselves total over a type set, and one clause. The clause is the finding: `_visible_to` exempts rows with no library, a playlist has none, so `/Items?includeItemTypes=Playlist` would have answered every user's private playlists to everybody. §6.5 gains it, and 005's own `MEDIA_TYPE_OF` docstring turns out to have said why `Playlist` was left out of `ItemType` in the first place
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -27,8 +28,15 @@ has to appear in `/Items` filtered by type, carry `UserData`, be favouritable an
 `GET /Items/{id}` — all of which the item machinery does today for thirteen types. A second table
 of playlist-shaped things would need a second query path, a second serialiser and a second
 visibility predicate, and the third of those is where 009's two divergences live. So the cost of
-this decision is paid in migration 0008 and nowhere else: two check constraints on `items` were
-written when `Playlist` did not exist, and both have to be rebuilt (§4).
+this decision is paid in migration 0008, in three maps and in one clause: two check constraints on
+`items` were written when `Playlist` did not exist and both have to be rebuilt (§4); three
+structures assert themselves total over a type set and all three break when the enum gains a
+member; and `_visible_to`'s library clause **exempts rows with no library**, which a playlist is.
+
+> *This paragraph said "migration 0008 and nowhere else" until the task list was written against
+> the code it names. The exemption is the one that mattered: left alone, `/Items?includeItemTypes=Playlist`
+> would have answered every user's private playlists to everybody, and AC-15 would have failed in
+> the leaking direction. `tasks.md`'s gate section carries all three.*
 
 **The entry identifier is the item identifier, so de-duplication is a primary key.** This is spec
 §3.1 turned into the only schema that can hold it: `playlist_entries` is keyed
@@ -393,6 +401,13 @@ that neither can be skipped:
 3. **Which entries** — the join drops entries whose item is missing or soft-deleted, and
    `_library_permitted` drops those in a library this reader may not open. That second clause is
    behaviours §3.17, and it is why `entries()` takes a `User`.
+
+   **And the playlist row itself needs a clause of its own, one level up.** `_visible_to` composes
+   four predicates, and its library one exempts a row with no library — a by-name row is not *in* a
+   library, and neither is a playlist. So `/Items` needs a fourth sibling clause, written the way
+   `_by_name_is_referenced` is: not a playlist, or one this caller owns, is shared with, or that is
+   public. Without it the playlist route above is careful and the general listing beside it is not,
+   which is the worse of the two halves to get wrong. T6.
 4. **The envelope** — 005's, with `TotalRecordCount` counting what survived step 3 and
    `StartIndex` echoed, then `startIndex`/`limit` applied. **The count is taken before paging and
    after filtering**, which is the reference's own order and the only one that lets a client page.
