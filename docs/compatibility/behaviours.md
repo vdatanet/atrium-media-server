@@ -979,7 +979,7 @@ happened. `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]` `[pro
 | A method the path does not have | `405`, **empty body**, no `Content-Type`, and `Allow` naming every method that path has `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-26]`. The order is alphabetical on the one measured pair where alphabetical and registration order differ: `PUT /UserFavoriteItems/{itemId}` answers `Allow: DELETE, POST` `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]` — the order `compat/errors.py`'s sort produces |
 | An item a handler could not find | `404`, **RFC 9457 problem details** as JSON |
 | A malformed value the model binder rejected | `400`, **RFC 9457 problem details** with an `errors` map |
-| A controller that refused the request itself | `4xx`, **`text/plain` with no `charset`**, and the fixed 25-byte body `Error processing request.` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]` |
+| A controller that refused the request itself | `4xx`, **`text/plain` with no `charset`**, and the fixed 25-byte body `Error processing request.` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`. **Measured for a policy refusal too**, at 009's spec gate: a non-administrator naming another user in `userId` is answered `403` with those same 25 bytes `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]` |
 | A controller that refused with its own message | `404`, the message as a **JSON-encoded bare string** — `"<item name> does not have an image of type Box"` — `application/json; charset=utf-8` `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]` |
 
 ```json
@@ -1020,6 +1020,20 @@ three spellings, none of them anything the client sent
             "playbackProgressInfo": ["The playbackProgressInfo field is required."]},
  "traceId": "00-9c83…-a105…-00"}
 ```
+
+**One of Atrium's refusals had the wrong body, and it took three features to find out.**
+`compat/errors.ForbiddenError` answers an **empty** `403`, on the argument that it is decided in the
+same place as the empty `401` beside it — and its own docstring carried a `⚠️` saying the shape was
+unmeasured, because the only account available to measure with was an administrator, and an
+administrator lacks no permission. 009's visibility probe creates a throwaway non-administrator and
+so could ask: the reference answers the 25-byte body above. Every route that refuses this way is
+affected, and one of them shipped in 005 — `/Items?userId=<somebody else>` — so this is a wire
+difference on an implemented feature rather than a question about a future one. **Decided at 009's
+plan gate: fixed there** ([009 plan §2](../../specs/009-playlists/plan.md)), because 009 needs the
+same refusal on two of its own routes and a third wrong copy is worse than one changed handler. The
+three *authentication* refusals of
+[002 OQ-5](../../specs/002-authentication-users-and-sessions/spec.md#7-open-questions) are a
+different class and stay open: each needs a real account to fail against.
 
 **Atrium gets the shape for free and the keys only deliberately, and it pays for them.** A path
 or query parameter's refusal already matched — `compat/errors.validation_errors` keys on the

@@ -4,6 +4,7 @@ title: Playlists
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-31
+amended: 2026-08-31 at the plan gate — §3.7 and a new AC-19 state the *bytes* of the refusal a caller gets for naming another user, which the spec gate had measured and recorded only as a status. The reference answers the 25-byte `text/plain` body every controller-level refusal carries; this server answered an empty `403` for that whole class, on the argument that it is decided where the empty `401` is, with a `⚠️` in the code saying the shape was unmeasured because no non-administrator account existed to produce one. The visibility probe made one. It is a wire difference on a route 005 already ships, so the correction is taken where the refusal is decided rather than on 009's own two routes — decided by the user at the plan gate
 depends_on: [005]
 ---
 
@@ -300,6 +301,15 @@ reference applies on its own write routes. [behaviours §3.16](../../docs/compat
 carries the argument; the short form is that a reference that refuses on one route what it permits
 on another cannot have taught a client to depend on the permissive one.
 
+**The refusal is the reference's own, bytes included.** It is `403` carrying the 25-byte
+`text/plain` body `Error processing request.` — the shape
+[behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one)
+gives a controller that refuses a request itself, measured here for a policy refusal for the first
+time `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. This server
+answered an **empty** `403` for every refusal of that class until 009 — a body no reference server
+sends, on a route 005 already ships — and 009 corrects it where it is decided rather than on its
+own two routes alone.
+
 **An entry the reader has no access to is shown anyway.** The reference filters a playlist's
 entries through a parental-rating and tag check, which has nothing to do with which libraries a
 user may open. Measured: a reader restricted to one library, who can list **zero** items of another
@@ -411,7 +421,9 @@ the only thing whose loss is unrecoverable, and the plan has to treat them accor
     with unchanged entry ids, and a `TotalRecordCount` that counts only those.
 18. An administrator renames a playlist through `POST /Items/{id}`; its non-administrator owner is
     answered `403`.
-19. Playlist state survives a full library rescan.
+19. A refusal for a caller naming another user carries `403` with the reference's 25-byte
+    `text/plain` body — on this feature's routes and on the 005 route that shares the rule.
+20. Playlist state survives a full library rescan.
 
 ## 6. Conformance
 
@@ -423,6 +435,7 @@ the only thing whose loss is unrecoverable, and the plan has to treat them accor
 | `.../Move/{newIndex}` | **L2** | Table-driven over source × target, including the boundaries (AC-9 to AC-11) |
 | `DELETE /Items/{itemId}` | **L2** | Playlist path plus the media refusal, with an on-disk assertion (AC-12) |
 | `POST /Items/{itemId}` | **L2** | Rename by an administrator, refusal for a non-administrator owner (AC-18) |
+| The shared refusal | **L2** | The `403` body, asserted as bytes on a 009 route and on `/Items?userId=` (AC-19) |
 
 The move test is table-driven because off-by-one errors in reordering pass every hand-written case
 and fail the one nobody wrote. Every (source, target) pair on a five-entry playlist is 25 rows and
