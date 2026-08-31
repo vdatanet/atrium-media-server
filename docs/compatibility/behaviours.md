@@ -1050,6 +1050,28 @@ at all, which cannot tell an empty body from a body-less refusal. So 009 §3.7's
 table were never in conflict — they describe the two shapes — and a route refused by policy keeps
 the empty one. `compat/errors.ForbiddenError` is the first shape only.
 
+**The line between the two is not the layer — it is how the refusal is expressed, and the second
+shape reaches inside a controller too (009 T5).** The table above says *"a controller tests the
+request itself"* against *"an authorization policy refuses"*, and a third refusal does not fit
+either description: a **shared reader without `CanEdit`** who moves an entry is refused by the
+playlist controller's own permission test, and the answer is `403` with **no content type and no
+body** — the second shape `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-08-31]`.
+The same is true of a public playlist's reader, who may read it and may not reorder it. The
+discriminator is the mechanism: a refusal **thrown** as an exception is rendered by the error
+middleware and carries the 25 bytes
+`[source: Jellyfin.Api/Helpers/RequestHelpers.cs:77-81 @ v10.11.11]`, while a refusal **returned**
+as a result carries nothing at all
+`[source: Jellyfin.Api/Controllers/PlaylistsController.cs:421-427 @ v10.11.11]`. Both live in the
+same action.
+
+| Refusal | Shape | Measured on |
+|---|---|---|
+| A permission test **inside** a 009 route: `may_edit` says no | `403`, **no content type, no body** | `POST /Playlists/{id}/Items/{entry}/Move/{n}` as a shared reader without `CanEdit`, and as a public playlist's reader |
+
+So every `may_edit` refusal this feature ships is the body-less shape, not `ForbiddenError`'s
+sentence — the same shape 009 §3.8's rename needs, and the reason its second exception class has a
+second caller.
+
 **Two of that class's raise sites in Atrium are neither shape's measurement.** `api/deps.py` refuses
 a live token whose account was disabled afterwards — 002 OQ-5's third row, still open, and it moved
 from one analogy to another when the handler changed. `api/users.py` refuses one user reading

@@ -23,8 +23,11 @@ from sqlalchemy.orm import Session as OrmSession
 from atrium.config.paths import DataPaths
 from atrium.db import models, schema
 from atrium.db.engine import create_database_engine, session_factory
+from atrium.db.item_queries import ItemQueryRepository
 from atrium.domain.items import CollectionType, ItemType
 from atrium.domain.playstate import MIN_RESUME_DURATION_SECONDS, TICKS_PER_SECOND
+from atrium.domain.queries import ItemQuery
+from atrium.domain.user import User
 from atrium.library import identity
 from tests.conftest import data_dir
 from tests.fixtures.query import (
@@ -356,6 +359,8 @@ def test_two_builds_derive_the_same_world(tmp_path: Path, world: QueryWorld) -> 
         assert second.album == world.album
         assert second.tracks == world.tracks
         assert second.multi_episode == world.multi_episode
+        assert [one.id for one in second.playlists] == [one.id for one in world.playlists]
+        assert [one.entries for one in second.playlists] == [one.entries for one in world.playlists]
     finally:
         second_session.rollback()
         second_session.close()
@@ -446,3 +451,143 @@ def test_the_first_series_episodes_are_long_enough_for_the_percentage_branches(
         for episode_id in handle.episodes:
             row = session.get(models.Item, episode_id)
             assert row is not None and row.runtime_ticks is None
+
+
+# ------------------------------------------------------------------------------------------
+# Playlists (009 T5)
+# ------------------------------------------------------------------------------------------
+
+
+def _reaches(session: OrmSession, world: QueryWorld, user: User, ids: tuple[str, ...]) -> set[str]:
+    """Which of these items that user may reach, through the predicate `/Items` itself uses.
+
+    Not `library_id in user's folders` restated here: a fixture whose expectations are computed
+    the way the fixture was built agrees with itself by construction. `ItemQueryRepository` is the
+    thing 009 section 3.7's omission is implemented in terms of, so it is the thing that has to
+    agree.
+    """
+    page = ItemQueryRepository(session).run(ItemQuery(user=user, ids=ids, limit=1000))
+    return {one.item.id for one in page.items}
+
+
+def test_the_five_playlists_are_items_with_no_library(
+    session: OrmSession, world: QueryWorld
+) -> None:
+    """`Type: Playlist`, and `library_id IS NULL` - which migration 0008's widened constraint is
+    an equivalence over, so a fixture that gave one a library would not insert at all."""
+    assert len(world.playlists) == 5
+    for handle in world.playlists:
+        row = session.get(models.Item, handle.id)
+        assert row is not None, f"{handle.name} was not seeded"
+        assert row.type == ItemType.PLAYLIST.value
+        assert row.library_id is None
+        assert row.name == handle.name
+
+
+def test_every_playlist_is_owned_by_a_user_that_is_not_the_restricted_one(
+    world: QueryWorld,
+) -> None:
+    """009 T6's own warning, asserted rather than remembered: a visibility test whose playlists
+    belong to the querying user passes on a world where nothing was hidden."""
+    for handle in world.playlists:
+        assert handle.owner_id == world.everyone.id
+        assert handle.owner_id != world.restricted.id
+
+
+def test_the_playlist_rows_carry_the_owner_the_share_and_the_media_type(
+    session: OrmSession, world: QueryWorld
+) -> None:
+    for handle in world.playlists:
+        row = session.get(models.Playlist, handle.id)
+        assert row is not None
+        assert (row.owner_user_id, row.is_public, row.media_type) == (
+            handle.owner_id,
+            handle.is_public,
+            handle.media_type,
+        )
+        shares = session.execute(
+            select(models.PlaylistShare).where(models.PlaylistShare.playlist_id == handle.id)
+        ).scalars()
+        assert {(one.user_id, one.can_edit) for one in shares} == set(handle.shares)
+
+
+def test_both_answers_to_can_edit_are_seeded(world: QueryWorld) -> None:
+    """AC-14 is two halves and the world has to hold both: a shared **editor** and a shared
+    **reader**. Measured on the reference before it was seeded - a `CanEdit: false` share in the
+    create body is stored and is a reader who is refused the move
+    `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-08-31]`.
+    """
+    assert world.shared_playlist.shares == ((world.restricted.id, True),)
+    assert world.read_only_playlist.shares == ((world.restricted.id, False),)
+
+
+def test_exactly_one_playlist_is_public_and_exactly_one_is_audio(world: QueryWorld) -> None:
+    """The two rows 009 T6 needs beside the private ones: spec section 3.7's fourth class, and a
+    second `media_type` - `mediaTypes=` is answered from the row for a playlist, and a world of
+    one media type cannot tell that from a map over the type (plan section 4.2)."""
+    assert [one.name for one in world.playlists if one.is_public] == [world.public_playlist.name]
+    audio = [one.name for one in world.playlists if one.media_type == "Audio"]
+    assert audio == [world.public_playlist.name]
+    assert {one.media_type for one in world.playlists} == {"Audio", "Video"}
+
+
+def test_every_entry_is_ordinal_contiguous_from_zero(
+    session: OrmSession, world: QueryWorld
+) -> None:
+    """The order is the fact; `ordinal` is how it is read back (plan section 4.3). A gap here
+    would make every ordering assertion in 009 a statement about the seeder."""
+    for handle in world.playlists:
+        rows = session.execute(
+            select(models.PlaylistEntry)
+            .where(models.PlaylistEntry.playlist_id == handle.id)
+            .order_by(models.PlaylistEntry.ordinal)
+        ).scalars()
+        assert [(one.ordinal, one.item_key) for one in rows] == list(enumerate(handle.entries))
+        assert len(set(handle.entries)) == len(handle.entries), "a duplicate the key would refuse"
+
+
+def test_the_private_playlist_is_long_enough_for_the_measured_move_matrix(
+    world: QueryWorld,
+) -> None:
+    """Five entries, because 009 AC-9's `B C D A E` and the boundary rows are stated on five."""
+    assert len(world.private_playlist.entries) == 5
+
+
+def test_the_two_library_playlist_really_does_hold_an_item_the_reader_cannot_see(
+    session: OrmSession, world: QueryWorld
+) -> None:
+    """T5's own verification, and the one thing this fixture exists to make true.
+
+    A playlist that quietly held two reachable items would make 009 T6 and T9 pass for the wrong
+    reason: the omission would be untested and the count would be right by accident.
+    """
+    handle = world.cross_library_playlist
+    assert handle.beyond_restricted, "nothing is out of the restricted user's reach"
+    assert _reaches(session, world, world.everyone, handle.entries) == set(handle.entries)
+    assert _reaches(session, world, world.restricted, handle.entries) == set(handle.restricted_sees)
+    assert set(handle.beyond_restricted) & set(handle.restricted_sees) == set()
+
+
+def test_the_hidden_entries_are_not_all_at_the_end(world: QueryWorld) -> None:
+    """The shape that tells the two move arithmetics apart, and it is easy to lose by accident.
+
+    A playlist whose unreachable entries all sit *after* the reachable ones gives the same answer
+    whether the landing position is computed in the caller's list or in the stored one - so a
+    fixture that appended the tracks would let AC-17's second half pass against either reading
+    (009 section 3.5, plan section 6.4).
+    """
+    handle = world.cross_library_playlist
+    hidden = set(handle.beyond_restricted)
+    positions = [index for index, one in enumerate(handle.entries) if one in hidden]
+    assert min(positions) < len(handle.entries) - 1
+    assert len(handle.restricted_sees) >= 3, "too short for a downward move to have room"
+
+
+def test_no_playlist_entry_points_at_a_playlist(world: QueryWorld) -> None:
+    """Every entry is a leaf item. The reference expands a container into its children rather than
+    storing the container (009 section 3.4), so an entry naming an album or a playlist would be a
+    row no create body can produce."""
+    playlist_ids = {one.id for one in world.playlists}
+    for handle in world.playlists:
+        assert set(handle.entries) & playlist_ids == set()
+        assert set(handle.entries) <= set(world.corpus) | set(world.tracks)

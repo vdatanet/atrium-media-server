@@ -100,10 +100,37 @@ def test_the_restricted_user_sees_only_the_permitted_library(
     repository: ItemQueryRepository, world: QueryWorld
 ) -> None:
     page = repository.run(ItemQuery(user=world.restricted, limit=1000))
-    libraries = {one.item.library_id for one in page.items if not one.item.is_by_name}
+    libraries = {
+        one.item.library_id
+        for one in page.items
+        if not one.item.is_by_name and one.item.type is not ItemType.PLAYLIST
+    }
     assert libraries == {world.movies.id}, (
         "an item of an unpermitted library reached a user whose policy excludes it"
     )
+
+
+def test_every_playlist_still_reaches_every_user(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """009 tasks' gate finding 2, asserted rather than described - and it is a **leak**.
+
+    `_library_permitted` exempts a row with no library, because a by-name row is not *in* one; a
+    playlist is not in one either (009 plan §4.1), so it passes that clause for every caller. Until
+    T6 adds the fourth sibling clause, every user's private playlists are in every other user's
+    listing. This says so out loud instead of excluding the rows from the test above and calling
+    it clean: T6 inverts this assertion, and a fixture that quietly stopped seeding playlists fails
+    it either way.
+    """
+    page = repository.run(
+        ItemQuery(
+            user=world.restricted,
+            include_types=frozenset({ItemType.PLAYLIST}),
+            limit=1000,
+        )
+    )
+    assert {one.item.id for one in page.items} == {one.id for one in world.playlists}
+    assert world.private_playlist.owner_id != world.restricted.id
 
 
 def test_a_by_name_row_is_reached_through_the_items_that_reference_it(

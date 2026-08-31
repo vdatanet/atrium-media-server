@@ -319,12 +319,29 @@ def test_album_ids_selects_the_albums_tracks(
 def test_media_types_reads_the_measured_table(
     repository: ItemQueryRepository, world: QueryWorld
 ) -> None:
-    """There is no `media_type` column: it is a property of the type, measured once. `MusicAlbum`
-    is `Unknown` on the reference, which a rule built on "does it hold audio" would get wrong."""
+    """A property of the type for the thirteen types a scan produces, measured once. `MusicAlbum`
+    is `Unknown` on the reference, which a rule built on "does it hold audio" would get wrong.
+
+    **The fourteenth type breaks the rule, and this test states the gap rather than hiding it.**
+    A playlist's media type is fixed at creation and stored per row (009 plan §4.2), so inverting
+    the type-level map claims *every* playlist for `Audio` and *none* for `Video`, where the
+    reference returns the audio playlist for one and the video one for the other
+    `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. Excluding the
+    rows would make the difference invisible; asserting it means 009 T6, which owns the gap, has
+    to come back here.
+    """
     audio = repository.run(
         ItemQuery(user=world.everyone, media_types=frozenset({"Audio"}), limit=1000)
     )
-    assert {one.item.type for one in audio.items} == {ItemType.AUDIO}
+    assert {one.item.type for one in audio.items} == {ItemType.AUDIO, ItemType.PLAYLIST}
+    assert {one.item.id for one in audio.items if one.item.type is ItemType.PLAYLIST} == {
+        one.id for one in world.playlists
+    }, "the gap: every playlist answers Audio, including the four that are Video"
+
+    video = repository.run(
+        ItemQuery(user=world.everyone, media_types=frozenset({"Video"}), limit=1000)
+    )
+    assert ItemType.PLAYLIST not in {one.item.type for one in video.items}
 
     unknown = repository.run(
         ItemQuery(user=world.everyone, media_types=frozenset({"Unknown"}), limit=1000)

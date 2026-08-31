@@ -577,6 +577,17 @@ whole case.
 build" until the fixtures were opened. Five criteria were said to be unreachable; none of them
 were.*
 
+> **T5 seeded five, and the two corrections are what the four could not express (2026-08-31).**
+> The list above has no **public** playlist, so §3.7's fourth class — the one caller who may read a
+> playlist through neither ownership nor a share — had no row in the world, and T6's own
+> verification asks for one. And the two-library playlist has to be **shared with `restricted`,
+> with `CanEdit`**: that reader is the only one who cannot reach every library, so without the
+> share AC-17's first half has no reader at all and its second half — a `Move` indexing the list
+> that reader was given — is unreachable. The public one holds the tracks and therefore carries
+> `media_type` `Audio`, which is the second value §4.2's `mediaTypes=` gap needs to be visible at
+> all. There is still **no administrator** in this world: AC-13, AC-16 and AC-18 build one, the way
+> `tests/unit/test_items_route.py` already does, and the fixture must not claim that id.
+
 **No probe runs in the suite.** The five that measured this feature live in `tools/` and are run by
 hand; CI never contacts a Jellyfin.
 
