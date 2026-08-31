@@ -16,8 +16,10 @@ mount point - changes every identifier there. Atrium derives from the path relat
 root, so that move costs nothing. The identifiers differ from the reference's either way
 (docs/compatibility/behaviours.md section 1.4), so being better here has no compatibility cost.
 
-There are **five** identity rules, not one, and `RULE_OF` says which type uses which. Four came
-from 003; the fifth is 004's by-name rule, and it is the only one with no library in the key.
+There are **six** identity rules, not one, and `RULE_OF` says which type uses which. Four came
+from 003; the fifth is 004's by-name rule, and it is the only one with no library in the key. The
+sixth is 009's, and it is the only one that derives nothing at all: a playlist's identifier is
+minted when the user creates it, so every function here refuses to be asked for one.
 """
 
 from __future__ import annotations
@@ -31,13 +33,26 @@ from atrium.domain.items import ItemType
 
 
 class IdentityRule(StrEnum):
-    """The five shapes of spec 003 section 3.6's table plus 004's. A type uses exactly one."""
+    """The five shapes of spec 003 section 3.6's table, plus 004's and 009's. One per type.
+
+    Five of the six name the stable facts that go into a hash. `MINTED` names the absence of any:
+    it is a rule in this map so that the map stays **total** over `ItemType` - a type with no row
+    would fail as a `KeyError` mid-scan - and so that `_require` refuses every derivation of a
+    playlist by construction rather than by anybody remembering to check.
+    """
 
     FROM_PATH = "the file's path, relative to its library root"
     FROM_NAME = "the library plus the normalised name"
     FROM_PARENT_AND_NUMBER = "the parent's identity plus a number"
     FROM_LIBRARY = "the library's configured identity"
     FROM_FOLDED_NAME = "the folded name alone, server-wide"
+    MINTED = "nothing: it is allocated at creation"
+    """009's. A playlist is the one item a rescan cannot rebuild (009 spec section 4): it has no
+    path, no library and no scan, so there is no stable fact to hash and nothing to reproduce.
+    `compat/guids.new_id()` allocates it, the way it already allocates the server, library, user
+    and session identifiers - and Principle VII's forbidden list is about identifiers a scan
+    re-derives, which this is not.
+    """
 
 
 #: Which rule each type uses. A test asserts this covers every `ItemType`, because a type with no
@@ -60,6 +75,9 @@ RULE_OF: Mapping[ItemType, IdentityRule] = {
     ItemType.STUDIO: IdentityRule.FROM_FOLDED_NAME,
     ItemType.PERSON: IdentityRule.FROM_FOLDED_NAME,
     ItemType.YEAR: IdentityRule.FROM_FOLDED_NAME,
+    # 009's one. A row rather than an exemption, so the map stays total and every `for_*` function
+    # below refuses a playlist through `_require` without a line of its own.
+    ItemType.PLAYLIST: IdentityRule.MINTED,
 }
 
 #: What a filename cannot carry, and what the reference therefore replaces with a space before a

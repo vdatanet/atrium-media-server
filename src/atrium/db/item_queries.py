@@ -1180,10 +1180,20 @@ def _filters(query: ItemQuery) -> list[Any]:
 def _types_of_media(media_types: Iterable[str]) -> list[str]:
     """`Video`, `Audio` or `Unknown` back into the item types that answer them.
 
-    There is no `media_type` column: it is a property of the *type*, measured once into
-    `MEDIA_TYPE_OF`. Matching case-insensitively for the same reason `known_tokens` does - a
-    parameter whose name matches case-insensitively while its values did not would be a
-    distinction no client could have learned.
+    There is no `media_type` column for the thirteen scanned types: it is a property of the
+    *type*, measured once into `MEDIA_TYPE_OF`. Matching case-insensitively for the same reason
+    `known_tokens` does - a parameter whose name matches case-insensitively while its values did
+    not would be a distinction no client could have learned.
+
+    **`Playlist` is the exception, and this function cannot express it yet** (009 T3). A
+    playlist's media type is decided at creation and stored per row, so the reference filters
+    playlists by the row: `mediaTypes=Audio` returns an audio playlist and not a video one, and
+    `mediaTypes=Video` the reverse
+    `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. Reading the
+    type-level fallback here instead claims every playlist for `Audio` and none for `Video`.
+    Nothing observes it until 009 stores a playlist, and closing it needs the column T4 adds -
+    which is why the divergence is named here and in 009 spec section 4 rather than papered over
+    with a type-level guess.
     """
     wanted = {one.casefold() for one in media_types}
     return [kind.value for kind, media in MEDIA_TYPE_OF.items() if media.casefold() in wanted]

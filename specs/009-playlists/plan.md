@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-31
 updated: 2026-08-31
 accepted: 2026-08-31
-amended: 2026-08-31 at the tasks gate — §1 priced "a playlist is a row in `items`" at one migration; it is one migration, three maps that assert themselves total over a type set, and one clause. The clause is the finding: `_visible_to` exempts rows with no library, a playlist has none, so `/Items?includeItemTypes=Playlist` would have answered every user's private playlists to everybody. §6.5 gains it, and 005's own `MEDIA_TYPE_OF` docstring turns out to have said why `Playlist` was left out of `ItemType` in the first place; and 2026-08-31 by T1 — §6.4's block, executed as written, produces the reading spec §3.5 measured as **wrong**: it removed the entry from `full` and not from `visible`, so the visible neighbour is one too early and the discriminating pair gives `B C A D E`. Both removals now, and `>=` where it said `==`. And its claim to *"reproduce the observable result"* is true only where the caller sees everything: the reference takes the neighbour's position **before** the removal, so on a list with anything hidden a downward move lands one short of where the caller asked — unreachable for the set Atrium hides, which makes the two-list rule Atrium's own rather than a reproduction, and makes an entry the caller cannot see unaddressable. The thirty (source, target) pairs the 25-row matrix was modelling from one measured pair are measured
+amended: 2026-08-31 at the tasks gate — §1 priced "a playlist is a row in `items`" at one migration; it is one migration, three maps that assert themselves total over a type set, and one clause. The clause is the finding: `_visible_to` exempts rows with no library, a playlist has none, so `/Items?includeItemTypes=Playlist` would have answered every user's private playlists to everybody. §6.5 gains it, and 005's own `MEDIA_TYPE_OF` docstring turns out to have said why `Playlist` was left out of `ItemType` in the first place; and 2026-08-31 by T1 — §6.4's block, executed as written, produces the reading spec §3.5 measured as **wrong**: it removed the entry from `full` and not from `visible`, so the visible neighbour is one too early and the discriminating pair gives `B C A D E`. Both removals now, and `>=` where it said `==`. And its claim to *"reproduce the observable result"* is true only where the caller sees everything: the reference takes the neighbour's position **before** the removal, so on a list with anything hidden a downward move lands one short of where the caller asked — unreachable for the set Atrium hides, which makes the two-list rule Atrium's own rather than a reproduction, and makes an entry the caller cannot see unaddressable. The thirty (source, target) pairs the 25-row matrix was modelling from one measured pair are measured; and 2026-08-31 by T3 — §1's *three* structures total over the type set are **five**, and the two it missed are assertions rather than maps: the domain's two-way partition of `ItemType`, and `test_migration_0003.py` inserting one row of every type against the constraint 0008 replaces. §4.2 gains why `media_type` is a column rather than a lookup — measured, the reference fixes the value at creation and never revises it — and the one reader that cannot use the column: `mediaTypes=` filters playlists by the row on the reference and by the type here, which is undecided
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -37,6 +37,16 @@ member; and `_visible_to`'s library clause **exempts rows with no library**, whi
 > the code it names. The exemption is the one that mattered: left alone, `/Items?includeItemTypes=Playlist`
 > would have answered every user's private playlists to everybody, and AC-15 would have failed in
 > the leaking direction. `tasks.md`'s gate section carries all three.*
+>
+> *And the count moved again at T3, which is the task that added the member.* **Five** structures
+> assert themselves total over the type set, not three. The two the gate did not enumerate are both
+> assertions rather than maps, which is why reading the maps did not find them: the domain's own
+> partition — *every type is in the tree or is a by-name row, and nothing is in both* — has no room
+> for a third kind of thing, and `test_migration_0003.py` inserts **one row of every `ItemType`**
+> against 0003's type constraint, which is the constraint 0008 replaces. The first becomes a
+> three-way partition over a named `USER_CREATED` set; the second splits into *0003 accepts the
+> thirteen it lists and refuses the one it does not*, so the accounting stays total instead of
+> shrinking. A fifteenth type still breaks both.*
 
 **The entry identifier is the item identifier, so de-duplication is a primary key.** This is spec
 §3.1 turned into the only schema that can hold it: `playlist_entries` is keyed
@@ -203,6 +213,24 @@ every row but one type is a column every reader has to know is null.
 | `owner_user_id` | `ID` FK → `users.id` `ON DELETE CASCADE` | Spec §3.7's first class. A playlist without an owner cannot be reached by any rule, so the deletion cascades |
 | `is_public` | `bool` not null, default false | Spec §3.7's fourth class |
 | `media_type` | `str` not null | Inferred at creation when the client sends none (spec §3.2, §6.2) |
+
+**`media_type` is a column and not a lookup, and T3 measured why.** The reference decides the value
+at creation and never revises it — a playlist created empty answers `Audio` after a film is added
+to it — so the column reproduces the reference exactly, where a value derived from the entries at
+read time would not `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`.
+The type-level fallback in `MEDIA_TYPE_OF` is the answer for a playlist created empty and wrong for
+every other, so the item body prefers this column and the map is the default behind it. **Which
+task writes that preference is now an ordering question**: T3 was to write it and cannot — the
+column it reads is T4's, and T4 depends on T3 — so it moves to the task that has both a column and
+a repository to read it through, and is recorded here rather than left to be noticed at T14.
+
+**One reader is left on the fallback, and it is named rather than fixed here.** `mediaTypes=` is
+answered by inverting `MEDIA_TYPE_OF` into a list of item types, which cannot express a value that
+varies per row: measured, the reference returns an audio playlist for `mediaTypes=Audio` and a
+video one for `mediaTypes=Video`, where Atrium would claim every playlist for `Audio` and none for
+`Video`. Nothing can observe it before this table exists, no analysed client sends the pair, and
+whether the listing gains the clause or the gap is accepted is a scope decision — spec §4 states
+it, and no task in this list currently owns it.
 
 ### 4.3 `playlist_entries`
 

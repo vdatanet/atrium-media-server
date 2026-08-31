@@ -4,7 +4,7 @@ title: Playlists
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-31
-amended: 2026-08-31 at the plan gate — §3.7 and a new AC-19 state the *bytes* of the refusal a caller gets for naming another user, which the spec gate had measured and recorded only as a status. The reference answers the 25-byte `text/plain` body every controller-level refusal carries; this server answered an empty `403` for that whole class, on the argument that it is decided where the empty `401` is, with a `⚠️` in the code saying the shape was unmeasured because no non-administrator account existed to produce one. The visibility probe made one. It is a wire difference on a route 005 already ships, so the correction is taken where the refusal is decided rather than on 009's own two routes — decided by the user at the plan gate; and 2026-08-31 by T1 — §3.5 stated the move's arithmetic for a caller who sees the whole playlist and left the other caller to §3.7. It now says both: the index is judged against the list that reader was given and the entry lands at `newIndex` **of it**, where the reference is off by one on every downward move and will reorder an entry that reader was never shown. Neither difference is reachable against a reference server — what it hides is hidden by a parental-rating check — so both belong to §3.7's divergence, and AC-17 gains the clause. Plus the provenance: all thirty (source, `newIndex`) pairs are measured where one was; and 2026-08-31 by T2 — a `403` is **two** shapes and §3.7 had described one. The content type was never measured on either: the probe cited for both printed forty bytes of body and no headers, which cannot separate an empty body from a body-less refusal. Measured, the controller's refusal is `text/plain` with no `charset` and §3.8's elevated-controller refusal carries no content type and no body at all — so §3.7 and §3.8 were never in conflict, AC-18 and AC-19 assert different bytes on purpose, and only the first shape is the one the shared handler answers. Plus two raise sites that shared that handler and are neither measurement: a live token whose account was disabled (002 OQ-5, still open) and one user reading another, which the reference does not refuse at all
+amended: 2026-08-31 at the plan gate — §3.7 and a new AC-19 state the *bytes* of the refusal a caller gets for naming another user, which the spec gate had measured and recorded only as a status. The reference answers the 25-byte `text/plain` body every controller-level refusal carries; this server answered an empty `403` for that whole class, on the argument that it is decided where the empty `401` is, with a `⚠️` in the code saying the shape was unmeasured because no non-administrator account existed to produce one. The visibility probe made one. It is a wire difference on a route 005 already ships, so the correction is taken where the refusal is decided rather than on 009's own two routes — decided by the user at the plan gate; and 2026-08-31 by T1 — §3.5 stated the move's arithmetic for a caller who sees the whole playlist and left the other caller to §3.7. It now says both: the index is judged against the list that reader was given and the entry lands at `newIndex` **of it**, where the reference is off by one on every downward move and will reorder an entry that reader was never shown. Neither difference is reachable against a reference server — what it hides is hidden by a parental-rating check — so both belong to §3.7's divergence, and AC-17 gains the clause. Plus the provenance: all thirty (source, `newIndex`) pairs are measured where one was; and 2026-08-31 by T2 — a `403` is **two** shapes and §3.7 had described one. The content type was never measured on either: the probe cited for both printed forty bytes of body and no headers, which cannot separate an empty body from a body-less refusal. Measured, the controller's refusal is `text/plain` with no `charset` and §3.8's elevated-controller refusal carries no content type and no body at all — so §3.7 and §3.8 were never in conflict, AC-18 and AC-19 assert different bytes on purpose, and only the first shape is the one the shared handler answers. Plus two raise sites that shared that handler and are neither measurement: a live token whose account was disabled (002 OQ-5, still open) and one user reading another, which the reference does not refuse at all and 2026-08-31 by T3 — §3.2 said `MediaType` is *inferred at creation* and left open whether it then follows the contents, which is the difference between a value a row carries and a value anybody derives. Measured, it is fixed at creation and never revised: a playlist created empty answers `Audio` after a film is added, one created from a film answers `Video` after a track is, and the body's own `MediaType` outranks both. §3.2 says so, and gains a third refusal — an unrecognised `MediaType` is a `400` in the validation shape, not a dropped token. §4 gains the consequence nobody had asked about: `mediaTypes=` filters playlists by the stored value, so the parameter is the one place a per-row media type meets a listing that answers it from the kind, and that is left undecided rather than improvised
 depends_on: [005]
 ---
 
@@ -112,6 +112,7 @@ that type, carries `UserData`, and can be a favourite.
 | `Name` empty, or only spaces | **`200`** — the playlist is created, and carries that name |
 | An id in `Ids` that does not exist, with **no** `MediaType` and no resolvable id before it | **`400`**, and the body is the bare-text shape, not the validation one |
 | An id in `Ids` that does not exist, after a resolvable id, or with `MediaType` given | `200`; the unknown id is skipped |
+| A `MediaType` the reference does not know — `Nonsense` | **`400`**, and the body is the validation shape, keyed on `$` rather than on a parameter name: the value is refused where the body is deserialised, not by a check inside the route `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]` |
 | Unauthenticated | `401` |
 
 > **Two of those rows were the opposite way round in this document until they were measured.** It
@@ -130,6 +131,14 @@ that type, carries `UserData`, and can be a favourite.
 for a playlist created empty, and the media type of the first resolvable id otherwise. Two
 playlists may carry the same `Name`; they are two items.
 `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`
+
+**And creation decides it once.** The value is a fact about *that playlist*, not about playlists
+and not about its current contents: a playlist created empty answers `Audio` for ever, including
+after a film is added to it, and one created from a film answers `Video` after a track is added.
+A `MediaType` in the body outranks the contents outright — a playlist created from a film with
+`MediaType: Audio` answers `Audio`. So the value is written at creation and never revised, which
+is what makes it something a playlist *carries* rather than something anybody derives on the way
+out. `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`
 
 **The reference builds a playlist as a directory**, and three of its fields say so: `Path` is a
 filesystem path under the server's data directory, and `DateCreated` and `DateModified` come from
@@ -404,6 +413,20 @@ Playlists are the **only** structural state in v1 that does not come from the fi
 therefore the only thing in the server's store that cannot be rebuilt by a rescan. That makes them
 the only thing whose loss is unrecoverable, and the plan has to treat them accordingly.
 
+> **A playlist's media type is a fact about the row, and one query parameter reads it.** Every
+> other item's media type follows from its kind — a film is `Video`, a track is `Audio`, a
+> container is `Unknown` — and `mediaTypes=` is answered by turning the asked-for value back into
+> the kinds that answer it. A playlist breaks that: two playlists of the same kind answer
+> differently, and the reference filters them by the row it stored. Measured, `mediaTypes=Audio`
+> over playlists returns the audio one and not the video one, and `mediaTypes=Video` the reverse
+> `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. Answering that
+> parameter from the type alone would claim every playlist for `Audio` and none for `Video`.
+> **This is not decided.** No analysed client sends `mediaTypes` with `includeItemTypes=Playlist`,
+> so the cheapest honest answer is an accepted gap; the alternative is one more clause on the
+> listing, over the same stored value the item body already reads. Nothing observes it until a
+> playlist can be stored, and the decision belongs to whoever owns that listing rather than to the
+> task that added the type.
+
 > **The reference's playlists do come from the filesystem**, and three fields carry it to the wire:
 > `Path`, `DateCreated` and `DateModified` (§3.2). Atrium has no directory to report, and inventing
 > a path that no file backs would be a worse answer than the honest one — so a playlist item here
@@ -508,6 +531,9 @@ None. All six were answered at the spec-review gate on 2026-08-31.
 | The rename route is administrator-only | §3.8, AC-18 |
 | A playlist is a directory, and a rename does not move it | §3.2, §3.8, §4 |
 | The playlists folder is not a view | §3.2 — 009 adds nothing to a 005 response |
+| A playlist's `MediaType` is fixed at creation and never follows its contents | §3.2, §4 — it is a value the row carries, not one anybody derives |
+| An unrecognised `MediaType` is a `400`, not a dropped token | §3.2's error table — the third refusal on that route |
+| `mediaTypes=` filters playlists by the row, not by the type | §4 — undecided, and the only place 009 meets a 005 parameter it cannot answer from a kind |
 
 ## 8. References
 
