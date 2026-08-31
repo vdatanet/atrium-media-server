@@ -17,8 +17,10 @@ from atrium.domain.items import (
     BY_NAME,
     FILE_BACKED,
     IN_THE_TREE,
+    MEDIA_TYPE_OF,
     PARENT_OF,
     PRODUCED_BY,
+    USER_CREATED,
     CollectionType,
     Item,
     ItemType,
@@ -205,12 +207,36 @@ def test_the_type_values_are_the_references_spellings() -> None:
     assert CollectionType.TVSHOWS == "tvshows"
 
 
-def test_the_tree_and_the_by_name_types_partition_every_type() -> None:
-    """No third category, and nothing in both. A type that is in neither has no rule anywhere:
+def test_the_three_categories_partition_every_type() -> None:
+    """Every type is in exactly one of three sets, and a type in none has no rule anywhere:
     no parent, no collection type, no identity, and no constraint - and the first symptom would be
-    a `KeyError` in the middle of a scan."""
-    assert set(ItemType) == IN_THE_TREE | BY_NAME
-    assert IN_THE_TREE.isdisjoint(BY_NAME)
+    a `KeyError` in the middle of a scan.
+
+    **There were two categories until 009**, and the third is this assertion's whole subject.
+    Widening it to `IN_THE_TREE | BY_NAME | {ItemType.PLAYLIST}` would have made it a list of
+    exceptions; naming `USER_CREATED` keeps it a partition, so a fifteenth type still has to be
+    placed rather than excused.
+    """
+    assert set(ItemType) == IN_THE_TREE | BY_NAME | USER_CREATED
+    pairs = ((IN_THE_TREE, BY_NAME), (IN_THE_TREE, USER_CREATED), (BY_NAME, USER_CREATED))
+    for one, other in pairs:
+        assert one.isdisjoint(other)
+
+
+def test_the_user_created_type_is_outside_every_map_the_scanner_reads() -> None:
+    """The positive statement of 009's exemption, and the reason `IN_THE_TREE` is the scope of
+    the containment maps rather than `ItemType`.
+
+    A playlist has no parent, no collection type produces it and no depth applies to it, because
+    no scan creates it: it is minted when a user asks for it (009 spec section 4). It is *not*
+    a by-name row either - nothing references it into existence - which is why it is its own
+    category rather than a sixth member of that one.
+    """
+    for kind in USER_CREATED:
+        assert kind not in PARENT_OF
+        assert kind not in set().union(*PRODUCED_BY.values())
+        assert kind not in BY_NAME
+        assert kind in MEDIA_TYPE_OF, "every type still answers a MediaType"
 
 
 def test_a_by_name_item_knows_it_is_one() -> None:

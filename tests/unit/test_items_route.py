@@ -28,6 +28,8 @@ import pytest
 from fastapi import FastAPI
 
 from atrium.api.deps import require_user
+from atrium.api.items import parse_kinds
+from atrium.compat.query_params import IgnoredParameters
 from atrium.config.paths import DataPaths
 from atrium.db.repositories import UserRepository
 from atrium.domain.items import ItemType
@@ -538,12 +540,29 @@ async def test_an_unrecognised_sort_token_drops_and_is_recorded(
 async def test_a_real_kind_this_version_cannot_produce_narrows_to_nothing(
     client: httpx.AsyncClient,
 ) -> None:
-    """`Playlist` is a `BaseItemKind`, so the filter holds and matches nothing - unlike a
-    dropped nonsense token, which would have returned the whole world."""
-    answered = await client.get("/Items", params={"includeItemTypes": "Playlist"})
+    """`BoxSet` is a `BaseItemKind`, so the filter holds and matches nothing - unlike a
+    dropped nonsense token, which would have returned the whole world.
+
+    **This test asked `Playlist` until 009 T3**, and it would have gone on passing for the wrong
+    reason: `Playlist` is now a type of this domain, so the token is a real filter over a world
+    that happens to hold no playlists, which is a different mechanism answering with the same
+    zero. The token has to name a kind the domain still does not have.
+    """
+    answered = await client.get("/Items", params={"includeItemTypes": "BoxSet"})
     assert answered.status_code == 200
     assert answered.json()["TotalRecordCount"] == 0
     assert answered.json()["Items"] == []
+
+
+async def test_the_playlist_kind_is_now_this_domains_own(client: httpx.AsyncClient) -> None:
+    """The other half of the test above: `Playlist` binds to a type rather than to the reference's
+    vocabulary, so nothing is recorded as an ignored token and the filter is a real one."""
+    assert parse_kinds("Playlist", "includeItemTypes", IgnoredParameters(), "/Items") == frozenset(
+        {ItemType.PLAYLIST}
+    )
+    ignored = IgnoredParameters()
+    assert parse_kinds("BoxSet", "includeItemTypes", ignored, "/Items") == frozenset()
+    assert not ignored.counts, "a real BaseItemKind is not an ignored token"
 
 
 async def test_an_oversized_limit_is_served_not_clamped(client: httpx.AsyncClient) -> None:

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""What a library holds: one model, thirteen types, and the structure between them.
+"""What a library holds: one model, fourteen types, and the structure between them.
 
 Everything in a library is one type - a film, a season, a track, an album, a library root
 (docs/glossary.md). That is the reference's design and not a simplification of it: `/Items` returns
@@ -24,16 +24,15 @@ from enum import StrEnum
 
 
 class ItemType(StrEnum):
-    """The eight types feature 003 produces, and the five feature 004 adds.
+    """The eight types feature 003 produces, the five feature 004 adds, and 009's one.
 
     The values are the reference's spellings because they are the vocabulary, not a serialisation:
     the glossary, the specifications and every client call an episode an `Episode`. `compat/` still
     owns how one reaches the wire - this module simply does not invent a second name for a thing
     that already has one.
 
-    `Playlist`, `UserView` and `Folder` are real types this feature never creates: a playlist is
-    009, a user view is 005 deriving one per user from a `CollectionFolder`, and nothing here
-    produces a bare folder.
+    `UserView` and `Folder` are real types nothing here creates: a user view is 005 deriving one
+    per user from a `CollectionFolder`, and nothing produces a bare folder.
     """
 
     MOVIE = "Movie"
@@ -53,6 +52,10 @@ class ItemType(StrEnum):
     STUDIO = "Studio"
     PERSON = "Person"
     YEAR = "Year"
+
+    # 009's one, and the only type no scan can ever produce: a user creates it, and nothing on
+    # disk describes it. See `USER_CREATED` for what that costs the maps below.
+    PLAYLIST = "Playlist"
 
 
 class CollectionType(StrEnum):
@@ -98,9 +101,20 @@ BY_NAME: frozenset[ItemType] = frozenset(
     {ItemType.GENRE, ItemType.MUSIC_GENRE, ItemType.STUDIO, ItemType.PERSON, ItemType.YEAR}
 )
 
-#: Everything the scanner arranges into a tree: every type that is not a by-name row. The three
-#: containment maps below are total over *this* set, never over `ItemType`.
-IN_THE_TREE: frozenset[ItemType] = frozenset(ItemType) - BY_NAME
+#: The types a **user** creates, which no scan produces and no file describes. One so far.
+#:
+#: A third category rather than a member of either other one, because `Playlist` has each half of
+#: what defines them and neither whole: like a by-name row it has no library, no parent and no
+#: collection type, and unlike one it is not derived from a name an item mentions - it is minted
+#: when somebody asks for it, and a rescan of every library cannot rebuild it (009 spec section 4).
+#: Folding it into `BY_NAME` would have given `db/item_queries.py`'s by-name reference clause a
+#: row to reason about that nothing references, and folding it into `IN_THE_TREE` would have
+#: demanded a parent, a depth, a collection type and a metadata chain for a row that has none.
+USER_CREATED: frozenset[ItemType] = frozenset({ItemType.PLAYLIST})
+
+#: Everything the scanner arranges into a tree: every type that is neither a by-name row nor
+#: user-created. The three containment maps below are total over *this* set, never over `ItemType`.
+IN_THE_TREE: frozenset[ItemType] = frozenset(ItemType) - BY_NAME - USER_CREATED
 
 #: The type of an item's parent, or None for the one type that has none.
 #:
@@ -136,8 +150,19 @@ PARENT_OF: Mapping[ItemType, ItemType | None] = {
 #: what `MediaType` a `Genre` carries; `Unknown` is what every other non-file type answers, and the
 #: gap is named rather than hidden.
 #:
-#: A `Playlist` answers `Audio` on the measured server - derived from its contents rather than from
-#: its type - which is 009's problem and is why `Playlist` is not a member of `ItemType` here.
+#: **A `Playlist`'s value is the one entry here that is not a property of the type**, and the
+#: comment this replaced had the mechanism wrong: it said the reference derives the value from the
+#: item's contents, which would make a type-level map unable to hold it at all. Measured, the value
+#: is decided **at creation** - `Audio` for one created empty, the media type of the first
+#: resolvable id otherwise, and the body's own `MediaType` over both - and then it does not move:
+#: a playlist created empty and filled with films still answers `Audio`, and one created from a
+#: film still answers `Video` after a track is added
+#: `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`.
+#:
+#: So the entry below is the **fallback**, exact for a playlist created empty and wrong for any
+#: other: 009 stores the value per row and the serialiser prefers the stored one (009 plan
+#: section 4.2). What still reads this entry as though it were type-level is
+#: `db/item_queries.py`'s `mediaTypes` filter - see the caveat there.
 MEDIA_TYPE_OF: Mapping[ItemType, str] = {
     ItemType.MOVIE: "Video",
     ItemType.EPISODE: "Video",
@@ -152,6 +177,7 @@ MEDIA_TYPE_OF: Mapping[ItemType, str] = {
     ItemType.STUDIO: "Unknown",
     ItemType.PERSON: "Unknown",
     ItemType.YEAR: "Unknown",
+    ItemType.PLAYLIST: "Audio",
 }
 
 
@@ -225,12 +251,15 @@ class Item:
     name: str
 
     library_id: str | None
-    """The library this item belongs to - **null for exactly the five `BY_NAME` types**.
+    """The library this item belongs to - **null for the five `BY_NAME` types, and for a
+    playlist**.
 
     A genre is not in a library; it is referenced by items that are, and its identity is
-    server-wide (004 spec section 3.7). The schema states the correspondence as a check constraint
-    rather than trusting this docstring: `library_id IS NULL` if and only if the type is one of the
-    five.
+    server-wide (004 spec section 3.7). A playlist is not in one either - it belongs to a user
+    (009 spec section 3.7). The schema states the correspondence as a check constraint rather than
+    trusting this docstring: `library_id IS NULL` if and only if the type is one of the five, and
+    009's migration widens that constraint to *the five or a playlist* rather than giving a
+    playlist a library it would then appear under.
     """
 
     parent_id: str | None = None
@@ -313,6 +342,7 @@ __all__ = [
     "MEDIA_TYPE_OF",
     "PARENT_OF",
     "PRODUCED_BY",
+    "USER_CREATED",
     "CollectionType",
     "Item",
     "ItemType",

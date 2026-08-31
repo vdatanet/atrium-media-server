@@ -29,7 +29,7 @@ from atrium.config.paths import DataPaths
 from atrium.db import schema
 from atrium.db.engine import create_database_engine
 from atrium.db.models import Base
-from atrium.domain.items import BY_NAME, ItemType
+from atrium.domain.items import BY_NAME, USER_CREATED, ItemType
 from tests.conftest import data_dir
 
 
@@ -404,13 +404,23 @@ def test_rolling_back_removes_the_rows_0002_has_no_schema_for(
         }
 
 
-def test_the_type_check_lists_exactly_the_types_the_domain_has(migrated: Engine) -> None:
+def test_the_type_check_lists_every_type_this_revision_knows_and_refuses_the_one_it_does_not(
+    migrated: Engine,
+) -> None:
     """The assertion `test_migration_0002.py` used to make, moved here with the revision that
-    widened the list. Two lists of the same thirteen strings; something has to notice when one of
-    them grows, and 0003 is now the revision that owns the whole of `ItemType`."""
+    widened the list. Two lists of the same strings; something has to notice when one of them
+    grows.
+
+    **009 added a fourteenth type, and this test is the fifth structure that was total over
+    `ItemType`** - the task list named three. `Playlist` is 0008's value and not 0003's, so the
+    accounting stays total by splitting rather than shrinking: every type this revision lists
+    inserts, and the one it does not is asserted *refused* here rather than quietly dropped from
+    the loop. A fifteenth type breaks this test the way a fourteenth did.
+    """
+    known = sorted(set(ItemType) - USER_CREATED)
     with migrated.begin() as connection:
         library = a_library(connection)
-        for index, kind in enumerate(sorted(ItemType)):
+        for index, kind in enumerate(known):
             connection.execute(
                 text(
                     "INSERT INTO items (id, library_id, type, name) "
@@ -422,4 +432,9 @@ def test_the_type_check_lists_exactly_the_types_the_domain_has(migrated: Engine)
                     "type": kind.value,
                 },
             )
-        assert connection.execute(text("SELECT count(*) FROM items")).scalar() == len(ItemType)
+        assert connection.execute(text("SELECT count(*) FROM items")).scalar() == len(known)
+
+    insert = "INSERT INTO items (id, library_id, type, name) VALUES (:id, NULL, :type, 'x')"
+    for kind in sorted(USER_CREATED):
+        with pytest.raises(IntegrityError, match="ck_items_type"), migrated.begin() as connection:
+            connection.execute(text(insert), {"id": "f" * 32, "type": kind.value})

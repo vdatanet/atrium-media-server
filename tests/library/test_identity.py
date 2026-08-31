@@ -71,6 +71,24 @@ def test_deriving_a_type_the_wrong_way_is_refused() -> None:
         for_name(ItemType.MOVIE, LIBRARY, "The Film")
 
 
+def test_a_minted_type_cannot_be_derived_by_any_rule() -> None:
+    """009: a playlist's identifier is allocated, not derived, and `MINTED` is how the map says so.
+
+    The failure this prevents is the silent one again, one step worse than the row above: a
+    derivation for a playlist would produce a *stable-looking* identifier - reproducible, canonical,
+    indistinguishable from a real one - for a thing whose whole point is that no fact about it is
+    stable enough to hash. `_require` refuses all five derivations from the one map row, so there is
+    no function here that has to remember.
+    """
+    for derive_it in (
+        lambda: for_file(ItemType.PLAYLIST, LIBRARY, "Playlists/mine"),
+        lambda: for_name(ItemType.PLAYLIST, LIBRARY, "mine"),
+        lambda: for_by_name(ItemType.PLAYLIST, "mine"),
+    ):
+        with pytest.raises(ValueError, match="takes its identity from"):
+            derive_it()
+
+
 def test_the_result_is_a_canonical_identifier() -> None:
     for item_id in (
         for_file(ItemType.MOVIE, LIBRARY, FILM),

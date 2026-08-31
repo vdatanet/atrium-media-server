@@ -24,6 +24,11 @@ Plan §1 prices the "a playlist is a row in `items`" decision at *"migration 000
 There are three structures that assert themselves total over a type set, and adding a member to the
 enum breaks all three:
 
+> *T3 found **five**, and the two missing ones are assertions rather than maps — the domain's own
+> two-way partition of `ItemType`, six lines below the first assertion this list cites, and
+> `test_migration_0003.py` inserting one row of every type against the constraint 0008 replaces.
+> Its Done note carries both, and the list below is left as it was written.*
+
 - `PARENT_OF` is total over `IN_THE_TREE`, asserted by `tests/unit/test_domain_items.py:138`, and
   `IN_THE_TREE` is *everything that is not a by-name row*. A playlist has no parent and the scanner
   never arranges one, so **`IN_THE_TREE` excludes it** — which is what that constant's own docstring
@@ -168,7 +173,7 @@ one migration; it is one migration, four maps and a clause.
 
 ## T3 — The type joins the enum, and the three maps that are total over it
 
-- [ ] **Changes:** `ItemType.PLAYLIST`. `IN_THE_TREE` excludes it (gate finding 1), so `PARENT_OF`
+- [x] **Changes:** `ItemType.PLAYLIST`. `IN_THE_TREE` excludes it (gate finding 1), so `PARENT_OF`
   needs no row and the tree assertions keep their meaning. `library/identity.py` gains
   `IdentityRule.MINTED` — *"allocated at creation; a playlist is the one item a rescan cannot
   rebuild"* — and `RULE_OF` maps `PLAYLIST` to it, with `derive` refusing to be called for that
@@ -181,6 +186,63 @@ one migration; it is one migration, four maps and a clause.
   is the point: a member was added and no test had to be weakened. Plus a row asserting `derive`
   raises for `MINTED`.
 - **Spec reference:** §3.2, §4; plan §1, §4.2
+
+> **Done (2026-08-31).** *There are **five** structures total over the type set, not three, and
+> neither of the two nobody enumerated is a map.* That is why reading the maps did not find them:
+> both are assertions.
+>
+> - **The domain's own partition.** `test_domain_items.py:212` asserts
+>   `set(ItemType) == IN_THE_TREE | BY_NAME` — *"No third category, and nothing in both"* — six
+>   lines below the assertion the gate cited, in the same file. `IN_THE_TREE` excluding the
+>   playlist is exactly what makes a third category exist, so the two statements cannot both hold.
+>   It is now a three-way partition over a named `USER_CREATED` set, which keeps it a partition: a
+>   fifteenth type still has to be placed rather than excused, where
+>   `IN_THE_TREE | BY_NAME | {PLAYLIST}` would have turned it into a list of exceptions.
+> - **`test_migration_0003.py`'s constraint test**, which inserts **one row of every `ItemType`**
+>   and asserts they all land. Its own docstring says *"0003 is now the revision that owns the
+>   whole of `ItemType`"*, and 0008 is about to take that ownership away. It splits rather than
+>   shrinks: every type 0003 lists inserts, and the one it does not is asserted **refused** with
+>   `ck_items_type` named — so the accounting is still total, and a fifteenth type breaks it the
+>   way the fourteenth did. It is the one test in the repository that would have failed at T4
+>   instead, with a rebuild in flight.
+>
+> *The task's third structure needed no code at all, and the first two needed less than it says.*
+> `PARENT_OF` and `PRODUCED_BY` need no row, as stated — but so does `_DEPTH` in `library/scan.py`
+> and `CHAIN_OF` in `metadata/merge.py`, both of which are total over `IN_THE_TREE` and both of
+> which the exclusion carries for free; that is what the exclusion buys. And `RULE_OF`'s new
+> `MINTED` row does not need `derive` taught to refuse: `_require` already compares the type's rule
+> against the rule the function implements, so one map row refuses all five derivations at once.
+> There is no dispatcher called `derive` in that module to teach — `derive` is the hash primitive
+> in `compat/guids.py`, which knows nothing about types.
+>
+> *`MEDIA_TYPE_OF`'s new value is right and the sentence that justified it was wrong.* 005's
+> comment said a playlist's `Audio` is *"derived from its contents rather than from its type"*,
+> which cannot be true of a value a type-level map holds. Measured: the value is decided **at
+> creation** and never revised — a playlist created empty answers `Audio` after a film is added to
+> it, one created from a film answers `Video` after a track is, and the body's own `MediaType`
+> outranks the contents outright
+> `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. So the map's entry
+> is the *fallback* — exact for a playlist created empty, wrong for every other — which is what
+> makes plan §4.2's column the right shape rather than a convenience.
+>
+> *And that fallback has a reader the plan did not count.* `db/item_queries.py`'s `_types_of_media`
+> inverts `MEDIA_TYPE_OF` to answer `mediaTypes=`, on the argument its own docstring states —
+> *"there is no `media_type` column: it is a property of the type"* — which 009 makes false. The
+> reference filters playlists by the stored row: `mediaTypes=Audio` returns the audio playlist and
+> not the video one, and `mediaTypes=Video` the reverse. Reading the fallback claims **every**
+> playlist for `Audio` and none for `Video`. Nothing observes it until T4 stores a playlist, and
+> closing it needs T4's column — so it is named in the code, in spec §4 and in plan §4.2, and
+> **left undecided**: it is an accepted gap or one more clause on the listing, and no task in this
+> list owns it. **The same ordering blocks this task's last clause**: `api/item_dto.py` cannot
+> prefer a column that T4 has not created, and T4 depends on T3.
+>
+> *Two smaller things, both about tests that would have passed for the wrong reason.*
+> `test_a_real_kind_this_version_cannot_produce_narrows_to_nothing` asked `includeItemTypes=Playlist`
+> and got zero rows because v1 could not produce the type; it now gets zero rows because the world
+> holds no playlists, which is a different mechanism with the same answer. It asks `BoxSet`, and a
+> new test asserts the other half — `Playlist` binds to a type and records no ignored token. And
+> `MediaType: Nonsense` on creation is a **`400`** in the validation shape rather than a dropped
+> token, which is a refusal spec §3.2's error table did not have and T8 has to answer.
 
 ## T4 — Migration 0008: two constraints rebuilt, three tables
 
