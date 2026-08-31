@@ -1,9 +1,10 @@
 ---
 feature: 009-playlists
 title: Playlists — implementation plan
-status: Draft
+status: Accepted
 created: 2026-08-31
 updated: 2026-08-31
+accepted: 2026-08-31
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
