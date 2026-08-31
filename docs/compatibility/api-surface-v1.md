@@ -168,13 +168,22 @@ Jellyfin's version carries `Key` and `ItemId` inside the object.
 | DELETE | `/Playlists/{playlistId}/Items` | `RemoveItemFromPlaylist` | M |
 | POST | `/Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}` | `MoveItem` | M |
 | DELETE | `/Items/{itemId}` | `DeleteItem` | M |
+| POST | `/Items/{itemId}` | `UpdateItem` | M |
 
-Note that `{itemId}` in `MoveItem` and `RemoveItemFromPlaylist` is the **playlist entry id**, not
-the media item id — the same track can appear twice in one playlist. This distinction is a common
-source of client bugs and must be got right.
+`{itemId}` in `MoveItem` and `RemoveItemFromPlaylist` is the **playlist entry id** — and that
+identifier is the media item's own, measured on the wire
+`[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-31]`. This note read *"the same
+track can appear twice in one playlist"* until 009's spec review; it cannot, and the two facts are
+one: an entry that cannot be named apart from its item cannot appear twice in a list addressed by
+name. See [behaviours §2.26](behaviours.md) and [009 §3.1](../../specs/009-playlists/spec.md).
 
 `DeleteItem` is in v1 solely because deleting a playlist goes through it. Deleting *media* is a
 separate, dangerous capability gated by user policy.
+
+`UpdateItem` joined at 009's spec review on 2026-08-31: it is how the music client renames a
+playlist, and it was the one operation that client calls which no feature owned. It is routed for
+playlists, and the reference declares it administrator-only — so a playlist's own owner is refused
+unless they are one ([009 §3.8](../../specs/009-playlists/spec.md)).
 
 ## 7. Images
 

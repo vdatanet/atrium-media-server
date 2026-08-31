@@ -364,3 +364,13 @@ endpoints:
     consumers: [music-client]
     feature: "009"
     level: L2
+  # Added at 009's spec review on 2026-08-31: the music client renames a playlist with it, which
+  # made it the one operation that client calls with no owning feature. Routed for playlists;
+  # the reference declares the whole controller elevated, so a non-administrator owner is
+  # refused - 009 section 3.8.
+  - path: "/Items/{itemId}"
+    method: POST
+    operation: UpdateItem
+    consumers: [music-client]
+    feature: "009"
+    level: L2

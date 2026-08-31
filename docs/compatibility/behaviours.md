@@ -780,20 +780,46 @@ told anything — the request succeeds.
 **Atrium does:** the same. The argument for allowing duplicates is real — a set list may want the
 same track twice — and it loses to Principle I.
 
-**Entry identity survives this.** A row is still addressed by its own `PlaylistItemId`, not by the
-item's `Id`; uniqueness of items does not make the two the same thing.
+**Entry identity is where this comes from**, which this entry had backwards until 2026-08-31. It
+read *"a row is still addressed by its own `PlaylistItemId`, not by the item's `Id`"*. The two are
+the same value (§2.26), so an entry cannot be named apart from its item — and a list addressed by
+name cannot hold one twice. The de-duplication is not a policy beside the identifiers; it is what
+the identifiers leave possible.
 
 ### 2.8 `Move`'s `newIndex` is the entry's position after the move
 
 **Jellyfin does:** removes the entry, then inserts it so it ends up at exactly `newIndex` in the
 resulting list. On `[A B C D E]`, moving index 0 to index 3 gives `B C D A E`, not `B C A D E`.
-`[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-26]`
+`[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-26, re-measured 2026-08-31]`
+The boundaries around it are a defect rather than a semantic, and they are §3.15.
 
 **Depends on it:** every drag-and-drop reorder. Upward moves are identical under either reading,
 so a client built against the wrong one works until a user drags something **down**.
 
 **Atrium does:** the same. This project's specification asserted the opposite until it was
 measured — which is the whole reason the probe was written before the code.
+
+### 2.26 A playlist entry's identifier is the item's identifier
+
+**Jellyfin does:** answer every row of `GET /Playlists/{playlistId}/Items` with a
+`PlaylistItemId` equal to that row's own `Id`. The property is filled from a field that caches the
+resolved item's id the first time the entry is looked up, so there is no second identifier
+anywhere in the exchange. `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-31]`
+`[source: MediaBrowser.Controller/Entities/BaseItem.cs:1797-1802 @ v10.11.11]`
+
+**Depends on it:** the two routes that address a row — `Move` and `Remove` — take that value, and
+a client that held an entry id and an item id as different things would still work, because it
+would be holding the same string twice. What no client can do is address two occurrences of one
+track, and §2.7 is why there are never two.
+
+**Atrium does:** the same, and it is not a free choice — a `PlaylistItemId` differing from `Id`
+would be a value no reference server sends. Specified in
+[009 §3.1](../../specs/009-playlists/spec.md).
+
+> **This is the finding the 009 spec review was least prepared for.** The specification was built
+> around the opposite claim, in four places including an acceptance criterion, and the music
+> client's contract asks for a `PlaylistItemId` *"distinct from the track id"*. Both were reasoning
+> from what the two names suggest. Nothing had compared the two values.
 
 ### 2.9 A reported position resolves through six branches, not two thresholds
 
@@ -2018,6 +2044,86 @@ request and the measurement above would invert.
 
 Decided at 012's measurement gate on 2026-08-29 (012 OQ-8), under the procedure in §3.0.
 
+### 3.15 `Move`'s index is unguarded in both directions — class A, diverged
+
+**Jellyfin does:** answer a `Move` whose `newIndex` is past the entry count with **`500`** and the
+bare text `Error processing request.`, and a `Move` whose `newIndex` is **negative** with `204` and
+a move the caller did not ask for. On a five-entry playlist, index 5 puts the entry last; index 6
+is the `500`; index -1 answers `204` and leaves `B A C D E`. An entry id that is not in the
+playlist is a silent `204` when the index is in range, and the **same `500`** when it is not —
+because the index arithmetic runs before the entry is looked up.
+`[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-31]`
+`[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:307-345 @ v10.11.11]`
+
+**Depends on it:** nothing can be built on either. A `500` carries no information a client can act
+on, and a negative index that silently reorders is a result no client asked for — a drag-and-drop
+that computes -1 for a row dropped above the first one gets a move to position **1**, which reads
+as a bug in the client. Class A by §3.9's reasoning, which is the same shape: an unhandled
+exception on a malformed input, where the well-formed input one step away is a clean refusal.
+
+**Atrium does: diverge — refuse both with `400`, and move nothing.** The clamp at exactly the entry
+count is parity and is kept; past it, and below zero, the request is refused rather than crashed or
+guessed. The absent-entry `204` is parity and is kept as well, and so is the order the reference
+judges in — the index first, so an entry that is not in the playlist is refused rather than ignored
+when the index is out of range too. The only observable difference is a `400` where the reference
+produces a `500` or an unrequested move. Specified in [009 §3.5](../../specs/009-playlists/spec.md).
+
+---
+
+### 3.16 A playlist read names its own reader — class A, diverged
+
+**Jellyfin does:** take the identity it checks a playlist's permissions against from the `userId`
+query parameter of `GET /Playlists/{playlistId}/Items`, with no test that the caller may name it —
+`var callingUserId = userId ?? User.GetUserId();`, and every permission test below it runs against
+the named user `[source: Jellyfin.Api/Controllers/PlaylistsController.cs:520-531 @ v10.11.11]`.
+Measured: a restricted non-administrator, answered `404` by `GET /Items/{id}` and by the same
+playlist route without the parameter, is answered **`200` with the entries** when the request names
+the owner. `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`
+
+**The same controller refuses the same parameter one route away.** `CreatePlaylist` and
+`AddItemToPlaylist` pass it through a helper that throws for a non-administrator naming another
+user — measured as `403` in the same run `[source: Jellyfin.Api/Helpers/RequestHelpers.cs:67-85 @
+v10.11.11]`.
+
+**Depends on it:** an administrator reading another user's playlist, which the helper permits on
+the write routes and which this route permits for everybody. §3.0.1's tie-break 1 — absent
+evidence, assume a compensation exists — is what kept
+[§3.5 `/Users/Public`](#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated)
+replicated, and it does not reach here: a client cannot have built a workflow on a permission the
+same server refuses on the routes beside it, because the workflow would fail the moment it wrote
+anything.
+
+**Atrium does: diverge — honour `userId` for an administrator, refuse it otherwise**, which is the
+reference's own rule on its own write routes rather than a rule of ours. The divergence is strictly
+*less* disclosed, which §3.0.3 names as the safest shape, and it is confined to a request a
+non-administrator has no legitimate reason to send. Specified in
+[009 §3.7](../../specs/009-playlists/spec.md).
+
+---
+
+### 3.17 A playlist's entries ignore the reader's library access — class B, diverged
+
+**Jellyfin does:** filter a playlist's entries through a visibility call that is a parental-rating
+and tag check, and nothing else `[source: MediaBrowser.Controller/Entities/BaseItem.cs:1736-1741 @
+v10.11.11]`. Library access is enforced by the item *queries*, which this route does not use — so a
+reader restricted to one library, who can list **zero** items of another and is answered `404`
+fetching one directly, is handed those items as playlist rows, with their names and ids, counted in
+`TotalRecordCount`. `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`
+
+**Depends on it:** a client rendering a shared playlist sees rows it cannot play — every one of
+them answers `404` on fetch and on delivery. Nothing is built on that; what a client would have to
+have built on is the *count*, and a count that includes unplayable rows is not something a client
+can use either.
+
+**Atrium does: diverge — omit entries the reader cannot reach**, keeping the order and the entry
+ids of the rest, and counting only what it returns. The difference a client can observe is fewer
+rows and a smaller total for the same shared playlist, which is the direction §3.0.3 calls the
+least dangerous, and it is the behaviour
+[009 §3.7](../../specs/009-playlists/spec.md) had been describing as the reference's own since the
+day it was written. Specified there, as a divergence now that the gate has measured it.
+
+---
+
 ## 4. Deliberate exceptions
 
 Every one of them is listed here so it is never mistaken for an oversight — including §4.4, which
@@ -2062,6 +2168,14 @@ film and finds it still there.
 
 **Atrium does:** permits deletion only for items whose removal takes no file off disk. Playlists
 delete; movies, episodes and tracks answer `403`.
+
+**`403` here is an invented status, deliberately, and the parity path beside it is `401`.** The
+reference has no refusal to copy for this case — for an entitled user it deletes the file — so the
+status is ours to choose, and `403` is what an authenticated caller forbidden by policy is owed.
+The refusal the reference *does* make, for a caller who may not delete that **playlist**, is `401`
+with the body `"Unauthorized access"` `[probe: tools/probe_playlist_visibility.py, Jellyfin
+10.11.11, 2026-08-31]`, and Atrium reproduces that one exactly. Two refusals, two statuses, and
+only one of them is a divergence.
 
 Unlike the other divergences in this document, this one is not argued from "no client can tell". It
 is argued from consequence. v1 has no trash, no undo and no confirmation flow of its own, so
@@ -2139,6 +2253,8 @@ undocumented bug.
 | **A subtitle file's encoding is decided by a rule, not by a detector** ([011 §3.5, §3.6](../../specs/011-subtitle-delivery/spec.md)) | On a file that is UTF-8 or carries a byte order mark — the overwhelming majority — nothing. On a subtitle file in a legacy single-byte encoding outside `cp1252`, **different cue text**: the words a player draws are not the words in the file, and where a byte is one `cp1252` does not define, the fetch answers the `500` a failed extraction does | A detector behind the one function that makes the choice, with its runtime dependency argued in an ADR on the day a real library needs it. See §5.11 |
 | **A stream carries no `IsAVC`, `TimeBase` or `NalLengthSize`** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Three properties absent on every stream | Columns migration 0006 does not have; they arrive with the migration that adds them, and nothing in v1 reads them |
 | **Dolby Vision and HDR10+ are not classified** ([008 §3.1, §3.7](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A Dolby Vision or HDR10+ film's master playlist carries no `SUPPLEMENTAL-CODECS`, and its copied segments are tagged `hvc1` where the reference tags `dvh1` — because the file is inspected here as the HDR10 file its colour metadata claims `[probe: tools/probe_transcode_decision.py, Jellyfin 10.11.11, 2026-08-29]` | Reading the Dolby Vision configuration record and the HDR10+ marker out of a stream's side data, which is where that signal lives. See §5.10 |
+| **A playlist item carries no `Path`** ([009 §4](../../specs/009-playlists/spec.md)) | A `Playlist` item fetched with `fields=Path` has none, and its two date fields are its store's rather than a directory's. The reference builds a playlist as a directory under its data path and reports it `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]` | Nothing to close: v1's playlists are not files, and reporting a path no file backs would be the worse answer. Visible only to a client that asks for `Path` by name, and neither analysed client does |
+| **A non-administrator cannot rename their own playlist** ([009 §3.8](../../specs/009-playlists/spec.md)) | The music client's rename button answers `403` for every user who is not an administrator — which is what a stock reference server answers too, because the route that client calls is declared elevated `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-08-31]`. This is a reproduced gap, not an introduced one: the reference's own working rename for an owner is `POST /Playlists/{playlistId}`, which no analysed client calls | `UpdatePlaylist` entering the surface, on the day a client is measured calling it. Principle VI keeps it out until then, and 009 §2 records what the exclusion costs |
 | **A multi-part film answers one media source per part** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Two sources on one item, where the reference answers one source, a `PartCount` and a separate route for the rest | Not a gap to close on its own: it follows from 003 §3.3 modelling the parts as one item's sources, and closing it means changing that model or adding `GET /Videos/{id}/AdditionalParts` to the surface |
 
 The difference between this section and §4 is intent. §4 says *we thought about it and chose

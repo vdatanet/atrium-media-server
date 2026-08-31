@@ -120,7 +120,7 @@ say how it will be proven is not finished.
 | [006](006-images/) | Images | **Implemented** | **Implemented** | **Implemented** |
 | [007](007-user-data-and-playstate/) | User data and playstate | **Implemented** | **Implemented** | **Implemented** |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Implemented** | **Implemented** | **Implemented** |
-| [009](009-playlists/) | Playlists | Draft | — | — |
+| [009](009-playlists/) | Playlists | **Accepted** | — | — |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
@@ -136,15 +136,18 @@ codec-less empty `200`). **Every one of the fourteen tasks then found something 
 why the spec carries thirteen amendments and not one: the sharpest are the four `stream` routes
 requiring no token where the task list said the opposite (T6), a `PlaySessionId`-keyed stop whose
 mandatory `deviceId` decides nothing (T12), and a `SegmentKeepSeconds` that is a distance behind
-the client rather than a file age (T13). **009 and 010 remain drafts**, and their open
+the client rather than a file age (T13). **009 was accepted at its own measurement gate on 2026-08-31**, three days after 012's: six open
+questions answered by five probes — one extended, four written — and **thirteen claims that did not
+survive them**, the sharpest being that `PlaylistItemId` is the item's own `Id`, which is the
+distinction the whole feature had been written around. **010 remains the only draft**, and its open
 questions are the standing review agenda —
 [what 008 owes them](008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
 and [what 011 does](011-subtitle-delivery/tasks.md#what-this-feature-owes-the-next-ones) are
 written down rather than remembered. **011's spec was accepted on the same day as 008's**, at its
 own measurement gate, its plan and task list on 2026-08-30, and the twelve tasks ran from
 2026-08-30 to 2026-08-31; **012 was opened on 2026-08-29 and accepted at its own gate the same
-day**, so the drafts are 009 and 010. The lowest-numbered feature that is not implemented is
-**009**, so its spec review is the next gate, and both those lists are inputs to it.
+day**. The lowest-numbered feature that is not implemented is
+**009**, and with its spec accepted the next gate is its plan; both those lists are inputs to it.
 
 **008's own closing task found the class it exists to catch.** The acceptance map is where a
 criterion and the test that proves it are put on one line, and doing that showed two criteria whose
@@ -533,6 +536,20 @@ the documentation and one contradicted it:
 | 003 OQ-3 — sort-name derivation | Confirmed 15/15, **plus a second rule**: three item types bypass it entirely |
 | 007 OQ-2 — completion thresholds | Answered: 90% / 5% / 300s, **and six branches** where the spec had two |
 | 009 OQ-1 — `Move` semantics | **Contradicted.** The spec had the reading backwards; §3.5 and AC-8 corrected |
+
+**Five more were run at the 009 spec gate**, on 2026-08-31 — `probe_playlist_move.py` extended and
+`probe_playlist_creation.py`, `probe_playlist_expansion.py`, `probe_playlist_visibility.py` and
+`probe_playlist_rename.py` written — and it is the gate at which the most claims died at once:
+
+| Question | Outcome |
+|---|---|
+| 009 OQ-3 — container expansion | Confirmed, **and wider**: album, artist, series, season and collection all expand, and an album keeps its own order |
+| 009 OQ-4 — entries the reader cannot see | **Contradicted.** Nothing is filtered for library access; the omission §3.7 described was Atrium's alone and is now a divergence (behaviours §3.17) |
+| 009 OQ-5 — client reliance on media deletion | Answered on the documents: none. The §3.6 divergence costs both analysed clients nothing |
+| 009 OQ-6 — the `Move` boundaries | **Contradicted, every row**: a clamp one position wide, then `500`; a negative index that moves rather than refuses; an absent entry that is a silent `204` (behaviours §3.15) |
+| Not asked — entry identity | **`PlaylistItemId` is the item's `Id`**, on the wire. §3.1, AC-5, the surface's own note and a client contract sentence all said otherwise (behaviours §2.26) |
+| Not asked — who may read | A private playlist is readable by **anyone who names its owner** in `userId`, on the one route that does not check (behaviours §3.16) |
+| Not asked — who may rename | The route the music client renames with is administrator-only, so a playlist's own owner is refused `403` (009 §3.8) |
 
 **Two more were written and run at the 004/005 spec gate**, on 2026-08-27, and the pattern held:
 
