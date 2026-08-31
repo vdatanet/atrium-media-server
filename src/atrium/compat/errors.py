@@ -73,14 +73,38 @@ class UnauthenticatedError(Exception):
 
 
 class ForbiddenError(Exception):
-    """A usable credential, and the account may not do this. Answered with an empty 403.
+    """A usable credential, and the account may not do this. The third shape at `403`.
 
-    ⚠️ **The shape is not measured.** The empty `401` above was measured for an unauthenticated
-    route; no refusal of this kind could be issued against the reference from here, because the
-    account available to measure with is an administrator and an administrator lacks no
-    permission. It is emitted in the same shape as the `401` beside it, on the argument that it is
-    decided in the same place - before any route body runs - and 002 spec section 7 (OQ-5) carries
-    it as an open question rather than as a claim.
+    Measured at last, and the shape is the controller's own sentence rather than the emptiness
+    this class emitted until 009: a non-administrator naming somebody else on
+    `POST /Playlists/{id}/Items?userId=` is answered `403`, `text/plain` with no charset, and the
+    same 25 bytes every other controller refusal carries
+    `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. That refusal is
+    005's `/Items?userId=` one route away, so the correction is taken here rather than on 009's
+    own routes (009 spec section 3.7, AC-19; 009 plan section 2).
+
+    ⚠️ **A `403` is two shapes on the reference, and this class is only the first of them.** The
+    same probe measured `POST /Items/{id}` - the elevated controller the music client renames
+    through - answering `403` with **no content type and no body at all**, because that refusal is
+    an authorization policy's and never reaches a controller. Both statuses are `403` and the
+    bytes are the whole difference, which is behaviours section 1.11's rule applied to one status
+    instead of to one route. A route refused by policy rather than by its own test therefore does
+    **not** raise this class, and 009 T13's rename is the first one that needs the other shape.
+
+    ⚠️ **Two of this class's raise sites are not the measured refusal**, and neither moves to a
+    measured shape by changing this handler:
+
+    * `api/deps.py` refuses a live token whose account was disabled after it was issued. That is
+      002 spec section 7 (OQ-5)'s third row and is still unmeasured - measuring it means
+      disabling a real account that holds a live token. It answered the empty shape by analogy
+      with the empty `401`; it now answers this one by analogy with the `403` beside it. Both are
+      analogies.
+    * `api/users.py` refuses one user reading another. The reference does not refuse it at all:
+      it answers `200` with the other user's whole object, policy included, to a restricted
+      non-administrator naming an administrator
+      `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. 002 spec
+      section 3.7 states that `403` with no provenance, so the shape of Atrium's refusal there is
+      the smaller half of the question.
     """
 
 
@@ -449,10 +473,6 @@ async def unauthenticated_handler(_request: Request, _exc: Exception) -> Respons
     return empty_error(401)
 
 
-async def forbidden_handler(_request: Request, _exc: Exception) -> Response:
-    return empty_error(403)
-
-
 def controller_error(status_code: int, headers: dict[str, str] | None = None) -> Response:
     """The third shape: a status, `text/plain`, and the reference's fixed sentence.
 
@@ -468,6 +488,15 @@ def controller_error(status_code: int, headers: dict[str, str] | None = None) ->
         status_code=status_code,
         headers={"Content-Type": CONTROLLER_ERROR_TYPE, **(headers or {})},
     )
+
+
+async def forbidden_handler(_request: Request, _exc: Exception) -> Response:
+    """The measured `403`: `text/plain`, no charset, the fixed 25 bytes.
+
+    Below `controller_error` rather than beside `unauthenticated_handler` on purpose - the
+    grouping is by wire shape, and this refusal left the empty group when it was measured.
+    """
+    return controller_error(403)
 
 
 async def client_authorization_handler(_request: Request, _exc: Exception) -> Response:

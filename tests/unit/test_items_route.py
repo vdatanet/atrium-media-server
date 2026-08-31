@@ -8,7 +8,7 @@ Three groups, and each holds something the layers below cannot:
   (AC-16). Every case then runs once more with its parameter names case-mangled and must answer
   the identical body, which re-holds the canonicalisation of behaviours 1.15 on a real route.
 * **The refusals** - the byte-identical `404` for an unknown and an invisible id (AC-8), the
-  validation `400` for a malformed one, the empty `403` for a `userId` that is not the caller's,
+  validation `400` for a malformed one, the measured `403` for a `userId` that is not the caller's,
   and the tier 3 parameter that is ignored, answered `200`, and recorded (AC-15).
 * **The paging property re-held over HTTP** (AC-4's endpoint half) and the statement-count
   parity that keeps the whole route inside the repository's fixed budget.
@@ -477,13 +477,22 @@ async def test_an_unknown_or_invisible_parent_is_the_same_404(
     assert unknown.status_code == invisible.status_code == 404
 
 
-async def test_user_id_of_somebody_else_is_the_empty_403(
+async def test_user_id_of_somebody_else_is_the_controller_403(
     client: httpx.AsyncClient, world: QueryWorld
 ) -> None:
-    """Plan section 7's row, through the 002 seam: empty body, and nothing about the other user."""
+    """009 AC-19, on 005's route: the measured bytes, and nothing about the other user.
+
+    This asserted `content == b""` from 005 until 009 measured the refusal against a real
+    non-administrator - the reference sends the controller's own 25 bytes, and the assertion and
+    this test's own name moved with the handler
+    `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`.
+    """
     answered = await client.get("/Items", params={"userId": world.restricted.id})
     assert answered.status_code == 403
-    assert answered.content == b""
+    assert answered.content == b"Error processing request."
+    # The charset Starlette would append is the whole reason `controller_error` sets the header
+    # itself, and a test that only compared bodies is what let the empty one stand for a feature.
+    assert answered.headers["content-type"] == "text/plain"
 
 
 async def test_user_id_of_oneself_is_allowed(client: httpx.AsyncClient, world: QueryWorld) -> None:

@@ -234,10 +234,14 @@ def recorder(request: Request) -> IgnoredParameters:
 def effective_user(users: UserRepository, caller: User, user_id: str | None) -> User:
     """Whose visibility and user data apply (spec section 3.3, tier 1 `userId`).
 
-    A non-administrator naming anybody else gets the empty `403` through the 002 seam
-    (plan section 7 - unmeasured against the reference, flagged for the differential). An
-    administrator naming nobody that exists gets the problem-details `404`; that case is
-    likewise unmeasured, and recorded in the T10 Done note rather than silently chosen.
+    A non-administrator naming anybody else gets the `403` through the 002 seam, and it carries
+    the reference's own 25 bytes: measured on the same parameter of the same reference controller
+    one route away, and corrected here rather than only on 009's routes (009 spec section 3.7,
+    AC-19) `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. Plan
+    section 7 called that shape unmeasured and flagged it for the differential; it is measured
+    now, and it was empty here for a whole feature. An administrator naming nobody that exists
+    gets the problem-details `404`; **that** case is still unmeasured, and recorded in the T10
+    Done note rather than silently chosen.
     """
     if user_id is None or user_id == caller.id:
         return caller
