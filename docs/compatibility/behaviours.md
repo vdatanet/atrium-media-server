@@ -1021,6 +1021,32 @@ three spellings, none of them anything the client sent
  "traceId": "00-9c83…-a105…-00"}
 ```
 
+**The second key is not universal, and 009 T8 measured what decides it: whether the body is
+*required*.** `POST /Playlists` declares an optional body — its four properties may be sent as
+query parameters instead — and every one of its refusals names **one** key and no second one.
+Measured on four of them in a single run, which also split the first key in two
+`[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`:
+
+| What was wrong with the body | Key | Message |
+|---|---|---|
+| A required property is **absent** | `"$"` | `JSON deserialization for type '<the reference's type>' was missing required properties including: 'Name'.` |
+| That property is present and **null** | the property — `"Name"` | `The Name field is required.` |
+| A value matches no member of a declared vocabulary | `"$"` | `The JSON value could not be converted to <the enum>. Path: $ \| LineNumber: 0 \| BytePositionInLine: 10.` |
+| A value did not bind — a malformed identifier | `""` | `The supplied value is invalid.` |
+
+Three of those are new. The split between rows 1 and 2 is the deserialiser refusing the document
+against the property validator refusing a value, and the *same property* produces both; row 3 is
+`"$"` rather than `""` because an enum converter throws while the text is still being read, which
+is what puts it on the deserialiser's side of the same line.
+
+**And row 3's byte position is reproducible where §1.11's parser message is not.** It is the offset
+**inside the quoted token** — a one-character value answers `3` where an eight-character one
+answers `10` — not an offset into the request, so Atrium sends the sentence byte for byte. Rows 1
+and 3 name a type of the reference's own; those two strings are wire facts, declared on the model
+that reproduces them (`compat/model.py`'s `WIRE_TYPE` and `WIRE_ENUM_TYPES`), and nothing about how
+the reference computes them is carried over. What is still a divergence is the message under `"$"`
+when the text is **not JSON at all**, for the reason the paragraph below gives.
+
 **One of Atrium's refusals had the wrong body, and it took three features to find out.**
 `compat/errors.ForbiddenError` answers an **empty** `403`, on the argument that it is decided in the
 same place as the empty `401` beside it — and its own docstring carried a `⚠️` saying the shape was
@@ -1099,6 +1125,13 @@ the status match. That no client branches on the text is **assumed**, not survey
 tie-break 1's default would presume a compensation exists, set aside here only because the text
 cannot be matched at any price short of that parser. The differential harness (010) is what would
 surface a client that reads it.
+
+**That divergence is narrower than it read, and 009 T8 is what narrowed it.** It applies to the
+`"$"` entry whose message is a *parser's* — the text that is not JSON — and not to the two `"$"`
+messages of the table above, which are a deserialiser's and a converter's: both are templates over
+values this server already has, so both are reproduced exactly. What cannot be matched is a byte
+offset into a document that failed to parse; what can be is a sentence naming a type and a position
+inside a token.
 
 The split is not arbitrary: the empty ones are produced before the framework's controller pipeline
 runs, the JSON ones by that pipeline, and the last two by a controller inside it — the fixed
@@ -2228,6 +2261,36 @@ present keeps its position, and the first occurrence within a batch is the one t
 three of which are the reference's own behaviour on the runs where its cache is warm. What a client
 can observe is a playlist that never grows a row it cannot then delete. Specified in
 [009 §3.1 and §3.4](../../specs/009-playlists/spec.md), AC-5.
+
+---
+
+### 3.19 `CreatePlaylist` crashes on a request with no name, and accepts one for a user that does not exist — class A, diverged
+
+**Jellyfin does:** answer `POST /Playlists` carrying **neither a `Name` in its body nor one in its
+query** with **`500`**, `text/plain`, the fixed 25 bytes. The four properties may be sent either
+way — the query wins, and `?name=` with no body at all creates a playlist — so "no name" is a
+property of the merged pair rather than of either source, and it is the one combination the route
+does not survive `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`.
+
+The same run measured a second unserveable request answered rather than refused: a body whose
+`UserId` names **nobody at all** answers `200` and creates a playlist owned by a user that does not
+exist. Nothing then reaches it — every rule in [009 §3.7](../../specs/009-playlists/spec.md) is a
+comparison against an owner or a share.
+
+**Depends on it:** nothing can be built on either. A `500` carries no information a client can act
+on, and a playlist owned by nobody is unreadable, uneditable and undeletable by every caller — a
+client that made one could not tell its user what happened to it. Class A by §3.9's reasoning, and
+the same shape as [§3.15](#315-moves-index-is-unguarded-in-both-directions--class-a-diverged) one
+route away: an unhandled failure on a malformed input where the well-formed input beside it is a
+clean answer.
+
+**Atrium does: diverge — refuse both, and create nothing.** A request naming no name anywhere is
+`400` in the *same* `text/plain` shape the reference's `500` carries, so the status is the whole
+difference; a `userId` naming nobody is the problem-details `404` that `effective_user` already
+answers on every 005 route, which is where the rule lives rather than being written a second time
+here. The query form itself is **parity** and is implemented: refusing a request the reference
+serves would be the larger divergence. Specified in
+[009 §3.2](../../specs/009-playlists/spec.md).
 
 ---
 

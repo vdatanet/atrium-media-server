@@ -531,7 +531,7 @@ one migration; it is one migration, four maps and a clause.
 
 ## T8 — `POST /Playlists`: two refusals that are not the same shape
 
-- [ ] **Changes:** new `api/playlists.py` with the create route. Plan §6.1 in order: a body with no
+- [x] **Changes:** new `api/playlists.py` with the create route. Plan §6.1 in order: a body with no
   `Name` is the model layer's validation `400`; an empty or blank name is accepted and stored; with
   no `MediaType` the id list is walked and the first unresolvable id **before** the first resolvable
   one is the bare-text `400`; an empty playlist with no media type is `Audio`. The response is
@@ -541,6 +541,74 @@ one migration; it is one migration, four maps and a clause.
   as **bytes**, the empty name creating a playlist, and the three id-list orders answering `400`,
   `200`, `200`. Then `/Items?includeItemTypes=Playlist` finds it (AC-1).
 - **Spec reference:** §3.2, AC-1, AC-2, AC-3
+
+> **Done (2026-08-31).** *This task's title undercounts by two, and the miscount is in the half the
+> plan called settled.* Section 6.1's step 1 says the missing-`Name` refusal *"is not a check this
+> feature writes"* and that its map is *"keyed on the property"*. The key is **`$`** — the
+> deserialiser refusing the whole document before any property is validated, with a sentence naming
+> the type it was building — and the property key belongs to a request nobody had asked about:
+> `Name` present and **`null`**, which answers `{"Name": ["The Name field is required."]}` and is a
+> different refusal from a different layer. A malformed identifier in `Ids` or `UserId` is a
+> **third** key, the empty string. So the route answers four `400` bodies from three layers, and
+> the "two refusals" of the title are the two the documents happened to name
+> `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`.
+>
+> *And none of the four carries the key behaviours §1.11 said every body refusal carries.* That
+> section states a body failure names the binder's key **beside the action parameter's name**,
+> measured across 007's three routes. Measured here: one key, never two. What decides it is whether
+> the body parameter is **required** — 007's three are, this route's is not — so `body_parameter_of`
+> answers `None` for an optional body and the second row disappears with it. Without that, every
+> refusal on this route would have shipped a `createPlaylistDto` row no reference server sends; with
+> the guard removed, four of this task's tests fail.
+>
+> *Two of the reference's sentences name a .NET type, and both are reproduced rather than diverged
+> from.* Section 1.11 already carries a recorded divergence for a `$` message on the argument that
+> *"reproducing that sentence would mean writing a JSON parser to fail like another one"*. That is
+> true of the **parser's** message and of nothing else here: the missing-property sentence is a
+> template over the type name and the property, and the vocabulary sentence's
+> `BytePositionInLine` is the offset **inside the quoted token** — `3` for a one-character value
+> where an eight-character one gives `10`, measured on purpose to find out — so both are byte-exact.
+> The two type names are wire facts declared on the model (`WIRE_TYPE`, `WIRE_ENUM_TYPES`) and
+> nothing about how the reference computes them is carried over, which is the interface-versus-
+> implementation line Principle IV draws. The divergence in §1.11 is narrowed to the parser message
+> it was actually about.
+>
+> *The route has four inputs neither document mentioned, and refusing them would have been the
+> larger delta.* `name`, `ids`, `userId` and `mediaType` are query parameters as well as body
+> properties; the query wins; and `?name=` with **no body at all** creates a playlist. A route that
+> required a body would refuse a request the reference serves. Measured with it: a query `name`
+> does **not** rescue a body that fails to deserialise, so the merge happens after binding and plan
+> §6.1's step 1 really does belong to the model layer even though the value has a second source.
+> And the same token is refused two ways on one route — `MediaType: Nonsense` in the body is T3's
+> validation `400`, `?mediaType=Nonsense` is dropped and recorded, which is behaviours §1.12 beside
+> the refusal it is usually contrasted with.
+>
+> *Two requests the reference cannot serve it answers anyway, and both are refused here.* A request
+> naming no `Name` in **either** source is a **`500`** — `text/plain`, the same 25 bytes — because
+> "no name" is a property of the merged pair and the one combination the route does not survive. And
+> a `UserId` naming **nobody at all** answers `200` and creates a playlist owned by a user that does
+> not exist, which no rule in spec §3.7 can then reach: it is unreadable, uneditable and
+> undeletable by every caller. Atrium refuses the first with `400` in the reference's own bytes and
+> the second with the `404` `effective_user` already answers — 007 T10's Done note left that second
+> case *chosen but unmeasured*, and it is measured now. Both are behaviours **§3.19**, argued from
+> §3.15's reasoning one route away rather than improvised.
+>
+> *One decision taken rather than escalated.* `POST /Playlists` with `UserId` naming another user is
+> `403` with T2's 25 bytes — measured on this route rather than inferred from the add route beside
+> it, which is all §3.16 had `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11,
+> 2026-08-31]`. It is `effective_user`, unchanged, so AC-19 holds on this feature's first route
+> without a second copy of the rule.
+>
+> *One thing this task did not do, and the task list is why.* A container named in `Ids` becomes an
+> entry of its own and settles the media type from itself: plan §6.2's expansion serves creation and
+> addition through one function and arrives at **T10**, which is also where AC-7 asserts the album's
+> own order. Named here rather than discovered there.
+>
+> *Two smaller things.* `INTERIM_009` is back in `tests/conformance/test_routes.py` — the seventh
+> feature to need that device, deleted at T14 like the six before it — and the exact-set check would
+> otherwise have failed on the first route 009 registered. And every clause above was checked by
+> deletion, by hand: removing the wire-name normalisation fails three tests, the required-body guard
+> four, and the no-name refusal one.
 
 ## T9 — `GET /Playlists/{playlistId}/Items`: the one door, and `PlaylistItemId`
 

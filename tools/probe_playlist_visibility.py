@@ -35,6 +35,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import secrets
 
 from _probe import Probe, ProbeError, Server, main
@@ -223,6 +224,22 @@ def run(server: Server) -> Probe:
         probe.observe(
             "SHAPE  GET /Users/{someone else}  (a controller tests the caller itself)",
             shape(*other.get_raw(f"/Users/{server.user_id}")),
+        )
+        # And the creation route, which takes the same parameter in its *body*. behaviours
+        # section 3.16 says `CreatePlaylist` shares the helper that refuses on the add route, and
+        # says it from the source rather than from a measurement - so the fourth row asks it. It
+        # decides which bytes 009 T8's route answers a body naming somebody else, and it is the
+        # only place the parameter arrives as a property rather than as a query.
+        stolen, _, stolen_body = other.post_raw(
+            "/Playlists", body={"Name": PRIVATE + " stolen", "UserId": server.user_id}
+        )
+        if stolen == 200 and stolen_body:
+            made = json.loads(stolen_body).get("Id")
+            if made:
+                created.append(made)
+        probe.observe(
+            "SHAPE  POST /Playlists  {UserId: <the owner>}  (the same helper, in a body)",
+            shape(stolen, _, stolen_body),
         )
 
         # -- OQ-4: the entries the reader cannot see ------------------------------------------

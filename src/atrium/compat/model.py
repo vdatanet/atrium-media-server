@@ -15,6 +15,7 @@ specs/001-server-identity-and-discovery/plan.md section 5.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, ConfigDict, model_serializer, model_validator
@@ -78,6 +79,24 @@ class AtriumModel(BaseModel):
     #: such an exception names the wire spelling here, and the key is emitted in place, profile
     #: conversion included, rather than re-inserted by hand after serialisation.
     NULL_KEPT: ClassVar[frozenset[str]] = frozenset()
+
+    #: The reference's own name for this type, as its JSON deserialiser spells it when it refuses
+    #: a body that omits a required property: `JSON deserialization for type '<this>' was missing
+    #: required properties including: 'Name'.` Empty on every model whose body has no required
+    #: property, which is all of them but one - and an empty value keeps the refusal 007 measured
+    #: rather than inventing a sentence
+    #: `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`.
+    #:
+    #: It is a fact about the **wire**, not about the reference's code: the string reaches a
+    #: client, so reproducing it is Principle I in the same way `Error processing request.` is,
+    #: and nothing here is derived from how the reference computes it. compat/errors.py.
+    WIRE_TYPE: ClassVar[str] = ""
+
+    #: The reference's own name for the enumeration behind a vocabulary property, keyed by the
+    #: property's **wire** spelling: the refusal for a value no member matches names that type
+    #: (`The JSON value could not be converted to <this>.`) and nothing else can supply it. Same
+    #: rule as `WIRE_TYPE`: a property absent from this map keeps the 007 shape.
+    WIRE_ENUM_TYPES: ClassVar[Mapping[str, str]] = {}
 
     @model_serializer(mode="wrap")
     def _for_the_wire(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:

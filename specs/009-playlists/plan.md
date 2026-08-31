@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-31
 updated: 2026-08-31
 accepted: 2026-08-31
-amended: 2026-08-31 at the tasks gate — §1 priced "a playlist is a row in `items`" at one migration; it is one migration, three maps that assert themselves total over a type set, and one clause. The clause is the finding: `_visible_to` exempts rows with no library, a playlist has none, so `/Items?includeItemTypes=Playlist` would have answered every user's private playlists to everybody. §6.5 gains it, and 005's own `MEDIA_TYPE_OF` docstring turns out to have said why `Playlist` was left out of `ItemType` in the first place; and 2026-08-31 by T1 — §6.4's block, executed as written, produces the reading spec §3.5 measured as **wrong**: it removed the entry from `full` and not from `visible`, so the visible neighbour is one too early and the discriminating pair gives `B C A D E`. Both removals now, and `>=` where it said `==`. And its claim to *"reproduce the observable result"* is true only where the caller sees everything: the reference takes the neighbour's position **before** the removal, so on a list with anything hidden a downward move lands one short of where the caller asked — unreachable for the set Atrium hides, which makes the two-list rule Atrium's own rather than a reproduction, and makes an entry the caller cannot see unaddressable. The thirty (source, target) pairs the 25-row matrix was modelling from one measured pair are measured; and 2026-08-31 by T3 — §1's *three* structures total over the type set are **five**, and the two it missed are assertions rather than maps: the domain's two-way partition of `ItemType`, and `test_migration_0003.py` inserting one row of every type against the constraint 0008 replaces. §4.2 gains why `media_type` is a column rather than a lookup — measured, the reference fixes the value at creation and never revises it — and the one reader that cannot use the column: `mediaTypes=` filters playlists by the row on the reference and by the type here, which T4 hands to T6; and 2026-08-31 by T4 — §4's rebuild is not merely "a risk", it is a **measured** loss: with the foreign-key pragma on, batch mode's `DROP TABLE` cascades every child row of `items` away in silence, and two module docstrings said the opposite. Migrations now run with foreign keys off and an explicit orphan check, §9's first risk is marked fired, and the two clauses T3 could not place have owners: the stored `media_type` preference is T4's (§4.2) and the `mediaTypes=` filter is T6's
+amended: 2026-08-31 at the tasks gate — §1 priced "a playlist is a row in `items`" at one migration; it is one migration, three maps that assert themselves total over a type set, and one clause. The clause is the finding: `_visible_to` exempts rows with no library, a playlist has none, so `/Items?includeItemTypes=Playlist` would have answered every user's private playlists to everybody. §6.5 gains it, and 005's own `MEDIA_TYPE_OF` docstring turns out to have said why `Playlist` was left out of `ItemType` in the first place; and 2026-08-31 by T1 — §6.4's block, executed as written, produces the reading spec §3.5 measured as **wrong**: it removed the entry from `full` and not from `visible`, so the visible neighbour is one too early and the discriminating pair gives `B C A D E`. Both removals now, and `>=` where it said `==`. And its claim to *"reproduce the observable result"* is true only where the caller sees everything: the reference takes the neighbour's position **before** the removal, so on a list with anything hidden a downward move lands one short of where the caller asked — unreachable for the set Atrium hides, which makes the two-list rule Atrium's own rather than a reproduction, and makes an entry the caller cannot see unaddressable. The thirty (source, target) pairs the 25-row matrix was modelling from one measured pair are measured; and 2026-08-31 by T3 — §1's *three* structures total over the type set are **five**, and the two it missed are assertions rather than maps: the domain's two-way partition of `ItemType`, and `test_migration_0003.py` inserting one row of every type against the constraint 0008 replaces. §4.2 gains why `media_type` is a column rather than a lookup — measured, the reference fixes the value at creation and never revises it — and the one reader that cannot use the column: `mediaTypes=` filters playlists by the row on the reference and by the type here, which T4 hands to T6; and 2026-08-31 by T4 — §4's rebuild is not merely "a risk", it is a **measured** loss: with the foreign-key pragma on, batch mode's `DROP TABLE` cascades every child row of `items` away in silence, and two module docstrings said the opposite. Migrations now run with foreign keys off and an explicit orphan check, §9's first risk is marked fired, and the two clauses T3 could not place have owners: the stored `media_type` preference is T4's (§4.2) and the `mediaTypes=` filter is T6's; and 2026-08-31 by T8 — §6.1's step 1 said a body with no `Name` is refused *"in the validation shape, keyed on the property"*. It is keyed **`$`**: the deserialiser refuses the document before any property is validated, and the property key is a different refusal the section did not have (`Name` present and null), with a third key — the empty string — for a malformed identifier. None of the three carries the action-parameter row behaviours §1.11 attributed to every body refusal; that row belongs to a **required** body and this route's is optional. §6.1 also gains the four inputs it never mentioned: `name`, `ids`, `userId` and `mediaType` are query parameters as well as body properties, the query wins, and a request naming a name in neither is the reference's `500` — refused here as a `400` in the same bytes, behaviours §3.19
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -412,6 +412,33 @@ Spec §3.2's table, in the order the route applies it:
 > The two `400`s are two shapes on one route, and behaviours §1.11 already records that pattern for
 > three others. A single "invalid request" helper would collapse them, which is why neither is one:
 > step 1 belongs to the model and step 3 raises the bare-text refusal explicitly.
+
+> **Step 1 belongs to the model and its key does not follow from that, which is T8's finding
+> (2026-08-31).** *"The shape follows from `Name` being a required field"* is the sentence that was
+> wrong: the framework here keys a missing body property on the property, and the reference keys it
+> on **`$`** — the deserialiser refusing the whole document, with a sentence naming the type it was
+> building. The property key is a *different* refusal, `Name` present and `null`, which neither
+> document had asked about; and a malformed identifier is a third, keyed with the empty string.
+> None of the three carries the action-parameter row behaviours §1.11 attributed to every body
+> refusal, because that row belongs to a **required** body and this route's is optional. So the
+> model layer still produces all three and `compat/errors.py` spells them: the two reference type
+> names are declared on the model (`WIRE_TYPE`, `WIRE_ENUM_TYPES`) and the handler stays global.
+> `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`
+>
+> **And the route has four inputs the section did not mention.** `name`, `ids`, `userId` and
+> `mediaType` are query parameters as well as body properties, the query wins, and `?name=` with no
+> body at all creates a playlist — so the route declares all four and merges them **after** the body
+> binds, which is the order the reference has: a query `name` does not rescue a body that fails to
+> deserialise. A request naming no name in either source is the reference's `500` and Atrium's
+> `400` in the same bytes (behaviours §3.19), and `?mediaType=Nonsense` is dropped and recorded
+> where the body's is refused.
+>
+> **Step 5's expansion is not here yet.** §6.2's one function serves creation and addition, and it
+> arrives with the addition route at T10 — so until then a container named in `Ids` becomes an entry
+> of its own and settles the media type from itself. The `403` for a `UserId` naming another user
+> **is** here: it is `effective_user`, the same helper 005 uses, measured on this route rather than
+> inferred from the add route beside it
+> `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`.
 
 ### 6.2 Adding: expansion first, then the key
 

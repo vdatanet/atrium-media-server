@@ -239,9 +239,16 @@ def effective_user(users: UserRepository, caller: User, user_id: str | None) -> 
     one route away, and corrected here rather than only on 009's routes (009 spec section 3.7,
     AC-19) `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. Plan
     section 7 called that shape unmeasured and flagged it for the differential; it is measured
-    now, and it was empty here for a whole feature. An administrator naming nobody that exists
-    gets the problem-details `404`; **that** case is still unmeasured, and recorded in the T10
-    Done note rather than silently chosen.
+    now, and it was empty here for a whole feature.
+
+    **An administrator naming nobody that exists gets the problem-details `404`, and that case is
+    measured at last** - 007 T10's Done note left it chosen-but-unmeasured, and 009 T8 asked it on
+    the one route where the parameter creates something: the reference answers **`200`** and builds
+    a playlist owned by a user that does not exist
+    `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`. Nothing can then
+    reach that playlist - every rule in 009 spec section 3.7 compares against an owner or a share -
+    so the `404` stands as a divergence with an argument rather than as a guess, and behaviours
+    section 3.19 carries it.
     """
     if user_id is None or user_id == caller.id:
         return caller
