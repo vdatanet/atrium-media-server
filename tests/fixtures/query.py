@@ -17,9 +17,10 @@ media world instead, because only a real scan can say a row and a file agree.
 
 **Built through the repositories** rather than by inserting rows, which is what keeps the world
 honest against schema drift: a shape the write path will not produce cannot be quietly relied on
-by a test. The one exception is `item_user_data`, which has no repository until 007 owns it - the
-rows are written through the ORM model, and the reason is named at `_seed_user_data` rather than
-left to be inferred.
+by a test. The exceptions are `item_user_data`, which had no repository until 007 owned it, and
+the three playlist tables, whose repository is 009 T7 and does not exist yet - those rows are
+written through the ORM models, and the reason is named at `_seed_user_data` and
+`_seed_playlists` rather than left to be inferred.
 
 **Deterministic** (Principle VII). Every identifier is derived by `library/identity`, every date
 is a constant, and nothing calls a clock: two builds of this world are byte-identical, which is
@@ -127,6 +128,16 @@ SHORT_RUNTIME_TICKS = 215 * 10_000_000
 #: position over runtime, and a world with positions and no runtimes could never emit one.
 RUNTIME_TICKS = 36_000_000_000
 
+#: The five playlists, by identifier. **Minted rather than derived** - a playlist is the one item
+#: a rescan cannot rebuild (009 plan section 1), so `library/identity` has no rule to derive one
+#: with and a fixture cannot call `new_id()` without giving up Principle VII. Fixed constants are
+#: what a deterministic world can hold, in the same spirit as the library and user ids above.
+PRIVATE_PLAYLIST_ID = "90" * 16
+PUBLIC_PLAYLIST_ID = "91" * 16
+SHARED_PLAYLIST_ID = "92" * 16
+READ_ONLY_PLAYLIST_ID = "93" * 16
+CROSS_LIBRARY_PLAYLIST_ID = "94" * 16
+
 #: The tags of the images this world carries, named so a DTO test asserts values rather than
 #: presence. The first film keeps its original single Primary (tag `"d" * 32`, from T3).
 SERIES_PRIMARY_TAG = "e" * 32
@@ -193,6 +204,36 @@ class SeriesHandle:
 
     next_up: str
     """The episode NextUp must return: the lowest unwatched one after `watched`."""
+
+
+@dataclass(frozen=True, slots=True)
+class PlaylistHandle:
+    """One seeded playlist, and everything a permission or ordering test needs to reach into it."""
+
+    id: str
+    name: str
+    owner_id: str
+    is_public: bool
+    media_type: str
+    entries: tuple[str, ...]
+    """Every entry, in ordinal order - the *stored* order, which is the owner's view."""
+
+    shares: tuple[tuple[str, bool], ...] = ()
+    """`(user_id, can_edit)`, in insertion order."""
+
+    beyond_restricted: tuple[str, ...] = ()
+    """The entries `restricted` cannot reach, because they are in a library that user cannot open.
+
+    A claim, not a convenience: `test_query_fixture` asserts it against `ItemQueries` rather than
+    against this tuple, so a playlist that quietly held only reachable items fails here instead of
+    making 009 AC-17 pass for the wrong reason.
+    """
+
+    @property
+    def restricted_sees(self) -> tuple[str, ...]:
+        """The order `restricted` is shown, which is the list a `Move` by that user indexes."""
+        hidden = set(self.beyond_restricted)
+        return tuple(one for one in self.entries if one not in hidden)
 
 
 @dataclass(frozen=True, slots=True)
@@ -264,6 +305,35 @@ class QueryWorld:
     resumable: tuple[str, ...]
     """Items with a mid-playback position for `everyone`."""
 
+    playlists: tuple[PlaylistHandle, ...]
+    """The five, in the order the five fields below name them. Every one is owned by `everyone`,
+    so `restricted` is the second user every visibility assertion needs (009 tasks T6)."""
+
+    private_playlist: PlaylistHandle
+    """Five films, no share, not public: what `restricted` must not see, and the five-entry order
+    009 AC-9's `B C D A E` is asserted on."""
+
+    public_playlist: PlaylistHandle
+    """`IsPublic`, so readable by everybody - spec section 3.7's fourth class, which no other
+    playlist here can express. **It holds the three tracks**, so its stored `media_type` is
+    `Audio` where every other one is `Video`: `mediaTypes=` is answered from the row for a
+    playlist (009 plan section 4.2) and a world of one media type could not tell that from a map."""
+
+    shared_playlist: PlaylistHandle
+    """Shared with `restricted`, `can_edit` **true**: AC-14's first half, and the reorder an
+    administrator who does not own it must still be refused (AC-13)."""
+
+    read_only_playlist: PlaylistHandle
+    """Shared with `restricted`, `can_edit` **false**: AC-14's second half. Measured on the
+    reference before it was seeded - the create body stores such a share, and that user reads the
+    playlist and is refused the move
+    `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-08-31]`."""
+
+    cross_library_playlist: PlaylistHandle
+    """Films and tracks interleaved, shared with `restricted` with `can_edit`: AC-17's whole case,
+    both halves. The share is what makes the second half reachable at all - a reader who cannot
+    edit cannot demonstrate that a `Move` indexes the list they were given."""
+
 
 # ------------------------------------------------------------------------------------------
 # The builder
@@ -314,6 +384,7 @@ def build_query_world(session: OrmSession) -> QueryWorld:
     resumable = (corpus[1], corpus[2])
     _seed_user_data(session, everyone, series, favourites, resumable)
     _seed_inspections(session, items, (movies, shows, music))
+    playlists = _seed_playlists(session, items, everyone, restricted, corpus, tracks)
 
     session.flush()
     return QueryWorld(
@@ -338,6 +409,12 @@ def build_query_world(session: OrmSession) -> QueryWorld:
         guest_track=guest_track,
         favourites=favourites,
         resumable=resumable,
+        playlists=playlists,
+        private_playlist=playlists[0],
+        public_playlist=playlists[1],
+        shared_playlist=playlists[2],
+        read_only_playlist=playlists[3],
+        cross_library_playlist=playlists[4],
     )
 
 
@@ -1032,6 +1109,127 @@ def _seed_user_data(
             )
         )
     session.flush()
+
+
+# ------------------------------------------------------------------------------------------
+# Playlists (009 T5)
+# ------------------------------------------------------------------------------------------
+
+
+def _seed_playlists(
+    session: OrmSession,
+    items: ItemRepository,
+    everyone: User,
+    restricted: User,
+    corpus: tuple[str, ...],
+    tracks: tuple[str, ...],
+) -> tuple[PlaylistHandle, ...]:
+    """Five playlists, and the fifth exists because the task list asked for four.
+
+    **Every one is owned by `everyone`**, which is what makes `restricted` the second user 009
+    T6's visibility assertions need: a playlist owned by the querying user would pass a leaking
+    predicate and a correct one alike.
+
+    **The item row goes through `ItemRepository` and the three playlist tables do not**, for the
+    reason `_seed_user_data` gives: `PlaylistRepository` is 009 T7 and does not exist yet, and
+    inventing a write path this task does not own is worse than writing the rows the schema
+    defines. When T7 lands, this function is one of its callers to reconsider.
+
+    **The five are the four T5 lists plus a public one**, and the addition is measured rather than
+    invented: spec section 3.7's fourth class is `IsPublic`, T6's own verification wants "the
+    public one present for both", and the reference creates one from the same body that creates
+    the rest `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-08-31]`.
+    """
+    everything = (
+        PlaylistHandle(
+            id=PRIVATE_PLAYLIST_ID,
+            name="Films to rewatch",
+            owner_id=everyone.id,
+            is_public=False,
+            media_type="Video",
+            entries=corpus[0:5],
+        ),
+        PlaylistHandle(
+            id=PUBLIC_PLAYLIST_ID,
+            name="Everybody's mixtape",
+            owner_id=everyone.id,
+            is_public=True,
+            # The one `Audio` row. Measured: a playlist's media type is fixed at creation from the
+            # first resolvable id and stored per row, so a world whose playlists were all `Video`
+            # could not tell `mediaTypes=` answered from the row from `mediaTypes=` answered from
+            # the type `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11,
+            # 2026-08-31]`.
+            media_type="Audio",
+            entries=tracks,
+        ),
+        PlaylistHandle(
+            id=SHARED_PLAYLIST_ID,
+            name="Shared and editable",
+            owner_id=everyone.id,
+            is_public=False,
+            media_type="Video",
+            entries=corpus[5:8],
+            shares=((restricted.id, True),),
+        ),
+        PlaylistHandle(
+            id=READ_ONLY_PLAYLIST_ID,
+            name="Shared and read only",
+            owner_id=everyone.id,
+            is_public=False,
+            media_type="Video",
+            entries=corpus[8:11],
+            shares=((restricted.id, False),),
+        ),
+        PlaylistHandle(
+            id=CROSS_LIBRARY_PLAYLIST_ID,
+            name="Across two libraries",
+            owner_id=everyone.id,
+            is_public=False,
+            # A film first, so `Video`: measured, the value follows the **first resolvable id**
+            # and not the majority - the same five ids led by a track answer `Audio`
+            # `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-08-31]`.
+            media_type="Video",
+            # **Interleaved, not appended.** A hidden entry at the end makes the two move
+            # arithmetics of 009 section 3.5 agree; one in the middle is what tells them apart, and
+            # AC-17's second half is the only thing that exercises the difference.
+            entries=(corpus[11], tracks[0], corpus[12], corpus[13], tracks[1]),
+            shares=((restricted.id, True),),
+            beyond_restricted=(tracks[0], tracks[1]),
+        ),
+    )
+    for offset, handle in enumerate(everything):
+        _add(
+            items,
+            _with_sort_name(
+                Item(
+                    id=handle.id,
+                    type=ItemType.PLAYLIST,
+                    name=handle.name,
+                    # No library, and the schema states the correspondence as a constraint: a
+                    # playlist belongs to a user, not to a folder (009 plan section 4.1).
+                    library_id=None,
+                    date_created=_created(500 + offset),
+                )
+            ),
+        )
+        session.add(
+            models.Playlist(
+                item_id=handle.id,
+                owner_user_id=handle.owner_id,
+                is_public=handle.is_public,
+                media_type=handle.media_type,
+            )
+        )
+        for ordinal, item_key in enumerate(handle.entries):
+            session.add(
+                models.PlaylistEntry(playlist_id=handle.id, item_key=item_key, ordinal=ordinal)
+            )
+        for user_id, can_edit in handle.shares:
+            session.add(
+                models.PlaylistShare(playlist_id=handle.id, user_id=user_id, can_edit=can_edit)
+            )
+    session.flush()
+    return everything
 
 
 # ------------------------------------------------------------------------------------------

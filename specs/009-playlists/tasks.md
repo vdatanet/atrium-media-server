@@ -310,15 +310,72 @@ one migration; it is one migration, four maps and a clause.
 
 ## T5 — The fixture world gets playlists
 
-- [ ] **Changes:** `tests/fixtures/query.py` seeds four: one owned by `everyone`, one shared with
+- [x] **Changes:** `tests/fixtures/query.py` seeds four: one owned by `everyone`, one shared with
   `restricted` **with** `can_edit`, one shared **without** it, and one holding items from two
   libraries — which is AC-17's whole case. The users this needs already exist (`everyone`,
-  `restricted`, `nobody`), which is the correction the plan gate made to plan §8.
+  `restricted`, `nobody`), which is the correction the plan gate made to plan §8. **Five were
+  seeded**, and the fifth is the public one this line does not name — its Done note says why.
 - **Depends on:** T4
 - **Verified by:** `uv run pytest tests/unit -q` — the world builds, and a test asserts the
   two-library playlist really does hold an item `restricted` cannot see, because a fixture that
   quietly holds two visible items would make T6 and T9 pass for the wrong reason.
 - **Spec reference:** §3.7; plan §8
+
+> **Done (2026-08-31).** *Four playlists cannot hold five classes, and the missing one is the class
+> T6's own verification asks for.* Spec §3.7's table has four ways to reach a playlist and the four
+> this task lists cover three: an owner, a shared editor, a shared reader. **`IsPublic` has no
+> row** — and T6's verification says *"the public one is present for both"*, which nothing in the
+> world could have answered. The world seeds five. The public one holds the three tracks rather
+> than films, so its stored `media_type` is `Audio` where the other four are `Video`: the
+> `mediaTypes=` gap T4 handed T6 is a difference between a per-row value and a type-level map, and
+> a world whose playlists were all one media type could not tell the two apart.
+>
+> *And the two-library playlist has to be **shared**, or AC-17 has no reader.* The task lists it
+> beside the shared ones as though it were a fourth independent world. It is not: `restricted` is
+> the only user who cannot reach every library, so a two-library playlist that is neither theirs,
+> nor shared with them, nor public is a playlist they get `404` for — the omission has nobody to
+> omit anything from. AC-17's second half is stricter still: *"that reader's `Move` indexes the
+> list they were given"* needs that reader to be **allowed to move**, which is a share with
+> `can_edit` and nothing else. It is the shape the reference itself produces
+> `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-08-31]`, and its hidden entries
+> are **interleaved**: with the unreachable ones appended, both readings of §3.5's arithmetic give
+> the same answer and AC-17's second half would pass against either.
+>
+> *The probe that checked those two also answered a third question and found a `403` nobody had
+> measured.* A share with `CanEdit: false` **is** stored by the create body and **is** a reader who
+> is refused the move — so AC-14's second half has a world — and the refusal is `403` with **no
+> content type and no body**. That is the *body-less* shape, from a permission test the playlist
+> controller makes **itself**, which contradicts behaviours §1.11's rule as T2 wrote it two commits
+> ago: the split is not *controller versus policy* but *thrown versus returned* — an exception is
+> rendered by the error middleware and carries the 25 bytes, a `Forbid()` result carries nothing,
+> and both happen inside the same action
+> `[source: Jellyfin.Api/Controllers/PlaylistsController.cs:421-427 @ v10.11.11]`
+> `[source: Jellyfin.Api/Helpers/RequestHelpers.cs:77-81 @ v10.11.11]`. **T10, T11 and T12 are the
+> tasks that change:** every `may_edit` refusal they ship is the body-less shape, so they need
+> T13's second exception class rather than `ForbiddenError`, whose body is now the sentence. Spec
+> §3.7, AC-13, AC-14 and behaviours §1.11 say so; a note is on each of those tasks.
+>
+> *Two assertions elsewhere in the suite went red the moment the world held a playlist, and both
+> are the leak rather than the fixture.* `test_the_restricted_user_sees_only_the_permitted_library`
+> failed because a playlist's `library_id` is null and `_library_permitted` exempts a null — this
+> list's gate finding 2, arriving one task earlier than expected and as a **failing test** rather
+> than as a paragraph. It is not excluded: the rows are excluded from that assertion and a new one
+> beside it states the leak out loud — every playlist reaches every user — for T6 to invert.
+> `test_media_types_reads_the_measured_table` failed the same way for `mediaTypes=Audio`, which now
+> returns all five playlists because the filter inverts the type map; that test now asserts the gap
+> with its measurement beside it, so T6 has to come back to it rather than discover it.
+>
+> *What this world still cannot express, and it is one thing:* **there is no administrator in it.**
+> AC-13, AC-16 and AC-18 all need an administrator who does not own the playlist, and adding a
+> fourth user was tried and reverted — `tests/unit/test_items_route.py` already mints one at
+> `"d" * 32`, so a world that claimed that id fails every test in that file on a unique
+> constraint. Later tasks build their own, as that file does; the fixture must not claim `"d" * 32`.
+>
+> *Two smaller things.* The playlist rows go in through `ItemRepository` and the three playlist
+> tables through the ORM, which is `_seed_user_data`'s exception and for its reason: T7 owns
+> `PlaylistRepository` and does not exist yet. And the identifiers are fixed constants, not
+> `new_id()` — a minted id in a deterministic world (Principle VII) is a constant or it is a golden
+> nobody can check in.
 
 ## T6 — The clause without which every playlist is public
 
@@ -387,7 +444,10 @@ one migration; it is one migration, four maps and a clause.
 - [ ] **Changes:** the add and remove routes. Add resolves each id, expands a container to its
   playable descendants in the container's own order through the existing children query, and
   appends; unknown ids are skipped unconditionally here, unlike creation. Remove takes `entryIds`
-  and answers `204` for an id that is not there.
+  and answers `204` for an id that is not there. **The refusal for a caller who may not edit is
+  `403` with no body and no content type** (added at T5): it is the body-less shape, not
+  `ForbiddenError`'s sentence, so it uses T13's second exception class
+  `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-08-31]`.
 - **Depends on:** T9
 - **Verified by:** `uv run pytest tests/conformance/test_playlists.py -q` — an album's tracks in the
   album's own order with the album itself absent, a series' episodes, a collection's films;
@@ -399,7 +459,10 @@ one migration; it is one migration, four maps and a clause.
 - [ ] **Changes:** the move route over T1's `moved`. `204` for a move, for a no-op, and for an entry
   id that is not in the playlist with an in-range index; `400` for an index past the visible length
   or below zero — behaviours §3.15 — **and the index is judged before the entry is looked up**, so
-  an absent entry with an out-of-range index is the refusal.
+  an absent entry with an out-of-range index is the refusal. **And the caller who may not edit is
+  `403` with no body and no content type** (added at T5) — measured on a shared reader without
+  `can_edit` and on a public playlist's reader, both of which the world now holds
+  `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-08-31]`.
 - **Depends on:** T10
 - **Verified by:** `uv run pytest tests/conformance/test_playlists.py -q` — the five-entry
   `0 → 3` giving `B C D A E` over HTTP with entry ids unchanged, and each boundary row answering
@@ -416,7 +479,10 @@ one migration; it is one migration, four maps and a clause.
 - **Depends on:** T11
 - **Verified by:** `uv run pytest tests/conformance/test_playlists.py -q` — deletion by the owner
   and by an administrator who is not; `401` **with its body** for a shared reader; and the media
-  refusal with an **on-disk assertion** that the file is still there afterwards.
+  refusal with an **on-disk assertion** that the file is still there afterwards. The administrator
+  is built by the test: **the fixture world has none** (T5), the way
+  `tests/unit/test_items_route.py` already does it, and AC-13's editing half is the body-less `403`
+  that task measured.
 - **Spec reference:** §3.6, AC-12, AC-13
 
 ## T13 — `POST /Items/{itemId}`: the rename, and the two things it refuses
@@ -458,9 +524,11 @@ one migration; it is one migration, four maps and a clause.
 - [ ] The three divergences ship as specified: the named reader (§3.16), the unreachable entry
       (§3.17) and the two refusals `Move` does not make (§3.15) — each with a test that fails if the
       reference's behaviour is reproduced instead.
-- [ ] `ForbiddenError`'s body is the reference's **controller** shape, on 009's routes **and** on
-  005's (AC-19) — and the rename's `403` is the reference's **policy** shape, which is a
-  different set of bytes and not this class (AC-18, T2's finding).
+- [ ] `ForbiddenError`'s body is the reference's 25-byte shape, on 009's routes **and** on 005's
+  (AC-19) — and every **`may_edit`** refusal is the body-less one, which is a different set of
+  bytes and not this class: the rename (AC-18, T2), and `Move`, `Add` and `Remove` for a caller who
+  may read the playlist and not change it (AC-13, AC-14, T5). The line between the two shapes is
+  *thrown versus returned*, not *controller versus policy* (T5).
 - [ ] Anything learned during implementation is back in `spec.md` and `plan.md`, in the same change.
 - [ ] `spec.md`, `plan.md` and `tasks.md` are all `Implemented`.
 
