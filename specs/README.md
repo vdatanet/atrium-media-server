@@ -120,7 +120,7 @@ say how it will be proven is not finished.
 | [006](006-images/) | Images | **Implemented** | **Implemented** | **Implemented** |
 | [007](007-user-data-and-playstate/) | User data and playstate | **Implemented** | **Implemented** | **Implemented** |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Implemented** | **Implemented** | **Implemented** |
-| [009](009-playlists/) | Playlists | **Accepted** | **Accepted** | Draft |
+| [009](009-playlists/) | Playlists | **Accepted** | **Accepted** | **Accepted** |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
@@ -147,11 +147,15 @@ written down rather than remembered. **011's spec was accepted on the same day a
 own measurement gate, its plan and task list on 2026-08-30, and the twelve tasks ran from
 2026-08-30 to 2026-08-31; **012 was opened on 2026-08-29 and accepted at its own gate the same
 day**. The lowest-numbered feature that is not implemented is
-**009**, and with its spec and plan both accepted on 2026-08-31 the next gate is its task list;
-both those lists are inputs to it. The plan's own gate found one thing, which is the rate this
-project expects: §8 budgeted a fixture task for a second non-administrator restricted to one
-library, and `tests/fixtures/query.py` has seeded exactly that since 005 — five criteria called
-unreachable, none of which were.
+**009**, and its spec, plan and fourteen tasks were all accepted on 2026-08-31, so what is next is
+**T1** — the first unticked task of the lowest-numbered feature, which is where this table always
+points. Both those lists were inputs to the plan. Each of 009's own two gates found something, which
+is the rate this project expects: the plan gate found §8 budgeting a fixture task for a second
+non-administrator restricted to one library, which `tests/fixtures/query.py` has seeded since 005 —
+five criteria called unreachable, none of which were. The tasks gate found the plan pricing *"a
+playlist is a row in `items`"* at one migration when it is one migration, three maps and a clause —
+and the clause is the one without which `/Items?includeItemTypes=Playlist` answers every user's
+private playlists to everybody.
 
 **008's own closing task found the class it exists to catch.** The acceptance map is where a
 criterion and the test that proves it are put on one line, and doing that showed two criteria whose

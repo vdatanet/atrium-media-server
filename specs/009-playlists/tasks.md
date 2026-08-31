@@ -1,9 +1,10 @@
 ---
 feature: 009-playlists
 title: Playlists — tasks
-status: Draft
+status: Accepted
 created: 2026-08-31
 updated: 2026-08-31
+accepted: 2026-08-31
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
