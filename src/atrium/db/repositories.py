@@ -26,9 +26,9 @@ from __future__ import annotations
 import hashlib
 import secrets
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import CursorResult, delete, func, select, update
 from sqlalchemy.orm import Session as OrmSession
@@ -55,6 +55,7 @@ from atrium.domain.media import (
     VideoRangeType,
     renumber,
 )
+from atrium.domain.playlists import Playlist, Share, may_read, moved
 from atrium.domain.playstate import UserItemData
 from atrium.domain.session import AccessToken, IssuedToken, Session
 from atrium.domain.sorting import sort_name
@@ -64,6 +65,12 @@ from atrium.metadata.artwork import ImageAssociation, ImageKind, SourceKind
 from atrium.metadata.byname import fold_for_search, genre_type, identity_of, person_type_of
 from atrium.metadata.merge import MetadataChanges
 from atrium.metadata.model import Field, MetadataField, PersonCredit, PersonKind
+
+if TYPE_CHECKING:
+    # Type-only: `db/item_queries.py` imports this module for `inspection_of`, so importing it back
+    # at runtime would be a cycle. `PlaylistRepository` is handed one rather than building one, and
+    # the annotation is all that is needed to say which one.
+    from atrium.db.item_queries import ItemQueryRepository
 
 #: Sixteen bytes, rendered as 32 lowercase hex characters - the shape the reference's `AccessToken`
 #: has. `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`, spec section 3.3.
@@ -1204,6 +1211,267 @@ class UserDataRepository:
         row.playback_position_ticks = data.playback_position_ticks
         row.last_played_date = data.last_played_date
         self._session.flush()
+
+
+# --------------------------------------------------------------------------------------------
+# Playlists (009)
+# --------------------------------------------------------------------------------------------
+
+
+class PlaylistRepository:
+    """The only way a playlist is read or written, and the reason there is only one.
+
+    **Two reads and six writes.** Both reads take a `User`, which is 009 plan section 9's second
+    risk written as a signature: an entries query that forgot the reader is how section 3.17's
+    divergence stops applying on one route, silently, in a change that looks like a refactor.
+    `tests/unit/test_playlist_repository.py` asserts the classification by reflection, so a ninth
+    method has to declare which of the two it is before the suite goes green again.
+
+    **The stored order never leaves this class.** `entries` answers what its caller may see, and
+    the move takes its arithmetic *in* rather than handing the full order out (`reorder`): a
+    public "the whole order, unfiltered" would be a read with nothing to filter it, next to a
+    read that filters, which is the shape the risk above describes. It is also the only way the
+    read and the write that depends on it are one transaction.
+
+    **`media_type` is read, never re-derived** (009 plan section 4.2). The column is filled at
+    creation and never revised, `ItemQueries._hydrate` reads the same column for the `/Items`
+    path, and a repository that recomputed the value from the entries would make one playlist
+    report two media types depending on which route asked.
+    """
+
+    def __init__(self, session: OrmSession, queries: ItemQueryRepository) -> None:
+        self._session = session
+        self._queries = queries
+
+    # -- reads -------------------------------------------------------------------------------
+
+    def by_id(self, playlist_id: str, user: User) -> Playlist | None:
+        """The playlist's permission facts, or `None` if this caller may not learn it exists.
+
+        **The `User` is an existence filter and not the decision.** Deciding is
+        `domain/playlists.py`'s, over the object this returns; what happens here is the answer
+        009 spec section 3.3 gives to a caller who may not read the playlist - `404` rather than
+        `403`, so the id discloses nothing.
+
+        **And an administrator is handed the row they may not read**, which looks like a hole and
+        is the one thing that makes T12 writable: deletion is the single operation an
+        administrator may perform on a playlist they neither own nor are shared
+        `[source: MediaBrowser.Controller/Playlists/Playlist.cs:261-264 @ v10.11.11]`, so a door
+        that filtered by `may_read` would answer `404` to the one caller spec section 3.6 says
+        must succeed. Every read route still applies `may_read` to what comes back - an
+        administrator reading somebody's private playlist is `404` (spec section 3.7's last row),
+        and it is that call, not this one, that says so.
+        """
+        row = self._session.get(models.Playlist, playlist_id)
+        item = self._session.get(models.Item, playlist_id)
+        if row is None or item is None or item.removed_at is not None:
+            return None
+        playlist = Playlist(
+            id=row.item_id,
+            name=item.name,
+            owner_user_id=row.owner_user_id,
+            is_public=row.is_public,
+            media_type=row.media_type,
+            shares=self._shares(playlist_id),
+        )
+        if may_read(playlist, user) or user.is_administrator:
+            return playlist
+        return None
+
+    def entries(self, playlist_id: str, user: User) -> list[str]:
+        """The item identifiers this reader may see, in the playlist's order.
+
+        Two exclusions, and they are one call: an entry whose item is missing or soft-deleted, and
+        an entry in a library this reader may not open. The first is the reference's own behaviour
+        `[source: MediaBrowser.Controller/Entities/Folder.cs:1637-1643 @ v10.11.11]`; the second
+        is 009's divergence (behaviours section 3.17), and both fall out of asking
+        `ItemQueryRepository` the same question `/Items` asks rather than writing a second
+        predicate here.
+
+        Constant in statements: the order, then one question about the whole page of keys.
+        """
+        stored = self._order(playlist_id)
+        visible = self._queries.visible_ids(stored, user)
+        return [item_key for item_key in stored if item_key in visible]
+
+    # -- writes ------------------------------------------------------------------------------
+
+    def create(self, playlist: Playlist, item_keys: Sequence[str]) -> Playlist:
+        """The `items` row, the three playlist rows, and the entries, as one unit.
+
+        The item row is what makes a playlist answer `/Items`, `UserData` and favourites (plan
+        section 10's rejected alternative), and it carries **no library**: `library_id IS NULL` is
+        half of `ck_items_by_name_has_no_library`, widened by migration 0008 for exactly this row.
+
+        `date_created` is taken here rather than passed in, which is what makes it the one thing
+        about a playlist a caller cannot fake - and is why `tests/fixtures/query.py` still writes
+        its five worlds itself: a deterministic world needs fixed dates (Principle VII), and a
+        fixture built by the code under test cannot fail it.
+        """
+        ItemRepository(self._session).add(self._item_row(playlist))
+        self._session.add(
+            models.Playlist(
+                item_id=playlist.id,
+                owner_user_id=playlist.owner_user_id,
+                is_public=playlist.is_public,
+                media_type=playlist.media_type,
+            )
+        )
+        for share in playlist.shares:
+            self._session.add(
+                models.PlaylistShare(
+                    playlist_id=playlist.id, user_id=share.user_id, can_edit=share.can_edit
+                )
+            )
+        self._session.flush()
+        self.append(playlist.id, item_keys)
+        return playlist
+
+    def append(self, playlist_id: str, item_keys: Sequence[str]) -> int:
+        """Add what is not there already, at the end, and answer how many that was.
+
+        **The key is not the whole of de-duplication, and the plan said it was.** The primary key
+        `(playlist_id, item_key)` does make a duplicate impossible - and an insert that conflicts
+        and is skipped leaves the ordinal it would have occupied unused, so a playlist that
+        de-duplicated by conflict alone develops holes in a column three other operations assume
+        is contiguous. The batch is therefore reduced *before* the ordinals are handed out - which
+        is also the only way to answer AC-5's "how many were added" without a second read - and
+        the constraint stays as the backstop that turns a concurrent double-add into a loud
+        failure instead of a quiet duplicate.
+
+        **First occurrence wins**, within the batch and against what is already stored, which is
+        what the reference does when its own de-duplication fires
+        `[probe: tools/probe_playlist_writes.py, Jellyfin 10.11.11, 2026-08-31]`.
+        """
+        stored = self._order(playlist_id)
+        already = set(stored)
+        wanted: list[str] = []
+        for item_key in item_keys:
+            if item_key in already:
+                continue
+            already.add(item_key)
+            wanted.append(item_key)
+        for offset, item_key in enumerate(wanted):
+            self._session.add(
+                models.PlaylistEntry(
+                    playlist_id=playlist_id, item_key=item_key, ordinal=len(stored) + offset
+                )
+            )
+        self._session.flush()
+        return len(wanted)
+
+    def remove(self, playlist_id: str, item_keys: Sequence[str]) -> None:
+        """Drop the named entries and close the gaps they leave.
+
+        An identifier that is not in the playlist is not an error (spec section 3.5): the delete
+        matches nothing and the renumbering is a no-op. The two statements are one transaction
+        because a reader between them would see a hole in the order and page over it.
+        """
+        if not item_keys:
+            return
+        self._session.execute(
+            delete(models.PlaylistEntry)
+            .where(models.PlaylistEntry.playlist_id == playlist_id)
+            .where(models.PlaylistEntry.item_key.in_(list(item_keys)))
+        )
+        self._renumber(playlist_id, self._order(playlist_id))
+
+    def reorder(self, playlist_id: str, entry: str, new_index: int, visible: Sequence[str]) -> None:
+        """Move one entry to `new_index` of the list this caller was given.
+
+        **The arithmetic is `domain.playlists.moved` and it happens here**, where plan section 5
+        had the caller do it and pass the resulting order in. The caller cannot: computing it
+        needs the *stored* order, which is the one thing no route may hold (see the class
+        docstring), and reading it in one request and writing it in the next is the read-then-write
+        the transaction below exists to prevent.
+
+        Raises `MoveIndexOutOfRangeError` for an index below zero or past the caller's own entry
+        count - 009's third divergence, which the route turns into `400` (behaviours section 3.15)
+        - and a plain `ValueError` when `visible` is not a sub-sequence of the stored order, which
+        is a caller bug and not a client's.
+        """
+        self._renumber(
+            playlist_id, list(moved(self._order(playlist_id), entry, new_index, visible))
+        )
+
+    def rename(self, playlist_id: str, name: str) -> None:
+        """The one property `POST /Items/{itemId}` may change on a playlist (spec section 3.8).
+
+        **Three columns, not one.** `name`, `sort_name` and `name_folded` are three derivations of
+        one string, and writing only the first leaves a playlist that sorts under its old name and
+        cannot be found by `searchTerm` or `nameStartsWith` at all - the failure 005 T6 found in
+        `ItemRepository.add`, which is one row of the same table. `ItemRepository.update` is not
+        the door for this: it writes neither name once a refresh has touched the item, and it
+        rewrites the sources a playlist does not have.
+        """
+        row = self._session.get(models.Item, playlist_id)
+        if row is None:
+            raise LookupError(f"no playlist {playlist_id}")
+        row.name = name
+        row.sort_name = sort_name(_item(row, []))
+        row.name_folded = fold_for_search(name)
+        self._session.flush()
+
+    def delete(self, playlist_id: str) -> None:
+        """The item row goes, and the database takes the rest.
+
+        A playlist is the one item that is **not** soft-deleted (plan section 4.5): its identity is
+        minted rather than derived, so there is no returning file for a kept row to belong to. The
+        entries and the shares follow through `ON DELETE CASCADE`, which is enforced because
+        `db/engine.py` turns the pragma on for every connection - a fact migration 0008 had to
+        learn the hard way, in the other direction.
+        """
+        self._session.execute(delete(models.Item).where(models.Item.id == playlist_id))
+        self._session.flush()
+
+    # -- internals ---------------------------------------------------------------------------
+
+    def _order(self, playlist_id: str) -> list[str]:
+        """The stored order, whole and unfiltered. Private, and the class docstring says why.
+
+        Ordered by `(ordinal, item_key)` rather than by `ordinal` alone: the index is deliberately
+        not unique (plan section 4.3), so the tie-break is what keeps two rows that briefly share
+        an ordinal from ordering themselves differently on two reads (Principle VII).
+        """
+        return list(
+            self._session.execute(
+                select(models.PlaylistEntry.item_key)
+                .where(models.PlaylistEntry.playlist_id == playlist_id)
+                .order_by(models.PlaylistEntry.ordinal, models.PlaylistEntry.item_key)
+            ).scalars()
+        )
+
+    def _renumber(self, playlist_id: str, order: Sequence[str]) -> None:
+        """Rewrite `ordinal` contiguously from zero, in the order given."""
+        rows = {
+            row.item_key: row
+            for row in self._session.execute(
+                select(models.PlaylistEntry).where(models.PlaylistEntry.playlist_id == playlist_id)
+            ).scalars()
+        }
+        for ordinal, item_key in enumerate(order):
+            rows[item_key].ordinal = ordinal
+        self._session.flush()
+
+    def _shares(self, playlist_id: str) -> tuple[Share, ...]:
+        return tuple(
+            Share(user_id=row.user_id, can_edit=row.can_edit)
+            for row in self._session.execute(
+                select(models.PlaylistShare)
+                .where(models.PlaylistShare.playlist_id == playlist_id)
+                .order_by(models.PlaylistShare.user_id)
+            ).scalars()
+        )
+
+    def _item_row(self, playlist: Playlist) -> Item:
+        item = Item(
+            id=playlist.id,
+            type=ItemType.PLAYLIST,
+            name=playlist.name,
+            library_id=None,
+            date_created=utc_now(),
+        )
+        return replace(item, sort_name=sort_name(item))
 
 
 # --------------------------------------------------------------------------------------------

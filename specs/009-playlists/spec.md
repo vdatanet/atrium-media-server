@@ -4,7 +4,7 @@ title: Playlists
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-31
-amended: 2026-08-31 at the plan gate — §3.7 and a new AC-19 state the *bytes* of the refusal a caller gets for naming another user, which the spec gate had measured and recorded only as a status. The reference answers the 25-byte `text/plain` body every controller-level refusal carries; this server answered an empty `403` for that whole class, on the argument that it is decided where the empty `401` is, with a `⚠️` in the code saying the shape was unmeasured because no non-administrator account existed to produce one. The visibility probe made one. It is a wire difference on a route 005 already ships, so the correction is taken where the refusal is decided rather than on 009's own two routes — decided by the user at the plan gate; and 2026-08-31 by T1 — §3.5 stated the move's arithmetic for a caller who sees the whole playlist and left the other caller to §3.7. It now says both: the index is judged against the list that reader was given and the entry lands at `newIndex` **of it**, where the reference is off by one on every downward move and will reorder an entry that reader was never shown. Neither difference is reachable against a reference server — what it hides is hidden by a parental-rating check — so both belong to §3.7's divergence, and AC-17 gains the clause. Plus the provenance: all thirty (source, `newIndex`) pairs are measured where one was; and 2026-08-31 by T2 — a `403` is **two** shapes and §3.7 had described one. The content type was never measured on either: the probe cited for both printed forty bytes of body and no headers, which cannot separate an empty body from a body-less refusal. Measured, the controller's refusal is `text/plain` with no `charset` and §3.8's elevated-controller refusal carries no content type and no body at all — so §3.7 and §3.8 were never in conflict, AC-18 and AC-19 assert different bytes on purpose, and only the first shape is the one the shared handler answers. Plus two raise sites that shared that handler and are neither measurement: a live token whose account was disabled (002 OQ-5, still open) and one user reading another, which the reference does not refuse at all and 2026-08-31 by T3 — §3.2 said `MediaType` is *inferred at creation* and left open whether it then follows the contents, which is the difference between a value a row carries and a value anybody derives. Measured, it is fixed at creation and never revised: a playlist created empty answers `Audio` after a film is added, one created from a film answers `Video` after a track is, and the body's own `MediaType` outranks both. §3.2 says so, and gains a third refusal — an unrecognised `MediaType` is a `400` in the validation shape, not a dropped token. §4 gains the consequence nobody had asked about: `mediaTypes=` filters playlists by the stored value, so the parameter is the one place a per-row media type meets a listing that answers it from the kind, and that is left undecided rather than improvised and 2026-08-31 by T5 — §3.7's table said which callers may edit and never what a refusal to edit looks like, and AC-13 and AC-14 said "refused" and "may not" with no status at all. Measured, every "no" in that column is `403` with **no body and no content type** — the body-less shape, on a permission test the playlist controller makes itself, which means behaviours §1.11's split between a controller and a policy is really the split between a refusal *thrown* and a refusal *returned*, and both happen in the same action. Plus the two classes nobody had produced: a `CanEdit: false` share is stored by the create body and is a reader who is refused the move, and a public playlist's reader is refused identically
+amended: 2026-08-31 at the plan gate — §3.7 and a new AC-19 state the *bytes* of the refusal a caller gets for naming another user, which the spec gate had measured and recorded only as a status. The reference answers the 25-byte `text/plain` body every controller-level refusal carries; this server answered an empty `403` for that whole class, on the argument that it is decided where the empty `401` is, with a `⚠️` in the code saying the shape was unmeasured because no non-administrator account existed to produce one. The visibility probe made one. It is a wire difference on a route 005 already ships, so the correction is taken where the refusal is decided rather than on 009's own two routes — decided by the user at the plan gate; and 2026-08-31 by T1 — §3.5 stated the move's arithmetic for a caller who sees the whole playlist and left the other caller to §3.7. It now says both: the index is judged against the list that reader was given and the entry lands at `newIndex` **of it**, where the reference is off by one on every downward move and will reorder an entry that reader was never shown. Neither difference is reachable against a reference server — what it hides is hidden by a parental-rating check — so both belong to §3.7's divergence, and AC-17 gains the clause. Plus the provenance: all thirty (source, `newIndex`) pairs are measured where one was; and 2026-08-31 by T2 — a `403` is **two** shapes and §3.7 had described one. The content type was never measured on either: the probe cited for both printed forty bytes of body and no headers, which cannot separate an empty body from a body-less refusal. Measured, the controller's refusal is `text/plain` with no `charset` and §3.8's elevated-controller refusal carries no content type and no body at all — so §3.7 and §3.8 were never in conflict, AC-18 and AC-19 assert different bytes on purpose, and only the first shape is the one the shared handler answers. Plus two raise sites that shared that handler and are neither measurement: a live token whose account was disabled (002 OQ-5, still open) and one user reading another, which the reference does not refuse at all and 2026-08-31 by T3 — §3.2 said `MediaType` is *inferred at creation* and left open whether it then follows the contents, which is the difference between a value a row carries and a value anybody derives. Measured, it is fixed at creation and never revised: a playlist created empty answers `Audio` after a film is added, one created from a film answers `Video` after a track is, and the body's own `MediaType` outranks both. §3.2 says so, and gains a third refusal — an unrecognised `MediaType` is a `400` in the validation shape, not a dropped token. §4 gains the consequence nobody had asked about: `mediaTypes=` filters playlists by the stored value, so the parameter is the one place a per-row media type meets a listing that answers it from the kind, and that is left undecided rather than improvised and 2026-08-31 by T5 — §3.7's table said which callers may edit and never what a refusal to edit looks like, and AC-13 and AC-14 said "refused" and "may not" with no status at all. Measured, every "no" in that column is `403` with **no body and no content type** — the body-less shape, on a permission test the playlist controller makes itself, which means behaviours §1.11's split between a controller and a policy is really the split between a refusal *thrown* and a refusal *returned*, and both happen in the same action. Plus the two classes nobody had produced: a `CanEdit: false` share is stored by the create body and is a reader who is refused the move, and a public playlist's reader is refused identically and 2026-08-31 by T7 - §3.1 said a playlist cannot hold one item twice and §3.4 said de-duplication is two stages, both measured on a playlist holding one entry. Measured on playlists that already held several: the entry already there keeps its position and the first occurrence of a repeat is the one that survives - and the stage that compares against the existing entries reads an id cache that is empty until an entry has been resolved, so 6 of 8 identical requests added an item the playlist already held. The duplicate that produces is unaddressable - two rows, one `PlaylistItemId`, `Move` reordering the first and `Remove` deleting both - so §3.1, §3.4 and AC-5 now state Atrium's rule with its argument, and the feature ships a fourth divergence (behaviours §3.18)
 depends_on: [005]
 ---
 
@@ -83,10 +83,20 @@ would be a value no reference server sends, which is Principle I's first forbidd
 consequence for the plan is that an entry is addressed by the item it references, and a playlist
 therefore cannot hold one item twice.
 
+> **The reference's can, and that was measured at T7.** Its de-duplication is a lookup in the same
+> id cache this section is about, and the cache is empty until an entry has been resolved — so
+> **6 of 8 identical add requests put the same item in the playlist twice**
+> `[probe: tools/probe_playlist_writes.py, Jellyfin 10.11.11, 2026-08-31]`. What that produces is
+> exactly what this section predicts: two rows carrying **one** `PlaylistItemId`, which `Move`
+> reorders by moving the first and `Remove` deletes both of at once. Atrium never produces it
+> (§3.4, [behaviours §3.18](../../docs/compatibility/behaviours.md)), and the sentence above is
+> Atrium's rule rather than a description of the reference.
+
 > **What this costs a client.** The music client's contract asks for a `PlaylistItemId` "distinct
 > from the track id" so that it can address duplicates `[client-contract: 2026-08-29, §10]`. Half
-> of that is satisfiable and half is not: the field is there on every row, and it is not distinct,
-> because against a reference server there are no duplicates for it to address.
+> of that is satisfiable and half is not: the field is there on every row, and it is not distinct.
+> A reference server does occasionally produce a duplicate — and it is *unaddressable*, by the same
+> field, which makes the contract's ask unsatisfiable rather than merely unnecessary.
 
 ### 3.2 `POST /Playlists` — `CreatePlaylist`
 
@@ -181,7 +191,23 @@ against the existing entries, then within the incoming batch. `[source: Emby.Ser
 Measured on both paths, because they are separate code paths: creating a playlist with the same id
 twice yields one entry, and adding an id already present yields zero new entries. `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-31]`
 
-Atrium does the same, and §3.1 is why it is not a policy choice.
+**Where a repeat lands is measured too, and it is nowhere: the entry already there keeps its
+position.** Re-adding the first of three entries leaves the order untouched, and `Ids` naming A B A
+on creation creates A B — the first occurrence, not the last. A one-entry playlist cannot tell
+"dropped" from "removed and appended", which is the only shape the paragraph above was measured on.
+`[probe: tools/probe_playlist_writes.py, Jellyfin 10.11.11, 2026-08-31]`
+
+**But only the second of the two stages is reliable, and this is 009's fourth divergence.** The
+stage that compares against the *existing* entries reads a cache filled the first time an entry is
+resolved, and an entry whose cache is cold is invisible to it: **6 of 8 identical requests** added
+an item the playlist already held, on the same server, seconds apart. The stage that de-duplicates
+*within* the batch never missed. `[probe: tools/probe_playlist_writes.py, Jellyfin 10.11.11,
+2026-08-31]`
+
+**Atrium de-duplicates always**, which is a divergence only from the failing side of a coin flip:
+the argument, and why a client cannot have built on the duplicate it produces, is in
+[behaviours §3.18](../../docs/compatibility/behaviours.md). §3.1 is why de-duplication is not a
+policy choice here in the first place.
 
 **Adding a container adds its children, and every kind of container.** Measured: an album adds its
 tracks **in the album's own order**, an artist adds their tracks, a series and a season add their
@@ -469,8 +495,9 @@ the only thing whose loss is unrecoverable, and the plan has to treat them accor
    unknown id **first** and no `MediaType` answers `400`; supplying `MediaType` makes it succeed.
 4. Every item from `GET /Playlists/{id}/Items` carries a `PlaylistItemId`, and it is equal to that
    item's `Id`.
-5. Adding an item already in the playlist adds nothing, and one request naming it twice adds it
-   once — on both the creation and the addition paths.
+5. Adding an item already in the playlist adds nothing and moves nothing, and one request naming it
+   twice adds it once — on both the creation and the addition paths, and **every time**, where the
+   reference manages it only when its own id cache is warm (§3.4).
 6. Removing by entry id removes exactly that row; removing an entry id that is not present
    answers `204`.
 7. Adding an album adds its tracks in the album's own order, and the album itself is not an entry;
@@ -560,11 +587,12 @@ None. All six were answered at the spec-review gate on 2026-08-31.
 | A playlist's `MediaType` is fixed at creation and never follows its contents | §3.2, §4 — it is a value the row carries, not one anybody derives |
 | An unrecognised `MediaType` is a `400`, not a dropped token | §3.2's error table — the third refusal on that route |
 | `mediaTypes=` filters playlists by the row, not by the type | §4 — undecided, and the only place 009 meets a 005 parameter it cannot answer from a kind |
+| De-duplication against the existing entries fires about a third of the time, so a playlist **can** hold one item twice | §3.1, §3.4, AC-5, behaviours §3.18 — measured at T7, and the duplicate it makes is unaddressable |
 
 ## 8. References
 
 - [docs/compatibility/api-surface-v1.md §6](../../docs/compatibility/api-surface-v1.md#6-playlists)
 - [specs/005 §3.1](../005-item-query-api/spec.md) — the list envelope
 - [docs/compatibility/client-embeat-mobile.md §3](../../docs/compatibility/client-embeat-mobile.md) — the named consumer for the rename
-- [docs/compatibility/behaviours.md](../../docs/compatibility/behaviours.md) §2.7, §2.8, §2.26, §3.15, §3.16, §3.17, §4.3, §5
+- [docs/compatibility/behaviours.md](../../docs/compatibility/behaviours.md) §2.7, §2.8, §2.26, §3.15, §3.16, §3.17, §3.18, §4.3, §5
 - `[spec: CreatePlaylist, CreatePlaylistDto, PlaylistCreationResult, GetPlaylistItems, AddItemToPlaylist, RemoveItemFromPlaylist, MoveItem, DeleteItem, UpdateItem]`

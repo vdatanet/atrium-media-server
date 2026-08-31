@@ -250,6 +250,29 @@ class ItemQueryRepository:
         rows = list(self._session.execute(page).scalars())
         return QueryPage(items=self._hydrate(rows, query.user), total=total)
 
+    def visible_ids(self, ids: Sequence[str], user: User) -> set[str]:
+        """Which of these identifiers this user may see - the one predicate, asked as a question.
+
+        The **only** public way for another module to reach `_visible_to`, and it exists because
+        009's playlist entries have to be filtered by exactly what `/Items` filters by. The
+        alternative was a second predicate in `db/repositories.py` covering "not removed, and in a
+        library this user may open", which is this module's opening warning written out: two
+        predicates in two places is how they stop agreeing, and the direction they fail in is a
+        reader being handed rows they cannot open.
+
+        A **question rather than the clause itself**: handing out a SQL expression would let a
+        caller compose it into a query of their own and get the composition wrong, and the one
+        caller there is wants a set. One statement, whatever the length of `ids`.
+        """
+        if not ids:
+            return set()
+        rows = self._session.execute(
+            select(models.Item.id)
+            .where(models.Item.id.in_(list(ids)))
+            .where(self._visible_to(user))
+        ).scalars()
+        return set(rows)
+
     def _shuffled(self, scoped: Select[tuple[models.Item]], query: ItemQuery) -> QueryPage:
         """`Random`, which is not an `ORDER BY` at all (plan section 6.4).
 

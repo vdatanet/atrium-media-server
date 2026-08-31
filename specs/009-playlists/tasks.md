@@ -449,7 +449,7 @@ one migration; it is one migration, four maps and a clause.
 
 ## T7 — `PlaylistRepository`: one read door, four writes
 
-- [ ] **Changes:** `db/repositories.py`. `by_id`, `entries`, `create`, `append`, `remove`,
+- [x] **Changes:** `db/repositories.py`. `by_id`, `entries`, `create`, `append`, `remove`,
   `reorder`, `rename`, `delete`, exactly plan §5's signatures. Every read takes a `User` and there
   is no variant that does not. `append` is `INSERT … ON CONFLICT DO NOTHING`, so de-duplication is
   the key rather than a step; `remove` and `reorder` renumber inside their own transaction.
@@ -465,6 +465,69 @@ one migration; it is one migration, four maps and a clause.
   asserts **no public read on the class takes fewer arguments than a `User`** (plan §9's second
   risk).
 - **Spec reference:** §3.4, §3.5; plan §5, §6.2, §6.3
+
+> **Done (2026-08-31).** *The reference does not de-duplicate reliably, and a playlist there **can**
+> hold one item twice.* Measured before a line was written, because §3.4's "duplicates are silently
+> dropped" had only ever been asked of a playlist holding **one** entry — a shape that cannot tell
+> "dropped" from "removed and appended", which is the half this task needed. It answered that half
+> (the entry already there keeps its position, and `Ids` naming A B A creates A B) and then
+> contradicted itself between two batteries of the same run. Repeated: **6 of 8 identical requests**
+> added an item the playlist already held, seconds apart, on one server
+> `[probe: tools/probe_playlist_writes.py, Jellyfin 10.11.11, 2026-08-31]`. The mechanism is spec
+> §3.1's own field: the filter compares against `LinkedChildren.Select(c => c.ItemId)`
+> `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:221-224 @ v10.11.11]`, that
+> `ItemId` is a **cache** filled the first time an entry is resolved
+> `[source: MediaBrowser.Controller/Entities/BaseItem.cs:1773-1805 @ v10.11.11]`, and the writer
+> that creates entries never fills it
+> `[source: MediaBrowser.Controller/Entities/LinkedChild.cs:26-40 @ v10.11.11]`. So the two stages
+> §3.4 describes are one reliable and one cold-cache lottery — and what the lottery produces is the
+> thing §3.1 said could not exist: two rows carrying **one** `PlaylistItemId`, which `Move`
+> reorders by moving the first copy and `Remove` deletes both of at once. Measured, on a playlist
+> the race had just made. **Atrium de-duplicates always** — a coin flip cannot be replicated
+> (Principle VII) and no client can compensate for a duplicate it can neither predict nor delete —
+> which is 009's **fourth** divergence: behaviours §3.18, spec §3.1, §3.4, AC-5, plan §1 and §6.2.
+>
+> *And "de-duplication is the key rather than a step" is wrong in both directions.* The key does
+> not **drop** a repeat: with the reduction removed, three of this task's tests fail with
+> `IntegrityError` — the constraint refuses, and only a dialect-specific `ON CONFLICT DO NOTHING`
+> would make it drop. And even that would not be enough, because a conflicting insert leaves the
+> **ordinal** it was going to occupy unused: a playlist de-duplicated by the key alone grows a hole
+> in the one column `remove`, `reorder` and the read all assume is contiguous, on the first
+> repeated add. The batch is reduced before the ordinals are handed out — which is also how
+> `append` answers AC-5's count without a second read — and the constraint stays as what makes a
+> duplicate impossible under a concurrent writer rather than merely unlikely. Plan §6.2 says so.
+>
+> *Two of plan §5's eight signatures could not be written as they stand, and the same sentence
+> forbids both.* "Every read takes a `User`" is the rule; `reorder(playlist_id, order)` breaks it,
+> because the caller can only produce that order by first reading the **stored** one — the one read
+> the class exists to keep inside itself. `reorder` therefore takes the move (`entry`, `new_index`,
+> `visible`) and runs `moved` internally, which also makes the read and the write it depends on one
+> transaction instead of two requests apart. And `by_id`'s `User` cannot be a `may_read` filter:
+> the one caller who needs it most is the **administrator**, who may delete a playlist they may not
+> read (spec §3.6), and a strict door would have answered `404` to T12 and made that task
+> unwritable. It is an existence filter with an administrator branch, the routes still call
+> `may_read`, and a test asserts both halves — tightening the door fails loudly rather than in
+> three tasks' time.
+>
+> *The visibility predicate is asked, not copied.* `entries` needs exactly what `/Items` filters
+> by, and `db/item_queries.py` imports `db/repositories.py`, so the import cannot go the other way:
+> the repository is **handed** an `ItemQueryRepository` and asks its new public `visible_ids`. The
+> alternative — "not removed, and in a library this user may open" written a second time here — is
+> the failure that module's own docstring opens with, and it would have been invisible until
+> somebody changed library access and moved one of the two.
+>
+> *One thing this task did not do, deliberately.* T5's fixture says "when T7 lands, this function
+> is one of its callers to reconsider". It is not: `create` takes `date_created` from the clock,
+> where the fixture needs fixed dates for a deterministic world (Principle VII) — and a world built
+> by the code under test cannot fail it, which is what four of this task's assertions rely on.
+>
+> *Two smaller things.* `rename` writes **three** columns, not one: `name`, `sort_name` and
+> `name_folded` are three derivations of one string, and writing only the first leaves a playlist
+> that sorts under its old name and that `searchTerm` cannot find at all — 005 T6's finding, on one
+> row of the same table, and `ItemRepository.update` is not a door for it because it writes neither
+> name once a refresh has touched the item. And every clause above was checked by deletion, by
+> hand: removing the entry filter fails two tests, the `may_read` filter one, the administrator
+> branch another, the name derivations a fifth, and the batch reduction three.
 
 ## T8 — `POST /Playlists`: two refusals that are not the same shape
 
@@ -575,9 +638,10 @@ one migration; it is one migration, four maps and a clause.
 - [ ] Every one of spec §5's twenty acceptance criteria has a passing test, named in T14's map.
 - [ ] Every endpoint reaches the conformance level in spec §6.
 - [ ] `surface.yaml` lists the seven routes and the router serves no eighth.
-- [ ] The three divergences ship as specified: the named reader (§3.16), the unreachable entry
-      (§3.17) and the two refusals `Move` does not make (§3.15) — each with a test that fails if the
-      reference's behaviour is reproduced instead.
+- [ ] The **four** divergences ship as specified: the named reader (§3.16), the unreachable entry
+      (§3.17), the two refusals `Move` does not make (§3.15) and the de-duplication that never
+      misses (§3.18, added at T7) — each with a test that fails if the reference's behaviour is
+      reproduced instead.
 - [ ] `ForbiddenError`'s body is the reference's 25-byte shape, on 009's routes **and** on 005's
   (AC-19) — and every **`may_edit`** refusal is the body-less one, which is a different set of
   bytes and not this class: the rename (AC-18, T2), and `Move`, `Add` and `Remove` for a caller who

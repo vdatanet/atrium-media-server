@@ -101,7 +101,8 @@ administrator. §6.6 says what the other two cases answer and why neither is a s
 [§3.17](../../docs/compatibility/behaviours.md) (the unreachable entry) — plus
 [§3.15](../../docs/compatibility/behaviours.md), the two unhandled failures the reference's move
 arithmetic produces. All three were measured at the spec gate and are specified in 009 §3.5 and
-§3.7.
+§3.7. **A fourth was measured at T7**: [§3.18](../../docs/compatibility/behaviours.md), the
+de-duplication that misses about a third of the time, specified in 009 §3.1 and §3.4.
 
 **One inherited decision is contradicted by this gate's measurement, and it is not ours to fix
 quietly.** `compat/errors.py`'s `ForbiddenError` is documented as *"answered with an empty 403"*
@@ -338,22 +339,49 @@ almost every test's.
 ```python
 # db/repositories.py
 class PlaylistRepository:
+    def __init__(self, session: OrmSession, queries: ItemQueryRepository) -> None
     def by_id(self, playlist_id: str, user: User) -> Playlist | None
     def entries(self, playlist_id: str, user: User) -> list[str]      # item ids, in order
     def create(self, playlist: Playlist, item_keys: Sequence[str]) -> Playlist
     def append(self, playlist_id: str, item_keys: Sequence[str]) -> int
     def remove(self, playlist_id: str, item_keys: Sequence[str]) -> None
-    def reorder(self, playlist_id: str, order: Sequence[str]) -> None
+    def reorder(self, playlist_id: str, entry: str, new_index: int, visible: Sequence[str]) -> None
     def rename(self, playlist_id: str, name: str) -> None
     def delete(self, playlist_id: str) -> None
 ```
 
+> **Two of those lines are T7's corrections, and both were forced by this section's own rule
+> (2026-08-31).**
+>
+> **`reorder` takes the move, not the moved order.** The block first read
+> `reorder(playlist_id, order)`, with the caller computing `moved(...)` and passing the result in —
+> and the caller cannot, because `moved`'s first argument is the **stored** order, which is
+> precisely the read this section forbids handing out. Adding "the whole order, unfiltered" to the
+> surface next to a read that filters is the risk in §9 spelled out. So the arithmetic runs inside
+> the repository, which also makes the read and the write it depends on one transaction rather than
+> two requests apart.
+>
+> **The constructor is given the one visibility predicate rather than writing a second one.**
+> `db/item_queries.py` imports this module, so importing it back is a cycle; the repository is
+> handed an `ItemQueryRepository` and asks it `visible_ids`, which is that module's only public
+> door onto `_visible_to`. The alternative — "not removed, and in a library this user may open",
+> written again here — is the two-predicates-in-two-places failure `item_queries.py`'s own
+> docstring opens with.
+
+**And `by_id`'s `User` is an existence filter, not the decision.** It answers spec §3.3's `404`
+before `403` for a caller who may not read the playlist — **and it hands the row to an
+administrator anyway**, which looks like a hole and is what makes §6.6 writable: deletion is the
+one operation an administrator may perform on a playlist they neither own nor are shared (spec
+§3.6), so a door filtered by `may_read` alone would answer `404` to the one caller who must
+succeed. Every read route still applies `may_read` to what comes back.
+
 **Every read takes a `User` and there is no variant that does not.** That is the invariant this
 feature is most likely to lose: a helper added later that reads entries "just for the count" is how
 §3.17's divergence stops applying to one route. `entries` returns what that user may see, in order,
-already filtered by `_library_permitted`; a caller that wants the unfiltered order for the move
-arithmetic asks `reorder` to compute it, which is why `reorder` takes the whole order and not an
-index.
+already filtered by `_library_permitted`; the stored order never leaves the class, which is why
+`reorder` takes the move rather than the result of one. The classification is asserted by
+reflection in `tests/unit/test_playlist_repository.py`, so a ninth method has to declare which of
+the two it is before the suite is green.
 
 **`append` returns the number of entries actually added**, which is zero for a batch that was all
 duplicates. Nothing on the wire reads it — the route answers `204` either way (spec §3.4) — but the
@@ -407,6 +435,26 @@ the measurement found the reference expanding every one of them through the same
 **De-duplication needs no step.** The insert is `INSERT … ON CONFLICT DO NOTHING` against
 `(playlist_id, item_key)`, which drops both an item already present and a repeat inside the batch —
 the reference's two stages, in one place, for the reason §1 gives.
+
+> **It needs one, and the column that pays for it is `ordinal` (T7, 2026-08-31).** A conflicting
+> insert that does nothing also does nothing with the ordinal it was going to occupy, so a playlist
+> that de-duplicated by the key alone develops a **hole** in the column §6.3, §6.4 and the read all
+> assume is contiguous — on the first repeated add. The batch is therefore reduced before the
+> ordinals are handed out, which is also what lets `append` answer AC-5's "how many were added"
+> without a second read. The key stays, and what it is for is stated correctly: it makes a
+> duplicate impossible under a concurrent writer, where the reduction alone would let two requests
+> race. Written without either, the reference's "silently dropped" is an `IntegrityError` — the
+> constraint **refuses**, it does not drop.
+>
+> **First occurrence wins**, within the batch and against what is stored, and the entry already
+> there keeps its position: measured, where the one-entry playlist §3.4 was measured on could not
+> tell "kept" from "removed and appended"
+> `[probe: tools/probe_playlist_writes.py, Jellyfin 10.11.11, 2026-08-31]`.
+>
+> **And the reference does not always manage it**, which is spec §3.4's fourth divergence and
+> behaviours §3.18: its first stage reads an id cache that is empty until an entry has been
+> resolved, so 6 of 8 identical requests duplicated. Atrium's key makes that unreachable rather
+> than unlikely.
 
 ### 6.3 Removing
 

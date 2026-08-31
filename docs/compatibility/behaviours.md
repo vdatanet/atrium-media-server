@@ -2194,6 +2194,41 @@ v10.11.11]`. Neither can fire against a reference server for the reason above: w
 hidden by the parental-rating check, never by library access. Atrium answers an omitted entry the
 way it answers one that is not in the playlist at all — `204`, nothing changes (§3.15's parity row).
 
+### 3.18 A playlist's de-duplication misses about a third of the time — class B, diverged
+
+**Jellyfin does:** de-duplicate an add in two stages — against the entries the playlist already
+holds, then within the incoming batch — and only the second stage is reliable. The first compares
+the incoming items against `playlist.LinkedChildren.Select(c => c.ItemId)`
+`[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:221-224 @ v10.11.11]`, and that
+field is **not** the entry's item: it is a cache, filled the first time the entry is resolved
+`[source: MediaBrowser.Controller/Entities/BaseItem.cs:1773-1805 @ v10.11.11]`, and the writer that
+creates entries never fills it
+`[source: MediaBrowser.Controller/Entities/LinkedChild.cs:26-40 @ v10.11.11]`. An entry whose cache
+is cold is invisible to the filter, so the item goes in a second time. Measured: **6 of 8 identical
+requests** — same server, same playlist shape, seconds apart — added an item the playlist already
+held, and the exploratory battery that found it duplicated on 5 of 16
+`[probe: tools/probe_playlist_writes.py, Jellyfin 10.11.11, 2026-08-31]`.
+
+The duplicate it produces is **unaddressable**, which is
+[009 §3.1](../../specs/009-playlists/spec.md) seen from the other side: both rows carry one
+`PlaylistItemId` — the item's own `Id` — so `Move` on that id reorders the first copy and `Remove`
+on it deletes both at once. Measured, on a playlist the race had just duplicated.
+
+**Depends on it:** nothing can. The behaviour is a coin flip on identical requests, so a client
+cannot predict it, cannot ask for it, and cannot compensate for it — the only compensation
+available is de-duplicating client-side, which is unaffected by a server that never duplicates.
+Nor can a user clean up afterwards: the two operations that address an entry treat the two copies
+as one. This is §3.0's second escape hatch — a class-B defect no client can work around behaves
+like class A in the only respect that matters — and Principle VII settles what is left, because
+replicating a race means a server whose answer to one request differs between two runs.
+
+**Atrium does: diverge — de-duplicate always.** The entry table's key is the playlist and the item,
+so a repeat is dropped on the creation path and on the addition path alike, the entry already
+present keeps its position, and the first occurrence within a batch is the one that lands — all
+three of which are the reference's own behaviour on the runs where its cache is warm. What a client
+can observe is a playlist that never grows a row it cannot then delete. Specified in
+[009 §3.1 and §3.4](../../specs/009-playlists/spec.md), AC-5.
+
 ---
 
 ## 4. Deliberate exceptions
