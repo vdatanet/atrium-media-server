@@ -35,6 +35,7 @@ from atrium.db.item_queries import (
 from atrium.db.repositories import ItemRepository
 from atrium.domain.items import ItemType
 from atrium.domain.queries import ItemQuery
+from atrium.domain.user import User
 from atrium.library import identity
 from tests.conftest import QueryCounter, data_dir
 from tests.fixtures.query import (
@@ -100,6 +101,9 @@ def test_the_restricted_user_sees_only_the_permitted_library(
     repository: ItemQueryRepository, world: QueryWorld
 ) -> None:
     page = repository.run(ItemQuery(user=world.restricted, limit=1000))
+    # A by-name row and a playlist both carry a null `library_id` and both are exempt from the
+    # library clause on purpose (009 plan §4.1). What reaches this user is a question this
+    # assertion cannot ask; `test_a_playlist_reaches_its_owner_its_shares_and_nobody_else` asks it.
     libraries = {
         one.item.library_id
         for one in page.items
@@ -110,27 +114,64 @@ def test_the_restricted_user_sees_only_the_permitted_library(
     )
 
 
-def test_every_playlist_still_reaches_every_user(
+def playlists_reaching(repository: ItemQueryRepository, user: User) -> set[str]:
+    page = repository.run(
+        ItemQuery(user=user, include_types=frozenset({ItemType.PLAYLIST}), limit=1000)
+    )
+    return {one.item.id for one in page.items}
+
+
+def test_a_playlist_reaches_its_owner_its_shares_and_nobody_else(
     repository: ItemQueryRepository, world: QueryWorld
 ) -> None:
-    """009 tasks' gate finding 2, asserted rather than described - and it is a **leak**.
+    """009 tasks' gate finding 2, inverted by T6 - and until it was, this was a **leak**.
 
     `_library_permitted` exempts a row with no library, because a by-name row is not *in* one; a
-    playlist is not in one either (009 plan §4.1), so it passes that clause for every caller. Until
-    T6 adds the fourth sibling clause, every user's private playlists are in every other user's
-    listing. This says so out loud instead of excluding the rows from the test above and calling
-    it clean: T6 inverts this assertion, and a fixture that quietly stopped seeding playlists fails
-    it either way.
+    playlist is not in one either (009 plan §4.1), so it passed that clause for every caller and
+    `/Items?includeItemTypes=Playlist` answered every user's private playlists to everybody. T5
+    wrote this test asserting the leak on purpose so that T6 had to come back to it.
+
+    Every one of the five is owned by `everyone`, so `restricted` reaches exactly the three shared
+    with that user plus the public one, and `nobody` - shared with nothing - reaches the public one
+    alone. Measured on the reference in the same three classes: a private playlist is **absent**
+    from another user's listing, a shared one and a public one are **present**
+    `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`
+    `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-08-31]`.
     """
-    page = repository.run(
-        ItemQuery(
-            user=world.restricted,
-            include_types=frozenset({ItemType.PLAYLIST}),
-            limit=1000,
-        )
+    everything = {one.id for one in world.playlists}
+    assert playlists_reaching(repository, world.everyone) == everything, "the owner sees all five"
+
+    shared_with_restricted = {
+        one.id
+        for one in world.playlists
+        if any(user_id == world.restricted.id for user_id, _ in one.shares)
+    }
+    assert shared_with_restricted, "the fixture shares nothing with the restricted user"
+    assert playlists_reaching(repository, world.restricted) == shared_with_restricted | {
+        world.public_playlist.id
+    }
+    assert playlists_reaching(repository, world.nobody) == {world.public_playlist.id}
+
+    for user in (world.restricted, world.nobody):
+        assert world.private_playlist.id not in playlists_reaching(repository, user)
+        assert world.private_playlist.owner_id != user.id
+
+
+def test_an_unreachable_playlist_is_a_404_by_id_too(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """The listing and the fetch are one predicate, which is why `_visible_to` carries the clause
+    rather than the listing carrying a filter: a private playlist named directly is not found."""
+    named = repository.run(
+        ItemQuery(user=world.nobody, ids=(world.private_playlist.id,), limit=1000)
     )
-    assert {one.item.id for one in page.items} == {one.id for one in world.playlists}
-    assert world.private_playlist.owner_id != world.restricted.id
+    assert named.items == () and named.total == 0
+    assert (
+        repository.run(
+            ItemQuery(user=world.nobody, ids=(world.public_playlist.id,), limit=1000)
+        ).total
+        == 1
+    )
 
 
 def test_a_by_name_row_is_reached_through_the_items_that_reference_it(
@@ -490,10 +531,15 @@ def test_the_statement_count_is_what_the_plan_says_it_is(
     optional and it is not conditional - those streams are numbered *ahead of* the container's
     own, so a page hydrated without them answers wrong indices for the video and audio it does
     carry, and `HasSubtitles` is false on an item whose subtitles are all files (AC-11). One
-    statement for the page, like its two neighbours."""
+    statement for the page, like its two neighbours.
+
+    **A fourth since 009 T6**: the stored media type of the page's playlists. It is the one column
+    on a row that no scanner wrote, `MEDIA_TYPE_OF` is only the fallback behind it (plan section
+    4.2), and without it every playlist listed through `/Items` answers `Audio`. Unconditional for
+    the reason above - a page of films costs it too, and it compiles to an empty `IN`."""
     with query_counter.watching(engine):
         repository.run(ItemQuery(user=world.everyone, limit=10))
-    assert len(query_counter) == 18, query_counter.report()
+    assert len(query_counter) == 19, query_counter.report()
 
 
 def test_a_page_with_no_files_costs_the_same_as_a_page_of_films(

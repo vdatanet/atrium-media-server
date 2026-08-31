@@ -234,6 +234,21 @@ video one for `mediaTypes=Video`, where Atrium would claim every playlist for `A
 it sits before every route that could expose the difference. Whether it closes the gap with a
 clause or accepts it stays that task's call — spec §4 states both.
 
+> **T6 closed it, and found that "the item body prefers this column" had no writer on the listing
+> path.** The preference §4.2 describes is real and `api/item_dto.py` makes it, but the field it
+> prefers is filled by *the repository that produced the row* — and this paragraph's "T7's
+> repository is what fills it in" is true only of the playlist routes. `/Items` hydrates through
+> `ItemQueries._hydrate`, which nobody told, so every playlist listed there fell through to
+> `MEDIA_TYPE_OF[Playlist]` and reported `Audio`. The filter and the body would then have
+> disagreed on the same response, which is a worse answer than either gap alone: `_hydrate` gains
+> one statement for the page, unconditional like its neighbours, and the hydration budget moves
+> from eighteen to nineteen.
+>
+> **And the clause compares the row rather than the two values the row is expected to hold**,
+> because the reference has a third: measured, `mediaTypes=Unknown` over playlists returns one
+> `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. Spec §4 carries
+> where that value comes from and why Atrium's column cannot hold it.
+
 ### 4.3 `playlist_entries`
 
 | Column | Type | Notes |
@@ -481,6 +496,12 @@ that neither can be skipped:
    `_by_name_is_referenced` is: not a playlist, or one this caller owns, is shared with, or that is
    public. Without it the playlist route above is careful and the general listing beside it is not,
    which is the worse of the two halves to get wrong. T6.
+
+   **The clause has no administrator branch**, and that is spec §3.7's last row rather than an
+   omission: an administrator who is none of the three classes gets no read, so the predicate is
+   the same for every caller and the one thing an administrator may do to a playlist they do not
+   own is delete it (§6.6). `userId` therefore moves the whole predicate rather than bypassing it —
+   an administrator naming a user sees that user's playlists, which is 005's rule unchanged.
 4. **The envelope** — 005's, with `TotalRecordCount` counting what survived step 3 and
    `StartIndex` echoed, then `startIndex`/`limit` applied. **The count is taken before paging and
    after filtering**, which is the reference's own order and the only one that lets a client page.

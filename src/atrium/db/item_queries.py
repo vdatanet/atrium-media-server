@@ -456,15 +456,23 @@ class ItemQueryRepository:
     def _visible_to(self, user: User) -> Any:
         """Everything a user may see, as one clause.
 
-        Three parts, and the order they are written in is the order they exclude rows in:
-        the item is not soft-deleted, its library is one this user's policy permits, and - for the
-        four container types - something with a file is still visible underneath it.
+        Five parts, and the order they are written in is the order they exclude rows in: the item
+        is not soft-deleted, its library is one this user's policy permits, - for the four
+        container types - something with a file is still visible underneath it, a by-name row is
+        still referenced by something visible, and a playlist is one this user may reach.
+
+        **The fourth part is not a refinement of the second, and that is the whole reason it
+        exists.** `_library_permitted` exempts a row with no library, because a by-name row is not
+        *in* one; a playlist is not in one either (009 plan section 4.1), so it passed that clause
+        for every caller. Without `_playlist_is_reachable`,
+        `/Items?includeItemTypes=Playlist` answers every user's private playlists to everybody.
         """
         return (
             (models.Item.removed_at.is_(None))
             & self._library_permitted(user)
             & self._container_earns_its_place()
             & self._by_name_is_referenced(user)
+            & self._playlist_is_reachable(user)
         )
 
     def _library_permitted(self, user: User) -> Any:
@@ -530,6 +538,47 @@ class ItemQueryRepository:
             .correlate(models.Item.__table__)
             .exists()
         )
+
+    def _playlist_is_reachable(self, user: User) -> Any:
+        """A playlist exists for a user who owns it, is shared with it, or when it is public.
+
+        Spec section 3.7's four reading classes, as a clause on the general listing rather than as
+        a check on the playlist routes alone. The routes are careful by construction - they load a
+        playlist through one door that takes a `User` - and `/Items` is the listing beside them
+        that would not have been: measured, a private playlist is **absent** from another user's
+        `/Items?includeItemTypes=Playlist` and a shared or public one is **present**
+        `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`
+        `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-08-31]`.
+
+        **An administrator has no branch here, deliberately.** Spec section 3.7's table gives an
+        administrator who is none of the three classes *no* read - deletion is the one operation
+        they may perform on a playlist they do not own
+        `[source: Jellyfin.Api/Controllers/PlaylistsController.cs:132-134, 422-424, 461-463 @
+        v10.11.11]` - so the clause is the same for every caller.
+
+        A playlist item row with no `playlists` row fails the `EXISTS` and is invisible, which is
+        the direction to fail in: an unreachable half-written row discloses nothing.
+        """
+        playlist = models.Playlist
+        shared_with = select(models.PlaylistShare.playlist_id).where(
+            models.PlaylistShare.user_id == user.id
+        )
+        reachable = (
+            select(playlist.item_id)
+            .where(playlist.item_id == models.Item.id)
+            .where(
+                or_(
+                    playlist.is_public,
+                    playlist.owner_user_id == user.id,
+                    playlist.item_id.in_(shared_with),
+                )
+            )
+            # `correlate` for `_by_name_is_referenced`'s reason: without it the subquery takes its
+            # own copy of `items` and the clause is true for every row that any playlist matches.
+            .correlate(models.Item.__table__)
+            .exists()
+        )
+        return or_(models.Item.type != ItemType.PLAYLIST.value, reachable)
 
     def _library_permitted_on(self, item: Any, user: User) -> Any:
         """`_library_permitted`, against an aliased items table rather than the mapped one."""
@@ -613,6 +662,7 @@ class ItemQueryRepository:
         user_data = self._user_data(ids, user)
         ancestors = self._ancestors(rows)
         rollups = self._rollups(rows, user)
+        media_types = self._playlist_media_types(ids)
 
         return tuple(
             HydratedItem(
@@ -647,12 +697,38 @@ class ItemQueryRepository:
                     _image(one)
                     for one in sorted(images.get(row.id, []), key=lambda one: one.image_index)
                 ),
+                media_type=media_types.get(row.id),
                 user_data=_rolled(user_data.get(row.id, UserItemData()), rollups.get(row.id)),
                 parent=ancestors.get(row.id, (None, None))[0],
                 grandparent=ancestors.get(row.id, (None, None))[1],
             )
             for row in rows
         )
+
+    def _playlist_media_types(self, ids: Sequence[str]) -> dict[str, str]:
+        """The stored media type of every playlist on the page, one statement for the page.
+
+        **`HydratedItem.media_type` had no writer on this path, and `mediaTypes=` is what made
+        that visible.** T4 added the field and taught `api/item_dto.py` to prefer it, and plan
+        section 4.2 left the filling to T7's `PlaylistRepository` - which serves the playlist
+        routes and not this one. So every playlist listed through `/Items` fell through to
+        `MEDIA_TYPE_OF[Playlist]` and answered `MediaType: "Audio"`, four of the fixture world's
+        five of them wrongly. Left alone, T6's filter would have returned a row for
+        `mediaTypes=Video` whose own body said `Audio`: a listing disagreeing with itself is worse
+        than the gap the filter was closing. Measured, the reference's list row carries the same
+        value its bare item does `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11,
+        2026-08-31]`.
+
+        Unconditional, like the ancestors and the inspections above and for their reason: a
+        statement that ran only when the page held a playlist would make the counter's equality
+        assertion a property of the page rather than of hydration.
+        """
+        rows = self._session.execute(
+            select(models.Playlist.item_id, models.Playlist.media_type).where(
+                models.Playlist.item_id.in_(ids)
+            )
+        ).all()
+        return {row.item_id: row.media_type for row in rows}
 
     def _probes(
         self, rows: Sequence[models.Item], sources: Mapping[str, Sequence[models.ItemSource]]
@@ -1167,7 +1243,7 @@ def _filters(query: ItemQuery) -> list[Any]:
     if query.exclude_types is not None:
         clauses.append(item.type.not_in([one.value for one in query.exclude_types]))
     if query.media_types is not None:
-        clauses.append(item.type.in_(_types_of_media(query.media_types)))
+        clauses.append(_media_type_is(query.media_types))
 
     if query.ids is not None:
         clauses.append(item.id.in_(list(query.ids)))
@@ -1185,27 +1261,51 @@ def _filters(query: ItemQuery) -> list[Any]:
     return clauses
 
 
-def _types_of_media(media_types: Iterable[str]) -> list[str]:
-    """`Video`, `Audio` or `Unknown` back into the item types that answer them.
+def _media_type_is(media_types: Iterable[str]) -> Any:
+    """`mediaTypes=`, which is **two questions** because a playlist answers it per row.
 
-    There is no `media_type` column for the thirteen scanned types: it is a property of the
-    *type*, measured once into `MEDIA_TYPE_OF`. Matching case-insensitively for the same reason
-    `known_tokens` does - a parameter whose name matches case-insensitively while its values did
-    not would be a distinction no client could have learned.
+    Thirteen of the fourteen types answer from the type: a film is `Video`, a track is `Audio`, a
+    container is `Unknown`, measured once into `MEDIA_TYPE_OF`. A playlist's value is decided at
+    creation and stored on the row, and the reference filters playlists by that stored value -
+    `mediaTypes=Audio` returns the audio playlist and not the video one, and `mediaTypes=Video`
+    the reverse `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. So
+    the clause is a type test **or** a stored-value test, and `Playlist` is excluded from the
+    first half rather than given a type-level guess: reading `MEDIA_TYPE_OF[Playlist]` here would
+    claim every playlist for `Audio` and none for `Video`.
 
-    **`Playlist` is the exception, and this function cannot express it yet** (009 T3). A
-    playlist's media type is decided at creation and stored per row, so the reference filters
-    playlists by the row: `mediaTypes=Audio` returns an audio playlist and not a video one, and
-    `mediaTypes=Video` the reverse
-    `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. Reading the
-    type-level fallback here instead claims every playlist for `Audio` and none for `Video`.
-    The column exists as of T4, so this is now closable, and **T6 owns it**: it is the task that
-    already edits this module's `_visible_to`, and it sits before every route that could expose
-    the difference. Until then the divergence is named here and in 009 spec section 4 rather than
-    papered over with a type-level guess.
+    **The stored half compares the row, not a two-value special case, and that is measured.** A
+    playlist can answer `Unknown` - measured on a stock reference holding eight playlists,
+    `mediaTypes=Audio` returns five, `mediaTypes=Video` two and `mediaTypes=Unknown` **one**
+    `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. Creation cannot
+    produce that value - an id list that resolves to nothing falls back to `Audio`
+    `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:124-126 @ v10.11.11]` - but
+    a playlist the scanner resolves from a directory is given no media type at all
+    `[source: Emby.Server.Implementations/Library/Resolvers/PlaylistResolver.cs:40-45 @ v10.11.11]`
+    and its own file cannot restore one, because an `Unknown` media type is the one value the
+    saver does not write
+    `[source: MediaBrowser.LocalMetadata/Savers/PlaylistXmlSaver.cs:52-55 @ v10.11.11]`. Atrium
+    has no filesystem playlists (009 spec section 4), so its column holds `Audio` or `Video` - but
+    the clause answers whatever the column holds, which is what makes that true by measurement
+    rather than by assumption.
+
+    Matching case-insensitively on both halves, for the reason `known_tokens` gives: a parameter
+    whose name matches case-insensitively while its values did not would be a distinction no
+    client could have learned. Measured, `mediaTypes=audio` and `mediaTypes=Audio` are one answer.
     """
-    wanted = {one.casefold() for one in media_types}
-    return [kind.value for kind, media in MEDIA_TYPE_OF.items() if media.casefold() in wanted]
+    wanted = sorted({one.casefold() for one in media_types})
+    types = [
+        kind.value
+        for kind, media in MEDIA_TYPE_OF.items()
+        if kind is not ItemType.PLAYLIST and media.casefold() in wanted
+    ]
+    stored = (
+        select(models.Playlist.item_id)
+        .where(models.Playlist.item_id == models.Item.id)
+        .where(func.lower(models.Playlist.media_type).in_(wanted))
+        .correlate(models.Item.__table__)
+        .exists()
+    )
+    return or_(models.Item.type.in_(types), stored)
 
 
 def _name_clauses(query: ItemQuery) -> list[Any]:
