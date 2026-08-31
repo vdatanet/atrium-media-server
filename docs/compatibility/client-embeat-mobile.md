@@ -94,24 +94,35 @@ from the YAML:
 | Artwork (§9) | 1 | 006 | Implemented |
 | Delivery (§3, §4, §6, §7) | 3 | 008 | Implemented — the static pair at T6, `/universal` at T8 |
 
-**One operation the client calls is not in the 55.** `POST /Items/{itemId}` — the reference's
-`UpdateItem` — is how this client renames a playlist `[client-contract: 2026-08-29, §10]`. The
-string `UpdateItem` does not appear in `surface.yaml`, in any spec, or in `src/`. Every other
-playlist-editing operation it uses is a row: `POST /Playlists`, `POST`/`DELETE
-/Playlists/{id}/Items`, `POST /Playlists/{id}/Items/{itemId}/Move/{newIndex}` and `DELETE
-/Items/{itemId}` are all there, all owned by 009.
+**One operation the client calls was not in the 55, and now it is a row.** `POST /Items/{itemId}` —
+the reference's `UpdateItem` — is how this client renames a playlist `[client-contract: 2026-08-29,
+§10]`. Every other playlist-editing operation it uses was already there: `POST /Playlists`,
+`POST`/`DELETE /Playlists/{id}/Items`, `POST /Playlists/{id}/Items/{itemId}/Move/{newIndex}` and
+`DELETE /Items/{itemId}`, all owned by 009.
 
-That makes it a **009 scope question, not a v1 surface argument**: five sixths of playlist editing
-is already in, and the missing sixth is the rename. 009 is still Draft, which is the cheapest
-moment to decide it, and this document is the named consumer that
-[Principle VI](../constitution.md) asks for. Whoever accepts 009's spec should decide it there.
+**Decided at 009's spec review on 2026-08-31, and it entered the surface** — this document was the
+named consumer [Principle VI](../constitution.md) asks for. It is routed for playlists, and the
+gate measured the thing that decides what the row is worth: **the reference declares that
+controller administrator-only, so this client's rename answers `403` for every user who is not
+one — the playlist's own owner included**
+`[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-08-31]`. The route that renames
+for an ordinary owner is `POST /Playlists/{playlistId}`, which this client does not call and which
+Principle VI therefore keeps out.
 
-**The rest of the playlist group depends on a Draft feature in a second way.** Every row of
+So the rename works here exactly as far as it works against a stock reference server, and no
+further. That is parity, and it is a gap in the client's own feature rather than in this one —
+recorded in [behaviours §5](behaviours.md) with the mechanism that would close it.
+
+**The rest of the playlist group asks for something the reference does not have.** Every row of
 `GET /Playlists/{playlistId}/Items` must carry a `PlaylistItemId` distinct from the track id, or
 the client cannot address duplicates for removal and reordering `[client-contract: 2026-08-29,
-§10]`. [009 §3](../../specs/009-playlists/spec.md) already specifies exactly that, in four places,
-including an acceptance criterion. Nothing is owed; it is recorded so that the requirement has a
-named consumer when 009 is implemented.
+§10]`. Half of that is satisfiable: the property is on every row. The other half is not —
+**`PlaylistItemId` is the item's own `Id`**, measured on the wire
+`[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-31]` — and the duplicates it
+exists to address cannot occur, because the reference de-duplicates
+([behaviours §2.7](behaviours.md), [§2.26](behaviours.md)). 009 §3 asserted the distinctness too,
+in four places including an acceptance criterion, and its spec review corrected all four. Nothing
+is owed to this client that a reference server delivers.
 
 ### 3.1 The one operation it deliberately avoids
 

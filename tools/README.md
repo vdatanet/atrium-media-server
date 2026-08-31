@@ -31,7 +31,11 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_routing.py`](probe_routing.py) | How does the server match a path to a route, how does it refuse, and which headers ride every response? | 001 §3.6; behaviours §1.9, §1.10, §4.1 | no |
 | [`probe_query_envelope.py`](probe_query_envelope.py) | What shape does each list endpoint return, and how does one refuse? | 005 OQ-6, §3.5; behaviours §1.11, §1.12, §1.15, §1.16 | no |
 | [`probe_sort_names.py`](probe_sort_names.py) | How does the server derive `SortName` from `Name`? | 003 OQ-3 | yes |
-| [`probe_playlist_move.py`](probe_playlist_move.py) | Does `Move`'s `newIndex` refer to the list before or after removal? | 009 OQ-1 | yes |
+| [`probe_playlist_move.py`](probe_playlist_move.py) | Does `Move`'s `newIndex` refer to the list before or after removal, what do its boundaries do, and is a playlist entry's identifier its own? | 009 OQ-1, OQ-6, §3.1, §3.5; behaviours §2.7, §2.8, §2.26, §3.15 | yes |
+| [`probe_playlist_creation.py`](probe_playlist_creation.py) | What does `POST /Playlists` refuse, and what does it create? | 009 §3.2, §4, AC-2, AC-3 | yes |
+| [`probe_playlist_expansion.py`](probe_playlist_expansion.py) | Does adding a container add its children, and in what order? | 009 OQ-3, §3.4, AC-7 | yes |
+| [`probe_playlist_visibility.py`](probe_playlist_visibility.py) | What can a user who does not own a playlist see and do? | 009 OQ-4, §3.6, §3.7, AC-12 to AC-17; behaviours §3.16, §3.17, §4.3 | yes |
+| [`probe_playlist_rename.py`](probe_playlist_rename.py) | Who can rename a playlist, and through which route? | 009 §2, §3.8, AC-18; behaviours §5 | yes |
 | [`probe_playstate.py`](probe_playstate.py) | What do playback reports and played marks actually do to `UserData`, what does a playing session show, and how does each route refuse? | 007 §3.2–§3.8, OQ-2/3/5/6, AC-21/AC-22 — and OQ-4 with `--reap`, which costs ten minutes of deliberate silence | yes |
 | [`probe_auth_mechanisms.py`](probe_auth_mechanisms.py) | How may a client present a token, how strict is the client header's grammar, what one-off shapes does a sign-in return, and how is a refusal shaped? | 002 §3.1–§3.6, §3.8, OQ-1, OQ-3; behaviours §2.4, §2.10, §2.12–§2.14, §3.5, §5.1, §5.9 | no |
 | [`probe_library_extensions.py`](probe_library_extensions.py) | Which file extensions does the reference admit as items, and which does it ignore? | 003 §3.2, OQ-1 | no |
@@ -82,6 +86,10 @@ python3 tools/probe_routing.py
 python3 tools/probe_query_envelope.py
 python3 tools/probe_sort_names.py     --allow-writes
 python3 tools/probe_playlist_move.py  --allow-writes
+python3 tools/probe_playlist_creation.py   --allow-writes
+python3 tools/probe_playlist_expansion.py  --allow-writes
+python3 tools/probe_playlist_visibility.py --allow-writes
+python3 tools/probe_playlist_rename.py     --allow-writes
 python3 tools/probe_playstate.py      --allow-writes
 python3 tools/probe_auth_mechanisms.py --disabled-user probe-disabled
 python3 tools/probe_library_extensions.py
@@ -235,13 +243,17 @@ message, it names the section to change. `2` the question could not be answered 
 
 ### Writes
 
-Four of the probes cannot answer their question without writing, and they say so rather than doing
+Eight of the probes cannot answer their question without writing, and they say so rather than doing
 it quietly: each refuses to run without `--allow-writes`.
 
 | Probe | What it creates | Cleanup |
 |---|---|---|
 | `probe_sort_names.py` | 15 empty playlists with crafted names | Deletes them, including on failure |
-| `probe_playlist_move.py` | 2 playlists | Deletes them, including on failure |
+| `probe_playlist_move.py` | 2 playlists, plus one per boundary case | Deletes them, including on failure |
+| `probe_playlist_creation.py` | Up to 9 playlists, including ones named badly on purpose | Deletes them, including on failure |
+| `probe_playlist_expansion.py` | 1 playlist per container kind | Deletes them, including on failure |
+| `probe_playlist_visibility.py` | A throwaway non-administrator user, whose library access it restricts, and 2 playlists | Deletes all three, including on failure. Refuses to run if a user of that name already exists, so it can never touch a real account |
+| `probe_playlist_rename.py` | A throwaway non-administrator user and 2 playlists | The same. It renames nothing it did not create: that route writes metadata through the savers, so pointing it at a library item would be an edit, not a measurement |
 | `probe_playstate.py` | Play state and favourite marks on one long item, one short item, one season's episodes and one artist; a live playback reported and stopped | Chooses only items with no user data at all, so restoring them is exact; sweeps the season's episodes and the artist's favourite clean including on failure, and stops the playback it started |
 | `probe_next_up.py` | Played marks on a handful of episodes | Chooses series whose episodes carry no user data, deletes every mark including on failure, and verifies the episodes pristine afterwards |
 

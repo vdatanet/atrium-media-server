@@ -16,9 +16,21 @@ Upward moves cannot tell the two apart - moving E from 4 to 1 gives A E B C D ei
 why this probe moves downward.
 
 It also checks the premise the question rests on: that a playlist addresses *entries*, not items,
-so the same track appearing twice yields two independently addressable rows.
+so the same track appearing twice yields two independently addressable rows. That premise is now
+measured directly rather than inferred - the probe compares each row's PlaylistItemId with its own
+Id, because the reference caches the resolved item's id in the field the response reads from
+`[source: MediaBrowser.Controller/Entities/BaseItem.cs:1797-1802 @ v10.11.11]`, and if the two are
+equal then 009 section 3.1's whole distinction is a distinction the wire does not make.
 
-Writes: creates two playlists and deletes them afterwards, including on failure.
+Extended at the 009 spec review with the boundary battery OQ-6 asks for. Every one of those cases
+is a sentence the specification states without provenance, and the source reads against three of
+them: an entry id that is not in the playlist is looked up, not found, logged and returned from
+(section 3.5 says 404); the clamp at the end is reached only after an index into the accessible
+children, which throws for anything past the count (section 3.5 says "clamped"); and a negative
+index has its sign taken off by Math.Max before any of that (section 3.5 says 400).
+`[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:307-345 @ v10.11.11]`
+
+Writes: creates one playlist per case and deletes them afterwards, including on failure.
 
 Usage:
     python3 tools/probe_playlist_move.py http://your-jellyfin:8096 -u username --allow-writes
@@ -30,6 +42,13 @@ from _probe import Probe, ProbeError, Server, main
 
 NAME = "atrium probe - playlist move"
 DUP_NAME = "atrium probe - playlist entries"
+BOUNDARY_NAME = "atrium probe - playlist boundary"
+
+#: A syntactically valid identifier that addresses nothing. Section 3.5 says moving it answers 404;
+#: the source says it is looked up after the index arithmetic has already run, which is a different
+#: claim about *order* as much as about status - so it is asked at an index in range and again at
+#: one out of range.
+ABSENT_ENTRY = "0123456789abcdef0123456789abcdef"
 
 
 def entries(server: Server, playlist_id: str) -> list[tuple[str, str]]:
@@ -38,6 +57,12 @@ def entries(server: Server, playlist_id: str) -> list[tuple[str, str]]:
     return [
         (item.get("PlaylistItemId", "?"), item.get("Name", "?")) for item in result.get("Items", [])
     ]
+
+
+def rows(server: Server, playlist_id: str) -> list[dict]:
+    """Return the raw item rows in playlist order, for questions about a row's own fields."""
+    result = server.get(f"/Playlists/{playlist_id}/Items", UserId=server.user_id)
+    return result.get("Items", [])
 
 
 def source_items(server: Server, count: int) -> list[dict]:
@@ -65,13 +90,63 @@ def source_items(server: Server, count: int) -> list[dict]:
     )
 
 
+def boundaries(server: Server, probe: Probe, items: list, created: list) -> None:
+    """Section 3.5's table, one fresh playlist per row.
+
+    A fresh playlist per case rather than one playlist moved back and forth: a case whose whole
+    question is *did anything move* cannot be measured on a list some earlier case may have left
+    in a state nobody predicted.
+    """
+    labels = "ABCDE"
+    by_name = {item["Name"]: labels[i] for i, item in enumerate(items)}
+
+    def fresh(tag: str) -> tuple:
+        playlist_id = server.post(
+            "/Playlists",
+            body={
+                "Name": f"{BOUNDARY_NAME} {tag}",
+                "Ids": [item["Id"] for item in items],
+                "UserId": server.user_id,
+            },
+        )["Id"]
+        created.append(playlist_id)
+        return playlist_id, entries(server, playlist_id)
+
+    def order(playlist_id: str) -> str:
+        return " ".join(by_name.get(name, "?") for _, name in entries(server, playlist_id))
+
+    # (label, new index, whether to address an entry that is not there)
+    cases = (
+        ("move A to 4, the last index", 4, False),
+        ("move A to 5, one past the end", 5, False),
+        ("move A to 6, two past the end", 6, False),
+        ("move A to -1", -1, False),
+        ("move A to 0, where it already is", 0, False),
+        ("absent entry id, index in range", 1, True),
+        ("absent entry id, index past the end", 6, True),
+    )
+    for index, case in enumerate(cases):
+        label, new_index, absent = case
+        playlist_id, before = fresh(str(index))
+        entry = ABSENT_ENTRY if absent else before[0][0]
+        status, _, body = server.post_raw(
+            f"/Playlists/{playlist_id}/Items/{entry}/Move/{new_index}"
+        )
+        after = order(playlist_id)
+        detail = "" if status < 400 else "   " + repr(body[:70])
+        probe.observe(label, f"{status}  ->  {after}{detail}")
+
+
 def run(server: Server) -> Probe:
     probe = Probe(
         script="probe_playlist_move.py",
         question="does Move's newIndex refer to the list before or after the entry is removed?",
         document="specs/009-playlists/spec.md",
         section="section 3.5",
-        expectation="indices are zero-based and refer to the state before the move (pre-removal)",
+        expectation=(
+            "indices name the entry's position in the list after the move, so moving index 0 to "
+            "index 3 of [A B C D E] gives B C D A E"
+        ),
     )
 
     items = source_items(server, 5)
@@ -115,6 +190,18 @@ def run(server: Server) -> Probe:
         distinct = len({entry_id for entry_id, _ in on_add})
         probe.observe("distinct entry ids", f"{distinct} across {len(on_add)} entry/entries")
 
+        # The premise itself, asked of the wire rather than assumed: is a row's PlaylistItemId a
+        # value of its own, or the item's own Id under another name? Everything section 3.1 says
+        # about entry identity - and the warning that a server accepting either identifier would
+        # work by accident - rests on the answer being "a value of its own".
+        shown = rows(server, dup)
+        same = [row for row in shown if row.get("PlaylistItemId") == row.get("Id")]
+        probe.observe(
+            "entry id vs item id",
+            f"{len(same)} of {len(shown)} row(s) carry PlaylistItemId == Id"
+            + ("   <-- the entry id IS the item id" if same else "   <-- distinct, as specified"),
+        )
+
         if len(on_add) >= 2 and distinct == len(on_add):
             server.delete(f"/Playlists/{dup}/Items", EntryIds=on_add[0][0])
             left = entries(server, dup)
@@ -156,6 +243,9 @@ def run(server: Server) -> Probe:
 
         ids_preserved = {e for e, _ in before} == {e for e, _ in after}
         probe.observe("entry ids preserved", "yes" if ids_preserved else "NO - ids were reissued")
+
+        # -- OQ-6: the boundaries, which section 3.5 answers in a table with no provenance ----
+        boundaries(server, probe, items, created)
     finally:
         for item_id in created:
             try:
@@ -177,15 +267,16 @@ def run(server: Server) -> Probe:
     if order == "B C A D E":
         probe.conclude(
             "newIndex refers to the list BEFORE the entry is removed: the entry is inserted "
-            "before whatever occupied that index originally. specs/009 section 3.5 is correct",
-            matches_documentation=True,
+            "before whatever occupied that index originally. specs/009 section 3.5 has said the "
+            "opposite since 2026-08-26, so a reading this probe once measured has changed",
+            matches_documentation=False,
         )
     elif order == "B C D A E":
         probe.conclude(
             "newIndex refers to the list AFTER the entry is removed: the entry ends up at that "
-            "index in the resulting list. specs/009 section 3.5 says the opposite and must be "
-            "corrected, along with acceptance criterion 8",
-            matches_documentation=False,
+            "index in the resulting list, which is what section 3.5 has said since this probe "
+            "first answered OQ-1 on 2026-08-26",
+            matches_documentation=True,
         )
     else:
         probe.conclude(
