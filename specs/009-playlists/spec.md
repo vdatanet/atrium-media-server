@@ -433,11 +433,25 @@ the only thing whose loss is unrecoverable, and the plan has to treat them accor
 > over playlists returns the audio one and not the video one, and `mediaTypes=Video` the reverse
 > `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. Answering that
 > parameter from the type alone would claim every playlist for `Audio` and none for `Video`.
-> **This is not decided.** No analysed client sends `mediaTypes` with `includeItemTypes=Playlist`,
-> so the cheapest honest answer is an accepted gap; the alternative is one more clause on the
-> listing, over the same stored value the item body already reads. Nothing observes it until a
-> playlist can be stored, and the decision belongs to whoever owns that listing rather than to the
-> task that added the type.
+> **Decided at T6, and it is the clause rather than the gap.** The listing answers `mediaTypes=`
+> from the stored value for a playlist and from the kind for everything else. It was left open on
+> the argument that no analysed client sends the pair — but the same read decides the `MediaType`
+> a listed playlist *reports*, and a listing that filtered one way while reporting the other would
+> disagree with itself on the wire, which no client has to send anything unusual to see.
+>
+> **And the stored value has a third answer.** Measured on a stock reference: over eight
+> playlists, `mediaTypes=Audio` returns five, `mediaTypes=Video` two and `mediaTypes=Unknown`
+> **one** `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. Creation
+> cannot produce that value — an id list that resolves to nothing falls back to `Audio`
+> `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:124-126 @ v10.11.11]` — but a
+> playlist the reference builds from a directory is given no media type at all
+> `[source: Emby.Server.Implementations/Library/Resolvers/PlaylistResolver.cs:40-45 @ v10.11.11]`,
+> and its own file cannot restore one, because an unknown media type is the single value the
+> saver omits
+> `[source: MediaBrowser.LocalMetadata/Savers/PlaylistXmlSaver.cs:52-55 @ v10.11.11]`. Atrium
+> builds no playlist from a directory, so the value it stores is one of the other two — but the
+> parameter is answered by comparing what the playlist *holds*, not by naming the two values it is
+> expected to hold.
 
 > **The reference's playlists do come from the filesystem**, and three fields carry it to the wire:
 > `Path`, `DateCreated` and `DateModified` (§3.2). Atrium has no directory to report, and inventing

@@ -453,6 +453,139 @@ async def test_ac8_unknown_and_invisible_ids_answer_byte_identical_404s(
     assert masked(unknown.content) == masked(invisible.content)
 
 
+async def test_ac15_a_private_playlist_is_absent_from_another_users_items(
+    harness: Harness, client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """009 AC-15, asserted **through `/Items`** and not only through a direct fetch.
+
+    That is the whole point of T6 and of this list's gate finding 2: the playlist routes are
+    careful by construction and this listing is the one beside them that was not, because
+    `_library_permitted` exempts a row with no library and a playlist has none. A clause proven
+    only by the route that knows about playlists is a clause the leaking route never crossed.
+
+    Measured in the same three classes on the reference: a private playlist is absent from another
+    user's `/Items?includeItemTypes=Playlist`, a shared one and a public one are present
+    `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`
+    `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-08-31]`.
+    """
+    as_user(harness, world.restricted)
+    listed = await client.get(
+        "/Items", params={"includeItemTypes": "Playlist", "limit": "1000", "recursive": "true"}
+    )
+    assert listed.status_code == 200
+    body = listed.json()
+    shown = set(item_ids(body))
+    assert body["TotalRecordCount"] == len(shown), "the count follows the predicate, not the world"
+
+    assert world.private_playlist.id not in shown, "a private playlist reached a second user"
+    assert world.public_playlist.id in shown
+    assert world.shared_playlist.id in shown
+    assert world.read_only_playlist.id in shown
+
+
+async def test_ac15_an_unreachable_playlist_answers_404_by_id(
+    harness: Harness, client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """AC-15's second half, in the shape AC-8 fixed: the invisible id and the unknown one are one
+    refusal, so a client cannot learn a playlist exists by the way it is refused."""
+    as_user(harness, world.nobody)
+    refused = await client.get("/Items/" + world.private_playlist.id)
+    unknown = await client.get("/Items/" + "f" * 32)
+    assert refused.status_code == unknown.status_code == 404
+    assert refused.json()["title"] == unknown.json()["title"]
+
+    allowed = await client.get("/Items/" + world.public_playlist.id)
+    assert allowed.status_code == 200
+    assert allowed.json()["Type"] == "Playlist"
+
+
+async def test_an_administrator_gets_no_read_on_a_playlist_they_do_not_own(
+    harness: Harness, client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """Spec §3.7's last row, which the fixture world cannot express because it has no
+    administrator: deletion is the **one** operation an administrator may perform on a playlist
+    they do not own, and reading is not among the others
+    `[source: Jellyfin.Api/Controllers/PlaylistsController.cs:132-134, 422-424, 461-463 @
+    v10.11.11]`. So `_visible_to`'s fourth clause has no administrator branch, and this is the
+    test that fails if one is ever added for convenience.
+    """
+    as_user(harness, harness.admin)
+    listed = await client.get(
+        "/Items", params={"includeItemTypes": "Playlist", "limit": "1000", "recursive": "true"}
+    )
+    assert set(item_ids(listed.json())) == {world.public_playlist.id}
+    assert (await client.get("/Items/" + world.private_playlist.id)).status_code == 404
+
+
+async def test_an_administrator_naming_a_user_sees_that_users_playlists(
+    harness: Harness, client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """`userId` is whose visibility applies, and the fourth clause is inside that visibility rather
+    than beside it - so it moves with the named user instead of staying with the caller."""
+    as_user(harness, harness.admin)
+    answered = await client.get(
+        "/Items",
+        params={
+            "includeItemTypes": "Playlist",
+            "userId": world.everyone.id,
+            "limit": "1000",
+            "recursive": "true",
+        },
+    )
+    assert answered.status_code == 200
+    assert set(item_ids(answered.json())) == {one.id for one in world.playlists}
+
+
+async def test_media_types_over_playlists_reads_the_stored_row(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """The second half of T6, over HTTP. `mediaTypes=` is answered from the type for thirteen
+    types and from the row for the fourteenth, and the world's one `Audio` playlist against its
+    four `Video` ones is what tells a row read from a type-level guess
+    `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`.
+    """
+
+    async def playlists_for(media: str) -> set[str]:
+        answered = await client.get(
+            "/Items",
+            params={
+                "includeItemTypes": "Playlist",
+                "mediaTypes": media,
+                "limit": "1000",
+                "recursive": "true",
+            },
+        )
+        assert answered.status_code == 200
+        return set(item_ids(answered.json()))
+
+    assert await playlists_for("Audio") == {world.public_playlist.id}
+    assert await playlists_for("Video") == {
+        one.id for one in world.playlists if one.media_type == "Video"
+    }
+    assert await playlists_for("audio") == await playlists_for("Audio")
+    assert await playlists_for("Unknown") == set()
+
+
+async def test_a_listed_playlist_reports_the_media_type_it_was_filtered_by(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """The filter and the body have to agree, and until T6 they could not: nothing on the `/Items`
+    path filled `HydratedItem.media_type`, so every playlist listed here answered `Audio` from
+    `MEDIA_TYPE_OF` while the row said otherwise. A `mediaTypes=Video` answer carrying
+    `MediaType: "Audio"` is a listing disagreeing with itself, which is worse than the gap the
+    filter closed `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`.
+    """
+    listed = await client.get(
+        "/Items", params={"includeItemTypes": "Playlist", "limit": "1000", "recursive": "true"}
+    )
+    stored = {one.id: one.media_type for one in world.playlists}
+    assert {one["Id"]: one["MediaType"] for one in listed.json()["Items"]} == stored
+    assert set(stored.values()) == {"Audio", "Video"}, "a world of one media type proves nothing"
+
+    bare = await client.get("/Items/" + world.private_playlist.id)
+    assert bare.json()["MediaType"] == world.private_playlist.media_type == "Video"
+
+
 async def test_a_malformed_id_is_the_validation_400(client: httpx.AsyncClient) -> None:
     answered = await client.get("/Items/not-an-id")
     assert answered.status_code == 400

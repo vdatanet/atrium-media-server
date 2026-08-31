@@ -138,8 +138,12 @@ def run(server: Server) -> Probe:
             )
 
         # -- and whether the value is a filter, which is where a type-level answer shows -----
+        #
+        # `Unknown` is asked alongside the two the documents name, and it is the cell that decides
+        # the *shape* of 009 T6's clause. A fix written as "Audio or Video, per row" is a special
+        # case over two values; a playlist that answers neither would fall out of it in silence.
         if empty and from_movie:
-            for asked in ("Audio", "Video"):
+            for asked in ("Audio", "Video", "Unknown"):
                 filtered = server.get(
                     "/Items",
                     Recursive="true",
@@ -154,6 +158,22 @@ def run(server: Server) -> Probe:
                     f"{'in' if empty in ids else 'out'}, the video one "
                     f"{'in' if from_movie in ids else 'out'}",
                 )
+
+        # -- and whether the three answers account for every playlist the server holds --------
+        #
+        # Subtracting two numbers the block above has been printing side by side: if the filtered
+        # rows do not add up to the listing, some playlist answers a value creation cannot produce.
+        census: dict = {}
+        for row in server.get(
+            "/Items", Recursive="true", IncludeItemTypes="Playlist", UserId=server.user_id
+        ).get("Items", []):
+            census[str(row.get("MediaType", "<absent>"))] = (
+                census.get(str(row.get("MediaType", "<absent>")), 0) + 1
+            )
+        probe.observe(
+            "every playlist on the server, by MediaType",
+            ", ".join(f"{value}: {count}" for value, count in sorted(census.items())),
+        )
 
         # -- the rest of the row, which an item serialiser has to reproduce -------------------
         if empty:
@@ -197,6 +217,17 @@ def run(server: Server) -> Probe:
         "The type-level question is the last block: whatever a Playlist row answers for Type, "
         "IsFolder and CollectionType is what an item serialiser has to produce for a row that no "
         "scan created, and MediaType is the one cell of it that is not constant per type."
+    )
+    probe.note(
+        "Unknown is a third answer, and the census says so: creation cannot produce it - an id "
+        "list that resolves to nothing falls back to Audio [source: "
+        "Emby.Server.Implementations/Playlists/PlaylistManager.cs:124-126 @ v10.11.11] - but a "
+        "playlist the scanner resolves from a directory is given no media type at all [source: "
+        "Emby.Server.Implementations/Library/Resolvers/PlaylistResolver.cs:40-45 @ v10.11.11] and "
+        "its own file cannot restore one, because Unknown is the one value the saver does not "
+        "write [source: MediaBrowser.LocalMetadata/Savers/PlaylistXmlSaver.cs:52-55 @ v10.11.11]. "
+        "So mediaTypes= over playlists is a comparison against the stored row, not a two-value "
+        "special case."
     )
     return probe
 

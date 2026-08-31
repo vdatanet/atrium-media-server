@@ -379,7 +379,7 @@ one migration; it is one migration, four maps and a clause.
 
 ## T6 — The clause without which every playlist is public
 
-- [ ] **Changes:** `db/item_queries.py`. `_visible_to` gains a fourth clause beside
+- [x] **Changes:** `db/item_queries.py`. `_visible_to` gains a fourth clause beside
   `_by_name_is_referenced`: a row that is not a playlist passes, and a playlist passes when the
   caller owns it, is shared with it, or it is public. Written as a clause and not as a filter in
   Python, for the reason plan §10's last paragraph gives about counts and paging.
@@ -398,12 +398,66 @@ one migration; it is one migration, four maps and a clause.
   world where nothing was hidden.
 - **Spec reference:** §3.7, AC-15; plan §6.5, and this list's gate finding 2
 
+> **Done (2026-08-31).** *Closing the `mediaTypes=` gap made a second one visible on the same
+> response, and it was the older of the two: nothing on the `/Items` path ever filled the column
+> the item body prefers.* T4 added `HydratedItem.media_type` and taught `api/item_dto.py` to
+> prefer it over `MEDIA_TYPE_OF`, and plan §4.2 left the filling to *"T7's repository"* — which
+> serves the playlist routes and not this one. `/Items` hydrates through `ItemQueries._hydrate`,
+> which nobody told, so **every playlist listed there reported `MediaType: "Audio"`**, four of the
+> world's five of them wrongly. On its own that is a wrong field; underneath this task's filter it
+> is a response contradicting itself, because `mediaTypes=Video` would have returned four rows
+> whose own bodies said `Audio`. `_hydrate` gains one statement for the page — unconditional, like
+> the ancestors and the inspections beside it — and the hydration budget moves from eighteen to
+> nineteen, which is the number `test_item_queries.py` writes down so that a new related table
+> arrives as a decision rather than as drift. It was found by the parameter battery in
+> `test_items_route.py`, not by reading: `mediaTypes=Video` stopped answering one media type.
+>
+> *The filter compares the row, and a two-value special case would have been wrong on the
+> reference.* A playlist can answer **`Unknown`**: measured over the eight the reference held,
+> `mediaTypes=Audio` returns five, `mediaTypes=Video` two and `mediaTypes=Unknown` one, and the
+> probe now prints the census that says the three answers do not add up to the listing unless a
+> third value exists `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`.
+> Creation cannot produce it — an id list resolving to nothing falls back to `Audio`
+> `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:124-126 @ v10.11.11]`, and a
+> container in the list is expanded before the value is taken, so an album gives `Audio` and a
+> series `Video`. It comes from the *scanner*: a playlist resolved from a directory is given no
+> media type at all
+> `[source: Emby.Server.Implementations/Library/Resolvers/PlaylistResolver.cs:40-45 @ v10.11.11]`
+> and its own file cannot restore one, because `Unknown` is the single value the saver omits
+> `[source: MediaBrowser.LocalMetadata/Savers/PlaylistXmlSaver.cs:52-55 @ v10.11.11]`. Atrium
+> builds no playlist from a directory (spec §4), so its column holds `Audio` or `Video` — but that
+> is now a fact the clause does not depend on.
+>
+> *The visibility clause itself is the one part of this task that was exactly what the gate said.*
+> Four classes, no administrator branch — spec §3.7's last row gives an administrator who owns
+> nothing and is shared nothing **no read**, and the test that holds it is in
+> `test_items_route.py` because the fixture world has no administrator to hold it with (T5's Done
+> note). Written as an `EXISTS` correlated to `items` for `_by_name_is_referenced`'s reason, and a
+> playlist row with no `playlists` row fails it, which is the direction to fail in.
+>
+> *Both halves were checked by deletion, by hand, as the verification demanded.* With the clause
+> removed, six tests fail — three of them at the HTTP boundary, which is the half the gate said a
+> direct fetch could not prove. With `Playlist` put back into the type-level answer, the two
+> `mediaTypes` tests fail. Neither passes on a world where nothing was hidden: all five playlists
+> are owned by `everyone`, and the assertions run as `restricted`, as `nobody` and as an
+> administrator who owns none of them.
+>
+> *One thing this task did not do, deliberately.* The reference server carries a leftover playlist
+> from an earlier `probe_playlist_expansion.py` run — it is the `Unknown` row the census names,
+> and deleting it is a write on somebody else's data that no question here needed. The probe that
+> created it already asks for it to be removed by hand.
+
 ## T7 — `PlaylistRepository`: one read door, four writes
 
 - [ ] **Changes:** `db/repositories.py`. `by_id`, `entries`, `create`, `append`, `remove`,
   `reorder`, `rename`, `delete`, exactly plan §5's signatures. Every read takes a `User` and there
   is no variant that does not. `append` is `INSERT … ON CONFLICT DO NOTHING`, so de-duplication is
   the key rather than a step; `remove` and `reorder` renumber inside their own transaction.
+  **`media_type` already has a writer on the `/Items` path** (added 2026-08-31 by T6): plan §4.2's
+  *"T7's repository is what fills it in"* was true of the playlist routes only, and
+  `ItemQueries._hydrate` now reads the column for every page. This task fills it for its own reads
+  and must read the same column rather than re-deriving the value, or the two paths report
+  different media types for one playlist.
 - **Depends on:** T6
 - **Verified by:** `uv run pytest tests/unit/test_playlist_repository.py -q` — duplicates on both
   paths add nothing, ordinals stay contiguous after every mutation, an entry whose item is

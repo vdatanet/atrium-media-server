@@ -136,15 +136,16 @@ def test_a_predicate_costs_no_extra_statements(
 ) -> None:
     """Every filter is a clause on the one statement, never a second query or a walk in Python.
 
-    The ceiling is the hydration budget - eighteen: one count, one page, seven related tables,
+    The ceiling is the hydration budget - nineteen: one count, one page, seven related tables,
     the two 008 T3 added for the page's inspections, the one 011 T4 added for the subtitle streams
-    discovered beside them, four ancestor fetches and two rollups (`test_item_queries` holds the
-    exact number and the reasoning). What this test guards is that a *predicate* adds no statement
-    on top of it.
+    discovered beside them, the one 009 T6 added for the page's stored playlist media types, four
+    ancestor fetches and two rollups (`test_item_queries` holds the exact number and the
+    reasoning). What this test guards is that a *predicate* adds no statement on top of it -
+    including `media_types`, which since T6 reads a second table and does it in the same clause.
     """
     with query_counter.watching(engine):
         repository.run(ItemQuery(user=world.everyone, limit=10, **build(world)))
-    assert len(query_counter) <= 18, query_counter.report()
+    assert len(query_counter) <= 19, query_counter.report()
 
 
 # ------------------------------------------------------------------------------------------
@@ -322,32 +323,75 @@ def test_media_types_reads_the_measured_table(
     """A property of the type for the thirteen types a scan produces, measured once. `MusicAlbum`
     is `Unknown` on the reference, which a rule built on "does it hold audio" would get wrong.
 
-    **The fourteenth type breaks the rule, and this test states the gap rather than hiding it.**
-    A playlist's media type is fixed at creation and stored per row (009 plan §4.2), so inverting
-    the type-level map claims *every* playlist for `Audio` and *none* for `Video`, where the
-    reference returns the audio playlist for one and the video one for the other
-    `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. Excluding the
-    rows would make the difference invisible; asserting it means 009 T6, which owns the gap, has
-    to come back here.
+    **The fourteenth type answers from its row, and T6 closed the gap T5 asserted here.** A
+    playlist's media type is fixed at creation and stored per row (009 plan §4.2), so inverting the
+    type-level map claimed *every* playlist for `Audio` and *none* for `Video`, where the reference
+    returns the audio playlist for one and the video one for the other
+    `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. The world's one
+    `Audio` playlist against its four `Video` ones is what tells the two readings apart.
     """
+    playlists_of = {
+        media: {one.id for one in world.playlists if one.media_type == media}
+        for media in ("Audio", "Video")
+    }
+    assert len(playlists_of["Audio"]) == 1 and len(playlists_of["Video"]) == 4
+
     audio = repository.run(
         ItemQuery(user=world.everyone, media_types=frozenset({"Audio"}), limit=1000)
     )
     assert {one.item.type for one in audio.items} == {ItemType.AUDIO, ItemType.PLAYLIST}
-    assert {one.item.id for one in audio.items if one.item.type is ItemType.PLAYLIST} == {
-        one.id for one in world.playlists
-    }, "the gap: every playlist answers Audio, including the four that are Video"
+    assert {one.item.id for one in audio.items if one.item.type is ItemType.PLAYLIST} == (
+        playlists_of["Audio"]
+    ), "the stored row, not the type: only the playlist created from tracks answers Audio"
 
     video = repository.run(
         ItemQuery(user=world.everyone, media_types=frozenset({"Video"}), limit=1000)
     )
-    assert ItemType.PLAYLIST not in {one.item.type for one in video.items}
+    assert {one.item.id for one in video.items if one.item.type is ItemType.PLAYLIST} == (
+        playlists_of["Video"]
+    ), "the type map answers Audio for every playlist, so this set is what proves the row is read"
 
     unknown = repository.run(
         ItemQuery(user=world.everyone, media_types=frozenset({"Unknown"}), limit=1000)
     )
     assert ItemType.MUSIC_ALBUM in {one.item.type for one in unknown.items}
     assert ItemType.MOVIE not in {one.item.type for one in unknown.items}
+    # No playlist in this world stores `Unknown`, and the clause is a comparison against the row
+    # rather than a two-value special case, so this is the whole of what the world can assert. The
+    # reference *does* hold such a playlist: measured over eight of them, `mediaTypes=Unknown`
+    # answers one `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`.
+    assert ItemType.PLAYLIST not in {one.item.type for one in unknown.items}
+
+
+def test_media_types_over_playlists_respects_visibility(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """`visible AND filtered`, held over the clause that reads a second table.
+
+    The media-type clause is an `EXISTS` on `playlists`, and so is the visibility one. A filter
+    written as a join rather than as a correlated subquery would have widened the row set instead
+    of narrowing it, which is the one way this pair fails silently.
+    """
+    audio = repository.run(
+        ItemQuery(
+            user=world.nobody,
+            include_types=frozenset({ItemType.PLAYLIST}),
+            media_types=frozenset({"Audio"}),
+            limit=1000,
+        )
+    )
+    assert {one.item.id for one in audio.items} == {world.public_playlist.id}
+    assert audio.total == 1
+
+    video = repository.run(
+        ItemQuery(
+            user=world.nobody,
+            include_types=frozenset({ItemType.PLAYLIST}),
+            media_types=frozenset({"Video"}),
+            limit=1000,
+        )
+    )
+    assert video.total == 0, "every Video playlist is private and shared with somebody else"
 
 
 def test_media_types_matches_case_insensitively(
