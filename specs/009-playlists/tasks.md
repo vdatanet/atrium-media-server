@@ -112,7 +112,7 @@ one migration; it is one migration, four maps and a clause.
 
 ## T2 — `ForbiddenError` answers the reference's body, and 005's test moves with it
 
-- [ ] **Changes:** `compat/errors.py`'s `forbidden_handler` returns `controller_error(403)` instead
+- [x] **Changes:** `compat/errors.py`'s `forbidden_handler` returns `controller_error(403)` instead
   of `empty_error(403)` — the shape already exists in that module, written by 002 for the
   authentication refusals, down to setting the content type as a header so Starlette cannot append
   a `charset` the reference does not send. The `⚠️` in `ForbiddenError`'s docstring goes, because
@@ -128,6 +128,43 @@ one migration; it is one migration, four maps and a clause.
 - **Spec reference:** §3.7, AC-19; plan §2
 
 > First on purpose, so every refusal test written after it asserts the right bytes from the start.
+
+> **Done (2026-08-31).** *The cell this task's own verification asserts had never been measured,
+> and measuring it split one `403` into two.* The task asks for
+> `headers["content-type"] == "text/plain"` on the strength of a probe that printed
+> `add_body[:40]` and threw the headers away — a forty-byte slice of a body cannot see a content
+> type, and cannot tell an **empty** body from a **body-less** refusal. `probe_playlist_visibility`
+> gains a `shape` helper and a three-row battery that prints status, content type, body length and
+> body for every route Atrium answers through this one handler. The controller refusal is
+> `403 · text/plain · 25 bytes` as claimed — and the elevated controller the music client renames
+> through, spec §3.8, is **`403` · no content type · 0 bytes**, because an authorization policy
+> refuses it before any controller runs
+> `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`.
+>
+> So spec §3.7's *"every controller-level refusal"* and §3.8's *"with an empty body"* were never a
+> contradiction — they are the two shapes — and the definition of done's *"`ForbiddenError`'s body
+> is the reference's"* is true of the first only. **T13 is the task that changes:** its rename
+> cannot raise `ForbiddenError` any more, because `ForbiddenError` now says the sentence and that
+> route must say nothing.
+>
+> *Two of the four raise sites are not the refusal that was measured, and the plan promised one of
+> them would not move.* Plan §2 says *"what does not move is 002 OQ-5's three authentication
+> refusals"*, and OQ-5's third row — a live token whose account was disabled after it was issued —
+> is `api/deps.py:132`, raising this very class. It moved: from the empty shape by analogy with the
+> empty `401`, to the sentence by analogy with the measured `403`, still unmeasured either way, and
+> its test asserted `content == b""`. That is a **second** test asserting the old body, where the
+> task named one and plan §9's risk row predicted exactly this ("a *test* asserting the old empty
+> body somewhere the grep misses"). The row is marked fired.
+>
+> *And the fourth site is a route the reference does not refuse at all.* `api/users.py` answers
+> `403` to one user reading another; measured, a restricted non-administrator naming the
+> administrator is answered **`200` with that administrator's whole object, `Policy` included** —
+> the same disclosure 002 T11 found on `/Users/Public`, by a second road. 002 §3.7 states that
+> `403` with no provenance. **A decision is needed and was not taken here:** whether Atrium
+> replicates the disclosure (Principle I) or keeps the refusal belongs to 002's route and to the
+> user, and so does how T13 gets the empty shape — a second exception class, or the route writing
+> its own response the way the delete `401` does. Both are recorded in behaviours §1.11, spec §3.7,
+> §3.8, AC-18, AC-19 and plan §2 and §6; neither is improvised.
 
 ## T3 — The type joins the enum, and the three maps that are total over it
 
@@ -268,6 +305,11 @@ one migration; it is one migration, four maps and a clause.
 
 ## T13 — `POST /Items/{itemId}`: the rename, and the two things it refuses
 
+- [!] **Blocked by a decision, from T2's measurement.** The reference's `403` here is the **empty**
+  shape — no body, no content type, an authorization policy's refusal — and `ForbiddenError` stopped
+  being that at T2. This route needs the other shape by a road nobody has chosen: a second exception
+  class, or the route returning the response itself the way the delete `401` does (plan §6). The
+  rest of the task is unchanged and is written below.
 - [ ] **Changes:** `api/items.py` gains the route: an administrator renaming a playlist applies
   `Name` and nothing else; any non-administrator is `403` — the reference's own answer from an
   elevated controller; an administrator on an item that is not a playlist is `403`, which is v1's
@@ -300,7 +342,9 @@ one migration; it is one migration, four maps and a clause.
 - [ ] The three divergences ship as specified: the named reader (§3.16), the unreachable entry
       (§3.17) and the two refusals `Move` does not make (§3.15) — each with a test that fails if the
       reference's behaviour is reproduced instead.
-- [ ] `ForbiddenError`'s body is the reference's, on 009's routes **and** on 005's (AC-19).
+- [ ] `ForbiddenError`'s body is the reference's **controller** shape, on 009's routes **and** on
+  005's (AC-19) — and the rename's `403` is the reference's **policy** shape, which is a
+  different set of bytes and not this class (AC-18, T2's finding).
 - [ ] Anything learned during implementation is back in `spec.md` and `plan.md`, in the same change.
 - [ ] `spec.md`, `plan.md` and `tasks.md` are all `Implemented`.
 

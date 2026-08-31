@@ -1035,6 +1035,32 @@ three *authentication* refusals of
 [002 OQ-5](../../specs/002-authentication-users-and-sessions/spec.md#7-open-questions) are a
 different class and stay open: each needs a real account to fail against.
 
+**A `403` is two shapes, and one changed handler cannot be all of them — measured at 009 T2.** The
+paragraph above says *"every route that refuses this way"* as though the reference refused one way.
+It refuses two, and the split is this section's own rule applied to a single status:
+
+| Refusal | Shape | Measured on |
+|---|---|---|
+| A controller tests the request itself | `403`, `text/plain` with no charset, the 25 bytes | `POST /Playlists/{id}/Items?userId=<somebody else>` as a non-administrator |
+| An authorization **policy** refuses before the controller runs | `403`, **no content type, no body** | `POST /Items/{id}` — the elevated controller the music client renames through |
+
+`[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. The content type is
+newly measured on both: the earlier reading of that probe printed forty bytes of body and no header
+at all, which cannot tell an empty body from a body-less refusal. So 009 §3.7's sentence and §3.8's
+table were never in conflict — they describe the two shapes — and a route refused by policy keeps
+the empty one. `compat/errors.ForbiddenError` is the first shape only.
+
+**Two of that class's raise sites in Atrium are neither shape's measurement.** `api/deps.py` refuses
+a live token whose account was disabled afterwards — 002 OQ-5's third row, still open, and it moved
+from one analogy to another when the handler changed. `api/users.py` refuses one user reading
+another, and **the reference does not refuse that at all**: a restricted non-administrator naming an
+administrator is answered `200` with that administrator's whole object, `Policy` included
+`[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. That is the same
+disclosure as §3.5's `/Users/Public`, reached by a different road, against a `403` that
+[002 §3.7](../../specs/002-authentication-users-and-sessions/spec.md) states with no provenance.
+**Undecided:** whether Atrium replicates the disclosure or keeps the refusal is a Principle I call
+on 002's route, and it is recorded here rather than taken at a 009 task.
+
 **Atrium gets the shape for free and the keys only deliberately, and it pays for them.** A path
 or query parameter's refusal already matched — `compat/errors.validation_errors` keys on the
 declared name, which is the bullet above. A body's did not, and worse than expected: the framework

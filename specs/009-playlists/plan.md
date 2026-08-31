@@ -111,6 +111,26 @@ feature needs that refusal twice, and a third wrong copy is worse than one chang
 does **not** move is 002 OQ-5's three authentication refusals: they are a different class, each
 needs a real account to fail against, and no probe here will do that to somebody's installation.
 
+> **T2 measured the change's blast radius and it is wider than this section assumed (2026-08-31).**
+> Three corrections, none of which reverse the decision above:
+>
+> 1. **The reference has two `403` shapes**, and this section describes one. The refusal spec §3.8
+>    measures — an elevated controller turning a non-administrator away — carries **no content type
+>    and no body**, because an authorization policy answers it before any controller runs
+>    `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. §6's rename
+>    (T13) therefore cannot raise `ForbiddenError` once `ForbiddenError` carries the sentence, and
+>    the definition of done's *"`ForbiddenError`'s body is the reference's"* is true of the
+>    controller shape alone.
+> 2. **The content type was unmeasured on both** until T2 asked for it. The probe this section
+>    cites printed forty bytes of body and no headers, which cannot tell an empty body from a
+>    body-less refusal — so the shape this gate decided to copy was two thirds measured.
+> 3. **One of 002 OQ-5's three does share the handler.** `api/deps.py`'s refusal of a live token
+>    whose account was disabled afterwards is OQ-5's third row, and it moved from the empty shape
+>    to the sentence with the handler — one analogy for another, still unmeasured. Beside it,
+>    `api/users.py` refuses one user reading another where **the reference answers `200`** with
+>    that user's whole object. Both are recorded in behaviours §1.11 and neither is 009's to
+>    decide.
+
 ## 3. Modules
 
 ```
@@ -466,6 +486,15 @@ second status.
 | An administrator, on an item that is not a playlist | `403`, and §9 carries it |
 | An unknown item | `404` |
 
+**Both `403`s here are the *empty* shape, and `ForbiddenError` is no longer that** (T2's finding,
+§2). The reference answers this controller's refusal with no body and no content type, because an
+authorization policy decides it before the controller runs
+`[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]` — where the class this
+plan changed now carries the 25-byte sentence. T13 needs the empty shape by some other road, and
+**which road is not T2's to choose**: a second exception class beside `ForbiddenError`, or the route
+returning the response itself the way the `401` above does. Recorded for the user's decision rather
+than taken.
+
 The third row is the one this plan decides rather than inherits. The reference would apply the
 whole body to any item; v1 has no consumer for that (Principle VI) and could not honour it if it
 did — 004 T10 found the scan and the refresh fighting over `Item.name`, so a renamed film would be
@@ -502,7 +531,7 @@ Nineteen acceptance criteria, and the two that need the most machinery are the t
 | 15, 16 | conformance | The private playlist invisible in `/Items`, `404` direct — **and `404` when the request names its owner**, which is the divergence and needs two users |
 | 17 | conformance | A playlist holding an item in a library the reader cannot open: the row absent, the order and ids of the rest unchanged, `TotalRecordCount` counting only the survivors |
 | 18 | conformance | Rename by an administrator; `403` for the owner who is not one |
-| 19 | conformance + unit | The refusal's **bytes**, on a 009 route and on `/Items?userId=`. The second is 005's route, and `tests/unit/test_items_route.py::test_user_id_of_somebody_else_is_the_empty_403` asserts `content == b""` today — that assertion and the test's own name move in the same change |
+| 19 | conformance + unit | The refusal's **bytes and content type**, on a 009 route and on `/Items?userId=`. The second is 005's route, and its test moved at T2: `test_user_id_of_somebody_else_is_the_controller_403`, asserting the 25 bytes and `text/plain`. AC-18's `403` is the **other** shape and is asserted apart |
 | 20 | `tests/library/` | A playlist survives a full rescan — the one criterion that is about the scanner not touching something |
 
 **Fixtures — and the users this feature needs already exist.** `tests/fixtures/query.py` seeds
@@ -528,7 +557,7 @@ hand; CI never contacts a Jellyfin.
 | The `items` rebuild in 0008 is slow or lossy on a real library | Medium | High — it is every item the server has | `copy_from` with the model's own definition, as 0004 did; a test that populates `items` with one row of **every** type, migrates, and asserts the rows and their indexes survive |
 | A later reader adds an entries query without a `User` | Medium | High — §3.17's divergence stops applying, silently, on whichever route uses it | §5's single entry point, and a test that asserts the repository exposes no read that does not take one |
 | The move translation is right for the owner and wrong for a shared reader | Medium | Medium — invisible until somebody shares a playlist across libraries | The second matrix in §8, which is the only thing that exercises it |
-| Changing `ForbiddenError`'s body moves bytes on routes outside this feature | **Decided** (§2) | Medium — 005's `/Items?userId=` and any later refusal of that class | The change is one handler and one test assertion, and AC-19 covers both sides. The risk that remains is a *test* asserting the old empty body somewhere the grep misses, which is why AC-19 asserts bytes on both routes rather than one |
+| Changing `ForbiddenError`'s body moves bytes on routes outside this feature | **Fired, T2** | Medium — 005's `/Items?userId=` and any later refusal of that class | It reached more routes than one handler's worth: the grep found a **second** test asserting the empty body (`tests/unit/test_require_user.py`, 002's disabled-token refusal), which is the exact failure this row named, and one route it reaches is one the reference does not refuse at all. AC-19 covers the measured side; §2's note carries the rest |
 | The rename's `403` for a non-playlist item is a delta nobody measured | Low | Low | It is a refusal where the reference succeeds, for a request no analysed client sends; recorded in behaviours §5 when it ships |
 | A client sends `Users` in the create body and expects the sharing routes | Low | Low | Shares are stored and honoured (§4.4); the routes that *read* them stay out of scope, which is spec §2 |
 

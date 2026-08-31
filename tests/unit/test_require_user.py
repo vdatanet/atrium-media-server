@@ -102,7 +102,12 @@ async def test_a_token_whose_account_was_disabled_is_403(
 
     refused = await client.get("/System/Info", headers={"X-Emby-Token": issued.secret})
     assert refused.status_code == 403
-    assert refused.content == b""
+    # ⚠️ Not measured, and this line is the second analogy in a row rather than a finding. It read
+    # `b""` until 009 T2, by analogy with the empty `401` beside it; the shared handler now sends
+    # the controller's 25 bytes, measured for a *permission* refusal and not for this one. 002
+    # spec section 7 (OQ-5) still holds the question, and discharging it means disabling a real
+    # account that already holds a live token.
+    assert refused.content == b"Error processing request."
 
 
 async def test_a_malformed_client_header_does_not_authenticate(

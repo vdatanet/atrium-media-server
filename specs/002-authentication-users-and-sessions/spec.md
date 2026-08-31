@@ -304,6 +304,19 @@ Both return the §3.5 object in full, including configuration and policy.
 `GET /Users/{userId}` returns `403` when the token belongs to a different, non-administrator user.
 A user may always read themselves.
 
+> **⚠️ That `403` is Atrium's, not the reference's, and it was stated here with no provenance until
+> 009 T2 measured it (2026-08-31).** The reference does not refuse at all: a restricted
+> non-administrator naming an administrator is answered **`200` with that administrator's whole
+> object, `Configuration` and `Policy` included**
+> `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. It is the same
+> disclosure §3.4 already records for `/Users/Public`, reached by a second road — and there, this
+> document chose to replicate rather than to protect, because Principle I outranks the improvement.
+> **Undecided:** whether this route follows §3.4 or keeps the refusal is a divergence to argue or
+> to withdraw, and neither was taken at a 009 task. §5's criterion 7 and the conformance matrix
+> still describe the refusal, so nothing here has changed behaviour;
+> [behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one)
+> carries the measurement.
+
 ### 3.8 Sessions
 
 A session is a `(user, device, client)` triple, created at authentication and identified by the

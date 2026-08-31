@@ -18,8 +18,16 @@ v10.11.11]`. If that reads on the wire the way it reads in the source, a private
 readable by anyone who can name its owner, and AC-12 describes a privacy the reference does not
 have.
 
+It also carries a shape battery, added when 009 T2 came to implement the refusal this probe first
+measured and found the header missing. A forty-byte slice of a body cannot see a content type and
+cannot tell an empty body from a body-less refusal, so every 403 the throwaway user can produce is
+printed with its status, its content type, its length and its bytes - one row per layer of the
+reference that can refuse: a controller helper, an authorization policy, and a controller's own
+test. The answer is that a 403 is two shapes, which behaviours section 1.11 now carries.
+
 Writes: creates a throwaway non-administrator user, whose library access it restricts, and two
-playlists. Removes all three afterwards, including on failure.
+playlists. Removes all three afterwards, including on failure. The rename row of the shape battery
+posts an item body back, and it does that only to a playlist this probe created.
 
 Usage:
     python3 tools/probe_playlist_visibility.py http://your-jellyfin:8096 -u username --allow-writes
@@ -62,6 +70,21 @@ def status_of(server: Server, path: str, **params) -> str:
     if status == 200:
         return "200"
     return f"{status}  {payload[:40]!r}"
+
+
+def shape(status: int, headers: dict, payload: bytes) -> str:
+    """A refusal's whole observable shape: status, content type, and the body's own length.
+
+    The content type is the cell every earlier reading of this probe left out. `Error processing
+    request.` and an empty body are both visible in a 40-byte slice, but *which shape* a refusal
+    is depends on the header as much as on the bytes - `text/plain` with no charset is the
+    controller's own sentence, and no content type at all is the framework refusing before the
+    controller runs. Reading only the body cannot tell those apart when the body is empty.
+    """
+    content_type = next(
+        (value for key, value in headers.items() if key.lower() == "content-type"), None
+    )
+    return f"{status}  {content_type!r}  {len(payload)} bytes  {payload[:48]!r}"
 
 
 def run(server: Server) -> Probe:
@@ -176,6 +199,30 @@ def run(server: Server) -> Probe:
         probe.observe(
             "POST .../Items?userId=<the owner> as the other user",
             f"{add_status}  {add_body[:40]!r}   <-- the same parameter, the other route",
+        )
+
+        # -- the shape battery: is a 403 one shape, or several? -------------------------------
+        # Atrium answers every refusal of this class through one exception and one handler, so
+        # the question is not what *this* route says but whether the routes that share that
+        # handler all say the same thing. Three refusals, three layers of the reference:
+        # a controller helper, an authorization policy, and a controller's own test.
+        probe.observe(
+            "SHAPE  POST /Playlists/{id}/Items?userId=  (a controller helper refuses)",
+            shape(
+                *other.post_raw(
+                    f"/Playlists/{private_id}/Items", ids=tracks[0]["Id"], userId=server.user_id
+                )
+            ),
+        )
+        rename_body = other.get(f"/Items/{shared_id}", userId=other_id)
+        rename_body["Name"] = SHARED + " renamed"
+        probe.observe(
+            "SHAPE  POST /Items/{id}  (an elevated controller: the rename the client calls)",
+            shape(*other.post_raw(f"/Items/{shared_id}", body=rename_body)),
+        )
+        probe.observe(
+            "SHAPE  GET /Users/{someone else}  (a controller tests the caller itself)",
+            shape(*other.get_raw(f"/Users/{server.user_id}")),
         )
 
         # -- OQ-4: the entries the reader cannot see ------------------------------------------

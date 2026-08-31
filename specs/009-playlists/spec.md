@@ -4,7 +4,7 @@ title: Playlists
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-31
-amended: 2026-08-31 at the plan gate — §3.7 and a new AC-19 state the *bytes* of the refusal a caller gets for naming another user, which the spec gate had measured and recorded only as a status. The reference answers the 25-byte `text/plain` body every controller-level refusal carries; this server answered an empty `403` for that whole class, on the argument that it is decided where the empty `401` is, with a `⚠️` in the code saying the shape was unmeasured because no non-administrator account existed to produce one. The visibility probe made one. It is a wire difference on a route 005 already ships, so the correction is taken where the refusal is decided rather than on 009's own two routes — decided by the user at the plan gate; and 2026-08-31 by T1 — §3.5 stated the move's arithmetic for a caller who sees the whole playlist and left the other caller to §3.7. It now says both: the index is judged against the list that reader was given and the entry lands at `newIndex` **of it**, where the reference is off by one on every downward move and will reorder an entry that reader was never shown. Neither difference is reachable against a reference server — what it hides is hidden by a parental-rating check — so both belong to §3.7's divergence, and AC-17 gains the clause. Plus the provenance: all thirty (source, `newIndex`) pairs are measured where one was
+amended: 2026-08-31 at the plan gate — §3.7 and a new AC-19 state the *bytes* of the refusal a caller gets for naming another user, which the spec gate had measured and recorded only as a status. The reference answers the 25-byte `text/plain` body every controller-level refusal carries; this server answered an empty `403` for that whole class, on the argument that it is decided where the empty `401` is, with a `⚠️` in the code saying the shape was unmeasured because no non-administrator account existed to produce one. The visibility probe made one. It is a wire difference on a route 005 already ships, so the correction is taken where the refusal is decided rather than on 009's own two routes — decided by the user at the plan gate; and 2026-08-31 by T1 — §3.5 stated the move's arithmetic for a caller who sees the whole playlist and left the other caller to §3.7. It now says both: the index is judged against the list that reader was given and the entry lands at `newIndex` **of it**, where the reference is off by one on every downward move and will reorder an entry that reader was never shown. Neither difference is reachable against a reference server — what it hides is hidden by a parental-rating check — so both belong to §3.7's divergence, and AC-17 gains the clause. Plus the provenance: all thirty (source, `newIndex`) pairs are measured where one was; and 2026-08-31 by T2 — a `403` is **two** shapes and §3.7 had described one. The content type was never measured on either: the probe cited for both printed forty bytes of body and no headers, which cannot separate an empty body from a body-less refusal. Measured, the controller's refusal is `text/plain` with no `charset` and §3.8's elevated-controller refusal carries no content type and no body at all — so §3.7 and §3.8 were never in conflict, AC-18 and AC-19 assert different bytes on purpose, and only the first shape is the one the shared handler answers. Plus two raise sites that shared that handler and are neither measurement: a live token whose account was disabled (002 OQ-5, still open) and one user reading another, which the reference does not refuse at all
 depends_on: [005]
 ---
 
@@ -319,13 +319,25 @@ carries the argument; the short form is that a reference that refuses on one rou
 on another cannot have taught a client to depend on the permissive one.
 
 **The refusal is the reference's own, bytes included.** It is `403` carrying the 25-byte
-`text/plain` body `Error processing request.` — the shape
+`text/plain` body `Error processing request.`, with no `charset` on the content type — the shape
 [behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one)
-gives a controller that refuses a request itself, measured here for a policy refusal for the first
-time `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. This server
-answered an **empty** `403` for every refusal of that class until 009 — a body no reference server
-sends, on a route 005 already ships — and 009 corrects it where it is decided rather than on its
-own two routes alone.
+gives a controller that refuses a request itself, measured here for a permission refusal for the
+first time `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. This
+server answered an **empty** `403` for every refusal of that class until 009 — a body no reference
+server sends, on a route 005 already ships — and 009 corrects it where it is decided rather than on
+its own two routes alone.
+
+**But `403` is two shapes, and only this one is a controller's.** The refusal §3.8 measures — the
+elevated rename controller turning away a non-administrator — carries **no content type and no body
+at all**, because an authorization policy answers it before any controller runs. Both are `403` and
+the bytes are the whole difference. So the correction above belongs to the refusals a route decides
+for itself, and a route refused by policy keeps the empty shape
+`[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`.
+
+> **The content type was never measured until this was implemented.** The probe cited above had
+> printed forty bytes of each refusal's body and none of its headers, which cannot tell an empty
+> body from a body-less refusal, and cannot see the `charset` that separates this shape from every
+> JSON one. Both cells are measured now, and they are what turned one shape into two.
 
 **An entry the reader has no access to is shown anyway.** The reference filters a playlist's
 entries through a parental-rating and tag check, which has nothing to do with which libraries a
@@ -356,7 +368,7 @@ reference declares the controller elevated, so:
 | Caller | Answer |
 |---|---|
 | An administrator, on any playlist | `204`, and the name changes |
-| The playlist's own owner, not an administrator | **`403`**, with an empty body |
+| The playlist's own owner, not an administrator | **`403`**, with an empty body **and no content type** — an authorization policy's refusal, not a controller's, which is why it is not §3.7's 25 bytes |
 
 `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-08-31]`
 `[source: Jellyfin.Api/Controllers/ItemUpdateController.cs @ v10.11.11]`
@@ -439,9 +451,12 @@ the only thing whose loss is unrecoverable, and the plan has to treat them accor
     `Move` indexes the list they were given: the entry lands at `newIndex` of it, and naming the
     omitted entry answers `204` and changes nothing.
 18. An administrator renames a playlist through `POST /Items/{id}`; its non-administrator owner is
-    answered `403`.
+    answered `403` **with no body and no content type**, which is the policy shape of §3.7 and not
+    the sentence AC-19 asserts.
 19. A refusal for a caller naming another user carries `403` with the reference's 25-byte
-    `text/plain` body — on this feature's routes and on the 005 route that shares the rule.
+    `text/plain` body, content type included and `charset` absent — on this feature's routes and on
+    the 005 route that shares the rule. The two `403`s of AC-18 and AC-19 are different bytes on
+    purpose.
 20. Playlist state survives a full library rescan.
 
 ## 6. Conformance
@@ -454,7 +469,7 @@ the only thing whose loss is unrecoverable, and the plan has to treat them accor
 | `.../Move/{newIndex}` | **L2** | Table-driven over source × target, including the boundaries (AC-9 to AC-11) |
 | `DELETE /Items/{itemId}` | **L2** | Playlist path plus the media refusal, with an on-disk assertion (AC-12) |
 | `POST /Items/{itemId}` | **L2** | Rename by an administrator, refusal for a non-administrator owner (AC-18) |
-| The shared refusal | **L2** | The `403` body, asserted as bytes on a 009 route and on `/Items?userId=` (AC-19) |
+| The shared refusal | **L2** | The `403` body, asserted as bytes **and content type** on a 009 route and on `/Items?userId=` (AC-19) — and beside it AC-18's, which is the other shape |
 
 The move test is table-driven because off-by-one errors in reordering pass every hand-written case
 and fail the one nobody wrote. Every (source, target) pair on a five-entry playlist is 25 rows and
