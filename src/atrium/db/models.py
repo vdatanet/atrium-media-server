@@ -338,15 +338,22 @@ class Item(Base):
     __table_args__ = (
         CheckConstraint(
             "type IN ('Movie', 'Series', 'Season', 'Episode', 'MusicArtist', 'MusicAlbum', "
-            "'Audio', 'CollectionFolder', 'Genre', 'MusicGenre', 'Studio', 'Person', 'Year')",
+            "'Audio', 'CollectionFolder', 'Genre', 'MusicGenre', 'Studio', 'Person', 'Year', "
+            "'Playlist')",
             name="ck_items_type",
         ),
-        # **The by-name types are exactly the ones with no library**, stated as a constraint
-        # rather than left to the code that writes the rows. Both directions matter: a genre with
-        # a library would appear under one library and belong to all of them, and a film without
-        # one would be invisible to every query 005 scopes by library.
+        # **The types with no library are the five by-name ones or a playlist**, stated as a
+        # constraint rather than left to the code that writes the rows. Both directions matter: a
+        # genre with a library would appear under one library and belong to all of them, and a
+        # film without one would be invisible to every query 005 scopes by library.
+        #
+        # A playlist joins the null side rather than getting a library of its own: it belongs to a
+        # **user**, and giving it a library would put it under that library's tree and make
+        # `_library_permitted` - not ownership - the predicate that decides who sees it
+        # (009 plan section 4.1). Revision 0008.
         CheckConstraint(
-            "(library_id IS NULL) = (type IN ('Genre', 'MusicGenre', 'Studio', 'Person', 'Year'))",
+            "(library_id IS NULL) = "
+            "(type IN ('Genre', 'MusicGenre', 'Studio', 'Person', 'Year', 'Playlist'))",
             name="ck_items_by_name_has_no_library",
         ),
         # Pattern-driven, not fact-driven: 005 orders nearly every list by `sort_name` within a
@@ -986,3 +993,110 @@ class MediaExternalStreamRow(Base):
     probed_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
 
     probe: Mapped[MediaProbe] = relationship(back_populates="external_streams", lazy="raise")
+
+
+class Playlist(Base):
+    """A playlist's own facts, beside the `items` row that carries its name and its user data.
+
+    **A side table rather than four nullable columns on `items`**, for the reason that table's
+    docstring already gives about paths: a column that is null for every row but one type is a
+    column every reader has to know is null (009 plan section 4.2).
+
+    The item row is the playlist as a client sees it - `Type: Playlist`, favouritable, listed by
+    `/Items?includeItemTypes=Playlist` - and it has **no library**, which is the widened
+    `ck_items_by_name_has_no_library` above. Who may see it is decided by `owner_user_id`,
+    `PlaylistShare` and `is_public`, never by library access. Revision 0008.
+    """
+
+    __tablename__ = "playlists"
+
+    #: The playlist's identifier, **minted** rather than derived (009 plan section 1). It is the
+    #: one item in the store a rescan cannot rebuild, so `ON DELETE CASCADE` here is what makes
+    #: `DELETE /Items/{id}` one statement.
+    item_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("items.id", ondelete="CASCADE"), primary_key=True
+    )
+    #: A playlist without an owner cannot be reached by any of spec section 3.7's four rules, so
+    #: deleting the account takes the playlist with it rather than leaving an unreadable row.
+    owner_user_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    is_public: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+
+    #: **A column and not a lookup.** Measured, the reference fixes a playlist's media type at
+    #: creation and never revises it - a playlist created empty answers `Audio` after a film is
+    #: added to it, and one created from a film answers `Video` after a track is
+    #: `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`. So the value
+    #: varies per row where `domain.items.MEDIA_TYPE_OF` answers per type, and that map's
+    #: `Playlist` entry is the fallback behind this column rather than the answer.
+    media_type: Mapped[str] = mapped_column(String, nullable=False)
+
+    entries: Mapped[list[PlaylistEntry]] = relationship(
+        back_populates="playlist", lazy="raise", cascade="all, delete-orphan"
+    )
+    shares: Mapped[list[PlaylistShare]] = relationship(
+        back_populates="playlist", lazy="raise", cascade="all, delete-orphan"
+    )
+
+
+class PlaylistEntry(Base):
+    """One item in one playlist, at one position.
+
+    **There is no entry-identifier column, and that is the schema stating spec section 3.1.**
+    `PlaylistItemId` on the wire *is* the referenced item's `Id`, so an identifier of our own
+    would be a column whose only job is to be hidden - and the key below is therefore
+    `(playlist_id, item_key)`, which makes "adding an item already in the playlist adds nothing"
+    a property of the table rather than a rule applied twice (009 plan section 4.3).
+
+    **No foreign key on `item_key`, deliberately, and the argument is 007's.** `item_user_data`
+    carries the same shape for the same reason: a file that disappears and comes back must not
+    cost the user anything, and under a cascade the first slow mount would empty their playlists
+    permanently. An entry whose item is missing or soft-deleted is dropped **at read time**, which
+    is what the reference does too. Revision 0008.
+    """
+
+    __tablename__ = "playlist_entries"
+    #: `(playlist_id, ordinal)` is the read: one indexed scan in order, rather than a sort of
+    #: everything the playlist holds. **Not unique** - a move rewrites a contiguous range in one
+    #: `UPDATE`, and a unique index would force that into a two-phase dance around a constraint no
+    #: read depends on (009 plan section 4.3).
+    __table_args__ = (Index("ix_playlist_entries_order", "playlist_id", "ordinal"),)
+
+    playlist_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("playlists.item_id", ondelete="CASCADE"), primary_key=True
+    )
+    #: The referenced item's identity - **and the entry's identifier** (spec section 3.1).
+    item_key: Mapped[str] = mapped_column(ID, primary_key=True)
+    #: Contiguous from 0, rewritten inside the transaction that changes it. A query pattern, not a
+    #: fact: the fact is the order of a list.
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    playlist: Mapped[Playlist] = relationship(back_populates="entries", lazy="raise")
+
+
+class PlaylistShare(Base):
+    """One user a playlist is shared with, and whether they may change it.
+
+    A table rather than a JSON column on `playlists`, because the read that needs it asks *"may
+    this user edit this playlist"* - a key lookup - and the same question inside a blob is a scan
+    of every playlist the server has. Rows exist because the **create** body can set them (spec
+    section 3.2's `Users`); the sharing routes themselves are out of 009's scope. Revision 0008.
+    """
+
+    __tablename__ = "playlist_shares"
+
+    playlist_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("playlists.item_id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[str] = mapped_column(
+        ID, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    #: Spec section 3.7's second and third classes: a shared reader and a shared editor are two
+    #: different permissions over the same row.
+    can_edit: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+
+    playlist: Mapped[Playlist] = relationship(back_populates="shares", lazy="raise")

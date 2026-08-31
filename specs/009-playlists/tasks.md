@@ -234,7 +234,7 @@ one migration; it is one migration, four maps and a clause.
 > closing it needs T4's column — so it is named in the code, in spec §4 and in plan §4.2, and
 > **left undecided**: it is an accepted gap or one more clause on the listing, and no task in this
 > list owns it. **The same ordering blocks this task's last clause**: `api/item_dto.py` cannot
-> prefer a column that T4 has not created, and T4 depends on T3.
+> prefer a column that T4 has not created, and T4 depends on T3. **Reassigned to T4 on 2026-08-31**, which is where it was written; plan §4.2 says so too.
 >
 > *Two smaller things, both about tests that would have passed for the wrong reason.*
 > `test_a_real_kind_this_version_cannot_produce_narrows_to_nothing` asked `includeItemTypes=Playlist`
@@ -246,12 +246,14 @@ one migration; it is one migration, four maps and a clause.
 
 ## T4 — Migration 0008: two constraints rebuilt, three tables
 
-- [ ] **Changes:** `db/migrations/versions/0008_playlists.py` and `db/models.py`. The `items`
+- [x] **Changes:** `db/migrations/versions/0008_playlists.py` and `db/models.py`. The `items`
   rebuild through `batch_alter_table(copy_from=…, recreate="always")`, as 0004 did for
   `item_artists`: `ck_items_type` gains `'Playlist'`, and `ck_items_by_name_has_no_library` becomes
   *the five by-name types **or** a playlist*. Then `playlists`, `playlist_entries` and
   `playlist_shares` exactly as plan §4.2–§4.4 — no entry-identifier column, no foreign key on
-  `item_key`, `ordinal` indexed and not unique.
+  `item_key`, `ordinal` indexed and not unique. **And the two clauses T3 could not place**
+  (reassigned 2026-08-31): `api/item_dto.py` prefers the stored `media_type`, which is this
+  task's because it reads this task's column; the `mediaTypes=` filter goes to T6.
 - **Depends on:** T3
 - **Verified by:** `uv run pytest tests/unit/test_migrations.py -q`, up **and** down. The rebuild
   test seeds `items` with one row of every type *and* the rows that reference them —
@@ -259,6 +261,52 @@ one migration; it is one migration, four maps and a clause.
   and every foreign key survives. A rebuild that silently drops a child table's rows is the
   failure this task exists to make impossible.
 - **Spec reference:** §4; plan §4, §9's first risk
+
+> **Done (2026-08-31).** *The rebuild does drop a child table's rows — every one of them — and
+> `PRAGMA foreign_key_check` comes back clean afterwards, so nothing anywhere says so.* Measured
+> before a line of the revision was written. Batch mode rebuilds a table by `DROP TABLE`-ing the
+> original, and SQLite performs an implicit `DELETE FROM` before the drop **when foreign keys are
+> enforced** — which `db/engine.py` does on every connection. That fires `ON DELETE CASCADE` on all
+> six tables pointing at `items.id`: seeded with one row of every type and one row in each child,
+> a 0007 → 0008 upgrade comes out with `item_sources`, `item_genres`, `item_studios`,
+> `item_people`, `item_artists` and `item_images` **empty**, no exception, no orphan.
+>
+> *Two module docstrings asserted the opposite, and neither had been measured.* `db/schema.py` said
+> a migration with foreign keys off "is exactly the migration that leaves an orphan behind" and
+> `env.py` said opening a second connection "would migrate a database with foreign keys off" as
+> though that were the hazard — and `tests/unit/test_db_schema.py` had a purpose-built revision
+> asserting `PRAGMA foreign_keys == 1` during the run, so the wrong claim had a passing test under
+> it. Enforcement is the hazard. `schema.migration_connection` is the fix and every path that runs
+> a migration goes through it — the server's startup, `uv run alembic upgrade head` (the command
+> operators are told to run), and the test harness — with the pragma off, `PRAGMA foreign_key_check`
+> **before** the commit so "off" does not trade a silent deletion for a silent orphan, and the
+> restore in a `finally`. The restore has to be after the commit: the pragma is a no-op inside a
+> transaction, so putting it back where it was turned off reads `0` and hands the pool a connection
+> that enforces nothing for the rest of the process.
+>
+> *This was never 0008's bug alone.* 0003 rebuilds `items` the same way and `item_sources` exists
+> from 0002, so any populated 0002 database upgraded to 0003 lost every item's file paths. Nothing
+> caught it because `test_migrations.py` compares **schemas**, and rows are invisible to it.
+>
+> *The task's own list of "the rows that reference them" names two tables that cannot be affected
+> and misses five that can.* `item_user_data` and `media_streams` carry no foreign key to `items`
+> at all — 007's deliberate decision and 008's keying by path — so a test seeded with only the
+> three named would have asserted survival of one at-risk table out of six. The seed is now the
+> schema's own list, and the guard-removed test asserts **exactly** which six are emptied, so a
+> seventh cascading child added later changes that set and fails.
+>
+> *And T3's split test would have inverted in silence, exactly as its note predicted.*
+> `test_migration_0003.py`'s "0003 refuses `Playlist`" runs against the fixture that migrates to
+> **head**, so it asserted 0003's constraint only for as long as head was `0007`. At `0008` it
+> stopped raising. It now walks the database back to `0007` before asking, and says which revision
+> it is asking.
+>
+> *Two smaller things.* The downgrade deletes the playlist rows, which is real data loss and the
+> only honest option — a `Playlist` cannot exist under 0007's `ck_items_type`, and unlike every
+> other association this project rolls back, a playlist is the one thing a rescan cannot rebuild;
+> the docstring says so. And `ck_items_by_name_has_no_library` is an **equivalence**, so widening
+> it needed both directions tested: a playlist with a library is refused, and a film without one
+> still is.
 
 ## T5 — The fixture world gets playlists
 
@@ -278,6 +326,12 @@ one migration; it is one migration, four maps and a clause.
   `_by_name_is_referenced`: a row that is not a playlist passes, and a playlist passes when the
   caller owns it, is shared with it, or it is public. Written as a clause and not as a filter in
   Python, for the reason plan §10's last paragraph gives about counts and paging.
+  **And the `mediaTypes=` gap is this task's** (reassigned from nobody, 2026-08-31): T3 measured
+  that a playlist's media type is fixed at creation and stored per row, so `_types_of_media` —
+  which inverts the type-level `MEDIA_TYPE_OF` — claims every playlist for `Audio` and none for
+  `Video`, where the reference filters by the stored row. T4 created the column; this task already
+  edits this module and sits before every route that could expose the difference. Closing it with
+  a clause or accepting it as a gap is this task's call, and spec §4 states both.
 - **Depends on:** T5
 - **Verified by:** `uv run pytest tests/unit/test_items_route.py tests/conformance -q` — a private
   playlist is absent from another user's `/Items?includeItemTypes=Playlist` and answers `404` on

@@ -22,9 +22,15 @@ from atrium.db.engine import create_database_engine
 from atrium.server import create_app, main
 from tests.conftest import data_dir
 
-#: The first revision reads back `PRAGMA foreign_keys` and refuses if it is off. That is the whole
-#: assertion behind `upgrade_to_head` reusing the server's engine: Alembic would happily open its
-#: own connection from a URL, and that one would migrate with foreign keys disabled.
+#: The first revision reads back `PRAGMA foreign_keys` and refuses if it is **on**, which is the
+#: opposite of what it asserted until 009 T4 measured the claim behind it.
+#:
+#: The old text said Alembic opening its own connection "would migrate with foreign keys disabled",
+#: as though that were the hazard. Measured, enforcement is the hazard: batch mode rebuilds a table
+#: by dropping the original, SQLite performs an implicit `DELETE FROM` first when foreign keys are
+#: on, and that cascades every child row away without raising anything. So `migration_connection`
+#: turns the pragma off for the run, checks for orphans before committing, and turns it back on -
+#: and this revision asserts the first half while the test below asserts the last.
 FIRST = '''"""first
 
 Revision ID: 0001
@@ -43,8 +49,8 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    if bind.execute(sa.text("PRAGMA foreign_keys")).scalar() != 1:
-        raise AssertionError("this migration is running with foreign keys off")
+    if bind.execute(sa.text("PRAGMA foreign_keys")).scalar() != 0:
+        raise AssertionError("this migration is running with foreign keys on")
     op.create_table("widget", sa.Column("id", sa.Integer(), primary_key=True))
 
 
@@ -108,17 +114,17 @@ def test_a_fresh_database_is_brought_to_the_shipped_head(prepared: DataPaths) ->
     moment `0001` landed, which is what it was for: it named the day the assumption expired
     instead of leaving a stale one passing.
 
-    **It has now done that seven times**, at `0002`, `0003`, `0004`, `0005`, `0006` and `0007`. The
-    literal below is deliberate and is not to be replaced with a lookup of whatever the head
-    happens to be: a test that reads the head from the same place the code does asserts that two
-    functions agree, which they always will. This one asserts what this build *ships*, and the
-    only way to change it is to notice.
+    **It has now done that eight times**, at `0002`, `0003`, `0004`, `0005`, `0006`, `0007` and
+    `0008`. The literal below is deliberate and is not to be replaced with a lookup of whatever
+    the head happens to be: a test that reads the head from the same place the code does asserts
+    that two functions agree, which they always will. This one asserts what this build *ships*,
+    and the only way to change it is to notice.
     """
     engine = create_database_engine(prepared)
     try:
-        assert schema.head_revision(schema.alembic_config(prepared)) == "0007"
+        assert schema.head_revision(schema.alembic_config(prepared)) == "0008"
         schema.ensure_current(engine, prepared)
-        assert schema.current_revision(engine) == "0007"
+        assert schema.current_revision(engine) == "0008"
         with engine.connect() as connection:
             tables = set(inspect(connection).get_table_names())
     finally:
@@ -176,7 +182,7 @@ def test_a_database_behind_the_code_refuses_and_names_the_command(
     engine = create_database_engine(prepared)
     try:
         config = schema.alembic_config(prepared)
-        with engine.begin() as connection:
+        with schema.migration_connection(engine) as connection:
             config.attributes["connection"] = connection
             command.upgrade(config, "0001")
         assert schema.current_revision(engine) == "0001"
@@ -237,7 +243,7 @@ def test_the_server_refuses_to_start_when_the_database_is_behind(
     engine = create_database_engine(prepared)
     try:
         config = schema.alembic_config(prepared)
-        with engine.begin() as connection:
+        with schema.migration_connection(engine) as connection:
             config.attributes["connection"] = connection
             command.upgrade(config, "0001")
     finally:
@@ -254,7 +260,7 @@ def test_the_operator_gets_the_sentence_not_a_traceback(
     engine = create_database_engine(prepared)
     try:
         config = schema.alembic_config(prepared)
-        with engine.begin() as connection:
+        with schema.migration_connection(engine) as connection:
             config.attributes["connection"] = connection
             command.upgrade(config, "0001")
     finally:

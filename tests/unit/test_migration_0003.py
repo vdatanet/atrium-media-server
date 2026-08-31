@@ -405,7 +405,7 @@ def test_rolling_back_removes_the_rows_0002_has_no_schema_for(
 
 
 def test_the_type_check_lists_every_type_this_revision_knows_and_refuses_the_one_it_does_not(
-    migrated: Engine,
+    migrated: Engine, paths: DataPaths
 ) -> None:
     """The assertion `test_migration_0002.py` used to make, moved here with the revision that
     widened the list. Two lists of the same strings; something has to notice when one of them
@@ -416,7 +416,18 @@ def test_the_type_check_lists_every_type_this_revision_knows_and_refuses_the_one
     accounting stays total by splitting rather than shrinking: every type this revision lists
     inserts, and the one it does not is asserted *refused* here rather than quietly dropped from
     the loop. A fifteenth type breaks this test the way a fourteenth did.
+
+    **And it has to say which revision it is asking**, which T3 could not: the fixture migrates to
+    *head*, so the refusal below passed only for as long as head was `0007`. T4 made head `0008`,
+    the constraint widened, and the assertion inverted in silence - the failure T3's own note
+    predicted would land here. So the database is walked back to the last revision before the one
+    that widens it; `tests/unit/test_migrations.py` asserts the other side at `0008`.
     """
+    config = schema.alembic_config(paths)
+    with schema.migration_connection(migrated) as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0007")
+
     known = sorted(set(ItemType) - USER_CREATED)
     with migrated.begin() as connection:
         library = a_library(connection)

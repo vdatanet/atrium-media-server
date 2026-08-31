@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-08-31
 updated: 2026-08-31
 accepted: 2026-08-31
-amended: 2026-08-31 at the tasks gate — §1 priced "a playlist is a row in `items`" at one migration; it is one migration, three maps that assert themselves total over a type set, and one clause. The clause is the finding: `_visible_to` exempts rows with no library, a playlist has none, so `/Items?includeItemTypes=Playlist` would have answered every user's private playlists to everybody. §6.5 gains it, and 005's own `MEDIA_TYPE_OF` docstring turns out to have said why `Playlist` was left out of `ItemType` in the first place; and 2026-08-31 by T1 — §6.4's block, executed as written, produces the reading spec §3.5 measured as **wrong**: it removed the entry from `full` and not from `visible`, so the visible neighbour is one too early and the discriminating pair gives `B C A D E`. Both removals now, and `>=` where it said `==`. And its claim to *"reproduce the observable result"* is true only where the caller sees everything: the reference takes the neighbour's position **before** the removal, so on a list with anything hidden a downward move lands one short of where the caller asked — unreachable for the set Atrium hides, which makes the two-list rule Atrium's own rather than a reproduction, and makes an entry the caller cannot see unaddressable. The thirty (source, target) pairs the 25-row matrix was modelling from one measured pair are measured; and 2026-08-31 by T3 — §1's *three* structures total over the type set are **five**, and the two it missed are assertions rather than maps: the domain's two-way partition of `ItemType`, and `test_migration_0003.py` inserting one row of every type against the constraint 0008 replaces. §4.2 gains why `media_type` is a column rather than a lookup — measured, the reference fixes the value at creation and never revises it — and the one reader that cannot use the column: `mediaTypes=` filters playlists by the row on the reference and by the type here, which is undecided
+amended: 2026-08-31 at the tasks gate — §1 priced "a playlist is a row in `items`" at one migration; it is one migration, three maps that assert themselves total over a type set, and one clause. The clause is the finding: `_visible_to` exempts rows with no library, a playlist has none, so `/Items?includeItemTypes=Playlist` would have answered every user's private playlists to everybody. §6.5 gains it, and 005's own `MEDIA_TYPE_OF` docstring turns out to have said why `Playlist` was left out of `ItemType` in the first place; and 2026-08-31 by T1 — §6.4's block, executed as written, produces the reading spec §3.5 measured as **wrong**: it removed the entry from `full` and not from `visible`, so the visible neighbour is one too early and the discriminating pair gives `B C A D E`. Both removals now, and `>=` where it said `==`. And its claim to *"reproduce the observable result"* is true only where the caller sees everything: the reference takes the neighbour's position **before** the removal, so on a list with anything hidden a downward move lands one short of where the caller asked — unreachable for the set Atrium hides, which makes the two-list rule Atrium's own rather than a reproduction, and makes an entry the caller cannot see unaddressable. The thirty (source, target) pairs the 25-row matrix was modelling from one measured pair are measured; and 2026-08-31 by T3 — §1's *three* structures total over the type set are **five**, and the two it missed are assertions rather than maps: the domain's two-way partition of `ItemType`, and `test_migration_0003.py` inserting one row of every type against the constraint 0008 replaces. §4.2 gains why `media_type` is a column rather than a lookup — measured, the reference fixes the value at creation and never revises it — and the one reader that cannot use the column: `mediaTypes=` filters playlists by the row on the reference and by the type here, which T4 hands to T6; and 2026-08-31 by T4 — §4's rebuild is not merely "a risk", it is a **measured** loss: with the foreign-key pragma on, batch mode's `DROP TABLE` cascades every child row of `items` away in silence, and two module docstrings said the opposite. Migrations now run with foreign keys off and an explicit orphan check, §9's first risk is marked fired, and the two clauses T3 could not place have owners: the stored `media_type` preference is T4's (§4.2) and the `mediaTypes=` filter is T6's
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -220,17 +220,19 @@ to it — so the column reproduces the reference exactly, where a value derived 
 read time would not `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]`.
 The type-level fallback in `MEDIA_TYPE_OF` is the answer for a playlist created empty and wrong for
 every other, so the item body prefers this column and the map is the default behind it. **Which
-task writes that preference is now an ordering question**: T3 was to write it and cannot — the
-column it reads is T4's, and T4 depends on T3 — so it moves to the task that has both a column and
-a repository to read it through, and is recorded here rather than left to be noticed at T14.
+task writes that preference was an ordering question, and the answer is T4**: T3 was to write it
+and could not — the column it reads is T4's — so it moved to the task that creates the column.
+`HydratedItem` carries the stored value and `api/item_dto.py`'s `MediaType` emitter prefers it,
+with the map as the fallback behind it; T7's repository is what fills it in.
 
 **One reader is left on the fallback, and it is named rather than fixed here.** `mediaTypes=` is
 answered by inverting `MEDIA_TYPE_OF` into a list of item types, which cannot express a value that
 varies per row: measured, the reference returns an audio playlist for `mediaTypes=Audio` and a
 video one for `mediaTypes=Video`, where Atrium would claim every playlist for `Audio` and none for
-`Video`. Nothing can observe it before this table exists, no analysed client sends the pair, and
-whether the listing gains the clause or the gap is accepted is a scope decision — spec §4 states
-it, and no task in this list currently owns it.
+`Video`. Nothing can observe it before this table exists, and no analysed client sends the pair.
+**T6 owns it as of T4**: it is the task that already edits `_visible_to` in that same module, and
+it sits before every route that could expose the difference. Whether it closes the gap with a
+clause or accepts it stays that task's call — spec §4 states both.
 
 ### 4.3 `playlist_entries`
 
@@ -582,7 +584,7 @@ hand; CI never contacts a Jellyfin.
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| The `items` rebuild in 0008 is slow or lossy on a real library | Medium | High — it is every item the server has | `copy_from` with the model's own definition, as 0004 did; a test that populates `items` with one row of **every** type, migrates, and asserts the rows and their indexes survive |
+| The `items` rebuild in 0008 is slow or lossy on a real library | **Fired, T4** | High — it is every item the server has | It was lossy, and not in `items`: with `PRAGMA foreign_keys=ON`, which every connection carries, a batch rebuild's `DROP TABLE` performs an implicit `DELETE FROM` that cascades **all six** child tables away in silence — measured, with `foreign_key_check` clean afterwards. Every migration now runs through `db/schema.py`'s `migration_connection`, which turns the pragma off and checks for orphans before committing; `tests/unit/test_migrations.py` asserts the loss with the guard removed |
 | A later reader adds an entries query without a `User` | Medium | High — §3.17's divergence stops applying, silently, on whichever route uses it | §5's single entry point, and a test that asserts the repository exposes no read that does not take one |
 | The move translation is right for the owner and wrong for a shared reader | Medium | Medium — invisible until somebody shares a playlist across libraries | The second matrix in §8, which is the only thing that exercises it |
 | Changing `ForbiddenError`'s body moves bytes on routes outside this feature | **Fired, T2** | Medium — 005's `/Items?userId=` and any later refusal of that class | It reached more routes than one handler's worth: the grep found a **second** test asserting the empty body (`tests/unit/test_require_user.py`, 002's disabled-token refusal), which is the exact failure this row named, and one route it reaches is one the reference does not refuse at all. AC-19 covers the measured side; §2's note carries the rest |
