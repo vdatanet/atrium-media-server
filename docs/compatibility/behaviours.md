@@ -2136,6 +2136,16 @@ least dangerous, and it is the behaviour
 [009 §3.7](../../specs/009-playlists/spec.md) had been describing as the reference's own since the
 day it was written. Specified there, as a divergence now that the gate has measured it.
 
+**`Move` follows the omission, and the reference has no answer here to reproduce.** The index a
+reader gives is judged against the list they were given, and the entry lands at that index **of
+it** — where the reference bounds the index against the entries it shows and then computes the
+landing position in the stored order *before* removing the entry, so a downward move lands one
+position short of where the caller asked, and an entry the caller was never shown is reordered
+rather than left alone `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:289-345 @
+v10.11.11]`. Neither can fire against a reference server for the reason above: what it hides is
+hidden by the parental-rating check, never by library access. Atrium answers an omitted entry the
+way it answers one that is not in the playlist at all — `204`, nothing changes (§3.15's parity row).
+
 ---
 
 ## 4. Deliberate exceptions

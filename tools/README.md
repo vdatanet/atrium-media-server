@@ -31,7 +31,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_routing.py`](probe_routing.py) | How does the server match a path to a route, how does it refuse, and which headers ride every response? | 001 §3.6; behaviours §1.9, §1.10, §4.1 | no |
 | [`probe_query_envelope.py`](probe_query_envelope.py) | What shape does each list endpoint return, and how does one refuse? | 005 OQ-6, §3.5; behaviours §1.11, §1.12, §1.15, §1.16 | no |
 | [`probe_sort_names.py`](probe_sort_names.py) | How does the server derive `SortName` from `Name`? | 003 OQ-3 | yes |
-| [`probe_playlist_move.py`](probe_playlist_move.py) | Does `Move`'s `newIndex` refer to the list before or after removal, what do its boundaries do, and is a playlist entry's identifier its own? | 009 OQ-1, OQ-6, §3.1, §3.5; behaviours §2.7, §2.8, §2.26, §3.15 | yes |
+| [`probe_playlist_move.py`](probe_playlist_move.py) | Does `Move`'s `newIndex` refer to the list before or after removal, does that reading hold for **every** (source, target) pair, what do its boundaries do, and is a playlist entry's identifier its own? | 009 OQ-1, OQ-6, §3.1, §3.5, §6; behaviours §2.7, §2.8, §2.26, §3.15 | yes |
 | [`probe_playlist_creation.py`](probe_playlist_creation.py) | What does `POST /Playlists` refuse, and what does it create? | 009 §3.2, §4, AC-2, AC-3 | yes |
 | [`probe_playlist_expansion.py`](probe_playlist_expansion.py) | Does adding a container add its children, and in what order? | 009 OQ-3, §3.4, AC-7 | yes |
 | [`probe_playlist_visibility.py`](probe_playlist_visibility.py) | What can a user who does not own a playlist see and do? | 009 OQ-4, §3.6, §3.7, AC-12 to AC-17; behaviours §3.16, §3.17, §4.3 | yes |

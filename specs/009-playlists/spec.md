@@ -4,7 +4,7 @@ title: Playlists
 status: Accepted
 created: 2026-08-26
 updated: 2026-08-31
-amended: 2026-08-31 at the plan gate — §3.7 and a new AC-19 state the *bytes* of the refusal a caller gets for naming another user, which the spec gate had measured and recorded only as a status. The reference answers the 25-byte `text/plain` body every controller-level refusal carries; this server answered an empty `403` for that whole class, on the argument that it is decided where the empty `401` is, with a `⚠️` in the code saying the shape was unmeasured because no non-administrator account existed to produce one. The visibility probe made one. It is a wire difference on a route 005 already ships, so the correction is taken where the refusal is decided rather than on 009's own two routes — decided by the user at the plan gate
+amended: 2026-08-31 at the plan gate — §3.7 and a new AC-19 state the *bytes* of the refusal a caller gets for naming another user, which the spec gate had measured and recorded only as a status. The reference answers the 25-byte `text/plain` body every controller-level refusal carries; this server answered an empty `403` for that whole class, on the argument that it is decided where the empty `401` is, with a `⚠️` in the code saying the shape was unmeasured because no non-administrator account existed to produce one. The visibility probe made one. It is a wire difference on a route 005 already ships, so the correction is taken where the refusal is decided rather than on 009's own two routes — decided by the user at the plan gate; and 2026-08-31 by T1 — §3.5 stated the move's arithmetic for a caller who sees the whole playlist and left the other caller to §3.7. It now says both: the index is judged against the list that reader was given and the entry lands at `newIndex` **of it**, where the reference is off by one on every downward move and will reorder an entry that reader was never shown. Neither difference is reachable against a reference server — what it hides is hidden by a parental-rating check — so both belong to §3.7's divergence, and AC-17 gains the clause. Plus the provenance: all thirty (source, `newIndex`) pairs are measured where one was
 depends_on: [005]
 ---
 
@@ -228,8 +228,25 @@ until it is expensive.
 > rows nobody had thought to write, an unhandled failure, which is the divergence recorded beside
 > them.
 
+**The index is judged against what the caller can see**, and so is the position the entry lands at.
+For an owner the two lists are one and the table above is the whole story. For a reader who is
+shown fewer entries (§3.7) the reference is off by one on every downward move — it takes the
+neighbour's position in the stored order *before* removing the entry — and it moves entries that
+reader was never shown. Atrium does neither: the entry ends up at `newIndex` of the list that
+reader was given, and an entry omitted from it is answered as an entry that is not in the playlist
+— `204`, nothing changes. Neither difference is reachable against a reference server, because the
+entries it hides are hidden by a parental-rating check and never by library access
+`[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:289-345 @ v10.11.11]`; both
+belong to the divergence §3.7 already carries.
+
 Entry identifiers survive a move: the row keeps its `PlaylistItemId` — which, by §3.1, it could
 hardly fail to do.
+
+**Every pair is measured, not modelled.** All thirty of source × `newIndex` 0–5 on `[A B C D E]`,
+not the one pair that distinguishes the two readings: the post-removal reading reproduces the
+reference on every one of them, and the one-position clamp is a property of every source rather
+than of the one the boundary table asked about.
+`[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-31]`
 
 ### 3.6 Deleting a playlist
 
@@ -418,7 +435,9 @@ the only thing whose loss is unrecoverable, and the plan has to treat them accor
     reference answers `200`.
 16. `userId` naming another user is honoured for an administrator and refused otherwise.
 17. A playlist containing an item the reader cannot reach returns the remaining entries, in order,
-    with unchanged entry ids, and a `TotalRecordCount` that counts only those.
+    with unchanged entry ids, and a `TotalRecordCount` that counts only those — and that reader's
+    `Move` indexes the list they were given: the entry lands at `newIndex` of it, and naming the
+    omitted entry answers `204` and changes nothing.
 18. An administrator renames a playlist through `POST /Items/{id}`; its non-administrator owner is
     answered `403`.
 19. A refusal for a caller naming another user carries `403` with the reference's 25-byte

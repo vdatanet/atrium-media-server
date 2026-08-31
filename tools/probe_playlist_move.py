@@ -90,6 +90,69 @@ def source_items(server: Server, count: int) -> list[dict]:
     )
 
 
+MATRIX_NAME = "atrium probe - playlist matrix"
+
+
+def predicted(order: str, source: int, new_index: int) -> str:
+    """The post-removal reading, as 009 plan section 6.4 states it, over a caller who sees all.
+
+    Remove the entry, then place it so that it ends at `new_index` of the resulting list. This is
+    the model 009 T1 implements; the matrix below exists to find out whether it reproduces the
+    reference on every pair or only on the one pair OQ-1 measured.
+    """
+    remaining = list(order)
+    entry = remaining.pop(source)
+    if new_index >= len(remaining):
+        remaining.append(entry)
+    else:
+        remaining.insert(new_index, entry)
+    return "".join(remaining)
+
+
+def matrix(server: Server, probe: Probe, items: list, created: list) -> int:
+    """Every (source, target) pair on [A B C D E], one fresh playlist per pair.
+
+    009 spec section 6 asks for this matrix as a *test* - "off-by-one errors in reordering pass
+    every hand-written case and fail the one nobody wrote" - and then the only pair anybody ever
+    measured is 0 -> 3. A 25-row test asserting a model derived from one row is a 25-row test of
+    the model, not of the server. Targets run to 5 as well, so the clamp section 3.5 measured for
+    source A alone is asked of every source.
+
+    Returns the number of pairs where the reference disagrees with `predicted`.
+    """
+    labels = "ABCDE"
+    by_name = {item["Name"]: labels[i] for i, item in enumerate(items)}
+    start = "ABCDE"
+    disagreements = 0
+
+    for source in range(5):
+        row = []
+        for target in range(6):
+            playlist_id = server.post(
+                "/Playlists",
+                body={
+                    "Name": f"{MATRIX_NAME} {source}-{target}",
+                    "Ids": [item["Id"] for item in items],
+                    "UserId": server.user_id,
+                },
+            )["Id"]
+            created.append(playlist_id)
+            before = entries(server, playlist_id)
+            if len(before) != 5:
+                raise ProbeError(f"expected 5 entries, got {len(before)}; the matrix is unreadable")
+            status, _, _ = server.post_raw(
+                f"/Playlists/{playlist_id}/Items/{before[source][0]}/Move/{target}"
+            )
+            after = "".join(by_name.get(name, "?") for _, name in entries(server, playlist_id))
+            expected = predicted(start, source, target)
+            agrees = status < 400 and after == expected
+            disagreements += 0 if agrees else 1
+            row.append(f"{after}{'' if agrees else f'!={expected}'}({status})")
+        probe.observe(f"move {labels[source]} to 0..5", "  ".join(row))
+
+    return disagreements
+
+
 def boundaries(server: Server, probe: Probe, items: list, created: list) -> None:
     """Section 3.5's table, one fresh playlist per row.
 
@@ -246,6 +309,9 @@ def run(server: Server) -> Probe:
 
         # -- OQ-6: the boundaries, which section 3.5 answers in a table with no provenance ----
         boundaries(server, probe, items, created)
+
+        # -- the matrix section 6 asks for as a test, asked of the server first ---------------
+        disagreements = matrix(server, probe, items, created)
     finally:
         for item_id in created:
             try:
@@ -271,12 +337,20 @@ def run(server: Server) -> Probe:
             "opposite since 2026-08-26, so a reading this probe once measured has changed",
             matches_documentation=False,
         )
-    elif order == "B C D A E":
+    elif order == "B C D A E" and disagreements == 0:
         probe.conclude(
             "newIndex refers to the list AFTER the entry is removed: the entry ends up at that "
             "index in the resulting list, which is what section 3.5 has said since this probe "
-            "first answered OQ-1 on 2026-08-26",
+            "first answered OQ-1 on 2026-08-26 - and the reading reproduces the reference on all "
+            "thirty (source, target) pairs, targets past the end included",
             matches_documentation=True,
+        )
+    elif order == "B C D A E":
+        probe.conclude(
+            f"the discriminating pair reads post-removal, as section 3.5 says, but {disagreements} "
+            "of the thirty (source, target) pairs do something else: the reading is not the whole "
+            "rule and the matrix rows above say where it breaks",
+            matches_documentation=False,
         )
     else:
         probe.conclude(
