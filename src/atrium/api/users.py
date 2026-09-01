@@ -23,6 +23,16 @@ Atrium replicates it, per Principle V and behaviours section 3.0.2 - a defect is
 it is obviously wrong - and the whole argument, including the case for diverging, is written out in
 behaviours section 3.5 so that the decision is a decision rather than an oversight.
 
+## And so does `/Users/{userId}`, which is the same disclosure by a second road
+
+Any authenticated caller reads any user whole, policy included - measured on the full matrix of
+callers and subjects, not on one pair `[probe: tools/probe_user_read.py, Jellyfin 10.11.11,
+2026-09-01]`. This route answered `403` to a non-administrator naming anybody else until
+2026-09-01; that refusal was Atrium's own, stated in spec section 3.7 with no provenance since 002
+was written, and it is gone. Behaviours section 3.22 carries the decision and its cross-reference
+to section 3.5: replicating on one road and refusing on the other was the inconsistency, not the
+protection.
+
 ## The literal routes are registered before `/Users/{userId}`
 
 `/Users/Public`, `/Users/Me` and `/Users/Configuration` are literal paths that a parameterised
@@ -45,7 +55,8 @@ from atrium.api import sessions as session_models
 from atrium.api.deps import get_authenticator, get_sessions, get_state, require_user
 from atrium.compat.auth import require_client_authorization
 from atrium.compat.dates import WireDateTime
-from atrium.compat.errors import ForbiddenError, UnauthenticatedError
+from atrium.compat.errors import UserNotFoundError
+from atrium.compat.guids import WireGuid
 from atrium.compat.model import AtriumModel, PropertyKeyed
 from atrium.config.state import ServerState
 from atrium.db.engine import session_scope
@@ -203,25 +214,37 @@ async def update_configuration(
 @router.get("/Users/{userId}")
 async def user_by_id(
     request: Request,
-    userId: str,  # noqa: N803 - the reference's spelling, and it reaches the wire
-    user: Annotated[DomainUser, Depends(require_user)],
+    userId: WireGuid,  # noqa: N803 - the reference's spelling, and it reaches the wire
+    _caller: Annotated[DomainUser, Depends(require_user)],
     state: Annotated[ServerState, Depends(get_state)],
 ) -> UserDto:
-    """A user may always read themselves; an administrator may read anybody.
+    """**Any authenticated caller may read any user, whole.** Measured, and it was not believed.
 
-    Anyone else is a `403` - a `404` would tell an ordinary user which identifiers exist, and a
-    `401` would send their client round the login loop for a permission it will never be granted.
+    This route refused a non-administrator naming anybody else with a `403` until 2026-09-01, and
+    spec section 3.7 had stated that refusal with no provenance since 002 was written. The
+    reference refuses none of it: an ordinary non-administrator naming another non-administrator,
+    a restricted one naming an **administrator**, and a user naming themselves are one `200` with
+    the whole section 3.5 object - `Configuration` and `Policy` included - and the administrator's
+    object read by a restricted stranger is **byte-identical** to the administrator's own reading
+    of it `[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`. So there is no
+    per-caller representation to build here, and `require_user` is the whole of the access rule:
+    a request with no credential at all is the empty `401`, measured in the same run.
+
+    Atrium replicates it. It is the disclosure behaviours section 3.5 already replicates on
+    `/Users/Public`, reached by a second road, and refusing on one road while disclosing on the
+    other is the inconsistency rather than the protection (behaviours section 3.22).
+
+    The two identifiers that name nobody are the reference's own answers and not this route's
+    invention: one that is well formed and unused is `UserNotFoundError` - the fourth error shape,
+    `"User not found"` - and one that is not an identifier at all never arrives, because `WireGuid`
+    hands it to the validation `400` keyed on `userId`, which is what the reference's model binder
+    does with it.
     """
-    if userId != user.id and not user.is_administrator:
-        raise ForbiddenError("a user may only read themselves")
-
     with session_scope(get_sessions(request)) as opened:
         users = UserRepository(opened)
         found = users.by_id(userId)
         if found is None:
-            # An identifier nobody has. Answered as a refusal rather than as a miss, for the same
-            # reason as above: the two are indistinguishable to a caller who may not look.
-            raise UnauthenticatedError if userId == user.id else ForbiddenError("no such user")
+            raise UserNotFoundError
         access = users.library_access(found.id)
     return to_wire(found, state, access)
 

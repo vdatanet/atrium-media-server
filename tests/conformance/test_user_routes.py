@@ -284,13 +284,108 @@ async def test_a_user_may_always_read_themselves(client: httpx.AsyncClient, joan
     assert served.json()["Id"] == joan.id
 
 
-async def test_an_ordinary_user_reading_another_is_403(
+async def test_an_ordinary_user_reads_another_whole(
     app: FastAPI, client: httpx.AsyncClient, joan: User
 ) -> None:
+    """This asserted a `403` until 2026-09-01. The reference answers `200`, with everything.
+
+    The refusal was Atrium's own and spec section 3.7 stated it with no provenance; measured, an
+    ordinary non-administrator naming another non-administrator is answered the whole section 3.5
+    object, `Configuration` and `Policy` included
+    `[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`. Asserting the two
+    properties rather than the status is the point: a `200` carrying a redacted object would be a
+    different server from the one measured, and only the properties can tell them apart.
+    """
     other = make_user(app, name="Ada")
     token = (await log_in(client)).json()["AccessToken"]
-    refused = await client.get(f"/Users/{other.id}", headers={"X-Emby-Token": token})
-    assert refused.status_code == 403
+    served = await client.get(f"/Users/{other.id}", headers={"X-Emby-Token": token})
+    assert served.status_code == 200
+    body = served.json()
+    assert body["Name"] == "Ada"
+    assert "Configuration" in body
+    assert body["Policy"]["IsAdministrator"] is False
+
+
+async def test_a_non_administrator_reads_an_administrator_whole(
+    app: FastAPI, client: httpx.AsyncClient, joan: User
+) -> None:
+    """The cell 009 T2 measured, and the one that makes this a disclosure rather than a widening.
+
+    The bytes do not depend on who asked: a restricted non-administrator naming an administrator
+    is answered exactly what that administrator reads of themselves, `Policy.IsAdministrator`
+    included `[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    admin = make_user(app, name="Root", is_administrator=True)
+    elevated = (await log_in(client, name="Root", device="bench-2")).json()["AccessToken"]
+    token = (await log_in(client)).json()["AccessToken"]
+    served = await client.get(f"/Users/{admin.id}", headers={"X-Emby-Token": token})
+    own = await client.get(f"/Users/{admin.id}", headers={"X-Emby-Token": elevated})
+    assert served.status_code == 200
+    assert served.json()["Policy"]["IsAdministrator"] is True
+
+    # Everything but the two timestamps, which move because *asking* moves them: an
+    # authenticated request advances `LastActivityDate` (AC-13), so two reads of one account can
+    # never be byte-identical here whoever makes them. Every other property is the comparison
+    # the probe made, and it found no redaction at all.
+    moving = {"LastLoginDate", "LastActivityDate"}
+    assert {k: v for k, v in served.json().items() if k not in moving} == {
+        k: v for k, v in own.json().items() if k not in moving
+    }
+
+
+async def test_an_identifier_nobody_has_is_the_fourth_shape(
+    client: httpx.AsyncClient, joan: User
+) -> None:
+    """`404`, the JSON-encoded bare string, and the same body whoever asks.
+
+    Not the `403` this route used to send, and not the problem details every other `404` raised
+    from a handler in this project answers: measured, `"User not found"` under
+    `application/json; charset=utf-8`, identical for an administrator and for a non-administrator
+    `[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    token = (await log_in(client)).json()["AccessToken"]
+    missing = await client.get(f"/Users/{new_id()}", headers={"X-Emby-Token": token})
+    assert missing.status_code == 404
+    assert missing.content == b'"User not found"'
+    assert missing.headers["content-type"] == "application/json; charset=utf-8"
+
+
+async def test_an_administrator_gets_the_same_body_for_an_identifier_nobody_has(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    make_user(app, name="Root", is_administrator=True)
+    token = (await log_in(client, name="Root")).json()["AccessToken"]
+    missing = await client.get(f"/Users/{new_id()}", headers={"X-Emby-Token": token})
+    assert missing.status_code == 404
+    assert missing.content == b'"User not found"'
+
+
+async def test_a_malformed_identifier_is_the_validation_400(
+    client: httpx.AsyncClient, joan: User
+) -> None:
+    """The model binder refuses it before the route runs, keyed on the parameter's own spelling.
+
+    `{"userId": ["The value 'not-an-identifier' is not valid."]}`, measured
+    `[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]` - which is why `userId` is
+    typed as an identifier here rather than as a string.
+    """
+    token = (await log_in(client)).json()["AccessToken"]
+    refused = await client.get("/Users/not-an-identifier", headers={"X-Emby-Token": token})
+    assert refused.status_code == 400
+    assert refused.json()["errors"] == {"userId": ["The value 'not-an-identifier' is not valid."]}
+    # As bytes too, because the apostrophes are the part a parsed comparison cannot see: the
+    # reference escapes them to the six-character `\\u0027` like every other quotable character
+    # (behaviours 1.16), and this response class does it globally rather than by hand here.
+    assert b"The value \\u0027not-an-identifier\\u0027 is not valid." in refused.content
+
+
+async def test_reading_a_user_without_a_token_is_the_empty_401(
+    app: FastAPI, client: httpx.AsyncClient, joan: User
+) -> None:
+    """`require_user` is the whole of this route's access rule, and it is the only refusal left."""
+    refused = await client.get(f"/Users/{joan.id}")
+    assert refused.status_code == 401
+    assert refused.content == b""
 
 
 async def test_an_administrator_reading_another_is_200(

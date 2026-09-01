@@ -1131,16 +1131,26 @@ So every `may_edit` refusal this feature ships is the body-less shape, not `Forb
 sentence — the same shape 009 §3.8's rename needs, and the reason its second exception class has a
 second caller.
 
-**Two of that class's raise sites in Atrium are neither shape's measurement.** `api/deps.py` refuses
-a live token whose account was disabled afterwards — 002 OQ-5's third row, still open, and it moved
-from one analogy to another when the handler changed. `api/users.py` refuses one user reading
-another, and **the reference does not refuse that at all**: a restricted non-administrator naming an
-administrator is answered `200` with that administrator's whole object, `Policy` included
-`[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. That is the same
-disclosure as §3.5's `/Users/Public`, reached by a different road, against a `403` that
-[002 §3.7](../../specs/002-authentication-users-and-sessions/spec.md) states with no provenance.
-**Undecided:** whether Atrium replicates the disclosure or keeps the refusal is a Principle I call
-on 002's route, and it is recorded here rather than taken at a 009 task.
+**One of that class's raise sites in Atrium is neither shape's measurement**, and there were two.
+`api/deps.py` refuses a live token whose account was disabled afterwards — 002 OQ-5's third row,
+still open, and it moved from one analogy to another when the handler changed. The second was
+`api/users.py` refusing one user reading another, and **the reference does not refuse that at
+all**: every authenticated caller is answered `200` with the named user's whole object,
+`Configuration` and `Policy` included, in bytes that do not depend on who asked — measured on the
+route's whole matrix on 2026-09-01
+`[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`, after 009 T2 had measured one
+cell of it `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`.
+**Decided on 2026-09-01, outside 009 because the route belongs to 002: Atrium replicates**
+([§3.22](#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated)), so that raise
+site is gone rather than reshaped, and 002 §3.7's provenance-free `403` is withdrawn.
+
+**That route's `404` is the fourth shape, and it is the third route to send one.** An identifier no
+account has answers the JSON-encoded bare string `"User not found"`, 16 bytes, under
+`application/json; charset=utf-8` — the same body to an administrator and to a non-administrator —
+where a **malformed** one is the validation `400` below, keyed on `userId`
+`[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`. Three features have now looked
+at a `404` they assumed was problem details and found this shape instead, which is the argument for
+looking on the fourth rather than reading it off a neighbour.
 
 **Atrium gets the shape for free and the keys only deliberately, and it pays for them.** A path
 or query parameter's refusal already matched — `compat/errors.validation_errors` keys on the
@@ -1834,6 +1844,13 @@ rather than argued again from scratch. If it is ever taken, its shape is a middl
 list: strictly *less* information, on a route no known consumer reads those properties from, which
 is the least dangerous kind of change to make and still not free.
 
+**And it would have to be taken twice.** The same disclosure is reachable through
+`GET /Users/{userId}`, measured on 2026-09-01 and replicated there for these reasons plus one this
+route does not have — refusing there means refusing a request that succeeds against every reference
+server. That entry is
+[§3.22](#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated), and the two are
+one decision on two roads: a divergence on either alone leaves the object published by the other.
+
 > **This overturned an acceptance criterion, not a detail.** 002's AC-6 asserted that
 > `/Users/Public` **omits** `Configuration` and `Policy`, and its §3.4 gave the reason: "this is
 > pre-authentication, and it must not disclose what a user is allowed to do." The reasoning was
@@ -2421,6 +2438,56 @@ readable afterwards, because nothing is written until the whole body has been ch
 no `Name` is that same `400` rather than a `204` that erases the name: the bytes are identical and
 the status is the whole of the difference, which is the argument §3.19 makes for the four requests
 beside it. Specified in [009 §3.8](../../specs/009-playlists/spec.md).
+
+### 3.22 Any authenticated caller reads any user whole — class B, replicated
+
+**Jellyfin does:** answer `GET /Users/{userId}` with the **whole user object** — `Configuration`
+and `Policy` included — to any caller holding a usable token, whoever they are and whoever they
+name. Measured across the route's whole matrix rather than one pair of it: an ordinary
+non-administrator naming another non-administrator, a *restricted* non-administrator naming an
+**administrator**, an administrator naming anybody, and a user naming themselves are one `200` —
+and the administrator's object as read by that restricted stranger is **byte-identical** to the
+administrator's own reading of it, so there is no per-caller redaction anywhere in the route
+`[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`. 009 T2 measured the
+administrator cell alone on 2026-08-31, which is where the question came from
+`[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`.
+
+**This is [§3.5](#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated)
+reached by a second road**, and the same 42 policy properties travel down it. The two differ in
+who can walk them: `/Users/Public` needs no token and lists the users itself, this route needs a
+token and needs the caller to name an identifier. That is a smaller audience for the same
+disclosure, not a different one.
+
+**Depends on it:** unknown, and the shape of the dependency is a client that reads another user at
+all — the music client is this route's named consumer. What a client cannot have built on is the
+refusal, because no reference server sends it. That asymmetry is the whole decision: replicating
+risks a disclosure clients may not need, and diverging **breaks a request that succeeds against
+every Jellyfin there is**.
+
+**Atrium does:** the same. It answered `403` to a non-administrator naming anybody else until
+2026-09-01, and that refusal was never the reference's — [002 §3.7](../../specs/002-authentication-users-and-sessions/spec.md)
+had stated it with no provenance since the specification was written, which is exactly the failure
+mode Principle II names.
+
+The class is **B**: the request succeeds, with more than it should. §3.0's question is whether a
+client can have built something that being correct would break, and here it plainly can — a `403`
+where the reference sends a body is not "less information", it is a failed request, and §3.0.3
+puts *refusing what the reference answers* at the dangerous end of its list. The disclosure
+argument that §3.5 weighs and rejects is the same argument here, one road over, and taking it here
+alone would leave Atrium refusing on one road while publishing the identical object on the other:
+the inconsistency, not the protection. So the default holds — Principle V, replicate — and if the
+divergence is ever taken it is taken on **both** roads, in one change, with §3.5's entry rewritten
+beside this one.
+
+**Two refusals came back with the measurement, and they are the reference's own.** An identifier
+that is well formed and belongs to nobody is `404` with the JSON-encoded bare string
+`"User not found"` — the fourth error shape of §1.11, a third route for it — and the *same* body
+to an administrator and to a non-administrator, so the reference does not conceal which
+identifiers exist either. An identifier that is not an identifier is the validation `400`, keyed
+on `userId` and quoting the value back. Atrium had answered both with the same `403` as everything
+else, deliberately, so that a caller who may not look could not tell them apart; there is nobody
+who may not look. Specified in
+[002 §3.7](../../specs/002-authentication-users-and-sessions/spec.md).
 
 ---
 

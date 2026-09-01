@@ -3,9 +3,9 @@ feature: 002-authentication-users-and-sessions
 title: Authentication, users and sessions
 status: Implemented
 created: 2026-08-26
-updated: 2026-08-28
+updated: 2026-09-01
 accepted: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6; by T12 - section 3.8; by T18 - AC-3 and AC-10. 2026-08-28 by the L2 probe fold - section 3.8: an unknown capabilities property is dropped from the session's echo, not kept
+amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6; by T12 - section 3.8; by T18 - AC-3 and AC-10. 2026-08-28 by the L2 probe fold - section 3.8: an unknown capabilities property is dropped from the session's echo, not kept. 2026-09-01 by tools/probe_user_read.py - section 3.7, AC-7 and the section 6 matrix: GET /Users/{userId} refuses no authenticated caller, the 403 it stated with no provenance is withdrawn, and the two identifiers that name nobody are a 404 and a 400 rather than that same refusal
 depends_on: [001]
 ---
 
@@ -301,21 +301,39 @@ applies.
 
 Both return the §3.5 object in full, including configuration and policy.
 
-`GET /Users/{userId}` returns `403` when the token belongs to a different, non-administrator user.
-A user may always read themselves.
+**`GET /Users/{userId}` refuses no authenticated caller.** Any caller carrying a usable token is
+answered `200` with the named user's whole §3.5 object — a non-administrator naming another
+non-administrator, a restricted non-administrator naming an **administrator**, an administrator
+naming anybody, and a user naming themselves are one answer, and the bytes do not depend on who
+asked: the administrator's object as read by a restricted stranger is byte-identical to that
+administrator's own reading of it.
+`[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`
 
-> **⚠️ That `403` is Atrium's, not the reference's, and it was stated here with no provenance until
-> 009 T2 measured it (2026-08-31).** The reference does not refuse at all: a restricted
-> non-administrator naming an administrator is answered **`200` with that administrator's whole
-> object, `Configuration` and `Policy` included**
-> `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. It is the same
-> disclosure §3.4 already records for `/Users/Public`, reached by a second road — and there, this
-> document chose to replicate rather than to protect, because Principle I outranks the improvement.
-> **Undecided:** whether this route follows §3.4 or keeps the refusal is a divergence to argue or
-> to withdraw, and neither was taken at a 009 task. §5's criterion 7 and the conformance matrix
-> still describe the refusal, so nothing here has changed behaviour;
-> [behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one)
-> carries the measurement.
+| The request | The answer |
+|---|---|
+| Any authenticated caller, any existing `userId` | `200`, the whole §3.5 object, `Configuration` and `Policy` included |
+| A `userId` that is well formed and belongs to nobody | `404`, the message as a JSON-encoded bare string: `"User not found"`, 16 bytes, `application/json; charset=utf-8`. **The same body to an administrator and to a non-administrator** |
+| A `userId` that is not an identifier at all | `400`, the model binder's validation body, keyed on the parameter's own spelling: `{"userId": ["The value 'not-an-identifier' is not valid."]}` |
+| No credential at all | `401`, empty, as everywhere else |
+
+`[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`
+
+> **This section asserted a `403` for a non-administrator reading anybody else, from the day 002
+> was written until 2026-09-01, with no provenance.** 009 T2 measured one cell of it on 2026-08-31
+> and found `200`; the whole matrix above was measured on 2026-09-01 and found no refusal anywhere
+> in it. Atrium **replicates**, and the decision is
+> [behaviours §3.22](../../docs/compatibility/behaviours.md#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated):
+> it is the disclosure §3.4 already replicates on `/Users/Public`, reached by a second road, and
+> keeping the refusal on one road while disclosing on the other is the inconsistency rather than
+> the protection. Principle I outranks the improvement — a client that reads another user against
+> the reference must not meet a `403` here.
+>
+> The `404` and the `400` in the table are the second half of the finding, and neither was in the
+> question that started this: the refusal Atrium sent for an identifier nobody has was the same
+> `403`, so that the two could not be told apart. The reference tells them apart, and its `404` is
+> the **fourth** error shape rather than the problem details every other handler-raised `404` in
+> this project answers
+> ([behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one)).
 
 ### 3.8 Sessions
 
@@ -394,8 +412,14 @@ verbatim.
    when all users are hidden. It carries the **whole** user object — `Configuration` and `Policy`
    included — because the reference does; this criterion asserted the opposite until it was
    measured.
-7. `GET /Users/{userId}` for another user answers `403` for a non-administrator and `200` for an
-   administrator.
+7. `GET /Users/{userId}` answers **`200` with the named user's whole object to every authenticated
+   caller** — a non-administrator naming another non-administrator, a non-administrator naming an
+   administrator, an administrator naming anybody, and a user naming themselves alike — with
+   `Configuration` and `Policy` included and the same bytes whoever asked. An identifier no account
+   has is `404` carrying `"User not found"`; a malformed one is the validation `400` keyed on
+   `userId`; no credential is the empty `401`. **This criterion asserted a `403` for a
+   non-administrator until the route was measured on 2026-09-01**, and it was the last thing in
+   this document still describing a refusal §3.7 had already withdrawn.
 8. `POST /Users/Configuration` round-trips every property, including ones v1 does not act on.
 9. Capabilities posted to `/Sessions/Capabilities/Full` appear in the caller's `/Sessions` entry.
 10. After `LoginAttemptsBeforeLockout` failures the account answers **`403`** even with correct
@@ -418,7 +442,7 @@ verbatim.
 |---|---|---|
 | `POST /Users/AuthenticateByName` | **L3** | Golden response plus differential. Everything downstream depends on this being byte-right. **L2 is met; the differential half needs the harness [010](../010-conformance-harness/spec.md) delivers and a reachable reference server, so the gap is recorded rather than counted as met** |
 | `GET /Users/Public` | **L2** | Golden response; fixture with a hidden user |
-| `GET /Users/Me`, `GET /Users/{userId}` | **L2** | Golden response, permission matrix |
+| `GET /Users/Me`, `GET /Users/{userId}` | **L2** | Golden response, plus the caller matrix — every pair of caller and subject, the identifier nobody has, the malformed one and the absent credential. It was a *permission* matrix until 2026-09-01; there are no permissions on this route to tabulate, so what it proves is that no caller is refused and no body is redacted |
 | `POST /Users/Configuration` | **L2** | Round-trip test |
 | `GET /Sessions` | **L2** | Fixture with two sessions on two devices |
 | `POST /Sessions/Capabilities/Full` | **L1** | Shape only; its effect is asserted through `/Sessions` |
