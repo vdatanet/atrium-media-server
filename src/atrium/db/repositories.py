@@ -1221,11 +1221,13 @@ class UserDataRepository:
 class PlaylistRepository:
     """The only way a playlist is read or written, and the reason there is only one.
 
-    **Two reads and six writes.** Both reads take a `User`, which is 009 plan section 9's second
-    risk written as a signature: an entries query that forgot the reader is how section 3.17's
-    divergence stops applying on one route, silently, in a change that looks like a refactor.
-    `tests/unit/test_playlist_repository.py` asserts the classification by reflection, so a ninth
-    method has to declare which of the two it is before the suite goes green again.
+    **Three reads and six writes, and two of the reads take a `User`.** That is 009 plan section
+    9's second risk written as a signature: an entries query that forgot the reader is how section
+    3.17's divergence stops applying on one route, silently, in a change that looks like a
+    refactor. The third read is `by_id_for_deletion`, which takes none because the route it is
+    named for applies none - measured, not assumed, and its docstring carries the measurement.
+    `tests/unit/test_playlist_repository.py` asserts the classification by reflection, so a tenth
+    method has to declare which of the three it is before the suite goes green again.
 
     **The stored order never leaves this class.** `entries` answers what its caller may see, and
     the move takes its arithmetic *in* rather than handing the full order out (`reorder`): a
@@ -1262,11 +1264,34 @@ class PlaylistRepository:
         administrator reading somebody's private playlist is `404` (spec section 3.7's last row),
         and it is that call, not this one, that says so.
         """
+        playlist = self.by_id_for_deletion(playlist_id)
+        if playlist is None:
+            return None
+        if may_read(playlist, user) or user.is_administrator:
+            return playlist
+        return None
+
+    def by_id_for_deletion(self, playlist_id: str) -> Playlist | None:
+        """The playlist's permission facts, with **no visibility filter at all**.
+
+        The third read, and the only one that takes no reader - which is exactly why it is named
+        after the single route entitled to it. `DELETE /Items/{itemId}` applies no visibility test
+        to a playlist: measured, a caller who is answered `404` by every other route on a private
+        playlist is answered `401` by this one, so the deletion route discloses that the playlist
+        exists where the read route refuses to
+        `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]`
+        `[source: Jellyfin.Api/Controllers/LibraryController.cs:374-383 @ v10.11.11]`. A route that
+        went through `by_id` would answer that caller `404` and lose the reference's own shape.
+
+        `tests/unit/test_playlist_repository.py` classifies it apart from the two reads that do
+        take a `User`, so a fourth read cannot join this one by accident: the invariant plan
+        section 9 asks for is that an *entries* read carries its reader, and this reads no entries.
+        """
         row = self._session.get(models.Playlist, playlist_id)
         item = self._session.get(models.Item, playlist_id)
         if row is None or item is None or item.removed_at is not None:
             return None
-        playlist = Playlist(
+        return Playlist(
             id=row.item_id,
             name=item.name,
             owner_user_id=row.owner_user_id,
@@ -1274,9 +1299,6 @@ class PlaylistRepository:
             media_type=row.media_type,
             shares=self._shares(playlist_id),
         )
-        if may_read(playlist, user) or user.is_administrator:
-            return playlist
-        return None
 
     def entries(self, playlist_id: str, user: User) -> list[str]:
         """The item identifiers this reader may see, in the playlist's order.

@@ -27,7 +27,14 @@ from fastapi import FastAPI
 from atrium.api.deps import require_user
 from atrium.config.paths import DataPaths
 from atrium.db.item_queries import ItemQueryRepository
-from atrium.db.repositories import PlaylistRepository, UserRepository
+from atrium.db.repositories import (
+    ItemRepository,
+    LibraryRepository,
+    PlaylistRepository,
+    UserRepository,
+)
+from atrium.domain.items import CollectionType, Item, ItemType, MediaSource
+from atrium.domain.library import Library
 from atrium.domain.user import User
 from atrium.library import identity
 from atrium.server import create_app
@@ -1560,3 +1567,303 @@ async def test_the_move_route_declares_the_references_parameters_and_no_others(
         "newIndex",
     ]
     assert [one["name"] for one in parameters if one["in"] == "query"] == []
+
+
+# ------------------------------------------------------------------------------------------
+# T12 - `DELETE /Items/{itemId}`: three refusals, one of them ours
+# ------------------------------------------------------------------------------------------
+#
+# The route 009 owns half of. Its playlist half is parity down to the bytes; everything else on
+# it is refused, which is the one divergence in this project not argued from "no client can tell"
+# (behaviours section 4.3). Every cell below was measured before it was written
+# `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+#: The reference's own refusal, byte for byte: the *fourth* error shape at a status this project
+#: had only ever sent empty.
+UNAUTHORIZED = b'"Unauthorized access"'
+
+
+async def delete_item(client: httpx.AsyncClient, item_id: str) -> httpx.Response:
+    return await client.delete(f"/Items/{item_id}")
+
+
+async def test_ac12_the_owner_deletes_their_playlist_and_it_is_gone(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """AC-12's first clause, and the success shape beside it: `204`, no body, no content type."""
+    as_user(harness, world.everyone)
+    playlist = world.private_playlist
+
+    answered = await delete_item(client, playlist.id)
+    assert answered.status_code == 204, answered.content
+    assert answered.content == b""
+    assert "content-type" not in answered.headers
+
+    assert (await client.get(f"/Items/{playlist.id}")).status_code == 404
+    assert (await client.get(f"/Playlists/{playlist.id}/Items")).status_code == 404
+    listed = await client.get(
+        "/Items", params={"includeItemTypes": "Playlist", "recursive": "true", "limit": "1000"}
+    )
+    assert playlist.id not in {row["Id"] for row in listed.json()["Items"]}
+
+
+async def test_deleting_a_playlist_takes_its_entries_and_its_shares_with_it(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """The cascades, asserted where they are observable: the share is gone because the user it
+    was granted to can no longer reach the playlist, and the entries are gone because the id
+    answers nothing at all.
+
+    A fresh playlist rather than a seeded one, so the assertion is about this deletion and not
+    about what the world happened to hold."""
+    as_user(harness, world.everyone)
+    playlist_id = await created_id(
+        await client.post(
+            "/Playlists",
+            json={
+                "Name": "T12",
+                "Ids": list(world.corpus[0:2]),
+                "Users": [{"UserId": world.restricted.id, "CanEdit": True}],
+            },
+        )
+    )
+    as_user(harness, world.restricted)
+    assert (await client.get(f"/Playlists/{playlist_id}/Items")).status_code == 200
+
+    as_user(harness, world.everyone)
+    assert (await delete_item(client, playlist_id)).status_code == 204
+
+    as_user(harness, world.restricted)
+    assert (await client.get(f"/Playlists/{playlist_id}/Items")).status_code == 404
+    as_user(harness, world.everyone)
+    assert (await client.get(f"/Items/{playlist_id}")).status_code == 404
+    # The films are untouched: a cascade that reached the items would be a deletion of media
+    # through a route that refuses to delete media.
+    for item_id in world.corpus[0:2]:
+        assert (await client.get(f"/Items/{item_id}")).status_code == 200
+
+
+async def test_ac13_an_administrator_deletes_a_playlist_they_neither_own_nor_may_read(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """AC-13's deletion half, and the row spec section 3.7 asserts: deletion is the **one**
+    operation an administrator may perform on a playlist that is none of theirs.
+
+    **And unlike the editing refusal, it is not conditional on seeing the playlist.** T10 had to
+    correct AC-13 because the editing routes go through a lookup that filters by owner, share and
+    `IsPublic`; this route goes through no such lookup, measured - the same administrator is
+    answered `404` by `GET /Items/{id}` and `204` here, in the same private playlist, in the same
+    test `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    as_user(harness, harness.admin)
+    playlist = world.private_playlist
+    assert (await client.get(f"/Items/{playlist.id}")).status_code == 404
+    assert (await client.get(f"/Playlists/{playlist.id}/Items")).status_code == 404
+
+    assert (await delete_item(client, playlist.id)).status_code == 204
+
+    as_user(harness, world.everyone)
+    assert (await client.get(f"/Items/{playlist.id}")).status_code == 404
+
+
+@pytest.mark.parametrize(
+    "refused", ["share with can_edit", "share without can_edit", "public reader", "stranger"]
+)
+async def test_ac12_a_caller_who_may_not_delete_is_the_401_with_its_body(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld, refused: str
+) -> None:
+    """AC-12's third clause: `401`, and the body is the *fourth* shape rather than an empty one.
+
+    Four classes reach it and none of them is an administrator: a share **with** `CanEdit` may
+    reorder the playlist and may not delete it, which is the asymmetry the three permission
+    functions exist to carry (009 spec section 3.7). Measured with its content type, because a
+    `401` in this project had never carried a body before
+    `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    playlist_id = {
+        "share with can_edit": world.shared_playlist.id,
+        "share without can_edit": world.read_only_playlist.id,
+        "public reader": world.public_playlist.id,
+        "stranger": world.private_playlist.id,
+    }[refused]
+    as_user(harness, world.restricted)
+
+    answered = await delete_item(client, playlist_id)
+    assert answered.status_code == 401, answered.content
+    assert answered.content == UNAUTHORIZED
+    assert answered.headers["content-type"] == "application/json; charset=utf-8"
+
+    as_user(harness, world.everyone)
+    assert (await client.get(f"/Items/{playlist_id}")).status_code == 200
+
+
+async def test_the_deletion_refusal_discloses_a_playlist_every_other_route_hides(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """The finding this task turned on, kept as a test rather than as a sentence.
+
+    Spec section 3.6 said `404` for an invisible item, and for a **playlist** that is false: this
+    route applies no visibility test at all, so `restricted` - who is answered the read route's
+    twenty bytes and the item route's problem details for this same playlist - is answered `401`
+    here, and learns that it exists `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11,
+    2026-09-01]`. Replicated rather than corrected: the id has to be known before it can be
+    asked about, and a server that answered `404` would differ from the reference on a request a
+    client can make.
+    """
+    as_user(harness, world.restricted)
+    private = world.private_playlist.id
+
+    assert (await client.get(f"/Items/{private}")).status_code == 404
+    assert (await client.get(f"/Playlists/{private}/Items")).content == b'"Playlist not found"'
+    assert (await delete_item(client, private)).status_code == 401
+
+    # And a `404` on this route therefore means what it says: no such item, for anybody.
+    assert (await delete_item(client, ABSENT_ID)).status_code == 404
+
+
+async def test_an_unknown_identifier_is_the_problem_details_404(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """Not the read route's twenty bytes: this route is `LibraryController`'s and answers the
+    problem details every `NotFoundError` in this project answers, measured against a body the
+    playlist routes one path away do not send."""
+    as_user(harness, world.everyone)
+    answered = await delete_item(client, ABSENT_ID)
+    assert answered.status_code == 404, answered.content
+    body = json.loads(answered.content)
+    body.pop("traceId")
+    assert body == {
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+        "title": "Not Found",
+        "status": 404,
+    }
+
+
+async def test_a_malformed_identifier_is_the_binders_validation_400(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """`itemId` is typed as an identifier because the reference binds it as one - the route's
+    parameter is a parsed value, so a malformed one never reaches the action and is the
+    validation `400` keyed on the path parameter's own spelling. Measured, and not deduced from
+    the two routes in this feature that answer otherwise (T11)."""
+    as_user(harness, world.everyone)
+    answered = await delete_item(client, "not-an-identifier")
+    assert answered.status_code == 400, answered.content
+    assert validation_body(answered) == problem(
+        {"itemId": ["The value 'not-an-identifier' is not valid."]}
+    )
+
+
+async def test_an_all_zeros_identifier_is_the_bare_text_400(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """`Guid.Empty` is the third class of identifier here too, and it is refused before anything
+    is looked up - the same guard T10 found in the reference's own item lookup, on a route no
+    document had asked about `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11,
+    2026-09-01]`."""
+    as_user(harness, world.everyone)
+    answered = await delete_item(client, EMPTY_GUID)
+    assert answered.status_code == 400, answered.content
+    assert answered.content == CONTROLLER_BODY
+    assert answered.headers["content-type"] == "text/plain"
+
+
+@pytest.mark.parametrize("kind", ["a film", "an album", "a genre"])
+async def test_ac12_anything_that_is_not_a_playlist_is_refused(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld, kind: str
+) -> None:
+    """AC-12's second clause, widened to what the route actually decides (behaviours section 4.3).
+
+    The rule is *not a playlist*, rather than *a file backs it*: a genre this server rebuilds on
+    the next scan would be a deletion that does not stick, which is Principle VI's
+    plausible-looking stub. The reference refuses that one too - `CanDelete()` is `IsFileProtocol`
+    and a by-name row has no file `[source: MediaBrowser.Controller/Entities/BaseItem.cs:820-828 @
+    v10.11.11]` - though with `401` rather than this `403`, which is the divergence and not an
+    accident.
+    """
+    as_user(harness, world.everyone)
+    item_id = {"a film": world.corpus[0], "an album": world.album, "a genre": None}[kind]
+    if item_id is None:
+        genres = await client.get("/Genres", params={"limit": "1"})
+        item_id = genres.json()["Items"][0]["Id"]
+
+    answered = await delete_item(client, item_id)
+    assert answered.status_code == 403, answered.content
+    assert answered.content == CONTROLLER_BODY
+    assert answered.headers["content-type"] == "text/plain"
+    assert (await client.get(f"/Items/{item_id}")).status_code == 200
+
+
+async def test_an_item_this_caller_cannot_see_is_404_before_the_refusal(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """Media is the other way round from a playlist, and measured: an item in a library this
+    caller cannot open is `404` on this route, exactly as it is on `/Items/{itemId}` - the
+    reference's own lookup filters media by collection folder and filters a playlist by nothing
+    `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+    So the `403` above is a refusal only the callers who can see the item ever meet, and the
+    divergence discloses nothing the read routes do not.
+    """
+    as_user(harness, world.restricted)
+    track = world.tracks[0]
+    assert (await client.get(f"/Items/{track}")).status_code == 404
+    assert (await delete_item(client, track)).status_code == 404
+
+
+async def test_the_delete_route_declares_the_references_parameters_and_no_others(
+    app: FastAPI,
+) -> None:
+    """No `userId` `[spec: DeleteItem]`: the reference's action reads the caller's own identity,
+    so a parameter here would be a way to delete on somebody else's behalf that no reference
+    server offers. Asserted against the generated document, where a client discovers one."""
+    operation = app.openapi()["paths"]["/Items/{itemId}"]["delete"]
+    assert [one["name"] for one in operation["parameters"] if one["in"] == "path"] == ["itemId"]
+    assert [one["name"] for one in operation["parameters"] if one["in"] == "query"] == []
+
+
+async def test_ac12_a_film_is_refused_and_the_file_is_still_on_disk(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld, tmp_path: Path
+) -> None:
+    """AC-12's second clause, asserted where the divergence's whole argument lives: the file.
+
+    The seeded world's libraries are rooted at paths that do not exist, so nothing in it can tell
+    "the route refused" from "the route deleted the row and there was no file to remove". This
+    test roots a fourth library inside `tmp_path`, puts real bytes in it, and asserts them after
+    the refusal - which is the only assertion behaviours section 4.3's argument can be made with.
+    """
+    root = tmp_path / "deletable"
+    (root / "A Film").mkdir(parents=True)
+    film = root / "A Film" / "A Film.mkv"
+    film.write_bytes(b"not really a film")
+
+    with harness.app.state.sessions.begin() as opened:
+        library = LibraryRepository(opened).add(
+            Library(
+                id="c" * 32,
+                name="Deletable",
+                collection_type=CollectionType.MOVIES,
+                roots=(str(root),),
+            )
+        )
+        relative = "A Film/A Film.mkv"
+        item = Item(
+            id=identity.for_file(ItemType.MOVIE, library.id, relative),
+            type=ItemType.MOVIE,
+            name="A Film",
+            library_id=library.id,
+            sources=(MediaSource(relative_path=relative, size=film.stat().st_size, mtime_ns=1),),
+        )
+        ItemRepository(opened).add(item)
+
+    as_user(harness, world.everyone)
+    assert (await client.get(f"/Items/{item.id}")).status_code == 200
+
+    answered = await delete_item(client, item.id)
+    assert answered.status_code == 403, answered.content
+    assert answered.content == CONTROLLER_BODY
+    assert answered.headers["content-type"] == "text/plain"
+
+    assert film.exists()
+    assert film.read_bytes() == b"not really a film"
+    assert (await client.get(f"/Items/{item.id}")).status_code == 200

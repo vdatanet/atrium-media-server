@@ -100,7 +100,7 @@ from atrium.compat.errors import (
     PlaylistMoveError,
     PlaylistNotFoundError,
 )
-from atrium.compat.guids import CANONICAL, WireGuid, new_id, normalise
+from atrium.compat.guids import CANONICAL, EMPTY, WireGuid, new_id, normalise
 from atrium.compat.model import AtriumModel
 from atrium.db.engine import session_scope
 from atrium.db.item_queries import HydratedItem, ItemQueryRepository
@@ -255,10 +255,6 @@ def _shares(body: CreatePlaylistDto | None) -> tuple[Share, ...]:
     )
 
 
-#: `Guid.Empty`. Not an unknown identifier and not a malformed one: a third class, refused by
-#: both write routes and by creation wherever it appears (`EmptyIdentifierError`).
-EMPTY_ID = "0" * 32
-
 #: The value that means "this item does not answer the question", so the next one is asked.
 UNKNOWN_MEDIA_TYPE = "Unknown"
 
@@ -327,7 +323,7 @@ class _Expander:
         `EmptyIdentifierError` on every route that resolves one, which is where the reference puts
         it too - in the lookup, not in any route.
         """
-        if item_key == EMPTY_ID:
+        if item_key == EMPTY:
             raise EmptyIdentifierError("an identifier of all zeros names no item")
         page = self.queries.run(ItemQuery(user=user, ids=(item_key,), limit=1, count=False))
         return page.items[0] if page.items else None
