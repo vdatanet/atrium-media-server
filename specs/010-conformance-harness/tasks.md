@@ -4,6 +4,7 @@ title: Conformance harness — tasks
 status: Draft
 created: 2026-09-02
 updated: 2026-09-02
+amended: 2026-09-02 — **D-6 is taken, and this list records the decision rather than the reservation.** The four readings of *"What the gate changed"* §3 — behaviours §5.2, behaviours §5.6, 005 §7 OQ-7 and 007's paused-session ticker — join spec §3.10 as named comparisons, so **§3.10 is twenty rows and AC-16 counts twenty**. The spec is amended and dated in its frontmatter the way D-3's was. T5 loses the `outstanding:` section it was to give the register, T12 grows from four runner shapes to six, and the definition of done counts twenty. Behaviours §5.2 keeps its `⚠️ UNVERIFIED` marker: a §3.10 row is an owner and a method, not the reading that discharges it. `status` stays `Draft` — this list's own gate is a separate act.
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -48,8 +49,9 @@ and it is stale: nothing may trust it until it has been reconciled.
 
 This list was reviewed against [`spec.md`](spec.md), [`plan.md`](plan.md) and the files they name on
 2026-09-02, before being proposed for acceptance. It found three things. The first would have
-failed the suite on the day 010 flips to `Implemented`; the third is a scope call and is **reserved
-for its owner** rather than taken here.
+failed the suite on the day 010 flips to `Implemented`; the third was a scope call, reserved for its
+owner as **D-6** rather than taken by the list, and **taken on 2026-09-02** — the recommendation
+accepted, the accepted spec amended for it, and the record below rewritten to say so.
 
 ### 1. AC-2 cannot be mapped the way plan §8 maps it, and the map's own test is what says so
 
@@ -94,12 +96,13 @@ first, per identity, and T8's report prints the declared level beside the covera
 which L3 rows it actually compared. It is not a new criterion: it is AC-3's coverage line made able
 to answer the question every other feature's definition of done has been deferring to it.
 
-### 3. §3.10's sixteen rows are not everything the six lists and the compatibility documents owe
+### 3. §3.10's sixteen rows were not everything the six lists and the compatibility documents owe — they are twenty now
 
 The sixteen are checked and they are right: every row of 005's, 006's, 007's, 008's, 009's and
 011's *"what this feature owes the next ones"* that a sweep cannot raise is in the table, and the
 rest of those rows are sweep-visible and are discharged by T6's request cases and T8's triage.
-**Four things are not in it**, and each needs exactly what this feature has just acquired:
+**Four things were not in it**, and each needs exactly what this feature has just acquired — all
+four are rows of §3.10 since D-6:
 
 | What | Where it is written | Why nothing sees it |
 |---|---|---|
@@ -109,19 +112,21 @@ rest of those rows are sweep-visible and are discharged by T6's request cases an
 | **The paused-session ticker freeze** | 007's owes list, [007 plan §6.8](../007-user-data-and-playstate/plan.md) | Cited from the reference's source and never measured on the wire; it costs ten minutes of deliberate silence against a paused session, which is a probe nobody wrote |
 
 The first three are **writes into a library**, which is what the single-use instance is for, and all
-four are askable the day T9 lands. **Whether they become rows of `named-comparisons.yaml` is a
-scope call and it is not taken here**, because §3.10 is a table in an **accepted** spec and AC-16
+four are askable the day T9 lands. **Whether they become rows of `named-comparisons.yaml` was a
+scope call this list did not take**, because §3.10 is a table in an **accepted** spec and AC-16
 counts it: adding rows widens an acceptance criterion, which is the shape of the decision plan §11
-reserved as D-3 rather than took. It is recorded as **D-6** below, with a recommendation. Until it
-is decided, T12 carries all four as **outstanding readings** in the register's own `outstanding`
-section — counted and named in every report, excluded from AC-16's sixteen — which is the reading
-that neither loses them nor edits a criterion.
+reserved as D-3 rather than took. It was recorded as **D-6** below, with a recommendation, and
+**the recommendation was accepted on 2026-09-02**: all four are §3.10 rows now, inside AC-16's
+count, and the register has no separate `outstanding` section for them.
 
-## Decisions this list reserves
+## The decision this list reserved, taken on 2026-09-02
 
-| # | The call | Recommendation |
+| # | The call | Decided |
 |---|---|---|
-| **D-6** | Whether the four debts above join `named-comparisons.yaml` as named comparisons, widening spec §3.10 and AC-16 from sixteen | **Yes, as four new §3.10 rows**, with the spec amended and dated in its frontmatter the way D-3 was. All four are differences a sweep cannot raise, which is exactly what §3.10 is for; behaviours §5.2's `⚠️` in particular is a claim this repository has carried unmeasured since it was written and can now settle. The cost is one amendment to an accepted spec and four rows on a register; the cost of the alternative is that a run reports *"sixteen of sixteen"* while four questions with a written home go on being nobody's |
+| **D-6** | Whether the four debts above join `named-comparisons.yaml` as named comparisons, widening spec §3.10 and AC-16 from sixteen | **Yes, as four new §3.10 rows.** The spec is amended and the amendment is dated in its frontmatter the way D-3's was: §3.10 carries the four with their provenance and the reason each needs the instance, **AC-16 names twenty where it counted sixteen**, and [spec §7](spec.md#7-open-questions) records the decision. All four are differences a sweep cannot raise, which is exactly what §3.10 is for; behaviours §5.2's `⚠️` in particular is a claim this repository has carried unmeasured since it was written and can now be settled — **the marker itself stays**, because `behaviours.md` is not a specification and the reading that would discharge it has not been taken yet. The cost was one amendment to an accepted spec and four rows on a register; the cost of the alternative was a run reporting *"sixteen of sixteen"* while four questions with a written home went on being nobody's |
+
+**Nothing in this list is now waiting on a decision.** T5, T12 and the definition of done are
+written against twenty, and the `outstanding:` section they described is gone rather than empty.
 
 ## Legend
 
@@ -236,25 +241,28 @@ that neither loses them nor edits a criterion.
   reordered **and** changed produces exactly the change.
 - **Spec reference:** §3.3, §6, AC-17, AC-18; plan §6.2, §6.3
 
-## T5 — `docs/compatibility/named-comparisons.yaml`: sixteen rows, and what each needs
+## T5 — `docs/compatibility/named-comparisons.yaml`: twenty rows, and what each needs
 
 - [ ] **Changes:** new `docs/compatibility/named-comparisons.yaml` — one row per row of spec §3.10,
-  each with `id`, `what`, `why_the_sweep_misses_it`, `needs` (`identity:restricted`,
-  `identity:playback-denied`, `fixture`, `latency`, `bytes`, `twice`), `behaviours` and `runner`,
+  **twenty of them since D-6**, each with `id`, `what`, `why_the_sweep_misses_it`, `needs`
+  (`identity:restricted`, `identity:playback-denied`, `fixture`, `rescan`, `wait`, `latency`,
+  `bytes`, `twice`), `behaviours` and `runner`,
   which is `none` until the task that writes it. **`needs` is the field that earns the file**: it is
   what lets a report say *"four outstanding, and three of them because no fixture instance was
   available"*, and what a run consults to decide whether a row is even askable before it counts it
-  as a miss. The file also gains an `outstanding:` section carrying the four readings of *"What the
-  gate changed"* §3 — counted and named in every report, and **not** part of AC-16's sixteen until
-  D-6 is decided. `tests/unit/test_allowlist.py` gains the register's assertions.
+  as a miss. **There is no `outstanding:` section**: the four readings of *"What the gate changed"*
+  §3 are ordinary rows of the register, because D-6 was taken on 2026-09-02 and put them inside
+  AC-16's count rather than beside it. `tests/unit/test_allowlist.py` gains the register's
+  assertions.
 - **Depends on:** —
 - **Verified by:** `uv run pytest tests/unit/test_allowlist.py -q`.
   `test_the_register_is_spec_310s_table` parses spec §3.10's rows and asserts the ids cover them
   one for one, so a row deleted from either side fails; `test_every_row_names_a_behaviours_section_that_exists`
   resolves each `behaviours` value against the anchors in `behaviours.md` and fails on a section
   that is not there — which is 006 T3's finding (a task citing an exception withdrawn three features
-  earlier) turned into a check; and `test_no_outstanding_row_is_counted_as_named` asserts the two
-  lists are disjoint and that AC-16's count reads sixteen.
+  earlier) turned into a check; and `test_the_register_counts_twenty` asserts AC-16's count reads
+  **twenty** and that each of D-6's four rows is present by id, so a register that quietly dropped
+  one of them back out of the count fails.
 - **Spec reference:** §3.10, §4, AC-16; plan §4.2, §6.4
 
 ## T6 — `docs/compatibility/request-cases.yaml`: the eight L3 rows first, then the surface
@@ -440,30 +448,34 @@ that neither loses them nor edits a criterion.
   encoding — a fixture that is valid UTF-8 cannot exercise behaviours §5.11.
 - **Spec reference:** §3.1, AC-1, AC-13; plan §6.6, §9
 
-## T12 — The named comparisons: four runner shapes, and the outstanding readings
+## T12 — The named comparisons: six runner shapes over twenty rows
 
 - [ ] **Changes:** `tools/differential.py` gains a `runner` per row of `named-comparisons.yaml`, one
-  signature, `(instances, identities) -> NamedResult`, so the sixteen are code beside the sweep and
-  not prose beside the report (plan §6.4). Four shapes cover all of them: **a second seat** — the
+  signature, `(instances, identities) -> NamedResult`, so the twenty are code beside the sweep and
+  not prose beside the report (plan §6.4). Six shapes cover all of them: **a second seat** — the
   named reader, the entries a reader cannot reach, the delivery-time policy refusal — where the whole
   signal is a status or a **row count**; **the same request twice** — the de-duplication that
   misses, where the *reference's* disagreement with itself is the finding and never a flake to
   retry (6 of 8 identical requests behaved differently, behaviours §3.18); **something that is not
   in a body** — the progressive header frame, burn-in, the image track's latency, the subtitle
-  playlist's bytes, the manifest's `NAME` masked against its invariant form; and **a library the
+  playlist's bytes, the manifest's `NAME` masked against its invariant form; **a library the
   reference has to be given** — the multi-part film, the legacy-encoded subtitle, EXIF orientation,
-  the empty library, the media source with no runtime. The last two rows of §3.10 stay ordinary
-  request cases with a register row pointing at them. A runner that raises leaves its row
-  **outstanding with the exception** and the run continues. The four **outstanding readings** of
-  *"What the gate changed"* §3 are reported by name every run, with their reason, pending D-6.
+  the empty library, the media source with no runtime, and the specials series 005 OQ-7 needs; **the
+  library changed underneath a rescan** — the emptied container (behaviours §5.2) and the replaced
+  poster (behaviours §5.6), where the signal is the difference between two scans and not inside one
+  answer; and **a reading after a deliberate wait** — the paused-session ticker freeze, ten minutes
+  of silence against a paused session and then the position each server committed. The last three
+  shapes are the ones D-6 widened the table for, and all three need the instance T9 lands. The last
+  two rows of §3.10 stay ordinary request cases with a register row pointing at them. A runner that
+  raises leaves its row **outstanding with the exception** and the run continues.
 - **Depends on:** T7, T8, T11
 - **Verified by:** `uv run pytest tests/conformance/test_differential.py -q` for the shapes that can
   be driven without a server: `test_a_runner_that_raises_leaves_its_row_outstanding_and_the_run_continues`,
   and `test_the_row_count_is_the_signal_for_the_unreachable_entries_row`, which asserts the runner
   compares **counts** and not bodies — the two servers agree on every field of every row they both
   show, so a runner that diffed bodies would report nothing and pass. Then by hand against an
-  instance: `python3 tools/differential.py --named --fixture`, whose report must name sixteen run or
-  outstanding, and four outstanding readings beside them.
+  instance: `python3 tools/differential.py --named --fixture`, whose report must name **twenty** run
+  or outstanding, with no separate list beside them.
 - **Spec reference:** §3.10, AC-16; plan §6.4
 
 ## T13 — The probe convention enforced, the cleanup contract shared, and the last two debts paid
@@ -565,9 +577,9 @@ The feature is done when **all** of these hold:
 - [ ] `surface.yaml` is unchanged and the router serves the same 59 routes. **This feature adds no
       endpoint**, and the ignored-parameter tally is a file in the data directory precisely so that
       it cannot become one.
-- [ ] Every `§3.10` named comparison is run or reported outstanding **by name**, and an outstanding
-      one keeps the run from being clean. The four outstanding readings are reported beside them,
-      pending D-6.
+- [ ] Every one of `§3.10`'s **twenty** named comparisons is run or reported outstanding **by
+      name**, and an outstanding one keeps the run from being clean. The four D-6 added are inside
+      that count and not beside it.
 - [ ] Every allowlist entry declares a `behaviours.md` section or one of the four derivation
       classes, is scoped by endpoint and JSON pointer, and carries a date — and an entry that
       excuses nothing on a run is reported, because the allowlist is a metric that should shrink.

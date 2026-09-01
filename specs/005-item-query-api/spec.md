@@ -310,7 +310,9 @@ both times. One row per series; the most recently played series first
 `[probe: tools/probe_next_up.py, Jellyfin 10.11.11, 2026-08-28]`. The **specials exclusion is
 unmeasured and held open by §7 OQ-7**: the measured library had no pristine specials season to
 play, the probe says so in its own output, and the rule stands as v1's own reading until a
-library can answer it.
+library can answer it. **Since 2026-09-02 a library will be built for it**: the question is a
+named comparison of [010 §3.10](../010-conformance-harness/spec.md), run against the single-use
+reference instance rather than against a library that happens to have one.
 
 **The Latest grouping rule, measured** *(added by T11 — the plan's first wording said an episode
 always surfaces as its series, and one response disproved it)*: recent items group under their
@@ -511,7 +513,7 @@ this feature means about seventy fields, the largest single surface in the proje
 | OQ-1 | Which fields the reference sends that §3.2 omits, and whether any client reads them | The bounded delta in §3.2 | Differential harness (010) — the single highest-value output it produces |
 | OQ-2 | Which Tier 3 parameters real clients actually send | Promotion out of Tier 3 | The ignored-parameter report (AC-15) against real client traffic |
 | OQ-5 | How the reference ranks `InstantMix` | Nothing; v1 diverges into determinism deliberately | Unmeasured. The `Similar` half of this question was answered at 010's gate and **its two decisions are made** — see the Resolved table below. `InstantMix` was not measured with it and no divergence is claimed for it until it is |
-| OQ-7 | Whether the reference's Next Up really excludes a pristine specials season, as §3.8 states | §3.8's exclusion rule — it stands as v1's own reading until measured | `tools/probe_next_up.py` against a library holding a series whose only unplayed episodes are season 0's; the library measured on 2026-08-28 had none |
+| OQ-7 | Whether the reference's Next Up really excludes a pristine specials season, as §3.8 states | §3.8's exclusion rule — it stands as v1's own reading until measured | **Owned since 2026-09-02**: a named comparison of [010 §3.10](../010-conformance-harness/spec.md), added by that list's D-6, run against the single-use reference instance 010 §3.1 stands up over the fixture. The question needs a library holding a series whose only unplayed episodes are season 0's, and the library measured on 2026-08-28 had none `[probe: tools/probe_next_up.py, Jellyfin 10.11.11, 2026-08-28]` — so it is built rather than found. Still open until that comparison runs |
 ### Resolved
 
 | # | Question | Answer | Resolved by |
