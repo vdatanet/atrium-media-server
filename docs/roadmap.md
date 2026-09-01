@@ -49,6 +49,16 @@ any other track. The row's last sentence holds — they are still not painted in
 the exclusion below and the one subtitle row left in
 [behaviours §5](compatibility/behaviours.md#5-accepted-gaps-in-v1).
 
+**Playlists shipped on 2026-09-01**, across [009](../specs/009-playlists/tasks.md)'s fourteen
+tasks, and they are the one thing in the **Media types** row above that a client *writes* rather
+than reads: create, read, add, remove, reorder, rename and delete. That makes them the only
+structural state in v1 that does not come from the filesystem, and therefore the only thing in the
+server's store that a rescan cannot rebuild — which is why 009's last criterion is about surviving
+one ([009 §4](../specs/009-playlists/spec.md)). Six divergences ship with them, every one argued
+and recorded ([behaviours §3.15–§3.19, §3.21](compatibility/behaviours.md)), and the sharpest is a
+read the reference leaves open: naming another user in `userId` reads any private playlist there,
+and is refused here.
+
 ### Out of scope, and why
 
 | Not in v1 | Reason |

@@ -120,13 +120,13 @@ say how it will be proven is not finished.
 | [006](006-images/) | Images | **Implemented** | **Implemented** | **Implemented** |
 | [007](007-user-data-and-playstate/) | User data and playstate | **Implemented** | **Implemented** | **Implemented** |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Implemented** | **Implemented** | **Implemented** |
-| [009](009-playlists/) | Playlists | **Accepted** | **Accepted** | **Accepted** |
+| [009](009-playlists/) | Playlists | **Implemented** | **Implemented** | **Implemented** |
 | [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
 
-**001 through 008 are implemented, and 011 with them** — 008 on 2026-08-29 across fourteen tasks,
-011 on 2026-08-31 across twelve. Its spec and plan
+**001 through 009 are implemented, and 011 with them** — 008 on 2026-08-29 across fourteen tasks,
+011 on 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen. Its spec and plan
 were accepted the same day, at a review that wrote and ran the five probes its open questions had
 been citing prospectively — all twelve OQs answered, five claims overturned (the policy story, the
 body's `EnableTranscoding` switch, `static=true` as an error, `enableRedirection`'s `302`, and the
@@ -139,7 +139,9 @@ mandatory `deviceId` decides nothing (T12), and a `SegmentKeepSeconds` that is a
 the client rather than a file age (T13). **009 was accepted at its own measurement gate on 2026-08-31**, three days after 012's: six open
 questions answered by five probes — one extended, four written — and **thirteen claims that did not
 survive them**, the sharpest being that `PlaylistItemId` is the item's own `Id`, which is the
-distinction the whole feature had been written around. **010 remains the only draft**, and its open
+distinction the whole feature had been written around. **It shipped on 2026-09-01**, across
+fourteen tasks, every one of which found something the documents had wrong — which is why its spec
+carries twelve amendments and its plan nine. **010 remains the only draft**, and its open
 questions are the standing review agenda —
 [what 008 owes them](008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
 and [what 011 does](011-subtitle-delivery/tasks.md#what-this-feature-owes-the-next-ones) are
@@ -147,15 +149,26 @@ written down rather than remembered. **011's spec was accepted on the same day a
 own measurement gate, its plan and task list on 2026-08-30, and the twelve tasks ran from
 2026-08-30 to 2026-08-31; **012 was opened on 2026-08-29 and accepted at its own gate the same
 day**. The lowest-numbered feature that is not implemented is
-**009**, and its spec, plan and fourteen tasks were all accepted on 2026-08-31, so what is next is
-**T1** — the first unticked task of the lowest-numbered feature, which is where this table always
-points. Both those lists were inputs to the plan. Each of 009's own two gates found something, which
+**010**, whose spec is still a draft, so what is next is that spec's own measurement gate — the
+first unticked step of the lowest-numbered feature, which is where this table always points. Both
+those lists were inputs to the plan. Each of 009's own two gates found something, which
 is the rate this project expects: the plan gate found §8 budgeting a fixture task for a second
 non-administrator restricted to one library, which `tests/fixtures/query.py` has seeded since 005 —
 five criteria called unreachable, none of which were. The tasks gate found the plan pricing *"a
 playlist is a row in `items`"* at one migration when it is one migration, three maps and a clause —
 and the clause is the one without which `/Items?includeItemTypes=Playlist` answers every user's
 private playlists to everybody.
+
+**009's closing task found the class it exists to catch, and one of the three was a criterion with
+no test at all.** AC-20 — *"playlist state survives a full library rescan"* — had never been
+asserted, on the one item in the store a rescan cannot rebuild; two independent clauses keep a
+playlist out of the scan's removal pass and neither had been written down as load-bearing. Two more
+proved less than their names: AC-5's *"on both the creation and the addition paths"* had only ever
+asked the addition, and AC-13's *"the same three routes answer `404`"* had asked one of three — the
+move, the route whose refusals are ordered, being the one it mattered on. And AC-15 asserted that a
+request naming a playlist's owner in `userId` is part of the `404` it describes, where every route
+in the project that takes that parameter refuses it with the 25-byte `403` that AC-16 and AC-19
+assert; the criterion was corrected rather than the code.
 
 **008's own closing task found the class it exists to catch.** The acceptance map is where a
 criterion and the test that proves it are put on one line, and doing that showed two criteria whose

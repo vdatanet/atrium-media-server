@@ -125,7 +125,7 @@ on 2026-08-28 and not restated by the 2026-08-29 edition, whose scope excludes b
 | Contract §3 group | Operations | Owning feature | Status today |
 |---|---|---|---|
 | Identity and configuration | 7 | 001, 002, 004 | Implemented |
-| Library | 14 | 005, 009 | Implemented, except `GET /Playlists/{playlistId}/Items` (009, Draft) |
+| Library | 14 | 005, 009 | Implemented — `GET /Playlists/{playlistId}/Items` was the last of the fourteen, at 009 T9 on 2026-09-01 |
 | User data | 4 | 007 | Implemented |
 | Playback | 5 | 007, 008 | Implemented — `PlaybackInfo` at 008 T5, `DELETE /Videos/ActiveEncodings` at T12 |
 

@@ -12,7 +12,7 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001 through 008 are implemented, and 011 with them.** **[008](specs/008-playback-negotiation-and-delivery/)
+**Features 001 through 009 are implemented, and 011 with them.** **[008](specs/008-playback-negotiation-and-delivery/)
 landed on 2026-08-29 across fourteen tasks**, spec, plan and tasks all accepted the same day and
 every one of the fourteen finding something the documents had wrong. Playback is therefore in: the
 negotiation, the four `stream` routes, `/universal`, the HLS playlists and segments, and a
@@ -28,14 +28,23 @@ container's own streams, and served. Not burned in, which is
 [behaviours §5](docs/compatibility/behaviours.md#5-accepted-gaps-in-v1).
 **[012's spec was accepted on 2026-08-29](specs/012-negotiation-inputs/spec.md)**,
 at a gate that answered its nine open questions with two new probes and two extended ones and
-withdrew one of the two client findings it was built on. **[009's spec was accepted on 2026-08-31](specs/009-playlists/spec.md)**, at a gate whose five
-probes answered its six open questions and killed thirteen claims — including the one the feature
-was built on, that a playlist entry has an identifier of its own — so **010 is the only draft
-left**, and 009's plan is the next gate of the loop. What each implemented feature leaves the ones
-after it is written at the end of its own task list rather than here, so it cannot go stale:
+withdrew one of the two client findings it was built on. **[009](specs/009-playlists/) landed on 2026-09-01 across fourteen tasks**, its spec accepted at a
+gate whose five probes answered its six open questions and killed thirteen claims — including the
+one the feature was built on, that a playlist entry has an identifier of its own — and every one of
+the fourteen tasks then finding something further, which is why its spec carries twelve amendments
+and its plan nine. Playlists are therefore in, and they are the only thing a client **writes
+structure** to: creation with its four `400` bodies from three layers, the read with its
+`PlaylistItemId` and its own `404` shape, adding with every container expanding recursively,
+removing, the move's thirty measured pairs, deletion and the administrator-only rename. Six
+divergences ship with them ([behaviours §3.15–§3.19, §3.21](docs/compatibility/behaviours.md)) and
+two accepted gaps (a playlist has no `Path`; a non-administrator cannot rename their own).
+So **010 is the only draft left**, and its own measurement gate is the next gate of the loop. What
+each implemented feature leaves the ones after it is written at the end of its own task list rather
+than here, so it cannot go stale:
 [008's](specs/008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
 is the longest and 010 collects most of it, with
-[011's](specs/011-subtitle-delivery/tasks.md#what-this-feature-owes-the-next-ones) beside it;
+[011's](specs/011-subtitle-delivery/tasks.md#what-this-feature-owes-the-next-ones) and
+[009's](specs/009-playlists/tasks.md#what-this-feature-owes-the-next-ones) beside it;
 [007's](specs/007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones),
 [005's](specs/005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones) and
 [006's](specs/006-images/tasks.md#what-this-feature-owes-the-next-ones) stand beside it, with 004's
@@ -139,6 +148,7 @@ reasoning:
 | 009 gate | Answer six open questions and accept a spec | **Thirteen claims died, and the first one takes the feature's central idea with it.** `PlaylistItemId` **is** the item's `Id` — the field is a cache of the resolved item, so the entry identity §3.1 was built around, warned client authors about and asserted in an acceptance criterion is a distinction the wire does not make; it is also *why* the reference de-duplicates, which a probe had measured four days earlier without anyone connecting the two. The read route takes the identity it checks permissions against from a query parameter and never asks whether the caller may name it, so a restricted user reads any private playlist by naming its owner — where the same parameter on the same controller's write route answers `403`. A playlist shows entries from libraries the reader cannot open at all, because the filter in front of them is a parental-rating check: the omission the spec described as the reference's behaviour was never anyone's. Every row of the `Move` boundary table was wrong — a clamp exactly one position wide and a `500` past it, a negative index that moves the entry instead of refusing it, an absent entry that is a silent success. An empty `Name` creates a playlist where the spec promised `400`, an unknown id is fatal to creation under one condition and skipped under another, and refusing a deletion is `401` and not `403`. Plus the scope finding: the rename the music client calls is administrator-only, so the operation brought into the surface for that client refuses that client's own users |
 | 008 T9 | Answer two broken WAV routes and pay a prior-probe debt | **Both prior-probe claims moved when the probe was finally written.** The `500` has two causes, not one — a `wav` extension inferred as a *codec* never reaches the PCM bug at all — and the headerless body comes from the **transcoding** container, so the acceptance criterion's `Container=wav` named a request that answers mp3 on both servers. And the divergence has no chunked form: a WAV states its length inside the body, so a piped one says `ffffffff` |
 | 011 tasks | Review a twelve-item list against an accepted plan | **The plan's manifest section had been true when it was written, and stopped being true the same day.** 008 was amended hours earlier to offer an HDR stream copy a standard-range entrance, so "the variant line gains the subtitle group" would have shipped an entrance with no subtitles to exactly the client the entrance exists for — the reference gives the group to every variant it writes. Three more: the text/image split reads a codec spelling **the file does not report**, because four subtitle codecs are renamed at inspection, and against the unrenamed names the rule inverts on every DVD and broadcast track there is — a property 008 already emits, invisible because no fixture had a subtitle stream; the embedded **image** subtitle track the fixture needs cannot be encoded by ffmpeg at all, so it is a bitstream written by hand; and a sidecar's language rule names "the eight regional rows" of a table that has nine, two of them not regional |
+| 009 T14 | Write the acceptance map and flip three status lines | **A criterion with no test at all, two that proved less than their names, and one that says what its own tests contradict.** AC-20 — *"playlist state survives a full library rescan"* — had never been asserted, on the one item in the store a rescan cannot rebuild: **two** independent clauses keep a playlist out of the scan's removal pass — it has no library, and it is not file-backed — and neither was written down as load-bearing; remove both and the operator's purge deletes the playlist row outright. AC-5's *"on both the creation and the addition paths"* had only ever asked the addition, where `create` reduces its batch somewhere `append` does not; AC-13's *"the same three routes answer `404`"* had asked one of the three, and the two it skipped include the **move** — the route whose refusals are ordered, so a route reaching its editing test first would have disclosed a private playlist with a `403`. And AC-15 asserted that naming a playlist's owner in `userId` is part of the `404` it describes: it is the 25-byte `403` `effective_user` answers on every route in the project that takes the parameter, which is what AC-16 and AC-19 already said |
 | 011 T12 | Write the acceptance map and flip three status lines | **A risk the plan had named fired, and the mitigation it prescribed could not have caught it.** `-map 0:{N}` was handed the **wire** stream index where ffmpeg counts the demuxer's, so every remux, transcode and HLS segment of a film with a subtitle file beside it mapped one stream too far: measured, a remux of the one matrix entry with a sidecar answers `200` carrying **no video stream at all**. Plan §5 states the contract — `media/ffmpeg.py` maps `file_index` — §9 predicted this exact failure, and the test it prescribed asserts a property of `renumber` rather than of anything that reads it; meanwhile T1 had deliberately put the sidecar beside a film 008 asserts nothing about, which left every produced-bytes test in the repository running over a source with no external stream. Four criteria were mapped to tests that proved less than their names: AC-1's *listing row* had only ever been asked as a bare item, AC-11's `HasSubtitles` was asserted on a film carrying an embedded track too, AC-12's *"affects neither the item nor its user data"* had nothing at all, and two rows of the §3.7 table had no test. And the definition of done's two divergences are two: burn-in is a **third** observable difference, and it is an accepted gap rather than a divergence |
 
 The tools for it are in [`tools/`](tools/): `.env` carries the credentials, the probes answer one

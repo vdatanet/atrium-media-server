@@ -24,9 +24,12 @@ from sqlalchemy import Engine, select
 from atrium.compat.dates import utc_now
 from atrium.db import models, schema
 from atrium.db.engine import create_database_engine, session_factory, session_scope
-from atrium.db.repositories import ItemRepository, LibraryRepository
+from atrium.db.item_queries import ItemQueryRepository
+from atrium.db.repositories import ItemRepository, LibraryRepository, PlaylistRepository
 from atrium.domain.items import ItemType
 from atrium.domain.library import Library
+from atrium.domain.playlists import Playlist, Share
+from atrium.domain.user import User
 from atrium.library import config
 from atrium.library.maintenance import DEFAULT_GRACE, purge_removed
 from atrium.library.scan import scan
@@ -292,3 +295,163 @@ def test_purging_only_touches_the_library_it_was_asked_about(
 
     with session_scope(factory) as db:
         assert len(ItemRepository(db).by_library(other.id)) == before
+
+
+# ------------------------------------------------------------------------------------------
+# 009 AC-20: playlist state survives a full library rescan
+# ------------------------------------------------------------------------------------------
+#
+# 009's criterion, asserted here because this is the only file in the repository that runs a
+# **real** scan over a real library. It sits beside 003's AC-11 for the reason that criterion
+# exists: a playlist is the one item a rescan cannot rebuild (009 spec section 4), so where a film
+# that goes and comes back costs a user their favourites, a playlist that goes costs them the list
+# itself and nothing regenerates it.
+#
+# What makes it a test rather than a reading is the mechanism it depends on. The scan's removal
+# pass walks `by_library(library.id)` and skips anything that is not file-backed; a playlist has
+# `library_id IS NULL` and is not file-backed, so **two** independent clauses have to hold for it
+# to survive, and neither is stated anywhere a scan change would be read.
+
+
+PLAYLIST = "7c" * 16
+
+
+def a_playlist(engine: Engine, owner: str, item_keys: list[str]) -> None:
+    """One playlist, through the door that writes them, with a share and the public flag set.
+
+    Everything a playlist owns is written here - the item row, the playlist row, its shares and
+    its entries - because AC-20 says *playlist state*, and a test that seeded only the entries
+    would pass over a scan that dropped the shares.
+    """
+    factory = session_factory(engine)
+    with session_scope(factory) as db:
+        PlaylistRepository(db, ItemQueryRepository(db)).create(
+            Playlist(
+                id=PLAYLIST,
+                name="Survives a rescan",
+                owner_user_id=owner,
+                is_public=True,
+                media_type="Video",
+                shares=(Share(user_id=owner, can_edit=True),),
+            ),
+            item_keys,
+        )
+
+
+def movie_ids(engine: Engine, library: Library) -> list[str]:
+    """Every film the scan produced, in a stable order.
+
+    A playlist needs two entries before "the entry kept its place" is a claim about anything.
+    """
+    factory = session_factory(engine)
+    with session_scope(factory) as db:
+        return sorted(
+            item.id
+            for item in ItemRepository(db).by_library(library.id).values()
+            if item.type is ItemType.MOVIE
+        )
+
+
+def playlist_state(
+    engine: Engine, reader: User
+) -> tuple[str, bool, list[tuple[str, bool]], list[str]]:
+    """Name, public flag, shares and the entries this reader is given, in order."""
+    factory = session_factory(engine)
+    with session_scope(factory) as db:
+        repository = PlaylistRepository(db, ItemQueryRepository(db))
+        stored = repository.by_id(PLAYLIST, reader)
+        assert stored is not None, "the playlist row itself went"
+        return (
+            stored.name,
+            stored.is_public,
+            [(one.user_id, one.can_edit) for one in stored.shares],
+            repository.entries(PLAYLIST, reader),
+        )
+
+
+@pytest.fixture
+def reader(engine: Engine) -> User:
+    """A user with no library restrictions, so `entries` is filtered by removal and nothing else."""
+    user_id = "e" * 32
+    factory = session_factory(engine)
+    with session_scope(factory) as db:
+        db.add(models.User(id=user_id, name="Owner", name_normalised="owner", password_hash=None))
+    return User(id=user_id, name="Owner")
+
+
+def test_ac20_a_playlist_and_its_entries_survive_a_rescan_that_changes_nothing(
+    engine: Engine, library: Library, reader: User
+) -> None:
+    """AC-20's plain reading, and the one a scan change is most likely to break.
+
+    The removal pass is scoped to the library it was asked about and skips rows that are not
+    file-backed. A playlist satisfies neither test, so a pass that lost either clause would
+    soft-delete every playlist on the server on the next scan of any library - and the row would
+    still be there, which is what makes the failure quiet.
+    """
+    film = film_id(engine, library)
+    a_playlist(engine, reader.id, [film])
+    before = playlist_state(engine, reader)
+
+    for _ in range(3):
+        report = rescan(engine, library)
+        assert report.removed == 0
+
+    assert playlist_state(engine, reader) == before
+    assert before[3] == [film], "the fixture holds nothing, so nothing below proves anything"
+
+
+def test_ac20_an_entry_whose_file_goes_and_returns_keeps_its_place(
+    engine: Engine, library: Library, fixture_library: BuiltFixture, reader: User
+) -> None:
+    """The harder half, and 003's AC-11 seen from a playlist.
+
+    A file that goes is soft-deleted, so the entry stops being served (009 T7) and its row stays.
+    When the file returns it derives the same identifier it had before, so the entry comes back
+    **at its original position** rather than at the end - which is the whole reason the ordinal is
+    stored against the item key rather than the entry being re-appended.
+    """
+    film = film_id(engine, library)
+    other = next(one for one in movie_ids(engine, library) if one != film)
+    a_playlist(engine, reader.id, [other, film])
+
+    path = Path(fixture_library.of("movies").path_of(FILM))
+    contents = path.read_bytes()
+    path.unlink()
+    assert rescan(engine, library).removed == 1
+    assert playlist_state(engine, reader)[3] == [other], "a removed item is not served as an entry"
+
+    path.write_bytes(contents)
+    assert rescan(engine, library).revived == 1
+    assert playlist_state(engine, reader)[3] == [other, film], "the entry came back at the end"
+
+
+def test_ac20_a_purge_does_not_take_the_playlist_row_with_it(
+    engine: Engine, library: Library, fixture_library: BuiltFixture, reader: User
+) -> None:
+    """The one moment an item row really is deleted, and a playlist entry points at one.
+
+    `playlist_entries.item_key` deliberately carries **no** foreign key (009 plan section 4.3), for
+    the reason 007's user data does not: the identifier outlives the row. A purge that cascaded
+    here would delete the entry and leave a playlist that is shorter than it was, permanently.
+    """
+    film = film_id(engine, library)
+    a_playlist(engine, reader.id, [film])
+
+    Path(fixture_library.of("movies").path_of(FILM)).unlink()
+    rescan(engine, library)
+    factory = session_factory(engine)
+    with session_scope(factory) as db:
+        purge_removed(library, db, grace=timedelta(0))
+
+    name, is_public, shares, served = playlist_state(engine, reader)
+    assert (name, is_public, shares) == ("Survives a rescan", True, [(reader.id, True)])
+    assert served == [], "the item is gone, so the entry is not served"
+
+    with session_scope(factory) as db:
+        stored = db.execute(
+            select(models.PlaylistEntry.item_key)
+            .where(models.PlaylistEntry.playlist_id == PLAYLIST)
+            .order_by(models.PlaylistEntry.ordinal)
+        ).scalars()
+        assert list(stored) == [film], "the purge cascaded into the playlist's entries"

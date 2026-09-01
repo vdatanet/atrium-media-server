@@ -1,12 +1,12 @@
 ---
 feature: 009-playlists
 title: Playlists — tasks
-status: Accepted
+status: Implemented
 created: 2026-08-31
 updated: 2026-09-01
 accepted: 2026-08-31
 plan_status_required: Accepted
-plan_status_actual: Accepted
+plan_status_actual: Implemented
 ---
 
 # 009 — Tasks
@@ -998,24 +998,110 @@ one migration; it is one migration, four maps and a clause.
 
 ## T14 — The acceptance map, the route set, and 009 is Implemented
 
-- [ ] **Changes:** an acceptance map putting every one of spec §5's twenty criteria on one line
-  with the test that proves it, in `specs/009-playlists/tasks.md`. `surface.yaml`'s seven 009 rows
-  checked against the routes that actually exist. `spec.md`, `plan.md` and `tasks.md` to
-  `Implemented`; `specs/README.md`, `AGENTS.md` and the two client contracts updated for what 009
-  now serves.
+- [x] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_009` — twenty rows, each
+  naming its test; `IMPLEMENTED_FEATURES` gains `"009"` and `INTERIM_009` is deleted, the seventh
+  and last of those lists; `surface.yaml`'s seven 009 rows checked against the routes that exist;
+  `spec.md`, `plan.md` and this file to `Implemented`; `specs/README.md`, `docs/roadmap.md` and
+  `AGENTS.md` updated for what 009 now serves; and this file gains **what 009 owes the next ones**.
 - **Depends on:** T13
-- **Verified by:** `python3 tools/extract_v1_surface.py --print-summary`, the full gate, and a test
-  asserting the router serves exactly the seven 009 routes and no eighth.
+- **Verified by:** `uv run python tools/extract_v1_surface.py --print-summary`, the full gate, and
+  `test_009_serves_exactly_its_seven_routes_and_no_eighth` beside
+  `test_no_route_ships_ahead_of_its_feature`, `test_every_implemented_feature_has_a_map` and
+  `test_the_specification_still_has_the_criteria_this_map_expects`.
 - **Spec reference:** all of §5, §6
+
+> **Done (2026-09-01).** *One criterion had no test at all, two proved less than their names, and
+> one said something its own tests contradict.* This task exists to find exactly those, and it
+> found one of each class the three closing tasks before it did.
+>
+> **AC-20 — *"playlist state survives a full library rescan"* — had nothing.** T13's handover said
+> the only `ac20` name in the feature is about the rename, and it was right; nothing had ever run
+> a scan with a playlist in the database. It is the criterion this feature could least afford to
+> leave open: spec §4 says a playlist is the only thing in the store a rescan cannot rebuild, so
+> the failure it guards against is the one with no recovery. Written now in
+> `tests/library/test_removal.py`, beside 003's AC-11, because that is the only file in the
+> repository that runs a **real** scan over a real library — three rows: a rescan that changes
+> nothing leaves the name, the public flag, the shares and the entries alone; an entry whose file
+> goes is not served and comes back **at its original position** when the file does; and an
+> operator's purge, the one moment an item row really is deleted, does not take the entry with it.
+> *And it can fail.* Two independent clauses keep a playlist out of the removal pass — the scan
+> reads `by_library(library.id)` and a playlist has no library, and the missing list filters on
+> `is_file_backed` and a playlist is not — so each was removed by hand in turn (the test still
+> passed, which is the point of there being two) and then both together: all three rows fail, the
+> purge deleting the playlist row itself.
+>
+> **AC-5 says *"on both the creation and the addition paths"* and every assertion under it went
+> through the add route.** `create` reduces its batch in a different place from `append` — T7's
+> Done note is about that reduction and about the hole a conflict-only de-duplication leaves in the
+> ordinals — so the path the measured answer actually belongs to was the one nothing asked: `Ids`
+> naming A B A creates A B, the **first** occurrence surviving
+> `[probe: tools/probe_playlist_writes.py, Jellyfin 10.11.11, 2026-08-31]`. Added to that test,
+> with the container named twice on the same path beside it.
+>
+> **AC-13 says *"the same three routes answer `404`"* and one of the three had been asked.** The
+> move is the route the omission mattered on: it is the one whose refusals are ordered `404`,
+> `403`, index, entry (T11), so a route that reached its editing test first would have answered
+> `403` and disclosed a private playlist to an administrator every other route hides it from.
+> Measured, it answers the twenty bytes; the test asks all three now and asserts nothing moved.
+> **And AC-9's *"every entry keeps its `PlaylistItemId`"*** was compared on `Id` — which AC-4 makes
+> equal and does not make the same claim, since a route reissuing the property while keeping `Id`
+> passes every line of that matrix.
+>
+> **AC-15 said something the code and two criteria beside it contradict, and that is 008 T14's
+> finding again.** It read *"answers `404` on direct fetch — **including** when the request names
+> its owner in `userId`"*. Naming another user is the 25-byte `403` — `effective_user`, on every
+> route in this project that takes the parameter, which is what AC-16 and AC-19 assert and what
+> T2 corrected on 005's route. One request cannot have two shapes. The criterion is corrected
+> rather than the code, because the code is the measured answer and §3.16's divergence is argued
+> from a refusal: a refusal that discloses nothing about the caller cannot also be the refusal
+> that discloses nothing about the playlist.
+>
+> *The map lives where every other feature's does, and the task statement said otherwise.* It asks
+> for the map *"in `specs/009-playlists/tasks.md`"*; the map that can **fail** is `FEATURE_009` in
+> `tests/conformance/test_acceptance.py`, which is where 001 through 008 and 011 put theirs and
+> what `test_every_implemented_feature_has_a_map` reads. A table in prose beside it would be a
+> second copy of the same claim with nothing checking it, which is the shape this file's own
+> gate-finding section warns about. This note is the record; the dictionary is the map.
+>
+> *Two routine calls, taken rather than escalated.* **The `415` gap T13 handed over is not 009's,
+> and it now names an owner.** It spans five routes across three features — 007's three, 008's
+> `PlaybackInfo` and 009's rename — is measured on one of them, and closing it needs a
+> content-type gate in `compat/` plus a measurement per route: a change to a module every request
+> model in the project inherits, made on the strength of one reading, inside a task whose subject
+> is the acceptance map. It stays a [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)
+> row, the row now names **010** as the feature that measures the other four, and *what 009 owes
+> the next ones* carries it so it cannot go stale here. **And the two client contracts did need the
+> edit this task's statement asked for**, which was worth checking rather than assuming: a contract
+> is a record of what a client's author wrote and is not a status board, so the first reading here
+> was that they hold nothing 009 moves — and both carry a *"Status today"* column that said
+> **Draft** for the playlist group and for `GET /Playlists/{playlistId}/Items`, the last of the
+> video client's fourteen library operations. Two stale cells, on the two documents `surface.yaml`'s
+> `consumers:` tags point at. The root `README.md`'s status paragraph was the third, and it counts
+> features by hand.
+>
+> *One thing this task did not do.* `surface.yaml` needed no edit: T8 through T13 each added their
+> row with its consumers, feature and level as they landed, so the check was a check and not a
+> change. `tools/extract_v1_surface.py` reports `009=7`.
 
 ---
 
 ## Definition of done
 
-- [ ] Every one of spec §5's twenty acceptance criteria has a passing test, named in T14's map.
-- [ ] Every endpoint reaches the conformance level in spec §6.
-- [ ] `surface.yaml` lists the seven routes and the router serves no eighth.
-- [ ] The **six** divergences ship as specified: the named reader (§3.16), the unreachable entry
+- [x] Every one of spec §5's twenty acceptance criteria has a passing test, named in
+      `FEATURE_009`. **Four of the twenty did not have one when this box was ticked the first
+      time**: AC-20 had no test of any kind, AC-5's creation path and AC-13's other two routes had
+      never been asked, and AC-9's `PlaylistItemId` was compared on `Id`. All four are written
+      (T14's note), and AC-15's own wording was corrected to the shape its tests assert.
+- [x] Every endpoint reaches the conformance level in spec §6. All seven rows are **L2**: the
+      golden-response readings are pinned whole-response assertions rather than `tests/golden/`
+      files — the reading 008 T14 and 011 T12 both ticked this line under — and the two
+      table-driven rows §6 asks for are there, the move's thirty measured pairs over HTTP and its
+      eleven boundary rows. **The differential half is [010](../010-conformance-harness/)'s**, as
+      it is for every feature before this one.
+- [x] `surface.yaml` lists the seven routes and the router serves no eighth — counted against the
+      file rather than against this list's prose, with `INTERIM_009` deleted and `"009"` in
+      `IMPLEMENTED_FEATURES`. It is the seventh and **last** of the interim lists.
+- [x] The **six** divergences ship as specified: the named reader (§3.16), the unreachable entry
       (§3.17), the two refusals `Move` does not make (§3.15), the de-duplication that never
       misses (§3.18, added at T7), the write requests the reference cannot serve and answers
       anyway (§3.19, added at T8) and the rename that erases a name (§3.21, added at T13) — each
@@ -1023,13 +1109,18 @@ one migration; it is one migration, four maps and a clause.
       **four** and named the first four until T13 counted them: §3.19 had been shipped and
       unlisted since T8, and §3.20 is a defect this feature replicates rather than a divergence,
       so it is not in the list and is not missing from it.*
-- [ ] `ForbiddenError`'s body is the reference's 25-byte shape, on 009's routes **and** on 005's
+- [x] `ForbiddenError`'s body is the reference's 25-byte shape, on 009's routes **and** on 005's
   (AC-19) — and every **`may_edit`** refusal is the body-less one, which is a different set of
   bytes and not this class: the rename (AC-18, T2), and `Move`, `Add` and `Remove` for a caller who
   may read the playlist and not change it (AC-13, AC-14, T5). The line between the two shapes is
   *thrown versus returned*, not *controller versus policy* (T5).
-- [ ] Anything learned during implementation is back in `spec.md` and `plan.md`, in the same change.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all `Implemented`.
+- [x] Anything learned during implementation is back in `spec.md` and `plan.md`, in the same
+      change — twelve amendments on the spec's frontmatter and nine on the plan's, one per task
+      that found something, and the two decisions a task escalated taken by the user rather than
+      improvised (T2's `403` shapes, T5's editing refusal).
+- [x] `spec.md`, `plan.md` and `tasks.md` are all `Implemented`, with
+      [`specs/README.md`](../README.md)'s table and narrative, [`docs/roadmap.md`](../../docs/roadmap.md)
+      and [`AGENTS.md`](../../AGENTS.md) saying the same thing.
 
 ## What is out of scope, recorded so it is not mistaken for an oversight
 
@@ -1044,3 +1135,79 @@ one migration; it is one migration, four maps and a clause.
 ## What this feature owes the next ones
 
 *Written at T14, when it is known rather than guessed.*
+
+**010 collects most of it**, because a differential is the only thing that can ask these. Two of
+the rows are ones a differential will **not** find on its own, and they are named comparisons
+rather than sweeps:
+
+* **The named reader** ([behaviours §3.16](../../docs/compatibility/behaviours.md)). A differential
+  finds this the moment it runs `GET /Playlists/{id}/Items?userId=<somebody else>` as a
+  non-administrator: `200` with the entries there, `403` with 25 bytes here. It is 009's sharpest
+  divergence and the one a client could most plausibly have been built on, so the comparison is
+  worth running **as a restricted user** and not only as the administrator every probe in this
+  repository authenticates as. The same request on the *write* route beside it is `403` on both,
+  which is the whole argument.
+* **The entries a reader cannot reach** ([§3.17](../../docs/compatibility/behaviours.md)), and a
+  differential over a stock library **will not see it**: what the reference hides is hidden by a
+  parental-rating check and never by library access, so two servers whose test user can open
+  everything agree. It needs a **named** comparison — a user restricted to one library, a playlist
+  holding items from two — and the row count is the whole signal. The move's arithmetic hangs off
+  the same shape (AC-17), and it is the one rule in this feature with **no reference answer behind
+  it** (T1): the reference is off by one on every downward move by such a reader and reorders
+  entries that reader was never shown, and neither is reachable against a stock server.
+* **The four requests the reference cannot serve and answers anyway**
+  ([§3.19](../../docs/compatibility/behaviours.md)) — a creation naming no `Name` in either source
+  (`500` there, `400` here), a `UserId` naming nobody (`200` there creating an unreachable
+  playlist, `404` here), and a malformed playlist id on the **removal** and on the **move**
+  (`500` there, the validation `400` here, while the *addition* on the same path is the binder's
+  `400` on both). Every one is a status difference a body comparison reports on its own.
+* **The de-duplication that never misses** ([§3.18](../../docs/compatibility/behaviours.md)), and
+  it is the one row a differential can report as a **flake**: the reference's own answer is a coin
+  flip — 6 of 8 identical requests added an item the playlist already held, seconds apart, on one
+  server (T7). A differential that runs the add twice and diffs the entry list will disagree with
+  itself before it disagrees with Atrium, and the entry says why rather than the run being retried.
+* **The rename that erases a name** ([§3.21](../../docs/compatibility/behaviours.md)) and the
+  seven fields beside `Name` the reference applies and this server ignores
+  ([§5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)). Posting a whole fetched
+  item back is what the music client does, so this is reachable by replaying that client's own
+  request; the status is the whole difference for the erasing case (`204` there, `400` here) and
+  the *item read afterwards* is the difference for the rest.
+* **A deletion that discloses** ([§3.20](../../docs/compatibility/behaviours.md)) is **replicated**
+  and is therefore a row a differential should find nothing on — named here because a `401` where
+  every other route on the same playlist answers `404` looks exactly like a bug worth "fixing", and
+  it is not one.
+
+**Three are another feature's, and each was measured here rather than guessed:**
+
+* **A body with no `Content-Type` is `400` here and `415` there**
+  ([behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)), on **five**
+  routes: 007's three reporting routes, 008's `PlaybackInfo` and 009's rename. It is measured on
+  the rename alone (T13), and closing it is a content-type gate in `compat/` — a module every
+  request model in the project inherits — plus one measurement per route. **009 does not own it**
+  (T14): the row names 010 as the feature that measures the other four, and whoever writes that
+  gate owns `compat/`, not this feature. It is not reachable by any analysed client.
+* **`UpdatePlaylist` is the only route that renames a playlist for an owner who is not an
+  administrator**, and the route the music client actually calls refuses that owner `403` on a
+  stock reference server too (spec §2, §3.8). Principle VI keeps it out until a client is measured
+  calling it; the day one is, that route is the fix and it is a one-route feature.
+* **A playlist carries no `Path`, and its two dates are its store's**
+  ([§5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)). The reference builds a
+  playlist as a directory. Visible only to a client that asks for `Path` by name; a differential
+  that compares key sets will report it on every playlist and the row is the answer.
+
+**And two lessons rather than rows, for whoever touches these files next.**
+
+**A playlist is the one item a rescan cannot rebuild, and nothing in `library/` says so.** Two
+independent clauses keep it out of the scan's removal pass — the scan reads one library's rows and
+a playlist has no library, and the missing list filters on `is_file_backed` and a playlist is not
+— and neither was written down as load-bearing until AC-20 had a test (T14). Anything that widens
+what a scan reads, or what it considers missing, is one edit away from soft-deleting every
+playlist on the server; and the operator's purge behind it deletes rows outright.
+
+**Three of the four routes that take an item identifier in a path segment bind it differently, on
+purpose.** `itemId` is a parsed identifier on the deletion and on the rename, so plain, dashed,
+braced and upper-case all address the item; the **entry** id in `Move` is not parsed at all and is
+compared as text against the plain 32-character spelling, so a dashed one moves nothing (T11); and
+an id of all zeros is a refusal where a lookup happens and a silent success where none does. Asking
+each segment rather than inheriting the answer from the route beside it is what made all four
+right, and the same question is owed by any route added to this path.

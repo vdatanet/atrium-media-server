@@ -1036,6 +1036,165 @@ FEATURE_011: dict[int, tuple[str, ...]] = {
 }
 
 
+#: 009's map, twenty rows, and **the closing task found the class this file exists for three
+#: times**. AC-20 — *"playlist state survives a full library rescan"* — had no test of any kind:
+#: the only `ac20` name in the playlist file is about a **rename**, which T13 said out loud and
+#: nothing acted on. It is a criterion nobody could have noticed passing, because a playlist is
+#: the one item a rescan cannot rebuild, and it is proven now in `tests/library/test_removal.py`,
+#: where a real scan runs over a real library — with a deletion check behind it: remove the two
+#: independent clauses that keep a playlist out of the removal pass and all three rows fail, the
+#: purge taking the playlist row with it.
+#:
+#: Two more proved less than their names. **AC-5 says "on both the creation and the addition
+#: paths"** and every assertion under it went through the add route; `create` reduces its batch in
+#: a different place from `append`, so the path the measured answer belongs to — `Ids` naming
+#: A B A creating A B — was the one nothing asked. **AC-13 says "the same three routes answer
+#: `404`"** and one of the three had been asked; the move is the route whose refusals are ordered
+#: `404`, `403`, index, entry, so it is the one where an ordering change discloses a playlist.
+#: AC-9's *"every entry keeps its `PlaylistItemId`"* was compared on `Id`, which AC-4 makes equal
+#: and does not make the same claim.
+#:
+#: **And AC-15 said something its own tests contradict**, which is 008 T14's finding again: it
+#: read *"answers `404` on direct fetch — including when the request names its owner in
+#: `userId`"*, and naming another user is the 25-byte `403` of AC-16 and AC-19, on every route in
+#: this project that takes the parameter. The criterion is amended rather than the code.
+FEATURE_009: dict[int, tuple[str, ...]] = {
+    1: (
+        "tests.conformance.test_playlists:test_a_created_playlist_appears_in_items_filtered_by_its_type",
+    ),
+    2: (
+        "tests.conformance.test_playlists:test_an_empty_or_blank_name_creates_a_playlist_carrying_it",
+        "tests.conformance.test_playlists:test_a_body_with_no_name_is_the_deserialisers_refusal_keyed_on_the_dollar",
+        # The second layer, and the request nobody had asked about until T8: `Name` present and
+        # null is a different body from `Name` absent, so "the validation shape" is two shapes.
+        "tests.conformance.test_playlists:test_a_null_name_is_a_different_refusal_keyed_on_the_property",
+        "tests.conformance.test_playlists:test_the_two_refusals_of_this_route_are_not_the_same_shape",
+    ),
+    3: (
+        "tests.conformance.test_playlists:test_an_unknown_id_before_any_resolvable_one_is_the_controllers_refusal",
+        "tests.conformance.test_playlists:test_an_unknown_id_after_a_resolvable_one_is_skipped",
+        "tests.conformance.test_playlists:test_a_media_type_makes_the_same_unknown_id_harmless",
+    ),
+    4: (
+        "tests.conformance.test_playlists:test_ac4_every_row_carries_a_playlist_item_id_equal_to_its_id",
+        "tests.conformance.test_playlists:test_the_property_sits_immediately_after_id_and_on_no_other_route",
+    ),
+    5: (
+        # T14 added the creation half to this test: the criterion names two paths and this asked
+        # one, and `create` reduces the batch somewhere `append` does not.
+        "tests.conformance.test_playlists:test_ac5_a_repeat_adds_nothing_and_moves_nothing_expansions_included",
+        "tests.unit.test_playlist_repository:test_create_de_duplicates_the_id_list_and_keeps_the_first_occurrence",
+        "tests.unit.test_playlist_repository:test_appending_something_already_there_adds_nothing_and_moves_nothing",
+        # The divergence's own half: "every time" is the claim, and the hole a conflict-only
+        # de-duplication would leave in the ordinals is what makes it a reduction and not a key.
+        "tests.unit.test_playlist_repository:test_a_batch_of_duplicates_and_new_ids_leaves_no_hole_in_the_ordinals",
+    ),
+    6: (
+        "tests.conformance.test_playlists:test_ac6_removing_by_entry_id_removes_exactly_that_row",
+        "tests.conformance.test_playlists:test_ac6_a_removal_that_names_nothing_present_is_still_204",
+        "tests.unit.test_playlist_repository:test_removing_from_the_middle_closes_the_gap",
+    ),
+    7: (
+        "tests.conformance.test_playlists:test_ac7_an_album_expands_to_its_tracks_in_the_albums_own_order",
+        "tests.conformance.test_playlists:test_ac7_every_container_expands_and_two_of_them_were_never_named",
+        "tests.conformance.test_playlists:test_the_expansion_lands_where_the_container_was_named",
+        "tests.conformance.test_playlists:test_creation_expands_too_and_the_media_type_follows_the_expansion",
+        # The artist's ordering, which the seeded world cannot tell from a plain sort name at the
+        # boundary (T10) - so it is asserted as the key function, and says so.
+        "tests.unit.test_playlist_expansion_order:test_the_albums_are_grouped_where_a_sort_by_name_would_interleave_them",
+        "tests.unit.test_playlist_expansion_order:test_the_album_artist_outranks_the_album_and_the_id_closes_the_order",
+    ),
+    8: (
+        "tests.conformance.test_playlists:test_ac8_the_order_is_the_playlists_and_no_sort_parameter_is_declared",
+    ),
+    9: (
+        "tests.conformance.test_playlists:test_ac9_the_thirty_measured_pairs_over_http",
+        "tests.unit.test_playlists_domain:test_every_source_and_target_matches_the_reference",
+        "tests.unit.test_playlists_domain:test_the_pair_that_distinguishes_the_two_readings",
+        "tests.unit.test_playlists_domain:test_every_entry_survives_a_move",
+    ),
+    10: (
+        "tests.conformance.test_playlists:test_ac10_and_ac11_every_row_of_the_boundary_table",
+        "tests.unit.test_playlists_domain:test_an_index_one_past_the_count_is_the_last_position",
+        "tests.unit.test_playlists_domain:test_an_index_outside_the_clamp_is_refused",
+    ),
+    11: (
+        "tests.conformance.test_playlists:test_ac10_and_ac11_every_row_of_the_boundary_table",
+        "tests.unit.test_playlists_domain:test_an_absent_entry_with_an_index_in_range_changes_nothing",
+        "tests.unit.test_playlists_domain:test_the_index_is_judged_before_the_entry_is_looked_up",
+    ),
+    12: (
+        "tests.conformance.test_playlists:test_ac12_the_owner_deletes_their_playlist_and_it_is_gone",
+        "tests.conformance.test_playlists:test_ac12_a_caller_who_may_not_delete_is_the_401_with_its_body",
+        "tests.conformance.test_playlists:test_ac12_anything_that_is_not_a_playlist_is_refused",
+        "tests.conformance.test_playlists:test_ac12_a_film_is_refused_and_the_file_is_still_on_disk",
+        "tests.conformance.test_playlists:test_an_unknown_identifier_is_the_problem_details_404",
+        "tests.conformance.test_playlists:test_an_item_this_caller_cannot_see_is_404_before_the_refusal",
+        # The clause T12 added: "including one they may not read" is a disclosure, and the reason
+        # this route holds a disclosing refusal and a non-disclosing one at once.
+        "tests.conformance.test_playlists:test_the_deletion_refusal_discloses_a_playlist_every_other_route_hides",
+    ),
+    13: (
+        "tests.conformance.test_playlists:test_ac13_and_ac14_the_edit_refusal_is_the_other_403",
+        "tests.conformance.test_playlists:test_ac13_and_ac14_the_move_refusal_is_the_body_less_403",
+        # Widened at T14 from the add route alone to all three, which is what the criterion says.
+        "tests.conformance.test_playlists:test_an_administrator_is_answered_404_before_the_edit_refusal",
+        "tests.conformance.test_playlists:test_ac13_an_administrator_deletes_a_playlist_they_neither_own_nor_may_read",
+        "tests.unit.test_playlists_domain:test_only_delete_reads_the_administrator_flag",
+    ),
+    14: (
+        "tests.conformance.test_playlists:test_a_share_with_can_edit_may_write",
+        "tests.conformance.test_playlists:test_ac13_and_ac14_the_edit_refusal_is_the_other_403",
+        "tests.conformance.test_playlists:test_ac13_and_ac14_the_move_refusal_is_the_body_less_403",
+        "tests.conformance.test_playlists:test_the_create_body_stores_its_shares_and_its_public_flag",
+        "tests.unit.test_playlists_domain:test_a_share_never_grants_deletion",
+    ),
+    15: (
+        # Through `/Items` and not only through a direct fetch: `_visible_to`'s library clause
+        # exempts a row with no library, and a playlist has none (T6, the tasks gate's finding 2).
+        "tests.unit.test_items_route:test_ac15_a_private_playlist_is_absent_from_another_users_items",
+        "tests.unit.test_items_route:test_ac15_an_unreachable_playlist_answers_404_by_id",
+        "tests.unit.test_items_route:test_an_administrator_gets_no_read_on_a_playlist_they_do_not_own",
+        # The clause T14 corrected: naming the owner is refused, and the refusal is a `403`.
+        "tests.conformance.test_playlists:test_ac16_naming_another_user_is_the_controllers_own_twenty_five_bytes",
+    ),
+    16: (
+        "tests.conformance.test_playlists:test_ac16_naming_another_user_is_the_controllers_own_twenty_five_bytes",
+        "tests.conformance.test_playlists:test_an_administrator_may_name_a_user_and_gets_that_users_view",
+        "tests.conformance.test_playlists:test_ac19_naming_another_user_on_the_add_route_is_the_twenty_five_bytes",
+        "tests.unit.test_items_route:test_an_administrator_naming_a_user_sees_that_users_playlists",
+    ),
+    17: (
+        "tests.conformance.test_playlists:test_ac17_a_reader_is_shown_only_the_entries_they_can_reach",
+        "tests.conformance.test_playlists:test_ac17_a_readers_move_indexes_the_list_that_reader_was_given",
+        "tests.conformance.test_playlists:test_ac17_an_entry_the_reader_cannot_see_is_answered_as_an_absent_one",
+        "tests.conformance.test_playlists:test_a_readers_index_is_bounded_by_what_that_reader_was_given",
+        "tests.unit.test_playlists_domain:test_the_entry_lands_where_the_caller_asked_in_the_callers_own_list",
+        "tests.unit.test_playlists_domain:test_the_hidden_entry_is_not_addressable_by_a_caller_who_cannot_see_it",
+    ),
+    18: (
+        "tests.conformance.test_playlists:test_ac18_an_administrator_renames_a_playlist",
+        "tests.conformance.test_playlists:test_ac18_the_non_administrator_owner_is_the_empty_403",
+        "tests.conformance.test_playlists:test_the_policy_refuses_before_anything_about_the_item_is_read",
+    ),
+    19: (
+        "tests.conformance.test_playlists:test_ac19_naming_another_user_on_the_add_route_is_the_twenty_five_bytes",
+        "tests.conformance.test_playlists:test_a_user_id_naming_somebody_else_is_the_reference_403_with_its_bytes",
+        # The 005 route that shares the rule, which is where the correction had to be taken (T2).
+        "tests.unit.test_items_route:test_user_id_of_somebody_else_is_the_controller_403",
+    ),
+    20: (
+        # Written at T14, because until then this criterion had nothing at all. A real scan over a
+        # real library, which is what `tests/library/` is and `tests/conformance/` is not.
+        "tests.library.test_removal:test_ac20_a_playlist_and_its_entries_survive_a_rescan_that_changes_nothing",
+        "tests.library.test_removal:test_ac20_an_entry_whose_file_goes_and_returns_keeps_its_place",
+        "tests.library.test_removal:test_ac20_a_purge_does_not_take_the_playlist_row_with_it",
+        # The rename's half of "state": three columns of one row, and nothing else about it.
+        "tests.conformance.test_playlists:test_ac20_a_renamed_playlist_keeps_its_entries",
+    ),
+}
+
+
 FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "001-server-identity-and-discovery": FEATURE_001,
     "002-authentication-users-and-sessions": FEATURE_002,
@@ -1045,6 +1204,7 @@ FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "006-images": FEATURE_006,
     "007-user-data-and-playstate": FEATURE_007,
     "008-playback-negotiation-and-delivery": FEATURE_008,
+    "009-playlists": FEATURE_009,
     "011-subtitle-delivery": FEATURE_011,
 }
 
