@@ -91,13 +91,15 @@ class ForbiddenError(Exception):
     005's `/Items?userId=` one route away, so the correction is taken here rather than on 009's
     own routes (009 spec section 3.7, AC-19; 009 plan section 2).
 
-    ⚠️ **A `403` is two shapes on the reference, and this class is only the first of them.** The
-    same probe measured `POST /Items/{id}` - the elevated controller the music client renames
-    through - answering `403` with **no content type and no body at all**, because that refusal is
-    an authorization policy's and never reaches a controller. Both statuses are `403` and the
-    bytes are the whole difference, which is behaviours section 1.11's rule applied to one status
-    instead of to one route. A route refused by policy rather than by its own test therefore does
-    **not** raise this class, and 009 T13's rename is the first one that needs the other shape.
+    **A `403` is two shapes on the reference, and this class is only the first of them.** The same
+    probe measured `POST /Items/{id}` - the elevated controller the music client renames through -
+    answering `403` with **no content type and no body at all**, because that refusal is an
+    authorization policy's and never reaches a controller. Both statuses are `403` and the bytes
+    are the whole difference, which is behaviours section 1.11's rule applied to one status
+    instead of to one route. The other shape is `EmptyForbiddenError` below; it arrived at 009 T10
+    rather than at T13, because the playlist controller's own editing test is refused the same way
+    - the split is between a refusal *returned* and a refusal *thrown*, not between a controller
+    and a policy.
 
     ⚠️ **Two of this class's raise sites are not the measured refusal**, and neither moves to a
     measured shape by changing this handler:
@@ -320,6 +322,43 @@ class PlaylistCreationError(Exception):
     One class for both because they are one shape on the wire, and the raise sites say which row
     they are. Deliberately not `DeliverySourceError`, whose docstring is a statement about a
     `mediaSourceId` and would be a lie at the place this is raised.
+    """
+
+
+class EmptyIdentifierError(Exception):
+    """An identifier of all zeros arrived where an item was expected. The same third shape.
+
+    **It is not an unknown id, and that is the whole of why this class exists.** A well-formed
+    identifier that addresses nothing is skipped - unconditionally by the add route, and after the
+    media type has settled by the creation one (009 spec section 3.4). `Guid.Empty` is refused
+    instead, on both routes and in every position, with the bare-text `400` and nothing added
+    `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`. The reference's
+    item lookup rejects it before any query runs
+    `[source: Emby.Server.Implementations/Library/LibraryManager.cs:1357-1362 @ v10.11.11]`, which
+    is why one guard covers both routes here as it does there.
+
+    An empty identifier is what a client sends when a default-initialised field reaches the wire,
+    so this is a refusal a real client can meet by accident rather than an exotic one.
+
+    Separate from `PlaylistCreationError` because that class's docstring is a statement about
+    `POST /Playlists`, and this refusal belongs to the id list rather than to any one route.
+    """
+
+
+class EmptyForbiddenError(Exception):
+    """The other `403`: no body, no content type, and the status line alone.
+
+    009 spec section 3.7's *May edit* column is this shape rather than `ForbiddenError`'s 25
+    bytes, and the two are told apart by **how** the reference refuses rather than by which route
+    does: a refusal it *returns* as a result carries nothing, where one thrown as an exception is
+    rendered by the error middleware into the controller's sentence
+    `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-08-31]`
+    `[source: Jellyfin.Api/Controllers/PlaylistsController.cs:383-389 @ v10.11.11]`.
+
+    Two raise sites, and both are measured: the playlist controller's own owner-or-share test on
+    every editing route (009 AC-13, AC-14), and the elevated rename controller turning away a
+    non-administrator, where the refusal is an authorization policy's and never reaches a
+    controller at all (009 spec section 3.8, AC-18, T13).
     """
 
 
@@ -732,6 +771,19 @@ async def playlist_creation_handler(_request: Request, _exc: Exception) -> Respo
     return controller_error(400)
 
 
+async def empty_identifier_handler(_request: Request, _exc: Exception) -> Response:
+    return controller_error(400)
+
+
+async def empty_forbidden_handler(_request: Request, _exc: Exception) -> Response:
+    """The `403` with nothing in it - beside `unauthenticated_handler`, whose group it shares.
+
+    `ForbiddenError` left this group when it was measured (009 T2); this class is what the shape
+    it left behind is now called, because two of the reference's refusals really do send it.
+    """
+    return empty_error(403)
+
+
 async def delivery_production_handler(_request: Request, _exc: Exception) -> Response:
     """The `500` a production that could not start answers, with the header it already wrote.
 
@@ -814,6 +866,15 @@ EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     # list it was given and refused it. A row of its own rather than a `DeliverySourceError`
     # because the class is read at the raise site, where "no such media source" would be false.
     PlaylistCreationError: playlist_creation_handler,
+    # 009 T10's two. The first is the same bytes as the row above at the same status and is a
+    # separate class because it belongs to the id list rather than to one route - the reference
+    # refuses an all-zeros identifier in its item lookup, which both write routes and the
+    # creation path go through. The second is the `403` shape `ForbiddenError` used to send: a
+    # refusal the reference **returns** rather than throws carries no body and no content type,
+    # and an editing route refused by the playlist's own owner-or-share test is one of the two
+    # places that happens (009 spec section 3.7, AC-13, AC-14).
+    EmptyIdentifierError: empty_identifier_handler,
+    EmptyForbiddenError: empty_forbidden_handler,
     # 009 T9's, and it is the *fourth* shape at `404` - the one status this project had
     # thought settled. The playlist read route answers a JSON-encoded bare string where
     # every `NotFoundError` beside it answers problem details, so the row exists to keep
@@ -848,6 +909,8 @@ __all__ = [
     "DeliveryProductionError",
     "DeliverySegmentRequestError",
     "DeliverySourceError",
+    "EmptyForbiddenError",
+    "EmptyIdentifierError",
     "ExceptionHandler",
     "ForbiddenError",
     "ImageNotFoundError",
@@ -863,6 +926,8 @@ __all__ = [
     "client_authorization_handler",
     "controller_error",
     "empty_error",
+    "empty_forbidden_handler",
+    "empty_identifier_handler",
     "forbidden_handler",
     "image_absent_message",
     "image_not_found_handler",

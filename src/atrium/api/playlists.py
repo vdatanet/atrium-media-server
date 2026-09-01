@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The reference's `PlaylistsController`, starting with the one route that creates a playlist.
+"""The reference's `PlaylistsController`: creating a playlist, reading it, and writing its entries.
 
 ## `POST /Playlists` - two refusals that are not the same shape, and then four
 
@@ -46,15 +46,30 @@ that, the first id in the list that resolves settles it; failing that, `Audio`. 
 and never revised - a playlist created empty answers `Audio` after a film is added to it - which
 is why it is a column rather than a lookup (009 plan section 4.2).
 
-See specs/009-playlists/spec.md section 3.2 and plan section 6.1.
+## The two entry-writing routes - one identifier list, and what it is allowed to name
+
+**Every container expands, and "container" is a predicate rather than a list** - `_Expander` below
+carries the width of that and how it was measured. An unknown id is skipped here in every
+position, where creation refuses one that reaches it before the media type has settled; a
+malformed one is dropped by the binder; and the all-zeros identifier is refused by both routes
+wherever it sits. Three classes of identifier, three different answers, measured side by side
+`[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+**Both routes refuse in two shapes, in this order.** A playlist this caller cannot see is the read
+route's twenty bytes - so a write cannot be used to learn that a private playlist exists - and a
+caller who may read it and may not edit it is `403` with **no body and no content type**, which is
+the other of the two `403`s this feature ships (`EmptyForbiddenError`).
+
+See specs/009-playlists/spec.md sections 3.2, 3.3, 3.4 and 3.5, and plan sections 6.1 and 6.2.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from typing import Annotated, ClassVar, Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 
 from atrium.api.deps import get_sessions, get_state, require_user
 from atrium.api.item_dto import BuildContext, Width, build_dtos
@@ -67,14 +82,19 @@ from atrium.api.items import (
     recorder,
     split_csv,
 )
-from atrium.compat.errors import PlaylistCreationError, PlaylistNotFoundError
-from atrium.compat.guids import WireGuid, new_id
+from atrium.compat.errors import (
+    EmptyForbiddenError,
+    EmptyIdentifierError,
+    PlaylistCreationError,
+    PlaylistNotFoundError,
+)
+from atrium.compat.guids import CANONICAL, WireGuid, new_id, normalise
 from atrium.compat.model import AtriumModel
 from atrium.db.engine import session_scope
 from atrium.db.item_queries import HydratedItem, ItemQueryRepository
 from atrium.db.repositories import LibraryRepository, PlaylistRepository, UserRepository
-from atrium.domain.items import MEDIA_TYPE_OF, ItemType
-from atrium.domain.playlists import Playlist, Share, may_read
+from atrium.domain.items import FILE_BACKED, MEDIA_TYPE_OF, ItemType
+from atrium.domain.playlists import Playlist, Share, may_edit, may_read
 from atrium.domain.queries import ItemQuery
 from atrium.domain.user import User
 
@@ -191,7 +211,8 @@ async def create_playlist(
     with session_scope(get_sessions(request)) as opened:
         owner = effective_user(UserRepository(opened), caller, asked_owner)
         queries = ItemQueryRepository(opened)
-        entries, media_type = _walk(queries, owner, asked_ids, asked_type)
+        playlists = PlaylistRepository(opened, queries)
+        entries, media_type = _walk(_Expander(queries, playlists), owner, asked_ids, asked_type)
         playlist = Playlist(
             id=new_id(),
             name=asked_name,
@@ -200,7 +221,7 @@ async def create_playlist(
             media_type=media_type,
             shares=_shares(body),
         )
-        PlaylistRepository(opened, queries).create(playlist, entries)
+        playlists.create(playlist, entries)
     return PlaylistCreationResult(id=playlist.id)
 
 
@@ -215,8 +236,156 @@ def _shares(body: CreatePlaylistDto | None) -> tuple[Share, ...]:
     )
 
 
+#: `Guid.Empty`. Not an unknown identifier and not a malformed one: a third class, refused by
+#: both write routes and by creation wherever it appears (`EmptyIdentifierError`).
+EMPTY_ID = "0" * 32
+
+#: The value that means "this item does not answer the question", so the next one is asked.
+UNKNOWN_MEDIA_TYPE = "Unknown"
+
+#: What a folder is expanded into: the two media types a playlist entry can carry. A container
+#: among the descendants answers `Unknown` and is therefore not one, which is the same filter the
+#: reference states on its own expansion query
+#: `[source: MediaBrowser.Controller/Playlists/Playlist.cs:217-229 @ v10.11.11]`.
+PLAYABLE_MEDIA_TYPES = frozenset({"Audio", "Video"})
+
+#: The media type four containers settle **by their kind**, before anything looks at what they
+#: hold. Measured through the answer rather than read off the map: a music container creates an
+#: `Audio` playlist even when the walk would have gone on to a film
+#: `[probe: tools/probe_playlist_expansion.py, Jellyfin 10.11.11, 2026-09-01]`
+#: `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:95-114 @ v10.11.11]`.
+#: Every other container answers from its first playable descendant, which is `_settles` below.
+CONTAINER_MEDIA_TYPE: Mapping[ItemType, str] = {
+    ItemType.MUSIC_ARTIST: "Audio",
+    ItemType.MUSIC_ALBUM: "Audio",
+    ItemType.MUSIC_GENRE: "Audio",
+    ItemType.GENRE: "Video",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class _Expander:
+    """Plan section 6.2's one function, serving creation and addition alike.
+
+    **"Is this a container" is a predicate, not a list of five types.** `FILE_BACKED` is the three
+    types a *file* produces, and everything else this server can name is something a client can
+    ask to add whole: measured, an album, an artist, a series, a season, a collection, a plain
+    folder, **the library root itself** and **another playlist** all expand, and the container is
+    never an entry of its own `[probe: tools/probe_playlist_expansion.py, Jellyfin 10.11.11,
+    2026-09-01]`. Two of those the specification had not named, and a rule written from its five
+    would have added a library to a playlist as a single row.
+
+    **Three shapes of expansion, because the reference has three**
+    `[source: MediaBrowser.Controller/Playlists/Playlist.cs:191-232 @ v10.11.11]`:
+
+    * a **folder** - anything with children - answers its playable descendants in the folder's own
+      order, which is the order `/Items?parentId=` gives and therefore the album's own order
+      (AC-7). Recursive, so a series answers episodes rather than seasons;
+    * an **artist** or a **music genre** answers the audio linked to it, ordered by album artist,
+      then album, then sort name. The link and not the tree: an artist's expansion carries the
+      tracks they are credited on and not only the ones under their own albums, which measured as
+      forty-two rows where the tree gives forty;
+    * **a playlist** answers its own entries, in its own order and filtered to what this reader may
+      see - the one container whose children are not in the item tree at all.
+
+    Expansion happens **in place**: a request naming a film, an album and a second film lands the
+    album's tracks between the two films rather than after them.
+
+    **Two of these branches the test world cannot discriminate**, named here rather than left to
+    look proven: its one music genre is carried by an album and not by that album's tracks, so the
+    by-name query and the folder query answer alike there, and its one guest album sorts the same
+    way under the artist's three keys as under a plain name ordering - which is why
+    `tests/unit/test_playlist_expansion_order.py` asserts the ordering where it is decided.
+    """
+
+    queries: ItemQueryRepository
+    playlists: PlaylistRepository
+
+    def resolve(self, user: User, item_key: str) -> HydratedItem | None:
+        """The item that identifier names, or `None` when it names nothing this user may see.
+
+        The one identifier that is neither is refused here rather than skipped: an all-zeros id is
+        `EmptyIdentifierError` on every route that resolves one, which is where the reference puts
+        it too - in the lookup, not in any route.
+        """
+        if item_key == EMPTY_ID:
+            raise EmptyIdentifierError("an identifier of all zeros names no item")
+        page = self.queries.run(ItemQuery(user=user, ids=(item_key,), limit=1, count=False))
+        return page.items[0] if page.items else None
+
+    def expand(self, user: User, found: HydratedItem) -> list[HydratedItem]:
+        """This item as playlist entries: itself if it is a file, its contents if it is not."""
+        kind = found.item.type
+        if kind in FILE_BACKED:
+            return [found]
+        if kind is ItemType.PLAYLIST:
+            return _in_playlist_order(self.queries, user, self.playlists.entries(found.id, user))
+        if kind is ItemType.MUSIC_ARTIST:
+            return self._linked(ItemQuery(user=user, artist_ids=(found.id,), count=False))
+        if kind is ItemType.MUSIC_GENRE:
+            return self._linked(ItemQuery(user=user, genre_ids=(found.id,), count=False))
+        return list(
+            self.queries.run(
+                ItemQuery(
+                    user=user,
+                    parent_id=found.id,
+                    recursive=True,
+                    media_types=PLAYABLE_MEDIA_TYPES,
+                    count=False,
+                )
+            ).items
+        )
+
+    def _linked(self, query: ItemQuery) -> list[HydratedItem]:
+        """Audio linked to a by-name row, in the reference's three keys.
+
+        The middle key is why this is sorted here rather than by the query: `Album` is not one of
+        the eight tokens `sortBy` accepts, and adding a ninth to express it would put a key on the
+        wire that no reference server orders by - which `SortBy`'s own docstring forbids for
+        exactly that reason. The three values come off the hydrated rows instead: a track's
+        grandparent is its album artist and its parent is its album (`PARENT_OF`), so the ordering
+        is the reference's without a new vocabulary. The id closes it, so it is total
+        (Principle VII).
+        """
+        rows = self.queries.run(replace(query, include_types=frozenset({ItemType.AUDIO}))).items
+        return sorted(rows, key=_by_album_artist_album_and_name)
+
+
+def _by_album_artist_album_and_name(one: HydratedItem) -> tuple[str, str, str, str]:
+    return (
+        one.grandparent.name if one.grandparent is not None else "",
+        one.parent.name if one.parent is not None else "",
+        one.item.sort_name,
+        one.id,
+    )
+
+
+def _settles(found: HydratedItem, expanded: Sequence[HydratedItem]) -> str | None:
+    """What this requested id decides the new playlist's media type to be, or `None`.
+
+    Three steps, in the reference's own order: the item's own value if it has one - which for a
+    playlist named in `Ids` is the value that playlist was born with - then the four containers
+    that answer from their kind, then the first playable thing the expansion produced. A container
+    that expands to nothing decides nothing, and the walk moves on to the next id: measured, an
+    empty folder followed by a film creates a `Video` playlist and the same folder alone creates
+    an `Audio` one, which is the fallback rather than the folder
+    `[probe: tools/probe_playlist_expansion.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    own = found.media_type or MEDIA_TYPE_OF[found.item.type]
+    if own != UNKNOWN_MEDIA_TYPE:
+        return own
+    named = CONTAINER_MEDIA_TYPE.get(found.item.type)
+    if named is not None:
+        return named
+    for one in expanded:
+        value = one.media_type or MEDIA_TYPE_OF[one.item.type]
+        if value != UNKNOWN_MEDIA_TYPE:
+            return value
+    return None
+
+
 def _walk(
-    queries: ItemQueryRepository, owner: User, asked_ids: list[str], asked_type: str | None
+    expander: _Expander, owner: User, asked_ids: list[str], asked_type: str | None
 ) -> tuple[list[str], str]:
     """Resolve the id list in order, and settle the media type on the way through.
 
@@ -227,10 +396,13 @@ def _walk(
     `MediaType` makes both `200`
     `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`.
 
-    **A container is not expanded here yet.** Plan section 6.2's one expansion serves creation and
-    addition alike, and it arrives with the addition route at T10 - which is also where the
-    album's own order is asserted (AC-7). Until then a container named in `Ids` becomes an entry
-    of its own, and the media type it settles is the container's rather than its children's.
+    **A container named here expands, and what it expands to settles the media type**, which is
+    T10's correction to this function rather than a new capability beside it. An album in `Ids`
+    creates a playlist of nineteen tracks answering `Audio`, and a **series** creates one of eight
+    episodes answering `Video` - where the series' own media type is `Unknown` and the empty-list
+    fallback is `Audio`, so a walk that read the container's own value would store a media type no
+    reference server holds `[probe: tools/probe_playlist_expansion.py, Jellyfin 10.11.11,
+    2026-09-01]`.
 
     An empty list, or one that resolves to nothing after the type is settled, keeps `Audio` - the
     reference's own fallback, which is `MEDIA_TYPE_OF`'s entry for the type (009 spec section 3.2).
@@ -238,15 +410,15 @@ def _walk(
     entries: list[str] = []
     settled = asked_type
     for item_key in asked_ids:
-        page = queries.run(ItemQuery(user=owner, ids=(item_key,), limit=1, count=False))
-        if not page.items:
+        found = expander.resolve(owner, item_key)
+        if found is None:
             if settled is None:
                 raise PlaylistCreationError(f"no item {item_key} to infer a media type from")
             continue
-        found = page.items[0]
+        expanded = expander.expand(owner, found)
         if settled is None:
-            settled = found.media_type or MEDIA_TYPE_OF[found.item.type]
-        entries.append(found.id)
+            settled = _settles(found, expanded)
+        entries.extend(one.id for one in expanded)
     return entries, settled if settled is not None else MEDIA_TYPE_OF[ItemType.PLAYLIST]
 
 
@@ -361,3 +533,123 @@ def _in_playlist_order(
     page = queries.run(ItemQuery(user=target, ids=tuple(wanted), limit=len(wanted), count=False))
     by_id = {one.id: one for one in page.items}
     return [by_id[item_key] for item_key in wanted if item_key in by_id]
+
+
+# --------------------------------------------------------------------------------------------
+# The two entry-writing routes (T10)
+# --------------------------------------------------------------------------------------------
+#
+# Both take one identifier list, and neither refuses one that names nothing: an unknown id is
+# skipped on the add - unconditionally, unlike creation - and a removal that names an entry the
+# playlist does not hold is a success `[probe: tools/probe_playlist_add_remove.py, Jellyfin
+# 10.11.11, 2026-09-01]`. What they refuse is the caller and the *playlist*, in that order.
+
+
+def _identifiers(raw: str | None) -> list[str]:
+    """A comma-separated identifier list, canonicalised, with unparseable tokens dropped.
+
+    **Dropped rather than refused**, which is the opposite of what the same value does in the
+    create *body*: `{"Ids": ["banana"]}` is the binder's validation `400` (T8) and
+    `?ids=banana,<a track>` adds the track and says nothing about the word. Measured on the add
+    route and on the removal `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11,
+    2026-09-01]` - a query list is bound token by token where a body property is bound as a whole,
+    so the two are one value with two refusals, which is behaviours section 1.12's shape.
+    """
+    wanted: list[str] = []
+    for token in split_csv(raw):
+        canonical = normalise(token)
+        if isinstance(canonical, str) and CANONICAL.match(canonical):
+            wanted.append(canonical)
+    return wanted
+
+
+def _editable(playlists: PlaylistRepository, playlist_id: str, user: User) -> Playlist:
+    """The playlist this caller may write to, or the refusal that says why - in that order.
+
+    **`404` before `403`, and the order is the whole disclosure rule.** A playlist this caller
+    cannot see answers exactly what an identifier that names nothing answers, twenty bytes and
+    all, so no write route can be used to learn that a private playlist exists
+    `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+    **Then the editing test, and it is the other `403`.** 009 spec section 3.7's *May edit* column
+    is refused with no body and no content type, because the reference *returns* that refusal
+    rather than throwing it (`EmptyForbiddenError`). Three callers reach it: a share without
+    `CanEdit`, a public playlist's reader, and an administrator who is none of section 3.7's three
+    classes - and that last one only where the playlist is **visible** to them, since a private
+    one is `404` at the line above and never reaches the test.
+    """
+    playlist = playlists.by_id(playlist_id, user)
+    if playlist is None or not may_read(playlist, user):
+        raise PlaylistNotFoundError
+    if not may_edit(playlist, user):
+        raise EmptyForbiddenError("this caller may read the playlist and may not edit it")
+    return playlist
+
+
+@router.post(ITEMS_ROUTE, status_code=204)
+async def add_to_playlist(
+    request: Request,
+    caller: Annotated[User, Depends(require_user)],
+    playlistId: WireGuid,  # noqa: N803
+    ids: str | None = None,
+    userId: WireGuid | None = None,  # noqa: N803
+) -> Response:
+    """`AddItemToPlaylist` `[spec: AddItemToPlaylist]`. Appends to the end, and answers `204`.
+
+    **Every container expands, in place** - `_Expander` carries the width of that claim and how
+    it was measured. The two things this route adds to it are the ones a single-id request cannot
+    show: the expansion lands where the container was named rather than after everything else, and
+    the batch is de-duplicated as a batch, so an album named twice adds its tracks once.
+
+    **An unknown id is skipped unconditionally here**, which is the difference from creation
+    (009 spec section 3.4): `[absent, track]` and `[track, absent]` both add the track, where the
+    same pair on `POST /Playlists` answers `400` in one order and `200` in the other. The one
+    identifier that is not skipped is all zeros, and `EmptyIdentifierError` says why.
+
+    **`userId` names the writer**, and Atrium refuses a non-administrator who names anybody else -
+    `effective_user` again, unchanged, which is the rule the reference applies on this very route
+    and not on the read beside it (009 spec section 3.7, behaviours section 3.16).
+    """
+    with session_scope(get_sessions(request)) as opened:
+        target = effective_user(UserRepository(opened), caller, userId)
+        queries = ItemQueryRepository(opened)
+        playlists = PlaylistRepository(opened, queries)
+        playlist = _editable(playlists, playlistId, target)
+
+        expander = _Expander(queries, playlists)
+        entries: list[str] = []
+        for item_key in _identifiers(ids):
+            found = expander.resolve(target, item_key)
+            if found is None:
+                continue
+            entries.extend(one.id for one in expander.expand(target, found))
+        playlists.append(playlist.id, entries)
+    return Response(status_code=204)
+
+
+@router.delete(ITEMS_ROUTE, status_code=204)
+async def remove_from_playlist(
+    request: Request,
+    caller: Annotated[User, Depends(require_user)],
+    playlistId: WireGuid,  # noqa: N803
+    entryIds: str | None = None,  # noqa: N803
+) -> Response:
+    """`RemoveItemFromPlaylist` `[spec: RemoveItemFromPlaylist]`. `204`, and `204` again.
+
+    **An entry id that is not in the playlist is a success**, and the reason is a client's rather
+    than a purist's: clients retry, and a retry after a removal that worked must not fail
+    (009 spec section 3.5). Measured with each class of identifier - absent, malformed, all zeros -
+    and all three are `204` with the playlist untouched
+    `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`. The all-zeros id
+    is *not* the refusal it is on the add route, because nothing here looks an item up.
+
+    **This route takes no `userId`, and that is the reference's shape rather than an omission**:
+    the removal reads the caller's own identity where the addition above declares the parameter
+    `[spec: RemoveItemFromPlaylist]`. Declaring one here would be a lever no reference server has.
+    """
+    with session_scope(get_sessions(request)) as opened:
+        queries = ItemQueryRepository(opened)
+        playlists = PlaylistRepository(opened, queries)
+        playlist = _editable(playlists, playlistId, caller)
+        playlists.remove(playlist.id, _identifiers(entryIds))
+    return Response(status_code=204)

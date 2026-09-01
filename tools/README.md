@@ -35,7 +35,8 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_playlist_creation.py`](probe_playlist_creation.py) | What does `POST /Playlists` refuse, **in what bytes**, and what does it create — and does the deprecated query form still work? | 009 §3.2, §4, AC-2, AC-3; behaviours §1.11, §1.12, §3.19 | yes |
 | [`probe_playlist_media_type.py`](probe_playlist_media_type.py) | Is a playlist's `MediaType` a property of its type, of its creation, or of its contents — and does `mediaTypes=` filter playlists by the row or by the type? | 009 §3.2, §4; plan §4.2; `MEDIA_TYPE_OF` | yes |
 | [`probe_playlist_writes.py`](probe_playlist_writes.py) | What does a write do to the entries a playlist already holds — is a repeat dropped in place, does a removal renumber, and **is the de-duplication reliable**? | 009 §3.1, §3.4, AC-5; plan §6.2, §6.3; behaviours §3.18 | yes |
-| [`probe_playlist_expansion.py`](probe_playlist_expansion.py) | Does adding a container add its children, and in what order? | 009 OQ-3, §3.4, AC-7 | yes |
+| [`probe_playlist_expansion.py`](probe_playlist_expansion.py) | Does adding a container add its children, in what order, **and which kinds of container** — on the add route and on creation, where it also settles the media type? | 009 OQ-3, §3.2, §3.4, AC-7; plan §6.2 | yes |
+| [`probe_playlist_add_remove.py`](probe_playlist_add_remove.py) | What do the add and remove routes accept and refuse, **in bytes** — and is an unknown item id really always skipped? | 009 §3.4, §3.5, AC-5, AC-6; behaviours §1.11, §3.19 | yes |
 | [`probe_playlist_visibility.py`](probe_playlist_visibility.py) | What can a user who does not own a playlist see and do — and **what shape is each `403` it can produce**? | 009 OQ-4, §3.6, §3.7, §3.8, AC-12 to AC-19; behaviours §1.11, §3.16, §3.17, §4.3 | yes |
 | [`probe_playlist_shares.py`](probe_playlist_shares.py) | Which of the playlists a fixture world would seed can a create body actually produce — a share without `CanEdit`, a public one, and one whose entries come from two libraries? | 009 T5, §3.7, AC-14, AC-15, AC-17; plan §4.2, §8; behaviours §1.11 | yes |
 | [`probe_playlist_rename.py`](probe_playlist_rename.py) | Who can rename a playlist, and through which route? | 009 §2, §3.8, AC-18; behaviours §5 | yes |
@@ -92,6 +93,7 @@ python3 tools/probe_sort_names.py     --allow-writes
 python3 tools/probe_playlist_move.py  --allow-writes
 python3 tools/probe_playlist_creation.py   --allow-writes
 python3 tools/probe_playlist_expansion.py  --allow-writes
+python3 tools/probe_playlist_add_remove.py --allow-writes
 python3 tools/probe_playlist_visibility.py --allow-writes
 python3 tools/probe_playlist_rename.py     --allow-writes
 python3 tools/probe_playlist_read.py       --allow-writes
@@ -256,7 +258,8 @@ it quietly: each refuses to run without `--allow-writes`.
 | `probe_sort_names.py` | 15 empty playlists with crafted names | Deletes them, including on failure |
 | `probe_playlist_move.py` | 2 playlists, plus one per boundary case | Deletes them, including on failure |
 | `probe_playlist_creation.py` | Up to 17 playlists, including ones named badly on purpose and several made through the query form | Deletes them, including on failure |
-| `probe_playlist_expansion.py` | 1 playlist per container kind | Deletes them, including on failure |
+| `probe_playlist_expansion.py` | 1 playlist per container kind, plus one per creation case — and one of them holds a whole library, so it picks the **smallest** library root there is | Deletes them, including on failure |
+| `probe_playlist_add_remove.py` | 1 playlist per identifier class, on both routes | Deletes them, including on failure |
 | `probe_playlist_visibility.py` | A throwaway non-administrator user, whose library access it restricts, and 2 playlists (a third is attempted and refused, which is the measurement) | Deletes all three, including on failure. Refuses to run if a user of that name already exists, so it can never touch a real account |
 | `probe_playlist_rename.py` | A throwaway non-administrator user and 2 playlists | The same. It renames nothing it did not create: that route writes metadata through the savers, so pointing it at a library item would be an edit, not a measurement |
 | `probe_playstate.py` | Play state and favourite marks on one long item, one short item, one season's episodes and one artist; a live playback reported and stopped | Chooses only items with no user data at all, so restoring them is exact; sweeps the season's episodes and the artist's favourite clean including on failure, and stops the playback it started |

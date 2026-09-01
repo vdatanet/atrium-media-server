@@ -29,6 +29,7 @@ from atrium.config.paths import DataPaths
 from atrium.db.item_queries import ItemQueryRepository
 from atrium.db.repositories import PlaylistRepository, UserRepository
 from atrium.domain.user import User
+from atrium.library import identity
 from atrium.server import create_app
 from tests.conftest import data_dir
 from tests.fixtures.query import QueryWorld, build_query_world
@@ -40,6 +41,9 @@ HEX32 = re.compile(r"\A[0-9a-f]{32}\Z")
 #: Well-formed and addresses nothing, exactly as the probe's does: a malformed identifier would
 #: measure the binder instead of the id walk.
 ABSENT_ID = "f" * 32
+
+#: `Guid.Empty`, and a class of its own: refused where `ABSENT_ID` is skipped (T10).
+EMPTY_GUID = "0" * 32
 
 ADMIN_ID = "d" * 32
 
@@ -741,3 +745,452 @@ async def test_the_declared_parameters_are_honoured(
 
     dark = await rows(client, world.private_playlist.id, enableImages="false")
     assert all("ImageTags" not in row for row in dark["Items"])
+
+
+# --------------------------------------------------------------------------------------------
+# `POST` and `DELETE /Playlists/{playlistId}/Items` - adding and removing (T10)
+# --------------------------------------------------------------------------------------------
+#
+# Every case below is a transcription of a measured run
+# `[probe: tools/probe_playlist_expansion.py, Jellyfin 10.11.11, 2026-09-01]`
+# `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+
+async def add(
+    client: httpx.AsyncClient, playlist_id: str, ids: list[str], **params: Any
+) -> httpx.Response:
+    return await client.post(
+        f"/Playlists/{playlist_id}/Items", params={"ids": ",".join(ids), **params}
+    )
+
+
+async def drop(
+    client: httpx.AsyncClient, playlist_id: str, entry_ids: list[str] | None = None
+) -> httpx.Response:
+    params = {} if entry_ids is None else {"entryIds": ",".join(entry_ids)}
+    return await client.delete(f"/Playlists/{playlist_id}/Items", params=params)
+
+
+async def entries(client: httpx.AsyncClient, playlist_id: str) -> list[str]:
+    body = await rows(client, playlist_id)
+    return [row["Id"] for row in body["Items"]]
+
+
+async def a_new_playlist(client: httpx.AsyncClient, **params: Any) -> str:
+    """An empty playlist through the route that makes one, so no test writes its own rows."""
+    return await created_id(await client.post("/Playlists", params={"name": "T10", **params}))
+
+
+async def added(client: httpx.AsyncClient, ids: list[str]) -> list[str]:
+    """What one add lands in a fresh playlist, in order. Asserts the `204` on the way through."""
+    playlist_id = await a_new_playlist(client)
+    answered = await add(client, playlist_id, ids)
+    assert answered.status_code == 204, answered.content
+    assert answered.content == b""
+    return await entries(client, playlist_id)
+
+
+async def test_ac7_an_album_expands_to_its_tracks_in_the_albums_own_order(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """AC-7's first half, and the half the whole feature was told to get right.
+
+    The album's own order is the order `/Items?parentId=` gives, on both servers: measured
+    position by position against a nineteen-track album, and the container itself is never an
+    entry `[probe: tools/probe_playlist_expansion.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    landed = await added(client, [world.album])
+    assert landed == list(world.tracks)
+    assert world.album not in landed
+
+
+@pytest.mark.parametrize(
+    "container",
+    ["album", "series", "season", "artist", "library-root", "playlist", "empty-playlist"],
+)
+async def test_ac7_every_container_expands_and_two_of_them_were_never_named(
+    client: httpx.AsyncClient, world: QueryWorld, container: str
+) -> None:
+    """ "Every container expands" is a predicate, and the specification had named five kinds.
+
+    Measured, a plain folder, **the library root itself** and **another playlist** expand too, by
+    the same rule and through the same branch: anything that is not one of the three types a file
+    produces is something a client can ask to add whole
+    `[probe: tools/probe_playlist_expansion.py, Jellyfin 10.11.11, 2026-09-01]`. A rule written
+    from the five kinds the spec listed would have put a whole library in a playlist as one row.
+
+    The empty container is the other end of the same rule: nothing to add, and the same `204` as a
+    container that added forty tracks.
+    """
+    series = world.series[0]
+    named, expected = {
+        "album": (world.album, list(world.tracks)),
+        "series": (series.id, list(series.episodes)),
+        "season": (series.seasons[0], None),
+        "artist": (world.album_artist, None),
+        "library-root": (identity.for_library(world.music.id), None),
+        "playlist": (world.public_playlist.id, list(world.public_playlist.entries)),
+        "empty-playlist": (await a_new_playlist(client), []),
+    }[container]
+
+    landed = await added(client, [named])
+    assert named not in landed, "the container itself is never an entry"
+    if expected is not None:
+        assert landed == expected
+        return
+
+    if container == "season":
+        # A season's episodes are a contiguous run of the series' own order, and which run is a
+        # fact about the fixture rather than about the rule under test.
+        assert landed, "a season with episodes must expand to them"
+        assert set(landed) <= set(series.episodes)
+        assert landed == [one for one in series.episodes if one in set(landed)]
+    elif container == "artist":
+        # The **link**, not the tree: an artist's expansion carries the tracks they are credited
+        # on, which is why the reference's forty-two rows were forty by a tree walk. And it is
+        # grouped by album, which is the middle key of the ordering the reference states.
+        assert world.guest_track in landed
+        assert set(world.tracks) <= set(landed)
+        first = landed.index(world.tracks[0])
+        assert landed[first : first + len(world.tracks)] == list(world.tracks)
+    else:
+        assert set(landed) == set(world.tracks) | {world.guest_track}
+
+
+async def test_the_expansion_lands_where_the_container_was_named(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """In place, not at the end - which no single-id request can tell apart.
+
+    Measured with a film, an album and a second film: twenty-one entries with the album's
+    nineteen between the two films `[probe: tools/probe_playlist_expansion.py, Jellyfin 10.11.11,
+    2026-09-01]`.
+    """
+    first, second = world.corpus[0], world.corpus[1]
+    landed = await added(client, [first, world.album, second])
+    assert landed == [first, *world.tracks, second]
+
+
+async def test_ac5_a_repeat_adds_nothing_and_moves_nothing_expansions_included(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """AC-5, on the add path, and once more through a container.
+
+    The entry already there keeps its position - measured on a playlist holding several, because
+    a one-entry playlist cannot tell "dropped" from "removed and appended" (T7). Atrium
+    de-duplicates **every time**, where the reference manages it only when its own id cache is
+    warm (009 spec section 3.4, behaviours section 3.18).
+    """
+    playlist_id = await a_new_playlist(client)
+    await add(client, playlist_id, [world.corpus[0], world.corpus[1], world.corpus[2]])
+    before = await entries(client, playlist_id)
+
+    assert (await add(client, playlist_id, [world.corpus[0]])).status_code == 204
+    assert await entries(client, playlist_id) == before
+
+    assert (await add(client, playlist_id, [world.corpus[3], world.corpus[3]])).status_code == 204
+    assert await entries(client, playlist_id) == [*before, world.corpus[3]]
+
+    # And the same rule through an expansion: the album twice is its tracks once, and a track the
+    # album already contributed is not added a second time by naming it directly.
+    both = await added(client, [world.album, world.album])
+    assert both == list(world.tracks)
+    mixed = await added(client, [world.album, world.tracks[1]])
+    assert mixed == list(world.tracks)
+
+
+@pytest.mark.parametrize("order", ["first", "last", "between"])
+async def test_an_unknown_id_is_skipped_wherever_it_sits(
+    client: httpx.AsyncClient, world: QueryWorld, order: str
+) -> None:
+    """009 spec section 3.4's "unconditionally here, unlike creation", measured at last.
+
+    The same pair on `POST /Playlists` answers `400` in one order and `200` in the other, because
+    creation walks the list to infer a media type. This route infers nothing, so position does not
+    matter `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    wanted = {
+        "first": [ABSENT_ID, world.corpus[0]],
+        "last": [world.corpus[0], ABSENT_ID],
+        "between": [world.corpus[0], ABSENT_ID, world.corpus[1]],
+    }[order]
+    expected = [one for one in wanted if one != ABSENT_ID]
+    assert await added(client, wanted) == expected
+
+
+async def test_the_all_zeros_identifier_is_refused_by_both_paths(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """The finding: one identifier is neither skipped nor malformed.
+
+    An all-zeros id is refused with the bare-text `400` on the add route wherever it sits - beside
+    a resolvable id included - and on creation **after** the media type has settled, which is
+    exactly the position where an ordinary unknown id is skipped. The reference rejects an empty
+    GUID in its item lookup rather than missing it, so one guard covers both routes
+    `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+    Nothing lands: the refusal happens before the playlist is written to.
+    """
+    playlist_id = await a_new_playlist(client)
+    for wanted in ([EMPTY_GUID], [world.corpus[0], EMPTY_GUID]):
+        answered = await add(client, playlist_id, wanted)
+        assert answered.status_code == 400, answered.content
+        assert answered.content == CONTROLLER_BODY
+        assert answered.headers["content-type"] == "text/plain"
+    assert await entries(client, playlist_id) == []
+
+    refused = await client.post(
+        "/Playlists", json={"Name": "zeros", "Ids": [world.corpus[0], EMPTY_GUID]}
+    )
+    assert refused.status_code == 400, refused.content
+    assert refused.content == CONTROLLER_BODY
+
+    # The contrast, on the same request shape: an ordinary unknown id in that position is skipped.
+    allowed = await client.post(
+        "/Playlists", json={"Name": "absent", "Ids": [world.corpus[0], ABSENT_ID]}
+    )
+    assert allowed.status_code == 200, allowed.content
+
+
+async def test_ac6_removing_by_entry_id_removes_exactly_that_row(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """AC-6's first half, and the order closes up behind it."""
+    playlist_id = await a_new_playlist(client)
+    await add(client, playlist_id, list(world.corpus[:4]))
+
+    answered = await drop(client, playlist_id, [world.corpus[1]])
+    assert answered.status_code == 204, answered.content
+    assert answered.content == b""
+    assert await entries(client, playlist_id) == [world.corpus[0], world.corpus[2], world.corpus[3]]
+
+    assert (await drop(client, playlist_id, [world.corpus[0], world.corpus[3]])).status_code == 204
+    assert await entries(client, playlist_id) == [world.corpus[2]]
+
+
+@pytest.mark.parametrize("named", ["absent", "malformed", "all-zeros", "nothing at all"])
+async def test_ac6_a_removal_that_names_nothing_present_is_still_204(
+    client: httpx.AsyncClient, world: QueryWorld, named: str
+) -> None:
+    """AC-6's second half, over every class of identifier a client can send.
+
+    Clients retry, and a retry after a removal that worked must not fail (009 spec section 3.5).
+    The all-zeros id is the row worth having: it is a `400` on the add route and a `204` here,
+    because nothing on this route looks an item up
+    `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    playlist_id = await a_new_playlist(client)
+    await add(client, playlist_id, list(world.corpus[:3]))
+    before = await entries(client, playlist_id)
+
+    wanted = {
+        "absent": [ABSENT_ID],
+        "malformed": ["not-an-identifier"],
+        "all-zeros": [EMPTY_GUID],
+        "nothing at all": None,
+    }[named]
+    answered = await drop(client, playlist_id, wanted)
+    assert answered.status_code == 204, answered.content
+    assert await entries(client, playlist_id) == before
+
+
+@pytest.mark.parametrize("method", ["POST", "DELETE"])
+@pytest.mark.parametrize("case", ["absent", "not-a-playlist", "private-to-this-caller"])
+async def test_both_write_routes_answer_the_reads_twenty_byte_refusal(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld, method: str, case: str
+) -> None:
+    """T9's fourth shape, measured on the two write routes as well.
+
+    An absent playlist and a real item that is not a playlist are one body on both routes, and a
+    playlist this caller may not see is the same body again - so no write can be used to learn
+    that a private playlist exists `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11,
+    2026-09-01]`.
+    """
+    if case == "absent":
+        target = ABSENT_ID
+    elif case == "not-a-playlist":
+        target = world.private_playlist.entries[0]
+    else:
+        target = world.private_playlist.id
+        as_user(harness, world.restricted)
+
+    answered = await client.request(
+        method, f"/Playlists/{target}/Items", params={"ids": world.corpus[0]}
+    )
+    assert answered.status_code == 404, answered.content
+    assert answered.content == b'"Playlist not found"'
+    assert answered.headers["content-type"] == "application/json; charset=utf-8"
+
+
+@pytest.mark.parametrize("method", ["POST", "DELETE"])
+async def test_a_malformed_playlist_id_is_the_binders_400_on_both_write_routes(
+    client: httpx.AsyncClient, method: str
+) -> None:
+    """One path, two routes, and the reference answers them differently.
+
+    The add binds `playlistId` as an identifier and answers the validation `400`; the **removal**
+    binds it as a string it parses itself, so an unparseable one is an unhandled `500` in the
+    bare-text shape `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`.
+    Atrium answers the validation `400` on both - behaviours section 3.19's argument, applied to a
+    third request the reference cannot serve.
+    """
+    answered = await client.request(method, "/Playlists/not-an-identifier/Items")
+    assert answered.status_code == 400, answered.content
+    assert validation_body(answered) == problem(
+        {"playlistId": ["The value 'not-an-identifier' is not valid."]}
+    )
+
+
+@pytest.mark.parametrize("refused", ["read-only share", "public reader", "administrator"])
+async def test_ac13_and_ac14_the_edit_refusal_is_the_other_403(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld, refused: str
+) -> None:
+    """AC-13 and AC-14: `403` with **no body and no content type**, which is the other shape.
+
+    Measured on the two classes that had never been produced before T5 - a share stored without
+    `CanEdit`, and a public playlist's reader - and it is the body-less shape because the
+    reference *returns* this refusal where it *throws* the one AC-19 asserts
+    `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-08-31]`.
+
+    The administrator row is the same shape and needs a playlist they can **see**: on a private
+    one they are answered `404` by the line above, which is the test below.
+    """
+    playlist_id, user = {
+        "read-only share": (world.read_only_playlist.id, world.restricted),
+        "public reader": (world.public_playlist.id, world.restricted),
+        "administrator": (world.public_playlist.id, harness.admin),
+    }[refused]
+    as_user(harness, user)
+
+    for answered in (
+        await add(client, playlist_id, [world.corpus[0]]),
+        await drop(client, playlist_id, [world.corpus[0]]),
+    ):
+        assert answered.status_code == 403, answered.content
+        assert answered.content == b""
+        assert "content-type" not in answered.headers
+
+
+async def test_a_share_with_can_edit_may_write(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """AC-14's first half. The share is a real writer, not a reader with a flag."""
+    as_user(harness, world.restricted)
+    playlist = world.shared_playlist
+    assert (await add(client, playlist.id, [world.corpus[0]])).status_code == 204
+    assert await entries(client, playlist.id) == [*playlist.entries, world.corpus[0]]
+    assert (await drop(client, playlist.id, [world.corpus[0]])).status_code == 204
+    assert await entries(client, playlist.id) == list(playlist.entries)
+
+
+async def test_an_administrator_is_answered_404_before_the_edit_refusal(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """Spec section 3.7's last row, on the write routes: the `403` is only reachable when visible.
+
+    The reference's own lookup filters by owner, share and `IsPublic` with no administrator branch
+    `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:62-78 @ v10.11.11]`, so an
+    administrator who is none of the three classes never reaches the editing test on a private
+    playlist. AC-13's `403` therefore belongs to the playlists they can see, and this is the line
+    that says which is which.
+    """
+    as_user(harness, harness.admin)
+    answered = await add(client, world.private_playlist.id, [world.corpus[0]])
+    assert answered.status_code == 404, answered.content
+    assert answered.content == b'"Playlist not found"'
+
+
+async def test_ac19_naming_another_user_on_the_add_route_is_the_twenty_five_bytes(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """AC-19 on the route the reference itself refuses, where the read beside it does not.
+
+    `effective_user`, unchanged: the `403` a non-administrator gets for naming somebody else is
+    the controller's own 25 bytes, and the administrator's `userId` is honoured
+    `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`.
+    """
+    as_user(harness, world.restricted)
+    answered = await add(
+        client, world.shared_playlist.id, [world.corpus[0]], userId=world.everyone.id
+    )
+    assert answered.status_code == 403
+    assert answered.content == CONTROLLER_BODY
+    assert answered.headers["content-type"] == "text/plain"
+
+    as_user(harness, harness.admin)
+    allowed = await add(
+        client, world.shared_playlist.id, [world.corpus[1]], userId=world.everyone.id
+    )
+    assert allowed.status_code == 204, allowed.content
+
+
+async def test_the_two_write_routes_declare_the_references_parameters_and_no_others(
+    app: FastAPI,
+) -> None:
+    """The add takes `userId` and the removal does not, which is the reference's own asymmetry.
+
+    Asserted against the generated document for AC-8's reason: a parameter is discovered there,
+    and a `userId` on the removal would be a lever no reference server has `[spec:
+    RemoveItemFromPlaylist]`.
+    """
+    operations = app.openapi()["paths"]["/Playlists/{playlistId}/Items"]
+    assert {one["name"] for one in operations["post"]["parameters"] if one["in"] == "query"} == {
+        "ids",
+        "userId",
+    }
+    assert {one["name"] for one in operations["delete"]["parameters"] if one["in"] == "query"} == {
+        "entryIds"
+    }
+
+
+@pytest.mark.parametrize(
+    ("named", "media_type"),
+    [("album", "Audio"), ("series", "Video")],
+)
+async def test_creation_expands_too_and_the_media_type_follows_the_expansion(
+    client: httpx.AsyncClient, world: QueryWorld, named: str, media_type: str
+) -> None:
+    """The other half of plan section 6.2's one function, and T8's named gap closed.
+
+    A container in `Ids` expands on creation exactly as it does on the add route, and the media
+    type is settled from what it expanded to: a **series** creates a `Video` playlist where the
+    series' own media type is `Unknown` and the empty-list fallback is `Audio`
+    `[probe: tools/probe_playlist_expansion.py, Jellyfin 10.11.11, 2026-09-01]`. Reading the
+    container's own value would have stored `Unknown`, which creation cannot produce on the
+    reference at all (009 spec section 4).
+    """
+    container = world.album if named == "album" else world.series[0].id
+    expected = list(world.tracks) if named == "album" else list(world.series[0].episodes)
+
+    playlist_id = await created_id(
+        await client.post("/Playlists", json={"Name": named, "Ids": [container]})
+    )
+    assert await entries(client, playlist_id) == expected
+    assert (await item(client, playlist_id))["MediaType"] == media_type
+
+
+async def test_a_video_genre_settles_video_and_expands_to_nothing(
+    client: httpx.AsyncClient,
+) -> None:
+    """The one media type no expansion can produce, and the only branch that answers it.
+
+    The reference names four containers that settle a media type by their **kind**, before their
+    contents are looked at: three music ones answer `Audio` and a `Genre` answers `Video`
+    `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:95-114 @ v10.11.11]`. The
+    row exists because a genre's *expansion* is empty - the folder branch looks for children, and
+    a by-name row has none `[source: MediaBrowser.Controller/Playlists/Playlist.cs:217-229 @
+    v10.11.11]` - so nothing downstream could ever settle it. Both halves are asserted here, on
+    the by-name row two films share.
+
+    Unmeasurable against the reference used by this project: it holds no genre rows at all, which
+    is why this is the one rule in T10 carried by a source citation rather than by a probe.
+    """
+    listed = await client.get("/Items", params={"includeItemTypes": "Genre", "recursive": "true"})
+    assert listed.status_code == 200, listed.content
+    genre = json.loads(listed.content)["Items"][0]["Id"]
+
+    playlist_id = await created_id(
+        await client.post("/Playlists", json={"Name": "by genre", "Ids": [genre]})
+    )
+    assert await entries(client, playlist_id) == []
+    assert (await item(client, playlist_id))["MediaType"] == "Video"
