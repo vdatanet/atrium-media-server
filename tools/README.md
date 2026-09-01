@@ -10,10 +10,16 @@ Scripts that keep the documentation honest. None of them is part of the server.
 | [`extract_v1_surface.py`](extract_v1_surface.py) | Validate `docs/compatibility/surface.yaml` against that document — the automated half of Principle VI |
 | [`generate_cultures.py`](generate_cultures.py) | Regenerate `src/atrium/metadata/cultures.py` — the table `GET /Localization/Cultures` serves — from a measurement of the reference |
 
-The validator refuses a document whose version is not the one `surface.yaml` pins. Fetching from a
-`10.11.11` server therefore reports a mismatch against the pinned `10.11.10` contract: see
-[reference-target §1](../docs/compatibility/reference-target.md#1-the-pinned-version), which
-records why the two differ and what moving the pin costs.
+The validator refuses a document whose version is not the one `surface.yaml` pins. Both now read
+`10.11.11`, so a document fetched from the reference server validates — which it could not do until
+2026-09-01, when the contract pin moved off a `10.11.10` document nobody could obtain. What that
+cost and why it was done is [reference-target §1](../docs/compatibility/reference-target.md#1-the-pinned-version).
+
+**A fetched document is the core API plus that server's plugins.** Two of the reference server's
+paths come from one, and an earlier fetch — from a server carrying a plugin this one does not —
+put nineteen names that were never Jellyfin's into `docs/compatibility/property-names.json`, where
+they sat unnoticed for the life of the project. Regenerate the index from a server you know the
+plugin list of.
 
 ## Probes
 

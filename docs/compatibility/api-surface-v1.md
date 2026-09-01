@@ -1,7 +1,7 @@
 # The v1 API surface
 
-**Last verified: 2026-08-26. Every path and method below was checked to exist in the Jellyfin
-10.11.10 OpenAPI document; the `Operation` column is that document's `operationId`.**
+**Last verified: 2026-09-01. Every path and method below was checked to exist in the Jellyfin
+10.11.11 OpenAPI document; the `Operation` column is that document's `operationId`.**
 
 Jellyfin exposes **322 paths**. v1 of Atrium serves **58**. This document explains which 58, and —
 more importantly — *how that set was chosen*, because Principle VI forbids adding an endpoint

@@ -28,7 +28,9 @@ Three decisions dominate the plan, and each came out of a fact rather than a pre
 snake_case with an alias generator, and for 988 of the reference's 1043 property names it produces
 the right answer. For **55 it does not**, because the reference keeps acronyms uppercase:
 `IsHD`, `IsAVC`, `TwoLetterISOLanguageName`. Five of those land inside v1's own schemas.
-`[spec: measured across components.schemas of the pinned 10.11.10 document]`
+`[spec: measured across components.schemas of the 10.11.10 document, 2026-08-26]` — the pin moved
+to `10.11.11` on 2026-09-01 and the index is 1026 names; these counts are what was measured then,
+against a document that also carried a plugin's schemas (reference-target §1).
 
 A generator plus hand-written exceptions would work and would rot: nobody notices a missing
 exception until a client does. So the plan inverts the check — **every alias is validated against
