@@ -89,7 +89,7 @@ from the YAML:
 |---|---|---|---|
 | Identity and session (§2) | 4 | 001, 002 | Implemented |
 | Library and browsing (§10) | 10 | 005 | Implemented |
-| Playlists (§10) | 6 | 009 | **Draft** — see below |
+| Playlists (§10) | 6 | 009 | Implemented on 2026-09-01 — see below for the one that refuses this client's own users |
 | User data and reporting (§8) | 7 | 007 | Implemented |
 | Artwork (§9) | 1 | 006 | Implemented |
 | Delivery (§3, §4, §6, §7) | 3 | 008 | Implemented — the static pair at T6, `/universal` at T8 |
@@ -112,6 +112,14 @@ Principle VI therefore keeps out.
 So the rename works here exactly as far as it works against a stock reference server, and no
 further. That is parity, and it is a gap in the client's own feature rather than in this one —
 recorded in [behaviours §5](behaviours.md) with the mechanism that would close it.
+
+**Shipped on 2026-09-01, and the row above is what shipped**: the rename is administrator-only
+here because it is administrator-only there. 009 T13 measured two more things about it that this
+client's own round trip walks into — the reference refuses a body that omits `Genres`, `Tags` or
+`ProviderIds`, so `{"Name": …}` alone is not a request a stock server serves; and a body with no
+`Name` at all answers `204` there and **erases** the playlist's name, which this server refuses
+([behaviours §3.21](behaviours.md)). Fetch-change-post, which is what this client does, is
+therefore the shape that works on both.
 
 **The rest of the playlist group asks for something the reference does not have.** Every row of
 `GET /Playlists/{playlistId}/Items` must carry a `PlaylistItemId` distinct from the track id, or
@@ -524,7 +532,7 @@ would take them:
 | [§5.4](#54-every-universal-request-re-encodes-for-a-different-reason-than-the-reference-does) + [§6.1](#61-an-honest-content-length-on-a-capped-transcode) + [§6.2](#62-keying-a-transcode-on-a-client-supplied-playsessionid) | One question about where a progressive re-encode is produced, asked three ways. Settle it once |
 | [§5.8](#58-the-album-play-queue-is-correctly-ordered-by-accident) | One test, and it can be written today. The only item here that needs no decision |
 | [§5.5](#55-localaddress-is-plain-http-at-defaults-and-an-operator-can-take-that-away), [§5.7](#57-a-suspended-preload-is-an-idle-connection-a-deployment-can-cut) | Prose: a sentence in behaviours §4.2, a paragraph of deployment guidance |
-| [§3](#3-the-twenty-seven-operations-and-the-one-that-is-not-in-the-55) | A 009 scope decision, taken when 009's spec is accepted |
+| [§3](#3-the-twenty-seven-operations-and-the-one-that-is-not-in-the-55) | A 009 scope decision, **taken** when 009's spec was accepted on 2026-08-31: `POST /Items/{itemId}` entered the surface with this document as its named consumer, and shipped at 009 T13 |
 
 Three [behaviours](behaviours.md) entries were owed here and **two are now written**, both at 008
 T14 because both describe what 008 ships: §5.1's accepted-gap entry (§5), and §5.2's and §5.3's

@@ -905,6 +905,30 @@ async def test_ac5_a_repeat_adds_nothing_and_moves_nothing_expansions_included(
     mixed = await added(client, [world.album, world.tracks[1]])
     assert mixed == list(world.tracks)
 
+    # **The creation path, which AC-5 names first and nothing here had asked** (T14). It is a
+    # different code path from the add route - `create` reduces the batch before the ordinals are
+    # handed out, and only `append` was ever exercised above - and it is the path the measured
+    # answer belongs to: `Ids` naming A B A creates A B, the **first** occurrence surviving
+    # `[probe: tools/probe_playlist_writes.py, Jellyfin 10.11.11, 2026-08-31]`.
+    on_creation = await created_id(
+        await client.post(
+            "/Playlists",
+            json={
+                "Name": "A B A",
+                "Ids": [world.corpus[0], world.corpus[1], world.corpus[0]],
+            },
+        )
+    )
+    assert await entries(client, on_creation) == [world.corpus[0], world.corpus[1]]
+
+    # And through an expansion on that path too, where the container is named twice.
+    twice = await created_id(
+        await client.post(
+            "/Playlists", json={"Name": "album twice", "Ids": [world.album, world.album]}
+        )
+    )
+    assert await entries(client, twice) == list(world.tracks)
+
 
 @pytest.mark.parametrize("order", ["first", "last", "between"])
 async def test_an_unknown_id_is_skipped_wherever_it_sits(
@@ -1093,18 +1117,34 @@ async def test_a_share_with_can_edit_may_write(
 async def test_an_administrator_is_answered_404_before_the_edit_refusal(
     client: httpx.AsyncClient, harness: Harness, world: QueryWorld
 ) -> None:
-    """Spec section 3.7's last row, on the write routes: the `403` is only reachable when visible.
+    """Spec section 3.7's last row, on **all three** write routes: the `403` needs visibility.
 
     The reference's own lookup filters by owner, share and `IsPublic` with no administrator branch
     `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:62-78 @ v10.11.11]`, so an
     administrator who is none of the three classes never reaches the editing test on a private
     playlist. AC-13's `403` therefore belongs to the playlists they can see, and this is the line
     that says which is which.
+
+    **AC-13 says "the same three routes" and this asked one of them until T14.** Add, remove and
+    move each make the lookup for themselves, and the move makes it in a third module state - it
+    is the route whose refusals are ordered `404`, `403`, index, entry - so a route that had
+    reached its editing test first would have answered a `403` here and disclosed the playlist.
     """
     as_user(harness, harness.admin)
-    answered = await add(client, world.private_playlist.id, [world.corpus[0]])
-    assert answered.status_code == 404, answered.content
-    assert answered.content == b'"Playlist not found"'
+    private = world.private_playlist
+
+    for answered in (
+        await add(client, private.id, [world.corpus[0]]),
+        await drop(client, private.id, [private.entries[0]]),
+        await move(client, private.id, private.entries[0], 1),
+    ):
+        assert answered.status_code == 404, answered.content
+        assert answered.content == b'"Playlist not found"'
+        assert answered.headers["content-type"] == "application/json; charset=utf-8"
+
+    # And nothing moved: the refusal is before the arithmetic, not a `404` written after it.
+    as_user(harness, world.everyone)
+    assert await entries(client, private.id) == list(private.entries)
 
 
 async def test_ac19_naming_another_user_on_the_add_route_is_the_twenty_five_bytes(
@@ -1279,6 +1319,14 @@ async def test_ac9_the_thirty_measured_pairs_over_http(
         landed = await entries(client, playlist_id)
         assert landed == [labelled[one] for one in expected], f"{source} -> {target}"
         assert set(landed) == set(named), "a move reissues no entry id (AC-9)"
+
+        # AC-9's second half **as the criterion words it** (T14). The line above compares `Id`,
+        # and by AC-4 the two are equal on every row - but "every entry keeps its
+        # `PlaylistItemId`" is a claim about the property the client addresses entries by, and a
+        # route that reissued it while keeping `Id` would pass every line above.
+        after = (await rows(client, playlist_id))["Items"]
+        assert [row["PlaylistItemId"] for row in after] == [row["Id"] for row in after]
+        assert {row["PlaylistItemId"] for row in after} == set(named)
 
 
 @pytest.mark.parametrize(
