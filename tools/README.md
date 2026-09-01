@@ -32,7 +32,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_query_envelope.py`](probe_query_envelope.py) | What shape does each list endpoint return, and how does one refuse? | 005 OQ-6, §3.5; behaviours §1.11, §1.12, §1.15, §1.16 | no |
 | [`probe_sort_names.py`](probe_sort_names.py) | How does the server derive `SortName` from `Name`? | 003 OQ-3 | yes |
 | [`probe_playlist_move.py`](probe_playlist_move.py) | Does `Move`'s `newIndex` refer to the list before or after removal, does that reading hold for **every** (source, target) pair, what do its boundaries do, and is a playlist entry's identifier its own? | 009 OQ-1, OQ-6, §3.1, §3.5, §6; behaviours §2.7, §2.8, §2.26, §3.15 | yes |
-| [`probe_playlist_creation.py`](probe_playlist_creation.py) | What does `POST /Playlists` refuse, and what does it create? | 009 §3.2, §4, AC-2, AC-3 | yes |
+| [`probe_playlist_creation.py`](probe_playlist_creation.py) | What does `POST /Playlists` refuse, **in what bytes**, and what does it create — and does the deprecated query form still work? | 009 §3.2, §4, AC-2, AC-3; behaviours §1.11, §1.12, §3.19 | yes |
 | [`probe_playlist_media_type.py`](probe_playlist_media_type.py) | Is a playlist's `MediaType` a property of its type, of its creation, or of its contents — and does `mediaTypes=` filter playlists by the row or by the type? | 009 §3.2, §4; plan §4.2; `MEDIA_TYPE_OF` | yes |
 | [`probe_playlist_writes.py`](probe_playlist_writes.py) | What does a write do to the entries a playlist already holds — is a repeat dropped in place, does a removal renumber, and **is the de-duplication reliable**? | 009 §3.1, §3.4, AC-5; plan §6.2, §6.3; behaviours §3.18 | yes |
 | [`probe_playlist_expansion.py`](probe_playlist_expansion.py) | Does adding a container add its children, and in what order? | 009 OQ-3, §3.4, AC-7 | yes |
@@ -253,9 +253,9 @@ it quietly: each refuses to run without `--allow-writes`.
 |---|---|---|
 | `probe_sort_names.py` | 15 empty playlists with crafted names | Deletes them, including on failure |
 | `probe_playlist_move.py` | 2 playlists, plus one per boundary case | Deletes them, including on failure |
-| `probe_playlist_creation.py` | Up to 9 playlists, including ones named badly on purpose | Deletes them, including on failure |
+| `probe_playlist_creation.py` | Up to 17 playlists, including ones named badly on purpose and several made through the query form | Deletes them, including on failure |
 | `probe_playlist_expansion.py` | 1 playlist per container kind | Deletes them, including on failure |
-| `probe_playlist_visibility.py` | A throwaway non-administrator user, whose library access it restricts, and 2 playlists | Deletes all three, including on failure. Refuses to run if a user of that name already exists, so it can never touch a real account |
+| `probe_playlist_visibility.py` | A throwaway non-administrator user, whose library access it restricts, and 2 playlists (a third is attempted and refused, which is the measurement) | Deletes all three, including on failure. Refuses to run if a user of that name already exists, so it can never touch a real account |
 | `probe_playlist_rename.py` | A throwaway non-administrator user and 2 playlists | The same. It renames nothing it did not create: that route writes metadata through the savers, so pointing it at a library item would be an edit, not a measurement |
 | `probe_playstate.py` | Play state and favourite marks on one long item, one short item, one season's episodes and one artist; a live playback reported and stopped | Chooses only items with no user data at all, so restoring them is exact; sweeps the season's episodes and the artist's favourite clean including on failure, and stops the playback it started |
 | `probe_next_up.py` | Played marks on a handful of episodes | Chooses series whose episodes carry no user data, deletes every mark including on failure, and verifies the episodes pristine afterwards |

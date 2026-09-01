@@ -51,6 +51,13 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 #: somebody's client. 004 joined at T15, which is the line this file's own comment promised.
 IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007", "008", "011"})
 
+#: 009 arrives across six route-bearing tasks - creation (T8), the read (T9), the add and the
+#: remove (T10), the move (T11), the deletion (T12) and the rename (T13) - and the exact-set check
+#: below has to stay meaningful in between, so the routes that have landed are listed here. It is
+#: deleted at T14, when `"009"` joins the set above. 002, 005, 006, 007, 008 and 011 each used
+#: exactly this device, and all six lists are gone.
+INTERIM_009 = frozenset({("POST", "/Playlists")})
+
 
 def _load_surface_parser() -> Any:
     """Reuse the parser the surface validator already has, rather than write a second one.
@@ -130,9 +137,10 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     002 arrived across two tasks, 005 across seven, 006 across five, 007 across three, 008 across
     eight and 011 across two, and for the changes between them this set was accompanied by an
     explicit list of the individual routes that had landed. All six lists are gone: `INTERIM_011`
-    was the last, deleted at 011 T12 in the change that put `"011"` in the set above, and what it
-    was holding open - the three subtitle routes of `surface.yaml` - is now counted against the
-    file rather than against a list here.
+    was the last of those, deleted at 011 T12 in the change that put `"011"` in the set above, and
+    what it was holding open - the three subtitle routes of `surface.yaml` - is now counted against
+    the file rather than against a list here. `INTERIM_009` above is the seventh, and it goes the
+    same way at 009 T14.
 
     **One route 008 serves is knowingly narrower than the reference's**, and it is recorded here
     because nothing else in this file would say so: `/Audio/{itemId}/universal` with
@@ -143,7 +151,17 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     playlist pair is a surface decision under AGENTS.md's "Adding an endpoint" procedure, and it
     is on 008's list of what it owes the features after it.
     """
-    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES)
+    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES) | INTERIM_009
+
+
+def test_the_interim_list_names_routes_the_surface_file_really_has(app: FastAPI) -> None:
+    """An interim entry is a route that has landed early, not a route invented here.
+
+    Without this, a typo in `INTERIM_009` would widen the check above by exactly the string it
+    misspelled and nothing would notice until the list was deleted.
+    """
+    assert surface_paths(frozenset({"009"})) >= INTERIM_009
+    assert documented_paths(app) >= INTERIM_009
 
 
 def test_an_unlisted_route_fails_the_check(app: FastAPI) -> None:

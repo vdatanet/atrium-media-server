@@ -65,6 +65,25 @@ def create(server: Server, body: dict) -> tuple:
     return status, __import__("json").loads(payload).get("Id"), payload[:70]
 
 
+def shape(status: int, headers: dict, payload: bytes) -> str:
+    """A refusal's whole observable shape: status, content type, length, and the body itself.
+
+    The battery above reads 70 bytes of a body and no headers at all, which is enough to see
+    *that* a request was refused and not enough to reproduce the refusal. Both of section 3.2's
+    `400`s have to be written as bytes by the route that answers them, and the two are different
+    shapes on purpose - one is problem details from the model binder, the other the controller's
+    own `text/plain` sentence - so the content type and the whole body are the measurement.
+
+    The body is printed entire rather than sliced: a problem-details `errors` map keys on a
+    property name, and which spelling it uses is the cell 007 T8 found the framework getting
+    wrong (`item_id`, snake_case, on the wire).
+    """
+    content_type = next(
+        (value for key, value in headers.items() if key.lower() == "content-type"), None
+    )
+    return f"{status}  {content_type!r}  {len(payload)} bytes  {payload!r}"
+
+
 def entry_count(server: Server, playlist_id: str) -> int:
     shown = server.get(f"/Playlists/{playlist_id}/Items", UserId=server.user_id)
     return len(shown.get("Items", []))
@@ -162,6 +181,98 @@ def run(server: Server) -> Probe:
         if video:
             shown_video = server.get(f"/Items/{video}", userId=server.user_id)
             probe.observe("  MediaType from a Movie", shown_video.get("MediaType"))
+
+        # -- the bytes of both refusals, which nothing here had ever read ---------------------
+        #
+        # Section 3.2's table names two `400` shapes and cites this script for one of them, but
+        # every row above prints a 70-byte slice and throws the headers away. A route that has to
+        # answer both cannot be written from that: the shapes differ in the content type as much
+        # as in the body, and the validation one differs from Atrium's default in the *key* its
+        # `errors` map uses.
+        probe.observe("-- the shape of each refusal", "status, content type, length, body")
+        for label, body in (
+            ("no Name at all", {"Ids": [], "UserId": server.user_id}),
+            ("Name null", {"Name": None, "UserId": server.user_id}),
+            (
+                "absent id FIRST, no MediaType",
+                {"Name": NAME + " 6", "Ids": [ABSENT_ID], "UserId": server.user_id},
+            ),
+            (
+                "MediaType Nonsense",
+                {"Name": NAME + " 7", "MediaType": "Nonsense", "UserId": server.user_id},
+            ),
+            # The two identifier properties, asked because the answer decides whether Atrium's
+            # body model may declare them as identifiers at all: a typed field refuses through
+            # the binder, an untyped one lets the id walk of section 3.2 decide.
+            (
+                "Ids holds a non-identifier",
+                {"Name": NAME + " 12", "Ids": ["banana"], "UserId": server.user_id},
+            ),
+            ("UserId is a non-identifier", {"Name": NAME + " 13", "UserId": "banana"}),
+            ("UserId names nobody", {"Name": NAME + " 14", "UserId": ABSENT_ID}),
+            # The same refusal with a one-character token. The converter's message carries a byte
+            # position, and whether that position is a property of the *request text* or of the
+            # token alone decides whether the sentence is reproducible at all: a parser's own
+            # offset into the document cannot be, and `len(token) + 2` can.
+            ("MediaType X", {"Name": NAME + " 15", "MediaType": "X"}),
+        ):
+            status, headers, payload = server.post_raw("/Playlists", body=body)
+            if status == 200 and payload:
+                created.append(__import__("json").loads(payload).get("Id"))
+            probe.observe(f"  {label}", shape(status, headers, payload))
+
+        # -- the query form, which the specification says takes precedence --------------------
+        #
+        # `[spec: CreatePlaylist]` says the four parameters may be sent as query rather than body
+        # and that query wins, and section 3.2 repeats it. Nothing has asked whether that is
+        # still true of 10.11.11, and it decides whether Atrium's route can require a body at
+        # all: a client sending the deprecated form meets a `400` from a server that cannot read
+        # it, which is a difference Principle I does not allow.
+        status, headers, payload = server.post_raw("/Playlists", body=None, name=NAME + " 8")
+        if status == 200 and payload:
+            created.append(__import__("json").loads(payload).get("Id"))
+        probe.observe("query name, no body", shape(status, headers, payload))
+        status, headers, payload = server.post_raw(
+            "/Playlists", body={"Name": NAME + " 9 body"}, name=NAME + " 9 query"
+        )
+        which = None
+        if status == 200 and payload:
+            which = __import__("json").loads(payload).get("Id")
+            created.append(which)
+        probe.observe("query and body together", shape(status, headers, payload))
+        if which:
+            probe.observe(
+                "  the name it kept",
+                repr(server.get(f"/Items/{which}", userId=server.user_id).get("Name")),
+            )
+        status, headers, payload = server.post_raw("/Playlists", body=None)
+        probe.observe("neither, an empty request", shape(status, headers, payload))
+        # Does the query name rescue a body that fails to deserialise? The answer decides *where*
+        # Atrium's first refusal sits: if the body is refused before the query is read, the check
+        # belongs to the model layer exactly as plan section 6.1 says, and if the query rescues
+        # it, the required property is a route-level test over the merged four values.
+        status, headers, payload = server.post_raw(
+            "/Playlists", body={"Ids": [], "UserId": server.user_id}, name=NAME + " 10"
+        )
+        if status == 200 and payload:
+            created.append(__import__("json").loads(payload).get("Id"))
+        probe.observe("query name, body with no Name", shape(status, headers, payload))
+        # And the same unbindable token on the query side. behaviours section 1.12 says an
+        # unrecognised enum *token* in a query is dropped and answered `200`, where the body's
+        # is the `400` measured above - so this is the same value refused two ways on one route.
+        status, headers, payload = server.post_raw(
+            "/Playlists", body={"Name": NAME + " 11"}, mediaType="Nonsense"
+        )
+        if status == 200 and payload:
+            made = __import__("json").loads(payload).get("Id")
+            created.append(made)
+            probe.observe(
+                "query mediaType Nonsense",
+                f"{shape(status, headers, payload)}   MediaType="
+                f"{server.get(f'/Items/{made}', userId=server.user_id).get('MediaType')!r}",
+            )
+        else:
+            probe.observe("query mediaType Nonsense", shape(status, headers, payload))
     finally:
         for playlist_id in created:
             try:

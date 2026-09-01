@@ -50,7 +50,7 @@ from __future__ import annotations
 
 import secrets
 from collections.abc import Callable, Coroutine
-from typing import Any
+from typing import Any, get_args
 
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
@@ -295,6 +295,26 @@ class SubtitleUnavailableError(Exception):
     """
 
 
+class PlaylistCreationError(Exception):
+    """`POST /Playlists` refused the request itself. The third shape at `400`.
+
+    Two rows reach it, and only one of them is parity:
+
+    * **An id in `Ids` that resolves to nothing, reached before any id that does.** The reference
+      walks the list to infer a media type when the body names none, and throws on the first id
+      it cannot resolve - so the same two ids in the other order answer `200`. Measured, with the
+      body: `400`, `text/plain`, the fixed 25 bytes
+      `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`.
+    * **A request that names no `Name` in either the body or the query**, where the reference
+      answers **`500`** in this same shape. That is 009's fifth divergence (behaviours section
+      3.19): the status changes, the bytes do not.
+
+    One class for both because they are one shape on the wire, and the raise sites say which row
+    they are. Deliberately not `DeliverySourceError`, whose docstring is a statement about a
+    `mediaSourceId` and would be a lie at the place this is raised.
+    """
+
+
 class ImageNotFoundError(Exception):
     """The item exists and has no image of that type. Answered with the fourth shape.
 
@@ -366,8 +386,109 @@ def problem_details(
 #: it is filed under is the **empty string**.
 BODY_VALUE_INVALID = "The supplied value is invalid."
 
+#: The key the reference's JSON deserialiser files its own refusals under, as opposed to the
+#: **empty string** the model binder uses. Measured on one route, twice, with the two failures a
+#: body can carry: a required property that is absent and a value no vocabulary member matches
+#: are both `"$"`, while a malformed identifier in the same body is `""`
+#: `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`.
+DESERIALISATION_KEY = "$"
 
-def validation_errors(raw: list[Any], body_parameter: str | None = None) -> dict[str, list[str]]:
+#: What the reference says when a property the type declares as required is **absent**. The
+#: sentence names the reference's own type, which is a fact about the wire rather than about its
+#: code - reproducing it is Principle I, the way `Error processing request.` is - and it is a
+#: property the model declares (`AtriumModel.WIRE_TYPE`) rather than something derivable here.
+#:
+#: ⚠️ **Only the single-property form is measured.** `including:` reads like the head of a list
+#: and no v1 body declares two required properties, so what separates two names is unknown.
+#: `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`
+MISSING_PROPERTY_MESSAGE = (
+    "JSON deserialization for type '{wire_type}' was missing required properties "
+    "including: '{name}'."
+)
+
+#: What it says when that property is **present and null**, which is a different refusal at a
+#: different key: the deserialiser accepted the document and the property validator refused the
+#: value, so the map is keyed on the property rather than on `$`. Measured beside the row above,
+#: and nothing in this repository had asked for the two to be told apart.
+#: `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`
+PROPERTY_REQUIRED_MESSAGE = "The {name} field is required."
+
+#: What it says when a value matches no member of the vocabulary a property declares. The byte
+#: position is **the position inside the quoted token**, not an offset into the request - measured
+#: with a one-character token, which answers `3` where an eight-character one answers `10` - so
+#: unlike the parser message of section 1.11 this sentence is reproducible exactly.
+#: `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`
+VOCABULARY_MESSAGE = (
+    "The JSON value could not be converted to {wire_type}. "
+    "Path: $ | LineNumber: 0 | BytePositionInLine: {position}."
+)
+
+#: The framework's names for "this value is in no vocabulary I declare". Two, because a `Literal`
+#: and an `Enum` annotation are the same wire contract and report themselves differently.
+VOCABULARY_MISMATCH = frozenset({"literal_error", "enum"})
+
+
+def _wire_name(body_model: type[Any] | None, name: str) -> str:
+    """The property's spelling on the wire, whichever spelling the framework reported.
+
+    It reports **both**, on one model, depending on how the value failed: a property that is
+    absent is located by its alias (`Name`) and one that is present and wrong by the model's own
+    field name (`name`). Either would reach a client as a key, and only one of them is a name the
+    reference ever sends - which is 007 T8's finding arriving through a second door.
+    """
+    fields = getattr(body_model, "model_fields", {})
+    field = fields.get(name)
+    return str(getattr(field, "alias", None) or name)
+
+
+def _body_error(
+    error: dict[str, Any], location: tuple[Any, ...], body_model: type[Any] | None
+) -> tuple[str, str]:
+    """One failure inside a request body, as the reference keys and words it.
+
+    Four answers, all four measured on `POST /Playlists` in one run
+    `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`:
+
+    * a **required property that is absent** - `"$"`, the deserialiser naming the type it was
+      building and the property it did not find;
+    * a value matching **no member of a declared vocabulary** - `"$"` as well, because the
+      converter throws while the document is still being read;
+    * that same required property present and **null** - the *property's* own name, because the
+      document deserialised and a validator refused the value;
+    * anything else that did not bind - the **empty string** and the fixed sentence, which is what
+      007 measured and is left exactly as it was.
+
+    The first two need a name only the model can supply, so a model that declares none falls back
+    to the last row rather than inventing one - which is what keeps every body 007 bound answering
+    what it answered before.
+    """
+    kind = str(error.get("type", ""))
+    name = _wire_name(body_model, str(location[-1]))
+    wire_type = str(getattr(body_model, "WIRE_TYPE", "") or "")
+    if kind.startswith("json_"):
+        # The text failing to parse is `json_invalid`, and its location is `("body", 0)` - a byte
+        # offset rather than a field, so the error's *type* tells the two apart, not `len()`.
+        return DESERIALISATION_KEY, str(error.get("msg", BODY_VALUE_INVALID))
+    if kind == "missing" and len(location) > 1 and wire_type:
+        return DESERIALISATION_KEY, MISSING_PROPERTY_MESSAGE.format(wire_type=wire_type, name=name)
+    if kind in VOCABULARY_MISMATCH:
+        vocabulary = dict(getattr(body_model, "WIRE_ENUM_TYPES", {})).get(name)
+        if vocabulary:
+            # The position is the offset inside the quoted token: the opening quote, the token,
+            # and the closing quote the reader stops at.
+            position = len(str(error.get("input", ""))) + 2
+            return DESERIALISATION_KEY, VOCABULARY_MESSAGE.format(
+                wire_type=vocabulary, position=position
+            )
+    if kind != "missing" and len(location) > 1 and error.get("input", "") is None:
+        # A null where the type declares a value. The deserialiser was happy; the property was not.
+        return name, PROPERTY_REQUIRED_MESSAGE.format(name=name)
+    return "", BODY_VALUE_INVALID
+
+
+def validation_errors(
+    raw: list[Any], body_parameter: str | None = None, body_model: type[Any] | None = None
+) -> dict[str, list[str]]:
     """The framework's validation failures, keyed and worded as the reference words them.
 
     The key is the **declared** parameter name rather than the spelling the client sent: a request
@@ -386,23 +507,24 @@ def validation_errors(raw: list[Any], body_parameter: str | None = None) -> dict
     route. `body_parameter` is that name, read from the route, because the framework here would
     otherwise key the **model's field**: `item_id`, in snake_case, on the wire.
     `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`, behaviours section 1.11.
+
+    **The action-parameter row is not universal, and 009 T8 measured what decides it.** It appears
+    when the route's body parameter is **required** and not otherwise: `POST /Playlists` declares
+    an optional body - every one of its four measured refusals names one key and no second one -
+    where 007's three reporting routes require theirs and name two. `body_parameter` is therefore
+    `None` for an optional body (`body_parameter_of`), and `_body_error` above carries the rest.
+    `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`
     """
     collected: dict[str, list[str]] = {}
     for error in raw:
         location = tuple(error.get("loc") or ("",))
-        if body_parameter is not None and location and location[0] == "body":
-            # The text failing to parse is `json_invalid`, and its location is `("body", 0)` -
-            # a byte offset rather than a field, so the error's *type* is what tells the two
-            # apart and `len(location)` is not.
-            unparseable = str(error.get("type", "")).startswith("json_")
-            key = "$" if unparseable else ""
-            message = (
-                str(error.get("msg", BODY_VALUE_INVALID)) if unparseable else BODY_VALUE_INVALID
-            )
+        if location and location[0] == "body":
+            key, message = _body_error(error, location, body_model)
             collected.setdefault(key, []).append(message)
-            required = f"The {body_parameter} field is required."
-            if required not in collected.setdefault(body_parameter, []):
-                collected[body_parameter].append(required)
+            if body_parameter is not None:
+                required = PROPERTY_REQUIRED_MESSAGE.format(name=body_parameter)
+                if required not in collected.setdefault(body_parameter, []):
+                    collected[body_parameter].append(required)
             continue
         name = str(location[-1])
         pattern = (error.get("ctx") or {}).get("pattern")
@@ -424,13 +546,45 @@ def body_parameter_of(request: Request) -> str | None:
     Read off the resolved route rather than guessed: the three reporting routes call theirs
     `playbackStartInfo`, `playbackProgressInfo` and `playbackStopInfo` after the reference's own
     parameters, and a route with no body at all answers `None` and keeps the old keying.
+
+    **An optional body answers `None` too, and that is a measurement rather than a shortcut.**
+    The reference names the action parameter in a refusal only where the parameter is required;
+    `POST /Playlists` takes an optional body and names one key per failure, never two
+    `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`.
     """
     route = request.scope.get("route")
     field = getattr(route, "body_field", None)
-    if field is None:
+    if field is None or not _required(field):
         return None
     name: str | None = getattr(field, "alias", None) or getattr(field, "name", None)
     return name
+
+
+def _required(field: Any) -> bool:
+    """Whether the route declares its body as required. `Body(None)` says it does not."""
+    info = getattr(field, "field_info", None)
+    is_required = getattr(info, "is_required", None)
+    return bool(is_required()) if callable(is_required) else True
+
+
+def body_model_of(request: Request) -> type[Any] | None:
+    """The model the route's body binds to, for the two sentences only it can spell.
+
+    A refusal that names the reference's own type (`MISSING_PROPERTY_MESSAGE`) or the enumeration
+    behind one of its properties (`VOCABULARY_MESSAGE`) cannot be written from the failure alone -
+    the names are facts about the reference, declared on the model that reproduces it. This reads
+    the class off the resolved route so the handler stays global; a route with no body, or one
+    whose model declares neither name, falls back to the shape 007 measured.
+
+    The annotation is unwrapped because an **optional** body is declared `Model | None`, and that
+    is exactly the shape the only route needing this declares.
+    """
+    field = getattr(request.scope.get("route"), "body_field", None)
+    annotation = getattr(getattr(field, "field_info", None), "annotation", None)
+    candidates = get_args(annotation) or (annotation,)
+    return next(
+        (one for one in candidates if isinstance(one, type) and hasattr(one, "model_fields")), None
+    )
 
 
 async def validation_handler(request: Request, exc: Exception) -> Response:
@@ -448,7 +602,7 @@ async def validation_handler(request: Request, exc: Exception) -> Response:
         400,
         VALIDATION_TITLE,
         PROBLEM_TYPE_BAD_REQUEST,
-        validation_errors(list(raw), body_parameter_of(request)),
+        validation_errors(list(raw), body_parameter_of(request), body_model_of(request)),
     )
 
 
@@ -533,6 +687,10 @@ async def delivery_source_handler(_request: Request, _exc: Exception) -> Respons
     return controller_error(400)
 
 
+async def playlist_creation_handler(_request: Request, _exc: Exception) -> Response:
+    return controller_error(400)
+
+
 async def delivery_production_handler(_request: Request, _exc: Exception) -> Response:
     """The `500` a production that could not start answers, with the header it already wrote.
 
@@ -607,6 +765,10 @@ EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     # is the measured `400`, and a production that could not start is the measured `500`.
     DeliverySourceError: delivery_source_handler,
     DeliveryProductionError: delivery_production_handler,
+    # 009 T8's, and it is the third shape at `400` for a third reason: the route walked the id
+    # list it was given and refused it. A row of its own rather than a `DeliverySourceError`
+    # because the class is read at the raise site, where "no such media source" would be false.
+    PlaylistCreationError: playlist_creation_handler,
     # 011 T7's two, and they are the same shape at two statuses again - but split differently
     # from the pair above: on the subtitle fetch routes a `mediaSourceId` naming nothing is the
     # `500` and not the `400`, which is the whole reason they are their own classes.
@@ -626,6 +788,7 @@ __all__ = [
     "PATTERN_MISMATCH",
     "PROBLEM_TYPE_BAD_REQUEST",
     "PROBLEM_TYPE_NOT_FOUND",
+    "PROPERTY_REQUIRED_MESSAGE",
     "ROUTING_REFUSALS",
     "VALIDATION_TITLE",
     "AccountUnavailableError",
@@ -640,6 +803,7 @@ __all__ = [
     "InvalidCredentialsError",
     "ItemNotFoundError",
     "NotFoundError",
+    "PlaylistCreationError",
     "SubtitleRequestError",
     "SubtitleUnavailableError",
     "UnauthenticatedError",
