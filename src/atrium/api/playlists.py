@@ -60,7 +60,18 @@ route's twenty bytes - so a write cannot be used to learn that a private playlis
 caller who may read it and may not edit it is `403` with **no body and no content type**, which is
 the other of the two `403`s this feature ships (`EmptyForbiddenError`).
 
-See specs/009-playlists/spec.md sections 3.2, 3.3, 3.4 and 3.5, and plan sections 6.1 and 6.2.
+## `Move` - one route, three bindings, and two refusals the reference does not make
+
+The move is the one piece of arithmetic this feature cannot simplify, and it lives in
+`domain/playlists.py` rather than here: this route decides *who* and *what*, and the domain
+decides *where*. What is local to the route is that its three path segments bind three different
+ways on the reference - the playlist id through the framework's parser, the entry id as text
+matched against the 32-hex spelling, the index as an integer - so a dashed playlist id addresses
+the playlist and a dashed **entry** id addresses nothing
+`[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+See specs/009-playlists/spec.md sections 3.2, 3.3, 3.4 and 3.5, and plan sections 6.1, 6.2
+and 6.4.
 """
 
 from __future__ import annotations
@@ -86,6 +97,7 @@ from atrium.compat.errors import (
     EmptyForbiddenError,
     EmptyIdentifierError,
     PlaylistCreationError,
+    PlaylistMoveError,
     PlaylistNotFoundError,
 )
 from atrium.compat.guids import CANONICAL, WireGuid, new_id, normalise
@@ -94,7 +106,13 @@ from atrium.db.engine import session_scope
 from atrium.db.item_queries import HydratedItem, ItemQueryRepository
 from atrium.db.repositories import LibraryRepository, PlaylistRepository, UserRepository
 from atrium.domain.items import FILE_BACKED, MEDIA_TYPE_OF, ItemType
-from atrium.domain.playlists import Playlist, Share, may_edit, may_read
+from atrium.domain.playlists import (
+    MoveIndexOutOfRangeError,
+    Playlist,
+    Share,
+    may_edit,
+    may_read,
+)
 from atrium.domain.queries import ItemQuery
 from atrium.domain.user import User
 
@@ -102,6 +120,7 @@ router = APIRouter(tags=["Playlists"])
 
 ROUTE = "/Playlists"
 ITEMS_ROUTE = "/Playlists/{playlistId}/Items"
+MOVE_ROUTE = "/Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}"
 
 #: The reference's `MediaType` vocabulary, verbatim `[spec: MediaType]`. Five values, and the two
 #: this server can store are a subset of them: a playlist built from a directory answers `Unknown`
@@ -652,4 +671,60 @@ async def remove_from_playlist(
         playlists = PlaylistRepository(opened, queries)
         playlist = _editable(playlists, playlistId, caller)
         playlists.remove(playlist.id, _identifiers(entryIds))
+    return Response(status_code=204)
+
+
+@router.post(MOVE_ROUTE, status_code=204)
+async def move_playlist_item(
+    request: Request,
+    caller: Annotated[User, Depends(require_user)],
+    playlistId: WireGuid,  # noqa: N803
+    itemId: str,  # noqa: N803 - a string on purpose; the docstring below is why
+    newIndex: int,  # noqa: N803
+) -> Response:
+    """`MoveItem` `[spec: MoveItem]`. `204`, and the arithmetic is not here.
+
+    **Three path segments, three different bindings, and the reference has all three.** The
+    playlist id is *parsed*, by the controller rather than by the binder, so a **dashed** one
+    addresses the same playlist and a malformed one is an unhandled `500`
+    `[source: Jellyfin.Api/Controllers/PlaylistsController.cs:409-431 @ v10.11.11]`; the entry id
+    is never parsed at all and is compared as text against the plain 32-character spelling, so a
+    dashed entry id matches **nothing** and an upper-case one matches
+    `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:308-323 @ v10.11.11]`; and
+    the index is a route-bound integer, so `Move/banana` is the model binder's validation `400`
+    keyed `newIndex` - the one refusal on this route that needs no code. All three measured
+    `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+    So `itemId` is **not** a `WireGuid` and is not passed through `normalise`, which is the
+    opposite of every other identifier in this module: normalising it would move an entry on a
+    request that moves nothing on a reference server, and the caller would see it in the order
+    that comes back. Case is folded and nothing else is.
+
+    **The refusals are in the reference's own order**, which is measured rather than deduced: a
+    caller who may not edit is refused `403` even when the index is one the reference crashes on
+    `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-09-01]`. So `_editable` runs
+    first - `404` in the read route's twenty bytes, then the body-less `403` - and only then is
+    the index judged, before the entry is looked up (009 plan section 6.4.1).
+
+    **The two refusals the reference does not make** are both `400` in the bare-text shape, and
+    the bytes are the ones its own `500` carries so the status is the whole difference: an index
+    past the caller's entry count, and a negative one (behaviours section 3.15). Everything else
+    is `204` - a move, a no-op, and an entry id that is not in this caller's list, whether it is
+    absent, all zeros or not an identifier at all. The all-zeros id is **not** the refusal it is
+    on the add route, because nothing here looks an item up.
+
+    **No `userId`, and that is the reference's shape** `[spec: MoveItem]`: this route reads the
+    calling user's identity, as the removal beside it does, so there is no `effective_user` call
+    and no way to move an entry on somebody else's behalf.
+    """
+    with session_scope(get_sessions(request)) as opened:
+        queries = ItemQueryRepository(opened)
+        playlists = PlaylistRepository(opened, queries)
+        playlist = _editable(playlists, playlistId, caller)
+        try:
+            playlists.reorder(
+                playlist.id, itemId.lower(), newIndex, playlists.entries(playlist.id, caller)
+            )
+        except MoveIndexOutOfRangeError as refused:
+            raise PlaylistMoveError(str(refused)) from refused
     return Response(status_code=204)

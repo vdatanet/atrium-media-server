@@ -1194,3 +1194,369 @@ async def test_a_video_genre_settles_video_and_expands_to_nothing(
     )
     assert await entries(client, playlist_id) == []
     assert (await item(client, playlist_id))["MediaType"] == "Video"
+
+
+# --------------------------------------------------------------------------------------------
+# `POST /Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}` - the move (T11)
+# --------------------------------------------------------------------------------------------
+#
+# Every row below is a transcription of a measured run, not a derivation of the model the domain
+# implements `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-09-01]`. The matrix is
+# thirty pairs because spec section 6 asks for it as a test and because the model it checks was
+# once derived from a single measured pair.
+
+#: The five sources moved to each of the six targets, as the reference answered them, with the
+#: entries labelled `A`..`E` in stored order. Thirty rows, all `204`.
+MEASURED_MATRIX = {
+    "A": ("ABCDE", "BACDE", "BCADE", "BCDAE", "BCDEA", "BCDEA"),
+    "B": ("BACDE", "ABCDE", "ACBDE", "ACDBE", "ACDEB", "ACDEB"),
+    "C": ("CABDE", "ACBDE", "ABCDE", "ABDCE", "ABDEC", "ABDEC"),
+    "D": ("DABCE", "ADBCE", "ABDCE", "ABCDE", "ABCED", "ABCED"),
+    "E": ("EABCD", "AEBCD", "ABECD", "ABCED", "ABCDE", "ABCDE"),
+}
+
+LABELS = "ABCDE"
+
+
+def dashed(identifier: str) -> str:
+    """The other spelling of one identifier - accepted on one segment of this path and not both."""
+    parts = (
+        identifier[:8],
+        identifier[8:12],
+        identifier[12:16],
+        identifier[16:20],
+        identifier[20:],
+    )
+    return "-".join(parts)
+
+
+async def move(
+    client: httpx.AsyncClient, playlist_id: str, entry: str, new_index: int | str
+) -> httpx.Response:
+    return await client.post(f"/Playlists/{playlist_id}/Items/{entry}/Move/{new_index}")
+
+
+async def five_entries(client: httpx.AsyncClient, world: QueryWorld) -> str:
+    """A fresh five-entry playlist, one per case: a case asking *did anything move* cannot share."""
+    named = list(world.corpus[0:5])
+    playlist_id = await created_id(
+        await client.post("/Playlists", json={"Name": "T11", "Ids": named})
+    )
+    assert await entries(client, playlist_id) == named
+    return playlist_id
+
+
+@pytest.mark.parametrize("source", list(LABELS))
+async def test_ac9_the_thirty_measured_pairs_over_http(
+    client: httpx.AsyncClient, world: QueryWorld, source: str
+) -> None:
+    """AC-9, and the matrix spec section 6 asks for - at the boundary, one fresh playlist a pair.
+
+    T1 proved the arithmetic against these same thirty answers; this proves the **route** reaches
+    it, which is a different claim: a route that read the stored order where it should read the
+    caller's, or judged the index after the entry, passes every unit test the domain has.
+
+    `0 -> 3` giving `B C D A E` is one row of it, and the row a client author can get wrong
+    without noticing - every upward move agrees under both readings
+    `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    for target, expected in enumerate(MEASURED_MATRIX[source]):
+        playlist_id = await five_entries(client, world)
+        named = await entries(client, playlist_id)
+        labelled = dict(zip(LABELS, named, strict=True))
+
+        answered = await move(client, playlist_id, labelled[source], target)
+        assert answered.status_code == 204, answered.content
+        assert answered.content == b""
+
+        landed = await entries(client, playlist_id)
+        assert landed == [labelled[one] for one in expected], f"{source} -> {target}"
+        assert set(landed) == set(named), "a move reissues no entry id (AC-9)"
+
+
+@pytest.mark.parametrize(
+    ("case", "new_index", "entry", "status"),
+    [
+        ("the last index", 4, "own", 204),
+        ("one past the end, which is the clamp", 5, "own", 204),
+        ("two past the end", 6, "own", 400),
+        ("negative", -1, "own", 400),
+        ("where it already is", 0, "own", 204),
+        ("an absent entry, index in range", 1, ABSENT_ID, 204),
+        ("an absent entry, index past the end", 6, ABSENT_ID, 400),
+        ("the all-zeros entry, index in range", 1, EMPTY_GUID, 204),
+        ("the all-zeros entry, index past the end", 6, EMPTY_GUID, 400),
+        ("a malformed entry, index in range", 1, "not-an-identifier", 204),
+        ("a malformed entry, index past the end", 6, "not-an-identifier", 400),
+    ],
+)
+async def test_ac10_and_ac11_every_row_of_the_boundary_table(
+    client: httpx.AsyncClient,
+    world: QueryWorld,
+    case: str,
+    new_index: int,
+    entry: str,
+    status: int,
+) -> None:
+    """Spec section 3.5's third column, row by row, and the table it replaced had one row right.
+
+    The clamp is exactly **one** position wide: index 5 on a five-entry playlist puts the entry
+    last and index 6 is the reference's `500`, which Atrium answers `400` (behaviours section
+    3.15). A negative index moves the entry to position 1 there and moves nothing here. An entry
+    id that is not in the playlist is a silent `204` with the index in range and the refusal with
+    it out of range, because the index is judged **before** the entry is looked up - parity, and
+    the row the specification had wrong for the longest.
+
+    The all-zeros identifier is **not** the refusal it is on the add route, and the malformed one
+    is not the binder's `400`: neither segment is parsed here, so both are simply entries this
+    playlist does not hold `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    playlist_id = await five_entries(client, world)
+    before = await entries(client, playlist_id)
+    addressed = before[0] if entry == "own" else entry
+
+    answered = await move(client, playlist_id, addressed, new_index)
+    assert answered.status_code == status, answered.content
+
+    if status == 400:
+        assert answered.content == CONTROLLER_BODY
+        assert answered.headers["content-type"] == "text/plain"
+        assert await entries(client, playlist_id) == before, "a refused move moves nothing"
+        return
+
+    landed = await entries(client, playlist_id)
+    assert set(landed) == set(before)
+    if entry != "own":
+        assert landed == before, "an entry the playlist does not hold changes nothing"
+    elif new_index == 0:
+        assert landed == before, "moving an entry where it already is changes nothing"
+    else:
+        assert landed == [*before[1:], before[0]], "the clamp puts the entry last"
+
+
+@pytest.mark.parametrize(
+    ("spelling", "moves"),
+    [("canonical", True), ("upper-case", True), ("dashed", False), ("braced", False)],
+)
+async def test_the_entry_segment_is_matched_as_text_and_not_parsed(
+    client: httpx.AsyncClient, world: QueryWorld, spelling: str, moves: bool
+) -> None:
+    """The finding this task turned on: `itemId` is **not** an identifier on this route.
+
+    The reference compares it against the 32-hex spelling of each entry, case-insensitively, and
+    parses nothing `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:308-323 @
+    v10.11.11]` - so an upper-case id moves the entry and a **dashed** one, which every other
+    route in this feature accepts, moves nothing at all
+    `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-09-01]`. Normalising it the way
+    the add route normalises its list would reorder a playlist no reference server reorders, and
+    the caller would see it in the order that comes back.
+    """
+    playlist_id = await five_entries(client, world)
+    before = await entries(client, playlist_id)
+    addressed = {
+        "canonical": before[0],
+        "upper-case": before[0].upper(),
+        "dashed": dashed(before[0]),
+        "braced": "{" + before[0] + "}",
+    }[spelling]
+
+    answered = await move(client, playlist_id, addressed, 1)
+    assert answered.status_code == 204, answered.content
+    landed = await entries(client, playlist_id)
+    assert landed == ([before[1], before[0], *before[2:]] if moves else before)
+
+
+async def test_the_playlist_segment_is_parsed_where_the_entry_segment_is_not(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """One path, two identifier segments, two spellings of one value - and both are measured.
+
+    A dashed **playlist** id addresses the playlist, because the reference hands that segment to
+    the framework's parser `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-09-01]`.
+    That asymmetry is the whole reason `playlistId` is a `WireGuid` here and `itemId` is a string.
+    """
+    playlist_id = await five_entries(client, world)
+    before = await entries(client, playlist_id)
+
+    answered = await move(client, dashed(playlist_id), before[0], 1)
+    assert answered.status_code == 204, answered.content
+    assert await entries(client, playlist_id) == [before[1], before[0], *before[2:]]
+
+
+async def test_a_malformed_playlist_id_is_the_binders_400_here_too(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """The fourth request of behaviours section 3.19, on the third route to have one.
+
+    This route parses `playlistId` inside the action as the **removal** does, not as the addition
+    does, so a malformed one is an unhandled `500` in the bare-text shape
+    `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-09-01]`
+    `[source: Jellyfin.Api/Controllers/PlaylistsController.cs:409-431 @ v10.11.11]`. Atrium
+    answers the validation `400` on all three write routes: one shape for one path.
+    """
+    answered = await move(client, "not-an-identifier", world.corpus[0], 1)
+    assert answered.status_code == 400, answered.content
+    assert validation_body(answered) == problem(
+        {"playlistId": ["The value 'not-an-identifier' is not valid."]}
+    )
+
+
+async def test_a_new_index_that_is_not_a_number_is_the_binders_400_and_that_is_parity(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """The one refusal on this route that needs no code, and it is keyed by the path parameter.
+
+    Measured as the 261-byte problem-details document keyed `newIndex`, which is T9's path-binder
+    shape and not the body's `The supplied value is invalid.`
+    `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    playlist_id = await five_entries(client, world)
+    before = await entries(client, playlist_id)
+
+    answered = await move(client, playlist_id, before[0], "banana")
+    assert answered.status_code == 400, answered.content
+    assert validation_body(answered) == problem({"newIndex": ["The value 'banana' is not valid."]})
+    assert await entries(client, playlist_id) == before
+
+
+@pytest.mark.parametrize("case", ["absent", "not-a-playlist", "invisible"])
+async def test_the_move_answers_the_twenty_bytes_before_anything_else(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld, case: str
+) -> None:
+    """T9's fourth shape on the third write route, and it is reached before the index is judged."""
+    if case == "absent":
+        target = ABSENT_ID
+    elif case == "not-a-playlist":
+        target = world.private_playlist.entries[0]
+    else:
+        target = world.private_playlist.id
+        as_user(harness, world.restricted)
+
+    answered = await move(client, target, world.corpus[0], 99)
+    assert answered.status_code == 404, answered.content
+    assert answered.content == b'"Playlist not found"'
+    assert answered.headers["content-type"] == "application/json; charset=utf-8"
+
+
+@pytest.mark.parametrize("refused", ["read-only share", "public reader", "administrator"])
+@pytest.mark.parametrize("new_index", [1, 99])
+async def test_ac13_and_ac14_the_move_refusal_is_the_body_less_403(
+    client: httpx.AsyncClient,
+    harness: Harness,
+    world: QueryWorld,
+    refused: str,
+    new_index: int,
+) -> None:
+    """AC-13 and AC-14 on the route they were written for, and the order is measured.
+
+    **The caller is judged before the index**, which is not deducible from the arithmetic: a
+    shared reader without `CanEdit` moving to an index the reference crashes on is answered `403`
+    and not `500` `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-09-01]`. So
+    `99` and `1` are the same refusal here, and the `400` this route makes its own is only
+    reachable by a caller who may edit.
+    """
+    playlist, user = {
+        "read-only share": (world.read_only_playlist, world.restricted),
+        "public reader": (world.public_playlist, world.restricted),
+        "administrator": (world.public_playlist, harness.admin),
+    }[refused]
+    as_user(harness, user)
+
+    # The entry comes from the fixture rather than from a read: the public playlist holds the
+    # three tracks and `restricted` cannot open the music library, so that reader is shown an
+    # empty playlist (T9's finding) - and the refusal below happens before any entry is looked up.
+    answered = await move(client, playlist.id, playlist.entries[0], new_index)
+    assert answered.status_code == 403, answered.content
+    assert answered.content == b""
+    assert "content-type" not in answered.headers
+
+
+async def test_ac17_a_readers_move_indexes_the_list_that_reader_was_given(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """AC-17's second half, and this feature's one rule with no reference answer behind it.
+
+    The reference indexes the entries the caller can see and then inserts at the neighbour's
+    position in the order *before* the entry was removed, so a downward move by a reader who is
+    shown less than the whole lands one position short of where they asked - and it will reorder
+    an entry that reader was never shown. Neither is reachable against a reference server, because
+    what it hides is hidden by a parental-rating check and never by library access (behaviours
+    section 3.17), so Atrium's rule is argued from that divergence rather than transcribed: the
+    entry lands at `newIndex` **of the list the reader was given**.
+    """
+    playlist = world.cross_library_playlist
+    seen = list(playlist.restricted_sees)
+    as_user(harness, world.restricted)
+
+    answered = await move(client, playlist.id, seen[0], 1)
+    assert answered.status_code == 204, answered.content
+    assert await entries(client, playlist.id) == [seen[1], seen[0], seen[2]]
+
+    as_user(harness, world.everyone)
+    stored = await entries(client, playlist.id)
+    assert stored == [playlist.entries[1], seen[1], seen[0], seen[2], playlist.entries[4]]
+    assert set(stored) == set(playlist.entries), "no entry the reader cannot see is reissued"
+
+
+async def test_ac17_an_entry_the_reader_cannot_see_is_answered_as_an_absent_one(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """The other half of the same rule: `204`, and nothing changes.
+
+    The reference moves it, because the list it looks the entry up in is not the list it bounded
+    the index against. Under behaviours section 3.17 that entry is one this reader was never
+    shown, so no client can have been built on reordering it.
+    """
+    playlist = world.cross_library_playlist
+    hidden = playlist.beyond_restricted[0]
+    as_user(harness, world.restricted)
+
+    # Index 3 and not 1: the hidden entry is *stored* at index 1, so a route that indexed the
+    # stored order would answer this case with a no-op and the test would pass for the wrong
+    # reason. It is the last index this reader may name, and it moves the entry under any reading
+    # that reaches it at all.
+    answered = await move(client, playlist.id, hidden, 3)
+    assert answered.status_code == 204, answered.content
+
+    as_user(harness, world.everyone)
+    assert await entries(client, playlist.id) == list(playlist.entries)
+
+
+async def test_a_readers_index_is_bounded_by_what_that_reader_was_given(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """The bound moves with the view, which is the half of the rule that **is** parity.
+
+    The reference bounds `newIndex` against the accessible children too, which is why one past
+    that count is the last position and two past it is its `500`. Three visible entries of five:
+    index 3 is the clamp and index 4 is the refusal.
+    """
+    playlist = world.cross_library_playlist
+    seen = list(playlist.restricted_sees)
+    as_user(harness, world.restricted)
+
+    assert (await move(client, playlist.id, seen[0], len(seen))).status_code == 204
+    assert await entries(client, playlist.id) == [*seen[1:], seen[0]]
+
+    refused = await move(client, playlist.id, seen[0], len(seen) + 1)
+    assert refused.status_code == 400, refused.content
+    assert refused.content == CONTROLLER_BODY
+    assert refused.headers["content-type"] == "text/plain"
+
+
+async def test_the_move_route_declares_the_references_parameters_and_no_others(
+    app: FastAPI,
+) -> None:
+    """No `userId`, which is the reference's own shape rather than an omission `[spec: MoveItem]`.
+
+    Asserted against the generated document for AC-8's reason: a parameter is discovered there,
+    and one this route does not have would be a lever no reference server offers.
+    """
+    operation = app.openapi()["paths"]["/Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}"]
+    parameters = operation["post"]["parameters"]
+    assert [one["name"] for one in parameters if one["in"] == "path"] == [
+        "playlistId",
+        "itemId",
+        "newIndex",
+    ]
+    assert [one["name"] for one in parameters if one["in"] == "query"] == []

@@ -775,7 +775,7 @@ one migration; it is one migration, four maps and a clause.
 
 ## T11 — `Move`, and the two refusals the reference does not make
 
-- [ ] **Changes:** the move route over T1's `moved`. `204` for a move, for a no-op, and for an entry
+- [x] **Changes:** the move route over T1's `moved`. `204` for a move, for a no-op, and for an entry
   id that is not in the playlist with an in-range index; `400` for an index past the visible length
   or below zero — behaviours §3.15 — **and the index is judged before the entry is looked up**, so
   an absent entry with an out-of-range index is the refusal. **And the caller who may not edit is
@@ -787,6 +787,49 @@ one migration; it is one migration, four maps and a clause.
   `0 → 3` giving `B C D A E` over HTTP with entry ids unchanged, and each boundary row answering
   what spec §3.5's third column says.
 - **Spec reference:** §3.5, AC-9, AC-10, AC-11
+
+> **Done (2026-09-01).** *The task was written as one arithmetic behind one identifier, and the
+> route has **three path segments that bind three different ways**.* The playlist id is parsed, so
+> a dashed one addresses the playlist. The **entry** id is not parsed at all: the reference
+> compares it as text against the plain 32-character spelling of each entry, case-insensitively,
+> so an upper-case entry id moves the entry and a **dashed or braced one moves nothing**
+> `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-09-01]`
+> `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:308-323 @ v10.11.11]`. This
+> is therefore the one route in the feature that must **not** canonicalise the identifier it is
+> handed — `_identifiers()` and `WireGuid` are both the wrong tool here, and either would have
+> reordered a playlist no reference server reorders, visibly, in the order the caller gets back.
+> It is also why an entry id that is malformed or all zeros is a silent `204` and not a refusal:
+> nothing on this route looks an item up, so `EmptyIdentifierError` must not be reachable from it.
+>
+> *And the two refusals the task did name are not the first two the route makes.* T10's open
+> question — is a malformed playlist id the binder's `400` or the removal's `500` — is answered
+> `500`: this action parses the segment itself, exactly as the removal does and unlike the
+> addition on the same path `[source: Jellyfin.Api/Controllers/PlaylistsController.cs:409-431 @
+> v10.11.11]`. That is behaviours §3.19's **fourth** request, answered here with the validation
+> `400` like the other two. And the order the whole route hangs on was measured rather than
+> deduced: a shared reader without `CanEdit` naming an index the reference crashes on is answered
+> **`403`**, not `500` `[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-09-01]`.
+> So `_editable` runs before the arithmetic, "the index is judged before the entry" is a rule
+> *inside* `moved` and not a rule of the route, and the `400` this feature makes its own is
+> reachable only by a caller who may edit. Plan §6.4.1 said neither; it does now.
+>
+> *One test passed for the wrong reason, and it was the one test with no reference answer behind
+> it.* AC-17's *"an entry the reader cannot see is answered as an absent one"* was first written
+> as a move of the hidden entry to index 1 — and that entry is **stored** at index 1, so a route
+> indexing the stored order would have answered it with a no-op and the assertion would have held.
+> Caught by deletion, by hand: with the route reading the stored order in place of the caller's,
+> two of the three AC-17 tests failed and that one did not. It names index 3 now, the last index
+> that reader may name, which no reading can reach without moving something.
+>
+> *Two routine calls, taken rather than escalated.* **The `400` is a class of its own**
+> (`PlaylistMoveError`) rather than `PlaylistCreationError` reused for its bytes: the classes in
+> `compat/errors.py` are read where they are raised, and that one's docstring is a statement about
+> `Ids` and a `Name`. **The route declares no `userId`**, which is the reference's own shape
+> `[spec: MoveItem]` — the removal beside it declares none either, and a parameter this route does
+> not have would be a lever no reference server offers, asserted against the generated document
+> the way AC-8 is. Every clause was checked by deletion: normalising the entry id fails two tests,
+> testing the caller after the index fails four, and reading the stored order in place of the
+> caller's fails three.
 
 ## T12 — `DELETE /Items/{itemId}`: three refusals, one of them ours
 

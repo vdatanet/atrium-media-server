@@ -325,6 +325,21 @@ class PlaylistCreationError(Exception):
     """
 
 
+class PlaylistMoveError(Exception):
+    """`Move` was given an index this server refuses. The same third shape at `400`.
+
+    009's third divergence (behaviours section 3.15): the reference answers an index past the
+    caller's entry count with **`500`** and the fixed 25 bytes, and a **negative** one with `204`
+    and a move nobody asked for. Atrium refuses both, in the *same* bytes the `500` carries, so
+    the status line is the whole of the difference - the argument section 3.19 makes one route
+    away `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+    Deliberately not `PlaylistCreationError`, whose docstring is a statement about `Ids` and a
+    `Name` and would be false at the raise site: the classes in this module are read where they
+    are raised, and one shape shared by two reasons is two classes.
+    """
+
+
 class EmptyIdentifierError(Exception):
     """An identifier of all zeros arrived where an item was expected. The same third shape.
 
@@ -775,6 +790,10 @@ async def empty_identifier_handler(_request: Request, _exc: Exception) -> Respon
     return controller_error(400)
 
 
+async def playlist_move_handler(_request: Request, _exc: Exception) -> Response:
+    return controller_error(400)
+
+
 async def empty_forbidden_handler(_request: Request, _exc: Exception) -> Response:
     """The `403` with nothing in it - beside `unauthenticated_handler`, whose group it shares.
 
@@ -875,6 +894,10 @@ EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     # places that happens (009 spec section 3.7, AC-13, AC-14).
     EmptyIdentifierError: empty_identifier_handler,
     EmptyForbiddenError: empty_forbidden_handler,
+    # 009 T11's, and it is the third shape at `400` for a third reason again: an index outside
+    # the entries this caller can see. The bytes are the ones the reference's own `500` carries,
+    # so the status is the whole divergence (behaviours section 3.15).
+    PlaylistMoveError: playlist_move_handler,
     # 009 T9's, and it is the *fourth* shape at `404` - the one status this project had
     # thought settled. The playlist read route answers a JSON-encoded bare string where
     # every `NotFoundError` beside it answers problem details, so the row exists to keep
@@ -918,6 +941,7 @@ __all__ = [
     "ItemNotFoundError",
     "NotFoundError",
     "PlaylistCreationError",
+    "PlaylistMoveError",
     "PlaylistNotFoundError",
     "SubtitleRequestError",
     "SubtitleUnavailableError",
@@ -934,6 +958,7 @@ __all__ = [
     "invalid_credentials_handler",
     "message_error",
     "not_found_handler",
+    "playlist_move_handler",
     "playlist_not_found_handler",
     "problem_details",
     "routing_handler",
