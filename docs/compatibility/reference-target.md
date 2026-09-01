@@ -14,6 +14,7 @@ compatible with what, exactly?*
 | API contract | Jellyfin `10.11.11` OpenAPI document |
 | Behavioural reference | Jellyfin `10.11.11` source and a running instance |
 | Version Atrium reports | `10.11.11` — see §4 |
+| Reference instance image | The published Jellyfin `10.11.11` image, **pinned by digest** — [ADR-0007](../decisions/0007-a-container-runtime-for-the-reference-instance.md). The digest is written into this row by the task that lands the single-use instance; until then no run has one to print |
 
 The reasoning for pinning, and for pinning to this particular line rather than `master`, is in
 [ADR-0004](../decisions/0004-pin-to-jellyfin-10-11.md).

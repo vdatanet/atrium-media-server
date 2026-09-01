@@ -40,7 +40,8 @@ here — 53 probes and `tools/extract_v1_surface.py`'s hand-written `parse_surfa
 that HTTP, JSON and this project's own YAML subset are reachable from the standard library — and it
 buys the property the feature is about: **the thing that decides whether the server is right does
 not depend on the server's own dependency set.** It is nonetheless a project-level constraint on a
-component the size of this one, so it is D-2 in §11.
+component the size of this one, so it was put to its owner as D-2 in §11 — and **decided on
+2026-09-01 as no change**: `tools/`, standard library, the 3.9 floor.
 
 **Rows are compared by position, and a difference in order is its own class.** OQ-1 killed every
 join key the wire could have offered (spec §3.2), so position is what is left — which promotes the
@@ -70,7 +71,8 @@ requirement declared on UpdateInitialConfiguration, UpdateStartupUser, CompleteW
 AddVirtualFolder and CreateUserByName]` — waits for the scan, runs the comparison, and destroys the
 instance and everything it wrote. Single use, so a leak inside it is harmless; owned by the run, so its
 destruction is a `finally` and a startup sweep rather than a discipline. §6.5, §6.6. **The runtime
-this introduces is not this plan's to adopt** — D-1 in §11.
+this introduces is adopted, and it has a record of its own** — D-1 in §11, taken on 2026-09-01 as
+[ADR-0007](../../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md).
 
 **Identity is a dimension of every request, not a mode of the run.** Spec §3.9 measured 12 of 23
 reads answering differently to a restricted non-administrator, two of them as *shorter lists*. A
@@ -105,12 +107,14 @@ because the debt was *paid* under a different script name and nobody struck the 
 | An acceptance criterion is bound to the test that proves it by a map the suite reads | `tests/conformance/test_acceptance.py` (001 T19, 003 T21) |
 | Never copy Jellyfin's code; running its published server is reading the reference, not forking it | Principle IV |
 
-**Deviations:** one, and it is D-1 rather than a decision taken here.
+**Deviations:** one, and it is D-1, decided on 2026-09-01.
 [architecture §5](../../docs/architecture.md#5-deployment-shape) says the deployment shape is one
 process and *"no second service"*. A fixture run starts a second service — a Jellyfin — for the
 length of one comparison. That is a **development-time** dependency of a tool and not a deployment
-decision, and nothing a user installs gains anything by it; but the runtime it needs is a
-project-level choice with an ADR's shape, so §11 asks for one rather than assuming it.
+decision, and nothing a user installs gains anything by it; the runtime it needs is nonetheless a
+project-level choice with an ADR's shape, and it now has one:
+[ADR-0007](../../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md), with
+`architecture.md` §2 and §5 carrying the cross-reference.
 
 ## 3. Modules
 
@@ -167,7 +171,8 @@ reads, with a test asserting the prose says what the file says. The prose stays,
 Atrium from outside, exactly as it compares a running Jellyfin, and a comparison that imported the
 server's own code could agree with it by construction — which is 008 T16's lesson in this
 feature's own shape: *a test that compared Atrium against itself passed while the contract was
-broken*. The one place the server is touched is §6.8's ignored-parameter report, which is D-5.
+broken*. The one place the server is touched is §6.8's ignored-parameter report, which is D-5 —
+**taken**, in the smallest shape that report allows.
 
 ## 4. Data model
 
@@ -434,14 +439,25 @@ different mount point — or they name this spec's own §7. Two of those seven h
 section already and are simply not citing it (`X-Response-Time-ms` is §1.9; the `Similar` array is
 now §3.23 and §3.24), and one has none at all: **the random `ChildCount` is recorded in
 `conformance.md`'s allowlist table and in spec §3.3, and nowhere in `behaviours.md`.** So AC-6
-needs either seven new entries or a rule that distinguishes a *divergence* from a *derivation*.
-This plan proposes the second and does not take it: **D-3** in §11.
+needed either seven new entries or a rule that distinguishes a *divergence* from a *derivation*.
+This plan proposed the second, and **D-3 took it on 2026-09-01** — which is an amendment to an
+accepted spec, dated and recorded in its frontmatter.
 
 Where the entry is a divergence, `because` is the behaviours section and AC-6 is unchanged. Where it
 is a derivation, `because` is one of four declared classes, each of which is a fact about how the
 two servers are built rather than a difference either one chose: `derived-identifier`,
 `wall-clock`, `content-hash`, `installation-path`. A fifth class is not added without review, which
 is the discipline AC-6 was written for.
+
+**And the row that was neither was written rather than reclassified.** The reference's random
+`ChildCount` on a library view is now
+[behaviours §3.25](../../docs/compatibility/behaviours.md) — class B, diverged, on §3.0's first
+escape hatch, because a number redrawn on every request is one no client can have compensated for.
+It is also the entry that argues this section's scoping rule where a reader will look for it: the
+same property on a series, a season or the two-disc album is a real subtree aggregate on both
+servers. Spec §3.3's two tables now carry a `because` on every row of both, and so does
+[conformance.md](../../docs/compatibility/conformance.md#l3--differential)'s rendering of the same
+list.
 
 ### 6.4 The named comparisons
 
@@ -543,8 +559,17 @@ built for, and it asks one question: *given the fixture tree, what does a refere
 contain?* Its answer chooses between two paths this plan has already priced — the fixture is the
 media world plus the structural cases ported into it entry by entry (the mechanism §3.1 already
 uses for the five it owes), or the fixture is both trees as two libraries and AC-2's item count
-compares both. **D-4** in §11 records it, because it changes what the fixture task in the task list
-is.
+compares both. **D-4** in §11 records it — decided on 2026-09-01 **with its dependency stated**: the
+measurement cannot be taken before D-1's instance exists, because the only reachable Jellyfin is an
+operator's production server and adding a library to it is a write this project does not own. So the
+default holds until the instance can answer, and the answer changes what the fixture task in the
+task list is.
+
+**The order is therefore fixed, and it is the one thing about D-4 that must not be lost.** The task
+that lands `tools/_reference.py` comes first; `tools/probe_reference_scan.py` is that instance's
+**first run** and is the task that performs this measurement; the fixture task that ports the
+structural entries §3.1 owes reads the probe's answer and is written after it. Until then this is an
+open measurement with a default, not a measured result.
 
 ### 6.7 Identities
 
@@ -584,12 +609,18 @@ assuming it:
 
 So the report is not a matter of reading what is already written down. It is a change to a shipped
 module every request passes through, for the benefit of a report — which is a scope call rather
-than a task-level one, and it is **D-5**. If it is taken, the shape is the smallest one: `record`
-gains the client from the header `users/` already parses, and the tally is **written into the data
-directory** when the server stops, where the harness reads it beside the report it is writing
-anyway. **Not a route**: an endpoint serving the tally is an endpoint Jellyfin does not have, which
-is Principle I's first forbidden line and an extension a client could discover. If it is not taken,
-AC-10 is met at three columns and the fourth is recorded as a gap with the reason.
+than a task-level one, and it is **D-5**, **taken on 2026-09-01**. The shape is the smallest one:
+`record` gains the client from the header `users/` already parses, and the tally is **written into
+the data directory** when the server stops, where the harness reads it beside the report it is
+writing anyway. AC-10's four columns are therefore met rather than reduced to three.
+
+**Never a route, and this is where the reason is recorded so nobody reaches for one later.** An
+endpoint that served the tally would be an endpoint Jellyfin does not have — Principle I's first
+forbidden line, and an "optional" extension is still a delta because a client can discover it. The
+tally is diagnostic output of this server about itself; it leaves the process as a file in the data
+directory, which is a place `config/` already owns and no client can see, or it does not leave the
+process at all. A file also survives the shutdown that a route could not answer after, which is when
+the count is complete.
 
 ### 6.9 The version-bump command
 
@@ -643,7 +674,7 @@ usual one.
 |---|---|---|
 | Surface validation, L0, L1, L2, and this feature's own mutation proofs | **CI, every change** | Nothing beyond the repository — and this is the half that grows |
 | The L3 sweep against a reachable server | A contributor's machine, on demand | `.env` credentials and a Jellyfin somebody already has |
-| The fixture runs, the named comparisons that need one, and AC-2 | A contributor's machine, on demand | The runtime of D-1; **an instance this project stands up and destroys** |
+| The fixture runs, the named comparisons that need one, and AC-2 | A contributor's machine, on demand | The runtime of D-1 ([ADR-0007](../../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md)); **an instance this project stands up and destroys** |
 | Every probe, and the version bump | A contributor's machine, on demand and at a bump | The same |
 
 **No CI job contacts a Jellyfin server, and none starts one.** That is not a limitation this
@@ -684,9 +715,11 @@ false, and each changes something in the task list rather than in the prose:
    item-identity row names a `probe_item_ids.py` that does not exist beside a
    `probe_item_identity.py` that does and that ran at 003 T19. AC-9's real size is smaller than its
    register says, and its first task is the reconciliation.
-4. **AC-6, applied to the allowlist the spec ships, fails it.** Three of eight field rows and one of
-   three array rows name a `behaviours.md` section; the random `ChildCount` has no entry there at
-   all. §6.3 and D-3.
+4. **AC-6, applied to the allowlist the spec ships, failed it.** Three of eight field rows and one
+   of three array rows named a `behaviours.md` section; the random `ChildCount` had no entry there at
+   all. **Fixed on 2026-09-01 by D-3**: AC-6 refined to take a behaviours section or one of four
+   derivation classes, every row of both tables given a `because`, and behaviours §3.25 written.
+   §6.3.
 
 **And one thing this plan got wrong while writing it, kept because the next reader will reach for
 it too.** The obvious way for a harness to check that it has been pointed at the right two servers
@@ -728,10 +761,10 @@ not a server.
 | 3 | `tests/unit/test_allowlist.py` | Every endpoint of `surface.yaml` has at least one case in `request-cases.yaml`, and the coverage line counts what it ran |
 | 4 | `tests/conformance/test_differential.py` | The mutation table: a removed field → `MISSING_KEY`; an integer as a string → `TYPE`; a changed title → `VALUE`; a reordered array → `ORDER` and **not** N values; a shorter array → one `LENGTH` and no children |
 | 5 | `tests/conformance/test_differential.py` | The report's own ordering, asserted on a report built from a mixed finding set |
-| 6 | `tests/unit/test_allowlist.py` | An entry whose `because` names neither a behaviours section nor a declared class fails the load (subject to D-3) |
+| 6 | `tests/unit/test_allowlist.py` | An entry whose `because` names neither a behaviours section nor one of the four declared derivation classes fails the load, and a class outside the four fails it too — AC-6 as D-3 refined it |
 | 7, 8 | `tests/unit/test_probe_convention.py` | The sweep over `tools/probe_*.py`: reaches `_probe.main`, names a document and a section, declares `needs_writes` if it writes. `_probe.Probe.report` returning 1 on a contradiction is asserted directly |
 | 9 | `tests/unit/test_probe_convention.py` | Every open row of `reference-target.md`'s register names a script that exists, or carries a recorded reason it cannot — which is the assertion that would have caught §6.12's finding three |
-| 10 | `tests/conformance/test_differential.py` | The report's columns, over a recorder seeded by hand. Its fourth column is D-5 |
+| 10 | `tests/conformance/test_differential.py` | The report's four columns, over a recorder seeded by hand. The fourth is the client, which D-5 took: the recorder gains it, and the tally is asserted as a file in the data directory rather than a response |
 | 11 | CI, unchanged | The default job passes with no Jellyfin and no network — already true, enforced by `tests/conftest.py`'s socket guard, and the property the new tests must not cost. Nothing this feature adds carries `needs_reference`: the mutation proofs run on checked-in pairs |
 | 12 | `tests/unit/test_version_bump.py` | Each step made to fail in turn; the command stops and the later steps did not run |
 | 13 | `tests/unit/test_media_fixtures.py` (extended) | Every fixture file is generated by a declared entry — the existing rule, restated for the entries §3.1 owes |
@@ -809,56 +842,100 @@ triages, and the answer belongs to the feature that owns the endpoint, through b
 gate that accepted the spec found two such differences and left both to 005 — which is the procedure
 working, and a harness that had "fixed" them would have made a Principle I decision in a tool.
 
-## 11. Decisions this plan does not take
+## 11. The five decisions this plan reserved, taken on 2026-09-01
 
-Five, each a project-level call. Each states what it costs and what this plan recommends; none of
-them is taken here.
+**All five are decided.** Each was written here as a project-level call with a recommendation, and
+their owner accepted every recommendation on 2026-09-01. This section is now the record of what was
+taken, not a request. Nothing in this plan or in 010's spec is waiting on a decision; what the plan
+is still waiting on is its own gate.
 
-**D-1 · The runtime the reference instance needs.** A container runtime — Docker or Podman —
-invoked as a subprocess through its CLI, not through a Python SDK, so `tools/` keeps its
+| # | The call | Decided | Where it is written |
+|---|---|---|---|
+| D-1 | The runtime the reference instance needs | **Adopt a container runtime, with an ADR** | [ADR-0007](../../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md), [architecture §2 and §5](../../docs/architecture.md#2-runtime-stack), [reference-target §1](../../docs/compatibility/reference-target.md#1-the-pinned-version) |
+| D-2 | Where the harness lives, and under which floor | **No change** — `tools/`, standard library, Python 3.9 | Unchanged: [architecture §3](../../docs/architecture.md#3-repository-layout), §1 and §2 of this plan |
+| D-3 | AC-6, against the allowlist the spec ships | **Refine AC-6, and write the missing entry** | [010 spec AC-6 and §3.3](spec.md), [behaviours §3.25](../../docs/compatibility/behaviours.md), [conformance.md](../../docs/compatibility/conformance.md#l3--differential), §6.3 here |
+| D-4 | Which fixture world the reference instance is given | **Measure first — and the measurement waits on D-1** | §6.6 here |
+| D-5 | The ignored-parameter report's fourth column | **Take it**, written to the data directory and never to a route | §6.8 here |
+
+**D-1 · The runtime the reference instance needs — adopted.** A container runtime, Docker or
+Podman, invoked as a subprocess through its command line so that `tools/` keeps its
 standard-library-only rule. It is a **development** dependency: nothing a user installs is affected,
-and CI never has it, because no job may contact a Jellyfin server. *Recommendation: adopt it, with
-an ADR, and pin the image by digest in `reference-target.md` beside the two version rows it already
-pins.* The harness must degrade without it: `--reference-url` accepts an instance somebody else
-stood up, and every fixture-dependent row is then reported outstanding rather than skipped. The
-alternative — asking each contributor to install and configure a Jellyfin by hand — is the state
-this feature exists to leave.
+and **no CI job has it, because no CI job may contact or start a Jellyfin**. The image is pinned by
+**digest**, recorded in [reference-target §1](../../docs/compatibility/reference-target.md#1-the-pinned-version)
+beside the two version rows it already pins and printed in the report header beside the Atrium sha;
+the digest is written into that row by the task that lands `tools/_reference.py`, which is the first
+run that has one. **The harness degrades rather than fails without the runtime**: `--reference-url`
+takes an instance somebody else stood up, a machine with neither still runs the sweep against a
+reachable server and everything in the default CI job, and every case and named row that declared
+`needs: fixture` is then reported **outstanding with the reason** rather than skipped — so a run
+without the dependency loses coverage and says so. What the dependency buys, what it costs, and the
+four alternatives rejected — an SDK, a hand-installed Jellyfin per contributor, a virtual machine,
+and running it in CI — are
+[ADR-0007](../../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md).
 
-**D-2 · Where the harness lives, and under which floor.** `architecture.md` §3 and
-`conformance.md` already say `tools/`, which means standard library only and a Python 3.9 floor,
-and this is a program an order of magnitude larger than a probe. *Recommendation: keep it in
-`tools/` under both rules.* The floor is what lets the harness run on a machine that has no
-environment, the parsers it needs already exist there, and the one part that would suffer — the
-comparison engine — has no I/O and could move later at no cost to anything else.
+**D-2 · Where the harness lives, and under which floor — no change, and that is the decision.**
+The harness stays in `tools/`, standard library only, on the Python 3.9 floor, which is what
+[architecture §3](../../docs/architecture.md#3-repository-layout) and `tools/README.md` already say
+and what CI already runs the scripts under at both ends of the range. It was put here because the
+component is an order of magnitude larger than a probe and the constraint is project-level, not
+because anything was wrong with it: the floor is what lets the harness run on a machine that has no
+environment, the parsers it needs already exist there, and the one part that would suffer — the pure
+comparison engine — has no I/O and could move later at no cost to anything else. **Recorded as
+decided-and-unchanged** so that a later reader does not read silence as an open question.
 
-**D-3 · AC-6, against the allowlist the spec ships.** As written, an allowlist entry with no
-`behaviours.md` reference fails the run, and seven of the eleven entries spec §3.3 publishes have
-none. *Recommendation: refine AC-6 rather than manufacture seven entries* — a **divergence** names a
-behaviours section, and a **derivation** names one of four declared classes (`derived-identifier`,
-`wall-clock`, `content-hash`, `installation-path`) — **and** write the one behaviours entry that is
-genuinely missing: the reference's random `ChildCount` on a library view, which is recorded in
-`conformance.md` and in this spec and nowhere in `behaviours.md`. This edits an accepted spec's
-acceptance criterion, which is why it is here.
+**D-3 · AC-6, against the allowlist the spec ships — refined, and the missing entry written.**
+This one **edits an accepted spec, deliberately**, which is why it was reserved: AC-6 as accepted
+failed the allowlist its own document ships, and a criterion that cannot pass is not a gate. Every
+allowlist row now cites **either** the behaviours.md section that argues a difference a server chose
+**or** one of four declared derivation classes for a difference neither server chose —
+`derived-identifier`, `wall-clock`, `content-hash`, `installation-path` — with a fifth class
+reviewable and never a substitute for an argument somebody owes. Spec §3.3's two tables gained a
+`because` column and every row of both carries one;
+[conformance.md](../../docs/compatibility/conformance.md#l3--differential)'s rendering of the same
+list carries it too, so the two prose copies cannot drift apart while §6.3's file is being written.
+**The one row that was neither a divergence with an argument nor a derivation was written rather
+than reclassified:** the reference's random `ChildCount` on a library view is
+[behaviours §3.25](../../docs/compatibility/behaviours.md), class B, diverged. The spec's frontmatter
+carries the amendment, dated, because the document is `Accepted` and an amendment to one of those is
+recorded rather than silent. It also carries this plan's measurement about the mechanism: **an entry
+is scoped to an endpoint and a JSON path, never to a bare field name**, because `ChildCount` here is
+a real computed subtree aggregate and a name-keyed row would excuse, on every container, the value
+L2 exists to check.
 
-**D-4 · Which fixture world the reference instance is given.** Unmeasurable until an instance
-exists: whether a reference makes items out of the 003 tree, whose files are deliberately not
-decodable media. *Recommendation: measure it first (`tools/probe_reference_scan.py`), and default to
-the media world extended with the structural entries §3.1 already owes* — one tree, one library
-per collection type, real media throughout — because that is the world every fixture-dependent named
-comparison needs anyway. If the reference does scan the filler tree, both worlds go across and AC-2
-compares two libraries instead of one, at no extra cost.
+**D-4 · Which fixture world the reference instance is given — measure first, and the measurement
+has a prerequisite.** The default stands: **the media world extended with the structural entries
+§3.1 already owes** — one tree, real media throughout, one library per collection type — because
+that is the world every fixture-dependent named comparison needs anyway. If the reference does make
+items out of the 003 tree, both worlds go across and AC-2 compares two libraries instead of one.
 
-**D-5 · The ignored-parameter report's fourth column.** AC-10 names parameter, endpoint, count and
-client. The recorder in `compat/query_params.py` has the first three and no client, and nothing in
-`src/atrium/` reads its counts at all, so the report needs a change to a shipped module every
-request passes through. *Recommendation: take it, in the smallest shape* — `record` gains the client
-from the header 002 already parses, and the tally is **written to the data directory** at shutdown
-rather than served — because the delta 005 §3.3 accepted was accepted **in exchange for** this
-report, and a three-column report cannot name the client whose parameter should be promoted. If it
-is declined, AC-10 is met at three columns and the fourth becomes a recorded gap with its reason,
-which is a smaller promise than 005 made.
+**What must not be fudged is that this is still unmeasured, and why it cannot be measured yet.**
+Answering it needs a library scan on a reference server, and a scan is a **write**. The only
+reachable Jellyfin is an operator's production instance, which this project does not write to —
+that is the whole reason D-1 exists. **So D-4's measurement is possible only once D-1's disposable
+instance does**, and the sequence is fixed (§6.6):
 
-**A route is not available for this, and the reason is worth stating so nobody reaches for it
-later.** An endpoint that served the tally would be an endpoint Jellyfin does not have — Principle
-I's first forbidden line, and an extension a client could discover. The tally leaves the process as
-a file or it does not leave it.
+1. the task that lands `tools/_reference.py` — the instance itself, from D-1's runtime;
+2. **`tools/probe_reference_scan.py`, which is the task that performs this measurement**, and is the
+   instance's first run: *given the fixture tree, what does a reference server's library contain?*;
+3. the fixture task that ports the structural entries §3.1 owes, written against the probe's answer.
+
+Until step 2 has run, the default above is a **default, not a finding**, and no document may cite it
+as measured. Both branches are priced (§6.6), so the answer changes the shape of step 3 and nothing
+earlier.
+
+**D-5 · The ignored-parameter report's fourth column — taken, in the smallest shape.**
+`compat/query_params.py`'s recorder gains the client, read from the header 002 already parses, and
+the tally is **written into the data directory** when the server stops, where the harness reads it
+beside the report it is writing anyway. AC-10's four columns are met rather than reduced to three,
+which matters because the bounded delta [005 §3.3](../005-item-query-api/spec.md) accepted was
+accepted **in exchange for** this report: a three-column report cannot name the client whose
+parameter should be promoted, and a delta with no closing mechanism is a permanent excuse.
+
+**The tally is a file and never a route, and the reasoning belongs next to the report** (§6.8) so
+that nobody reaches for the tidier option later. An endpoint serving the tally would be an endpoint
+Jellyfin does not have — Principle I's first forbidden line — and "optional, behind a flag" does not
+save it, because an extension a client can discover is still a delta. The tally is this server's
+diagnostic output about itself: it leaves the process as a file in the data directory, which
+`config/` already owns and no client can see, or it does not leave the process at all. The file is
+also the only form that can carry the *complete* count, since it is written at shutdown, which is
+after the last request a route could have answered.

@@ -67,6 +67,14 @@ rather than aspirational.
 | Media inspection and remux | `ffprobe` / `ffmpeg`, as external processes | [0002](decisions/0002-python-and-the-runtime-stack.md) |
 | Tests | pytest, httpx, pytest-asyncio | — |
 | Lint / types | ruff, mypy (strict) | — |
+| Reference instance, **development only** | A container runtime — Docker or Podman, CLI-invoked | [0007](decisions/0007-a-container-runtime-for-the-reference-instance.md) |
+
+The last row is not part of what a user installs. The conformance harness in `tools/` stands up a
+single-use Jellyfin of the pinned version over this repository's own fixture and destroys it
+([ADR-0007](decisions/0007-a-container-runtime-for-the-reference-instance.md)); no CI job has the
+runtime, because no CI job may contact or start a Jellyfin, and the harness degrades without it —
+an instance somebody else stood up is accepted by URL, and every comparison that needed a fixture
+instance is then reported outstanding rather than skipped.
 
 ### Why FastAPI specifically
 
@@ -136,3 +144,9 @@ instance is reproducible and a bug report can carry its configuration.
 A single process serving HTTP, plus `ffmpeg` child processes; one data directory holding the
 SQLite database, the image cache and the transcode scratch space. No message broker, no external
 cache, no second service. If v1 needs one of those, the design has gone wrong somewhere earlier.
+
+**A development machine running the conformance harness is the one place a second server appears**,
+and it is a tool's dependency rather than a deployment one: 010's fixture runs start a reference
+Jellyfin, compare against it, and destroy it
+([ADR-0007](decisions/0007-a-container-runtime-for-the-reference-instance.md)). Nothing a user
+installs gains a second process, and nothing in this section moves.

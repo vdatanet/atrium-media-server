@@ -53,9 +53,19 @@ the writing measurements off an operator's server, where 009's runs had left 28 
 **010's plan was drafted on 2026-09-01** and is what the next gate reads: its bulk is the thing
 that does not exist yet — a **single-use reference instance**, stood up from a pinned image over
 this repository's own fixture, configured over the reference's first-time-setup operations with no
-human, and destroyed with everything it wrote — and it reserves **five decisions** for their owner
-instead of taking them, the first being the runtime that instance needs. So what is next is **that
-plan's gate**, and tasks do not start until it is `Accepted`. What each implemented feature leaves the ones after it is written at
+human, and destroyed with everything it wrote. It reserved **five decisions** for their owner
+instead of taking them, and **all five were taken on 2026-09-01**, every recommendation accepted:
+the reference instance gets a container runtime, with
+[ADR-0007](docs/decisions/0007-a-container-runtime-for-the-reference-instance.md) and no CI job
+allowed near it; the harness stays in `tools/` on the standard library and the 3.9 floor; **AC-6 is
+refined and an accepted spec amended for it**, because as accepted it failed the very allowlist its
+own document ships — an entry now cites a behaviours section or one of four derivation classes, and
+the reference's random `ChildCount` finally has an entry of its own
+([behaviours §3.25](docs/compatibility/behaviours.md)); the fixture world keeps its default and its
+measurement **waits on the instance that does not exist yet**, since a library scan is a write and
+the only reachable server is an operator's; and the ignored-parameter report gets its fourth column,
+written to the data directory and never to a route. So what is next is **that plan's gate**, and
+tasks do not start until it is `Accepted`. What each implemented feature leaves the ones after it is written at
 the end of its own task list rather than here, so it cannot go stale:
 [008's](specs/008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
 is the longest and 010 collects most of it, with
