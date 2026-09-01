@@ -2162,6 +2162,13 @@ because the index arithmetic runs before the entry is looked up.
 `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-08-31]`
 `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:307-345 @ v10.11.11]`
 
+**And the entry segment is never parsed**, which 009 T11 measured while implementing the route: an
+entry id that is malformed, all zeros or written in the *dashed* spelling of a real entry's id is
+matched against nothing, so all three take the same two answers as an absent one — `204` in range,
+the `500` out of it. An **upper-case** one matches, because the comparison folds case and nothing
+else `[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-09-01]`
+`[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:308-323 @ v10.11.11]`.
+
 **Depends on it:** nothing can be built on either. A `500` carries no information a client can act
 on, and a negative index that silently reorders is a result no client asked for — a drag-and-drop
 that computes -1 for a row dropped above the first one gets a move to position **1**, which reads
@@ -2172,8 +2179,14 @@ exception on a malformed input, where the well-formed input one step away is a c
 count is parity and is kept; past it, and below zero, the request is refused rather than crashed or
 guessed. The absent-entry `204` is parity and is kept as well, and so is the order the reference
 judges in — the index first, so an entry that is not in the playlist is refused rather than ignored
-when the index is out of range too. The only observable difference is a `400` where the reference
-produces a `500` or an unrequested move. Specified in [009 §3.5](../../specs/009-playlists/spec.md).
+when the index is out of range too. The three spellings that match nothing are parity too, and they
+are the reason this route does **not** canonicalise the identifier it is handed: normalising a
+dashed entry id would reorder a playlist no reference server reorders, which the caller sees in the
+order that comes back. The only observable difference is a `400` where the reference produces a
+`500` or an unrequested move, and it is reachable only by a caller who may edit — the permission
+test runs first, measured with an index the reference crashes on
+`[probe: tools/probe_playlist_shares.py, Jellyfin 10.11.11, 2026-09-01]`. Specified in
+[009 §3.5](../../specs/009-playlists/spec.md).
 
 ---
 
@@ -2309,19 +2322,27 @@ string it parses inside the method — so one refusal is the framework's and the
 unhandled parse `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`
 `[source: Jellyfin.Api/Controllers/PlaylistsController.cs:447-456 @ v10.11.11]`.
 
-**Depends on it:** nothing can be built on any of the three. A `500` carries no information a
+**And a fourth, on the third route of the same controller, found at 009 T11.** `POST
+/Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}` parses that segment inside the action as
+the removal does, so a malformed playlist id is the same `500` in the same 25 bytes — the two
+segments of one path bind differently from each other on this route as well, since the *entry* id
+is never parsed at all and refuses nothing
+`[probe: tools/probe_playlist_move.py, Jellyfin 10.11.11, 2026-09-01]`
+`[source: Jellyfin.Api/Controllers/PlaylistsController.cs:409-431 @ v10.11.11]`.
+
+**Depends on it:** nothing can be built on any of the four. A `500` carries no information a
 client can act on, and a playlist owned by nobody is unreadable, uneditable and undeletable by
 every caller — a client that made one could not tell its user what happened to it. Class A by
 §3.9's reasoning, and the same shape as
 [§3.15](#315-moves-index-is-unguarded-in-both-directions--class-a-diverged) one route away: an
 unhandled failure on a malformed input where the well-formed input beside it is a clean answer.
 
-**Atrium does: diverge — refuse all three, and create nothing.** A request naming no name anywhere
+**Atrium does: diverge — refuse all four, and create nothing.** A request naming no name anywhere
 is `400` in the *same* `text/plain` shape the reference's `500` carries, so the status is the whole
 difference; a `userId` naming nobody is the problem-details `404` that `effective_user` already
 answers on every 005 route, which is where the rule lives rather than being written a second time
-here; and a malformed playlist id is the validation `400` on **both** write routes, because both
-declare that segment as an identifier and one shape for one path is the smaller surprise. The query
+here; and a malformed playlist id is the validation `400` on **all three** write routes, because
+each declares that segment as an identifier and one shape for one path is the smaller surprise. The query
 form itself is **parity** and is implemented: refusing a request the reference serves would be the
 larger divergence. Specified in [009 §3.2](../../specs/009-playlists/spec.md) and
 [§3.5](../../specs/009-playlists/spec.md).

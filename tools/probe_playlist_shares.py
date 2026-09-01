@@ -19,6 +19,11 @@ measured.
   for it (plan section 4.2), and `probe_playlist_media_type.py` measured single-type creations
   only. A body naming a film and a track in one list has never been asked.
 
+Extended at 009 T11 with one row the fixture does not need and the *route* does: when a caller who
+may not edit names an index the reference crashes on, which refusal wins. Two refusals are due at
+once and the order decides whether Atrium tests the caller before the move arithmetic or after -
+deducible from the controller, and this project's habit is to ask.
+
 Writes: creates a throwaway non-administrator user, restricts it to one library, and creates five
 playlists. Removes the playlists and the user afterwards, including on failure.
 
@@ -170,6 +175,16 @@ def run(server: Server) -> Probe:
                 probe.observe(
                     f"  {label}: moves entry 0 to index 1",
                     f"{shape(*moved)}  ->  owner sees {order}",
+                )
+                # Which refusal wins when two of them are due at once (009 T11). The index that
+                # crashes this route is one the caller may not reach in the first place, and the
+                # answer decides whether Atrium tests the caller before the arithmetic or after.
+                both = other.post_raw(
+                    f"/Playlists/{playlist_id}/Items/{seen[0]['PlaylistItemId']}/Move/9"
+                )
+                probe.observe(
+                    f"  {label}: moves entry 0 to index 9, which is past the end",
+                    f"{shape(*both)}   <-- the caller or the index, whichever is judged first",
                 )
 
         # -- battery 2: the public playlist nobody has created --------------------------------

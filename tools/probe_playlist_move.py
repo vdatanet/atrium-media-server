@@ -22,6 +22,13 @@ Id, because the reference caches the resolved item's id in the field the respons
 `[source: MediaBrowser.Controller/Entities/BaseItem.cs:1797-1802 @ v10.11.11]`, and if the two are
 equal then 009 section 3.1's whole distinction is a distinction the wire does not make.
 
+Extended again at 009 T11 with the battery the *route* needs rather than the arithmetic: what each
+of the three path segments accepts. The document types `playlistId` and `itemId` here as bare
+strings where the addition on the same path types `playlistId` as a `uuid` `[spec: MoveItem]`, and
+that difference is what produced the removal's unhandled `500` - so the same request is asked with
+a malformed identifier, an all-zeros one, and the dashed, braced and upper-case spellings of a real
+one, on both segments, plus an index that is not a number.
+
 Extended at the 009 spec review with the boundary battery OQ-6 asks for. Every one of those cases
 is a sentence the specification states without provenance, and the source reads against three of
 them: an entry id that is not in the playlist is looked up, not found, logged and returned from
@@ -38,6 +45,8 @@ Usage:
 
 from __future__ import annotations
 
+from typing import Dict
+
 from _probe import Probe, ProbeError, Server, main
 
 NAME = "atrium probe - playlist move"
@@ -49,6 +58,15 @@ BOUNDARY_NAME = "atrium probe - playlist boundary"
 #: claim about *order* as much as about status - so it is asked at an index in range and again at
 #: one out of range.
 ABSENT_ENTRY = "0123456789abcdef0123456789abcdef"
+
+#: The identifier a default-initialised field serialises to, which T10 found is a third class on
+#: the add route: refused rather than skipped. Whether this route knows the difference is a
+#: question about *its* lookup, and it is asked below rather than carried over.
+ALL_ZEROS = "0" * 32
+
+#: Not an identifier at all. The removal route parses its own path segment and answers `500`;
+#: whether this route binds or parses is what the battery below settles.
+MALFORMED = "not-an-identifier"
 
 
 def entries(server: Server, playlist_id: str) -> list[tuple[str, str]]:
@@ -91,6 +109,7 @@ def source_items(server: Server, count: int) -> list[dict]:
 
 
 MATRIX_NAME = "atrium probe - playlist matrix"
+ADDRESSING_NAME = "atrium probe - playlist addressing"
 
 
 def predicted(order: str, source: int, new_index: int) -> str:
@@ -198,6 +217,125 @@ def boundaries(server: Server, probe: Probe, items: list, created: list) -> None
         after = order(playlist_id)
         detail = "" if status < 400 else "   " + repr(body[:70])
         probe.observe(label, f"{status}  ->  {after}{detail}")
+
+
+def shape(status: int, headers: Dict[str, str], body: bytes, limit: int = 56) -> str:
+    """Status, content type and body, because a status alone is not a shape.
+
+    T9 and T10 both found a route whose refusal status everybody had right and whose *bytes*
+    nobody had asked about - the read's twenty-byte `404`, the removal's `500` where the addition
+    beside it answers a validation `400`. This route's own refusals are asked the same way.
+    """
+    kind = headers.get("Content-Type") or "no content type"
+    seen = f"{len(body)}B  {body[:limit]!r}" if body else "empty"
+    return f"{status}  {kind}  {seen}"
+
+
+def dashed(value: str) -> str:
+    """The other spelling of one identifier - accepted on one segment of this path, not on both."""
+    return f"{value[:8]}-{value[8:12]}-{value[12:16]}-{value[16:20]}-{value[20:]}"
+
+
+def addressing(server: Server, probe: Probe, items: list, created: list) -> None:
+    """What the three path segments accept, and what each one refuses with.
+
+    The boundary battery above asks about the *arithmetic*; this one asks about the identifiers
+    and the index as **text**, which is a different layer and answers a different question. The
+    OpenAPI document types this route's `playlistId` and `itemId` as bare strings where the
+    addition beside them types `playlistId` as a `uuid` `[spec: MoveItem]`, and that difference is
+    exactly what produced the removal's unhandled `500` - so it is asked rather than inferred.
+
+    A fresh playlist per case, for the boundary battery's reason: a case whose whole question is
+    *did anything move* cannot be measured on a list an earlier case may have reordered.
+    """
+
+    def fresh(tag: str) -> tuple:
+        playlist_id = server.post(
+            "/Playlists",
+            body={
+                "Name": f"{ADDRESSING_NAME} {tag}",
+                "Ids": [item["Id"] for item in items],
+                "UserId": server.user_id,
+            },
+        )["Id"]
+        created.append(playlist_id)
+        return playlist_id, [entry for entry, _ in entries(server, playlist_id)]
+
+    film = server.get(
+        "/Items",
+        Recursive="true",
+        IncludeItemTypes="Movie",
+        Limit=1,
+        SortBy="SortName",
+        UserId=server.user_id,
+    ).get("Items", [])
+
+    # -- the playlist segment ----------------------------------------------------------------
+    _holder, before = fresh("holder")
+    for label, addressed in (
+        ("an absent playlist", ABSENT_ENTRY),
+        ("an item that is not a playlist", film[0]["Id"] if film else ABSENT_ENTRY),
+        ("the all-zeros playlist id", ALL_ZEROS),
+        ("a malformed playlist id", MALFORMED),
+    ):
+        status, headers, body = server.post_raw(f"/Playlists/{addressed}/Items/{before[0]}/Move/1")
+        probe.observe(f"move within {label}", shape(status, headers, body))
+
+    # -- the entry segment: three classes of identifier, and four spellings of one -------------
+    # The reference parses the playlist segment with the framework's own parser and matches the
+    # entry segment by string comparison against the 32-hex form, so the two segments should
+    # accept different spellings of one value. Asked rather than inferred: a route that accepted
+    # the dashed form where the reference does not would move an entry no reference server moves,
+    # which is a difference a client sees in the order it gets back.
+    for label, spelling, new_index in (
+        ("the all-zeros entry id, index in range", "zeros", 1),
+        ("the all-zeros entry id, index past the end", "zeros", 6),
+        ("a malformed entry id, index in range", "malformed", 1),
+        ("a malformed entry id, index past the end", "malformed", 6),
+        ("the entry's own id", "plain", 1),
+        ("an upper-case entry id", "upper", 1),
+        ("a dashed entry id", "dashed", 1),
+        ("a braced entry id", "braced", 1),
+    ):
+        holder, before = fresh(label[:12])
+        addressed = {
+            "zeros": ALL_ZEROS,
+            "malformed": MALFORMED,
+            "plain": before[0],
+            "upper": before[0].upper(),
+            "dashed": dashed(before[0]),
+            "braced": "{" + before[0] + "}",
+        }[spelling]
+        status, headers, body = server.post_raw(
+            f"/Playlists/{holder}/Items/{addressed}/Move/{new_index}"
+        )
+        landed = [entry for entry, _ in entries(server, holder)]
+        probe.observe(
+            f"move addressed by {label}",
+            shape(status, headers, body)
+            + ("  ->  the entry moved" if landed != before else "  ->  nothing moved"),
+        )
+
+    # -- the dashed spelling on the *other* segment, which the framework parses ----------------
+    holder, before = fresh("dashed-playlist")
+    status, headers, body = server.post_raw(f"/Playlists/{dashed(holder)}/Items/{before[0]}/Move/1")
+    landed = [entry for entry, _ in entries(server, holder)]
+    probe.observe(
+        "move within a dashed playlist id",
+        shape(status, headers, body)
+        + ("  ->  the entry moved" if landed != before else "  ->  nothing moved"),
+    )
+
+    # -- the index, which is the one segment the framework binds as a number -------------------
+    for label, raw_index in (
+        ("a newIndex that is not a number", "banana"),
+        ("an empty newIndex", ""),
+    ):
+        holder, before = fresh(label[:12])
+        status, headers, body = server.post_raw(
+            f"/Playlists/{holder}/Items/{before[0]}/Move/{raw_index}"
+        )
+        probe.observe(f"move to {label}", shape(status, headers, body, limit=300))
 
 
 def run(server: Server) -> Probe:
@@ -310,6 +448,9 @@ def run(server: Server) -> Probe:
         # -- OQ-6: the boundaries, which section 3.5 answers in a table with no provenance ----
         boundaries(server, probe, items, created)
 
+        # -- the three path segments as text, which is a different layer (T11) ---------------
+        addressing(server, probe, items, created)
+
         # -- the matrix section 6 asks for as a test, asked of the server first ---------------
         disagreements = matrix(server, probe, items, created)
     finally:
@@ -322,6 +463,15 @@ def run(server: Server) -> Probe:
     probe.note(
         f"The moved entry is {by_name.get(moved_name, 'A')}. Both readings agree on upward moves, "
         "so only this downward case distinguishes them."
+    )
+    probe.note(
+        "The three path segments bind three different ways. The playlist id is parsed - dashed "
+        "addresses the same playlist and malformed is an unhandled 500, as on the removal and "
+        "unlike the addition. The entry id is not parsed at all: it is compared as text against "
+        "the plain 32-character spelling, so an upper-case one matches and a dashed or braced one "
+        "matches nothing, which is also why a malformed or all-zeros entry id is a silent 204 "
+        "rather than the refusal the add route makes of it. The index is bound as a number, so a "
+        "newIndex that is not one is the binder's validation 400 keyed `newIndex`."
     )
     probe.note(
         "The duplicate rows above are the premise the move question rests on: reordering or "
