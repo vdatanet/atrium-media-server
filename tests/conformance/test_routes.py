@@ -56,7 +56,7 @@ IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007", "008
 #: below has to stay meaningful in between, so the routes that have landed are listed here. It is
 #: deleted at T14, when `"009"` joins the set above. 002, 005, 006, 007, 008 and 011 each used
 #: exactly this device, and all six lists are gone.
-INTERIM_009 = frozenset({("POST", "/Playlists")})
+INTERIM_009 = frozenset({("POST", "/Playlists"), ("GET", "/Playlists/{playlistId}/Items")})
 
 
 def _load_surface_parser() -> Any:

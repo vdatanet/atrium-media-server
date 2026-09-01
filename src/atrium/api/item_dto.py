@@ -86,6 +86,13 @@ class BuildContext:
     #: `IsFolder`, where the same items through `/Items` carry both
     #: `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
     omit: frozenset[str] = frozenset()
+    #: `omit`'s positive counterpart, and it has exactly one user. A playlist entry row is the
+    #: list-row width plus `PlaylistItemId` and nothing else - measured by subtracting the two
+    #: property sets, thirty-two names against thirty-one
+    #: `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]` - so it is a flag
+    #: rather than a fourth `Width`: the measurement says the row *is* a list row, and a fourth
+    #: member of that enum would say the opposite.
+    playlist_row: bool = False
 
 
 # ------------------------------------------------------------------------------------------------
@@ -248,6 +255,17 @@ USER_VIEW_EXTRAS: frozenset[str] = frozenset(
         "Tags",
     }
 )
+
+#: What `GET /Playlists/{playlistId}/Items` adds on top of a list row, and it is the whole of the
+#: difference: the union of a playlist row's property names minus the union of the same items'
+#: `/Items` rows is this one name, and the subtraction the other way is empty
+#: `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+#:
+#: A fourth tier of one name rather than a member of `GATED`, because it is not asked for: the
+#: route sends it unconditionally and no `fields` token reaches it. It is also not in `ALWAYS`,
+#: which would put it on every row of every route - measured, an `/Items` row carrying the same
+#: track does not have it.
+PLAYLIST_EXTRA: frozenset[str] = frozenset({"PlaylistItemId"})
 
 #: What is still unanswerable, named. This was 008's whole gap until T3 filled it; `Chapters` is
 #: what is left, because nothing extracts a chapter list and a stub would lie (005 plan section 1).
@@ -533,6 +551,14 @@ def _dimension(one: HydratedItem, pick: Callable[[Any], int | None]) -> int | No
 EMITTERS: Mapping[str, Callable[[HydratedItem, BuildContext], Any]] = {
     # -- always ----------------------------------------------------------------------------------
     "Id": lambda one, ctx: one.id,
+    # -- the playlist row's one extra, considered only when `playlist_row` is set ----------------
+    #: **The item's own id, and that is the finding rather than a shortcut.** The field the
+    #: reference answers from is a cache of the resolved item's identifier, so the entry
+    #: identity 009 was written around is a distinction the wire does not make: equal on every
+    #: row measured, and absent from every route but the playlist one (009 spec section 3.1)
+    #: `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+    "PlaylistItemId": lambda one, ctx: one.id,
+    # -- always, continued -----------------------------------------------------------------------
     "ServerId": lambda one, ctx: ctx.server_id,
     "Name": lambda one, ctx: one.item.name,
     "Type": lambda one, ctx: one.item.type.value,
@@ -670,6 +696,8 @@ EMITTERS: Mapping[str, Callable[[HydratedItem, BuildContext], Any]] = {
 def _considered(item_type: ItemType, ctx: BuildContext) -> frozenset[str]:
     """Which registry names this call site puts to their emitters."""
     named = ALWAYS | frozenset(name for name, types in PER_TYPE.items() if item_type in types)
+    if ctx.playlist_row:
+        named = named | PLAYLIST_EXTRA
     if ctx.width is Width.FULL:
         return named | frozenset(GATED)
     gated = frozenset(name for name, token in GATED.items() if token in ctx.fields)
@@ -707,6 +735,7 @@ __all__ = [
     "EMITTERS",
     "GATED",
     "PER_TYPE",
+    "PLAYLIST_EXTRA",
     "UNPROBED",
     "USER_VIEW_EXTRAS",
     "VIDEO_TYPES",

@@ -29,6 +29,7 @@ from atrium.api.item_dto import (
     EMITTERS,
     GATED,
     PER_TYPE,
+    PLAYLIST_EXTRA,
     UNPROBED,
     USER_VIEW_EXTRAS,
     BuildContext,
@@ -210,7 +211,7 @@ def test_the_gated_list_is_the_specs() -> None:
 
 
 def test_every_registry_name_has_an_emitter_and_no_emitter_is_unreachable() -> None:
-    assert set(EMITTERS) == set(ALWAYS) | set(PER_TYPE) | set(GATED)
+    assert set(EMITTERS) == set(ALWAYS) | set(PER_TYPE) | set(GATED) | PLAYLIST_EXTRA
 
 
 def test_every_emitted_name_is_a_field_the_model_declares() -> None:
@@ -238,6 +239,17 @@ def test_the_three_tiers_do_not_overlap() -> None:
     assert not (SPEC_ALWAYS & set(SPEC_PER_TYPE))
     assert not (SPEC_ALWAYS & SPEC_GATED)
     assert not (set(SPEC_PER_TYPE) & SPEC_GATED)
+
+
+def test_the_playlist_extra_is_in_none_of_the_three_tiers() -> None:
+    """The fourth tier invents where `/UserViews` un-gates, and that asymmetry is measured.
+
+    `PlaylistItemId` is in no tier: `ALWAYS` would put it on every row of every route, and the
+    reference sends it on none but the playlist one; `GATED` would make it something `fields`
+    asks for, and nothing asks for it
+    `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    assert not (PLAYLIST_EXTRA & (SPEC_ALWAYS | set(SPEC_PER_TYPE) | SPEC_GATED))
 
 
 # ------------------------------------------------------------------------------------------

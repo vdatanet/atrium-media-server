@@ -29,6 +29,14 @@ own `404`: `"<item name> does not have an image of type <Type>"`, quoted, in
 problem details, an item that exists and lacks the image gets this - split by which of the two
 lookups failed. `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`
 
+**It has a second route since 009, and the second one does not split.** Every way
+`GET /Playlists/{playlistId}/Items` can fail to hand over a playlist is the fixed 20-byte
+`"Playlist not found"` - an unknown id, a real item that is not a playlist, and a playlist the
+reader may not see - while the *problem-details* `404` for that same playlist lives on a different
+route, `GET /Items/{itemId}`. So the shape is a fact about the route rather than about the status,
+and reading it off a neighbouring route is how a feature ships a body no reference server sends
+`[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+
 The first was implemented in feature 001, because only the first was reachable there. The second
 belongs to the features that raise it; its shape is recorded in
 docs/compatibility/behaviours.md section 1.11 so it does not have to be rediscovered. The fourth
@@ -312,6 +320,39 @@ class PlaylistCreationError(Exception):
     One class for both because they are one shape on the wire, and the raise sites say which row
     they are. Deliberately not `DeliverySourceError`, whose docstring is a statement about a
     `mediaSourceId` and would be a lie at the place this is raised.
+    """
+
+
+#: The reference's own sentence, byte for byte, quoted as a complete JSON document by
+#: `message_error`: 18 characters, 20 bytes on the wire. Fixed - it interpolates nothing, unlike
+#: the image route's template beside it, so an unknown playlist and a private one that this
+#: reader may not learn exists are indistinguishable down to the byte, which is the point.
+#: `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`
+#: `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-09-01]`
+PLAYLIST_ABSENT_MESSAGE = "Playlist not found"
+
+
+class PlaylistNotFoundError(Exception):
+    """`GET /Playlists/{playlistId}/Items` could not hand this caller a playlist. Fourth shape.
+
+    **Not problem details, and that is the finding rather than a detail.** Every other `404` this
+    project raises from a handler is the second shape, and 009 said only *"404 for an unknown
+    playlist, and for one the reader may not see"* - a status with no shape. Measured, the route
+    answers the **JSON-encoded bare string** `"Playlist not found"`,
+    `application/json; charset=utf-8`, 20 bytes - the shape behaviours section 1.11 records for
+    the image route, now measured on a second route and a second feature
+    `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+    **Three requests reach it and one does not.** An identifier that addresses nothing, an
+    identifier that addresses a real item which is not a playlist, and a playlist this reader may
+    not see are one body between them; a **malformed** identifier never gets here at all, because
+    the model binder refuses it first with the validation `400` (behaviours section 1.11's fifth
+    row). So the `/Items/{itemId}` fetch beside it answers problem details for the same private
+    playlist, and the two routes disagree on purpose.
+
+    Deliberately not an `ImageNotFoundError`: that class carries a display name and its docstring
+    is a statement about images, and deliberately not a `NotFoundError` subclass, which would
+    resolve through the MRO to the problem-details handler and undo the whole finding.
     """
 
 
@@ -715,6 +756,10 @@ async def subtitle_unavailable_handler(_request: Request, _exc: Exception) -> Re
     return controller_error(500)
 
 
+async def playlist_not_found_handler(_request: Request, _exc: Exception) -> Response:
+    return message_error(404, PLAYLIST_ABSENT_MESSAGE)
+
+
 async def image_not_found_handler(_request: Request, exc: Exception) -> Response:
     message = str(exc) if isinstance(exc, ImageNotFoundError) else NOT_FOUND_TITLE
     return message_error(404, message)
@@ -769,6 +814,11 @@ EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     # list it was given and refused it. A row of its own rather than a `DeliverySourceError`
     # because the class is read at the raise site, where "no such media source" would be false.
     PlaylistCreationError: playlist_creation_handler,
+    # 009 T9's, and it is the *fourth* shape at `404` - the one status this project had
+    # thought settled. The playlist read route answers a JSON-encoded bare string where
+    # every `NotFoundError` beside it answers problem details, so the row exists to keep
+    # the class off `NotFoundError`'s MRO rather than merely to name a handler.
+    PlaylistNotFoundError: playlist_not_found_handler,
     # 011 T7's two, and they are the same shape at two statuses again - but split differently
     # from the pair above: on the subtitle fetch routes a `mediaSourceId` naming nothing is the
     # `500` and not the `400`, which is the whole reason they are their own classes.
@@ -786,6 +836,7 @@ __all__ = [
     "NOT_FOUND_TITLE",
     "PATTERN_MESSAGE",
     "PATTERN_MISMATCH",
+    "PLAYLIST_ABSENT_MESSAGE",
     "PROBLEM_TYPE_BAD_REQUEST",
     "PROBLEM_TYPE_NOT_FOUND",
     "PROPERTY_REQUIRED_MESSAGE",
@@ -804,6 +855,7 @@ __all__ = [
     "ItemNotFoundError",
     "NotFoundError",
     "PlaylistCreationError",
+    "PlaylistNotFoundError",
     "SubtitleRequestError",
     "SubtitleUnavailableError",
     "UnauthenticatedError",
@@ -817,6 +869,7 @@ __all__ = [
     "invalid_credentials_handler",
     "message_error",
     "not_found_handler",
+    "playlist_not_found_handler",
     "problem_details",
     "routing_handler",
     "trace_id",

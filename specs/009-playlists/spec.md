@@ -83,6 +83,12 @@ would be a value no reference server sends, which is Principle I's first forbidd
 consequence for the plan is that an entry is addressed by the item it references, and a playlist
 therefore cannot hold one item twice.
 
+**And the field belongs to one route, not to the item.** Re-measured at T9 against the route that
+emits it: equal to `Id` on every row, immediately after `Id` in the wire order, and **absent from
+an `/Items` row carrying the same track** — the one property separating a playlist row from a bare
+list row (§3.3). So it is a property of a row *in a playlist*, which is why no other response
+carries it. `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`
+
 > **The reference's can, and that was measured at T7.** Its de-duplication is a lookup in the same
 > id cache this section is about, and the cache is empty until an entry has been resolved — so
 > **6 of 8 identical add requests put the same item in the playlist twice**
@@ -199,12 +205,50 @@ accepted**: the route takes `userId`, `startIndex`, `limit`, `fields`, `enableIm
 > most plainly — a client could discover it — so the correction removes a capability rather than
 > adding one.
 
-`404` for an unknown playlist, and for one the reader may not see. The `403` the route declares is
-reachable only for a playlist stored outside the server's own playlists folder, because everywhere
-else the visibility test in front of it has already answered `404`.
-`[source: Jellyfin.Api/Controllers/PlaylistsController.cs:520-531 @ v10.11.11]`
+**The row is a bare list row and one property, and the property sits immediately after `Id`.** The
+width is measured rather than assumed, because 005 §3.2 found there is no single item
+representation: subtracting the two property sets over the same items gives **`PlaylistItemId` and
+nothing else** in one direction and nothing at all in the other, and an `/Items` row carrying the
+same track does not have the property at all. So this is the list-row width plus one name, and the
+name is on no other route.
+`[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`
 
-**`userId` names the reader, and Atrium diverges on who may name it.** §3.7.
+The envelope is 005 §3.1's three keys, and **`TotalRecordCount` is taken after filtering and before
+paging** — `startIndex=1&limit=2` on a five-entry playlist answers two rows and a count of five,
+and `startIndex=99` answers no rows and the same five. That order is the only one that lets a
+client page. `fields`, `enableUserData` and `enableImages` are all live on this route.
+`[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`
+
+**`404` for an unknown playlist, and for one the reader may not see — and it is not the shape every
+other `404` in this API is.** The body is the message as a **JSON-encoded bare string**,
+`"Playlist not found"` under `application/json; charset=utf-8`, 20 bytes: the shape
+[behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one)
+records for a controller that refuses *with a message*, measured here on a second route and a
+second feature. One body covers three different requests — an identifier that addresses nothing,
+an identifier that addresses a real item which is **not** a playlist, and a playlist this reader
+may not see — which is what makes a private playlist undisclosable. A `GET /Items/{itemId}` on that
+same playlist answers problem details, so the two routes disagree on purpose.
+`[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`
+`[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-09-01]`
+
+> **This section said `404` and stopped there**, and a status is not a shape. Every other `404`
+> this project raises from a handler is problem details, so the obvious implementation would have
+> shipped a body no reference server sends on the feature's first read route — the same class of
+> miss 006 T3 and 008 T6 each found once.
+
+**A fourth request is a different status entirely.** A `playlistId` that is not an identifier is
+the model binder's validation `400`, keyed on the parameter and quoting the value back —
+`{"playlistId": ["The value 'not-an-identifier' is not valid."]}` — and never reaches the route.
+That is the *path* parameter's sentence, which is not the one a malformed identifier inside
+§3.2's body gets. `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`
+
+The `403` the route declares is reachable only for a playlist stored outside the server's own
+playlists folder, because everywhere else the visibility test in front of it has already answered
+`404`. `[source: Jellyfin.Api/Controllers/PlaylistsController.cs:520-531 @ v10.11.11]`
+
+**`userId` names the reader, and Atrium diverges on who may name it.** §3.7. A request naming
+**nobody** is not that case: it answers `200` for the caller's own view, which is the default
+`userId` has everywhere `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`.
 
 ### 3.4 `POST /Playlists/{playlistId}/Items` — `AddItemToPlaylist`
 

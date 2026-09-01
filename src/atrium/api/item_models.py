@@ -99,6 +99,14 @@ class BaseItemDto(AtriumModel):
     original_title: str | None = None
     server_id: str | None = None
     id: str
+    #: **Immediately after `Id`, and equal to it** - the measured wire position and the measured
+    #: value, on a route that is the only one to send the property at all: a `/Items` row carrying
+    #: the same track has thirty properties and this is not one of them
+    #: `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`. Declared here rather
+    #: than on a subclass because the position is part of the contract and a subclass's own fields
+    #: serialise last; which rows *set* it is `api.item_dto`'s decision, as for every other name.
+    #: 009 spec section 3.1 is why the value is not an identifier of its own.
+    playlist_item_id: str | None = None
     etag: str | None = None
     date_created: WireDateTime | None = None
     date_last_media_added: WireDateTime | None = None

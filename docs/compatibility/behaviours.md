@@ -980,7 +980,19 @@ happened. `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]` `[pro
 | An item a handler could not find | `404`, **RFC 9457 problem details** as JSON |
 | A malformed value the model binder rejected | `400`, **RFC 9457 problem details** with an `errors` map |
 | A controller that refused the request itself | `4xx`, **`text/plain` with no `charset`**, and the fixed 25-byte body `Error processing request.` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`. **Measured for a policy refusal too**, at 009's spec gate: a non-administrator naming another user in `userId` is answered `403` with those same 25 bytes `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]` |
-| A controller that refused with its own message | `404`, the message as a **JSON-encoded bare string** — `"<item name> does not have an image of type Box"` — `application/json; charset=utf-8` `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]` |
+| A controller that refused with its own message | `404`, the message as a **JSON-encoded bare string** — `"<item name> does not have an image of type Box"` — `application/json; charset=utf-8` `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. **Measured on a second route and a second feature at 009 T9**: `GET /Playlists/{playlistId}/Items` answers the fixed 20-byte `"Playlist not found"` for an id that addresses nothing, for a real item that is not a playlist, and for a playlist the reader may not see `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]` |
+
+**The fourth shape is not the exception it looked like at 006, and the split is per route rather
+than per feature.** The image route splits its two `404`s by *which lookup failed* — an item that
+does not exist gets problem details, an item lacking the image gets the string. The playlist read
+route has no such split: every way it cannot hand over a playlist is the one string, and the
+problem-details `404` for that same playlist is a **different route**, `GET /Items/{itemId}`. So a
+route's `404` shape is a fact about the route, and reading it off another route is how a feature
+ships a body no reference server sends. A **malformed** identifier in the path never reaches either
+shape: it is the validation `400` below, keyed on the parameter and quoting the value back —
+`{"playlistId": ["The value 'not-an-identifier' is not valid."]}`, which is the *path* parameter's
+sentence and not the body's `The supplied value is invalid.`
+`[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`
 
 ```json
 {"type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
@@ -2193,6 +2205,18 @@ reference's own rule on its own write routes rather than a rule of ours. The div
 *less* disclosed, which §3.0.3 names as the safest shape, and it is confined to a request a
 non-administrator has no legitimate reason to send. Specified in
 [009 §3.7](../../specs/009-playlists/spec.md).
+
+**Shipped at 009 T9, and it is one call rather than a rule of this route's own.** The read route
+puts `userId` through `effective_user` — 005's helper, unchanged, the same one `POST /Playlists`
+uses — so the refusal is the controller's 25-byte `text/plain` measured beside it and there is no
+second copy of the rule to drift. Re-measured on the implementation date and unchanged: the
+reference still answers `200` with the entries `[probe: tools/probe_playlist_visibility.py,
+Jellyfin 10.11.11, 2026-09-01]`.
+
+**The divergence has a second half, and it is parity.** An administrator naming a user is honoured
+here, and what they get is **that user's view** rather than an administrator's: the visibility
+clause has no administrator branch (009 plan §6.5), so an administrator who is none of §3.7's three
+classes is answered `404` for a private playlist, `userId` or not.
 
 ---
 

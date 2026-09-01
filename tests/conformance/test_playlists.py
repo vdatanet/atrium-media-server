@@ -450,3 +450,294 @@ async def test_the_create_body_stores_its_shares_and_its_public_flag(
     assert stored is not None
     assert stored.is_public is True
     assert [(one.user_id, one.can_edit) for one in stored.shares] == [(world.restricted.id, True)]
+
+
+# --------------------------------------------------------------------------------------------
+# `GET /Playlists/{playlistId}/Items` - the one door (T9)
+# --------------------------------------------------------------------------------------------
+#
+# The width, the envelope and every refusal below are a transcription of one measured run
+# `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`, not of what this server
+# happens to produce.
+
+
+async def rows(client: httpx.AsyncClient, playlist_id: str, **params: Any) -> dict[str, Any]:
+    answered = await client.get(f"/Playlists/{playlist_id}/Items", params=params)
+    assert answered.status_code == 200, answered.content
+    body: dict[str, Any] = json.loads(answered.content)
+    return body
+
+
+async def test_ac4_every_row_carries_a_playlist_item_id_equal_to_its_id(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """AC-4, on the serialised body rather than on a model.
+
+    009 spec section 3.1's whole finding: the field the reference answers from is a cache of the
+    resolved item's id, so `PlaylistItemId` is not an identifier of its own. Asserted as equality
+    per row *and* as the identity of the two lists, because a route that emitted the item id in
+    the wrong position or on the wrong row would satisfy one and not the other.
+    """
+    body = await rows(client, world.private_playlist.id)
+    assert body["Items"], body
+    for row in body["Items"]:
+        assert row["PlaylistItemId"] == row["Id"], row
+    assert [row["PlaylistItemId"] for row in body["Items"]] == list(world.private_playlist.entries)
+
+
+async def test_the_property_sits_immediately_after_id_and_on_no_other_route(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """Measured wire position, and measured absence.
+
+    On the reference a playlist row carries thirty-two property names where the same track through
+    `/Items` carries thirty-one. The count is a fact about that library's items, so what is
+    asserted here is the *shape* of the difference rather than the number: the two directions of
+    the subtraction, one giving exactly `PlaylistItemId` and the other nothing at all, on the same
+    item down both routes `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+    Position is part of the contract for the same reason it is on the login body: JSON key order
+    is what a client reading the response by eye sees first, and the reference puts this property
+    immediately after `Id`.
+    """
+    body = await rows(client, world.private_playlist.id)
+    keys = list(body["Items"][0])
+    assert keys[keys.index("Id") + 1] == "PlaylistItemId", keys
+
+    entry = world.private_playlist.entries[0]
+    listed = await client.get("/Items", params={"ids": entry, "recursive": "true"})
+    assert listed.status_code == 200, listed.content
+    row = json.loads(listed.content)["Items"][0]
+    assert "PlaylistItemId" not in row, row
+    assert set(keys) - set(row) == {"PlaylistItemId"}
+    assert not set(row) - set(keys)
+
+
+async def test_ac8_the_order_is_the_playlists_and_no_sort_parameter_is_declared(
+    client: httpx.AsyncClient, app: FastAPI, world: QueryWorld
+) -> None:
+    """AC-8, both halves: the order, and the absence of the lever that could change it.
+
+    The second half is asserted against the **generated OpenAPI document** rather than by sending
+    a `sortBy` and finding the order unchanged. Two reasons, and they are the same reason: a route
+    that accepted the parameter and happened to sort by the playlist's order would pass the weaker
+    test, and the document is literally where a client discovers a capability - which is the thing
+    Principle I forbids this route to have. Measured for completeness anyway:
+    `sortBy=SortName&sortOrder=Descending` answers `200` in the playlist's own order
+    `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    body = await rows(client, world.private_playlist.id)
+    assert [row["Id"] for row in body["Items"]] == list(world.private_playlist.entries)
+
+    operation = app.openapi()["paths"]["/Playlists/{playlistId}/Items"]["get"]
+    declared = {one["name"] for one in operation["parameters"] if one["in"] == "query"}
+    assert declared == {
+        "userId",
+        "startIndex",
+        "limit",
+        "fields",
+        "enableImages",
+        "enableUserData",
+        "imageTypeLimit",
+        "enableImageTypes",
+    }
+
+
+async def test_the_count_is_taken_before_paging_and_after_filtering(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """Plan section 6.5 step 4, and the only order that lets a client page."""
+    whole = await rows(client, world.private_playlist.id)
+    assert whole["TotalRecordCount"] == len(world.private_playlist.entries)
+    assert whole["StartIndex"] == 0
+
+    paged = await rows(client, world.private_playlist.id, startIndex=1, limit=2)
+    assert [row["Id"] for row in paged["Items"]] == list(world.private_playlist.entries[1:3])
+    assert paged["TotalRecordCount"] == len(world.private_playlist.entries)
+    assert paged["StartIndex"] == 1
+
+    past = await rows(client, world.private_playlist.id, startIndex=99, limit=2)
+    assert past["Items"] == []
+    assert past["TotalRecordCount"] == len(world.private_playlist.entries)
+    assert past["StartIndex"] == 99
+
+
+async def test_ac17_a_reader_is_shown_only_the_entries_they_can_reach(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """AC-17's first half, which is 009's second divergence (behaviours section 3.17).
+
+    The reference hands this reader every row and counts them all, because the filter in front of
+    its entries is a parental-rating check and not a library one. Atrium omits them; the survivors
+    keep their order and their entry ids, and the count follows the omission.
+    """
+    playlist = world.cross_library_playlist
+    assert playlist.beyond_restricted, "the fixture must hold an unreachable entry"
+
+    as_user(harness, world.restricted)
+    body = await rows(client, playlist.id)
+
+    assert [row["Id"] for row in body["Items"]] == list(playlist.restricted_sees)
+    assert [row["PlaylistItemId"] for row in body["Items"]] == list(playlist.restricted_sees)
+    assert body["TotalRecordCount"] == len(playlist.restricted_sees)
+    assert body["TotalRecordCount"] < len(playlist.entries)
+
+
+async def test_ac16_naming_another_user_is_the_controllers_own_twenty_five_bytes(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """AC-16 and behaviours section 3.16, on the route the reference leaves open.
+
+    **The reference answers `200` here** - a restricted user reads any private playlist by naming
+    its owner, where the same parameter on the same controller's *write* route answers `403`
+    `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-09-01]`. Atrium answers
+    the reference's own refusal, in the reference's own bytes.
+
+    Asserted as bytes **and** content type, because a `403` is two shapes and only the header
+    separates them (009 T2).
+    """
+    as_user(harness, world.restricted)
+    answered = await client.get(
+        f"/Playlists/{world.private_playlist.id}/Items",
+        params={"userId": world.everyone.id},
+    )
+    assert answered.status_code == 403
+    assert answered.content == CONTROLLER_BODY
+    assert len(answered.content) == 25
+    assert answered.headers["content-type"] == "text/plain"
+
+
+async def test_an_administrator_may_name_a_user_and_gets_that_users_view(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """AC-16's other half, and the one that proves `userId` moves the whole predicate.
+
+    An administrator naming `restricted` sees what `restricted` sees - not what an administrator
+    would see, and not everything: 009 plan section 6.5 step 3 says the visibility clause has no
+    administrator branch, so naming a user *is* the only way an administrator reaches a playlist
+    they neither own nor are shared.
+    """
+    as_user(harness, harness.admin)
+    body = await rows(client, world.cross_library_playlist.id, userId=world.restricted.id)
+    assert [row["Id"] for row in body["Items"]] == list(
+        world.cross_library_playlist.restricted_sees
+    )
+
+
+async def test_an_administrator_who_is_none_of_the_three_classes_reads_nothing(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """Spec section 3.7's last row, and the hole `by_id` leaves open on purpose.
+
+    `PlaylistRepository.by_id` hands an administrator the row it would refuse anybody else, so
+    that T12's deletion is writable at all. This route calls `may_read` on what comes back, and
+    this is the test that fails if a later change drops that call.
+    """
+    as_user(harness, harness.admin)
+    answered = await client.get(f"/Playlists/{world.private_playlist.id}/Items")
+    assert answered.status_code == 404, answered.content
+    assert answered.content == b'"Playlist not found"'
+
+
+async def test_a_public_playlist_is_readable_by_anybody(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """Spec section 3.7's fourth class, which no other seeded playlist can express.
+
+    **Two readers, because readable and readable-in-full are different questions here.** The
+    administrator is none of the first three classes and is refused every other playlist in this
+    file (`test_an_administrator_who_is_none_of_the_three_classes_reads_nothing`), so a `200`
+    carrying all three entries is `is_public` and nothing else. `restricted` proves the *other*
+    half at the same time: the public playlist holds the three tracks, that user's one library is
+    Films, and the divergence of AC-17 therefore empties a playlist it does not hide - `200` with
+    nothing in it, which is a different answer from the `404` a private one gives.
+    """
+    as_user(harness, harness.admin)
+    body = await rows(client, world.public_playlist.id)
+    assert [row["Id"] for row in body["Items"]] == list(world.public_playlist.entries)
+    assert body["TotalRecordCount"] == len(world.public_playlist.entries)
+
+    as_user(harness, world.restricted)
+    empty = await rows(client, world.public_playlist.id)
+    assert empty["Items"] == []
+    assert empty["TotalRecordCount"] == 0
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["absent", "not-a-playlist", "private-to-this-reader"],
+)
+async def test_three_requests_are_one_refusal_and_it_is_the_fourth_shape(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld, case: str
+) -> None:
+    """The finding this task was for: the `404` here is **not** problem details.
+
+    Measured, `GET /Playlists/{id}/Items` answers the JSON-encoded bare string
+    `"Playlist not found"` - `application/json; charset=utf-8`, 20 bytes - for an id that
+    addresses nothing, for a real item that is not a playlist, and for a playlist this reader may
+    not see `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`
+    `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-09-01]`. One body for
+    three causes, which is what makes the private playlist undisclosable.
+
+    Everything else in this project answers a handler's `404` with problem details, and
+    `/Items/{itemId}` still does - on the very same playlist. The two routes disagree on purpose.
+    """
+    if case == "absent":
+        target = ABSENT_ID
+    elif case == "not-a-playlist":
+        target = world.private_playlist.entries[0]
+    else:
+        target = world.private_playlist.id
+        as_user(harness, world.restricted)
+
+    answered = await client.get(f"/Playlists/{target}/Items")
+    assert answered.status_code == 404, answered.content
+    assert answered.content == b'"Playlist not found"'
+    assert len(answered.content) == 20
+    assert answered.headers["content-type"] == "application/json; charset=utf-8"
+
+
+async def test_a_malformed_playlist_id_is_the_binders_four_hundred_not_this_routes_refusal(
+    client: httpx.AsyncClient,
+) -> None:
+    """The fourth request, and it never reaches the route at all.
+
+    Measured on the reference: `400` in the validation shape, where the three above are `404`.
+    Typing `playlistId` as an identifier is what produces it, and a `str` there would have turned
+    a measured `400` into a `404` on the one route where the two are already unusually split.
+
+    **And it is the *path* parameter's sentence, not the body's.** A malformed identifier inside
+    `POST /Playlists`'s body is `{"": ["The supplied value is invalid."]}` - the four refusals at
+    the top of this file - where the same malformation in a path segment names the parameter and
+    quotes the value back. Both are behaviours section 1.11 and they are not the same string
+    `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    answered = await client.get("/Playlists/not-an-identifier/Items")
+    assert answered.status_code == 400, answered.content
+    assert validation_body(answered) == problem(
+        {"playlistId": ["The value 'not-an-identifier' is not valid."]}
+    )
+    assert answered.headers["content-type"] == "application/json; charset=utf-8"
+
+
+async def test_the_declared_parameters_are_honoured(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """`fields`, `enableUserData` and `enableImages`, all three measured as live on this route.
+
+    Plan section 6.5 step 4 assumes 005's envelope machinery applies unchanged; this is the test
+    that says so, and it exists because "the standard list envelope" is a sentence rather than an
+    assertion.
+    """
+    bare = await rows(client, world.private_playlist.id)
+    assert all("Path" not in row for row in bare["Items"])
+    assert all("UserData" in row for row in bare["Items"])
+
+    asked = await rows(client, world.private_playlist.id, fields="Path")
+    assert any("Path" in row for row in asked["Items"])
+
+    quiet = await rows(client, world.private_playlist.id, enableUserData="false")
+    assert all("UserData" not in row for row in quiet["Items"])
+
+    dark = await rows(client, world.private_playlist.id, enableImages="false")
+    assert all("ImageTags" not in row for row in dark["Items"])

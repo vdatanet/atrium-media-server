@@ -39,6 +39,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_playlist_visibility.py`](probe_playlist_visibility.py) | What can a user who does not own a playlist see and do — and **what shape is each `403` it can produce**? | 009 OQ-4, §3.6, §3.7, §3.8, AC-12 to AC-19; behaviours §1.11, §3.16, §3.17, §4.3 | yes |
 | [`probe_playlist_shares.py`](probe_playlist_shares.py) | Which of the playlists a fixture world would seed can a create body actually produce — a share without `CanEdit`, a public one, and one whose entries come from two libraries? | 009 T5, §3.7, AC-14, AC-15, AC-17; plan §4.2, §8; behaviours §1.11 | yes |
 | [`probe_playlist_rename.py`](probe_playlist_rename.py) | Who can rename a playlist, and through which route? | 009 §2, §3.8, AC-18; behaviours §5 | yes |
+| [`probe_playlist_read.py`](probe_playlist_read.py) | **How wide is a playlist entry row**, which of the declared parameters does the read route honour, and **which error shape is its `404`**? | 009 §3.1, §3.3, AC-4, AC-8; plan §6.5; behaviours §1.11 | yes |
 | [`probe_playstate.py`](probe_playstate.py) | What do playback reports and played marks actually do to `UserData`, what does a playing session show, and how does each route refuse? | 007 §3.2–§3.8, OQ-2/3/5/6, AC-21/AC-22 — and OQ-4 with `--reap`, which costs ten minutes of deliberate silence | yes |
 | [`probe_auth_mechanisms.py`](probe_auth_mechanisms.py) | How may a client present a token, how strict is the client header's grammar, what one-off shapes does a sign-in return, and how is a refusal shaped? | 002 §3.1–§3.6, §3.8, OQ-1, OQ-3; behaviours §2.4, §2.10, §2.12–§2.14, §3.5, §5.1, §5.9 | no |
 | [`probe_library_extensions.py`](probe_library_extensions.py) | Which file extensions does the reference admit as items, and which does it ignore? | 003 §3.2, OQ-1 | no |
@@ -93,6 +94,7 @@ python3 tools/probe_playlist_creation.py   --allow-writes
 python3 tools/probe_playlist_expansion.py  --allow-writes
 python3 tools/probe_playlist_visibility.py --allow-writes
 python3 tools/probe_playlist_rename.py     --allow-writes
+python3 tools/probe_playlist_read.py       --allow-writes
 python3 tools/probe_playstate.py      --allow-writes
 python3 tools/probe_auth_mechanisms.py --disabled-user probe-disabled
 python3 tools/probe_library_extensions.py
