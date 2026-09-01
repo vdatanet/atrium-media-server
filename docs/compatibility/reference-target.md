@@ -45,6 +45,52 @@ The reasoning for pinning, and for pinning to this particular line rather than `
 > moving it is the procedure above, not a side effect of a sweep. If the pin ever moves to
 > `10.11.11`, the exception list empties and should be deleted.
 
+> **The gap runs the other way too, and that half is not a version delta at all: nineteen of the
+> index's 1043 names were never Jellyfin's** (2026-09-01). Fetched the document fresh from the
+> reference server and diffed it against the index
+> (`python3 tools/fetch_reference_spec.py`, then `tools/extract_property_names.py --check`):
+> `added`, `deleted`, `episodes`, `ids`, `imdb`, `movies`, `not_found`, `number`, `people`,
+> `season`, `seasons`, `shows`, `slug`, `tmdb`, `trakt`, `tvdb`, `tvrage`, `updated` and `year`
+> are in the index and appear **nowhere in the `10.11.11` document at any depth** — not as a
+> property name, and fourteen of the nineteen not even as a quoted string. They are not
+> something the extractor stopped reaching: it reads `components.schemas[*].properties`, the
+> same place it always read. Nor are they Jellyfin's under another spelling — a search of the
+> source tree at `v10.11.11` finds no `not_found`, no `tvrage` and no `trakt` in any serialised
+> name (an absence, so it carries no `file:line`). The vocabulary is the Trakt.tv API's — an `ids`
+> object of `trakt`/`slug`/`imdb`/`tmdb`/`tvdb`/`tvrage`, and a sync response of
+> `added`/`deleted`/`updated`/`not_found` each holding `movies`/`shows`/`seasons`/`episodes`/
+> `people` — which reaches an OpenAPI document only through an installed plugin.
+>
+> **A Jellyfin's document is the core API plus whatever plugins are installed**, and that is
+> measurable on the current server rather than inferred: it has six plugins, and two of the 316
+> paths it declares — `/TMDbBoxSets/Refresh` and `/Tmdb/ClientConfiguration` — come from them
+> `[probe: /Plugins and /api-docs/openapi.json, Jellyfin 10.11.11, 2026-09-01]`. None of the six
+> is Trakt, which is why the nineteen names are gone.
+>
+> So `property-names.json` is not an extraction of *the* `10.11.10` document. It is an extraction
+> of **one server's** `10.11.10` document, taken while that server had a plugin the reference
+> server no longer has — and **no server this project can reach serves that document**. The
+> freshness check therefore cannot pass anywhere, not merely in CI: the only document obtainable
+> is `10.11.11`, and the index pins `10.11.10`. A conditional gate that would fail on every run
+> if its condition were met is not a gate that is skipped; it is one that cannot be satisfied.
+>
+> **What it costs today is nothing reachable**, and that is luck rather than design: all nineteen
+> begin lowercase, and `test_every_alias_is_pascal_case` rejects any alias that does — so no
+> Atrium field can pass the sweep on a Trakt name, because a different test fails it first. What
+> it costs in principle is that the sweep's question — *is this exactly a property name the
+> reference uses?* — is asked against a set nineteen names wider than the reference, and
+> `difflib`'s "did you mean" suggestions are drawn from that same set. The index's other
+> twenty-three lowercase names are genuine and must stay: Jellyfin's own plugin-repository
+> schemas are camelCase (`repositoryUrl`, `sourceUrl`, `subScore`, `targetAbi`, `checksum`)
+> and so is `ProblemDetails` (`type`, `title`, `status`, `detail`, `instance`). Lowercase is
+> not the tell; absence from the document is.
+>
+> **Neither half is fixed here.** Regenerating against `10.11.11` *is* the version move — the
+> index's version is the pin, `tests/conformance/test_aliases.py` asserts it equals
+> `surface.yaml`'s, and step 2 of the procedure above needs the differential harness feature 010
+> delivers. Pruning the nineteen by hand contradicts the index's own header and would make it
+> reproducible from nothing at all. Both are decisions; this note is the measurement they need.
+
 `master` (the 12.0.0 line) is explicitly **not** the target. It moves, it has already changed
 behaviours that clients depend on, and no client ships against it.
 

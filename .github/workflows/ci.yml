@@ -112,6 +112,12 @@ jobs:
         # It says which of the two happened, because a step that prints nothing when it skips is
         # a step nobody notices has stopped working.
         #
+        # It has never once run, and placing a document here today would not make it pass: the
+        # index pins 10.11.10 and the only document anyone can fetch is 10.11.11, so the branch
+        # that runs fails by construction. That is a fact about the pin, not about this step -
+        # measured 2026-09-01 and written down in docs/compatibility/reference-target.md section 1,
+        # along with the nineteen names the index carries that no Jellyfin document has.
+        #
         # What holds without a document is asserted by the suite instead, where it is a hard gate
         # rather than a conditional one: the index is sorted, self-counting, and pins the same
         # version surface.yaml does. tests/conformance/test_aliases.py.
