@@ -3,7 +3,7 @@ feature: 009-playlists
 title: Playlists — tasks
 status: Accepted
 created: 2026-08-31
-updated: 2026-08-31
+updated: 2026-09-01
 accepted: 2026-08-31
 plan_status_required: Accepted
 plan_status_actual: Accepted
@@ -688,7 +688,7 @@ one migration; it is one migration, four maps and a clause.
 
 ## T10 — Adding and removing, and every container expands
 
-- [ ] **Changes:** the add and remove routes. Add resolves each id, expands a container to its
+- [x] **Changes:** the add and remove routes. Add resolves each id, expands a container to its
   playable descendants in the container's own order through the existing children query, and
   appends; unknown ids are skipped unconditionally here, unlike creation. Remove takes `entryIds`
   and answers `204` for an id that is not there. **The refusal for a caller who may not edit is
@@ -700,6 +700,78 @@ one migration; it is one migration, four maps and a clause.
   album's own order with the album itself absent, a series' episodes, a collection's films;
   duplicates dropped on both paths; removing an absent entry id answering `204`.
 - **Spec reference:** §3.4, §3.5, AC-5, AC-6, AC-7
+
+> **Done (2026-09-01).** *"Every kind of container" was a list of five, and the rule is a
+> predicate over everything that is not a file.* Measured, three more kinds expand and none of the
+> documents had named them: a **plain folder**, **the library root itself** — twenty-one entries
+> from a view listing three children, because the expansion is recursive — and **another
+> playlist**, which is the one container whose children are not in the item tree at all
+> `[probe: tools/probe_playlist_expansion.py, Jellyfin 10.11.11, 2026-09-01]`. Written from the
+> five kinds, the rule would have put a whole library into a playlist as a single row. What
+> answers *"is this a container"* was already in the domain: `FILE_BACKED` is the three types a
+> file produces, and everything else holds something. Two more properties no single-id request can
+> show: the expansion lands **where the container was named** in a batch, and a folder's order and
+> an **artist's** are different orders — a folder answers `/Items?parentId=`'s, an artist answers
+> album artist, album, sort name over the tracks they are *credited* on, which was forty-two rows
+> where the tree walk gives forty.
+>
+> *And the same function moves a value the create route had already shipped wrong.* Plan §6.2 says
+> one expansion serves both paths, so creation expands too — and the media type it settles comes
+> from **what the ids expanded to**, not from the id: a series in `Ids` creates a `Video` playlist
+> where the series' own media type is `Unknown` and the fallback is `Audio`. T8's walk read
+> `MEDIA_TYPE_OF[Series]` and would have stored `Unknown`, a value the reference's creation path
+> cannot produce at all (spec §4). Four containers answer from their kind before their contents
+> are consulted — three music ones `Audio`, a `Genre` `Video`
+> `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:95-114 @ v10.11.11]` — and
+> that map is the only way `Video` is reachable for a container that expands to nothing, which a
+> genre always does.
+>
+> *The finding that nearly went the other way: one identifier is refused where every other unknown
+> one is skipped.* The first run of the new probe measured *"an unknown id refuses the whole add
+> request, in any position"* — flatly contradicting both documents — and it was wrong, because the
+> id it called unknown was `00000000000000000000000000000000`. **`Guid.Empty` is a third class**:
+> the reference rejects it in the item lookup rather than failing to find it
+> `[source: Emby.Server.Implementations/Library/LibraryManager.cs:1357-1362 @ v10.11.11]`, so it is
+> the bare-text `400` on the add route wherever it sits, and on **creation** even in the position
+> where an ordinary unknown id is skipped — while a *malformed* id is dropped in silence and a
+> genuinely absent one is skipped exactly as documented
+> `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`. It is the id a
+> client sends when a default-initialised field reaches the wire, and both probes now carry the
+> pair side by side so it cannot be collapsed again. It is **not** a refusal on the removal, which
+> looks nothing up: absent, malformed, all-zeros and no parameter at all are four `204`s.
+>
+> *Two shapes the task statement had not asked about.* Both write routes answer T9's twenty bytes —
+> an absent playlist and a real item that is not a playlist are one body, so no write discloses a
+> playlist a caller may not see — and a **malformed** playlist id is the binder's validation `400`
+> on the add and an unhandled **`500`** on the removal, one path and two bindings, because that
+> action takes the segment as text and parses it itself. Atrium answers the `400` on both:
+> behaviours §3.19 gains its third row rather than a section of its own, since it is the same class
+> and the same argument.
+>
+> *One condition AC-13 was missing.* The administrator's `403` is reachable only on a playlist that
+> administrator can **see**. The lookup in front of every editing test filters by owner, share and
+> `IsPublic` with no administrator branch, so a private playlist is `404` and never reaches the
+> permission test — the criterion is corrected rather than the code.
+>
+> *Two routine calls, taken rather than escalated.* **`EmptyForbiddenError` is written now**, not at
+> T13: the decision recorded on 2026-08-31 gave the policy-shaped `403` a second class answering
+> `empty_error(403)`, and the editing refusal needs the same bytes for the reason spec §3.7 already
+> states — the split is between a refusal the reference *returns* and one it *throws*, not between
+> a controller and a policy, so one class serves both raise sites and T13 reuses it. **The artist's
+> middle ordering key is applied after the read**, because `Album` is not one of the eight `sortBy`
+> tokens and `SortBy`'s own docstring forbids a ninth: a key on the wire that no reference server
+> orders by is exactly the delta that enum exists to prevent.
+>
+> *Two things this task could not prove at the HTTP boundary, named rather than hidden.* The
+> artist ordering is asserted as a key function in `tests/unit/test_playlist_expansion_order.py` —
+> the seeded world's one guest album sorts the same way under the three keys and under a plain
+> `SortName`, so a boundary test would agree with itself, and a second album for that artist is a
+> fixture change belonging to a fixture task. And the **music genre** branch is source-cited rather
+> than proven: the world's music genre is carried by an album and not by its tracks, so the branch
+> and the folder branch answer alike there. The **video** genre's `Video` is proven, and it is the
+> row that makes the map load-bearing. Every other clause was checked by deletion, by hand: removing
+> the expansion fails four tests, the all-zeros guard one, the `may_edit` test three, and the nested
+> playlist branch one.
 
 ## T11 — `Move`, and the two refusals the reference does not make
 
@@ -734,11 +806,14 @@ one migration; it is one migration, four maps and a clause.
 
 ## T13 — `POST /Items/{itemId}`: the rename, and the two things it refuses
 
-- [!] **Blocked by a decision, from T2's measurement.** The reference's `403` here is the **empty**
-  shape — no body, no content type, an authorization policy's refusal — and `ForbiddenError` stopped
-  being that at T2. This route needs the other shape by a road nobody has chosen: a second exception
-  class, or the route returning the response itself the way the delete `401` does (plan §6). The
-  rest of the task is unchanged and is written below.
+> **No longer blocked (2026-09-01).** It was: the reference's `403` here is the **empty** shape —
+> no body, no content type, an authorization policy's refusal — and `ForbiddenError` stopped being
+> that at T2, so the route needed the other shape by a road nobody had chosen. The decision taken
+> on 2026-08-31 was a second exception class, and **T10 wrote it**: `EmptyForbiddenError` in
+> `compat/errors.py`, answering `empty_error(403)`, because the playlist controller's own editing
+> test sends the same bytes for the same reason (spec §3.7). Raise that class here and assert the
+> empty body *and* the absent content type.
+
 - [ ] **Changes:** `api/items.py` gains the route: an administrator renaming a playlist applies
   `Name` and nothing else; any non-administrator is `403` — the reference's own answer from an
   elevated controller; an administrator on an item that is not a playlist is `403`, which is v1's

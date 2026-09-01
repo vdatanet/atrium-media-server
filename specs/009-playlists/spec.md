@@ -3,8 +3,8 @@ feature: 009-playlists
 title: Playlists
 status: Accepted
 created: 2026-08-26
-updated: 2026-08-31
-amended: 2026-08-31 at the plan gate — §3.7 and a new AC-19 state the *bytes* of the refusal a caller gets for naming another user, which the spec gate had measured and recorded only as a status. The reference answers the 25-byte `text/plain` body every controller-level refusal carries; this server answered an empty `403` for that whole class, on the argument that it is decided where the empty `401` is, with a `⚠️` in the code saying the shape was unmeasured because no non-administrator account existed to produce one. The visibility probe made one. It is a wire difference on a route 005 already ships, so the correction is taken where the refusal is decided rather than on 009's own two routes — decided by the user at the plan gate; and 2026-08-31 by T1 — §3.5 stated the move's arithmetic for a caller who sees the whole playlist and left the other caller to §3.7. It now says both: the index is judged against the list that reader was given and the entry lands at `newIndex` **of it**, where the reference is off by one on every downward move and will reorder an entry that reader was never shown. Neither difference is reachable against a reference server — what it hides is hidden by a parental-rating check — so both belong to §3.7's divergence, and AC-17 gains the clause. Plus the provenance: all thirty (source, `newIndex`) pairs are measured where one was; and 2026-08-31 by T2 — a `403` is **two** shapes and §3.7 had described one. The content type was never measured on either: the probe cited for both printed forty bytes of body and no headers, which cannot separate an empty body from a body-less refusal. Measured, the controller's refusal is `text/plain` with no `charset` and §3.8's elevated-controller refusal carries no content type and no body at all — so §3.7 and §3.8 were never in conflict, AC-18 and AC-19 assert different bytes on purpose, and only the first shape is the one the shared handler answers. Plus two raise sites that shared that handler and are neither measurement: a live token whose account was disabled (002 OQ-5, still open) and one user reading another, which the reference does not refuse at all and 2026-08-31 by T3 — §3.2 said `MediaType` is *inferred at creation* and left open whether it then follows the contents, which is the difference between a value a row carries and a value anybody derives. Measured, it is fixed at creation and never revised: a playlist created empty answers `Audio` after a film is added, one created from a film answers `Video` after a track is, and the body's own `MediaType` outranks both. §3.2 says so, and gains a third refusal — an unrecognised `MediaType` is a `400` in the validation shape, not a dropped token. §4 gains the consequence nobody had asked about: `mediaTypes=` filters playlists by the stored value, so the parameter is the one place a per-row media type meets a listing that answers it from the kind, and that is left undecided rather than improvised and 2026-08-31 by T5 — §3.7's table said which callers may edit and never what a refusal to edit looks like, and AC-13 and AC-14 said "refused" and "may not" with no status at all. Measured, every "no" in that column is `403` with **no body and no content type** — the body-less shape, on a permission test the playlist controller makes itself, which means behaviours §1.11's split between a controller and a policy is really the split between a refusal *thrown* and a refusal *returned*, and both happen in the same action. Plus the two classes nobody had produced: a `CanEdit: false` share is stored by the create body and is a reader who is refused the move, and a public playlist's reader is refused identically and 2026-08-31 by T7 - §3.1 said a playlist cannot hold one item twice and §3.4 said de-duplication is two stages, both measured on a playlist holding one entry. Measured on playlists that already held several: the entry already there keeps its position and the first occurrence of a repeat is the one that survives - and the stage that compares against the existing entries reads an id cache that is empty until an entry has been resolved, so 6 of 8 identical requests added an item the playlist already held. The duplicate that produces is unaddressable - two rows, one `PlaylistItemId`, `Move` reordering the first and `Remove` deleting both - so §3.1, §3.4 and AC-5 now state Atrium's rule with its argument, and the feature ships a fourth divergence (behaviours §3.18) and 2026-08-31 by T8 — §3.2's error table called its validation `400` one refusal keyed on the property. It is **three**, at three keys, told apart by what about the body was wrong: a `Name` that is absent is keyed `$` — the deserialiser refusing the document before any property is validated — a `Name` that is present and **null** is keyed `Name`, and a malformed identifier in `Ids` or `UserId` is keyed with the empty string. None of the three names the action parameter behaviours §1.11 said every body refusal names; that row belongs to a **required** body, and this route's is optional. The query form is real and is implemented — `?name=` with no body at all creates a playlist and a query value beats the body's — but a body that fails to deserialise is refused before the query is read, so the two sources merge after binding rather than instead of it. Two requests the reference cannot serve it answers anyway: no name in either source is a **`500`**, and a `UserId` naming nobody is a `200` creating a playlist no rule in §3.7 can reach; both are refused here, behaviours §3.19. And one value is refused two ways on one route — `MediaType: Nonsense` in the body is T3's validation `400`, `?mediaType=Nonsense` in the query is dropped and the playlist created
+updated: 2026-09-01
+amended: 2026-08-31 at the plan gate — §3.7 and a new AC-19 state the *bytes* of the refusal a caller gets for naming another user, which the spec gate had measured and recorded only as a status. The reference answers the 25-byte `text/plain` body every controller-level refusal carries; this server answered an empty `403` for that whole class, on the argument that it is decided where the empty `401` is, with a `⚠️` in the code saying the shape was unmeasured because no non-administrator account existed to produce one. The visibility probe made one. It is a wire difference on a route 005 already ships, so the correction is taken where the refusal is decided rather than on 009's own two routes — decided by the user at the plan gate; and 2026-08-31 by T1 — §3.5 stated the move's arithmetic for a caller who sees the whole playlist and left the other caller to §3.7. It now says both: the index is judged against the list that reader was given and the entry lands at `newIndex` **of it**, where the reference is off by one on every downward move and will reorder an entry that reader was never shown. Neither difference is reachable against a reference server — what it hides is hidden by a parental-rating check — so both belong to §3.7's divergence, and AC-17 gains the clause. Plus the provenance: all thirty (source, `newIndex`) pairs are measured where one was; and 2026-08-31 by T2 — a `403` is **two** shapes and §3.7 had described one. The content type was never measured on either: the probe cited for both printed forty bytes of body and no headers, which cannot separate an empty body from a body-less refusal. Measured, the controller's refusal is `text/plain` with no `charset` and §3.8's elevated-controller refusal carries no content type and no body at all — so §3.7 and §3.8 were never in conflict, AC-18 and AC-19 assert different bytes on purpose, and only the first shape is the one the shared handler answers. Plus two raise sites that shared that handler and are neither measurement: a live token whose account was disabled (002 OQ-5, still open) and one user reading another, which the reference does not refuse at all and 2026-08-31 by T3 — §3.2 said `MediaType` is *inferred at creation* and left open whether it then follows the contents, which is the difference between a value a row carries and a value anybody derives. Measured, it is fixed at creation and never revised: a playlist created empty answers `Audio` after a film is added, one created from a film answers `Video` after a track is, and the body's own `MediaType` outranks both. §3.2 says so, and gains a third refusal — an unrecognised `MediaType` is a `400` in the validation shape, not a dropped token. §4 gains the consequence nobody had asked about: `mediaTypes=` filters playlists by the stored value, so the parameter is the one place a per-row media type meets a listing that answers it from the kind, and that is left undecided rather than improvised and 2026-08-31 by T5 — §3.7's table said which callers may edit and never what a refusal to edit looks like, and AC-13 and AC-14 said "refused" and "may not" with no status at all. Measured, every "no" in that column is `403` with **no body and no content type** — the body-less shape, on a permission test the playlist controller makes itself, which means behaviours §1.11's split between a controller and a policy is really the split between a refusal *thrown* and a refusal *returned*, and both happen in the same action. Plus the two classes nobody had produced: a `CanEdit: false` share is stored by the create body and is a reader who is refused the move, and a public playlist's reader is refused identically and 2026-08-31 by T7 - §3.1 said a playlist cannot hold one item twice and §3.4 said de-duplication is two stages, both measured on a playlist holding one entry. Measured on playlists that already held several: the entry already there keeps its position and the first occurrence of a repeat is the one that survives - and the stage that compares against the existing entries reads an id cache that is empty until an entry has been resolved, so 6 of 8 identical requests added an item the playlist already held. The duplicate that produces is unaddressable - two rows, one `PlaylistItemId`, `Move` reordering the first and `Remove` deleting both - so §3.1, §3.4 and AC-5 now state Atrium's rule with its argument, and the feature ships a fourth divergence (behaviours §3.18) and 2026-08-31 by T8 — §3.2's error table called its validation `400` one refusal keyed on the property. It is **three**, at three keys, told apart by what about the body was wrong: a `Name` that is absent is keyed `$` — the deserialiser refusing the document before any property is validated — a `Name` that is present and **null** is keyed `Name`, and a malformed identifier in `Ids` or `UserId` is keyed with the empty string. None of the three names the action parameter behaviours §1.11 said every body refusal names; that row belongs to a **required** body, and this route's is optional. The query form is real and is implemented — `?name=` with no body at all creates a playlist and a query value beats the body's — but a body that fails to deserialise is refused before the query is read, so the two sources merge after binding rather than instead of it. Two requests the reference cannot serve it answers anyway: no name in either source is a **`500`**, and a `UserId` naming nobody is a `200` creating a playlist no rule in §3.7 can reach; both are refused here, behaviours §3.19. And one value is refused two ways on one route — `MediaType: Nonsense` in the body is T3's validation `400`, `?mediaType=Nonsense` in the query is dropped and the playlist created and 2026-09-01 by T10 — §3.4's *"every kind of container"* named five kinds and the rule is wider than any list: a plain folder, **the library root itself** and **another playlist** expand too, recursively, and the expansion lands where the container was named in the batch rather than at the end. The orders are two — a folder's own for a folder, and album artist, album, sort name over the *credited* tracks for an artist — and creation expands as well, which moves the media type it infers: a series in `Ids` creates a `Video` playlist where the series' own media type is `Unknown` and the fallback is `Audio`, so §3.2's *"the media type of the first resolvable id"* is the media type of what that id expanded to. Plus the identifier neither document had separated: an id of **all zeros** is refused with the bare-text `400` by the add route and by creation in the position where an ordinary unknown id is skipped, because the reference rejects an empty identifier in its lookup rather than failing to find it — and it is *not* a refusal on the removal, which looks nothing up. §3.5 gains the removal's four measured classes and the third request behaviours §3.19 now carries: a malformed playlist id is the binder's `400` on the add and a **`500`** on the removal, one path, two bindings. AC-7 states the width and AC-13 the condition it was missing — the administrator's `403` is reachable only on a playlist that administrator can see, and is a `404` otherwise
 depends_on: [005]
 ---
 
@@ -132,6 +132,7 @@ that type, carries `UserData`, and can be a favourite.
 | `UserId` naming **another user**, from a non-administrator | `403`, `text/plain`, the 25 bytes — the same helper the add route uses, measured here too `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]` |
 | An id in `Ids` that does not exist, with **no** `MediaType` and no resolvable id before it | **`400`**, and the body is the bare-text shape, not the validation one |
 | An id in `Ids` that does not exist, after a resolvable id, or with `MediaType` given | `200`; the unknown id is skipped |
+| An id in `Ids` of **all zeros**, anywhere in the list | **`400`**, the bare-text shape, and nothing is created — including after a resolvable id, where an ordinary unknown id is skipped. §3.4 carries the rule and where it comes from `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]` |
 | A `MediaType` the reference does not know — `Nonsense` | **`400`**, and the body is the validation shape, keyed on `$` rather than on a parameter name: the value is refused where the body is deserialised, not by a check inside the route `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]` |
 | A value in `Ids` or `UserId` that is not an identifier | `400`, the validation shape keyed on the **empty string** with `The supplied value is invalid.` — the binder's refusal, which is a third key on the same route |
 | Unauthenticated | `401` |
@@ -175,6 +176,19 @@ beside the refusal it is usually contrasted with.
 for a playlist created empty, and the media type of the first resolvable id otherwise. Two
 playlists may carry the same `Name`; they are two items.
 `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`
+
+> **"The first resolvable id" is not the id's own media type when that id is a container**, which
+> T10 measured because creation expands as well (§3.4). A **series** in `Ids` creates a playlist of
+> its episodes answering `Video`, where the series' own media type is `Unknown` and the fallback
+> for a playlist that settles nothing is `Audio` — so the value comes from what the ids **expanded
+> to**. Four containers answer from their kind before their contents are consulted, and they are
+> the reason a media type can be decided by a container that expands to nothing: a music album,
+> artist or genre answers `Audio` and a `Genre` answers `Video`
+> `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:95-114 @ v10.11.11]`. A
+> container that expands to nothing and answers from neither decides nothing, and the walk moves
+> on: an empty folder alone creates an `Audio` playlist and the same folder followed by a film
+> creates a `Video` one.
+> `[probe: tools/probe_playlist_expansion.py, Jellyfin 10.11.11, 2026-09-01]`
 
 **And creation decides it once.** The value is a fact about *that playlist*, not about playlists
 and not about its current contents: a playlist created empty answers `Audio` for ever, including
@@ -286,14 +300,76 @@ tracks **in the album's own order**, an artist adds their tracks, a series and a
 episodes, and a collection adds its films. The container itself never becomes an entry.
 `[probe: tools/probe_playlist_expansion.py, Jellyfin 10.11.11, 2026-08-31]`
 
-`404` for an unknown playlist. Unknown item ids are skipped — unconditionally here, unlike §3.2's
-creation path.
+> **"Every kind" is wider than the five this paragraph names, and three more were measured at
+> T10.** A **plain folder** expands, **the library root itself** expands — twenty-one entries from
+> a view listing three children, because the expansion is recursive — and **another playlist**
+> expands to its own entries. Anything that holds something is a container; the five kinds above
+> are examples of the rule and not the rule. A container that holds nothing adds nothing and says
+> so with the same `204`.
+> `[probe: tools/probe_playlist_expansion.py, Jellyfin 10.11.11, 2026-09-01]`
+>
+> **And the expansion happens where the container was named.** A request naming a film, an album
+> and a second film lands the album's tracks *between* the two films, so a client that builds a
+> playlist in one request gets the order it asked for. No single-id request can tell that from an
+> expansion appended at the end, which is why it was measured separately.
+>
+> **The orders are two, not one.** A folder answers in the folder's own order — the order
+> `/Items?parentId=` gives, which is what makes AC-7's "the album's own order" true. An **artist**
+> answers a different query, ordered by album artist, then album, then sort name, over the tracks
+> that artist is *credited* on: forty-two rows where a walk down the item tree gives forty.
+
+`404` for an unknown playlist, in §3.3's twenty bytes — an identifier that addresses nothing and a
+real item that is not a playlist are one body here too, so no write route discloses a playlist a
+caller may not see. A **malformed** playlist id is the validation `400`, as on the read.
+`[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`
+
+Unknown item ids are skipped — unconditionally here, unlike §3.2's creation path: measured in
+first, last and middle position, and the batch's other ids are added. A **malformed** id in `ids`
+is dropped in silence, where the same value in §3.2's *body* is a validation `400` — a query list
+binds token by token and a body property binds as a whole.
+
+> **One identifier is refused rather than skipped, and it is the one a client sends by accident.**
+> An id of all zeros — `Guid.Empty`, what a default-initialised field serialises to — answers
+> `400` in the bare-text shape and adds **nothing**, beside a resolvable id included; and on §3.2's
+> creation path it is refused even in the position where an ordinary unknown id is skipped. The
+> reference rejects an empty identifier in its item lookup rather than failing to find it
+> `[source: Emby.Server.Implementations/Library/LibraryManager.cs:1357-1362 @ v10.11.11]`, so it is
+> one rule on both routes rather than a property of either
+> `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`. It is **not** a
+> refusal on the removal below, which looks nothing up.
+
+A request naming no ids at all is `204` and changes nothing.
+
+**The caller who may not edit is refused with `403`, no body and no content type** — §3.7's
+*May edit* column, and the shape §3.8 measures rather than the 25 bytes of AC-19. It is reachable
+only for a playlist the caller can **see**: an administrator who is none of §3.7's three classes is
+answered `404` first, because the lookup in front of the editing test filters by owner, share and
+`IsPublic` with no administrator branch
+`[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:62-78 @ v10.11.11]`.
 
 ### 3.5 Removing and reordering
 
 **`DELETE /Playlists/{playlistId}/Items`** removes entries by entry id, several at once, named in
 `entryIds`. `204`. Removing an entry id that is not in the playlist is `204`, not an error —
 clients retry, and a retry after a successful removal must not fail. `[spec: RemoveItemFromPlaylist]`
+
+**Measured over every class of identifier, and all of them are that same `204`**: an id that
+addresses nothing, a malformed one, an id of all zeros — which the add route refuses — and no
+`entryIds` parameter at all. The route looks nothing up, which is why the one refusal §3.4 has
+cannot happen here. The surviving entries keep their order.
+`[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`
+
+**This route takes no `userId`**, where the add route beside it does `[spec: RemoveItemFromPlaylist]`
+— it reads the caller's own identity, and declaring the parameter here would be a lever no
+reference server has.
+
+**And a malformed *playlist* id answers differently on the two routes of one path.** `POST` is the
+model binder's validation `400`; `DELETE` is a **`500`** in the bare-text shape, because that
+action takes the segment as text and parses it itself
+`[source: Jellyfin.Api/Controllers/PlaylistsController.cs:447-456 @ v10.11.11]`. Atrium answers the
+validation `400` on both — [behaviours §3.19](../../docs/compatibility/behaviours.md), the same
+argument as the two refusals already recorded there
+`[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`.
 
 **`POST /Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}`** moves one entry to an absolute
 index. `204`.
@@ -573,7 +649,10 @@ the only thing whose loss is unrecoverable, and the plan has to treat them accor
 6. Removing by entry id removes exactly that row; removing an entry id that is not present
    answers `204`.
 7. Adding an album adds its tracks in the album's own order, and the album itself is not an entry;
-   adding a series adds its episodes.
+   adding a series adds its episodes; and so does **every** other container — a season, an artist,
+   a plain folder, a library root and another playlist — with the expansion landing where the
+   container was named in the batch rather than after it. A container holding nothing adds nothing
+   and still answers `204`.
 8. `GET /Playlists/{id}/Items` accepts no sort parameter, and the order it returns is the
    playlist's.
 9. Moving an entry from index 0 to index 3 on a five-entry playlist produces `B C D A E` — the
@@ -587,7 +666,9 @@ the only thing whose loss is unrecoverable, and the plan has to treat them accor
 12. `DELETE /Items/{id}` on a playlist deletes it; on a movie it answers `403` and the file remains
     on disk; on a playlist the caller may not delete, it answers `401`.
 13. An administrator who does not own a playlist may delete it and may not edit it: `Move`,
-    `Add` and `Remove` are refused with `403`, **no body and no content type**.
+    `Add` and `Remove` are refused with `403`, **no body and no content type** — on a playlist that
+    administrator can *see*. On one they cannot, the same three routes answer `404` before the
+    editing test is reached, which is the same lookup §3.3's `404` comes from.
 14. A user shared with `CanEdit` through the create body may reorder the playlist; one shared
     without it is refused in that same shape, and so is a public playlist's reader.
 15. A non-public playlist is invisible to another non-administrator user in `/Items` and answers

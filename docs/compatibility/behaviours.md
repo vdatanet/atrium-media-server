@@ -2288,7 +2288,7 @@ can observe is a playlist that never grows a row it cannot then delete. Specifie
 
 ---
 
-### 3.19 `CreatePlaylist` crashes on a request with no name, and accepts one for a user that does not exist — class A, diverged
+### 3.19 The playlist write routes crash on requests they cannot serve — class A, diverged
 
 **Jellyfin does:** answer `POST /Playlists` carrying **neither a `Name` in its body nor one in its
 query** with **`500`**, `text/plain`, the fixed 25 bytes. The four properties may be sent either
@@ -2301,20 +2301,30 @@ The same run measured a second unserveable request answered rather than refused:
 exist. Nothing then reaches it — every rule in [009 §3.7](../../specs/009-playlists/spec.md) is a
 comparison against an owner or a share.
 
-**Depends on it:** nothing can be built on either. A `500` carries no information a client can act
-on, and a playlist owned by nobody is unreadable, uneditable and undeletable by every caller — a
-client that made one could not tell its user what happened to it. Class A by §3.9's reasoning, and
-the same shape as [§3.15](#315-moves-index-is-unguarded-in-both-directions--class-a-diverged) one
-route away: an unhandled failure on a malformed input where the well-formed input beside it is a
-clean answer.
+**And a third, on a sibling route, found at 009 T10.** A **malformed** playlist identifier in the
+path of `DELETE /Playlists/{playlistId}/Items` is a `500` in the same 25 bytes, where the **same
+malformation on the same path** through `POST` is the model binder's validation `400`. The two
+actions bind that segment differently — the add declares an identifier and the removal declares a
+string it parses inside the method — so one refusal is the framework's and the other is an
+unhandled parse `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`
+`[source: Jellyfin.Api/Controllers/PlaylistsController.cs:447-456 @ v10.11.11]`.
 
-**Atrium does: diverge — refuse both, and create nothing.** A request naming no name anywhere is
-`400` in the *same* `text/plain` shape the reference's `500` carries, so the status is the whole
+**Depends on it:** nothing can be built on any of the three. A `500` carries no information a
+client can act on, and a playlist owned by nobody is unreadable, uneditable and undeletable by
+every caller — a client that made one could not tell its user what happened to it. Class A by
+§3.9's reasoning, and the same shape as
+[§3.15](#315-moves-index-is-unguarded-in-both-directions--class-a-diverged) one route away: an
+unhandled failure on a malformed input where the well-formed input beside it is a clean answer.
+
+**Atrium does: diverge — refuse all three, and create nothing.** A request naming no name anywhere
+is `400` in the *same* `text/plain` shape the reference's `500` carries, so the status is the whole
 difference; a `userId` naming nobody is the problem-details `404` that `effective_user` already
 answers on every 005 route, which is where the rule lives rather than being written a second time
-here. The query form itself is **parity** and is implemented: refusing a request the reference
-serves would be the larger divergence. Specified in
-[009 §3.2](../../specs/009-playlists/spec.md).
+here; and a malformed playlist id is the validation `400` on **both** write routes, because both
+declare that segment as an identifier and one shape for one path is the smaller surprise. The query
+form itself is **parity** and is implemented: refusing a request the reference serves would be the
+larger divergence. Specified in [009 §3.2](../../specs/009-playlists/spec.md) and
+[§3.5](../../specs/009-playlists/spec.md).
 
 ---
 
