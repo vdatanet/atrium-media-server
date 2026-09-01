@@ -3,10 +3,10 @@ feature: 005-item-query-api
 title: Item query API
 status: Implemented
 created: 2026-08-26
-updated: 2026-08-28
+updated: 2026-09-01
 accepted: 2026-08-27
 implemented: 2026-08-28
-amended: 2026-08-29 by 008 T3 — §3.2 gains `Container`, `HasSubtitles` and `VideoType` per type and `IsHD` gated, four properties T1 measured and declined under Principle VI and that 007's owed list and 008 AC-28 have since given readers; and 2026-08-28 by 006 T2 - section 3.2 gains `ParentBackdropItemId`, the pair 005 measured and emitted only half of; by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated)
+amended: 2026-08-29 by 008 T3 — §3.2 gains `Container`, `HasSubtitles` and `VideoType` per type and `IsHD` gated, four properties T1 measured and declined under Principle VI and that 007's owed list and 008 AC-28 have since given readers; and 2026-08-28 by 006 T2 - section 3.2 gains `ParentBackdropItemId`, the pair 005 measured and emitted only half of; by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated); and 2026-09-01 at 010's measurement gate, by the two decisions that gate left to this feature - section 3.7's `Similar` hedge becomes a measurement and two recorded divergences (behaviours section 3.23 and section 3.24), AC-12 gains the exact-`limit` clause and names both, and OQ-5's `Similar` half moves to Resolved with both decisions made rather than owed
 depends_on: [002, 004]
 ---
 
@@ -323,9 +323,27 @@ were measured by name on a live configuration: `LatestItemsExcludes` (view ident
 to the unscoped request) and `HidePlayedInLatest`, `true` on a configuration never edited, which
 keeps played items out unless the caller's own played filter asks for them.
 
-**Similar and InstantMix are deterministic on purpose.** The reference's are not obviously so, and
-a non-deterministic endpoint cannot be tested at L2 or compared at L3. Determinism is invisible to a
-client — it cannot tell a stable ranking from a lucky one — so this costs nothing under Principle I.
+**`Similar` is deterministic on purpose, and that is a recorded divergence** *(corrected at 010's
+measurement gate, 2026-09-01 — this paragraph said "the reference's are not obviously so", which
+was a hedge in a place where a measurement was available)*. **The reference does not rank `Similar`
+at all**: it filters on the seed's own genres and tags and orders what matches at random, so four
+identical requests returned 48 distinct items with **none** in common. v1 scores instead — shared
+genres, people and studios — because a non-deterministic endpoint cannot be tested at L2 or
+compared at L3 at all, which is 010's problem as much as this feature's. The argument is not that a
+client cannot see the difference; it is that nothing can be built on a random draw, and every
+answer Atrium sends here is one the reference could have drawn. Recorded, with the full argument,
+in [behaviours §3.23](../../docs/compatibility/behaviours.md).
+
+**`limit` is a maximum here, and that is the second divergence.** The reference answers `limit + 4`
+rows on a **movie** seed — measured at 1, 5 and 20, on two seeds — where a series, an album and an
+artist seed answer exactly `limit`; and it fills `TotalRecordCount` with the number of rows it
+returned. Atrium answers exactly `limit` on every seed type, with `TotalRecordCount` the pre-limit
+pool size that AC-5 requires of every list endpoint in this feature. Recorded in
+[behaviours §3.24](../../docs/compatibility/behaviours.md).
+`[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]`
+
+**`InstantMix` is deterministic for the same reason, and the reference's own behaviour is still
+unmeasured** — §7 OQ-5 holds that half open, and no divergence is claimed for it until it is.
 
 ### 3.8 Series navigation
 
@@ -425,7 +443,12 @@ the point of listing it: a query endpoint that owns state is a query endpoint wi
 11. Season 0 sorts **first** — plain index order — in `/Shows/{seriesId}/Seasons`, as the
     reference sends it. *(Corrected by T12: the drafted criterion said "last" and the
     measurement said otherwise; see §3.8.)*
-12. `Similar` and `InstantMix` return identical results for identical input on repeated calls.
+12. `Similar` and `InstantMix` return identical results for identical input on repeated calls,
+    and `Similar` returns **exactly** `limit` rows for every seed type. *(Extended 2026-09-01 at
+    010's gate: both halves were true and neither said that they are divergences. The reference
+    draws `Similar` at random — [behaviours §3.23](../../docs/compatibility/behaviours.md) — and
+    answers `limit + 4` on a movie seed —
+    [behaviours §3.24](../../docs/compatibility/behaviours.md).)*
 13. The album-credit set is a subset of the any-credit set, the two coincide as row sets for
     exactly [behaviours §5.3](../../docs/compatibility/behaviours.md#53-an-artist-in-two-music-libraries-is-two-rows)'s
     reason, and the credit distinction is observable at item level: `artistIds` finds the guest
@@ -487,12 +510,13 @@ this feature means about seventy fields, the largest single surface in the proje
 |---|---|---|---|
 | OQ-1 | Which fields the reference sends that §3.2 omits, and whether any client reads them | The bounded delta in §3.2 | Differential harness (010) — the single highest-value output it produces |
 | OQ-2 | Which Tier 3 parameters real clients actually send | Promotion out of Tier 3 | The ignored-parameter report (AC-15) against real client traffic |
-| OQ-5 | How the reference ranks `Similar` and `InstantMix` | Nothing; v1 diverges into determinism deliberately | **Measured at 010's gate, 2026-09-01: it does not rank `Similar` at all.** The route filters on the seed's own genres and tags and orders the result at random, so four identical requests returned 48 distinct items with **none** in common — and on a **movie** seed `limit=N` answers **N + 4** rows where a series, an album and an artist answer exactly N. §3.7's determinism argument therefore rests on a measurement rather than on "not obviously so", and the two decisions those readings raise — whether each becomes a recorded divergence — are **owed to this feature** and written up as G-1 and G-2 in [010 §7](../010-conformance-harness/spec.md). `[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]` |
+| OQ-5 | How the reference ranks `InstantMix` | Nothing; v1 diverges into determinism deliberately | Unmeasured. The `Similar` half of this question was answered at 010's gate and **its two decisions are made** — see the Resolved table below. `InstantMix` was not measured with it and no divergence is claimed for it until it is |
 | OQ-7 | Whether the reference's Next Up really excludes a pristine specials season, as §3.8 states | §3.8's exclusion rule — it stands as v1's own reading until measured | `tools/probe_next_up.py` against a library holding a series whose only unplayed episodes are season 0's; the library measured on 2026-08-28 had none |
 ### Resolved
 
 | # | Question | Answer | Resolved by |
 |---|---|---|---|
+| OQ-5 (the `Similar` half) | How the reference ranks `Similar` | **It does not rank it at all, and `limit` is not a maximum on a movie seed.** The route filters on the seed's own genres and tags and orders what matches at random — four identical requests returned 48 distinct items with **none** in common — and a movie seed answers `limit + 4` rows where a series, an album and an artist answer exactly `limit`. Both readings were **decided on 2026-09-01** rather than left owed: each is a recorded divergence, argued in [behaviours §3.23 and §3.24](../../docs/compatibility/behaviours.md) and stated in §3.7 and AC-12. They were raised as G-1 and G-2 in [010 §7](../010-conformance-harness/spec.md), which records the same two decisions | `tools/probe_similar_ranking.py`, 2026-09-01 |
 | OQ-6 | Whether `/Items/Latest` really returns a bare array on a live server, or the spec is wrong | **Yes — bare array, and three other endpoints have three further shapes.** §3.1 now records all four | `tools/probe_query_envelope.py`, 2026-08-26 |
 | OQ-3 | The reference's tie-breaking key for each `sortBy` | **Almost none: `Name` is chained after `SortName` only, and nothing — not even the id — after anything else.** Measured, its movie sorts arrive stable with ties in id order, while `AlbumArtist`/`Artist` repeat identically yet their pages do not reassemble the one-shot list. §3.4 rule 2 is therefore a divergence from a defect, argued in behaviours §3.6 | `tools/probe_sort_stability.py`, 2026-08-27 |
 | OQ-4 | The reference's completion threshold for `Resume` eligibility | **90% ceiling, 5% floor, 300-second minimum runtime — one ordered rule with six branches**, measured at 007 OQ-2 and specified in 007 §3.7, which §3.7's exclusion follows. The `probe_resume_threshold.py` this row used to name was never needed: `probe_playstate.py` answered it | `tools/probe_playstate.py`, 2026-08-26 |

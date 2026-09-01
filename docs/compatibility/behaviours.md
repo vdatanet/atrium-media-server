@@ -2489,6 +2489,113 @@ else, deliberately, so that a caller who may not look could not tell them apart;
 who may not look. Specified in
 [002 §3.7](../../specs/002-authentication-users-and-sessions/spec.md).
 
+### 3.23 `Similar` is a random draw, not a ranking — class B, diverged
+
+**Jellyfin does:** answer `GET /Items/{itemId}/Similar` with items that share the seed's own
+genres and tags, **in no order at all**. There is no scoring pass anywhere in the route: it builds
+a query from the seed's genre and tag names and asks for the result ordered at random
+`[source: Jellyfin.Api/Controllers/LibraryController.cs:790-801 @ v10.11.11]`. Measured, four
+identical requests against one seed returned **48 distinct items with none in common** — not one
+result set reshuffled, but a fresh draw over the matching pool each time
+`[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+So the array is not a ranking whose leading rows mean more than its trailing ones. The word
+*similar* is carried entirely by the filter, and everything after the filter is chance.
+
+**Depends on it:** no, and this one cannot be depended on. There is no order to compensate for: a
+response that never repeats itself offers a client nothing to assume, so the only two things a
+client can do with the array are show it as it arrives and re-sort it itself — and both are
+untouched by the order becoming stable. That is §3.0's first escape hatch, the same one
+[§3.1](#31-totalrecordcount-is-0-on-by-name-endpoints-without-limit--class-b) and
+[§3.6](#36-ties-are-engine-resolved-and-paging-the-artist-sorts-loses-rows--class-b-diverged)
+went through. What a client *can* observe is that a second request returns the same rows where the
+reference returns different ones; that is a difference in variety rather than in correctness, and
+the route's one named consumer — the video client — states nothing about either in its traced
+contract.
+
+**Atrium does: diverge — score deterministically**, so one seed over one library produces the same
+rows in the same order every time. v1 scores on shared genres, people and studios
+([005 §3.7 and AC-12](../../specs/005-item-query-api/spec.md)).
+
+The argument required by Principle V is **not** that the difference is invisible — a client issuing
+the request twice can see it. It is that nothing can be built on the difference: a random draw is
+not a value, and a client treating a stable answer as one the reference could have given it by
+chance is right, because it is. Every response Atrium sends here is a response the reference could
+have drawn.
+
+The second half of the argument belongs to this repository rather than to any client.
+**Replicating the randomness would make this endpoint undiffable by the very harness that exists to
+check it.** A route whose successive answers share no rows cannot be compared field by field
+against another server, or against itself — so reproducing the draw faithfully would buy nothing a
+client can use and cost the only mechanism able to find what this project has got wrong here. That
+is [010 OQ-4](../../specs/010-conformance-harness/spec.md#7-open-questions), which had to answer
+this endpoint with a whole array excused rather than a field, and
+[010 §3.3](../../specs/010-conformance-harness/spec.md#33-the-allowlist) carries the mechanism.
+§3.0.0 applies with unusual force besides: replicating means writing a shuffle on purpose, and then
+a test asserting that it shuffles.
+
+Class **B** — the request succeeds, carrying something wrong in the only sense that matters here —
+decided through the escape hatch rather than against it. No upstream issue is known, so §3.0.1's
+tie-break 2 reads *not judged* and weighs nothing.
+
+`limit` on the same route is a **separate** decision with its own class and its own argument
+(§3.24), because §3.0.2 forbids deciding once for a whole endpoint.
+
+### 3.24 `Similar` answers `limit + 4` on a movie seed — class B, diverged
+
+**Jellyfin does:** treat `limit` on `GET /Items/{itemId}/Similar` as a maximum for three seed types
+and not for the fourth. Measured at `limit=1`, `limit=5` and `limit=20`, on two seeds each: a
+**movie** seed answers **exactly N + 4** rows every time, where a series, an album and an artist
+seed answer exactly N `[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+The four are not a rounding or a tie: a limited query that groups by metadata key has four added to
+its limit before it runs `[source: Jellyfin.Server.Implementations/Item/BaseItemRepository.cs:1427-1429
+@ v10.11.11]`, and this route sets that grouping flag for the movie case alone
+`[source: Jellyfin.Api/Controllers/LibraryController.cs:795 @ v10.11.11]`. Nothing removes the
+surplus afterwards, so it reaches the wire.
+
+`TotalRecordCount` travels with it, and the two servers fill the field from different things. The
+reference's is **the number of rows it just returned** — N + 4 on the movie seed, N elsewhere —
+where Atrium's is the size of the matching pool before the limit, which is what
+[005 AC-5](../../specs/005-item-query-api/spec.md) requires of every list endpoint in the project
+and what [§3.1](#31-totalrecordcount-is-0-on-by-name-endpoints-without-limit--class-b) already
+decided for the by-name family.
+
+**Depends on it:** no compensation is possible that a correct answer would break, and the reference
+itself is the evidence. **The difference is observable** — a client that counts what it asked for
+sees five rows where it asked for one — so this entry does not get the argument that nobody can see
+it. What it gets instead is that there is nothing consistent to have compensated for:
+
+- The surplus is **not stable across the route**. Three of the four seed types honour `limit`
+  exactly, so a client that hard-coded "ask for four fewer" would under-fill every series, album and
+  artist shelf it drew. A compensation that is wrong on three quarters of the same endpoint is not a
+  compensation anyone shipped.
+- The surplus is **not explicable from the wire**. Nothing in the response says why the extra rows
+  are there or which four they are; they are indistinguishable from the ones asked for.
+- The remaining compensations are **defect-tolerant**: a client that displays what arrives keeps
+  working when N arrives, and a client that truncates to N locally finds the truncation a no-op.
+  §3.0's first escape hatch, again.
+
+Taken through §3.0 explicitly, the class is **B** and not A or C: the request succeeds — no 5xx, no
+unparseable body — and it succeeds with *more* than was asked for rather than with something
+omitted. So the default is *replicate*, and the escape hatch above is what moves it. §3.0.3 is
+honest about the risk that carries: changing a value clients already read is shape 4, the dangerous
+one, which needs evidence about compensations rather than reasoning about correctness — and the
+evidence is the three seed types the reference already answers correctly, on the same route, in the
+same version. A client cannot have built on a rule the reference does not follow.
+
+§3.0.0 is the last weight: replicating means writing code that adds four arbitrary rows to a movie
+seed's answer and only a movie seed's, plus a test asserting the four are there. Where the evidence
+is balanced the side that has to write bug code needs the stronger argument, and here it does not
+have one. No upstream issue is known — tie-break 2 reads *not judged*.
+
+**Atrium does: diverge — answer exactly `limit` rows on every seed type**, and report
+`TotalRecordCount` as the pre-limit pool size on all of them, as
+[005 AC-5](../../specs/005-item-query-api/spec.md) already required. Replicating the count instead
+would mean sending a `TotalRecordCount` equal to the page — a total that is not a total — on one
+route while every other list endpoint in the project sends the real one, which is §3.1's decision
+reversed for no reader's benefit.
+
 ---
 
 ## 4. Deliberate exceptions

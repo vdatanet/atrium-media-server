@@ -43,9 +43,14 @@ two accepted gaps (a playlist has no `Path`; a non-administrator cannot rename t
 answered its four open questions with none surviving unchanged — the path it proposed to join two
 servers on is absent from every default list row, a recorded session replays faithfully and still
 cannot be the gate, and its two non-deterministic endpoints are three. It also found two
-differences against **implemented** 005, both left to 005: `Similar` is a random draw rather than a
-ranking, and its `limit` answers `limit + 4` on a movie seed. So **no draft is left**, and what is
-next is 010's own **plan**. What each implemented feature leaves the ones after it is written at
+differences against **implemented** 005, and **both were decided on 2026-09-01**: `Similar` is a
+random draw rather than a ranking, and its `limit` answers `limit + 4` on a movie seed — Atrium
+diverges on each, argued in [behaviours §3.23 and §3.24](docs/compatibility/behaviours.md) and
+stated in [005 §3.7 and AC-12](specs/005-item-query-api/spec.md). The same day settled the one
+question that gate left open: a run that needs the fixture on both servers **stands up a single-use
+reference instance over it and destroys it**, so 010's AC-2 is no longer blocked — which also takes
+the writing measurements off an operator's server, where 009's runs had left 28 playlists behind.
+So **no draft is left and no decision is owed**, and what is next is 010's own **plan**. What each implemented feature leaves the ones after it is written at
 the end of its own task list rather than here, so it cannot go stale:
 [008's](specs/008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
 is the longest and 010 collects most of it, with

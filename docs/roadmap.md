@@ -140,15 +140,27 @@ to be in place before the first response model, or Principle I is enforced by di
 by CI. What 010 delivers as a feature is the *differential* layer, which needs a server complete
 enough to compare.
 
-**And the differential layer needs one thing this project does not have.** 010's spec was accepted
-on 2026-09-01 with its AC-2 — *"both servers, pointed at the same built fixture, produce libraries
-with the same item count and the same structure"* — recorded as **blocked**. The only Jellyfin this
-repository can reach is an operator's own server, holding an operator's own library, on another
-machine: the fixture tree is not on its filesystem and adding a library to it would be writing to
-data this project does not own. **Whether a reference instance can exist that the project may
-configure and discard is an infrastructure decision** (010 §7 OQ-5), and it gates AC-2 and every
-one of 010 §3.10's named comparisons that needs a planted file, a multi-part film, a legacy-encoded
-subtitle or an empty library. Everything that gate did measure was measured without one.
+**And the differential layer needed one thing this project did not have, which it now makes for
+itself.** 010's spec was accepted on 2026-09-01 with its AC-2 — *"both servers, pointed at the same
+built fixture, produce libraries with the same item count and the same structure"* — recorded as
+**blocked**, because the only Jellyfin this repository could reach was an operator's own server,
+holding an operator's own library, on another machine: the fixture tree is not on its filesystem
+and adding a library to it would be writing to data this project does not own. **Decided the same
+day: a run that needs the fixture on both sides stands up a reference instance of its own** — the
+pinned version, the repository's fixture tree as its only library, used for the comparison and then
+destroyed with everything it wrote, including on failure. AC-2 is unblocked, 010 §7's OQ-5 is
+answered, and with them every one of 010 §3.10's named comparisons that needs a planted file, a
+multi-part film, a legacy-encoded subtitle or an empty library. What such an instance runs on is
+010's plan, which does not exist yet.
+
+**The second reason is the one that decides how the tooling is judged.** A disposable instance
+takes every writing measurement off a server somebody uses. The convention says a probe that writes
+removes what it made, including on failure, and on 2026-09-01 that was checked and did not hold:
+009's runs had left **28 playlists** behind on the operator's server. Against an instance that is
+destroyed either way, a leaked artefact costs nothing — which is the difference between a cleanup
+that has to be perfect and one that only has to be tidy. Everything 010's gate did measure was
+measured before any of this existed, against the real library, which is why each of those readings
+is a named measurement and not a sweep.
 
 ### The first three, concretely
 

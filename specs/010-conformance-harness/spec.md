@@ -4,7 +4,7 @@ title: Conformance harness
 status: Accepted
 created: 2026-08-26
 updated: 2026-09-01
-amended: 2026-09-01 at the measurement gate — the spec was written before the thing it compares existed, and four probes moved it. §7's four open questions are answered and closed. **OQ-1's premise survives and its remedy does not:** identifiers cannot join two servers, but neither can a path — the reference sends none on a default list row at all, so a run that joins on one is comparing requests no client sends; asking for it still leaves a virtual season, a remote channel and every by-name row with nothing to join on, and the paths those rows do carry name the reference installation's own data directory. **OQ-3 is answered yes for reads and no for the feature:** every read of the surface but three answers byte-identical bodies on repeated identical requests, and the only header values that move are the response time and the clock — but a recording answers only the requests it recorded, which is the class of defect L3 exists to find, so a recorded session is a regression net and never the gate. **OQ-4's two non-deterministic endpoints are three, and the third is not an endpoint:** `/UserViews` answers a fresh random `ChildCount` between 1 and 9 on every request, because the reference declines to count a top-level folder and substitutes a number so clients will not think it empty. **The allowlist §3.3 describes cannot express any of them:** it is a list of fields compared by shape, and what these need is a whole array excused, which is a second mechanism and now a stated one. Plus the three things the gate found that nobody asked about: `/Items/{itemId}/Similar` is not a ranking at all but a fresh draw whose successive answers share **nothing**, and on a **movie** seed it answers `limit + 4` rows where the pinned document calls `limit` a maximum — both new divergences against an implemented feature, and both owner decisions; and a differential that authenticates once measures half the table — **12 of 23 reads of the surface answer differently to a restricted non-administrator**, two of them not as refusals but as shorter lists. §3.9 and §3.10 are new sections, §5 gains five criteria, and the fixture-differential AC-2 is recorded as unreachable from the only reference this project can reach.
+amended: 2026-09-01 at the measurement gate — the spec was written before the thing it compares existed, and four probes moved it. §7's four open questions are answered and closed. **OQ-1's premise survives and its remedy does not:** identifiers cannot join two servers, but neither can a path — the reference sends none on a default list row at all, so a run that joins on one is comparing requests no client sends; asking for it still leaves a virtual season, a remote channel and every by-name row with nothing to join on, and the paths those rows do carry name the reference installation's own data directory. **OQ-3 is answered yes for reads and no for the feature:** every read of the surface but three answers byte-identical bodies on repeated identical requests, and the only header values that move are the response time and the clock — but a recording answers only the requests it recorded, which is the class of defect L3 exists to find, so a recorded session is a regression net and never the gate. **OQ-4's two non-deterministic endpoints are three, and the third is not an endpoint:** `/UserViews` answers a fresh random `ChildCount` between 1 and 9 on every request, because the reference declines to count a top-level folder and substitutes a number so clients will not think it empty. **The allowlist §3.3 describes cannot express any of them:** it is a list of fields compared by shape, and what these need is a whole array excused, which is a second mechanism and now a stated one. Plus the three things the gate found that nobody asked about: `/Items/{itemId}/Similar` is not a ranking at all but a fresh draw whose successive answers share **nothing**, and on a **movie** seed it answers `limit + 4` rows where the pinned document calls `limit` a maximum — both new divergences against an implemented feature, and both owner decisions; and a differential that authenticates once measures half the table — **12 of 23 reads of the surface answer differently to a restricted non-administrator**, two of them not as refusals but as shorter lists. §3.9 and §3.10 are new sections, §5 gains five criteria, and the fixture-differential AC-2 is recorded as unreachable from the only reference this project can reach. **Amended again the same day by the three decisions that gate left to their owners.** G-1 and G-2 are decided and recorded as divergences, with their arguments in behaviours §3.23 and §3.24 and their statements in 005 §3.7 and AC-12; and **OQ-5 is answered, so AC-2 is no longer blocked** — a run that needs the fixture on both servers stands up a single-use reference instance of the pinned version over it and destroys it, including on failure, which also takes the writing measurements off an operator's server where 009's runs left 28 playlists behind. §3.1's blocked wording, §3.5's cleanup claim, AC-2, §4's artefact table and §7 are rewritten accordingly, and the clause above recording AC-2 as unreachable is what they supersede.
 depends_on: [001, 002, 003, 004, 005, 006, 007, 008, 009, 011]
 ---
 
@@ -91,15 +91,32 @@ film with a **subtitle file beside it** and one with an **image subtitle track**
 file in a **legacy encoding** (behaviours §5.11), and a **playlist holding items from two
 libraries** (§3.10).
 
-**AC-2 needs a reference this project controls, and the reachable one is not it.** The only
-Jellyfin this repository can measure is an operator's own server, holding an operator's own
-library, on another machine. Both halves of "point both servers at the same built fixture" are
-refused by that: the fixture tree is not on the reference's filesystem, and adding a library to it
-would be writing to data this project does not own. **AC-2 is therefore unreachable until a
-reference instance exists that the project may configure and discard**, and that is an
-infrastructure decision recorded here rather than a step a run can take. Everything in §3.9, §3.10
-and §7 was measured without one, against the real library, which is why each of those is a *named*
-measurement and not a sweep.
+**AC-2 needs a reference this project controls, so a run stands one up.** *(Decided 2026-09-01.
+This paragraph recorded AC-2 as blocked; it is not.)* The only Jellyfin this repository could
+measure when the document was accepted is an operator's own server, holding an operator's own
+library, on another machine, and both halves of "point both servers at the same built fixture" are
+refused by that: the fixture tree is not on that machine, and adding a library to it would be
+writing to data this project does not own.
+
+**So a run does not borrow a reference. It creates one, uses it, and destroys it.** A run that
+needs the fixture on both sides brings up a reference server of the pinned version, gives it the
+fixture tree of this section as its **only** library, waits for its scan to finish, issues the
+comparison, and then destroys the instance and everything it wrote — including on failure, and
+including whatever the run itself created inside it. The instance is **single use**: nothing
+carries from one run to the next, which is what makes the comparison reproducible and what keeps
+the fixture the only library either server has ever seen. The requirement is what this section
+states — an instance of the pinned version, configurable, disposable, and holding nothing but the
+fixture. *How* one is stood up is 010's plan, and this document does not decide it.
+
+**The second reason is that it takes the writing measurements off an operator's server**, and it
+is not the smaller one. §3.5 requires a probe that writes to remove what it made, including on
+failure; on 2026-09-01 the operator's server still held **28 playlists left behind by 009's probe
+runs**, each carrying the name those probes create them under. Against a disposable instance a
+leftover is harmless, because the instance does not survive the run either way — which is the
+difference between a cleanup that must be perfect and one that only has to be tidy.
+
+Everything in §3.9, §3.10 and §7 was measured **before** such an instance existed, against the real
+library, which is why each of those is a *named* measurement and not a sweep.
 
 ### 3.2 The differential run
 
@@ -240,6 +257,12 @@ quietly becoming false.
 touches anything the operator owns. Three of them now build a throwaway account, because the
 question they answer is invisible from an administrator's seat (§3.9).
 
+**That is the requirement, and on 2026-09-01 it was checked against the server and did not hold**:
+009's runs had left 28 playlists behind, where `tools/README.md` records of every writing probe
+that it deletes what it made including on failure. The requirement stands — a probe that leaks is a
+probe with a defect — but it is no longer the only thing standing between a run and an operator's
+data, because the fixture runs of §3.1 write to an instance that is destroyed afterwards regardless.
+
 **This feature discharges the prior-measurement debts** registered in
 [reference-target.md](../../docs/compatibility/reference-target.md): each becomes a probe script,
 and its citation changes from `prior-probe` to `probe`. A claim that fails to reproduce is not
@@ -357,13 +380,16 @@ have the same answers, which is a smaller claim than it sounds.
 | Differential reports | Git-ignored output | Per run |
 | Ignored-parameter reports | Git-ignored output | Per run |
 | Throwaway accounts a run creates | The reference server, briefly | Destroyed by the run that made them, including on failure |
+| The reference instance a fixture run stands up | Alongside the run | Single use: destroyed by the run that made it, including on failure (§3.1) |
 
 ## 5. Acceptance criteria
 
 1. The fixture library builds deterministically: two builds produce byte-identical media files.
 2. Both servers, pointed at the same built fixture, produce libraries with the same item count and
-   the same structure. *(**Blocked**, and recorded as such in §3.1: it needs a reference instance
-   the project may configure, and the only reachable reference is an operator's own server.)*
+   the same structure. *(**Unblocked 2026-09-01**: the run stands up a single-use reference
+   instance of the pinned version over the fixture and destroys it — §3.1. This criterion was
+   recorded as blocked when the spec was accepted, on the reading that the only reachable reference
+   was an operator's own server.)*
 3. The differential covers every endpoint in `surface.yaml`, with at least one request case each,
    and reports its coverage.
 4. A deliberately introduced defect — a renamed field, a changed type, an omitted field — is caught,
@@ -428,22 +454,27 @@ All four questions this document was written with are answered. None survived un
 | OQ-3 | Can the differential run against a recorded session instead of a live one? | **Yes for the bodies, no for the feature.** 16 of 19 reads of the surface answered byte-identical bodies on three identical requests, and the only header values that moved are the response time and the clock — so a recording is faithful enough to replay. But a recording answers only the requests it recorded, and the defect class L3 exists to find is *the field nobody thought to ask for*; a request nobody thought to record cannot find it. It also cannot carry a write: the playlist routes change what the next read reports, and one of them disagrees with itself (behaviours §3.18). **A recorded session is a regression net for CI, never the gate on a version bump.** `[probe: tools/probe_reference_determinism.py, Jellyfin 10.11.11, 2026-09-01]` |
 | OQ-4 | What to do when Jellyfin's own response is non-deterministic (`Random`, `Similar`) | **Compare by shape — and the two endpoints are three.** `/UserViews` answers a fresh random `ChildCount` between 1 and 9 on every request, on every view, with the row order and every other property unchanged: the reference declines to count a top-level folder and substitutes a number so that clients "won't think the folders are empty" `[source: Emby.Server.Implementations/Dto/DtoService.cs:516-526 @ v10.11.11]`, reached because that route asks for every field `[source: Jellyfin.Api/Controllers/UserViewsController.cs:89 @ v10.11.11]`. And the mechanism §3.3 proposed does not fit: excusing a *field* cannot excuse `Similar`, whose whole array is redrawn — four identical requests returned 48 distinct items with **none** in common. §3.3 now carries two kinds of entry. `[probe: tools/probe_reference_determinism.py and tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]` |
 
-### Raised by the gate, and owned elsewhere
+### Raised by the gate, owned elsewhere, and decided
 
-Two differences against an **implemented** feature, found by hand while answering OQ-4. Neither is
+Two differences against an **implemented** feature, found by hand while answering OQ-4. Neither was
 this feature's to decide (§2): both are 005's, through
-[behaviours §3.0](../../docs/compatibility/behaviours.md#30-how-the-decision-is-made).
+[behaviours §3.0](../../docs/compatibility/behaviours.md#30-how-the-decision-is-made). **Both were
+decided on 2026-09-01**, and the column below records the decision rather than the debt. They are
+two decisions and not one because §3.0.2 forbids deciding once for a whole endpoint.
 
-| # | What was measured | The decision that is owed |
+| # | What was measured | The decision, taken 2026-09-01 |
 |---|---|---|
-| G-1 | **`/Items/{itemId}/Similar` is not a ranking.** The reference filters on the seed's own genres and tags and orders the result at random `[source: Jellyfin.Api/Controllers/LibraryController.cs:790-801 @ v10.11.11]`; four identical requests shared no item. 005 §3.7 chose determinism deliberately and argued it costs nothing under Principle I — that argument is now standing on a measurement rather than on "not obviously so" | Whether the divergence gets its own behaviours.md entry, now that it is measured rather than assumed |
-| G-2 | **`limit` is not a maximum on a movie seed.** `limit=N` answers **N + 4** rows — measured at 1, 5 and 20, on two seeds — where a series, an album and an artist seed answer exactly N. The reference adds four to any limited query that groups by metadata key `[source: Jellyfin.Server.Implementations/Item/BaseItemRepository.cs:1427-1429 @ v10.11.11]` and this route sets that flag for the movie case alone `[source: Jellyfin.Api/Controllers/LibraryController.cs:795 @ v10.11.11]`; nothing de-duplicates afterwards. The reference's `TotalRecordCount` is the number of rows it returned; Atrium's is the size of the pool before the limit | Replicate the four, or diverge with the argument — and the same question for `TotalRecordCount`. Both are observable by a client that counts what it asked for. `[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]` |
+| G-1 | **`/Items/{itemId}/Similar` is not a ranking.** The reference filters on the seed's own genres and tags and orders the result at random `[source: Jellyfin.Api/Controllers/LibraryController.cs:790-801 @ v10.11.11]`; four identical requests shared no item. 005 §3.7 chose determinism deliberately and argued it costs nothing under Principle I — that argument is now standing on a measurement rather than on "not obviously so" | **Diverge, and record it.** Atrium keeps its deterministic scoring, as [behaviours §3.23](../../docs/compatibility/behaviours.md) — class B, through §3.0's first escape hatch: a draw that never repeats gives a client nothing to compensate for, so no compensation breaks when the answer holds still. The entry does **not** argue that the difference is invisible; it argues that nothing can be built on it, and that replicating the draw would leave this the one endpoint the harness cannot compare at all, which is OQ-4's problem above. 005 §3.7 and AC-12 carry it |
+| G-2 | **`limit` is not a maximum on a movie seed.** `limit=N` answers **N + 4** rows — measured at 1, 5 and 20, on two seeds — where a series, an album and an artist seed answer exactly N. The reference adds four to any limited query that groups by metadata key `[source: Jellyfin.Server.Implementations/Item/BaseItemRepository.cs:1427-1429 @ v10.11.11]` and this route sets that flag for the movie case alone `[source: Jellyfin.Api/Controllers/LibraryController.cs:795 @ v10.11.11]`; nothing de-duplicates afterwards. The reference's `TotalRecordCount` is the number of rows it returned; Atrium's is the size of the pool before the limit | **Diverge: exactly `limit` rows, on every seed type, with `TotalRecordCount` the pre-limit pool size.** [behaviours §3.24](../../docs/compatibility/behaviours.md) — class B, and taken through §3.0 explicitly: the request succeeds with *more* than was asked, so the default is replicate, and what moves it is that there is nothing consistent to have compensated for. The count difference **is** observable, and the entry says so rather than claiming otherwise; the argument is that the four extra rows are neither stable across the route — three of the four seed types honour `limit` — nor explicable from the wire, so a client cannot have built on a rule the reference does not follow. 005 §3.7 and AC-12 carry it. `[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]` |
 
-### Still open
+### Also resolved
 
-| # | Question | Blocks | Resolved by |
-|---|---|---|---|
-| OQ-5 | Whether a reference instance this project may configure and discard can exist | AC-2, and every §3.10 row that needs a planted file or an empty library | An infrastructure decision, recorded in the roadmap rather than improvised by a run |
+| # | Question | Answer |
+|---|---|---|
+| OQ-5 | Whether a reference instance this project may configure and discard can exist | **Yes, and a run makes its own.** Decided 2026-09-01: a run that needs the fixture on both servers stands up a single-use reference instance of the pinned version, gives it the fixture tree as its only library, compares, and destroys it and everything it wrote — including on failure. AC-2 is unblocked and §3.1 states the mechanism; what the instance runs on belongs to this feature's plan. The second reason is that it takes the writing measurements off an operator's server, where 009's runs left 28 playlists behind on 2026-09-01 despite §3.5's cleanup requirement. Every §3.10 row that needs a planted file, a multi-part film, a legacy-encoded subtitle or an empty library is unblocked with it |
+
+**Nothing in this document is now waiting on a decision.** The four questions it was written with
+are answered above, the two differences it raised against 005 are decided, and OQ-5 is resolved.
 
 ## 8. References
 

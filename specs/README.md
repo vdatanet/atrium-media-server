@@ -147,8 +147,12 @@ and none survived unchanged: the path it proposed to join two servers on is **ab
 default list row**, a recorded session replays faithfully and still cannot be the gate, and its two
 non-deterministic endpoints are three — `/UserViews` answers a fresh random `ChildCount` on every
 request. It also found two differences nobody was looking for, both against **implemented** 005 and
-both left to 005 to decide: `/Items/{itemId}/Similar` is a random draw rather than a ranking, and
-its `limit` answers `limit + 4` on a movie seed. Its new §3.9 and §3.10 are the two halves the
+**both decided on 2026-09-01**: `/Items/{itemId}/Similar` is a random draw rather than a ranking,
+and its `limit` answers `limit + 4` on a movie seed — Atrium diverges on each, argued in
+[behaviours §3.23 and §3.24](../docs/compatibility/behaviours.md). The question that gate left
+open went with them: a run that needs the fixture on both servers stands up a **single-use
+reference instance** over it and destroys it, so AC-2 is unblocked and nothing in the document is
+waiting on a decision. Its new §3.9 and §3.10 are the two halves the
 document had no room for — the identities a run needs, measured at 12 of 23 reads answering
 differently to a restricted non-administrator, and the comparisons a sweep cannot raise, collected
 from [what 008 owes it](008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones),

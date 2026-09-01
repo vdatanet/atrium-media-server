@@ -283,6 +283,15 @@ doing it quietly: each refuses to run without `--allow-writes`.
 `probe_playstate.py` refuses to run at all if it cannot find a long item with no existing user
 data. It will not overwrite a real resume position, because it could not put one back exactly.
 
+**The Cleanup column above is the intent, and on 2026-09-01 it was checked and did not hold.** The
+server 009's probes ran against still held **28 playlists** created by them, all carrying the name
+those probes create them under. So *"deletes them, including on failure"* describes what each probe
+is written to do, not something anyone has verified after a run — and a leaked playlist is a defect
+in the probe, to be found and fixed rather than assumed away. It is also the second reason
+[010 §3.1](../specs/010-conformance-harness/spec.md) has a run stand up a disposable reference
+instance of its own: against an instance that is destroyed either way, a leaked artefact costs
+nothing.
+
 ### Planned
 
 | Script | Purpose | Arrives with |
