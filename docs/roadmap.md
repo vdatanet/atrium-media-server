@@ -140,6 +140,16 @@ to be in place before the first response model, or Principle I is enforced by di
 by CI. What 010 delivers as a feature is the *differential* layer, which needs a server complete
 enough to compare.
 
+**And the differential layer needs one thing this project does not have.** 010's spec was accepted
+on 2026-09-01 with its AC-2 — *"both servers, pointed at the same built fixture, produce libraries
+with the same item count and the same structure"* — recorded as **blocked**. The only Jellyfin this
+repository can reach is an operator's own server, holding an operator's own library, on another
+machine: the fixture tree is not on its filesystem and adding a library to it would be writing to
+data this project does not own. **Whether a reference instance can exist that the project may
+configure and discard is an infrastructure decision** (010 §7 OQ-5), and it gates AC-2 and every
+one of 010 §3.10's named comparisons that needs a planted file, a multi-part film, a legacy-encoded
+subtitle or an empty library. Everything that gate did measure was measured without one.
+
 ### The first three, concretely
 
 - **001** is small and unglamorous, and it is first because it is the first request every client

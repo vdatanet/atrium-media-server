@@ -82,6 +82,10 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_progressive_production.py`](probe_progressive_production.py) | Does a capped progressive transcode ever state a length, and is the work keyed on the play session the client supplies? | 011 OQ-9, OQ-10; behaviours §3.3 | yes — two or three short audio transcodes of one track, every session stopped |
 | [`probe_uninspected_source.py`](probe_uninspected_source.py) | What does a negotiation answer for a media source nothing has successfully opened, what does a listing answer, and is what an on-demand probe learns kept? | 012 §3.2, §3.4, OQ-1, OQ-2, OQ-3, OQ-9; behaviours §2.23, §3.13, §5 | yes — it builds a library of deliberately unreadable files on the server's own disk, scans, measures, and removes both the libraries and the files |
 | [`probe_session_filters.py`](probe_session_filters.py) | What do `GET /Sessions`' three parameters narrow, and does the narrowing run before or after the rule about whose sessions a caller may see? | 002 §3.8 (measured at 012's gate, OQ-7); behaviours §2.25 | only under `--allow-writes`: a throwaway non-administrator whose session supplies the second row, deleted on the way out |
+| [`probe_similar_ranking.py`](probe_similar_ranking.py) | Does the reference rank `Similar`, and does its `limit` mean what it says? | 010 §7 OQ-4 and the G-2 row; 005 §3.7, OQ-5 | no |
+| [`probe_differential_join.py`](probe_differential_join.py) | What can join an item on two servers whose identifiers are derived differently? | 010 §3.2, §7 OQ-1; behaviours §1.4, §3.6 | no |
+| [`probe_reference_determinism.py`](probe_reference_determinism.py) | Does the reference answer the same request the same way twice? | 010 §3.3, §7 OQ-3, OQ-4; behaviours §1.9 | no |
+| [`probe_restricted_surface.py`](probe_restricted_surface.py) | How much of the surface answers differently to a restricted non-administrator? | 010 §3.9, §3.10, AC-14, AC-15; behaviours §3.16, §3.17 | yes |
 
 ### Running them
 
@@ -259,8 +263,8 @@ message, it names the section to change. `2` the question could not be answered 
 
 ### Writes
 
-Eight of the probes cannot answer their question without writing, and they say so rather than doing
-it quietly: each refuses to run without `--allow-writes`.
+Eleven of the probes cannot answer their question without writing, and they say so rather than
+doing it quietly: each refuses to run without `--allow-writes`.
 
 | Probe | What it creates | Cleanup |
 |---|---|---|
@@ -273,6 +277,7 @@ it quietly: each refuses to run without `--allow-writes`.
 | `probe_playlist_rename.py` | A throwaway non-administrator user and 2 playlists | The same. It renames nothing it did not create: that route writes metadata through the savers, so pointing it at a library item would be an edit, not a measurement |
 | `probe_user_read.py` | Two throwaway non-administrator users, one of them restricted to a single library | Deletes both, including on failure. Refuses to run if a user of either name already exists, so it can never touch a real account — and it only ever *reads* the operator's own administrator account |
 | `probe_playstate.py` | Play state and favourite marks on one long item, one short item, one season's episodes and one artist; a live playback reported and stopped | Chooses only items with no user data at all, so restoring them is exact; sweeps the season's episodes and the artist's favourite clean including on failure, and stops the playback it started |
+| `probe_restricted_surface.py` | A throwaway non-administrator user restricted to one library, and 1 private playlist holding an item from that library and an item from outside it | Deletes both, including on failure. Refuses to run if a user of that name already exists, so it can never touch a real account |
 | `probe_next_up.py` | Played marks on a handful of episodes | Chooses series whose episodes carry no user data, deletes every mark including on failure, and verifies the episodes pristine afterwards |
 
 `probe_playstate.py` refuses to run at all if it cannot find a long item with no existing user

@@ -121,7 +121,7 @@ say how it will be proven is not finished.
 | [007](007-user-data-and-playstate/) | User data and playstate | **Implemented** | **Implemented** | **Implemented** |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Implemented** | **Implemented** | **Implemented** |
 | [009](009-playlists/) | Playlists | **Implemented** | **Implemented** | **Implemented** |
-| [010](010-conformance-harness/) | Conformance harness | Draft | — | — |
+| [010](010-conformance-harness/) | Conformance harness | **Accepted** | — | — |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
 
@@ -141,16 +141,24 @@ questions answered by five probes — one extended, four written — and **thirt
 survive them**, the sharpest being that `PlaylistItemId` is the item's own `Id`, which is the
 distinction the whole feature had been written around. **It shipped on 2026-09-01**, across
 fourteen tasks, every one of which found something the documents had wrong — which is why its spec
-carries twelve amendments and its plan nine. **010 remains the only draft**, and its open
-questions are the standing review agenda —
-[what 008 owes them](008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones)
-and [what 011 does](011-subtitle-delivery/tasks.md#what-this-feature-owes-the-next-ones) are
-written down rather than remembered. **011's spec was accepted on the same day as 008's**, at its
+carries twelve amendments and its plan nine. **010's spec was accepted at its own measurement gate on 2026-09-01**, the day 009 shipped
+and the last of its dependencies became implemented. Four probes answered its four open questions
+and none survived unchanged: the path it proposed to join two servers on is **absent from every
+default list row**, a recorded session replays faithfully and still cannot be the gate, and its two
+non-deterministic endpoints are three — `/UserViews` answers a fresh random `ChildCount` on every
+request. It also found two differences nobody was looking for, both against **implemented** 005 and
+both left to 005 to decide: `/Items/{itemId}/Similar` is a random draw rather than a ranking, and
+its `limit` answers `limit + 4` on a movie seed. Its new §3.9 and §3.10 are the two halves the
+document had no room for — the identities a run needs, measured at 12 of 23 reads answering
+differently to a restricted non-administrator, and the comparisons a sweep cannot raise, collected
+from [what 008 owes it](008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones),
+[what 011 does](011-subtitle-delivery/tasks.md#what-this-feature-owes-the-next-ones) and
+[what 009 does](009-playlists/tasks.md#what-this-feature-owes-the-next-ones). **011's spec was accepted on the same day as 008's**, at its
 own measurement gate, its plan and task list on 2026-08-30, and the twelve tasks ran from
 2026-08-30 to 2026-08-31; **012 was opened on 2026-08-29 and accepted at its own gate the same
 day**. The lowest-numbered feature that is not implemented is
-**010**, whose spec is still a draft, so what is next is that spec's own measurement gate — the
-first unticked step of the lowest-numbered feature, which is where this table always points. Both
+**010**, whose spec is now accepted, so what is next is its **plan** — the first unticked step of
+the lowest-numbered feature, which is where this table always points. Both
 those lists were inputs to the plan. Each of 009's own two gates found something, which
 is the rate this project expects: the plan gate found §8 budgeting a fixture task for a second
 non-administrator restricted to one library, which `tests/fixtures/query.py` has seeded since 005 —
@@ -571,6 +579,21 @@ the documentation and one contradicted it:
 | Not asked — entry identity | **`PlaylistItemId` is the item's `Id`**, on the wire. §3.1, AC-5, the surface's own note and a client contract sentence all said otherwise (behaviours §2.26) |
 | Not asked — who may read | A private playlist is readable by **anyone who names its owner** in `userId`, on the one route that does not check (behaviours §3.16) |
 | Not asked — who may rename | The route the music client renames with is administrator-only, so a playlist's own owner is refused `403` (009 §3.8) |
+
+**Four were written and run at the 010 spec gate**, on 2026-09-01 —
+`probe_similar_ranking.py`, `probe_differential_join.py`, `probe_reference_determinism.py` and
+`probe_restricted_surface.py`, the last of them the first probe in this repository to measure from
+a seat that can be refused something:
+
+| Question | Outcome |
+|---|---|
+| 010 OQ-1 — joining two servers' items | **The remedy died, not the premise.** Comparison by path was the way out and the path is not on the wire: 0 of 1000 default list rows carry one, and asked for by name it still leaves a virtual season, a remote channel and every by-name row unjoinable. `(Type, Name)` is 976 distinct of 1000 |
+| 010 OQ-2 — how many request cases | **Not a question about the reference.** Its measured input is 764 declared query parameters over the 59 endpoints; what settles the floor is that both differences this gate found are invisible to a bare request |
+| 010 OQ-3 — a recorded session | **Yes for the bodies, no for the feature.** 16 of 19 reads are byte-stable and only the response time and the clock move — but a recording answers only what it recorded, which is the class L3 exists to find |
+| 010 OQ-4 — non-deterministic responses | **Two endpoints are three**, and the third is `/UserViews`: its `ChildCount` is a fresh random integer between 1 and 9 on every request. And a field-level allowlist cannot express any of them |
+| Not asked — `Similar` | **It is not a ranking.** A random draw over items sharing the seed's genres and tags; four identical requests shared **no** item |
+| Not asked — `Similar`'s `limit` | **`limit + 4` on a movie seed**, exactly, at 1, 5 and 20 — where a series, an album and an artist answer exactly the limit |
+| Not asked — the identity a run uses | **12 of 23 reads answer differently to a restricted non-administrator**, and two of them differ as shorter lists rather than as refusals |
 
 **Two more were written and run at the 004/005 spec gate**, on 2026-08-27, and the pattern held:
 

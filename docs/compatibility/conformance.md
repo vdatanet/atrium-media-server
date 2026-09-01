@@ -101,6 +101,30 @@ python3 tools/differential.py \
 **What it compares:** the set of keys at every level, the type of every value, and the value itself
 for everything not on the allowlist.
 
+**Which row is which row, and it is not the identifier.** The two servers derive identifiers
+differently on purpose ([§1.4](behaviours.md#14-item-identifiers-are-32-lowercase-hex-characters)),
+and the obvious way out — comparing by path — is not available either: the reference sends no
+`Path` on a default list row at all, and asking for one changes the request under comparison and
+still leaves a virtual season, a remote channel and every by-name row with nothing to join on.
+`(Type, Name)` is not unique. So rows are compared **by position**, which makes the ordering part of
+the contract — and where the reference's own ordering is not total
+([§3.6](behaviours.md#36-ties-are-engine-resolved-and-paging-the-artist-sorts-loses-rows--class-b-diverged))
+the comparison is of multisets rather than sequences.
+`[probe: tools/probe_differential_join.py, Jellyfin 10.11.11, 2026-09-01]`
+
+**A run states the identities it authenticated as.** Every probe written before 2026-09-01
+authenticated as an administrator, and an administrator lacks no permission — measured, **12 of 23
+reads of the surface answer differently to a restricted non-administrator**, and two of those differ
+as *shorter lists* rather than as refusals, which no status comparison would see. A single-identity
+run is reported as covering one identity.
+`[probe: tools/probe_restricted_surface.py, Jellyfin 10.11.11, 2026-09-01]`
+
+**And a sweep is not the whole method.** The differences a sweep cannot raise — because they need a
+caller the run does not have, a library the reference cannot be given, or a comparison of something
+that is not in a body — are enumerated as **named comparisons** in
+[010 §3.10](../../specs/010-conformance-harness/spec.md), and an unrun one keeps a run from being
+called clean.
+
 **The allowlist** — fields that legitimately differ and are therefore compared by *shape* rather
 than by value — is checked in beside the tool, and every entry needs a reason:
 
@@ -109,8 +133,16 @@ than by value — is checked in beside the tool, and every entry needs a reason:
 | `Id`, `ItemId`, `ServerId`, `ParentId`, `SeriesId`, … | Derivation differs by design (behaviours §1.4) |
 | `DateCreated`, `DateLastSaved`, `DateLastMediaAdded` | Scan wall-clock time |
 | `Etag`, `ImageTags.*` | Content hashes over differently-derived inputs |
-| `Path` | Different mount points |
+| `Path` | Different mount points, and on the by-name rows a different installation's data directory |
 | `LocalAddress` | Deliberate divergence (behaviours §4.2) |
+| `X-Response-Time-ms`, and the response clock | Move on every response |
+| `ChildCount` on a library view | The reference's value is a fresh random integer between 1 and 9 `[source: Emby.Server.Implementations/Dto/DtoService.cs:516-526 @ v10.11.11]` |
+
+**A field is not the only unit a difference comes in.** Where the reference's whole answer is a
+draw, no field of it is comparable: `/Items/{itemId}/Similar` and any listing ordered at random are
+excused **as arrays** — their rows are not value-compared, while their key sets, types, envelope and
+row count still are. Four identical `Similar` requests returned 48 distinct items with none in
+common. `[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]`
 
 **Adding to the allowlist is a contract decision**, not a way to make a red test green. It happens
 in review, with the reason written in the table.
