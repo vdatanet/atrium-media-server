@@ -378,6 +378,48 @@ class EmptyForbiddenError(Exception):
 
 
 #: The reference's own sentence, byte for byte, quoted as a complete JSON document by
+#: `message_error`: 19 characters, 21 bytes on the wire.
+#: `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]`
+UNAUTHORIZED_ACCESS_MESSAGE = "Unauthorized access"
+
+
+class DeletionNotPermittedError(Exception):
+    """`DELETE /Items/{itemId}` was asked to delete a playlist this caller may not. `401`.
+
+    **A status this project associates with no credential, answering a perfectly authenticated
+    caller**, which is why it is a class of its own rather than a second status taught to
+    `ForbiddenError`: the reference's deletion route refuses with `Unauthorized`, and the body is
+    the *fourth* shape - the JSON-encoded bare string `"Unauthorized access"`,
+    `application/json; charset=utf-8`, 21 bytes
+    `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]`
+    `[source: Jellyfin.Api/Controllers/LibraryController.cs:374-383 @ v10.11.11]`. So one route
+    answers `401` in two shapes: this one, and the **empty** `401` `UnauthenticatedError` sends
+    when no token reached it at all. Both measured on the same request path.
+
+    **It is also the refusal that discloses**, and that is measured rather than assumed: a caller
+    who may not even *read* a playlist is answered this and not `404`, so on this route - unlike
+    every other route in 009 - a `404` really does mean "no such item" (009 spec section 3.6).
+    """
+
+
+class MediaDeletionRefusedError(Exception):
+    """`DELETE /Items/{itemId}` was asked to delete something that is not a playlist. `403`.
+
+    The one divergence in this project not argued from "no client can tell", and a deliberate
+    exception rather than a defect this feature reproduces (behaviours section 4.3): a deletion
+    the reference performs would take a file off disk, and v1 has no trash to put it in. The
+    status is invented, because for an *entitled* caller the reference has no refusal to copy -
+    it deletes - and the third shape is the one every other controller refusal here carries.
+
+    Deliberately not `ForbiddenError`, whose docstring is a statement about an account that may
+    not do this: the account is not the reason here, and the same caller is refused whatever their
+    `EnableContentDeletion` says (009 spec section 3.6). Deliberately not `EmptyForbiddenError`
+    either - no authorization policy is involved and nothing about this refusal is the
+    reference's.
+    """
+
+
+#: The reference's own sentence, byte for byte, quoted as a complete JSON document by
 #: `message_error`: 18 characters, 20 bytes on the wire. Fixed - it interpolates nothing, unlike
 #: the image route's template beside it, so an unknown playlist and a private one that this
 #: reader may not learn exists are indistinguishable down to the byte, which is the point.
@@ -831,6 +873,19 @@ async def playlist_not_found_handler(_request: Request, _exc: Exception) -> Resp
     return message_error(404, PLAYLIST_ABSENT_MESSAGE)
 
 
+async def deletion_not_permitted_handler(_request: Request, _exc: Exception) -> Response:
+    """The `401` with a body - beside `playlist_not_found_handler`, whose shape it shares.
+
+    Not beside `unauthenticated_handler`, which sends the *empty* `401` on the same route: the
+    grouping in this module is by wire shape, and these two share only a status line.
+    """
+    return message_error(401, UNAUTHORIZED_ACCESS_MESSAGE)
+
+
+async def media_deletion_refused_handler(_request: Request, _exc: Exception) -> Response:
+    return controller_error(403)
+
+
 async def image_not_found_handler(_request: Request, exc: Exception) -> Response:
     message = str(exc) if isinstance(exc, ImageNotFoundError) else NOT_FOUND_TITLE
     return message_error(404, message)
@@ -903,6 +958,13 @@ EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     # every `NotFoundError` beside it answers problem details, so the row exists to keep
     # the class off `NotFoundError`'s MRO rather than merely to name a handler.
     PlaylistNotFoundError: playlist_not_found_handler,
+    # 009 T12's two, and they are the two halves of one route. The first is the *fourth* shape at
+    # `401` - a status this project had only ever sent empty - and it is the reference's own
+    # refusal for a playlist this caller may not delete. The second is the invented `403` of
+    # behaviours section 4.3, in the third shape, for everything on this route that is not a
+    # playlist: two refusals, two statuses, and only one of them is a divergence.
+    DeletionNotPermittedError: deletion_not_permitted_handler,
+    MediaDeletionRefusedError: media_deletion_refused_handler,
     # 011 T7's two, and they are the same shape at two statuses again - but split differently
     # from the pair above: on the subtitle fetch routes a `mediaSourceId` naming nothing is the
     # `500` and not the `400`, which is the whole reason they are their own classes.
@@ -925,9 +987,11 @@ __all__ = [
     "PROBLEM_TYPE_NOT_FOUND",
     "PROPERTY_REQUIRED_MESSAGE",
     "ROUTING_REFUSALS",
+    "UNAUTHORIZED_ACCESS_MESSAGE",
     "VALIDATION_TITLE",
     "AccountUnavailableError",
     "ClientAuthorizationError",
+    "DeletionNotPermittedError",
     "DeliveryNotFoundError",
     "DeliveryProductionError",
     "DeliverySegmentRequestError",
@@ -939,6 +1003,7 @@ __all__ = [
     "ImageNotFoundError",
     "InvalidCredentialsError",
     "ItemNotFoundError",
+    "MediaDeletionRefusedError",
     "NotFoundError",
     "PlaylistCreationError",
     "PlaylistMoveError",
@@ -949,6 +1014,7 @@ __all__ = [
     "account_unavailable_handler",
     "client_authorization_handler",
     "controller_error",
+    "deletion_not_permitted_handler",
     "empty_error",
     "empty_forbidden_handler",
     "empty_identifier_handler",
@@ -956,6 +1022,7 @@ __all__ = [
     "image_absent_message",
     "image_not_found_handler",
     "invalid_credentials_handler",
+    "media_deletion_refused_handler",
     "message_error",
     "not_found_handler",
     "playlist_move_handler",

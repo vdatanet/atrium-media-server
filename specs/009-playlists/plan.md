@@ -650,19 +650,34 @@ ignore.
 
 ### 6.6 Deleting, and renaming
 
-**`DELETE /Items/{itemId}`** answers three ways, and only one of them is this feature's invention:
+**`DELETE /Items/{itemId}`** answers six ways, and only one of them is this feature's invention:
 
 | The item | Answer | Whose rule |
 |---|---|---|
-| A playlist the caller may delete (`may_delete`: owner or administrator) | `204`, the row and its cascades go | Parity |
-| A playlist the caller may not delete | `401`, body `Unauthorized access` | Parity, measured at the gate (spec §3.6) |
-| Anything whose deletion would remove a file | `403` | The divergence, behaviours §4.3 |
-| Unknown, or invisible to the caller | `404` | Parity |
+| An identifier of all zeros | `400`, the fixed 25 bytes | Parity, measured at T12 |
+| A malformed identifier | `400`, the binder's validation shape keyed `itemId` | Parity, measured at T12 |
+| A playlist the caller may delete (`may_delete`: owner or administrator) | `204`, no body, the row and its cascades go | Parity |
+| A playlist the caller may not delete — **including one they may not read** | `401`, the 21-byte body `"Unauthorized access"` | Parity, measured at the gate and at T12 (spec §3.6) |
+| Anything that is not a playlist, and the caller can see it | `403` | The divergence, behaviours §4.3 |
+| Unknown, or **media** invisible to the caller | `404`, problem details | Parity |
 
-The `401` is the row worth naming: it is a status this project associates with *no credential*, and
-here it is the reference's answer to a perfectly authenticated caller. `compat/errors.py` has no
-class for it, and the route raises the refusal explicitly rather than teaching `ForbiddenError` a
-second status.
+The `401` is the row worth naming twice. It is a status this project associates with *no
+credential*, and here it is the reference's answer to a perfectly authenticated caller — in the
+**fourth** error shape, so one route answers `401` two ways: empty when no token reached it, and
+`"Unauthorized access"` when one did. `compat/errors.py` has no class for either half of this
+route, so T12 adds two — `DeletionNotPermittedError` for the parity `401` and
+`MediaDeletionRefusedError` for the divergence's `403` — rather than teaching `ForbiddenError` a
+second status or reusing it for its bytes.
+
+**The order of the first two lookups is the reference's, and it is not this feature's usual one.**
+A playlist is fetched through a door with **no visibility filter** (`by_id_for_deletion`, the
+repository's third read and the only one that takes no `User`), because the reference applies none:
+a caller who cannot read the playlist is answered `401` and not `404`, so the deletion route
+discloses that it exists where §6.5's read route refuses to
+`[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]`
+`[source: Jellyfin.Api/Controllers/LibraryController.cs:374-383 @ v10.11.11]`. Only when the id
+names no playlist does the media path run, and *that* one is filtered by the caller — which is why
+one route has a disclosing refusal and a non-disclosing one at the same time.
 
 **`POST /Items/{itemId}`** reads `Name`, on a `Playlist`, for an administrator:
 

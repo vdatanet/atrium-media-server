@@ -32,14 +32,20 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.exceptions import RequestValidationError
 
 from atrium.api.deps import get_sessions, get_state, require_user
 from atrium.api.item_dto import GATED, BuildContext, LibraryContext, Width, build_dto, build_dtos
 from atrium.api.item_models import BaseItemDto, BaseItemDtoQueryResult
-from atrium.compat.errors import ForbiddenError, NotFoundError
-from atrium.compat.guids import WireGuid, normalise, require_canonical
+from atrium.compat.errors import (
+    DeletionNotPermittedError,
+    EmptyIdentifierError,
+    ForbiddenError,
+    MediaDeletionRefusedError,
+    NotFoundError,
+)
+from atrium.compat.guids import EMPTY, WireGuid, normalise, require_canonical
 from atrium.compat.query_params import IgnoredParameters, known_tokens
 from atrium.db.engine import session_scope
 from atrium.db.item_queries import (
@@ -48,8 +54,9 @@ from atrium.db.item_queries import (
     ItemQueryRepository,
     ParentNotFoundError,
 )
-from atrium.db.repositories import LibraryRepository, UserRepository
+from atrium.db.repositories import LibraryRepository, PlaylistRepository, UserRepository
 from atrium.domain.items import ItemType
+from atrium.domain.playlists import may_delete
 from atrium.domain.queries import Filter, ItemQuery, SortBy, SortOrder
 from atrium.domain.user import User
 
@@ -428,6 +435,61 @@ async def item(
     return built
 
 
+@router.delete("/Items/{itemId}", status_code=204)
+async def delete_item(
+    request: Request,
+    caller: Annotated[User, Depends(require_user)],
+    itemId: WireGuid,
+) -> Response:
+    """`DeleteItem` `[spec: DeleteItem]`: the route 009 owns half of (009 spec section 3.6).
+
+    **Four answers, and three of them are the reference's.** A playlist this caller may delete -
+    its owner, or **any** administrator - goes, with its entries and its shares, and the answer is
+    `204` with no body and no content type. A playlist they may not delete is `401` carrying the
+    JSON-encoded bare string `"Unauthorized access"`. An identifier that addresses nothing this
+    caller can reach is the problem-details `404`, and an all-zeros one is the bare-text `400`
+    every route that resolves an identifier answers (T10). All four measured
+    `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+    **The fourth is ours, and it is the whole of what this route refuses**: anything that is not a
+    playlist answers `403` (behaviours section 4.3). The reference deletes a film and its file for
+    an entitled caller; v1 has no trash to put it in, so 009 claims the playlist half of this route
+    and refuses the rest. That includes the by-name rows a deletion would take no file from - a
+    genre this server rebuilds on the next scan is Principle VI's plausible-looking stub, not a
+    deletion.
+
+    **The order is the reference's, and it is not the order every other 009 route uses.** The
+    playlist lookup applies **no visibility test**: measured, a caller who is answered the read
+    route's twenty bytes for a private playlist is answered `401` here, so on this one route a
+    `404` really does mean "no such item" and the refusal discloses that a playlist exists
+    `[source: Jellyfin.Api/Controllers/LibraryController.cs:374-383 @ v10.11.11]`. Media is the
+    other way round: an item in a library this caller cannot open is `404` before any permission
+    is consulted, which is what `ItemQueryRepository` already answers.
+
+    **No `userId`.** The reference's action takes the caller's own identity and nothing else
+    `[spec: DeleteItem]`, so there is no `effective_user` call and no way to delete on somebody's
+    behalf.
+    """
+    if itemId == EMPTY:
+        raise EmptyIdentifierError("an identifier of all zeros names no item")
+
+    with session_scope(get_sessions(request)) as opened:
+        queries = ItemQueryRepository(opened)
+        playlists = PlaylistRepository(opened, queries)
+
+        playlist = playlists.by_id_for_deletion(itemId)
+        if playlist is not None:
+            if not may_delete(playlist, caller):
+                raise DeletionNotPermittedError("this caller may not delete the playlist")
+            playlists.delete(playlist.id)
+            return Response(status_code=204)
+
+        page = queries.run(ItemQuery(user=caller, ids=(itemId,), limit=1, count=False))
+        if not page.items:
+            raise NotFoundError
+        raise MediaDeletionRefusedError("v1 deletes no item whose removal could take a file")
+
+
 # ------------------------------------------------------------------------------------------------
 # The by-name family (plan section 6.7): five routes, one shape
 # ------------------------------------------------------------------------------------------------
@@ -493,6 +555,7 @@ __all__ = [
     "BASE_ITEM_KINDS",
     "aggregates_context",
     "by_name_envelope",
+    "delete_item",
     "effective_user",
     "library_context",
     "parse_fields",

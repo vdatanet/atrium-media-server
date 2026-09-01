@@ -31,7 +31,12 @@ from atrium.db.engine import create_database_engine, session_factory
 from atrium.db.item_queries import ItemQueryRepository
 from atrium.db.repositories import ItemRepository, PlaylistRepository
 from atrium.domain.items import ItemType
-from atrium.domain.playlists import MoveIndexOutOfRangeError, Playlist, Share
+from atrium.domain.playlists import (
+    MoveIndexOutOfRangeError,
+    Playlist,
+    Share,
+    may_delete,
+)
 from atrium.domain.user import User
 from tests.conftest import data_dir
 from tests.fixtures.query import QueryWorld, build_query_world
@@ -135,6 +140,32 @@ def test_by_id_hands_an_administrator_the_playlist_they_may_not_read(
     assert found is not None
     assert not may_read(found, administrator())
     assert may_delete(found, administrator())
+
+
+def test_by_id_for_deletion_hands_over_a_playlist_no_reader_could_see(
+    playlists: PlaylistRepository, world: QueryWorld
+) -> None:
+    """The third read, and the whole of why it exists (T12).
+
+    `restricted` is refused this playlist by `by_id` and by every route in the feature; the
+    deletion route still has to reach it, because the reference answers that caller `401` and not
+    `404` `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]`. What the row is
+    *for* is `may_delete`, which still says no - the door is not the decision.
+    """
+    found = playlists.by_id_for_deletion(world.private_playlist.id)
+    assert found is not None
+    assert not may_delete(found, world.restricted)
+    assert may_delete(found, world.everyone)
+    assert playlists.by_id(world.private_playlist.id, world.restricted) is None
+
+
+def test_by_id_for_deletion_answers_nothing_for_an_item_that_is_not_a_playlist(
+    playlists: PlaylistRepository, world: QueryWorld
+) -> None:
+    """A film and an unknown identifier are one answer, which is what lets the route tell "not a
+    playlist" from "not permitted" without a second query."""
+    assert playlists.by_id_for_deletion(world.corpus[0]) is None
+    assert playlists.by_id_for_deletion("f" * 32) is None
 
 
 def test_by_id_reads_the_shares_that_decide_the_three_permissions(
@@ -390,9 +421,16 @@ def test_two_playlists_do_not_share_an_ordering(
 # The invariant, by reflection (plan section 9's second risk)
 # ------------------------------------------------------------------------------------------
 
-#: The classification, and the test below fails until a new method joins one of the two.
+#: The classification, and the test below fails until a new method joins one of the three.
 READS = {"by_id", "entries"}
 WRITES = {"create", "append", "remove", "reorder", "rename", "delete"}
+
+#: The reads that take no reader, and there is exactly one. `DELETE /Items/{itemId}` applies no
+#: visibility test to a playlist - measured, a caller answered `404` by every other route is
+#: answered `401` by that one `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11,
+#: 2026-09-01]` - so the door it goes through cannot take a `User` and be honest about it. A set
+#: rather than an exemption, so that a second unfiltered read has to be added here on purpose.
+UNFILTERED_READS = {"by_id_for_deletion"}
 
 
 def public_methods() -> set[str]:
@@ -404,10 +442,10 @@ def public_methods() -> set[str]:
 
 
 def test_every_public_method_is_classified_as_a_read_or_a_write() -> None:
-    assert public_methods() == READS | WRITES, (
+    assert public_methods() == READS | WRITES | UNFILTERED_READS, (
         "a method was added to PlaylistRepository without being classified. A read must take a "
-        "`User`; say which this is, in READS or in WRITES, and the assertion below will hold you "
-        "to it."
+        "`User`; say which this is, in READS, in WRITES or in UNFILTERED_READS, and the two "
+        "assertions below will hold you to it."
     )
 
 
@@ -419,3 +457,14 @@ def test_a_read_takes_a_user(name: str) -> None:
     parameters = inspect.signature(getattr(PlaylistRepository, name)).parameters
     assert "user" in parameters, f"PlaylistRepository.{name} reads without a reader"
     assert parameters["user"].annotation == "User"
+
+
+@pytest.mark.parametrize("name", sorted(UNFILTERED_READS))
+def test_an_unfiltered_read_takes_no_user(name: str) -> None:
+    """The other half of the invariant: a read listed here must not quietly grow a reader.
+
+    A `User` on this signature would read as a filter, and the whole point of the method is that
+    the route it serves applies none - so the parameter would be either unused or a divergence.
+    """
+    parameters = inspect.signature(getattr(PlaylistRepository, name)).parameters
+    assert "user" not in parameters, f"PlaylistRepository.{name} is classified as unfiltered"

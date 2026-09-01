@@ -833,7 +833,7 @@ one migration; it is one migration, four maps and a clause.
 
 ## T12 — `DELETE /Items/{itemId}`: three refusals, one of them ours
 
-- [ ] **Changes:** `api/items.py` gains the route. A playlist the caller may delete goes, with its
+- [x] **Changes:** `api/items.py` gains the route. A playlist the caller may delete goes, with its
   entries and shares; one they may not is `401` with the body `Unauthorized access` — a status this
   project associates with *no credential*, raised explicitly rather than by teaching
   `ForbiddenError` a second one. Anything whose deletion would remove a file is `403`
@@ -846,6 +846,63 @@ one migration; it is one migration, four maps and a clause.
   `tests/unit/test_items_route.py` already does it, and AC-13's editing half is the body-less `403`
   that task measured.
 - **Spec reference:** §3.6, AC-12, AC-13
+
+> **Done (2026-09-01).** *The task was written around one refusal that discloses nothing, and this
+> route's refusal discloses.* Spec §3.6 said *"`404` for an unknown or invisible item"*, and for a
+> **playlist** the second half is false: `DELETE /Items/{itemId}` applies no visibility test to one
+> at all. Measured, a caller who is answered the read route's twenty bytes and `GET /Items/{itemId}`'s
+> problem details for a private playlist is answered **`401`** here — and so learns it exists
+> `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]`. Written as the documents
+> said, the route would have gone through `by_id` and answered that caller `404`, which is a body
+> no reference server sends on a request any client can make. **Media is filtered the other way**,
+> in the same run: an item in a library the caller cannot open is `404` before any permission is
+> consulted. So one route holds a disclosing refusal and a non-disclosing one at once, and the
+> repository grew a **third read** — `by_id_for_deletion`, the only one that takes no `User` —
+> rather than a filter argument nobody could read the meaning of. It is replicated rather than
+> corrected, and behaviours §3.20 carries the argument: the `401` is a refusal a delete button can
+> act on where a `404` invites *"it is already gone"*, and the identifier has to be known before it
+> can be asked about.
+>
+> *The row the task expected to be conditional is the one row in §3.7 that is not.* T10 had to
+> correct AC-13 because an administrator's editing `403` is reachable only on a playlist they can
+> **see**; the same reasoning predicts a `404` for a deletion, and the reference answers `204`. The
+> administrator deletes a private playlist that every other route in the feature refuses them. That
+> is what `by_id`'s deliberate administrator hole was written for — and it turned out not to be
+> enough, because a *stranger* has to reach the playlist too.
+>
+> *Two identifiers neither document had asked about, and they are T10's two classes again.* An
+> all-zeros id is the bare-text `400` here as it is on the write routes — the reference refuses
+> `Guid.Empty` in the item lookup this route shares with them — and a malformed one is the binder's
+> validation `400` keyed `itemId`, so `itemId` **is** a `WireGuid` where T11's entry id must not be.
+> Three of the four 009 routes bind that segment differently and this is the fourth; asking was the
+> whole of what made it right. The constant they share moved to `compat/guids.py` as `EMPTY`, since
+> two routes in two modules refusing the same identifier for the same reason is one fact.
+>
+> *What 009 claims of this route, since the task asked.* Only the playlist. The rule was written as
+> *"succeeds only for items whose deletion removes no file from disk"*, which reads as permission
+> for the by-name rows — and deleting a genre this server rebuilds on the next scan is a deletion
+> that does not stick, which is Principle VI's plausible-looking stub. Everything that is not a
+> playlist is `403`. The reference refuses those rows too (`CanDelete()` is `IsFileProtocol`), with
+> `401` rather than this `403`, and that is inside behaviours §4.3's existing exception rather than
+> beside it.
+>
+> *Three routine calls, taken rather than escalated.* **The media `403` stays one status for every
+> caller**, though the probe measured that a caller without `EnableContentDeletion` is refused
+> `401` by the reference — narrowing the divergence there would make a refusal's shape depend on a
+> permission v1 enforces nowhere else, and §4.3 now records the second observable cell rather than
+> chasing it. **Two exception classes, not one**: `DeletionNotPermittedError` for the parity `401`
+> and `MediaDeletionRefusedError` for the invented `403`, because a class in `compat/errors.py` is
+> read where it is raised and `ForbiddenError`'s docstring is a statement about an account. **The
+> `401` is the fourth error shape** — 21 bytes, `application/json; charset=utf-8` — so this route
+> answers `401` two ways, empty when no token arrived and with a body when one did, which is
+> recorded in behaviours §1.11 where that shape had been a `404` fact.
+>
+> *And the on-disk assertion needed a world.* Every library in the fixture world is rooted at a
+> path that does not exist, so no test in it could tell *"the route refused"* from *"there was no
+> file to remove"*. AC-12's media half now roots a fourth library inside `tmp_path` with real bytes
+> in it and asserts them after the `403`. Every other clause was checked by deletion, by hand:
+> replacing the unfiltered read with `by_id` fails two tests, removing the all-zeros guard one,
+> removing the `may_delete` test five, and removing the media lookup three.
 
 ## T13 — `POST /Items/{itemId}`: the rename, and the two things it refuses
 

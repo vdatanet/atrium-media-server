@@ -32,6 +32,14 @@ from pydantic import AfterValidator, BeforeValidator
 #: The canonical form: what this server emits, always.
 CANONICAL = re.compile(r"\A[0-9a-f]{32}\Z")
 
+#: `Guid.Empty`, canonicalised. **A third class of identifier**, and it lives here rather
+#: than in any one route because that is where the reference puts it: the item lookup every
+#: route shares refuses it before any query runs, so a well-formed id that addresses nothing
+#: is skipped where this one is refused
+#: `[source: Emby.Server.Implementations/Library/LibraryManager.cs:1357-1362 @ v10.11.11]`
+#: `[probe: tools/probe_playlist_add_remove.py, Jellyfin 10.11.11, 2026-09-01]`.
+EMPTY = "0" * 32
+
 #: What this server accepts: the canonical form, the dashed form, either with optional braces, in
 #: any casing. Anything else is not an identifier.
 _ACCEPTED = re.compile(
@@ -90,4 +98,4 @@ def require_canonical(value: str) -> str:
 #: The type every identifier-valued field uses. Lenient in, canonical out.
 WireGuid = Annotated[str, BeforeValidator(normalise), AfterValidator(require_canonical)]
 
-__all__ = ["CANONICAL", "WireGuid", "derive", "new_id", "normalise", "require_canonical"]
+__all__ = ["CANONICAL", "EMPTY", "WireGuid", "derive", "new_id", "normalise", "require_canonical"]

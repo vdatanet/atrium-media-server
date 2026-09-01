@@ -980,7 +980,11 @@ happened. `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]` `[pro
 | An item a handler could not find | `404`, **RFC 9457 problem details** as JSON |
 | A malformed value the model binder rejected | `400`, **RFC 9457 problem details** with an `errors` map |
 | A controller that refused the request itself | `4xx`, **`text/plain` with no `charset`**, and the fixed 25-byte body `Error processing request.` `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-26]`. **Measured for a policy refusal too**, at 009's spec gate: a non-administrator naming another user in `userId` is answered `403` with those same 25 bytes `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]` |
-| A controller that refused with its own message | `404`, the message as a **JSON-encoded bare string** — `"<item name> does not have an image of type Box"` — `application/json; charset=utf-8` `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. **Measured on a second route and a second feature at 009 T9**: `GET /Playlists/{playlistId}/Items` answers the fixed 20-byte `"Playlist not found"` for an id that addresses nothing, for a real item that is not a playlist, and for a playlist the reader may not see `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]` |
+| A controller that refused with its own message | `404`, the message as a **JSON-encoded bare string** — `"<item name> does not have an image of type Box"` — `application/json; charset=utf-8` `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. **Measured on a second route and a second feature at 009 T9**: `GET /Playlists/{playlistId}/Items` answers the fixed 20-byte `"Playlist not found"` for an id that addresses nothing, for a real item that is not a playlist, and for a playlist the reader may not see `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`. **And it is not only a
+`404` shape**: `DELETE /Items/{itemId}` refuses a caller who may not delete the item with `401`
+carrying the 21-byte `"Unauthorized access"` under the same content type, so one route answers
+`401` in two shapes — this one when a credential arrived, the empty one above when none did
+`[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]` |
 
 **The fourth shape is not the exception it looked like at 006, and the split is per route rather
 than per feature.** The image route splits its two `404`s by *which lookup failed* — an item that
@@ -2347,6 +2351,28 @@ form itself is **parity** and is implemented: refusing a request the reference s
 larger divergence. Specified in [009 §3.2](../../specs/009-playlists/spec.md) and
 [§3.5](../../specs/009-playlists/spec.md).
 
+### 3.20 A deletion discloses a playlist the reader is refused — class B, replicated
+
+**Jellyfin does:** answer `DELETE /Items/{itemId}` for a playlist the caller may neither read nor
+delete with `401` and the body `"Unauthorized access"`, where every other route on that same
+playlist answers `404` — the read route's twenty bytes, or `GET /Items/{itemId}`'s problem details.
+The item lookup this route shares applies the collection-folder test that hides **media** and no
+test at all that hides a playlist, so a caller holding an identifier learns from the difference
+whether a playlist is there `[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]`
+`[source: Jellyfin.Api/Controllers/LibraryController.cs:374-383 @ v10.11.11]`.
+
+**Depends on it:** a client cannot have built anything on the disclosure itself, but it can have
+built something on the `401`: a delete button that refuses a playlist somebody else owns must show
+its user *refused*, and a `404` invites "it is already gone" instead. That is the compensation
+§3.0.1 tie-break 1 asks about, and it is the reason this is class B rather than a free correction.
+
+**Atrium does:** the same. The disclosure is bounded — it reveals nothing but the existence of an
+identifier the caller must already hold, and identifiers here are minted rather than guessable
+(Principle VII's determinism is over inputs, not over anything a stranger has) — while the
+alternative changes a refusal a client can act on into one it cannot. §3.5's reasoning applies
+almost word for word: "it discloses too much" is the temptation §3.0.2 forbids acting on by itself.
+Specified in [009 §3.6](../../specs/009-playlists/spec.md).
+
 ---
 
 ## 4. Deliberate exceptions
@@ -2391,16 +2417,28 @@ permission — or, failing that, the per-folder
 **Depends on it:** a client's delete button. This divergence **is** observable — a user deletes a
 film and finds it still there.
 
-**Atrium does:** permits deletion only for items whose removal takes no file off disk. Playlists
-delete; movies, episodes and tracks answer `403`.
+**Atrium does:** permits deletion only for a **playlist**. Everything else this route can name
+answers `403` — movies, episodes and tracks, and the by-name rows a deletion would take no file
+from either. A genre or an artist is rebuilt by the next scan, so deleting one would be a deletion
+that does not stick, which is Principle VI's plausible-looking stub; the reference refuses those
+too, because its own precondition is that the item have a file at all
+`[source: MediaBrowser.Controller/Entities/BaseItem.cs:820-828 @ v10.11.11]`.
 
 **`403` here is an invented status, deliberately, and the parity path beside it is `401`.** The
-reference has no refusal to copy for this case — for an entitled user it deletes the file — so the
-status is ours to choose, and `403` is what an authenticated caller forbidden by policy is owed.
-The refusal the reference *does* make, for a caller who may not delete that **playlist**, is `401`
-with the body `"Unauthorized access"` `[probe: tools/probe_playlist_visibility.py, Jellyfin
-10.11.11, 2026-08-31]`, and Atrium reproduces that one exactly. Two refusals, two statuses, and
-only one of them is a divergence.
+reference has no refusal to copy for the case this divergence exists for — for an entitled user it
+deletes the file — so the status is ours to choose, and `403` is what an authenticated caller
+forbidden by policy is owed. The refusal the reference *does* make, for a caller who may not delete
+that **playlist**, is `401` with the body `"Unauthorized access"`
+`[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`, and Atrium reproduces
+that one exactly. Two refusals, two statuses, and only one of them is a divergence.
+
+**Where the divergence is observable is narrower than it looks, and measured at 009 T12.** A caller
+who is *not* entitled to delete content is refused by the reference as well — `401`, the same 21
+bytes — so for that caller Atrium's `403` differs from a refusal rather than from a deletion
+`[probe: tools/probe_item_deletion.py, Jellyfin 10.11.11, 2026-09-01]`. One status for every media
+request is deliberate rather than an oversight: v1 enforces `EnableContentDeletion` nowhere, and
+splitting a refusal's shape by a permission nothing else here honours would put a policy on the
+wire that this server does not otherwise have.
 
 Unlike the other divergences in this document, this one is not argued from "no client can tell". It
 is argued from consequence. v1 has no trash, no undo and no confirmation flow of its own, so
