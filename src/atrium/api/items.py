@@ -35,17 +35,20 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.exceptions import RequestValidationError
 
-from atrium.api.deps import get_sessions, get_state, require_user
+from atrium.api.deps import get_sessions, get_state, require_administrator, require_user
 from atrium.api.item_dto import GATED, BuildContext, LibraryContext, Width, build_dto, build_dtos
 from atrium.api.item_models import BaseItemDto, BaseItemDtoQueryResult
 from atrium.compat.errors import (
     DeletionNotPermittedError,
     EmptyIdentifierError,
     ForbiddenError,
+    ItemUpdateError,
     MediaDeletionRefusedError,
+    MediaUpdateRefusedError,
     NotFoundError,
 )
 from atrium.compat.guids import EMPTY, WireGuid, normalise, require_canonical
+from atrium.compat.model import AtriumModel
 from atrium.compat.query_params import IgnoredParameters, known_tokens
 from atrium.db.engine import session_scope
 from atrium.db.item_queries import (
@@ -490,6 +493,106 @@ async def delete_item(
         raise MediaDeletionRefusedError("v1 deletes no item whose removal could take a file")
 
 
+class UpdateItemDto(AtriumModel):
+    """The rename body: a whole `BaseItemDto` on the reference `[spec: UpdateItem]`, four of its
+    properties here.
+
+    **The client fetches the item, changes `Name` and posts it back**
+    `[client-contract: 2026-08-29, section 10]`, so the body that arrives carries every property
+    the read route emitted - thirty-nine of them on a playlist, measured. `extra="ignore"` takes
+    the other thirty-five; these four are the ones the route reads or refuses.
+
+    **Three of them are declared `| None` and are still required**, which is the shape of what
+    was measured rather than a looseness: the reference refuses a body that omits `Genres`, `Tags`
+    or `ProviderIds` **and** one that sends any of the three as `null`, identically, with the
+    controller's 25 bytes at `400` `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11,
+    2026-09-01]`. Declaring them required *here* would answer the framework's validation shape -
+    problem details, keyed on a property - which is a different refusal from the measured one, so
+    the check is the route's and the model stays permissive (`ItemUpdateError`).
+
+    `Name` is the same story for the opposite reason: absent or `null`, the reference answers
+    `204` and erases the name, which this server refuses instead (behaviours section 3.21).
+    """
+
+    #: The reference's own parameter name for this body, which its refusals spell out:
+    #: `{"request": ["The request field is required."]}` beside the binder's own key, measured on
+    #: a body that is not JSON at all `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11,
+    #: 2026-09-01]`. It is the **route parameter** below that carries it onto the wire, not this
+    #: class; the note is here because that is where a reader will look for it.
+    name: str | None = None
+    genres: list[str] | None = None
+    tags: list[str] | None = None
+    provider_ids: dict[str, str | None] | None = None
+
+
+@router.post("/Items/{itemId}", status_code=204)
+async def update_item(
+    http: Request,
+    caller: Annotated[User, Depends(require_administrator)],
+    itemId: WireGuid,
+    request: UpdateItemDto,
+) -> Response:
+    """`UpdateItem` `[spec: UpdateItem]`: the rename the music client calls (009 spec section 3.8).
+
+    **It is administrator-only, and that is the scope finding rather than a detail.** The reference
+    declares the whole controller elevated, so a playlist's own owner is refused the rename of
+    their own playlist unless they are an administrator - `403`, no body, no content type, an
+    authorization policy's refusal and never a controller's
+    `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`
+    `[source: Jellyfin.Api/Controllers/ItemUpdateController.cs @ v10.11.11]`. The operation was
+    brought into the surface for the music client and refuses that client's own users; the rename
+    that would work for an owner is `POST /Playlists/{playlistId}`, which no analysed client calls
+    and which Principle VI therefore keeps out (behaviours section 5).
+
+    **The refusal comes first, and `require_administrator` above is where the ordering lives**: a
+    non-administrator meets that `403` for a malformed identifier and for one naming nothing, so
+    nothing about the item leaks to a caller who may not touch it.
+
+    **What the route applies is `Name` and nothing else, and the reference applies seven more.**
+    Measured on a whole posted body, `Overview`, `ForcedSortName`, `OfficialRating`, `CustomRating`,
+    `ProductionYear`, `Genres` and `Tags` all take the value they were sent, where `Path` and
+    `IsFolder` are computed and ignored. v1 has a consumer for none of that and could not honour it
+    anyway - 004 T10 measured the scan and the refresh fighting over `Item.name` - so the narrowing
+    is a recorded gap (behaviours section 5) rather than an omission.
+
+    **The three properties a body may not omit are the reference's**, and they are checked here
+    rather than declared on the model so that the refusal is the measured 25 bytes.
+
+    Four identifier classes, all measured on this method rather than inherited from the `DELETE`
+    that shares its path: plain, dashed, braced and upper-case spellings all address the item, an
+    identifier that is not one is the binder's validation `400` keyed `itemId`, all zeros is the
+    bare-text `400`, and a well-formed unknown one is the problem-details `404`.
+
+    **The body parameter is called `request`** because the reference's action parameter is, and a
+    refusal of a required body names it: `The request field is required.` (behaviours section
+    1.11, 007 T8). The ASGI request takes the other name for once.
+    """
+    if itemId == EMPTY:
+        raise EmptyIdentifierError("an identifier of all zeros names no item")
+
+    with session_scope(get_sessions(http)) as opened:
+        queries = ItemQueryRepository(opened)
+        playlists = PlaylistRepository(opened, queries)
+
+        # `by_id` hands an administrator any playlist, which is the hole T12 relies on and the
+        # reason this route needs no second read: every caller who reaches this line is one.
+        playlist = playlists.by_id(itemId, caller)
+        if playlist is None:
+            page = queries.run(ItemQuery(user=caller, ids=(itemId,), limit=1, count=False))
+            if not page.items:
+                raise NotFoundError
+            raise MediaUpdateRefusedError("v1 updates no item that is not a playlist")
+
+        if request.genres is None or request.tags is None or request.provider_ids is None:
+            raise ItemUpdateError("the body omits a property the reference requires")
+        if request.name is None:
+            raise ItemUpdateError("the body carries no name to apply")
+
+        playlists.rename(playlist.id, request.name)
+
+    return Response(status_code=204)
+
+
 # ------------------------------------------------------------------------------------------------
 # The by-name family (plan section 6.7): five routes, one shape
 # ------------------------------------------------------------------------------------------------
@@ -553,6 +656,7 @@ def by_name_envelope(
 
 __all__ = [
     "BASE_ITEM_KINDS",
+    "UpdateItemDto",
     "aggregates_context",
     "by_name_envelope",
     "delete_item",
@@ -566,4 +670,5 @@ __all__ = [
     "recorder",
     "router",
     "split_csv",
+    "update_item",
 ]
