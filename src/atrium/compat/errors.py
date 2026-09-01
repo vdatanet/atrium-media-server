@@ -37,6 +37,12 @@ route, `GET /Items/{itemId}`. So the shape is a fact about the route rather than
 and reading it off a neighbouring route is how a feature ships a body no reference server sends
 `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`.
 
+**And a third route, in 002 and not in a feature that found the shape.** `GET /Users/{userId}`
+answers the fixed 16-byte `"User not found"` for an identifier no account has - the same body to an
+administrator and to a non-administrator, because that route refuses neither
+`[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`. Three routes now, one per
+feature that has looked, which is the argument for looking on the fourth rather than assuming.
+
 The first was implemented in feature 001, because only the first was reachable there. The second
 belongs to the features that raise it; its shape is recorded in
 docs/compatibility/behaviours.md section 1.11 so it does not have to be rediscovered. The fourth
@@ -101,20 +107,19 @@ class ForbiddenError(Exception):
     - the split is between a refusal *returned* and a refusal *thrown*, not between a controller
     and a policy.
 
-    ⚠️ **Two of this class's raise sites are not the measured refusal**, and neither moves to a
-    measured shape by changing this handler:
+    ⚠️ **One of this class's raise sites is not the measured refusal**, and it does not move to a
+    measured shape by changing this handler: `api/deps.py` refuses a live token whose account was
+    disabled after it was issued. That is 002 spec section 7 (OQ-5)'s third row and is still
+    unmeasured - measuring it means disabling a real account that holds a live token. It answered
+    the empty shape by analogy with the empty `401`; it now answers this one by analogy with the
+    `403` beside it. Both are analogies.
 
-    * `api/deps.py` refuses a live token whose account was disabled after it was issued. That is
-      002 spec section 7 (OQ-5)'s third row and is still unmeasured - measuring it means
-      disabling a real account that holds a live token. It answered the empty shape by analogy
-      with the empty `401`; it now answers this one by analogy with the `403` beside it. Both are
-      analogies.
-    * `api/users.py` refuses one user reading another. The reference does not refuse it at all:
-      it answers `200` with the other user's whole object, policy included, to a restricted
-      non-administrator naming an administrator
-      `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`. 002 spec
-      section 3.7 states that `403` with no provenance, so the shape of Atrium's refusal there is
-      the smaller half of the question.
+    **There were two, and the second one is gone.** `api/users.py` refused one user reading
+    another, and the reference does not refuse that at all: every authenticated caller is answered
+    `200` with the named user's whole object, `Configuration` and `Policy` included, in bytes that
+    do not depend on who asked `[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+    002 spec section 3.7 stated that `403` with no provenance; the route now replicates the
+    disclosure (behaviours section 3.22) and raises nothing from this class at all.
     """
 
 
@@ -494,6 +499,37 @@ class PlaylistNotFoundError(Exception):
     Deliberately not an `ImageNotFoundError`: that class carries a display name and its docstring
     is a statement about images, and deliberately not a `NotFoundError` subclass, which would
     resolve through the MRO to the problem-details handler and undo the whole finding.
+    """
+
+
+#: The reference's own sentence for a user nobody has, byte for byte, quoted as a complete JSON
+#: document by `message_error`: 14 characters, 16 bytes on the wire. Fixed, like the playlist's
+#: message above and unlike the image route's template.
+#: `[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`
+USER_ABSENT_MESSAGE = "User not found"
+
+
+class UserNotFoundError(Exception):
+    """`GET /Users/{userId}` was given an identifier no account has. The **fourth** shape at `404`.
+
+    A third route for the JSON-encoded bare string, and the first outside the two features that
+    found it: `"User not found"`, `application/json; charset=utf-8`, 16 bytes - and the *same*
+    body whoever asks, because this route does not vary its answer by caller at all
+    `[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+    **This is where 002's `403` went.** The route refused a non-administrator naming anybody else,
+    and refused an unknown identifier the same way so that the two could not be told apart. The
+    reference does neither: it discloses the user (behaviours section 3.22) and answers this for
+    an identifier nobody has, to an administrator and to a non-administrator alike. So the
+    indistinguishability that `403` was protecting was protecting nothing the reference protects.
+
+    A **malformed** identifier never reaches here - `WireGuid` on the path parameter means the
+    validation `400` refuses it first, which is what the reference does too, keyed on `userId`
+    and quoting the value back (behaviours section 1.11).
+
+    Deliberately not a `PlaylistNotFoundError` and not a `NotFoundError` subclass: the first is a
+    statement about playlists at the raise site, and the second resolves through the MRO to the
+    problem-details handler, which is a body no reference server sends on this route.
     """
 
 
@@ -918,6 +954,10 @@ async def playlist_not_found_handler(_request: Request, _exc: Exception) -> Resp
     return message_error(404, PLAYLIST_ABSENT_MESSAGE)
 
 
+async def user_not_found_handler(_request: Request, _exc: Exception) -> Response:
+    return message_error(404, USER_ABSENT_MESSAGE)
+
+
 async def deletion_not_permitted_handler(_request: Request, _exc: Exception) -> Response:
     """The `401` with a body - beside `playlist_not_found_handler`, whose shape it shares.
 
@@ -1017,6 +1057,11 @@ EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     # every `NotFoundError` beside it answers problem details, so the row exists to keep
     # the class off `NotFoundError`'s MRO rather than merely to name a handler.
     PlaylistNotFoundError: playlist_not_found_handler,
+    # 002's, arriving three features late: `GET /Users/{userId}` answers that same fourth shape
+    # with `"User not found"` for an identifier no account has - to an administrator and to a
+    # non-administrator alike, because the route refuses neither of them
+    # (behaviours section 3.22). It is the `404` that replaced the `403` this route used to send.
+    UserNotFoundError: user_not_found_handler,
     # 009 T12's two, and they are the two halves of one route. The first is the *fourth* shape at
     # `401` - a status this project had only ever sent empty - and it is the reference's own
     # refusal for a playlist this caller may not delete. The second is the invented `403` of
@@ -1056,6 +1101,7 @@ __all__ = [
     "PROPERTY_REQUIRED_MESSAGE",
     "ROUTING_REFUSALS",
     "UNAUTHORIZED_ACCESS_MESSAGE",
+    "USER_ABSENT_MESSAGE",
     "VALIDATION_TITLE",
     "AccountUnavailableError",
     "ClientAuthorizationError",
@@ -1081,6 +1127,7 @@ __all__ = [
     "SubtitleRequestError",
     "SubtitleUnavailableError",
     "UnauthenticatedError",
+    "UserNotFoundError",
     "account_unavailable_handler",
     "client_authorization_handler",
     "controller_error",
@@ -1103,6 +1150,7 @@ __all__ = [
     "routing_handler",
     "trace_id",
     "unauthenticated_handler",
+    "user_not_found_handler",
     "validation_errors",
     "validation_handler",
 ]

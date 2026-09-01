@@ -48,6 +48,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_playlist_rename.py`](probe_playlist_rename.py) | Who can rename a playlist, and through which route? | 009 §2, §3.8, AC-18; behaviours §5 | yes |
 | [`probe_playlist_read.py`](probe_playlist_read.py) | **How wide is a playlist entry row**, which of the declared parameters does the read route honour, and **which error shape is its `404`**? | 009 §3.1, §3.3, AC-4, AC-8; plan §6.5; behaviours §1.11 | yes |
 | [`probe_item_deletion.py`](probe_item_deletion.py) | What does `DELETE /Items/{itemId}` answer, to whom, and **in what bytes** — and does it hide a playlist the caller may not read? | 009 §3.6, §3.7, AC-12, AC-13; plan §6.6; behaviours §1.11, §3.20, §4.3 | yes |
+| [`probe_user_read.py`](probe_user_read.py) | **Who may read whom** through `GET /Users/{userId}`, what comes back, and what the two identifiers that name nobody answer? | 002 §3.7, AC-7, §6; behaviours §1.11, §3.5, §3.22 | yes |
 | [`probe_playstate.py`](probe_playstate.py) | What do playback reports and played marks actually do to `UserData`, what does a playing session show, and how does each route refuse? | 007 §3.2–§3.8, OQ-2/3/5/6, AC-21/AC-22 — and OQ-4 with `--reap`, which costs ten minutes of deliberate silence | yes |
 | [`probe_auth_mechanisms.py`](probe_auth_mechanisms.py) | How may a client present a token, how strict is the client header's grammar, what one-off shapes does a sign-in return, and how is a refusal shaped? | 002 §3.1–§3.6, §3.8, OQ-1, OQ-3; behaviours §2.4, §2.10, §2.12–§2.14, §3.5, §5.1, §5.9 | no |
 | [`probe_library_extensions.py`](probe_library_extensions.py) | Which file extensions does the reference admit as items, and which does it ignore? | 003 §3.2, OQ-1 | no |
@@ -104,6 +105,7 @@ python3 tools/probe_playlist_add_remove.py --allow-writes
 python3 tools/probe_playlist_visibility.py --allow-writes
 python3 tools/probe_playlist_rename.py     --allow-writes
 python3 tools/probe_playlist_read.py       --allow-writes
+python3 tools/probe_user_read.py           --allow-writes
 python3 tools/probe_playstate.py      --allow-writes
 python3 tools/probe_auth_mechanisms.py --disabled-user probe-disabled
 python3 tools/probe_library_extensions.py
@@ -269,6 +271,7 @@ it quietly: each refuses to run without `--allow-writes`.
 | `probe_playlist_add_remove.py` | 1 playlist per identifier class, on both routes | Deletes them, including on failure |
 | `probe_playlist_visibility.py` | A throwaway non-administrator user, whose library access it restricts, and 2 playlists (a third is attempted and refused, which is the measurement) | Deletes all three, including on failure. Refuses to run if a user of that name already exists, so it can never touch a real account |
 | `probe_playlist_rename.py` | A throwaway non-administrator user and 2 playlists | The same. It renames nothing it did not create: that route writes metadata through the savers, so pointing it at a library item would be an edit, not a measurement |
+| `probe_user_read.py` | Two throwaway non-administrator users, one of them restricted to a single library | Deletes both, including on failure. Refuses to run if a user of either name already exists, so it can never touch a real account — and it only ever *reads* the operator's own administrator account |
 | `probe_playstate.py` | Play state and favourite marks on one long item, one short item, one season's episodes and one artist; a live playback reported and stopped | Chooses only items with no user data at all, so restoring them is exact; sweeps the season's episodes and the artist's favourite clean including on failure, and stops the playback it started |
 | `probe_next_up.py` | Played marks on a handful of episodes | Chooses series whose episodes carry no user data, deletes every mark including on failure, and verifies the episodes pristine afterwards |
 

@@ -609,6 +609,26 @@ patterns in registration order — so `/users/public` reaches the public route r
 as a user whose identifier is `public`. That is a property of an ordering, so it is a test rather
 than a comment asking the next person to preserve it.
 
+### Amended — 2026-09-01: the cross-user `403` in *Verified by* was never the reference's
+
+**`GET /Users/{userId}` refuses no authenticated caller**, so the bullet above — *"cross-user reads
+are `403` for an ordinary user and `200` for an administrator"* — describes a server the reference
+is not. Measured across the route's whole matrix: an ordinary non-administrator naming another
+non-administrator, a restricted one naming an administrator, an administrator naming anybody and a
+user naming themselves are one `200` with the whole §3.5 object, and the bytes do not depend on who
+asked `[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`. It is the same disclosure
+this Done note records for `/Users/Public` two paragraphs up, reached by a second road — the
+parallel nobody drew at the time — and Atrium replicates it for the same reason, plus one that road
+does not have: refusing here breaks a request that succeeds against every reference server.
+
+The refusal was also hiding the route's two real error paths, because it answered them too. An
+identifier no account has is `404` carrying `"User not found"` — the fourth error shape, and the
+same body to an administrator and to a non-administrator — and a malformed one is the validation
+`400` keyed on `userId`. [Spec §3.7](spec.md#37-get-usersme-and-get-usersuserid), AC-7, the §6
+matrix and
+[behaviours §3.22](../../docs/compatibility/behaviours.md#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated)
+carry it; this task's own text is left as it was written, like the `/Users/Public` bullet beside it.
+
 ## T12 — `api/sessions.py`  ✅
 
 - [x] **Changes:** `GET /Sessions`, `POST /Sessions/Capabilities/Full`.

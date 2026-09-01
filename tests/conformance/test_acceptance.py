@@ -140,7 +140,11 @@ FEATURE_002: dict[int, tuple[str, ...]] = {
     4: (
         "tests.unit.test_require_user:test_no_token_is_the_empty_401_that_001_measured",
         "tests.unit.test_require_user:test_a_token_whose_account_was_disabled_is_403",
-        "tests.conformance.test_user_routes:test_an_ordinary_user_reading_another_is_403",
+        # The third name here was `/Users/{userId}`'s refusal until 2026-09-01, when that route
+        # was measured and turned out to refuse nobody. The criterion's second half - a valid
+        # token lacking permission is `403` - is proven on the route where the reference really
+        # does refuse: `/Items?userId=<somebody else>`, in the measured 25 bytes.
+        "tests.unit.test_items_route:test_user_id_of_somebody_else_is_the_controller_403",
     ),
     5: (
         "tests.conformance.test_user_routes:test_re_authenticating_invalidates_the_previous_token",
@@ -154,10 +158,19 @@ FEATURE_002: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_user_routes:test_every_user_hidden_is_an_empty_list_and_a_200",
         "tests.conformance.test_golden_users:test_public_users",
     ),
+    # Rewritten on 2026-09-01, when the criterion it maps stopped asserting a refusal. Every
+    # cell of the route is named here rather than the three it had, because the measurement that
+    # overturned it measured a matrix and one pair of it is not the route
+    # `[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`.
     7: (
         "tests.conformance.test_user_routes:test_a_user_may_always_read_themselves",
-        "tests.conformance.test_user_routes:test_an_ordinary_user_reading_another_is_403",
+        "tests.conformance.test_user_routes:test_an_ordinary_user_reads_another_whole",
+        "tests.conformance.test_user_routes:test_a_non_administrator_reads_an_administrator_whole",
         "tests.conformance.test_user_routes:test_an_administrator_reading_another_is_200",
+        "tests.conformance.test_user_routes:test_an_identifier_nobody_has_is_the_fourth_shape",
+        "tests.conformance.test_user_routes:test_an_administrator_gets_the_same_body_for_an_identifier_nobody_has",
+        "tests.conformance.test_user_routes:test_a_malformed_identifier_is_the_validation_400",
+        "tests.conformance.test_user_routes:test_reading_a_user_without_a_token_is_the_empty_401",
     ),
     8: (
         "tests.conformance.test_user_routes:test_a_configuration_round_trips_including_what_v1_does_not_act_on",
