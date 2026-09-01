@@ -50,7 +50,7 @@ stated in [005 §3.7 and AC-12](specs/005-item-query-api/spec.md). The same day 
 question that gate left open: a run that needs the fixture on both servers **stands up a single-use
 reference instance over it and destroys it**, so 010's AC-2 is no longer blocked — which also takes
 the writing measurements off an operator's server, where 009's runs had left 28 playlists behind.
-**010's plan was drafted on 2026-09-01** and is what the next gate reads: its bulk is the thing
+**010's plan was drafted and accepted on 2026-09-01**, so its task list is the next gate: the plan's bulk is the thing
 that does not exist yet — a **single-use reference instance**, stood up from a pinned image over
 this repository's own fixture, configured over the reference's first-time-setup operations with no
 human, and destroyed with everything it wrote. It reserved **five decisions** for their owner

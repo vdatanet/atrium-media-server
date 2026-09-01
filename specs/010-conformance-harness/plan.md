@@ -1,7 +1,8 @@
 ---
 feature: 010-conformance-harness
 title: Conformance harness — implementation plan
-status: Draft
+status: Accepted
+accepted: 2026-09-01
 created: 2026-09-01
 updated: 2026-09-01
 spec_status_required: Accepted
