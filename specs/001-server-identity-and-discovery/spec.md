@@ -207,9 +207,13 @@ as a deliberate divergence in
 
 ### 3.5 What the server says while it is starting
 
-Not an error path of one endpoint but a property of the whole server: **every one of the
-reference's 395 operations declares a `503`**, so nothing is exempt — not even a liveness probe.
-`[spec: every operation's 503 response in the pinned 10.11.10 document]`
+Not an error path of one endpoint but a property of the whole server: **every operation the
+reference declares declares a `503`**, so nothing is exempt — not even a liveness probe. Re-measured
+against the pinned document on 2026-09-01: 389 of 389, every one carrying exactly `Retry-After` and
+`Message` and a `text/html` body. The count is a property of *that server* rather than of Jellyfin —
+an installed plugin adds operations, which is how the 395 recorded on 2026-08-26 was reached — so
+the claim is the coverage, not the number.
+`[spec: every operation's 503 response in the pinned 10.11.11 document]`
 
 **Response — 503**
 

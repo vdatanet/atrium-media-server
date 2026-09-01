@@ -12,7 +12,7 @@
 # feature:   the specs/ directory that owns it
 
 reference:
-  jellyfin_openapi_version: "10.11.10"
+  jellyfin_openapi_version: "10.11.11"
   jellyfin_source_tag: "v10.11.11"
 
 endpoints:

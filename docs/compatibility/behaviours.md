@@ -22,7 +22,11 @@ nothing works. §2 is semantics. §3 is defects. §4 is the deliberate exception
 **Jellyfin does:** serialises every JSON property in PascalCase — `ItemId`, `RunTimeTicks`,
 `TotalRecordCount`, `IsFavorite`. It additionally advertises `application/json; profile="CamelCase"`
 and `application/json; profile="PascalCase"` content types alongside plain `application/json`,
-all pointing at the same schema. `[spec: every JSON response in the 10.11.10 document]`
+all pointing at the same schema — on 367 of the document's 370 JSON responses, two of which add
+`text/css` beside them. The other three declare `application/json` alone:
+`GetNamedConfiguration`, `GetSchedulesDirectCountries`, and a plugin's `TmdbClientConfiguration`.
+*"Every"* is therefore very nearly true and not quite, which is worth knowing before writing a
+client that counts on it. `[spec: every JSON response in the 10.11.11 document, counted 2026-09-01]`
 
 The same schema, and **not** the same serialisation: the CamelCase profile really does emit
 camelCase. That is §1.13, and this entry is about what a client gets when it asks for nothing in
@@ -463,8 +467,9 @@ modification time anywhere**. 120 `Movie`, `Episode` and `Audio` items requested
 `Fields=MediaSources,Path,Etag,DateCreated,DateLastMediaAdded` carried no property whose name
 contains "modif" on the item or on the source; the only time-shaped properties were `DateCreated`,
 `PremiereDate` and `RunTimeTicks`. `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-28]` The
-pinned document agrees: `DateModified` exists on `FontFile` and `LogFile` and on nothing else.
-`[spec: components.schemas in the 10.11.10 document]`
+pinned document agrees: `DateModified` exists on `FontFile` and `LogFile` and on nothing else, and
+the only other property whose name contains "modif" is `ChapterInfo.ImageDateModified` — neither an
+item nor a media source. `[spec: components.schemas in the 10.11.11 document, re-measured 2026-09-01]`
 
 **Depends on it:** no client can, because there is nothing there to depend on. That is the whole
 value of the entry — it says which half of a scanner's change-detection signal is observable and

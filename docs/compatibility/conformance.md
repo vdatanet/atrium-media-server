@@ -132,3 +132,21 @@ Bumping the pinned Jellyfin version is a deliberate act with a fixed procedure:
 4. Only then change the version in [reference-target.md](reference-target.md).
 
 A version bump that skips step 2 has not been done; it has been declared.
+
+### The two rows move separately
+
+[reference-target §1](reference-target.md#1-the-pinned-version) pins two things, and the procedure
+above is written for moving the **behavioural** one — a *new server*, whose differences step 2
+exists to find.
+
+**When only the contract row moves — same server, a different document of it — step 2 has no
+input.** Nothing behavioural changed, so there is no new difference for a differential harness to
+triage; running it would compare a server against itself. The steps that do apply are 1, 3 and 4,
+and they apply in full: the surface validator against the new document, every claim the repository
+draws from a document re-measured against it, and only then the version changed.
+
+This is not a licence to skip step 2 by declaring a move "document-only". The test is whether the
+running reference server changed. If it did, step 2 is mandatory and no argument substitutes for
+it. The one move made under this paragraph — `10.11.10` → `10.11.11` on 2026-09-01 — was made
+against a server that had already been `10.11.11` for the whole project, with every one of the
+repository's 515 provenance tags naming it and none naming `10.11.10`.

@@ -28,15 +28,10 @@ from atrium.compat.registry import import_model_modules, iter_models
 
 INDEX = Path(__file__).resolve().parents[2] / "docs" / "compatibility" / "property-names.json"
 
-#: Names the measured reference emits that the **pinned document does not carry**. `GenreItems`
-#: is a real `BaseItemDto` property on the wire - gated behind `fields=Genres` on a list row,
-#: unasked on a full body `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]` -
-#: and it is a declared property of the 10.11.11 document; the pinned 10.11.10 document simply
-#: lacks it, along with `LockedFields`, which nothing here serialises yet. An explicit exception
-#: rather than a regenerated index, because the index's version is the pin (ADR-0004) and moving
-#: it is a decision, not a side effect of a sweep. Recorded in
-#: docs/compatibility/reference-target.md section 1.
-MEASURED_BEYOND_THE_PINNED_DOCUMENT: frozenset[str] = frozenset({"GenreItems"})
+
+def snake_case_names(names: Iterable[str]) -> list[str]:
+    """Names Jellyfin could not have serialised. Separate so the rule can be shown to reject."""
+    return [name for name in names if "_" in name]
 
 
 @pytest.fixture(scope="module")
@@ -53,7 +48,7 @@ def find_problems(
     for model in models:
         for field_name, field in model.model_fields.items():
             alias = field.serialization_alias or field.alias or field_name
-            if alias in reference_names or alias in MEASURED_BEYOND_THE_PINNED_DOCUMENT:
+            if alias in reference_names:
                 continue
             near = difflib.get_close_matches(alias, reference_names, n=1)
             suggestion = f" Did you mean {near[0]!r}?" if near else ""
@@ -84,6 +79,36 @@ def test_index_is_internally_consistent() -> None:
     assert data["count"] == len(names), "the index's own count disagrees with its contents"
     assert len(set(names)) == len(names), "the index repeats a name"
     assert names == sorted(names), "the index is not sorted; it is generated, so it should be"
+
+
+def test_no_index_name_is_snake_case() -> None:
+    """The invariant that would have caught a plugin's names in the index, with no document.
+
+    Jellyfin serialises PascalCase, and camelCase in its package and error schemas. It never
+    serialises snake_case: of the 1026 names in the 10.11.11 document, none contains an
+    underscore. So an underscore in the index cannot have come from Jellyfin.
+
+    Something did. The index carried `not_found` from its first commit until 2026-09-01, along
+    with eighteen more Trakt names - a Jellyfin's OpenAPI document is the core API plus whatever
+    plugins are installed, and the server the index was extracted from had one the reference
+    server does not (docs/compatibility/reference-target.md section 1).
+
+    Nothing could see it. The freshness check needs the document, which CI has not got and which
+    for that pin nobody had at all; the assertions that run without one - sorted, unique,
+    self-counting - are all true of a polluted index. This one is not, and it needs no document.
+    """
+    data = json.loads(INDEX.read_text(encoding="utf-8"))
+    snake = snake_case_names(data["names"])
+    assert not snake, (
+        f"the index carries {snake}, and Jellyfin serialises no name with an underscore. A "
+        "document extracted from a server with plugins installed carries their schemas too - "
+        "regenerate from a stock server."
+    )
+
+
+def test_the_snake_case_rule_rejects_the_name_it_was_written_for() -> None:
+    """`not_found` sat in the index for the life of the project. The rule has to reject it."""
+    assert snake_case_names(["Name", "imageUrl", "not_found", "GenreItems"]) == ["not_found"]
 
 
 def test_index_and_surface_pin_the_same_document() -> None:

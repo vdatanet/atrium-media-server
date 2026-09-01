@@ -2,14 +2,15 @@
 """Whether the server is ready to answer, and what it says while it is not.
 
 A server that is still scanning, migrating or opening its database has to answer *something*, and
-the reference is specific about what. **Every one of its 395 operations declares a `503`**, so the
-gate is server-wide rather than per-route, and the response carries two headers:
+the reference is specific about what. **Every operation it declares declares a `503`** - 389 of
+389, re-measured 2026-09-01 - so the gate is server-wide rather than per-route, and the response
+carries two headers:
 
     Retry-After: <full seconds>
     Message: <a short plain-text reason>
 
 with a `text/html` body.
-`[spec: every operation's 503 response in the pinned 10.11.10 document]`
+`[spec: every operation's 503 response in the pinned 10.11.11 document]`
 
 `Retry-After` is what separates "starting" from "broken" for a client. Without it a `503` is
 indistinguishable from a server that is simply down, and a client that cannot tell will either

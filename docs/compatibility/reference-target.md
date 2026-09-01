@@ -1,6 +1,6 @@
 # The reference target
 
-**Last verified: 2026-08-26, against Jellyfin 10.11.11 source and the 10.11.10 OpenAPI document.**
+**Last verified: 2026-09-01, against Jellyfin 10.11.11 source and the 10.11.11 OpenAPI document.**
 
 This document answers one question precisely: *when we say Atrium is compatible with Jellyfin,
 compatible with what, exactly?*
@@ -11,85 +11,70 @@ compatible with what, exactly?*
 
 | | Value |
 |---|---|
-| API contract | Jellyfin `10.11.10` OpenAPI document |
+| API contract | Jellyfin `10.11.11` OpenAPI document |
 | Behavioural reference | Jellyfin `10.11.11` source and a running instance |
 | Version Atrium reports | `10.11.11` — see §4 |
 
 The reasoning for pinning, and for pinning to this particular line rather than `master`, is in
 [ADR-0004](../decisions/0004-pin-to-jellyfin-10-11.md).
 
-> **The two pins are one patch version apart, and as of 2026-08-26 the validator says so.**
-> `surface.yaml` pins the `10.11.10` document; the reachable reference server is `10.11.11` and
-> serves a `10.11.11` document, so `tools/extract_v1_surface.py` refuses it — correctly, since that
-> is not the pinned document. It had never said so before: the check compares
-> `reference.jellyfin_openapi_version`, and a parsing bug meant that block was silently dropped,
-> so the gate had never once run. The two documents agree on every one of the 55 endpoints in the
-> surface, so nothing is known to be wrong; what is open is whether the contract pin should move to
-> `10.11.11` and make both rows the same version. **That is a version move**, and §"When the
-> reference version moves" in [conformance.md](conformance.md) is its procedure — step 2 of which
-> needs the differential harness feature 010 delivers. Not decided here.
+> **The two pins are now one version, and the move that made them one is recorded here**
+> (2026-09-01). `surface.yaml` pinned the `10.11.10` document while the reachable reference server
+> is `10.11.11`; the gap was recorded on 2026-08-26 as undecided, on the grounds that moving the
+> pin is a version move whose step 2 needs the differential harness feature 010 delivers. Two
+> measurements taken on 2026-09-01 settled it the other way.
 >
-> **The surface has since grown to 58** — the three subtitle routes 011 added on 2026-08-29 — and
-> all three were checked against the `10.11.11` document at that gate: path, method and
-> `operationId`. The pin is unmoved, and the sentence above still holds of the endpoints it was
-> written about.
-
-> **The one measured consequence of the gap so far: two property names** (2026-08-28). The
-> `10.11.11` document declares `BaseItemDto.GenreItems` and `BaseItemDto.LockedFields`; the pinned
-> `10.11.10` document does not, so neither is in `docs/compatibility/property-names.json` — while
-> the running reference **emits** `GenreItems` on the wire (unasked on a full body, behind
-> `fields=Genres` on a list row `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11,
-> 2026-08-27]`). The alias sweep carries it as an explicit measured exception
-> (`tests/conformance/test_aliases.py`, `MEASURED_BEYOND_THE_PINNED_DOCUMENT`) rather than the
-> index being regenerated from the newer document, because the index's version *is* the pin and
-> moving it is the procedure above, not a side effect of a sweep. If the pin ever moves to
-> `10.11.11`, the exception list empties and should be deleted.
-
-> **The gap runs the other way too, and that half is not a version delta at all: nineteen of the
-> index's 1043 names were never Jellyfin's** (2026-09-01). Fetched the document fresh from the
-> reference server and diffed it against the index
-> (`python3 tools/fetch_reference_spec.py`, then `tools/extract_property_names.py --check`):
+> **The first: the `10.11.10` document is unobtainable, and its one committed artefact was never
+> stock.** `docs/compatibility/property-names.json` held 1043 names, and nineteen of them —
 > `added`, `deleted`, `episodes`, `ids`, `imdb`, `movies`, `not_found`, `number`, `people`,
-> `season`, `seasons`, `shows`, `slug`, `tmdb`, `trakt`, `tvdb`, `tvrage`, `updated` and `year`
-> are in the index and appear **nowhere in the `10.11.11` document at any depth** — not as a
-> property name, and fourteen of the nineteen not even as a quoted string. They are not
-> something the extractor stopped reaching: it reads `components.schemas[*].properties`, the
-> same place it always read. Nor are they Jellyfin's under another spelling — a search of the
-> source tree at `v10.11.11` finds no `not_found`, no `tvrage` and no `trakt` in any serialised
-> name (an absence, so it carries no `file:line`). The vocabulary is the Trakt.tv API's — an `ids`
-> object of `trakt`/`slug`/`imdb`/`tmdb`/`tvdb`/`tvrage`, and a sync response of
-> `added`/`deleted`/`updated`/`not_found` each holding `movies`/`shows`/`seasons`/`episodes`/
-> `people` — which reaches an OpenAPI document only through an installed plugin.
+> `season`, `seasons`, `shows`, `slug`, `tmdb`, `trakt`, `tvdb`, `tvrage`, `updated`, `year` —
+> appear nowhere in the `10.11.11` document at any depth, and nowhere in Jellyfin's source at
+> `v10.11.11` either. They are the Trakt.tv API's vocabulary: an `ids` object of
+> `trakt`/`slug`/`imdb`/`tmdb`/`tvdb`/`tvrage`, and a sync response of
+> `added`/`deleted`/`updated`/`not_found` each holding
+> `movies`/`shows`/`seasons`/`episodes`/`people`.
 >
-> **A Jellyfin's document is the core API plus whatever plugins are installed**, and that is
-> measurable on the current server rather than inferred: it has six plugins, and two of the 316
-> paths it declares — `/TMDbBoxSets/Refresh` and `/Tmdb/ClientConfiguration` — come from them
-> `[probe: /Plugins and /api-docs/openapi.json, Jellyfin 10.11.11, 2026-09-01]`. None of the six
-> is Trakt, which is why the nineteen names are gone.
+> **A Jellyfin's OpenAPI document is the core API plus whatever plugins are installed.** That is
+> measured, not inferred: the reference server has six plugins, and two of its 316 paths —
+> `/TMDbBoxSets/Refresh` and `/Tmdb/ClientConfiguration` — come from them
+> `[probe: /Plugins and /api-docs/openapi.json, Jellyfin 10.11.11, 2026-09-01]`. None of the six is
+> Trakt. So the index was an extraction of **one server's** `10.11.10` document, taken while that
+> server had a plugin this one does not — and no server this project can reach serves that
+> document. The freshness check could not pass anywhere, and had never once run.
 >
-> So `property-names.json` is not an extraction of *the* `10.11.10` document. It is an extraction
-> of **one server's** `10.11.10` document, taken while that server had a plugin the reference
-> server no longer has — and **no server this project can reach serves that document**. The
-> freshness check therefore cannot pass anywhere, not merely in CI: the only document obtainable
-> is `10.11.11`, and the index pins `10.11.10`. A conditional gate that would fail on every run
-> if its condition were met is not a gate that is skipped; it is one that cannot be satisfied.
+> **The second: step 2 of the procedure had no input.**
+> [conformance.md](conformance.md#when-the-reference-version-moves) says *"run the full
+> differential harness against the **new server**"*, and there is no new server. Every one of this
+> repository's 515 provenance tags reads `Jellyfin 10.11.11` and every one of its 340 source
+> citations reads `@ v10.11.11`; not one names `10.11.10`. The running reference has been
+> `10.11.11` for the whole project and the behavioural row of the table above always said so. What
+> moved was the contract row alone — from a document nobody has to the document describing the
+> server every probe already measured. Step 2 exists to catch behavioural differences a *server*
+> change introduces; a document-only move introduces none, and conformance.md now says so in its
+> own words.
 >
-> **What it costs today is nothing reachable**, and that is luck rather than design: all nineteen
-> begin lowercase, and `test_every_alias_is_pascal_case` rejects any alias that does — so no
-> Atrium field can pass the sweep on a Trakt name, because a different test fails it first. What
-> it costs in principle is that the sweep's question — *is this exactly a property name the
-> reference uses?* — is asked against a set nineteen names wider than the reference, and
-> `difflib`'s "did you mean" suggestions are drawn from that same set. The index's other
-> twenty-three lowercase names are genuine and must stay: Jellyfin's own plugin-repository
-> schemas are camelCase (`repositoryUrl`, `sourceUrl`, `subScore`, `targetAbi`, `checksum`)
-> and so is `ProblemDetails` (`type`, `title`, `status`, `detail`, `instance`). Lowercase is
-> not the tell; absence from the document is.
+> **What the move cost, measured before it was made:** all 461 aliases this project serialises are
+> declared by the `10.11.11` document, so the sweep passes unchanged. The index went from 1043
+> names to 1026 — losing exactly the nineteen, gaining `GenreItems` and `LockedFields`. The alias
+> sweep's `MEASURED_BEYOND_THE_PINNED_DOCUMENT` exception, which carried `GenreItems` because the
+> old pin lacked it, is empty and deleted. Steps 1 and 3 were run: the surface validator passes on
+> all 59 endpoints against the `10.11.11` document — its first ever run against a document — and
+> the claims this repository draws from the document were re-measured one by one, which moved two
+> of their numbers (§2 below, and
+> [behaviours §1.1](behaviours.md#11-property-casing-is-pascalcase)).
 >
-> **Neither half is fixed here.** Regenerating against `10.11.11` *is* the version move — the
-> index's version is the pin, `tests/conformance/test_aliases.py` asserts it equals
-> `surface.yaml`'s, and step 2 of the procedure above needs the differential harness feature 010
-> delivers. Pruning the nineteen by hand contradicts the index's own header and would make it
-> reproducible from nothing at all. Both are decisions; this note is the measurement they need.
+> **What the move did not fix, and cannot:** CI still has no document and must not have one, so the
+> freshness step still skips. What replaces it is an assertion that needs no document — **no name
+> in the index contains an underscore.** Jellyfin serialises PascalCase, and camelCase in its
+> package and error schemas; of the 1026 names in the `10.11.11` document, none has one.
+> `not_found` sat in the index from its first commit and nothing could see it: the checks that run
+> without a document — sorted, unique, self-counting, pinning the same version `surface.yaml` does
+> — are all true of a polluted index. `tests/conformance/test_aliases.py`.
+>
+> **[ADR-0004](../decisions/0004-pin-to-jellyfin-10-11.md) is not amended**, and its table still
+> reads `10.11.10`. Its decision is *"pin to `10.11.x`"*, it names moving the pin as a deliberate
+> act delegated to conformance.md, and a record is immutable once accepted
+> ([decisions/README.md](../decisions/README.md)). The live values are the table above.
 
 `master` (the 12.0.0 line) is explicitly **not** the target. It moves, it has already changed
 behaviours that clients depend on, and no client ships against it.
@@ -102,14 +87,15 @@ When two sources disagree, the higher one wins.
    This is the only source that reflects what clients actually receive.
 2. **The Jellyfin source at tag `v10.11.11`** — for behaviour that is hard to probe (error paths,
    ordering rules, identifier derivation).
-3. **The OpenAPI document for 10.11.10** — for the shape of requests and responses, parameter
-   names and enum vocabularies.
+3. **The OpenAPI document for 10.11.11** — for the shape of requests and responses, parameter
+   names and enum vocabularies. It is the document a running reference serves, which means it is
+   also the core API *plus that server's plugins*; §1 records what that cost once.
 
 The OpenAPI document is last on purpose. It is generated from the C# controllers and is
 **demonstrably not a complete description of behaviour**: it declares response headers with
 `allowEmptyValue`, which is invalid for a Header object and makes strict parsers reject the whole
-document; it declares every JSON response three times with `profile="CamelCase"` and
-`profile="PascalCase"` variants, **against the same schema, while two of the three serialise
+document; it declares all but three of its JSON responses three times with `profile="CamelCase"`
+and `profile="PascalCase"` variants, **against the same schema, while two of the three serialise
 differently**; and it declares `required` and `additionalProperties: false` on schemas that the
 server does not actually honour.
 
@@ -119,7 +105,7 @@ CamelCase variant really does emit camelCase — measured, in
 [behaviours §1.13](behaviours.md#113-the-camelcase-profile-really-is-camelcase) — and no reading of
 the document could have told anyone that. The document describes *shapes*, and a serialisation is
 not a shape.
-`[spec: directly observable in the 10.11.10 document]`
+`[spec: directly observable in the 10.11.11 document]`
 
 ### Prior measurements, and the debt they carry
 
