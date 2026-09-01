@@ -906,7 +906,7 @@ one migration; it is one migration, four maps and a clause.
 
 ## T13 — `POST /Items/{itemId}`: the rename, and the two things it refuses
 
-> **No longer blocked (2026-09-01).** It was: the reference's `403` here is the **empty** shape —
+> **Was blocked, and no longer (2026-09-01).** It was: the reference's `403` here is the **empty** shape —
 > no body, no content type, an authorization policy's refusal — and `ForbiddenError` stopped being
 > that at T2, so the route needed the other shape by a road nobody had chosen. The decision taken
 > on 2026-08-31 was a second exception class, and **T10 wrote it**: `EmptyForbiddenError` in
@@ -914,7 +914,7 @@ one migration; it is one migration, four maps and a clause.
 > test sends the same bytes for the same reason (spec §3.7). Raise that class here and assert the
 > empty body *and* the absent content type.
 
-- [ ] **Changes:** `api/items.py` gains the route: an administrator renaming a playlist applies
+- [x] **Changes:** `api/items.py` gains the route: an administrator renaming a playlist applies
   `Name` and nothing else; any non-administrator is `403` — the reference's own answer from an
   elevated controller; an administrator on an item that is not a playlist is `403`, which is v1's
   own answer and goes to behaviours §5 in this change (plan §6.6).
@@ -923,6 +923,78 @@ one migration; it is one migration, four maps and a clause.
   `/Items` afterwards, the owner-who-is-not-an-administrator refused, and a film refused with
   nothing about it changed.
 - **Spec reference:** §3.8, AC-18
+
+> **Done (2026-09-01).** *The task was written around a route that reads one property, and the
+> route reads a whole item — three of whose properties it cannot do without.* The client fetches
+> the item, changes `Name` and posts it back, so thirty-nine properties arrive. Dropping each of
+> them in turn measured which ones matter: **`Genres`, `Tags` and `ProviderIds`**, absent or
+> `null`, are each the controller's 25-byte `400`, and a body of exactly those three and a `Name`
+> is accepted `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. So the
+> round trip is load-bearing rather than incidental: **`{"Name": …}` alone is refused by a stock
+> reference server**, and a route that had accepted it — which is what "applies `Name`" describes
+> — would have answered `204` to a request no reference server serves. Reproduced exactly, and
+> checked in the route rather than declared required on the model, because a required field here
+> answers the *validation* shape and the measured refusal is the controller's.
+>
+> *And it is not a rename.* The same posted body changed **seven fields beside `Name`** on the
+> reference — `Overview`, `ForcedSortName` (which then decides `SortName`), `OfficialRating`,
+> `CustomRating`, `ProductionYear`, `Genres` and `Tags` — while `Path` and `IsFolder` are computed
+> and ignored on both servers. Plan §6.6's *"only `Name` is applied"* was written as a description
+> of the reference and is a **divergence**: recorded in behaviours §5 with the reason it cannot
+> simply be widened (004 T10 measured the scan and the refresh already fighting over `Item.name`),
+> and asserted by a test rather than left as a sentence.
+>
+> *A third thing the documents had not asked: a body with no `Name` is a `204` that erases it.*
+> Absent or `null`, the reference answers `204` and the playlist comes back with no `Name`
+> property at all — a rename route that un-names a playlist. Refused here in the same bytes as the
+> incomplete body, so the status is the whole difference: behaviours §3.21, the feature's sixth
+> divergence, and the same argument §3.19 makes for the four requests beside it. The same entry
+> carries what the reference's own refusal leaves behind, which nobody would have predicted: after
+> a body with no `Genres`, that playlist's `GET /Items/{itemId}` answers `400` **from then on**
+> while the row still counts in a listing, until a later complete body repairs it.
+>
+> *The elevation had to be a dependency, and that is a measurement rather than a style.* A
+> non-administrator posting to a path segment that is not an identifier at all is answered the
+> empty `403`, where an administrator sending the same request gets the binder's validation `400`
+> — the policy runs before model binding. Written the obvious way, as a check inside the route,
+> the malformed identifier answers `400`; that was tried, and the test fails. `require_administrator`
+> in `api/deps.py` is therefore the first sub-dependency in this project whose *ordering* is the
+> contract, and the same measurement puts the `403` ahead of the lookup, so a caller who may not
+> use the route cannot learn whether an item exists.
+>
+> *`itemId` binds as a `WireGuid` here too — measured on the POST, not inherited.* Plain, dashed,
+> braced and upper-case all address the playlist; a non-identifier is the validation `400` keyed
+> `itemId`; all zeros is the bare-text `400`; a well-formed unknown one is the problem-details
+> `404`, **and it beats the body** — an unknown id with a body this route would refuse is still the
+> `404`. Four classes, the same four the `DELETE` on this path answers, and asking was the whole of
+> what made it right (T11's entry id is the counter-example one route away).
+>
+> *What this means for the client contract, said plainly.* The rename the music client calls is
+> administrator-only, so **the operation brought into the surface for that client refuses that
+> client's own users** — not through any choice made here: a stock reference server refuses them
+> identically, because `ItemUpdateController` is declared elevated. The permission is not widened.
+> The route that would let an owner rename their own playlist is `UpdatePlaylist`, which no
+> analysed client calls and which Principle VI therefore keeps out; behaviours §5 already carried
+> that row and still does.
+>
+> *Three routine calls, taken rather than escalated.* **Two exception classes, not one**:
+> `ItemUpdateError` for the `400` (both rows — the reference's three properties and this server's
+> `Name`, one shape and one class, the arrangement `PlaylistCreationError` already makes) and
+> `MediaUpdateRefusedError` for the invented `403`. **That `403` is the *empty* shape** where
+> T12's invented refusal on the same path is the 25 bytes, which plan §6.6 asked for and is worth
+> naming as deliberate: this route's other refusal is empty, so the two cannot be told apart and
+> nothing is disclosed; the deletion route has no such neighbour. **A body with no `Name` is
+> refused rather than applied**, on §3.19's precedent, because the alternative is a silent no-op or
+> reproducing data loss.
+>
+> *And one gap this task found and did not close.* A request with **no body and no `Content-Type`**
+> is `415` on the reference, in problem details, and the validation `400` here — on this route and
+> on the four older ones with a required body (007's three, 008's `PlaybackInfo`). It is measured
+> only on this route, so closing it means one measurement per route and a content-type gate in
+> `compat/`; recorded in behaviours §1.11 and as a §5 row rather than extrapolated from a single
+> reading. Every clause of the route was checked by deletion, by hand: removing the trio guard
+> fails six tests, the `Name` guard two, the non-playlist refusal three, and moving the
+> administrator check out of the dependency one — the one that measures the ordering.
 
 ## T14 — The acceptance map, the route set, and 009 is Implemented
 
@@ -943,10 +1015,14 @@ one migration; it is one migration, four maps and a clause.
 - [ ] Every one of spec §5's twenty acceptance criteria has a passing test, named in T14's map.
 - [ ] Every endpoint reaches the conformance level in spec §6.
 - [ ] `surface.yaml` lists the seven routes and the router serves no eighth.
-- [ ] The **four** divergences ship as specified: the named reader (§3.16), the unreachable entry
-      (§3.17), the two refusals `Move` does not make (§3.15) and the de-duplication that never
-      misses (§3.18, added at T7) — each with a test that fails if the reference's behaviour is
-      reproduced instead.
+- [ ] The **six** divergences ship as specified: the named reader (§3.16), the unreachable entry
+      (§3.17), the two refusals `Move` does not make (§3.15), the de-duplication that never
+      misses (§3.18, added at T7), the write requests the reference cannot serve and answers
+      anyway (§3.19, added at T8) and the rename that erases a name (§3.21, added at T13) — each
+      with a test that fails if the reference's behaviour is reproduced instead. *This line said
+      **four** and named the first four until T13 counted them: §3.19 had been shipped and
+      unlisted since T8, and §3.20 is a defect this feature replicates rather than a divergence,
+      so it is not in the list and is not missing from it.*
 - [ ] `ForbiddenError`'s body is the reference's 25-byte shape, on 009's routes **and** on 005's
   (AC-19) — and every **`may_edit`** refusal is the body-less one, which is a different set of
   bytes and not this class: the rename (AC-18, T2), and `Move`, `Add` and `Remove` for a caller who

@@ -64,6 +64,7 @@ INTERIM_009 = frozenset(
         ("DELETE", "/Playlists/{playlistId}/Items"),
         ("POST", "/Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}"),
         ("DELETE", "/Items/{itemId}"),
+        ("POST", "/Items/{itemId}"),
     }
 )
 

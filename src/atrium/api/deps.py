@@ -42,12 +42,15 @@ specs/002-authentication-users-and-sessions/plan.md section 5.
 
 from __future__ import annotations
 
+from typing import Annotated
+
+from fastapi import Depends
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import sessionmaker
 from starlette.requests import Request
 
 from atrium.compat.auth import extract_token
-from atrium.compat.errors import ForbiddenError, UnauthenticatedError
+from atrium.compat.errors import EmptyForbiddenError, ForbiddenError, UnauthenticatedError
 from atrium.config.paths import DataPaths
 from atrium.config.settings import Settings
 from atrium.config.state import ServerState
@@ -146,6 +149,30 @@ async def require_user(request: Request) -> User:
     return user
 
 
+async def require_administrator(
+    caller: Annotated[User, Depends(require_user)],
+) -> User:
+    """The one elevated route in v1: `POST /Items/{itemId}`, which renames a playlist.
+
+    **A dependency rather than a line inside the route, because the reference refuses before the
+    request is bound.** Measured: a non-administrator posting to a path segment that is not an
+    identifier at all is answered the empty `403`, where an administrator sending the same request
+    is answered the binder's validation `400`
+    `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. That is what an
+    authorization policy attached to the whole controller does - it runs before model binding - and
+    it is reproduced here by the only ordering this framework offers: a sub-dependency is solved,
+    and may raise, before the path parameters of the route that declares it. The same measurement
+    puts the refusal ahead of the lookup, so a caller who is not an administrator cannot learn
+    whether an item exists (009 spec section 3.8).
+
+    `EmptyForbiddenError` and not `ForbiddenError`: this refusal carries no body and no content
+    type, which is the half of the `403` split that never reaches a controller (009 T2).
+    """
+    if not caller.is_administrator:
+        raise EmptyForbiddenError("the route is administrator-only")
+    return caller
+
+
 __all__ = [
     "get_authenticator",
     "get_passwords",
@@ -154,5 +181,6 @@ __all__ = [
     "get_sessions",
     "get_settings",
     "get_state",
+    "require_administrator",
     "require_user",
 ]

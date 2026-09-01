@@ -1867,3 +1867,380 @@ async def test_ac12_a_film_is_refused_and_the_file_is_still_on_disk(
     assert film.exists()
     assert film.read_bytes() == b"not really a film"
     assert (await client.get(f"/Items/{item.id}")).status_code == 200
+
+
+# ------------------------------------------------------------------------------------------
+# T13 - `POST /Items/{itemId}`: the rename, and the two things it refuses
+# ------------------------------------------------------------------------------------------
+#
+# The other method of the path above, and the one route in v1 an authorization policy guards.
+# Every cell was measured before it was written `[probe: tools/probe_playlist_rename.py,
+# Jellyfin 10.11.11, 2026-09-01]`, including the two the documents had not asked about: the
+# three properties a body may not omit, and the seven the reference applies beside `Name`.
+
+#: The smallest body the reference accepts, and the shape of the finding: `Name` alone is a
+#: `400`. `Genres`, `Tags` and `ProviderIds` are required and non-null; the other thirty-five
+#: properties of a read may all be left out.
+REQUIRED_BESIDE_NAME: dict[str, Any] = {"Genres": [], "Tags": [], "ProviderIds": {}}
+
+
+def rename_body(name: str | None, **changed: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {"Name": name, **REQUIRED_BESIDE_NAME}
+    body.update(changed)
+    return body
+
+
+async def rename(client: httpx.AsyncClient, item_id: str, body: dict[str, Any]) -> httpx.Response:
+    return await client.post(f"/Items/{item_id}", json=body)
+
+
+async def test_ac18_an_administrator_renames_a_playlist(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """AC-18's first half, with the success shape beside it: `204`, no body, no content type.
+
+    The name is asserted where a client reads it - the item route, the listing, and a search -
+    because the rename writes three columns and only the first of them is `Name` on the wire. A
+    rename that wrote one would leave a playlist sorting under its old name and unfindable by
+    `searchTerm`, which is the failure 005 T6 found one table away.
+    """
+    as_user(harness, harness.admin)
+    playlist = world.public_playlist
+
+    answered = await rename(client, playlist.id, rename_body("Renamed By An Administrator"))
+    assert answered.status_code == 204, answered.content
+    assert answered.content == b""
+    assert "content-type" not in answered.headers
+
+    assert (await item(client, playlist.id))["Name"] == "Renamed By An Administrator"
+    found = await client.get(
+        "/Items",
+        params={"searchTerm": "renamed by an", "includeItemTypes": "Playlist", "recursive": "true"},
+    )
+    assert [row["Id"] for row in found.json()["Items"]] == [playlist.id]
+
+
+async def test_ac18_the_non_administrator_owner_is_the_empty_403(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """AC-18's second half, and the scope finding of this whole feature: **the rename the music
+    client calls refuses that client's own users**.
+
+    The playlist's own owner is answered `403` with no body and no content type - an
+    authorization policy's refusal, decided before the controller runs - which is the *other*
+    shape from AC-19's 25 bytes and is asserted apart from it on purpose (T2). The owner's own
+    playlist keeps its name, so the refusal is total rather than partial.
+    """
+    as_user(harness, world.everyone)
+    playlist = world.private_playlist
+    before = (await item(client, playlist.id))["Name"]
+
+    answered = await rename(client, playlist.id, rename_body("Renamed By Its Owner"))
+    assert answered.status_code == 403, answered.content
+    assert answered.content == b""
+    assert "content-type" not in answered.headers
+    assert (await item(client, playlist.id))["Name"] == before
+
+
+@pytest.mark.parametrize(
+    "target", ["their own playlist", "an identifier naming nothing", "not an identifier"]
+)
+async def test_the_policy_refuses_before_anything_about_the_item_is_read(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld, target: str
+) -> None:
+    """The ordering, measured rather than chosen: a non-administrator meets the same empty `403`
+    for a well-formed identifier that names nothing and for a path segment that is not an
+    identifier at all, where an administrator sending the same two requests is answered `404` and
+    the binder's validation `400` `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11,
+    2026-09-01]`.
+
+    That is what an authorization policy attached to a whole controller does, and it is why the
+    test exists: a caller who may not use this route learns nothing from it, not even whether an
+    identifier addresses something.
+    """
+    as_user(harness, world.everyone)
+    item_id = {
+        "their own playlist": world.private_playlist.id,
+        "an identifier naming nothing": ABSENT_ID,
+        "not an identifier": "not-an-identifier",
+    }[target]
+
+    answered = await rename(client, item_id, rename_body("Refused"))
+    assert answered.status_code == 403, answered.content
+    assert answered.content == b""
+    assert "content-type" not in answered.headers
+
+
+@pytest.mark.parametrize("omitted", ["Genres", "Tags", "ProviderIds"])
+@pytest.mark.parametrize("how", ["absent", "null"])
+async def test_the_three_properties_a_body_may_not_omit(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld, omitted: str, how: str
+) -> None:
+    """Parity, and the finding the task statement asked for: *"applies `Name` and nothing else"*
+    is a claim about a body with thirty-nine properties, and three of them are load-bearing.
+
+    Dropping each property of a whole posted body in turn, the reference refuses exactly
+    `Genres`, `Tags` and `ProviderIds` - absent or `null`, identically - with the controller's 25
+    bytes at `400`, and accepts a body of those three and a `Name`
+    `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. So the client's
+    round trip is load-bearing rather than incidental: a client that posted `{"Name": ...}` alone
+    would be refused by a stock reference server too.
+    """
+    as_user(harness, harness.admin)
+    playlist = world.public_playlist
+    before = (await item(client, playlist.id))["Name"]
+
+    body = rename_body("Renamed")
+    if how == "absent":
+        del body[omitted]
+    else:
+        body[omitted] = None
+
+    answered = await rename(client, playlist.id, body)
+    assert answered.status_code == 400, answered.content
+    assert answered.content == CONTROLLER_BODY
+    assert answered.headers["content-type"] == "text/plain"
+    assert (await item(client, playlist.id))["Name"] == before
+
+
+async def test_a_body_of_exactly_the_four_properties_is_accepted(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """The rule stated the other way round, because a refusal test alone cannot say where the
+    line is: the thirty-five properties a read emits and this body leaves out change nothing."""
+    as_user(harness, harness.admin)
+    playlist = world.public_playlist
+
+    answered = await rename(client, playlist.id, rename_body("Four Properties"))
+    assert answered.status_code == 204, answered.content
+    assert (await item(client, playlist.id))["Name"] == "Four Properties"
+
+
+@pytest.mark.parametrize("how", ["absent", "null"])
+async def test_a_body_with_no_name_is_refused_where_the_reference_erases_the_name(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld, how: str
+) -> None:
+    """009's sixth divergence, in the same bytes as the row above (behaviours section 3.21).
+
+    Measured: a whole item body whose `Name` is absent, or present and `null`, is answered `204`
+    and the playlist's name is **erased** - it comes back with no `Name` property at all
+    `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. A rename route that
+    un-names a playlist is a request no client sends and no client can have built on, so it is
+    refused here in the shape the route already refuses an incomplete body: the status is the
+    whole of the difference, and the playlist keeps its name.
+    """
+    as_user(harness, harness.admin)
+    playlist = world.public_playlist
+    before = (await item(client, playlist.id))["Name"]
+
+    body = rename_body(None)
+    if how == "absent":
+        del body["Name"]
+
+    answered = await rename(client, playlist.id, body)
+    assert answered.status_code == 400, answered.content
+    assert answered.content == CONTROLLER_BODY
+    assert answered.headers["content-type"] == "text/plain"
+    assert (await item(client, playlist.id))["Name"] == before
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+async def test_an_empty_or_blank_name_is_applied_as_sent(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld, name: str
+) -> None:
+    """Parity with the creation route's own finding: there is no validation on a playlist's name
+    anywhere, and the reference stores an empty or blank one exactly as it arrives (AC-2)."""
+    as_user(harness, harness.admin)
+    playlist = world.public_playlist
+
+    assert (await rename(client, playlist.id, rename_body(name))).status_code == 204
+    assert (await item(client, playlist.id))["Name"] == name
+
+
+async def test_the_properties_beside_name_are_ignored(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """The recorded gap (behaviours section 5), asserted rather than described.
+
+    The reference applies `Overview`, `ForcedSortName`, `OfficialRating`, `CustomRating`,
+    `ProductionYear`, `Genres` and `Tags` from the same body it takes `Name` from - measured, on
+    a body carrying all of them `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11,
+    2026-09-01]`. v1 applies `Name` and nothing else, so a client that edited a playlist's
+    overview would find it unchanged. Named here so the narrowing cannot be mistaken for one
+    nobody measured.
+    """
+    as_user(harness, harness.admin)
+    playlist = world.public_playlist
+
+    answered = await rename(
+        client,
+        playlist.id,
+        rename_body(
+            "Only The Name",
+            Overview="an overview the route does not apply",
+            OfficialRating="PG-13",
+            ProductionYear=1997,
+            Genres=["Not A Genre Of This Playlist"],
+            Tags=["not-a-tag"],
+        ),
+    )
+    assert answered.status_code == 204, answered.content
+
+    renamed = await item(client, playlist.id)
+    assert renamed["Name"] == "Only The Name"
+    assert renamed.get("Overview") is None
+    assert renamed.get("OfficialRating") is None
+    assert renamed.get("ProductionYear") is None
+    assert renamed.get("Genres", []) == []
+    assert renamed.get("Tags", []) == []
+
+
+@pytest.mark.parametrize("kind", ["a film", "an album", "a genre"])
+async def test_anything_that_is_not_a_playlist_is_the_empty_403(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld, kind: str
+) -> None:
+    """The refusal this feature invents on this route, and it is the *empty* shape rather than
+    the deletion's 25 bytes (009 plan section 6.6).
+
+    The reference would apply the whole body to any item type. v1 has a consumer for none of that
+    and could not honour it anyway - 004 T10 measured the scan and the refresh fighting over
+    `Item.name`, so a renamed film would be un-renamed by the next scan, which is Principle VI's
+    plausible-looking stub. The shape is the one the route's other refusal carries, so a caller
+    cannot tell "you are not an administrator" from "that is not a playlist".
+    """
+    as_user(harness, harness.admin)
+    item_id = {"a film": world.corpus[0], "an album": world.album, "a genre": None}[kind]
+    if item_id is None:
+        genres = await client.get("/Genres", params={"limit": "1"})
+        item_id = genres.json()["Items"][0]["Id"]
+    before = (await item(client, item_id))["Name"]
+
+    answered = await rename(client, item_id, rename_body("Renamed Media"))
+    assert answered.status_code == 403, answered.content
+    assert answered.content == b""
+    assert "content-type" not in answered.headers
+    assert (await item(client, item_id))["Name"] == before
+
+
+async def test_an_unknown_identifier_is_the_problem_details_404_on_the_rename(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """Measured, and it beats the body: an unknown identifier with a body the route would refuse
+    is still the `404` `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`.
+    """
+    as_user(harness, harness.admin)
+    answered = await rename(client, ABSENT_ID, {"Name": "Nothing To Rename"})
+    assert answered.status_code == 404, answered.content
+    body = json.loads(answered.content)
+    body.pop("traceId")
+    assert body == {
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+        "title": "Not Found",
+        "status": 404,
+    }
+
+
+async def test_a_malformed_identifier_is_the_binders_validation_400_on_the_rename(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """`itemId` binds as an identifier on this method too - measured on the **POST** rather than
+    inherited from the `DELETE` that shares the path, because three of the four 009 routes bind
+    that segment differently and inheriting is how a route ships the wrong refusal (T11, T12)."""
+    as_user(harness, harness.admin)
+    answered = await rename(client, "not-an-identifier", rename_body("Renamed"))
+    assert answered.status_code == 400, answered.content
+    assert validation_body(answered) == problem(
+        {"itemId": ["The value 'not-an-identifier' is not valid."]}
+    )
+
+
+async def test_an_all_zeros_identifier_is_the_bare_text_400_on_the_rename(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """`Guid.Empty` again, and it is refused before the lookup as it is on every other route that
+    resolves an identifier (T10, T12)."""
+    as_user(harness, harness.admin)
+    answered = await rename(client, EMPTY_GUID, rename_body("Renamed"))
+    assert answered.status_code == 400, answered.content
+    assert answered.content == CONTROLLER_BODY
+    assert answered.headers["content-type"] == "text/plain"
+
+
+@pytest.mark.parametrize("spelling", ["dashed", "braced", "upper case"])
+async def test_every_spelling_of_the_identifier_addresses_the_playlist(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld, spelling: str
+) -> None:
+    """The segment is parsed, so all four spellings address the item - unlike the *entry* id one
+    route away, which is compared as text and moves nothing when it is dashed (T11). Measured on
+    this method `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`."""
+    as_user(harness, harness.admin)
+    playlist = world.public_playlist
+    addressed = {
+        "dashed": dashed(playlist.id),
+        "braced": "{" + dashed(playlist.id) + "}",
+        "upper case": playlist.id.upper(),
+    }[spelling]
+
+    answered = await rename(client, addressed, rename_body(f"Renamed {spelling}"))
+    assert answered.status_code == 204, answered.content
+    assert (await item(client, playlist.id))["Name"] == f"Renamed {spelling}"
+
+
+async def test_a_body_that_does_not_bind_names_the_references_action_parameter(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """behaviours section 1.11's action-parameter row, on the second route in this project to
+    have a **required** body (007 T8, 009 T8).
+
+    Measured on the reference: a body that is not JSON is answered `400` with both keys - the
+    binder's own `$`, and `request` carrying `The request field is required.` - which is the
+    reference's name for this action's parameter and therefore this route's
+    `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. The sentence the
+    binder writes under `$` is .NET's own and is not reproduced; the key that names the parameter
+    is, which is the half a client keys on.
+    """
+    as_user(harness, harness.admin)
+    answered = await client.post(
+        f"/Items/{world.public_playlist.id}",
+        content=b"{not json",
+        headers={"content-type": "application/json"},
+    )
+    assert answered.status_code == 400, answered.content
+    body = validation_body(answered)
+    assert body["errors"]["request"] == ["The request field is required."]
+
+
+async def test_the_rename_route_declares_the_references_parameters_and_no_others(
+    app: FastAPI,
+) -> None:
+    """`itemId` in the path and nothing in the query `[spec: UpdateItem]`, asserted against the
+    generated document - and the path object holds both methods, since the deletion T12 added
+    lives at the same address."""
+    operations = app.openapi()["paths"]["/Items/{itemId}"]
+    assert set(operations) == {"get", "delete", "post"}
+    parameters = operations["post"]["parameters"]
+    assert [one["name"] for one in parameters if one["in"] == "path"] == ["itemId"]
+    assert [one["name"] for one in parameters if one["in"] == "query"] == []
+
+
+async def test_ac20_a_renamed_playlist_keeps_its_entries(
+    client: httpx.AsyncClient, harness: Harness, world: QueryWorld
+) -> None:
+    """The rename touches three columns of one row, and nothing else about the playlist: its
+    entries, their order and their ids are what they were. Asserted because `rename` writes
+    through the item table rather than through the playlist one, and a write that reached the
+    wrong row would be invisible on the name alone."""
+    as_user(harness, harness.admin)
+    playlist = world.public_playlist
+    before = (await client.get(f"/Playlists/{playlist.id}/Items")).json()
+
+    assert (
+        await rename(client, playlist.id, rename_body("Still Holds Its Entries"))
+    ).status_code == 204
+
+    after = (await client.get(f"/Playlists/{playlist.id}/Items")).json()
+    assert [row["Id"] for row in after["Items"]] == [row["Id"] for row in before["Items"]]
+    assert [row["PlaylistItemId"] for row in after["Items"]] == [
+        row["PlaylistItemId"] for row in before["Items"]
+    ]
+    assert after["TotalRecordCount"] == before["TotalRecordCount"]

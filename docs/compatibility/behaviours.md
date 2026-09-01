@@ -1037,6 +1037,18 @@ three spellings, none of them anything the client sent
  "traceId": "00-9c83…-a105…-00"}
 ```
 
+**The action-parameter key is measured on a second required body at 009 T13**, and the name is
+the reference's own action parameter again: `POST /Items/{itemId}` answers a body that is not JSON
+with `"$"` **and** `{"request": ["The request field is required."]}`
+`[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. Two features, two
+required bodies, and neither spelling is anything a client sent.
+
+**And there is a fifth shape this project does not send, measured in the same run.** A request with
+**no body and no `Content-Type` at all** on a route whose body is required is answered `415`,
+`Unsupported Media Type`, in the problem-details shape — not the `400` above. Atrium answers the
+validation `400` there, on this route and on the four older ones with a required body, which is the
+gap [§5](#5-accepted-gaps-in-v1) records rather than a shape any route here reproduces.
+
 **The second key is not universal, and 009 T8 measured what decides it: whether the body is
 *required*.** `POST /Playlists` declares an optional body — its four properties may be sent as
 query parameters instead — and every one of its refusals names **one** key and no second one.
@@ -2373,6 +2385,38 @@ alternative changes a refusal a client can act on into one it cannot. §3.5's re
 almost word for word: "it discloses too much" is the temptation §3.0.2 forbids acting on by itself.
 Specified in [009 §3.6](../../specs/009-playlists/spec.md).
 
+### 3.21 The rename applies a partial body destructively — class A, diverged
+
+**Jellyfin does:** treat `POST /Items/{itemId}` as an update of the whole item, and answer two
+kinds of incomplete body in two ways, neither of them survivable
+`[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`:
+
+- **A body that omits `Genres`, `Tags` or `ProviderIds`, or sends one of the three as `null`**, is
+  refused `400` with the controller's 25 bytes. Those three are the only required ones: dropping
+  each of the thirty-nine properties a read of a playlist hands back, one at a time, refuses on
+  exactly those three, and a body of just them and a `Name` is accepted. **And the refusal is not
+  clean.** After a body with no `Genres`, the playlist's own `GET /Items/{itemId}` answers `400`
+  from then on while the item still counts in a listing — the update applied part of the body
+  before it threw. A later complete body repairs it.
+- **A body carrying no `Name`, or a `Name` that is `null`**, is answered `204` and **erases the
+  name**. The playlist comes back with no `Name` property at all, from a route whose only purpose
+  in this feature is to set one.
+
+**Depends on it:** nothing. The first is a refusal, so no client can have built on the success it
+never got; the second destroys the one property the request exists to write, which no client can
+have wanted. Class A by §3.9's reasoning, and the same shape as
+[§3.19](#319-the-playlist-write-routes-crash-on-requests-they-cannot-serve--class-a-diverged) one
+method away: an unserveable request answered destructively, where the well-formed request beside it
+is a clean `204`.
+
+**Atrium does: the first is parity, the second is refused.** A body missing any of the three is the
+same `400` in the same 25 bytes — the client's round trip is load-bearing on both servers, and a
+client posting `{"Name": …}` alone is refused by a stock reference too — and the playlist stays
+readable afterwards, because nothing is written until the whole body has been checked. A body with
+no `Name` is that same `400` rather than a `204` that erases the name: the bytes are identical and
+the status is the whole of the difference, which is the argument §3.19 makes for the four requests
+beside it. Specified in [009 §3.8](../../specs/009-playlists/spec.md).
+
 ---
 
 ## 4. Deliberate exceptions
@@ -2518,6 +2562,8 @@ undocumented bug.
 | **Dolby Vision and HDR10+ are not classified** ([008 §3.1, §3.7](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A Dolby Vision or HDR10+ film's master playlist carries no `SUPPLEMENTAL-CODECS`, and its copied segments are tagged `hvc1` where the reference tags `dvh1` — because the file is inspected here as the HDR10 file its colour metadata claims `[probe: tools/probe_transcode_decision.py, Jellyfin 10.11.11, 2026-08-29]` | Reading the Dolby Vision configuration record and the HDR10+ marker out of a stream's side data, which is where that signal lives. See §5.10 |
 | **A playlist item carries no `Path`** ([009 §4](../../specs/009-playlists/spec.md)) | A `Playlist` item fetched with `fields=Path` has none, and its two date fields are its store's rather than a directory's. The reference builds a playlist as a directory under its data path and reports it `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]` | Nothing to close: v1's playlists are not files, and reporting a path no file backs would be the worse answer. Visible only to a client that asks for `Path` by name, and neither analysed client does |
 | **A non-administrator cannot rename their own playlist** ([009 §3.8](../../specs/009-playlists/spec.md)) | The music client's rename button answers `403` for every user who is not an administrator — which is what a stock reference server answers too, because the route that client calls is declared elevated `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-08-31]`. This is a reproduced gap, not an introduced one: the reference's own working rename for an owner is `POST /Playlists/{playlistId}`, which no analysed client calls | `UpdatePlaylist` entering the surface, on the day a client is measured calling it. Principle VI keeps it out until then, and 009 §2 records what the exclusion costs |
+| **The rename applies `Name` and nothing else, and refuses every item that is not a playlist** ([009 §3.8](../../specs/009-playlists/spec.md)) | A client that edits a playlist's overview, rating, year, genres or tags through `POST /Items/{itemId}` finds them unchanged, and the same request against a film, an episode, a track or a by-name row is `403` where the reference applies the body. Measured: a whole posted body changes `Overview`, `ForcedSortName`, `OfficialRating`, `CustomRating`, `ProductionYear`, `Genres` and `Tags` on the reference, while `Path` and `IsFolder` are computed and ignored on both `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. Neither analysed client posts anything but a changed `Name` | Item metadata editing entering the surface with a named consumer — which is more than a route: 004 T10 measured the scan and the refresh already fighting over `Item.name`, so an edited field needs somewhere to live that the next scan does not overwrite. Until then a refusal is the honest answer and a partial apply would be Principle VI's plausible-looking stub |
+| **A required body that is missing entirely is `400` and not `415`** ([§1.11](#111-there-are-four-error-shapes-not-one)) | A request carrying no body and no `Content-Type` on one of the five routes whose body is required — 007's three reporting routes, 008's `PlaybackInfo` and 009's rename — answers the validation `400` where the reference answers `415 Unsupported Media Type` in the problem-details shape `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. No analysed client sends a body-less request to a route that requires one | A content-type gate in `compat/`, ahead of the body binding, and one measurement per required-body route rather than an extrapolation from this one: the shape is measured on the rename alone, and the four older routes were never asked |
 | **A multi-part film answers one media source per part** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Two sources on one item, where the reference answers one source, a `PartCount` and a separate route for the rest | Not a gap to close on its own: it follows from 003 §3.3 modelling the parts as one item's sources, and closing it means changing that model or adding `GET /Videos/{id}/AdditionalParts` to the surface |
 
 The difference between this section and §4 is intent. §4 says *we thought about it and chose

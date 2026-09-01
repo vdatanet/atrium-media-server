@@ -419,6 +419,51 @@ class MediaDeletionRefusedError(Exception):
     """
 
 
+class ItemUpdateError(Exception):
+    """`POST /Items/{itemId}` was given a body it will not apply. The third shape at `400`.
+
+    Two rows reach it, and only one of them is parity:
+
+    * **A body that omits `Genres`, `Tags` or `ProviderIds`, or sends one of the three as
+      `null`.** The reference requires exactly those three of the thirty-nine properties its own
+      read hands a client, and refuses the body without them - `400`, `text/plain`, the fixed 25
+      bytes. Every other property may be left out, and a body of just those three and a `Name` is
+      accepted `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. So the
+      client's round trip is load-bearing rather than incidental, and this row is the reference's
+      answer reproduced exactly.
+    * **A body carrying no `Name`, or a `Name` that is `null`.** The reference answers `204` and
+      **erases the name**, leaving a playlist whose `Name` is absent from every response that
+      carries it. That is 009's sixth divergence (behaviours section 3.21): the bytes are the
+      row above's, and the status is the whole of the difference.
+
+    One class for both because they are one shape on the wire, and the raise sites say which row
+    they are - the same arrangement `PlaylistCreationError` makes for the creation route.
+    Deliberately not that class, whose docstring is a statement about `Ids` and about a name in a
+    query, neither of which this route has.
+    """
+
+
+class MediaUpdateRefusedError(Exception):
+    """`POST /Items/{itemId}` was asked to update something that is not a playlist. `403`.
+
+    The sibling of `MediaDeletionRefusedError` on the other method of the same path, and the same
+    kind of refusal: the reference edits every field of every item type here, v1 has a consumer
+    for none of that (Principle VI), and 004 T10 measured why it could not honour it anyway - the
+    scan and the refresh already fight over `Item.name`, so a renamed film would be un-renamed by
+    the next scan. Refusing is the honest answer (behaviours section 5).
+
+    **The shape is the empty one and the deletion's is not**, which is deliberate on both sides.
+    This route's other refusal carries no body and no content type, because an authorization
+    policy makes it; answering the invented refusal in the same shape means a caller cannot tell
+    "you are not an administrator" from "that is not a playlist", and there is nothing here worth
+    disclosing. The deletion route has no such neighbour - both of its refusals carry a body - so
+    it reaches for the third shape instead (009 plan section 6.6).
+
+    Deliberately not `EmptyForbiddenError`, whose docstring names two refusals the reference
+    makes: nothing about this one is the reference's.
+    """
+
+
 #: The reference's own sentence, byte for byte, quoted as a complete JSON document by
 #: `message_error`: 18 characters, 20 bytes on the wire. Fixed - it interpolates nothing, unlike
 #: the image route's template beside it, so an unknown playlist and a private one that this
@@ -886,6 +931,20 @@ async def media_deletion_refused_handler(_request: Request, _exc: Exception) -> 
     return controller_error(403)
 
 
+async def item_update_handler(_request: Request, _exc: Exception) -> Response:
+    return controller_error(400)
+
+
+async def media_update_refused_handler(_request: Request, _exc: Exception) -> Response:
+    """The invented `403` of the rename route, in the *empty* shape rather than the third.
+
+    Beside `media_deletion_refused_handler`, which is the same refusal on the other method of the
+    same path in a different shape - and the difference is the point rather than an inconsistency:
+    the rename's other `403` is empty, so this one is too (`MediaUpdateRefusedError`).
+    """
+    return empty_error(403)
+
+
 async def image_not_found_handler(_request: Request, exc: Exception) -> Response:
     message = str(exc) if isinstance(exc, ImageNotFoundError) else NOT_FOUND_TITLE
     return message_error(404, message)
@@ -965,6 +1024,15 @@ EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     # playlist: two refusals, two statuses, and only one of them is a divergence.
     DeletionNotPermittedError: deletion_not_permitted_handler,
     MediaDeletionRefusedError: media_deletion_refused_handler,
+    # 009 T13's two, and they are the other method of that same path. The first is the third shape
+    # at `400` for a body this route will not apply - the reference's own refusal for a body
+    # missing any of `Genres`, `Tags` and `ProviderIds`, and this server's for one missing the
+    # `Name` the reference would erase (behaviours section 3.21). The second is the invented `403`
+    # for an item that is not a playlist, in the **empty** shape and not the deletion's third one,
+    # because the refusal beside it on this route is empty and telling them apart discloses
+    # nothing worth disclosing (009 plan section 6.6).
+    ItemUpdateError: item_update_handler,
+    MediaUpdateRefusedError: media_update_refused_handler,
     # 011 T7's two, and they are the same shape at two statuses again - but split differently
     # from the pair above: on the subtitle fetch routes a `mediaSourceId` naming nothing is the
     # `500` and not the `400`, which is the whole reason they are their own classes.
@@ -1003,7 +1071,9 @@ __all__ = [
     "ImageNotFoundError",
     "InvalidCredentialsError",
     "ItemNotFoundError",
+    "ItemUpdateError",
     "MediaDeletionRefusedError",
+    "MediaUpdateRefusedError",
     "NotFoundError",
     "PlaylistCreationError",
     "PlaylistMoveError",
@@ -1022,7 +1092,9 @@ __all__ = [
     "image_absent_message",
     "image_not_found_handler",
     "invalid_credentials_handler",
+    "item_update_handler",
     "media_deletion_refused_handler",
+    "media_update_refused_handler",
     "message_error",
     "not_found_handler",
     "playlist_move_handler",
