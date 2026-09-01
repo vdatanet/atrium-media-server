@@ -612,7 +612,7 @@ one migration; it is one migration, four maps and a clause.
 
 ## T9 — `GET /Playlists/{playlistId}/Items`: the one door, and `PlaylistItemId`
 
-- [ ] **Changes:** the read route, through plan §6.5's five steps in that order — `effective_user`,
+- [x] **Changes:** the read route, through plan §6.5's five steps in that order — `effective_user`,
   `may_read`, the filtered join, the envelope with the count taken **after** filtering and before
   paging, and `PlaylistItemId` on every row. `api/item_dto.py` emits the property for this route
   only, equal to the row's `Id`. No sort parameter is declared.
@@ -623,6 +623,68 @@ one migration; it is one migration, four maps and a clause.
   `TotalRecordCount` counting only the survivors; and `?userId=<the owner>` from a
   non-administrator answers `403` **with T2's bytes**, where the reference answers `200`.
 - **Spec reference:** §3.1, §3.3, §3.7, AC-4, AC-8, AC-16, AC-17
+
+> **Done (2026-09-01).** *The task measured the width it was told to and found the documents right;
+> what it got wrong was a status it had never thought to call a shape.* Spec §3.3 said
+> *"`404` for an unknown playlist, and for one the reader may not see"* and stopped there, and plan
+> §6.5 step 2 said `404` and not `403` — both true, and neither a shape. Measured, this route
+> answers the **JSON-encoded bare string** `"Playlist not found"`, `application/json; charset=utf-8`,
+> 20 bytes: behaviours §1.11's fourth shape, which until now had exactly one route in the whole
+> project. Every `404` this codebase raises from a handler is problem details, and `NotFoundError`
+> is one import away in the module the route already uses — so the obvious implementation ships a
+> body no reference server sends, on the feature's first read route
+> `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+>
+> *Three requests are one body and a fourth is a different status.* An id that addresses nothing,
+> an id that addresses a real item which is **not** a playlist, and a playlist this reader may not
+> see are the same 20 bytes — which is what makes a private playlist undisclosable, and it is why
+> `PlaylistNotFoundError` interpolates nothing where the image route's template beside it
+> interpolates a display name. A **malformed** id never reaches the route: it is the binder's
+> validation `400`, and it carries the *path* parameter's sentence —
+> `{"playlistId": ["The value 'not-an-identifier' is not valid."]}` — not the body's
+> `The supplied value is invalid.` that T8's four refusals are made of. Typing `playlistId` as
+> `WireGuid` rather than `str` is the whole of what produces that, and the first draft here had it
+> as `str`. The class is deliberately **not** a `NotFoundError` subclass: Starlette resolves a
+> handler by walking the exception's MRO, so inheriting would have restored problem details
+> silently, which is the same trap the `ItemNotFoundError` comment in `compat/errors.py` describes
+> from the other side.
+>
+> *The width the task was told to measure held, and measuring it was still the right call.* 005 T1
+> says there is no single item representation, so this row could have been any of three shapes.
+> Subtracting the property sets over the same items: **thirty-two names against thirty-one, the
+> difference is `PlaylistItemId` and nothing else, the reverse subtraction is empty, and an
+> `/Items` row carrying the same track does not have the property at all**. So the row is the
+> list-row width plus one name. That shaped the mechanism: a flag on `BuildContext` and a
+> one-name fourth tier beside `ALWAYS`, `PER_TYPE` and `GATED` — **not** a fourth member of
+> `Width`, which would have asserted a fourth measured shape against a measurement that says there
+> are three. The field is declared on `BaseItemDto` immediately after `Id`, because that is where
+> the reference sends it and a subclass's own fields serialise last.
+>
+> *AC-8's second half cannot be proven by sending a `sortBy`.* A route that accepted the parameter
+> and happened to sort by the playlist's order passes that test, and the client can still discover
+> the capability — which is the thing Principle I forbids. The assertion is against the generated
+> **OpenAPI document**, which is literally where a client discovers one: eight query parameters and
+> no ninth. (Measured anyway, for the record: `sortBy=SortName&sortOrder=Descending` answers `200`
+> in the playlist's own order.)
+>
+> *Two routine calls, taken rather than escalated.* **The `403` for a named reader is
+> `effective_user`, unchanged** — §3.16's divergence shipped as one call to 005's helper rather
+> than as a rule of this route's own, so there is no second copy to drift, and the refusal is the
+> 25-byte `text/plain` T2 measured. Its other half is parity and worth naming: an administrator
+> naming a user gets **that user's view**, and an administrator who is none of §3.7's three classes
+> is answered `404` for a private playlist — the visibility clause has no administrator branch, so
+> `may_read` has to be called *here* even though `by_id` already took a `User`, and there is a test
+> that fails if a later change drops it. **`startIndex` is clamped at zero** rather than passed
+> into a slice: a negative one wraps in Python and hands back the tail of the playlist, a shape no
+> reference server produces.
+>
+> *One test assumption was wrong and the fixture was right.* The public playlist holds the three
+> tracks and `restricted`'s one library is Films, so *"a public playlist is readable by anybody"*
+> measured `TotalRecordCount: 0` — which is not a failure but §3.17's divergence and §3.7's fourth
+> class firing at once. The test now uses both readers: the administrator proves `is_public` grants
+> the read, `restricted` proves an empty `200` is a different answer from a private playlist's
+> `404`.
+
 
 ## T10 — Adding and removing, and every container expands
 

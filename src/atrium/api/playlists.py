@@ -51,26 +51,37 @@ See specs/009-playlists/spec.md section 3.2 and plan section 6.1.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Annotated, ClassVar, Literal
 
 from fastapi import APIRouter, Depends, Request
 
-from atrium.api.deps import get_sessions, require_user
-from atrium.api.items import effective_user, recorder, split_csv
-from atrium.compat.errors import PlaylistCreationError
+from atrium.api.deps import get_sessions, get_state, require_user
+from atrium.api.item_dto import BuildContext, Width, build_dtos
+from atrium.api.item_models import BaseItemDtoQueryResult
+from atrium.api.items import (
+    aggregates_context,
+    effective_user,
+    library_context,
+    parse_fields,
+    recorder,
+    split_csv,
+)
+from atrium.compat.errors import PlaylistCreationError, PlaylistNotFoundError
 from atrium.compat.guids import WireGuid, new_id
 from atrium.compat.model import AtriumModel
 from atrium.db.engine import session_scope
-from atrium.db.item_queries import ItemQueryRepository
-from atrium.db.repositories import PlaylistRepository, UserRepository
+from atrium.db.item_queries import HydratedItem, ItemQueryRepository
+from atrium.db.repositories import LibraryRepository, PlaylistRepository, UserRepository
 from atrium.domain.items import MEDIA_TYPE_OF, ItemType
-from atrium.domain.playlists import Playlist, Share
+from atrium.domain.playlists import Playlist, Share, may_read
 from atrium.domain.queries import ItemQuery
 from atrium.domain.user import User
 
 router = APIRouter(tags=["Playlists"])
 
 ROUTE = "/Playlists"
+ITEMS_ROUTE = "/Playlists/{playlistId}/Items"
 
 #: The reference's `MediaType` vocabulary, verbatim `[spec: MediaType]`. Five values, and the two
 #: this server can store are a subset of them: a playlist built from a directory answers `Unknown`
@@ -237,3 +248,116 @@ def _walk(
             settled = found.media_type or MEDIA_TYPE_OF[found.item.type]
         entries.append(found.id)
     return entries, settled if settled is not None else MEDIA_TYPE_OF[ItemType.PLAYLIST]
+
+
+@router.get(ITEMS_ROUTE)
+async def playlist_items(
+    request: Request,
+    caller: Annotated[User, Depends(require_user)],
+    playlistId: WireGuid,  # noqa: N803
+    userId: WireGuid | None = None,  # noqa: N803
+    startIndex: int = 0,  # noqa: N803
+    limit: int | None = None,
+    fields: str | None = None,
+    enableImages: bool = True,  # noqa: N803
+    enableUserData: bool = True,  # noqa: N803
+    imageTypeLimit: int | None = None,  # noqa: N803
+    enableImageTypes: str | None = None,  # noqa: N803
+) -> BaseItemDtoQueryResult:
+    """`GetPlaylistItems` `[spec: GetPlaylistItems]`, in 009 plan section 6.5's five steps.
+
+    **Eight parameters and no ninth.** There is no sort of any kind: 009 spec section 3.3 claimed
+    a `sortBy` until the gate removed it, and honouring one would be a capability a client could
+    discover, which is Principle I's plainest breach. Measured for completeness rather than
+    assumed - `sortBy=SortName&sortOrder=Descending` answers `200` in the playlist's own order
+    `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]` - and there is nothing
+    for the tier 3 recorder to record, because an undeclared parameter is not a dropped token.
+
+    **`playlistId` is typed as an identifier, and the measurement is why.** A *malformed* one
+    never reaches this function: the reference answers it with the model binder's validation
+    `400`, not with the route's own `404`, so the three requests that do reach the refusal below
+    - an id addressing nothing, an id addressing a real item that is not a playlist, and a
+    playlist this reader may not see - are one body between them and a fourth is a different
+    status entirely `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+    **The refusal is `404` and not `403`, and it is the fourth error shape.**
+    `PlaylistNotFoundError` carries the argument; the short version is that the reference's
+    visibility test runs in front of its permission test, so the `403` this route declares is
+    unreachable for anything the store holds (009 spec section 3.3), and the body is the bare
+    JSON string rather than the problem details every other `404` in this project answers.
+
+    **`may_read` is called here even though `by_id` took a `User`.** That door hands the row to an
+    administrator on purpose, so that T12's deletion is writable at all - which means the read
+    that skipped this call would show an administrator every private playlist on the server
+    (009 spec section 3.7's last row).
+    """
+    route = ITEMS_ROUTE
+    state = get_state(request)
+    asked_fields = parse_fields(fields, recorder(request), route)
+
+    with session_scope(get_sessions(request)) as opened:
+        target = effective_user(UserRepository(opened), caller, userId)
+        queries = ItemQueryRepository(opened)
+        playlists = PlaylistRepository(opened, queries)
+
+        playlist = playlists.by_id(playlistId, target)
+        if playlist is None or not may_read(playlist, target):
+            raise PlaylistNotFoundError
+        visible = playlists.entries(playlist.id, target)
+
+        wanted = _page(visible, startIndex, limit)
+        rows = _in_playlist_order(queries, target, wanted)
+        context = BuildContext(
+            server_id=state.server_id,
+            width=Width.LIST_ROW,
+            playlist_row=True,
+            fields=asked_fields,
+            enable_user_data=enableUserData,
+            enable_images=enableImages,
+            image_type_limit=imageTypeLimit,
+            enable_image_types=frozenset(split_csv(enableImageTypes)) or None,
+            libraries=library_context(LibraryRepository(opened)),
+            aggregates=aggregates_context(queries, rows, target, asked_fields, Width.LIST_ROW),
+        )
+        built = build_dtos(rows, context)
+
+    return BaseItemDtoQueryResult(
+        items=built, total_record_count=len(visible), start_index=startIndex
+    )
+
+
+def _page(visible: Sequence[str], start_index: int, limit: int | None) -> list[str]:
+    """The window of the order this reader may see, and the count is taken beside it, not here.
+
+    Plan section 6.5 step 4: the count is what survived filtering and comes **before** paging,
+    which is the only order that lets a client page - measured, `startIndex=1&limit=2` answers two
+    rows and `TotalRecordCount=5`, and `startIndex=99` answers no rows and the same five
+    `[probe: tools/probe_playlist_read.py, Jellyfin 10.11.11, 2026-09-01]`.
+
+    `start_index` is clamped at zero rather than passed to a slice: a negative one would wrap in
+    Python and hand back the tail of the playlist, which is a shape no reference server produces
+    and the sort of thing only arithmetic notices.
+    """
+    start = max(start_index, 0)
+    end = None if limit is None else start + max(limit, 0)
+    return list(visible[start:end])
+
+
+def _in_playlist_order(
+    queries: ItemQueryRepository, target: User, wanted: Sequence[str]
+) -> list[HydratedItem]:
+    """Hydrate this page's entries, and put them back in the playlist's order.
+
+    The query answers in *its* order, not the playlist's, and the playlist's order is the entire
+    point of the endpoint (009 spec section 3.3) - so the rows are re-seated by the identifiers
+    they were asked for. One query for the page, never one per entry.
+
+    Every identifier here has already survived `entries()`, so a row that fails to come back is a
+    row that vanished between two statements of one transaction; it is dropped rather than
+    faked, and the count above still reports what the reader was told the playlist holds.
+    """
+    if not wanted:
+        return []
+    page = queries.run(ItemQuery(user=target, ids=tuple(wanted), limit=len(wanted), count=False))
+    by_id = {one.id: one for one in page.items}
+    return [by_id[item_key] for item_key in wanted if item_key in by_id]

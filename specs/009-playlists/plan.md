@@ -561,6 +561,13 @@ that neither can be skipped:
 2. **May they read it** — `may_read`, over the playlist's owner, shares and `is_public`. A playlist
    they may not read is `404`, not `403`: the reference's own visibility test in front of the
    permission test makes the `403` unreachable for anything the store holds (spec §3.3).
+
+   **And the `404` is the fourth error shape, which this step did not say and T9 measured.** The
+   body is the JSON-encoded bare string `"Playlist not found"`, 20 bytes, not the problem details
+   every other `404` this project raises answers with — one body for an unknown id, for a real item
+   that is not a playlist, and for a playlist this reader may not see. `compat/errors.py` gains a
+   class of its own for it, deliberately **not** a `NotFoundError` subclass, because Starlette
+   resolves a handler by walking the MRO and inheriting would silently restore problem details.
 3. **Which entries** — the join drops entries whose item is missing or soft-deleted, and
    `_library_permitted` drops those in a library this reader may not open. That second clause is
    behaviours §3.17, and it is why `entries()` takes a `User`.
@@ -582,6 +589,13 @@ that neither can be skipped:
    after filtering**, which is the reference's own order and the only one that lets a client page.
 5. **`PlaylistItemId` on every row** — equal to `Id` (spec §3.1). Emitted in `api/item_dto.py`,
    for this route only, because it is a property of a row *in a playlist* and not of the item.
+
+   **The row is otherwise a list row exactly, and that is measured rather than assumed** (spec
+   §3.3): the property sets differ by this one name and by nothing in the other direction. So the
+   mechanism is a flag on `BuildContext` and a one-name fourth tier beside `ALWAYS`, `PER_TYPE` and
+   `GATED` — not a fourth member of `Width`, which would assert a fourth measured shape where the
+   measurement says there are still three. The field is declared on `BaseItemDto` immediately after
+   `Id`, which is where the reference sends it and where a subclass's own fields could not go.
 
 **No sort parameter is accepted** (spec §3.3): the route does not declare one, and the ignored-
 parameter recorder that 005 uses for tier 3 has nothing to record, because there is nothing here to
