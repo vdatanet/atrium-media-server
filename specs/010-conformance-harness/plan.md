@@ -4,7 +4,8 @@ title: Conformance harness — implementation plan
 status: Accepted
 accepted: 2026-09-01
 created: 2026-09-01
-updated: 2026-09-01
+updated: 2026-09-02
+amended: 2026-09-02 at the tasks gate — reviewing the list against the code this plan names found two things it got wrong about this repository, and both are corrected above rather than left to a task's Done note. **§8's AC-2 row could not be written:** it maps the criterion to a probe run "by hand", and `tests/conformance/test_acceptance.py` resolves every entry as `module:function` through `importlib` while §2 of this plan inherits the rule that a `tools/` module is reached by path and never as a package — so the row would fail on import the day 010 flips to `Implemented`, which is 009 T14's *"a criterion with no test at all"* arriving one feature early. The probe now **records** the reference's reading of the fixture and the test compares Atrium's scan against that record, so AC-2 is checkable in the default job with no Jellyfin anywhere. **And §4.3's floor was the right floor for the surface and the wrong one for eight rows:** `surface.yaml` declares eight endpoints at `level: L3` and nothing in the repository has ever checked that a declared level is reached, while every feature's definition of done has been deferring exactly that half here — those eight are seeded first, per identity, and the report prints the declared level beside the coverage. A third finding is recorded in the task list rather than here, because it is a scope call on an accepted spec and is reserved for its owner as D-6: §3.10's sixteen named comparisons do not carry four debts that need precisely what D-1's instance provides, including the only surviving `⚠️ UNVERIFIED` in the compatibility documents (behaviours §5.2), whose own text names a disposable library as the remedy
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -219,6 +220,17 @@ differences the spec's own gate found on `/Items/{itemId}/Similar` are both invi
 request. So the file starts at the floor plus the cases the two analysed clients actually send, and
 it grows by measurement rather than by combinatorics — 764 declared query parameters across those
 59 operations is the number that makes "one case per parameter" not a plan.
+
+**And the eight `level: L3` rows are seeded first.** *(Found at the tasks gate on 2026-09-02.)* That
+column is a **required** conformance level and nothing has ever checked that one is reached:
+`tools/extract_v1_surface.py` validates only that the value is one of `L0..L3`, and
+`tests/conformance/test_routes.py` reads `feature` and `consumers` and never `level`. Meanwhile
+every feature's definition of done ticks *"every endpoint reaches the conformance level declared in
+spec §6"* with the differential half deferred to this feature — [009's](../009-playlists/tasks.md)
+says so in as many words. So those eight are the only rows in the repository whose declared level
+this feature is the only thing that can pay for: they get their cases before the other 51, one per
+identity they are meaningful for, and §3.4's coverage line prints the declared level beside what a
+run actually compared.
 
 ### 4.4 The outputs
 
@@ -758,7 +770,7 @@ not a server.
 | AC | Where | Shape |
 |---|---|---|
 | 1 | `tests/unit/test_media_fixtures.py` (extended) | Two builds byte-identical — the assertion `tests/fixtures/media.py` already carries, extended to the tree the instance is given |
-| 2 | `tools/probe_reference_scan.py`, by hand | The one criterion that cannot be a test: it needs both servers. The probe is what runs it, and the acceptance map names the probe and says so |
+| 2 | `tools/probe_reference_scan.py`, **and a test over what it wrote down** | *This row said "by hand — the one criterion that cannot be a test", and the acceptance map cannot express that.* `tests/conformance/test_acceptance.py` resolves every entry as `module:function` through `importlib`, and §2 above inherits the rule that a `tools/` module is reached by path and never as a package — so the row would fail on import the day `"010"` joins `IMPLEMENTED_FEATURES`, for the right reason: a criterion whose only proof is a command somebody remembers to run is a criterion with no proof. **The probe therefore records the reference's reading of the fixture** — item count per collection type, and the structure, with its own citation in the file — and the test compares Atrium's scan of the same tree against that record. Both servers are still needed to *make* the reading; only one is needed to check it, so it runs in the default job. Found at the tasks gate on 2026-09-02 |
 | 3 | `tests/unit/test_allowlist.py` | Every endpoint of `surface.yaml` has at least one case in `request-cases.yaml`, and the coverage line counts what it ran |
 | 4 | `tests/conformance/test_differential.py` | The mutation table: a removed field → `MISSING_KEY`; an integer as a string → `TYPE`; a changed title → `VALUE`; a reordered array → `ORDER` and **not** N values; a shorter array → one `LENGTH` and no children |
 | 5 | `tests/conformance/test_differential.py` | The report's own ordering, asserted on a report built from a mixed finding set |
