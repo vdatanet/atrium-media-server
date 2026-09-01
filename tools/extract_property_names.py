@@ -54,6 +54,40 @@ def build(spec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+#: How many names from each side of the difference the report spells out. The rest are counted.
+SAMPLE = 10
+
+
+def stale_report(current: dict[str, Any], fresh: dict[str, Any], index: Path) -> list[str]:
+    """The lines `--check` prints when the index and the document disagree.
+
+    Separate from `main` because the trailing count was wrong and nothing could see it: the tail
+    subtracted a fixed 20 - two full samples - from the total, so a difference with fewer than
+    `SAMPLE` names on one side under-reported the rest. Measured on 2026-09-01 the real difference
+    was 2 names one way and 19 the other; it printed all 2, the first 10 of the 19, and called the
+    nine it had hidden "1 more". A report that hides evidence while claiming to have shown it is
+    worse than one that shows nothing.
+    """
+    missing = sorted(set(fresh["names"]) - set(current.get("names", [])))
+    extra = sorted(set(current.get("names", [])) - set(fresh["names"]))
+
+    lines = [f"error: {index} is stale"]
+    if current.get("reference_version") != fresh.get("reference_version"):
+        lines.append(
+            f"  version: index says {current.get('reference_version')}, "
+            f"document says {fresh.get('reference_version')}"
+        )
+    for name in missing[:SAMPLE]:
+        lines.append(f"  in the document, not in the index: {name}")
+    for name in extra[:SAMPLE]:
+        lines.append(f"  in the index, not in the document: {name}")
+
+    hidden = (len(missing) - min(len(missing), SAMPLE)) + (len(extra) - min(len(extra), SAMPLE))
+    if hidden:
+        lines.append(f"  ... and {hidden} more")
+    return lines
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--spec", required=True, type=Path, help="Pinned OpenAPI document")
@@ -84,21 +118,8 @@ def main() -> int:
             print(f"{args.index}: {fresh['count']} names, matches {args.spec}")
             return 0
 
-        missing = sorted(set(fresh["names"]) - set(current.get("names", [])))
-        extra = sorted(set(current.get("names", [])) - set(fresh["names"]))
-        print(f"error: {args.index} is stale", file=sys.stderr)
-        if current.get("reference_version") != fresh.get("reference_version"):
-            print(
-                f"  version: index says {current.get('reference_version')}, "
-                f"document says {fresh.get('reference_version')}",
-                file=sys.stderr,
-            )
-        for name in missing[:10]:
-            print(f"  in the document, not in the index: {name}", file=sys.stderr)
-        for name in extra[:10]:
-            print(f"  in the index, not in the document: {name}", file=sys.stderr)
-        if len(missing) + len(extra) > 20:
-            print(f"  ... and {len(missing) + len(extra) - 20} more", file=sys.stderr)
+        for line in stale_report(current, fresh, args.index):
+            print(line, file=sys.stderr)
         return 1
 
     args.index.parent.mkdir(parents=True, exist_ok=True)
