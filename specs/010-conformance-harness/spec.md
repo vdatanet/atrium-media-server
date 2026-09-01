@@ -4,7 +4,7 @@ title: Conformance harness
 status: Accepted
 created: 2026-08-26
 updated: 2026-09-01
-amended: 2026-09-01 at the measurement gate — the spec was written before the thing it compares existed, and four probes moved it. §7's four open questions are answered and closed. **OQ-1's premise survives and its remedy does not:** identifiers cannot join two servers, but neither can a path — the reference sends none on a default list row at all, so a run that joins on one is comparing requests no client sends; asking for it still leaves a virtual season, a remote channel and every by-name row with nothing to join on, and the paths those rows do carry name the reference installation's own data directory. **OQ-3 is answered yes for reads and no for the feature:** every read of the surface but three answers byte-identical bodies on repeated identical requests, and the only header values that move are the response time and the clock — but a recording answers only the requests it recorded, which is the class of defect L3 exists to find, so a recorded session is a regression net and never the gate. **OQ-4's two non-deterministic endpoints are three, and the third is not an endpoint:** `/UserViews` answers a fresh random `ChildCount` between 1 and 9 on every request, because the reference declines to count a top-level folder and substitutes a number so clients will not think it empty. **The allowlist §3.3 describes cannot express any of them:** it is a list of fields compared by shape, and what these need is a whole array excused, which is a second mechanism and now a stated one. Plus the three things the gate found that nobody asked about: `/Items/{itemId}/Similar` is not a ranking at all but a fresh draw whose successive answers share **nothing**, and on a **movie** seed it answers `limit + 4` rows where the pinned document calls `limit` a maximum — both new divergences against an implemented feature, and both owner decisions; and a differential that authenticates once measures half the table — **12 of 23 reads of the surface answer differently to a restricted non-administrator**, two of them not as refusals but as shorter lists. §3.9 and §3.10 are new sections, §5 gains five criteria, and the fixture-differential AC-2 is recorded as unreachable from the only reference this project can reach. **Amended again the same day by the three decisions that gate left to their owners.** G-1 and G-2 are decided and recorded as divergences, with their arguments in behaviours §3.23 and §3.24 and their statements in 005 §3.7 and AC-12; and **OQ-5 is answered, so AC-2 is no longer blocked** — a run that needs the fixture on both servers stands up a single-use reference instance of the pinned version over it and destroys it, including on failure, which also takes the writing measurements off an operator's server where 009's runs left 28 playlists behind. §3.1's blocked wording, §3.5's cleanup claim, AC-2, §4's artefact table and §7 are rewritten accordingly, and the clause above recording AC-2 as unreachable is what they supersede.
+amended: 2026-09-01 at the measurement gate — the spec was written before the thing it compares existed, and four probes moved it. §7's four open questions are answered and closed. **OQ-1's premise survives and its remedy does not:** identifiers cannot join two servers, but neither can a path — the reference sends none on a default list row at all, so a run that joins on one is comparing requests no client sends; asking for it still leaves a virtual season, a remote channel and every by-name row with nothing to join on, and the paths those rows do carry name the reference installation's own data directory. **OQ-3 is answered yes for reads and no for the feature:** every read of the surface but three answers byte-identical bodies on repeated identical requests, and the only header values that move are the response time and the clock — but a recording answers only the requests it recorded, which is the class of defect L3 exists to find, so a recorded session is a regression net and never the gate. **OQ-4's two non-deterministic endpoints are three, and the third is not an endpoint:** `/UserViews` answers a fresh random `ChildCount` between 1 and 9 on every request, because the reference declines to count a top-level folder and substitutes a number so clients will not think it empty. **The allowlist §3.3 describes cannot express any of them:** it is a list of fields compared by shape, and what these need is a whole array excused, which is a second mechanism and now a stated one. Plus the three things the gate found that nobody asked about: `/Items/{itemId}/Similar` is not a ranking at all but a fresh draw whose successive answers share **nothing**, and on a **movie** seed it answers `limit + 4` rows where the pinned document calls `limit` a maximum — both new divergences against an implemented feature, and both owner decisions; and a differential that authenticates once measures half the table — **12 of 23 reads of the surface answer differently to a restricted non-administrator**, two of them not as refusals but as shorter lists. §3.9 and §3.10 are new sections, §5 gains five criteria, and the fixture-differential AC-2 is recorded as unreachable from the only reference this project can reach. **Amended again the same day by the three decisions that gate left to their owners.** G-1 and G-2 are decided and recorded as divergences, with their arguments in behaviours §3.23 and §3.24 and their statements in 005 §3.7 and AC-12; and **OQ-5 is answered, so AC-2 is no longer blocked** — a run that needs the fixture on both servers stands up a single-use reference instance of the pinned version over it and destroys it, including on failure, which also takes the writing measurements off an operator's server where 009's runs left 28 playlists behind. §3.1's blocked wording, §3.5's cleanup claim, AC-2, §4's artefact table and §7 are rewritten accordingly, and the clause above recording AC-2 as unreachable is what they supersede. **Amended a third time on 2026-09-01, deliberately, by the decision the implementation plan reserved as D-3.** **AC-6 was unsatisfiable by the allowlist this document ships**: it failed the run on any entry with no behaviours.md reference, and three of the eight field rows and one of the three array rows named one. Seven named a *reason* instead — a scan's wall-clock time, a content hash, a different mount point — and those are not divergences anybody argued for; they are facts about two separate installations. **AC-6 now takes either**: a behaviours section where the difference was chosen, or one of four declared derivation classes — `derived-identifier`, `wall-clock`, `content-hash`, `installation-path` — where it was not, with a fifth class reviewable and never a substitute for an argument somebody owes. **The one row that was neither was written rather than reclassified:** the reference's random `ChildCount` on a library view had no behaviours entry at all, and it is now [behaviours §3.25](../../docs/compatibility/behaviours.md) — class B, diverged, because a number redrawn on every request is one no client can have compensated for. §3.3's two tables gain the `because` column, every row of both now carries one, and §3.3 records what the same measurement decided about the mechanism: **an entry is scoped to an endpoint and a path, never to a field name**, since `ChildCount` elsewhere is a real subtree aggregate on both servers and excusing the name would excuse the value the lower levels check.
 depends_on: [001, 002, 003, 004, 005, 006, 007, 008, 009, 011]
 ---
 
@@ -170,16 +170,17 @@ Headers are compared too, on the delivery routes, where `Content-Length`, `Accep
 
 Fields compared by **shape** rather than by value, each with a written reason.
 
-| Field | Why it may differ |
-|---|---|
-| `Id`, `ItemId`, `ServerId`, `ParentId`, `SeriesId`, `SeasonId`, `AlbumId`, … | Derivation differs by design (behaviours §1.4) |
-| `DateCreated`, `DateLastSaved`, `DateLastMediaAdded`, `LastActivityDate` | Scan wall-clock time |
-| `Etag`, `ImageTags.*`, `PlaySessionId`, `AccessToken` | Content hashes and generated identifiers |
-| `Path` | Different mount points, and on the by-name rows a different installation's data directory (§3.2) |
-| `LocalAddress` | Deliberate divergence (behaviours §4.2) |
-| `TotalRecordCount` on by-name endpoints without `limit` | Deliberate divergence (behaviours §3.1) |
-| `X-Response-Time-ms`, and the response clock | Move on every response, measured on 19 of 19 read cases (§7 OQ-3) |
-| `ChildCount` on a library view | **The reference's value is a fresh random integer** (§7 OQ-4) |
+| Field | Why it may differ | Because |
+|---|---|---|
+| `Id`, `ItemId`, `ServerId`, `ParentId`, `SeriesId`, `SeasonId`, `AlbumId`, … | Derivation differs by design (behaviours §1.4) | `derived-identifier` |
+| `DateCreated`, `DateLastSaved`, `DateLastMediaAdded`, `LastActivityDate` | Scan wall-clock time | `wall-clock` |
+| `Etag`, `ImageTags.*` | Content hashes over differently-derived inputs | `content-hash` |
+| `PlaySessionId`, `AccessToken` | Generated once per session and per token, by each server for itself | `derived-identifier` |
+| `Path` | Different mount points, and on the by-name rows a different installation's data directory (§3.2) | `installation-path` |
+| `LocalAddress` | Deliberate divergence | behaviours §4.2 |
+| `TotalRecordCount` on by-name endpoints without `limit` | Deliberate divergence | behaviours §3.1 |
+| `X-Response-Time-ms`, and the response clock | Move on every response, measured on 19 of 19 read cases (§7 OQ-3) | behaviours §1.9 |
+| `ChildCount` on a library view | **The reference's value is a fresh random integer** (§7 OQ-4) | behaviours §3.25 |
 
 **A field is not the only unit a difference comes in**, and the gate found three that this table
 cannot express. Where the reference's *whole answer* is a draw, no field of it is comparable and
@@ -187,15 +188,43 @@ excusing them one by one would excuse the response. Those get a **second kind of
 excused array** — which states the endpoint, the request shape that triggers it, and what is still
 compared when the rows are not:
 
-| Array | Why it may differ | What is still compared |
-|---|---|---|
-| The rows of `/Items/{itemId}/Similar` | A fresh draw per request; four identical requests shared **no** item (§7 OQ-4) | Key sets and types of each row, the envelope's own properties, and the row **count** |
-| The rows of any listing ordered at random | The same, by the caller's own request | The same |
-| The rows of a listing ordered by a key with ties | The reference's ordering is not total (behaviours §3.6) | Everything, as a multiset rather than a sequence |
+| Array | Why it may differ | What is still compared | Because |
+|---|---|---|---|
+| The rows of `/Items/{itemId}/Similar` | A fresh draw per request; four identical requests shared **no** item (§7 OQ-4) | Key sets and types of each row, the envelope's own properties, and the row **count** | behaviours §3.23 |
+| The rows of any listing ordered at random | The same, by the caller's own request | The same | behaviours §3.6 |
+| The rows of a listing ordered by a key with ties | The reference's ordering is not total | Everything, as a multiset rather than a sequence | behaviours §3.6 |
+
+**Every entry says why, and there are exactly two kinds of why.** *(Decided 2026-09-01, with the
+`because` column above.)* Where the difference is one a server **chose** — this project diverging,
+or the reference doing something it decided to do — the entry names the behaviours.md section that
+carries the argument, and adding the entry means having written that argument. Where the difference
+is one **neither server chose** — it follows from the two being separate installations of separate
+software, scanned at different moments, over different mount points — the entry names one of four
+**derivation classes**:
+
+| Class | What it says |
+|---|---|
+| `derived-identifier` | The two servers derive this identifier differently by design, and neither derivation is wrong (behaviours §1.4) |
+| `wall-clock` | The value is the moment the scan happened, and the two scans happened at different moments |
+| `content-hash` | The value is a hash over inputs that are themselves derived differently |
+| `installation-path` | The value names where this installation keeps its files |
+
+**A fifth class is not added without review**, and neither is a class used where a behaviours entry
+is what is actually owed. The distinction is the whole discipline: a derivation class is a fact
+about how two installations differ, and it can never be the excuse for a value one of the two
+decided. Where the honest answer was a behaviours entry that did not exist, the entry was written —
+the reference's random `ChildCount` is now behaviours §3.25, which is what closed the last row of
+this table.
 
 **Adding an entry of either kind is a contract decision, not a way to make a red run green.** It
 happens in review, the reason goes in the table, and an entry justified by "we do it differently"
-without a behaviours.md entry backing it is rejected.
+with neither a behaviours.md section nor a declared derivation class behind it is rejected (AC-6).
+
+**And an entry is scoped to an endpoint and to a path within the body, never to a field name.**
+`ChildCount` is the case that decides it: the reference's number is excused on a library view, and
+the same property elsewhere is a real count of a container's children on both servers — so an entry
+that excused the *name* would excuse, on every container, exactly the value the lower levels exist to
+check (behaviours §3.25).
 
 The allowlist is also **a metric**: it should shrink over time as derivations converge, and a run
 that grows it is worth a second look. The excused arrays are the exception that proves it — none of
@@ -395,7 +424,13 @@ have the same answers, which is a smaller claim than it sounds.
 4. A deliberately introduced defect — a renamed field, a changed type, an omitted field — is caught,
    and classified into the right pass.
 5. The report ranks missing keys first.
-6. An allowlist entry without a corresponding behaviours.md reference fails the run.
+6. **Every allowlist entry declares why the difference is excused, and an entry that does not fails
+   the run.** An entry that excuses a **divergence** — something one of the two servers chose —
+   names the behaviours.md section that carries the argument. An entry that excuses a
+   **derivation** — something neither server chose, which follows from the two being separate
+   installations — names one of four declared classes: `derived-identifier`, `wall-clock`,
+   `content-hash`, `installation-path`. An entry naming neither, or naming a fifth class, fails the
+   run. *(Refined 2026-09-01 — see the amendment note.)*
 7. Every probe prints a citation in the documented form and exits non-zero when its finding
    contradicts the documentation.
 8. A probe whose finding contradicts the documentation produces a message naming the document and

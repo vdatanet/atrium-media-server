@@ -2596,6 +2596,46 @@ would mean sending a `TotalRecordCount` equal to the page — a total that is no
 route while every other list endpoint in the project sends the real one, which is §3.1's decision
 reversed for no reader's benefit.
 
+### 3.25 `ChildCount` on a library view is a fresh random integer — class B, diverged
+
+**Jellyfin does:** answer `GET /UserViews` with a `ChildCount` between 1 and 9 that is **redrawn on
+every request**, on every view, with the row order and every other property of the response
+unchanged `[probe: tools/probe_reference_determinism.py, Jellyfin 10.11.11, 2026-09-01]`. It is not
+a stale count and not a cache: the reference declines to compute a top-level folder's count at all
+and substitutes a number in its place, so that a client does not read the library as empty
+`[source: Emby.Server.Implementations/Dto/DtoService.cs:516-526 @ v10.11.11]`. `/UserViews` reaches
+it because that route asks for every field
+`[source: Jellyfin.Api/Controllers/UserViewsController.cs:89 @ v10.11.11]`.
+
+This is the third of the three non-deterministic answers 010's gate found, and the only one that is
+a single field: the other two are whole arrays (§3.23, and the caller's own random ordering).
+
+**Depends on it:** no, and nothing can. The value is a different number each time it is asked, so
+there is no value to compensate for — a client that reads it either shows a number that changes
+under it or ignores it, and both are untouched by the number becoming true and stable. §3.0's first
+escape hatch, the same one §3.1, §3.6 and §3.23 went through. What a client can observe is that two
+requests agree here and disagree there, which is a difference in variety and not in correctness. The
+one thing the reference's number is for — *not looking empty* — is served better by a count that is
+right, and an empty library is the one case where the reference's substitute is a lie a client can
+act on: it offers navigation into a view with nothing in it.
+
+**Atrium does: diverge — emit the real count.** A `/UserViews` row carries the same computed subtree
+aggregate every other container carries: `ChildCount` is one of the gated fields
+[005 §3.2](../../specs/005-item-query-api/spec.md) answers with a count of the container's children,
+and this route asks for it unasked as part of its measured width. No code
+exists here to make it random and none will be written: §3.0.0's cost lands with unusual weight when
+replicating means writing a random number generator into a count and then a test asserting it varies.
+
+Class **B** — the request succeeds and carries something wrong — decided through the escape hatch
+rather than against it. No upstream issue is known, so §3.0.1's tie-break 2 reads *not judged*.
+
+**This entry is also why the conformance allowlist is scoped by endpoint and JSON path**, and it is
+worth stating here because the flat version is the one a later reader will reach for. The difference
+that needs excusing is *the reference's number on a `/UserViews` row*. An entry that excused the
+**name** `ChildCount` would excuse Atrium's real aggregate everywhere it appears — on the series,
+the season, the two-disc album — which is precisely the value L2 exists to check
+([010 §3.3](../../specs/010-conformance-harness/spec.md#33-the-allowlist), and its plan's §6.3).
+
 ---
 
 ## 4. Deliberate exceptions

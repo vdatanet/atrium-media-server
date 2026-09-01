@@ -126,23 +126,36 @@ that is not in a body — are enumerated as **named comparisons** in
 called clean.
 
 **The allowlist** — fields that legitimately differ and are therefore compared by *shape* rather
-than by value — is checked in beside the tool, and every entry needs a reason:
+than by value — is checked in beside the tool, and **every entry declares one of exactly two kinds
+of reason**: the behaviours.md section that argues a difference a server *chose*, or one of four
+**derivation classes** for a difference neither server chose — `derived-identifier`, `wall-clock`,
+`content-hash`, `installation-path`. An entry with neither fails the run
+([010 AC-6](../../specs/010-conformance-harness/spec.md#5-acceptance-criteria), refined 2026-09-01).
 
-| Field | Why it may differ |
-|---|---|
-| `Id`, `ItemId`, `ServerId`, `ParentId`, `SeriesId`, … | Derivation differs by design (behaviours §1.4) |
-| `DateCreated`, `DateLastSaved`, `DateLastMediaAdded` | Scan wall-clock time |
-| `Etag`, `ImageTags.*` | Content hashes over differently-derived inputs |
-| `Path` | Different mount points, and on the by-name rows a different installation's data directory |
-| `LocalAddress` | Deliberate divergence (behaviours §4.2) |
-| `X-Response-Time-ms`, and the response clock | Move on every response |
-| `ChildCount` on a library view | The reference's value is a fresh random integer between 1 and 9 `[source: Emby.Server.Implementations/Dto/DtoService.cs:516-526 @ v10.11.11]` |
+| Field | Why it may differ | Because |
+|---|---|---|
+| `Id`, `ItemId`, `ServerId`, `ParentId`, `SeriesId`, … | Derivation differs by design (behaviours §1.4) | `derived-identifier` |
+| `DateCreated`, `DateLastSaved`, `DateLastMediaAdded` | Scan wall-clock time | `wall-clock` |
+| `Etag`, `ImageTags.*` | Content hashes over differently-derived inputs | `content-hash` |
+| `Path` | Different mount points, and on the by-name rows a different installation's data directory | `installation-path` |
+| `LocalAddress` | Deliberate divergence | [behaviours §4.2](behaviours.md#42-localaddress-does-not-get-an-https-override) |
+| `X-Response-Time-ms`, and the response clock | Move on every response | [behaviours §1.9](behaviours.md#19-every-response-carries-x-response-time-ms) |
+| `ChildCount` on a library view | The reference's value is a fresh random integer between 1 and 9 `[source: Emby.Server.Implementations/Dto/DtoService.cs:516-526 @ v10.11.11]` | [behaviours §3.25](behaviours.md#325-childcount-on-a-library-view-is-a-fresh-random-integer--class-b-diverged) |
+
+**An entry is scoped to an endpoint and to a path inside the body, never to a bare field name.**
+`ChildCount` is why: the reference's number is excused on a library view, while the same property on
+a series, a season or a multi-disc album is a real count of the container's children on both servers.
+A row keyed on the name alone would excuse the value the L2 tests exist to check.
 
 **A field is not the only unit a difference comes in.** Where the reference's whole answer is a
 draw, no field of it is comparable: `/Items/{itemId}/Similar` and any listing ordered at random are
 excused **as arrays** — their rows are not value-compared, while their key sets, types, envelope and
 row count still are. Four identical `Similar` requests returned 48 distinct items with none in
-common. `[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]`
+common. `[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]` The same
+rule applies to these: the `Similar` array's reason is
+[behaviours §3.23](behaviours.md#323-similar-is-a-random-draw-not-a-ranking--class-b-diverged), and
+a listing whose order is drawn or whose ties are engine-resolved is
+[behaviours §3.6](behaviours.md#36-ties-are-engine-resolved-and-paging-the-artist-sorts-loses-rows--class-b-diverged).
 
 **Adding to the allowlist is a contract decision**, not a way to make a red test green. It happens
 in review, with the reason written in the table.

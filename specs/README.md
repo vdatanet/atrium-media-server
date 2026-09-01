@@ -121,7 +121,7 @@ say how it will be proven is not finished.
 | [007](007-user-data-and-playstate/) | User data and playstate | **Implemented** | **Implemented** | **Implemented** |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Implemented** | **Implemented** | **Implemented** |
 | [009](009-playlists/) | Playlists | **Implemented** | **Implemented** | **Implemented** |
-| [010](010-conformance-harness/) | Conformance harness | **Accepted** | — | — |
+| [010](010-conformance-harness/) | Conformance harness | **Accepted** | **Accepted** | — |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
 
@@ -157,12 +157,28 @@ document had no room for — the identities a run needs, measured at 12 of 23 re
 differently to a restricted non-administrator, and the comparisons a sweep cannot raise, collected
 from [what 008 owes it](008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones),
 [what 011 does](011-subtitle-delivery/tasks.md#what-this-feature-owes-the-next-ones) and
-[what 009 does](009-playlists/tasks.md#what-this-feature-owes-the-next-ones). **011's spec was accepted on the same day as 008's**, at its
+[what 009 does](009-playlists/tasks.md#what-this-feature-owes-the-next-ones). **Its plan was
+drafted on 2026-09-01** and is what the next gate reads. The bulk of it is the thing that does not
+exist yet — the single-use reference instance, stood up from a pinned image over the repository's
+own fixture, configured over the reference's first-time-setup operations with no human, and
+destroyed with everything it wrote — and it reserved **five decisions** for their owner rather than
+taking them, **all five taken on 2026-09-01** with every recommendation accepted: a container
+runtime for the instance ([ADR-0007](../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md)),
+`tools/` and the 3.9 floor unchanged, AC-6 refined and 010's accepted spec amended for it with the
+missing `ChildCount` entry written ([behaviours §3.25](../docs/compatibility/behaviours.md)), the
+fixture world defaulted with its measurement stated as waiting on that instance, and the
+ignored-parameter report's fourth column taken as a file in the data directory rather than a route. Writing it against the files rather
+than against the documents moved four claims: `tools/differential.py` is a command line
+`conformance.md` publishes and a program nobody has written, the `ATRIUM_JELLYFIN_URL` that
+document names as the harness's switch appears nowhere in the repository, the prior-measurement
+register is stale in four rows — three of its eight open debts have in fact been paid under another
+script's name — and AC-6, applied literally, failed the very allowlist the spec ships — which is what D-3 then refined it out of. **011's spec was accepted on the same day as 008's**, at its
 own measurement gate, its plan and task list on 2026-08-30, and the twelve tasks ran from
 2026-08-30 to 2026-08-31; **012 was opened on 2026-08-29 and accepted at its own gate the same
 day**. The lowest-numbered feature that is not implemented is
-**010**, whose spec is now accepted, so what is next is its **plan** — the first unticked step of
-the lowest-numbered feature, which is where this table always points. Both
+**010**, whose spec is accepted and whose plan is drafted, so what is next is that plan's **gate** —
+the first unticked step of the lowest-numbered feature, which is where this table always points.
+Tasks do not start until it is `Accepted` (Principle III). Both
 those lists were inputs to the plan. Each of 009's own two gates found something, which
 is the rate this project expects: the plan gate found §8 budgeting a fixture task for a second
 non-administrator restricted to one library, which `tests/fixtures/query.py` has seeded since 005 —
