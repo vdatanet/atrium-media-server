@@ -127,8 +127,11 @@ tools/
 │                          Pure because the mutation proofs of spec §6 have to run in CI, where
 │                          there is no server, and because a comparison that cannot be unit-tested
 │                          is the one thing this feature must not ship
-├── _allowlist.py          new: reads docs/compatibility/allowlist.yaml and the named-comparison
-│                          register; resolves an entry against (endpoint, identity, JSON path)
+├── _allowlist.py          new: reads docs/compatibility/allowlist.yaml, the named-comparison
+│                          register and the request cases; resolves an entry against
+│                          (endpoint, case, identity, JSON path). All three because a run is
+│                          measured against files rather than prose, and one reader is what keeps
+│                          the three from being read by three subsets of one format
 ├── _reference.py          new: the single-use reference instance - stand up, configure, scan-wait,
 │                          destroy, and the sweep that destroys what a crashed run left
 ├── differential.py        new, the CLI conformance.md already documents. Adds --identity,
@@ -145,8 +148,10 @@ docs/compatibility/
 │                          tables in conformance.md and spec §3.3 are checked against it
 ├── named-comparisons.yaml new: the twenty rows of spec §3.10, each with what it needs and the
 │                          behaviours section that is its answer
-└── request-cases.yaml     new: the request cases per endpoint (AC-3), seeded from what the two
-                           analysed clients send
+└── request-cases.yaml     new: the request cases per endpoint (AC-3), the eight level: L3 rows
+                           first, then the floor, then what the two analysed clients send - which
+                           T6 measured to be about a dozen strings, since neither client document
+                           restates per-endpoint request detail
 
 tests/
 ├── conformance/test_differential.py  new: the mutation proofs of spec §6, driving _differential.py
@@ -248,6 +253,30 @@ says so in as many words. So those eight are the only rows in the repository who
 this feature is the only thing that can pay for: they get their cases before the other 51, one per
 identity they are meaningful for, and §3.4's coverage line prints the declared level beside what a
 run actually compared.
+
+**Three more fields, added by T6, and one of them is what makes two register rows askable at all.**
+The paragraph above names a case's name, query, body, anchor and identities; writing the file found
+that none of the five can say three things it has to say.
+
+| Field | Why the five could not say it |
+|---|---|
+| `content_type` | The named-comparison register's `body-with-no-content-type` row is *"here to be recognised, not discovered"* — §6.4 makes it an ordinary request case — and **a body with no `Content-Type`** is not a query, not a body and not an identity. Four routes of the five 009 T13 named are cases in this file, each with a real body and a `content_type` of `none` |
+| `needs` | T6's own statement: a case whose anchor wants a kind of item no reachable library has declares `fixture` and leaves the anchor unfilled, for T11. It is the same vocabulary [§4.2](#42-docscompatibilitynamed-comparisonsyaml) uses, so a run reads one set of tokens |
+| `what_it_is_for` | The sentence review reads when the file grows, and where a case that names **one** seat says why |
+
+**And the anchor of §6.1.1 is three kinds rather than one**, which is the finding that cost the
+most. A `listing:` anchor is the plan's own — a declared listing case and a row position. It fills
+32 of this file's 55 anchors. The other two kinds are what the remaining 23 needed:
+
+- **`response:`** — a value an earlier case's *response* carried and no listing does: a created
+  playlist's `Id`, a negotiated media source's `Id`. Five routes have no other way in.
+- **`literal:`** — a path parameter that **does not name an item at all**. `{container}`,
+  `{routeFormat}`, `{imageType}`, `{imageIndex}` and `{newIndex}` are the caller's own choice and
+  the same string on both servers; with only the plan's kind, five routes were unaskable.
+
+`userId` stays what §6.1.1 says it is — the identity's own, never an anchor — and it is joined by a
+three-token **substitution** vocabulary for the same reason: `POST /Users/AuthenticateByName`'s body
+*is* the seat's credentials, and no anchor can supply a password.
 
 ### 4.4 The outputs
 

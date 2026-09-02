@@ -47,6 +47,7 @@ NAMED_COMPARISONS = REPO_ROOT / "docs" / "compatibility" / "named-comparisons.ya
 SURFACE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 BEHAVIOURS = REPO_ROOT / "docs" / "compatibility" / "behaviours.md"
 CONFORMANCE = REPO_ROOT / "docs" / "compatibility" / "conformance.md"
+REQUEST_CASES = REPO_ROOT / "docs" / "compatibility" / "request-cases.yaml"
 SPEC = REPO_ROOT / "specs" / "010-conformance-harness" / "spec.md"
 
 
@@ -589,12 +590,366 @@ def test_two_rows_with_one_id_fail_the_load() -> None:
     assert "a second row" in str(raised.value)
 
 
-def test_both_registers_are_valid_yaml() -> None:
-    """The hand-written subset the tools parse is a *subset*, so it must also be YAML.
+# --------------------------------------------------------------------------------------------
+# The request-case register — 010 AC-3, and the eight `level: L3` rows first
+# --------------------------------------------------------------------------------------------
 
-    The tools read these with two regexes and no dependency, which cannot tell a quoting mistake
-    from a value — and a register nothing else ever parses would keep one for ever.
+#: The three ids `allowlist.yaml` names and this register had to declare before they excused
+#: anything. Two of them are T4's excused arrays, which were proven in the engine and unreachable
+#: on the wire until a case carried the id; the third is T3's `TotalRecordCount` row.
+IDS_THE_ALLOWLIST_NAMES = (
+    "by-name-without-limit",
+    "listing-ordered-at-random",
+    "listing-ordered-by-a-key-with-ties",
+)
+
+#: The four routes where a body with no `Content-Type` has never been asked. 009 T13 measured the
+#: fifth — the playlist rename — and its own list names 010 as the feature that asks these.
+#: The endpoints whose case changes something about an account, or reads something a case changed:
+#: a configuration, a favourite, a played flag, a playstate row, a playlist. Every case of one of
+#: these names the seat the run created. The surface's other writes touch a session or an encoder
+#: and outlive nothing — `POST /System/Ping`, `POST /Sessions/Capabilities/Full`,
+#: `DELETE /Videos/ActiveEncodings`, `POST /Users/AuthenticateByName` and the negotiation — so
+#: those are asked from both seats.
+THE_RUNS_OWN_ACCOUNT = (
+    "POST /Users/Configuration",
+    "POST /UserFavoriteItems/{itemId}",
+    "DELETE /UserFavoriteItems/{itemId}",
+    "POST /UserPlayedItems/{itemId}",
+    "DELETE /UserPlayedItems/{itemId}",
+    "POST /Sessions/Playing",
+    "POST /Sessions/Playing/Progress",
+    "POST /Sessions/Playing/Stopped",
+    "POST /Playlists",
+    "GET /Playlists/{playlistId}/Items",
+    "POST /Playlists/{playlistId}/Items",
+    "DELETE /Playlists/{playlistId}/Items",
+    "POST /Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}",
+    "DELETE /Items/{itemId}",
+    "POST /Items/{itemId}",
+)
+
+CONTENT_TYPE_ROUTES = (
+    "POST /Sessions/Playing",
+    "POST /Sessions/Playing/Progress",
+    "POST /Sessions/Playing/Stopped",
+    "POST /Items/{itemId}/PlaybackInfo",
+)
+
+
+def _surface() -> list[dict[str, str]]:
+    """`surface.yaml` through the surface validator's **own** parser, never a second one.
+
+    A second parser of a file whose whole job is to be the single list is how the list stops being
+    single, which is the 2026-09-01 audit's M1 finding one file along.
     """
+    path = REPO_ROOT / "tools" / "extract_v1_surface.py"
+    name = "atrium_surface_extractor"
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None, f"cannot load {path}"
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    _reference, endpoints = module.parse_surface(SURFACE.read_text(encoding="utf-8"))
+    return list(endpoints)
+
+
+SURFACE_ROWS = _surface()
+CASES = allowlist.load_cases(REQUEST_CASES, ENTRIES)
+
+
+def _case_row(**overrides: str) -> dict[str, str]:
+    """A well-formed raw case, so a test can break exactly one thing about it."""
+    row = {
+        "id": "default",
+        "endpoint": "GET /Items",
+        "query": "",
+        "body": "none",
+        "content_type": "none",
+        "anchors": "[]",
+        "identities": "[administrator, restricted]",
+        "needs": "[]",
+        "what_it_is_for": "The bare listing",
+    }
+    row.update(overrides)
+    return row
+
+
+def test_the_shipped_request_cases_load() -> None:
+    """The floor. Every other test here is about what the loader refuses."""
+    assert len(CASES) > 59
+    assert CASES[0].endpoint == "GET /System/Info/Public", "the eight L3 rows come first"
+
+
+def test_every_surface_endpoint_has_at_least_one_case() -> None:
+    """AC-3's floor, and it fails on the sixtieth endpoint the day one is added with no case."""
+    surface = {f"{row['method']} {row['path']}" for row in SURFACE_ROWS}
+    assert len(surface) == 59, "the surface parser and the surface file disagree"
+    declared = {case.endpoint for case in CASES}
+    assert surface - declared == set(), sorted(surface - declared)
+    assert declared - surface == set(), sorted(declared - surface)
+
+
+def test_every_l3_row_has_a_case_for_every_identity_it_is_meaningful_for() -> None:
+    """*"What the gate changed"* §2, as an assertion.
+
+    Eight rows of `surface.yaml` declare `level: L3` and **nothing has ever checked that a level is
+    reached**: the surface validator checks only that the value is one of `L0..L3`, and
+    `test_routes.py` reads `feature` and `consumers`. Every feature's definition of done has
+    deferred the differential half here. So these eight get their cases first, and a run that asked
+    them from one seat would be answering a two-row table with one row — which is what fails here.
+    """
+    rows = [row for row in SURFACE_ROWS if row["level"] == "L3"]
+    assert len(rows) == 8, "the surface's L3 count moved; this test is what says so"
+    for row in rows:
+        endpoint = f"{row['method']} {row['path']}"
+        cases = allowlist.cases_for(CASES, endpoint)
+        assert cases, endpoint
+        seats = {seat for case in cases for seat in case.identities_for(allowlist.ROLES)}
+        assert {"administrator", "restricted"} <= seats, f"{endpoint}: only {sorted(seats)}"
+
+
+def test_an_anchor_over_an_unordered_listing_is_refused() -> None:
+    """**An anchor is only as sound as the ordering it indexes** (plan §6.1.1).
+
+    A `listing:` anchor says *"the row at position 0"*, so a listing whose rows the allowlist
+    excuses as `drawn` or `unordered` hands it an arbitrary row — and the case that follows is a
+    comparison of two different items wearing one name. Both excused listings are refused, and the
+    ordinary one beside them is not, which is what makes this a check and not a rejection of every
+    anchor.
+    """
+    sound = allowlist.check_cases(
+        [
+            _case_row(id="movies-by-sort-name", query="sortBy=SortName"),
+            _case_row(
+                id="a-movie",
+                endpoint="GET /Items/{itemId}",
+                anchors="[itemId=listing:GET /Items#movies-by-sort-name@0]",
+            ),
+        ]
+    )
+    allowlist.check_anchor_orderings(sound, ENTRIES)
+
+    for excused in ("listing-ordered-at-random", "listing-ordered-by-a-key-with-ties"):
+        cases = allowlist.check_cases(
+            [
+                _case_row(id=excused, query="sortBy=Random"),
+                _case_row(
+                    id="a-movie",
+                    endpoint="GET /Items/{itemId}",
+                    anchors=f"[itemId=listing:GET /Items#{excused}@0]",
+                ),
+            ]
+        )
+        with pytest.raises(allowlist.AllowlistError) as raised:
+            allowlist.check_anchor_orderings(cases, ENTRIES)
+        assert "arbitrary row" in str(raised.value)
+
+
+def test_the_three_case_ids_the_allowlist_names_are_declared() -> None:
+    """The debt T3 and T4 both left, discharged.
+
+    Until a case carried these ids, two of the three excused arrays *"excused nothing on the
+    wire"* — proven in the engine and unreachable in a run — and the five `TotalRecordCount` rows
+    excused a difference on a request nobody could send. An id no case declares matches nothing,
+    which is the safe half of being wrong and is still not a working entry.
+    """
+    declared = {case.id for case in CASES}
+    assert set(IDS_THE_ALLOWLIST_NAMES) <= declared, sorted(set(IDS_THE_ALLOWLIST_NAMES) - declared)
+
+    named = {entry.case for entry in ENTRIES if entry.case != "*"}
+    assert named <= declared, sorted(named - declared)
+
+    by_name = {case.endpoint for case in CASES if case.id == "by-name-without-limit"}
+    excused = {entry.endpoint for entry in ENTRIES if entry.case == "by-name-without-limit"}
+    assert excused == by_name, sorted(excused ^ by_name)
+
+
+def test_the_four_content_type_cases_are_the_four_the_register_owes() -> None:
+    """009's list: five routes, measured on one. These are the other four.
+
+    A `content_type` of `none` beside a real body is the whole case — `400` here and `415` there —
+    and no combination of a query and a body can say it, which is why the field exists.
+    """
+    asked = {
+        case.endpoint for case in CASES if case.content_type == allowlist.NONE and case.has_body
+    }
+    assert asked == set(CONTENT_TYPE_ROUTES), sorted(asked ^ set(CONTENT_TYPE_ROUTES))
+    assert any(row.id == "body-with-no-content-type" for row in NAMED)
+
+
+def test_the_malformed_body_the_register_names_is_an_ordinary_case() -> None:
+    """The other *"here to be recognised, not discovered"* row. Its body is not JSON, which is
+    only expressible because `body` is raw text sent verbatim rather than a parsed object."""
+    malformed = [case for case in CASES if case.id == "malformed-body"]
+    assert len(malformed) == 1
+    assert malformed[0].body == "not-json"
+    assert any(row.id == "body-binding-dollar-message" for row in NAMED)
+
+
+def test_every_case_that_writes_names_the_seat_the_run_created() -> None:
+    """Spec §3.5 asks a writing probe to remove what it made; this asks the sweep not to make it
+    on somebody else's account at all.
+
+    The administrator's seat is whatever `.env` points at, and on the only reference this project
+    could reach before T9 that is an operator's own. The one exception is the playlist rename,
+    which the reference declares administrator-only — so it runs as the administrator, over a
+    playlist the restricted seat made.
+    """
+    writes = {case for case in CASES if case.endpoint in THE_RUNS_OWN_ACCOUNT}
+    assert len({case.endpoint for case in writes}) == len(THE_RUNS_OWN_ACCOUNT)
+    for case in writes:
+        if case.endpoint == "POST /Items/{itemId}":
+            assert case.identities == ("administrator",), case.id
+            continue
+        assert case.identities == ("restricted",), f"{case.endpoint} {case.id}"
+
+
+def test_a_path_parameter_with_no_anchor_must_wait_on_the_fixture() -> None:
+    """Three ways to account for a `{parameter}` and no fourth: an anchor, `userId` — which plan
+    §6.1.1 says is the identity's own and never an anchor — or a case that declares `fixture` and
+    leaves it for T11. A parameter that is none of the three would be sent literally."""
+    with pytest.raises(allowlist.AllowlistError) as raised:
+        allowlist.check_cases([_case_row(id="a-movie", endpoint="GET /Items/{itemId}")])
+    assert "itemId" in str(raised.value)
+
+    waiting = allowlist.check_cases(
+        [_case_row(id="a-movie", endpoint="GET /Items/{itemId}", needs="[fixture]")]
+    )
+    assert waiting[0].needs == ("fixture",)
+
+    own = allowlist.check_cases([_case_row(id="the-identitys-own", endpoint="GET /Users/{userId}")])
+    assert own[0].anchors == ()
+
+
+def test_an_anchor_names_a_case_this_register_declares() -> None:
+    """An anchor is a cross-reference, and a cross-reference to nothing resolves to nothing."""
+    with pytest.raises(allowlist.AllowlistError) as raised:
+        allowlist.check_cases(
+            [
+                _case_row(
+                    id="a-movie",
+                    endpoint="GET /Items/{itemId}",
+                    anchors="[itemId=listing:GET /Items#no-such-case@0]",
+                )
+            ]
+        )
+    assert "does not declare" in str(raised.value)
+
+
+def test_the_three_anchor_kinds_and_nothing_else() -> None:
+    """Plan §6.1.1 describes one kind and this register needs three.
+
+    `literal` is the one that would look like a shortcut and is not: `{container}`, `{routeFormat}`,
+    `{imageType}`, `{imageIndex}` and `{newIndex}` do not name items at all, so no listing and no
+    response can fill them, and five routes are unaskable without it.
+    """
+    kinds = {anchor.kind for case in CASES for anchor in case.anchors}
+    assert kinds == {"listing", "response", "literal"}
+
+    for bad in (
+        "[itemId=guess:GET /Items#default@0]",
+        "[itemId=listing:GET /Items#default@first]",
+        "[itemId=response:GET /Items#default@0]",
+        "[itemId]",
+    ):
+        with pytest.raises(allowlist.AllowlistError):
+            allowlist.check_cases(
+                [_case_row(), _case_row(id="x", endpoint="GET /Items/{itemId}", anchors=bad)]
+            )
+
+
+def test_a_case_anchored_on_its_own_endpoint_fails_the_load() -> None:
+    """It cannot be resolved before itself, and a run that tried would loop or guess."""
+    with pytest.raises(allowlist.AllowlistError) as raised:
+        allowlist.check_cases([_case_row(anchors="[parentId=listing:GET /Items#default@0]")])
+    assert "before itself" in str(raised.value)
+
+
+def test_an_undeclared_substitution_fails_the_load() -> None:
+    """The vocabulary is three tokens, and a fourth would reach a server as literal text.
+
+    Angle brackets rather than braces: a body is JSON, and a brace-delimited token matched the
+    device profile's own nested objects the first time this was loaded.
+    """
+    good = allowlist.check_cases(
+        [
+            _case_row(
+                id="username-and-pw",
+                endpoint="POST /Users/AuthenticateByName",
+                body='{"Username": "<identity.username>", "Pw": "<identity.password>"}',
+                content_type="application/json",
+            )
+        ]
+    )
+    assert "<identity.username>" in good[0].body
+
+    with pytest.raises(allowlist.AllowlistError) as raised:
+        allowlist.check_cases([_case_row(query="userId=<identity.id>")])
+    assert "identity.user_id" in str(raised.value)
+
+
+def test_a_body_a_get_cannot_carry_and_a_content_type_with_no_body() -> None:
+    """Two shapes that describe nothing, refused rather than sent."""
+    with pytest.raises(allowlist.AllowlistError) as raised:
+        allowlist.check_cases([_case_row(body='{"a": 1}', content_type="application/json")])
+    assert "cannot carry a body" in str(raised.value)
+
+    with pytest.raises(allowlist.AllowlistError) as raised:
+        allowlist.check_cases([_case_row(content_type="application/json")])
+    assert "describes nothing" in str(raised.value)
+
+
+def test_an_empty_query_is_a_value_and_a_missing_one_is_not() -> None:
+    """T5 found the same thing about an empty `needs`. Here it is the commonest value there is:
+    the AC-3 floor case for most of the surface is a bare request."""
+    assert allowlist.check_cases([_case_row(query="")])[0].query == ""
+    assert len([case for case in CASES if not case.query]) > 20
+    row = _case_row()
+    del row["query"]
+    with pytest.raises(allowlist.AllowlistError) as raised:
+        allowlist.check_cases([row])
+    assert "missing query" in str(raised.value)
+
+
+def test_two_cases_with_one_id_on_one_endpoint_fail_the_load() -> None:
+    """An id is unique **per endpoint**, not globally: `static` is a case of both stream routes and
+    `by-name-without-limit` is a case of all five by-name endpoints, which is what lets one
+    allowlist entry keyed on a case id cover a family. Two under one name on ONE endpoint is a
+    difference the report cannot tell apart."""
+    with pytest.raises(allowlist.AllowlistError) as raised:
+        allowlist.check_cases([_case_row(), _case_row(query="limit=1")])
+    assert "unique per endpoint" in str(raised.value)
+
+    shared = {case.id for case in CASES}
+    assert len(shared) < len(CASES), "an id is shared across endpoints on purpose"
+
+
+def test_an_empty_identities_means_every_seat_and_not_the_first() -> None:
+    """The value that says nothing has to mean **all** of them: the failure this feature is prone
+    to is a case set that names one seat, and a default of "the first" would be that set."""
+    case = allowlist.check_cases([_case_row(identities="[]")])[0]
+    assert case.identities == ()
+    assert case.identities_for(allowlist.ROLES) == allowlist.ROLES
+
+    with pytest.raises(allowlist.AllowlistError):
+        allowlist.check_cases([_case_row(identities="[owner]")])
+
+
+def test_the_three_registers_are_valid_yaml() -> None:
+    """The hand-written subset the tools parse is a *subset*, so it must also be YAML — and the
+    third register is the one that proves it was worth checking: its bodies are JSON, whose double
+    quotes make a single-quoted YAML scalar the only spelling both readers agree on."""
     yaml = pytest.importorskip("yaml")
-    assert len(yaml.safe_load(NAMED_COMPARISONS.read_text("utf-8"))["comparisons"]) == len(NAMED)
-    assert len(yaml.safe_load(ALLOWLIST.read_text("utf-8"))["entries"]) == len(ENTRIES)
+    for path, block, expected in (
+        (NAMED_COMPARISONS, "comparisons", len(NAMED)),
+        (REQUEST_CASES, "cases", len(CASES)),
+        (ALLOWLIST, "entries", len(ENTRIES)),
+    ):
+        loaded = yaml.safe_load(path.read_text("utf-8"))[block]
+        assert len(loaded) == expected, path.name
+    parsed = yaml.safe_load(REQUEST_CASES.read_text("utf-8"))["cases"]
+    assert len(parsed) == len(CASES)
+    for raw, case in zip(parsed, CASES, strict=True):
+        assert raw["body"] == case.body, case.id
+        assert raw["query"] == case.query, case.id
