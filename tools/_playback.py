@@ -97,6 +97,11 @@ class VideoSource:
         raise ProbeError("could not name an audio codec the source does not already contain")
 
 
+#: How many rows `pick_video_source` reads before giving up. A library of dummy files is not a
+#: library with nothing in it, and a probe that cannot tell them apart reports the wrong finding.
+PLAYABLE_SEARCH_LIMIT = 50
+
+
 def pick_video_source(server: Server, kind: str = "Movie") -> VideoSource:
     """The first video item the library offers, with its measured media source.
 
@@ -107,19 +112,54 @@ def pick_video_source(server: Server, kind: str = "Movie") -> VideoSource:
     reject nothing. `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28]`
     """
     found = server.get(
-        "/Items", UserId=server.user_id, IncludeItemTypes=kind, Recursive="true", Limit=1
+        "/Items",
+        UserId=server.user_id,
+        IncludeItemTypes=kind,
+        Recursive="true",
+        Limit=PLAYABLE_SEARCH_LIMIT,
+        SortBy="SortName",
     )
     rows = found.get("Items", [])
     if not rows and kind == "Movie":
         return pick_video_source(server, kind="Episode")
     if not rows:
         raise ProbeError("the library holds no movie or episode to negotiate against")
-    item_id = rows[0]["Id"]
-    item = server.get(f"/Items/{item_id}", userId=server.user_id)
-    sources = item.get("MediaSources") or []
-    if not sources:
-        raise ProbeError(f"item {item_id} carries no media source")
-    return VideoSource(item_id, sources[0])
+    # **The first row is not necessarily playable, and taking it is how a probe reports a library
+    # instead of a server.** Measured 2026-09-02 against the single-use reference instance: the
+    # fixture tree's first movie is a file of dummy bytes, so `VideoSource` refused the whole
+    # probe over a source that carries no stream at all. The same trap the HDR search below was
+    # written for - "the first item" - one question earlier.
+    refusals: list[str] = []
+    fallback: VideoSource | None = None
+    for row in rows:
+        item_id = row["Id"]
+        item = server.get(f"/Items/{item_id}", userId=server.user_id)
+        sources = item.get("MediaSources") or []
+        if not sources:
+            refusals.append(f"{item_id} carries no media source")
+            continue
+        try:
+            candidate = VideoSource(item_id, sources[0])
+        except ProbeError as unusable:
+            refusals.append(str(unusable))
+            continue
+        # **A film with an embedded subtitle track is not a neutral source for a ladder
+        # question.** A named or defaulted track that resolves to anything but External, Embed or
+        # Drop refuses direct play on its own (011 spec section 3.3), so a probe building a
+        # profile with no `SubtitleProfiles` would measure that rule and report it as a
+        # container or codec finding. Measured 2026-09-02: the fixture tree's first playable
+        # film carries a `subrip` and a `PGSSUB` track, and an accepting profile is answered
+        # `SupportsDirectPlay: false`. One without is preferred; one with is better than none.
+        if not [one for one in sources[0].get("MediaStreams", []) if one.get("Type") == "Subtitle"]:
+            return candidate
+        if fallback is None:
+            fallback = candidate
+    if fallback is not None:
+        return fallback
+    raise ProbeError(
+        f"none of the first {len(rows)} {kind} rows can be negotiated about: "
+        + "; ".join(refusals[:5])
+    )
 
 
 #: How many items `pick_hdr_video_source` reads before giving up. High dynamic range is a

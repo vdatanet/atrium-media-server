@@ -596,8 +596,11 @@ def _negotiation(
 
     `profile` is `None` for the `GET`, for a `POST` whose body carries none and whose device
     stored none, and for an API key - and in every one of those the ladder answers direct play
-    with all three flags true, which is the intrinsic shape of a source that was never negotiated
-    about (spec section 3.3 rule 1).
+    with the flags the *account* carries, which is the intrinsic shape of a source that was never
+    negotiated about (spec section 3.3 rule 1). Intrinsic is not unconditional: the reference
+    writes the caller's permissions onto every static source before any profile work, one
+    permission per media kind, so a seat denied video transcoding is answered
+    `SupportsTranscoding: false` here with no profile and `true` with one.
     """
     found, target, libraries = _found(request, caller, item_id, body.user_id)
     is_video = found.item.type in VIDEO_TYPES
@@ -631,7 +634,13 @@ def _negotiation(
     for wire, inspection in zip(sources, probes, strict=True):
         if inspection is None:
             # Nothing has opened this file, so there is nothing to negotiate against and the
-            # source keeps the intrinsic flags `sources_for` gave it. A rescan is what fixes it.
+            # source keeps the intrinsic flags `sources_for` gave it. A rescan is what fixes it -
+            # but the account's own permissions are not part of what a rescan would learn, and the
+            # reference writes them onto every static source whether or not anything negotiated
+            # `[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @
+            # v10.11.11]`. Same rule as the ladder's rule 1, because it is the same moment.
+            wire.supports_transcoding = ladder.unnegotiated_transcoding(policy, is_video=is_video)
+            wire.supports_direct_stream = not is_video or policy.enable_remuxing
             continue
         switches = _switches(
             body, names_this_source=(body.media_source_id or "").lower() == wire.id.lower()

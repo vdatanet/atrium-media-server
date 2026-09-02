@@ -2248,12 +2248,21 @@ the reference names the album after its directory — T10 fixed the *ordering* o
 the same directory wherever the library is mounted) and deliberately did not fix that the borrowing
 is a guess at all. Two rows of the declared-difference table are that guess.
 
-**To 008.** **A seat with all three playback-processing permissions denied negotiates
-`SupportsTranscoding: true` here and `false` there**, measured on 2026-09-02 against a real pair, so
-[behaviours §2.21](../../docs/compatibility/behaviours.md)'s *"the same negotiation semantics — the
-all-three gate"* is false **of this server**. It is the first difference this harness has found in
-Atrium rather than in a document, and per spec §2 it is 008's to decide through
-[behaviours §3.0](../../docs/compatibility/behaviours.md#30-how-the-decision-is-made).
+**To 008 — answered on 2026-09-02, and the answer was not the one the row named.** A seat with all
+three playback-processing permissions denied negotiated `SupportsTranscoding: true` here and
+`false` there, measured against a real pair; it was the first difference this harness found in
+Atrium rather than in a document, and per spec §2 it was 008's to decide. 008 decided it the same
+day, and measuring first is what saved the fix: the comparison negotiates with an **empty body**,
+and the all-three gate [behaviours §2.21](../../docs/compatibility/behaviours.md) describes belongs
+to the profile path, which Atrium already had right. With no profile the reference reads **one**
+permission per media kind off the source, so implementing the gate this row named would have made
+the row agree and answered `true` for a seat denied video transcoding alone. **What this leaves the
+harness** is one correction and one debt. The correction: `named_delivery_time_policy_refusal`
+predicted two different delivery statuses from `/Videos/{itemId}/stream.mp4`, which takes no user
+on either contract as this project records it, so the row could never have been *as documented* —
+it now asserts the gate on both servers and a delivery neither refuses. The debt: **the
+delivery-time force-copy edge is still uncompared**, and reaching it needs a **segment** URI built
+by hand, because the reference hands a denied seat no address to follow.
 
 **To 002.** **Atrium's user record defaults `is_hidden` to `false` where the reference's is set**
 `[source: Jellyfin.Data/UserEntityExtensions.cs:174 @ v10.11.11]`, so the first account on each
