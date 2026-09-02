@@ -19,6 +19,7 @@ machine that has the binaries is what proves the fence is complete.
 
 from __future__ import annotations
 
+import struct
 from collections.abc import Mapping
 from fractions import Fraction
 from itertools import pairwise
@@ -32,12 +33,15 @@ from tests.fixtures.media import (
     BOTH_SUBTITLE_KINDS,
     CUES,
     DIRECT_PLAY,
+    EXIF_ORIENTATION_TAG,
     FILMS,
     HIGH_RANGE,
     HIGH_RATE_AUDIO,
     IMAGE_SUBTITLE_CODEC,
+    LEGACY_SUBTITLE,
     LONG_TAKE,
     MATRIX,
+    PLANTED_POSTER,
     REJECTED_AUDIO,
     REJECTED_CONTAINER,
     REJECTED_VIDEO,
@@ -48,7 +52,6 @@ from tests.fixtures.media import (
     BuiltMedia,
     Cue,
     MediaFile,
-    ScannedMediaWorld,
     generate,
     keyframe_seconds,
     pgs_bitstream,
@@ -56,6 +59,9 @@ from tests.fixtures.media import (
     srt_document,
     subtitle_packet_seconds,
 )
+from tests.fixtures.media_world import ScannedMediaWorld
+from tests.fixtures.reference_tree import build as build_reference_tree
+from tests.fixtures.reference_tree import libraries as reference_libraries
 
 pytestmark = pytest.mark.ffmpeg
 
@@ -209,12 +215,18 @@ def test_a_bitstream_that_starts_late_is_refused_rather_than_muxed() -> None:
 def test_a_sidecar_is_written_beside_its_film_with_the_cues_it_declares(
     entry: MediaFile, media_files: BuiltMedia
 ) -> None:
-    """The file 011 discovers, and the one thing about it that is not in its name: its cues."""
+    """The file 011 discovers, and the one thing about it that is not in its name: its cues.
+
+    Read back through the encoding the entry **declares** rather than through UTF-8, which is what
+    010 T11 made a property of the declaration: a legacy-encoded sidecar is the only input
+    behaviours section 5.11 has, and a test that insisted on UTF-8 here would be the thing
+    preventing one from existing.
+    """
     for sidecar in entry.sidecars:
         path = media_files.sidecar_path_of(entry, sidecar)
         assert path.is_file(), sidecar.reason
         assert path.parent == media_files.path_of(entry).parent
-        assert path.read_text(encoding="utf-8") == srt_document(sidecar.cues)
+        assert path.read_text(encoding=sidecar.encoding) == srt_document(sidecar.cues)
         assert path.stat().st_mtime_ns == FIXED_MTIME_NS, (
             "a sidecar carries its own change signal, so an unstamped one would make the scan "
             "that notices it untestable"
@@ -480,3 +492,183 @@ def test_a_sidecar_is_in_the_tree_and_is_nobody_s_source(
     for item in scanned_media_world.items.values():
         for source in item.sources:
             assert Path(source.relative_path).name not in names, item.name
+
+
+# ------------------------------------------------------------------------------------------
+# What 010 T11 added: the legacy encoding, the planted image, and the tree across the mount
+# ------------------------------------------------------------------------------------------
+
+
+def test_the_legacy_encoded_sidecar_is_not_utf8(media_files: BuiltMedia) -> None:
+    """AC-13's other half, and the day somebody "fixes" the encoding is the day this fails.
+
+    [behaviours section 5.11](../../docs/compatibility/behaviours.md) is the one divergence in the
+    project a client sees **directly** - as the wrong letters on a screen - because the reference
+    runs a statistical charset detector over a subtitle file and this server decides by a rule: a
+    byte order mark, then strict UTF-8, then one `cp1252` fallback. A file that is valid UTF-8
+    cannot exercise it, and until 010 T11 every sidecar in this module was written `utf-8`.
+
+    Both directions are asserted, because only the pair is the case: the bytes must **not** decode
+    as UTF-8, or the rule's second step answers and the two servers agree - and they must decode
+    as `cp1252` into something that is not the declared text, or the fetch takes 011's refusal path
+    instead of the divergence.
+    """
+    declared = [
+        (entry, sidecar)
+        for entry in MATRIX
+        for sidecar in entry.sidecars
+        if sidecar.encoding != "utf-8"
+    ]
+    assert declared, "no sidecar is in a legacy encoding, so behaviours 5.11 has no input"
+
+    for entry, sidecar in declared:
+        raw = media_files.sidecar_path_of(entry, sidecar).read_bytes()
+        with pytest.raises(UnicodeDecodeError):
+            raw.decode("utf-8")
+        assert raw.decode(sidecar.encoding) == srt_document(sidecar.cues)
+        assert raw.decode("cp1252") != raw.decode(sidecar.encoding), (
+            "the fallback and the real encoding agree on these bytes, so the two servers would "
+            "draw the same characters and the difference would be unobservable"
+        )
+
+
+def test_the_planted_image_carries_the_orientation_it_declares(media_files: BuiltMedia) -> None:
+    """The planted file 006 owes 010, read back by a parser that is not the writer.
+
+    The APP1 segment is walked here rather than handed to an image library: this module writes it
+    and `tests/fixtures/images.py`'s Pillow is not available to the standard-library-only path the
+    harness builds this tree through, so a reader that shared the writer's code would agree with
+    itself about a wrong file.
+    """
+    declared = [(entry, image) for entry in MATRIX for image in entry.images]
+    assert declared, "nothing plants an image, so the EXIF comparison has no file"
+
+    for entry, image in declared:
+        raw = media_files.image_path_of(entry, image).read_bytes()
+        assert raw.startswith(b"\xff\xd8\xff\xe1"), "the EXIF segment is not the first one"
+        length = int.from_bytes(raw[4:6], "big")
+        payload = raw[6 : 4 + length]
+        assert payload.startswith(b"Exif\x00\x00")
+        tiff = payload[6:]
+        assert tiff[:2] == b"MM" and int.from_bytes(tiff[2:4], "big") == 42
+        offset = int.from_bytes(tiff[4:8], "big")
+        assert int.from_bytes(tiff[offset : offset + 2], "big") == 1, "one directory entry"
+        tag, kind, count = struct.unpack(">HHI", tiff[offset + 2 : offset + 10])
+        assert (tag, kind, count) == (EXIF_ORIENTATION_TAG, 3, 1)
+        assert int.from_bytes(tiff[offset + 10 : offset + 12], "big") == image.orientation
+
+
+def test_the_planted_images_differ_only_in_the_tag_they_carry() -> None:
+    """One rotated image and one not, on one item: that is what makes the answer attributable.
+
+    A single tagged image proves nothing on its own, because a resize that ignores the tag and a
+    resize that honours it are only distinguishable against a control produced the same way.
+    """
+    rotated = [image for entry in MATRIX for image in entry.images if image.orientation != 1]
+    control = [image for entry in MATRIX for image in entry.images if image.orientation == 1]
+    assert rotated and control, "the comparison needs both a rotated image and one that is not"
+
+    owners = {entry.key for entry in MATRIX if entry.images}
+    assert len(owners) == 1, "two films carrying artwork would make the pair a comparison of films"
+
+    for image in rotated + control:
+        assert image.width != image.height, (
+            "a square source answers the same size whether the rotation was applied or not"
+        )
+
+
+def test_a_film_carrying_planted_artwork_has_a_directory_to_itself() -> None:
+    """Artwork beside a film in a shared directory belongs to whichever film claims it first.
+
+    The same rule the sidecars hold to, and for a sharper reason: `poster.jpg` at a library root is
+    the **library's** image, so an entry declared at the root would plant a fixture for a different
+    item than the one it names.
+    """
+    for entry in MATRIX:
+        if not entry.images:
+            continue
+        parent = Path(entry.path).parent
+        assert parent != Path(), f"{entry.key} sits at its library root"
+        beside = {one.key for one in MATRIX if one is not entry and Path(one.path).parent == parent}
+        assert not beside, f"{entry.key} shares {parent} with {beside}"
+
+
+@pytest.mark.parametrize("entry", (LEGACY_SUBTITLE, PLANTED_POSTER), ids=lambda one: one.key)
+def test_two_builds_of_a_planted_entry_are_byte_identical(entry: MediaFile, tmp_path: Path) -> None:
+    """AC-1, restated for the two shapes T11 added.
+
+    Neither goes through the encoder the existing proof covers: a sidecar's bytes come from this
+    module's own writer through a codec, and a planted image is an ffmpeg output with a
+    hand-written segment spliced into it. Both are new ways for a fixture to stop being
+    reproducible, and "two builds produce byte-identical files" is the criterion.
+    """
+    first = generate(entry, tmp_path / "one")
+    second = generate(entry, tmp_path / "two")
+    assert first.read_bytes() == second.read_bytes()
+    for sidecar in entry.sidecars:
+        assert (
+            first.with_name(sidecar.name).read_bytes()
+            == second.with_name(sidecar.name).read_bytes()
+        )
+    for image in entry.images:
+        assert first.with_name(image.name).read_bytes() == second.with_name(image.name).read_bytes()
+
+
+def test_every_file_in_the_media_tree_is_generated_by_a_declared_entry(
+    media_files: BuiltMedia,
+) -> None:
+    """AC-13, as a property of the code rather than a promise somebody keeps reviewing.
+
+    Every byte under the tree traces to an entry of `MATRIX`, one of its declared sidecars or one
+    of its declared planted images - so "no fixture file is a copyrighted work" is decidable by
+    reading the declarations, which is the discipline `tests/fixtures/library/manifest.py` holds
+    itself to and the reason neither module checks a binary in.
+    """
+    declared = (
+        {media_files.path_of(entry) for entry in MATRIX}
+        | {
+            media_files.sidecar_path_of(entry, sidecar)
+            for entry in MATRIX
+            for sidecar in entry.sidecars
+        }
+        | {media_files.image_path_of(entry, image) for entry in MATRIX for image in entry.images}
+    )
+    found = {path for path in media_files.base.rglob("*") if path.is_file()}
+    assert found == declared
+
+
+def test_the_mount_preserves_the_fixed_time(tmp_path: Path) -> None:
+    """Every file the reference instance is given carries the one fixed modification time.
+
+    **The invisible false positive 010 plan section 9 names.**
+    Both generators stamp `FIXED_MTIME_NS`; a bind mount preserves it and a copy does not unless
+    the copy preserves times. A fixture whose timestamps moved between the two servers would put a
+    difference into `DateCreated` on **every** item - a field the allowlist excuses - so the noise
+    would not even be reported. Break the media world's placement into a copy that drops times and
+    this fails; leave it a `copy2` and it passes.
+
+    Asserted over `reference_tree.build`, which is the composition the instance is actually handed:
+    the 003 tree written in place and the media world copied in from its cache.
+    """
+    root = build_reference_tree(tmp_path / "tree")
+    files = [path for path in root.rglob("*") if path.is_file()]
+    assert len(files) > len(MATRIX), "the composed tree is both worlds, not one"
+
+    moved = sorted(
+        str(path.relative_to(root)) for path in files if path.stat().st_mtime_ns != FIXED_MTIME_NS
+    )
+    assert not moved, f"{len(moved)} files crossed the mount with a different time: {moved[:5]}"
+
+
+def test_the_composed_tree_holds_a_library_with_nothing_in_it(tmp_path: Path) -> None:
+    """behaviours section 5.7 can only be asked of a library, and no reachable one is empty.
+
+    A `Series`, `Season`, `MusicArtist` or `MusicAlbum` with nothing visible beneath it is not
+    offered at all, so a `CollectionFolder` is the only shape where *"vacuously played"* is
+    observable - and creating one means writing into somebody's server, which is what the
+    single-use instance is for.
+    """
+    root = build_reference_tree(tmp_path / "tree")
+    empty = [spec for spec in reference_libraries() if not list((root / spec.subpath).rglob("*"))]
+    assert len(empty) == 1, "exactly one library holds nothing, and it is declared rather than left"
+    assert (root / empty[0].subpath).is_dir()

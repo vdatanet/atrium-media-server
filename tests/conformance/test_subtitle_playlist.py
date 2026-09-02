@@ -46,9 +46,8 @@ from tests.conformance.test_golden import STATE
 from tests.fixtures.media import (
     BOTH_SUBTITLE_KINDS,
     BuiltMedia,
-    ScannedMediaWorld,
-    build_scanned_media_world,
 )
+from tests.fixtures.media_world import ScannedMediaWorld, build_scanned_media_world
 
 pytestmark = [pytest.mark.conformance, pytest.mark.ffmpeg]
 

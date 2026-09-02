@@ -40,11 +40,10 @@ from tests.fixtures.library import BuiltFixture, build_fixture_library
 from tests.fixtures.media import (
     BINARIES,
     BuiltMedia,
-    ScannedMediaWorld,
     build_media_files,
-    build_scanned_media_world,
     missing_binaries,
 )
+from tests.fixtures.media_world import ScannedMediaWorld, build_scanned_media_world
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

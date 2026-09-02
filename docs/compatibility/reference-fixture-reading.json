@@ -2,7 +2,7 @@
   "_": "The reference's own reading of this repository's fixture tree, written by the probe named below and compared against Atrium's scan by tests/library/test_reference_reading.py. Generated: edit it by re-running the probe against a reference instance, never by hand.",
   "citation": "[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]",
   "question": "Given the fixture tree, what does a reference server's library contain? (010 plan section 11, D-4)",
-  "finding": "the reference makes 59 items out of the fixture tree, 37 of them backed by a file none of its probers can open - so a tree of paths and filler bytes is a library to it, and D-4's second branch is the measured one: both worlds go across",
+  "finding": "the reference makes 74 items out of the fixture tree, 48 of them backed by a file and 36 of those over a file none of its probers can open - so a tree of paths and filler bytes is a library to it, and D-4's second branch is the measured one: both worlds go across as libraries of their own",
   "jellyfin_version": "10.11.11",
   "image": "jellyfin/jellyfin@sha256:aefb67e6a7ff1debdd154a78a7bbb780fd0c873d8639210a7f6a2016ad2b35db",
   "fixture": {
@@ -69,20 +69,22 @@
         "from_a_fetcher": "The Watchers"
       }
     ],
-    "compared": true
+    "compared": false,
+    "carried_forward_from": "[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]"
   },
   "totals": {
-    "libraries": 3,
-    "items": 59
+    "libraries": 6,
+    "items": 74
   },
   "libraries": [
     {
       "name": "Movies",
       "collection_type": "movies",
-      "item_count": 19,
+      "decodable": false,
+      "item_count": 18,
       "counts_by_type": {
         "Folder": 1,
-        "Movie": 18
+        "Movie": 17
       },
       "items": [
         {
@@ -159,12 +161,6 @@
         },
         {
           "type": "Movie",
-          "name": "Excluded",
-          "file": "Excluded/An Excluded Film (2000).mkv",
-          "path": "Excluded/An Excluded Film (2000).mkv"
-        },
-        {
-          "type": "Movie",
           "name": "Rock & Roll",
           "file": "Rock & Roll (1978).mkv",
           "path": "Rock & Roll (1978).mkv"
@@ -204,6 +200,7 @@
     {
       "name": "Shows",
       "collection_type": "tvshows",
+      "decodable": false,
       "item_count": 20,
       "counts_by_type": {
         "Episode": 9,
@@ -337,6 +334,7 @@
     {
       "name": "Music",
       "collection_type": "music",
+      "decodable": false,
       "item_count": 20,
       "counts_by_type": {
         "Audio": 10,
@@ -466,6 +464,136 @@
           "path": "Various Artists"
         }
       ]
+    },
+    {
+      "name": "Films",
+      "collection_type": "movies",
+      "decodable": true,
+      "item_count": 12,
+      "counts_by_type": {
+        "Folder": 1,
+        "Movie": 11
+      },
+      "items": [
+        {
+          "type": "Folder",
+          "name": "Movies",
+          "file": null,
+          "path": null
+        },
+        {
+          "type": "Movie",
+          "name": "Both Subtitle Kinds",
+          "file": "Both Subtitle Kinds (2008).mkv",
+          "path": "Both Subtitle Kinds (2008).mkv"
+        },
+        {
+          "type": "Movie",
+          "name": "Direct Play",
+          "file": "Direct Play (2001).mp4",
+          "path": "Direct Play (2001).mp4"
+        },
+        {
+          "type": "Movie",
+          "name": "Rejected Audio",
+          "file": "Rejected Audio (2004).mp4",
+          "path": "Rejected Audio (2004).mp4"
+        },
+        {
+          "type": "Movie",
+          "name": "Rejected Container",
+          "file": "Rejected Container (2002).mkv",
+          "path": "Rejected Container (2002).mkv"
+        },
+        {
+          "type": "Movie",
+          "name": "Rejected Video",
+          "file": "Rejected Video (2003).mkv",
+          "path": "Rejected Video (2003).mkv"
+        },
+        {
+          "type": "Movie",
+          "name": "The High Range",
+          "file": "The High Range (2007).mp4",
+          "path": "The High Range (2007).mp4"
+        },
+        {
+          "type": "Movie",
+          "name": "The Legacy Encoding (2010)",
+          "file": "The Legacy Encoding (2010)/The Legacy Encoding (2010).mkv",
+          "path": "The Legacy Encoding (2010)/The Legacy Encoding (2010).mkv"
+        },
+        {
+          "type": "Movie",
+          "name": "The Long Take (2005)",
+          "file": "The Long Take (2005)/The Long Take (2005).mp4",
+          "path": "The Long Take (2005)/The Long Take (2005).mp4"
+        },
+        {
+          "type": "Movie",
+          "name": "The Planted Poster (2011)",
+          "file": "The Planted Poster (2011)/The Planted Poster (2011).mp4",
+          "path": "The Planted Poster (2011)/The Planted Poster (2011).mp4"
+        },
+        {
+          "type": "Movie",
+          "name": "The Two Parter (2006)",
+          "file": "The Two Parter (2006)/The Two Parter (2006) - part1.mkv",
+          "path": "The Two Parter (2006)/The Two Parter (2006) - part1.mkv"
+        },
+        {
+          "type": "Movie",
+          "name": "The Unconvertible (2009)",
+          "file": "The Unconvertible (2009)/The Unconvertible (2009).mkv",
+          "path": "The Unconvertible (2009)/The Unconvertible (2009).mkv"
+        }
+      ]
+    },
+    {
+      "name": "Tunes",
+      "collection_type": "music",
+      "decodable": true,
+      "item_count": 4,
+      "counts_by_type": {
+        "Audio": 1,
+        "Folder": 1,
+        "MusicAlbum": 1,
+        "MusicArtist": 1
+      },
+      "items": [
+        {
+          "type": "Audio",
+          "name": "Ninety Six Kilohertz",
+          "file": "Sounds/Untitled Folder/01 Ninety Six Kilohertz.flac",
+          "path": "Sounds/Untitled Folder/01 Ninety Six Kilohertz.flac"
+        },
+        {
+          "type": "Folder",
+          "name": "Music",
+          "file": null,
+          "path": null
+        },
+        {
+          "type": "MusicAlbum",
+          "name": "The Album",
+          "file": null,
+          "path": "Sounds/Untitled Folder"
+        },
+        {
+          "type": "MusicArtist",
+          "name": "Sounds",
+          "file": null,
+          "path": "Sounds"
+        }
+      ]
+    },
+    {
+      "name": "Empty",
+      "collection_type": "movies",
+      "decodable": false,
+      "item_count": 0,
+      "counts_by_type": {},
+      "items": []
     }
   ]
 }

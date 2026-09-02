@@ -158,6 +158,18 @@ ROLES = ("administrator", "restricted", "playback-denied")
 #: profile's nested objects on the first load.
 SUBSTITUTIONS = ("identity.username", "identity.password", "identity.user_id")
 
+#: What an anchor's own name is spelled as when the value belongs in a **query or a body** rather
+#: than in the path. Added by 010 T11, and it is what the four shapes T6 could not express needed:
+#: an item id in a body (007's three reporting routes), an item id in a query (`ids` on the
+#: playlist add, `entryIds` on the remove) and an entry id in a path parameter that no listing of
+#: *items* fills. T6 wrote them with `needs: [fixture]` and no anchor at all rather than with a
+#: placeholder, because a placeholder compares two `404`s and looks like coverage.
+#:
+#: The rule is one line: **`<anchor.p>` resolves to whatever the anchor named `p` resolves to**,
+#: through the same three kinds and the same per-server resolution. Nothing new is resolvable and
+#: nothing may carry an identifier, which is the property the anchor mechanism exists to keep.
+ANCHOR_SUBSTITUTION_PREFIX = "anchor."
+
 _SUBSTITUTION = re.compile(r"<([^<>]*)>")
 
 _PATH_PARAMETER = re.compile(r"\{(\w+)\}")
@@ -650,13 +662,14 @@ def check_cases(rows: Sequence[Mapping[str, str]]) -> Tuple[RequestCase, ...]:
 
         query, body = row["query"], row["body"]
         content_type = row["content_type"]
-        _check_substitutions(where, query, body)
         _check_body(where, endpoint, body, content_type)
 
         anchors = _anchors(where, endpoint, row["anchors"])
         needs = _members(where, "needs", row["needs"], NEEDS)
         identities = _members(where, "identities", row["identities"], ROLES)
+        _check_substitutions(where, query, body, anchors)
         _check_path_parameters(where, endpoint, anchors, needs)
+        _check_anchors_are_used(where, endpoint, query, body, anchors)
 
         cases.append(
             RequestCase(
@@ -676,14 +689,50 @@ def check_cases(rows: Sequence[Mapping[str, str]]) -> Tuple[RequestCase, ...]:
     return tuple(cases)
 
 
-def _check_substitutions(where: str, query: str, body: str) -> None:
+def _check_substitutions(where: str, query: str, body: str, anchors: Sequence[Anchor]) -> None:
+    """Every `<token>` is one somebody fills: the identity's own, or a declared anchor's."""
+    declared = {one.parameter for one in anchors}
     for text in (query, body):
         for token in _SUBSTITUTION.findall(text):
-            if token not in SUBSTITUTIONS:
+            if token in SUBSTITUTIONS:
+                continue
+            if token.startswith(ANCHOR_SUBSTITUTION_PREFIX):
+                parameter = token[len(ANCHOR_SUBSTITUTION_PREFIX) :]
+                if parameter in declared:
+                    continue
                 raise AllowlistError(
-                    f"{where}: <{token}> is not one of {', '.join(SUBSTITUTIONS)}. A token "
-                    f"nothing substitutes would reach the server as those literal characters"
+                    f"{where}: <{token}> names an anchor {parameter!r} this case does not "
+                    f"declare, so nothing would fill it"
                 )
+            raise AllowlistError(
+                f"{where}: <{token}> is not one of {', '.join(SUBSTITUTIONS)} and is not "
+                f"'{ANCHOR_SUBSTITUTION_PREFIX}<parameter>'. A token nothing substitutes would "
+                f"reach the server as those literal characters"
+            )
+
+
+def _check_anchors_are_used(
+    where: str, endpoint: str, query: str, body: str, anchors: Sequence[Anchor]
+) -> None:
+    """An anchor fills a path parameter or a `<anchor.p>` token, and never nothing.
+
+    Without this the register would accept an anchor nobody reads — which is exactly how a case
+    ends up *looking* filled while it still sends whatever it sent before. Same shape as T6's
+    refusal of a placeholder item id: a case that compares two `404`s counts as coverage.
+    """
+    parameters = set(_PATH_PARAMETER.findall(endpoint))
+    tokens = {
+        token[len(ANCHOR_SUBSTITUTION_PREFIX) :]
+        for text in (query, body)
+        for token in _SUBSTITUTION.findall(text)
+        if token.startswith(ANCHOR_SUBSTITUTION_PREFIX)
+    }
+    for anchor in anchors:
+        if anchor.parameter not in parameters and anchor.parameter not in tokens:
+            raise AllowlistError(
+                f"{where}: anchor {anchor.parameter!r} fills no path parameter of {endpoint!r} "
+                f"and no <{ANCHOR_SUBSTITUTION_PREFIX}{anchor.parameter}> in the query or body"
+            )
 
 
 def _check_body(where: str, endpoint: str, body: str, content_type: str) -> None:

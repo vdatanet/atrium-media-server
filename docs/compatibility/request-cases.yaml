@@ -221,6 +221,41 @@ cases:
     needs: []
     what_it_is_for: "The case allowlist.yaml's `unordered` entry is keyed on, and the artist sort is the one behaviours 3.6 measured: the reference adds no key after it, so the concatenation of its pages is not its one-shot list - some rows twice and others never"
 
+  # --- the two listings that name a fixture film, added by 010 T11 --------------------------
+  #
+  # A GLOBAL LISTING'S FIRST ROW IS NOT A FIXTURE FILM, and until T11 five cases assumed it was.
+  # T6 wrote `itemId=listing:GET /Items#movies-by-sort-name@0` under "the fixture is what
+  # guarantees the anchored film HAS one", which was true of the world the plan defaulted to - one
+  # library, real media throughout. D-4's measurement chose the other branch (010 plan 6.6): BOTH
+  # worlds go across, so a movie listing sorted by SortName now spans the 003 tree as well, and
+  # its first row is a film of filler bytes with no image, no subtitle stream and nothing a
+  # prober can open. Those five cases would have compared two refusals and counted as coverage,
+  # which is the same shape as the placeholder item id T6 refused.
+  #
+  # `searchTerm` is what narrows them, and it is a request a client sends: the music client
+  # searches this way deliberately. Each of these names ONE film the fixture declares, so
+  # position 0 is that film on both servers.
+
+  - id: the-planted-film
+    endpoint: "GET /Items"
+    query: "searchTerm=The Planted Poster&includeItemTypes=Movie&recursive=true&sortBy=SortName"
+    body: none
+    content_type: none
+    anchors: []
+    identities: [administrator, restricted]
+    needs: [fixture]
+    what_it_is_for: "The film the artwork cases anchor on: `The Planted Poster (2011)` of tests/fixtures/media.py, which carries a poster with an EXIF orientation and the only Backdrop at index 0 either world has. One name, one row, so position 0 is the same film on both servers"
+
+  - id: the-subtitled-film
+    endpoint: "GET /Items"
+    query: "searchTerm=The Unconvertible&includeItemTypes=Movie&recursive=true&sortBy=SortName"
+    body: none
+    content_type: none
+    anchors: []
+    identities: [administrator, restricted]
+    needs: [fixture]
+    what_it_is_for: "The film the subtitle cases anchor on: `The Unconvertible (2009)` of tests/fixtures/media.py, which carries an `ass` track inside it and a subtitle file beside it. Without it a subtitle stream at index 0 is a refusal on both servers"
+
   # ------------------------------------------------------------------------------------------
   # GET /Items/{itemId} - 005, L3. A bare item body carries up to 39 properties a list row does
   # not, so this is the widest per-item comparison in the sweep.
@@ -706,7 +741,7 @@ cases:
     query: "quality=90"
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#movies-by-sort-name@0", "imageType=literal:Primary"]
+    anchors: ["itemId=listing:GET /Items#the-planted-film@0", "imageType=literal:Primary"]
     identities: [administrator, restricted]
     needs: [fixture]
     what_it_is_for: "The video client sends quality=90 on every image, and 006 T1 measured that a bare quality does not transform at all. imageType names a kind and not an item, so a literal fills it; the fixture is what guarantees the anchored film HAS one, without which this compares two 404s"
@@ -716,7 +751,7 @@ cases:
     query: ""
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#movies-by-sort-name@0", "imageType=literal:Backdrop", "imageIndex=literal:0"]
+    anchors: ["itemId=listing:GET /Items#the-planted-film@0", "imageType=literal:Backdrop", "imageIndex=literal:0"]
     identities: [administrator, restricted]
     needs: [fixture]
     what_it_is_for: "The indexed form the video client builds for chapter images; both extra parameters are the caller's own choice, and the fixture is what guarantees a backdrop at index 0 exists to compare"
@@ -766,12 +801,12 @@ cases:
   - id: report-start
     endpoint: "POST /Sessions/Playing"
     query: ""
-    body: '{"PlaySessionId": "atrium-differential", "PositionTicks": 0, "CanSeek": true}'
+    body: '{"ItemId": "<anchor.itemId>", "PlaySessionId": "atrium-differential", "PositionTicks": 0, "CanSeek": true}'
     content_type: application/json
-    anchors: []
+    anchors: ["itemId=listing:GET /Items#movies-by-sort-name@0"]
     identities: [restricted]
-    needs: [fixture]
-    what_it_is_for: "The first of the three reporting routes. Its ItemId is in the BODY rather than the path, and an anchor fills a path parameter - so the body carries none and the case waits on T11, which is the one shape the plan's Case does not express"
+    needs: []
+    what_it_is_for: "The first of the three reporting routes. Its ItemId is in the BODY rather than the path, which no anchor could fill until T11 gave an anchor a name a query or a body can spell: <anchor.itemId> resolves through the same listing, per server, immediately before the case runs"
 
   - id: body-with-no-content-type
     endpoint: "POST /Sessions/Playing"
@@ -786,12 +821,12 @@ cases:
   - id: report-progress
     endpoint: "POST /Sessions/Playing/Progress"
     query: ""
-    body: '{"PlaySessionId": "atrium-differential", "PositionTicks": 100000000, "IsPaused": false}'
+    body: '{"ItemId": "<anchor.itemId>", "PlaySessionId": "atrium-differential", "PositionTicks": 100000000, "IsPaused": false}'
     content_type: application/json
-    anchors: []
+    anchors: ["itemId=listing:GET /Items#movies-by-sort-name@0"]
     identities: [restricted]
-    needs: [fixture]
-    what_it_is_for: "The progress report, whose row-4 completion rule 007 T2 found had one clause that decides nothing"
+    needs: []
+    what_it_is_for: "The progress report, whose row-4 completion rule 007 T2 found had one clause that decides nothing. The same film as the start above, because a progress report about a session nothing started is a different question"
 
   - id: body-with-no-content-type
     endpoint: "POST /Sessions/Playing/Progress"
@@ -806,12 +841,12 @@ cases:
   - id: report-stopped
     endpoint: "POST /Sessions/Playing/Stopped"
     query: ""
-    body: '{"PlaySessionId": "atrium-differential", "PositionTicks": 200000000}'
+    body: '{"ItemId": "<anchor.itemId>", "PlaySessionId": "atrium-differential", "PositionTicks": 200000000}'
     content_type: application/json
-    anchors: []
+    anchors: ["itemId=listing:GET /Items#movies-by-sort-name@0"]
     identities: [restricted]
-    needs: [fixture]
-    what_it_is_for: "The stop, which is the report that decides whether a resume row exists at all"
+    needs: []
+    what_it_is_for: "The stop, which is the report that decides whether a resume row exists at all - and the third report of one session over one film, so the three read as a session rather than as three unrelated writes"
 
   - id: body-with-no-content-type
     endpoint: "POST /Sessions/Playing/Stopped"
@@ -880,10 +915,10 @@ cases:
     query: "videoCodec=h264&audioCodec=aac"
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#movies-by-sort-name@0", "segmentId=literal:0", "container=literal:ts"]
+    anchors: ["itemId=listing:GET /Items#the-planted-film@0", "segmentId=literal:0", "container=literal:ts"]
     identities: [administrator, restricted]
     needs: [fixture]
-    what_it_is_for: "The one route whose remaining path parameter is carried by a body that is NOT JSON: playlistId comes out of the variant playlist above, which is m3u8, and a response anchor addresses a JSON Pointer. T8 owes the reader that parses it; until then playlistId is the unfilled anchor this case waits on"
+    what_it_is_for: "The one route whose remaining path parameter is carried by a body that is NOT JSON: playlistId comes out of the variant playlist above, which is m3u8, and a response anchor addresses a JSON Pointer. T8 did not write that reader and T11 did not either - filling it needs a fourth anchor kind that addresses a text body, which is a mechanism and not a fixture. THIS IS THE ONE ANCHOR OF THIS FILE STILL UNFILLED, and it is recorded here rather than dressed up: the itemId anchor now names a film a prober can open, so the case is one reader away from running"
 
   - id: stop-one-session
     endpoint: "DELETE /Videos/ActiveEncodings"
@@ -902,7 +937,7 @@ cases:
     query: "segmentLength=10"
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#movies-by-sort-name@0", "mediaSourceId=response:POST /Items/{itemId}/PlaybackInfo#no-body@/MediaSources/0/Id", "index=literal:0"]
+    anchors: ["itemId=listing:GET /Items#the-subtitled-film@0", "mediaSourceId=response:POST /Items/{itemId}/PlaybackInfo#no-body@/MediaSources/0/Id", "index=literal:0"]
     identities: [administrator, restricted]
     needs: [fixture]
     what_it_is_for: "segmentLength is required and has no default. index names a subtitle stream of a film the fixture owes (spec 3.1), so the case waits on T11 for a film that HAS one; the decimal point in its window durations is a named comparison because a parser normalises it away"
@@ -912,7 +947,7 @@ cases:
     query: ""
     body: none
     content_type: none
-    anchors: ["routeItemId=listing:GET /Items#movies-by-sort-name@0", "routeMediaSourceId=response:POST /Items/{itemId}/PlaybackInfo#no-body@/MediaSources/0/Id", "routeIndex=literal:0", "routeFormat=literal:vtt"]
+    anchors: ["routeItemId=listing:GET /Items#the-subtitled-film@0", "routeMediaSourceId=response:POST /Items/{itemId}/PlaybackInfo#no-body@/MediaSources/0/Id", "routeIndex=literal:0", "routeFormat=literal:vtt"]
     identities: [administrator, restricted]
     needs: [fixture]
     what_it_is_for: "The fetch the video client builds, in the lower-case stream.vtt spelling it uses inside a playlist. routeFormat is a format and routeIndex a stream number, so both are literals; the fixture is the film with a subtitle file beside it, without which index 0 is a refusal on both servers"
@@ -922,7 +957,7 @@ cases:
     query: ""
     body: none
     content_type: none
-    anchors: ["routeItemId=listing:GET /Items#movies-by-sort-name@0", "routeMediaSourceId=response:POST /Items/{itemId}/PlaybackInfo#no-body@/MediaSources/0/Id", "routeIndex=literal:0", "routeStartPositionTicks=literal:0", "routeFormat=literal:vtt"]
+    anchors: ["routeItemId=listing:GET /Items#the-subtitled-film@0", "routeMediaSourceId=response:POST /Items/{itemId}/PlaybackInfo#no-body@/MediaSources/0/Id", "routeIndex=literal:0", "routeStartPositionTicks=literal:0", "routeFormat=literal:vtt"]
     identities: [administrator, restricted]
     needs: [fixture]
     what_it_is_for: "The same fetch from a start position, which is the route a subtitle playlist's window entries address"
@@ -951,33 +986,33 @@ cases:
 
   - id: add-one-item
     endpoint: "POST /Playlists/{playlistId}/Items"
-    query: ""
+    query: "ids=<anchor.itemId>"
     body: none
     content_type: none
-    anchors: ["playlistId=response:POST /Playlists#create-with-a-name@/Id"]
+    anchors: ["playlistId=response:POST /Playlists#create-with-a-name@/Id", "itemId=listing:GET /Items#audio-by-sort-name@0"]
     identities: [restricted]
-    needs: [fixture]
-    what_it_is_for: "The add. Its `ids` names items in the QUERY rather than in the path, and an anchor fills a path parameter - so the query carries none and the case waits on T11, which is the second shape the plan's Case does not express"
+    needs: []
+    what_it_is_for: "The add. Its `ids` names items in the QUERY rather than in the path, which is the second shape T11's <anchor.itemId> spelling covers. A track and not a film, because the playlist above is created with MediaType Audio"
 
   - id: remove-one-entry
     endpoint: "DELETE /Playlists/{playlistId}/Items"
-    query: ""
+    query: "entryIds=<anchor.itemId>"
     body: none
     content_type: none
-    anchors: ["playlistId=response:POST /Playlists#create-with-a-name@/Id"]
+    anchors: ["playlistId=response:POST /Playlists#create-with-a-name@/Id", "itemId=listing:GET /Items#audio-by-sort-name@0"]
     identities: [restricted]
-    needs: [fixture]
-    what_it_is_for: "The removal, on the entry the add above made; its entryIds is a query value and waits with it. An entry that is not there is a silent success on the reference, which 009's gate measured"
+    needs: []
+    what_it_is_for: "The removal, on the entry the add above made. `entryIds` takes a PlaylistItemId, and 009's gate measured that a PlaylistItemId IS the item's own Id - which is why the same anchor as the add fills it, and why an entry identity the wire does not make cannot be anchored on. An entry that is not there is a silent success on the reference"
 
   - id: move-to-the-front
     endpoint: "POST /Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}"
     query: ""
     body: none
     content_type: none
-    anchors: ["playlistId=response:POST /Playlists#create-with-a-name@/Id", "newIndex=literal:0"]
+    anchors: ["playlistId=response:POST /Playlists#create-with-a-name@/Id", "itemId=listing:GET /Items#audio-by-sort-name@0", "newIndex=literal:0"]
     identities: [restricted]
-    needs: [fixture]
-    what_it_is_for: "The route whose thirty measured boundary pairs were every one of them wrong in 009's plan - a clamp exactly one position wide and a 500 past it. newIndex is a number the caller chooses; itemId is an entry the add above put there, so it waits with it"
+    needs: []
+    what_it_is_for: "The route whose thirty measured boundary pairs were every one of them wrong in 009's plan - a clamp exactly one position wide and a 500 past it. newIndex is a number the caller chooses; itemId is the entry the add above put there, which is the item's own Id"
 
   - id: delete-a-playlist
     endpoint: "DELETE /Items/{itemId}"

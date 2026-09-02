@@ -278,6 +278,30 @@ most. A `listing:` anchor is the plan's own — a declared listing case and a ro
 three-token **substitution** vocabulary for the same reason: `POST /Users/AuthenticateByName`'s body
 *is* the seat's credentials, and no anchor can supply a password.
 
+**A fourth token, `<anchor.p>`, added by T11, and it is what the four shapes T6 could not express
+needed.** An item id in a **body** — 007's three reporting routes — and an item id in a **query** —
+`ids` on the playlist add, `entryIds` on the remove — are exactly as unfillable as an unanchored
+path parameter, because an anchor fills a *path parameter* by construction. T6 wrote all four with
+`needs: [fixture]` and no anchor at all, deliberately, rather than with a placeholder that would
+have compared two `404`s and counted as coverage. `<anchor.p>` resolves to whatever the anchor named
+`p` resolves to, through the same three kinds and the same per-server resolution, so nothing new is
+resolvable and no case may carry an identifier. Two checks come with it and both refuse at load: a
+token naming an anchor the case does not declare, and **an anchor that fills nothing** — neither a
+path parameter of its endpoint nor a token in its query or body — which is the direction that would
+let a case *look* filled while it goes on sending what it sent before. Six cases lost their
+`fixture` with it, because for those six `fixture` had never meant the fixture.
+
+**And filling them found that five already-filled anchors named the wrong film.** T6 anchored the
+two image cases and the three subtitle cases on `GET /Items#movies-by-sort-name@0` under *"the
+fixture is what guarantees the anchored film HAS one"*, which was true of the world this plan
+defaulted to — one library, real media throughout. **D-4 chose the other branch** (§6.6), so a movie
+listing sorted by `SortName` now spans the 003 tree as well and its first row is a film of filler
+bytes with no image, no subtitle stream and nothing a prober can open. Two listing cases narrowed by
+`searchTerm` — a request a client really sends — name one fixture film each, and the five anchor on
+those instead. The one anchor still unfilled is `playlistId` on the HLS segment route, whose value
+is carried by an **m3u8** body: filling it needs a fourth anchor kind that addresses a text body,
+which is a mechanism rather than a fixture, and the case says so in its own `what_it_is_for`.
+
 ### 4.4 The outputs
 
 `reference/differential-<date>-<sha>.md` and `reference/ignored-parameters-<date>.md`, both
@@ -810,6 +834,56 @@ readers — the `.nfo` sidecars, the embedded tags — where both servers can be
 **The item set was the same either way**: only names moved, which is what makes this a
 contamination of the comparison rather than a difference in the scan.
 
+**Built on 2026-09-02 by T11, and the composition needed three things the branch did not say.**
+`tests/fixtures/reference_tree.py` now writes the 003 tree in place, copies the media world in under
+a `Decodable/` subtree and makes one directory with nothing in it — six libraries, 72 files.
+
+- **The two worlds name their roots the same.** Both call a directory `Movies` and a directory
+  `Music`, so a flat layout would have one silently merge into the other; the media world goes under
+  a subtree of its own and its libraries take the names Atrium's side already gives them, `Films`
+  and `Tunes`. A reading is keyed on the library's name, so two libraries under one name would be
+  one library in the record.
+- **The media matrix had to become importable without this project's runtime.** That entry point is
+  reached by `tools/probe_reference_scan.py`, a standalone program on the 3.9 floor, and
+  `tests/fixtures/media.py` imported SQLAlchemy and the `atrium` package for the *scanned* world it
+  also carried. That half is `tests/fixtures/media_world.py` now and nothing else moved.
+- **The prober follows the library.** Atrium's side of AC-2 scans the 003 tree with the stub that
+  refuses — its own generator says these are not decodable media — and the media world with the real
+  one. Scanning real media with the stub would have compared Atrium's *unexamined* reading against a
+  reference that examined everything, which is 003 T18's finding wearing a fixture for a hat.
+
+**What the composed tree measured, and it is more than the entries it was built to add.** Over the
+two libraries of files both servers can actually open the disagreement is **five names and nothing
+else** — same items, same files, same types — and every other difference in the reading is over a
+tree neither server can decode. Three of those differences are new and none was predicted: the
+reference names a library's root `Folder` row after the **directory** and not after the library, so
+`Films` comes back as `Movies` where `/UserViews` answers `Films`; it takes a `MusicArtist` from the
+**directory** even where the file's tags name another, while taking that same file's album from the
+tags; and an **empty** library is nothing at all to it — zero rows, not even the root `Folder` it
+gives every other library — where Atrium carries its `CollectionFolder`
+`[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`.
+
+**A playlist is not a file, so the fixture cannot hold one.** Spec §3.1 lists *a playlist holding
+items from two libraries* among the entries it owes, beside four that really are files. What a tree
+can owe is the **two libraries** and a reader who may open one of them; the playlist itself is
+written through the API by the run, which is §3.10's row and T12's runner. The composed tree is what
+makes that row askable — before it, every reachable library the run could restrict a seat to held
+one collection type.
+
+**The record distinguishes the worlds, and the first reading did not.** Its finding counted every
+file-backed row as *"backed by a file none of its probers can open"*, which was true of the 003 tree
+alone and would have described a real `h264` file as unopenable in the one document AC-2 is checked
+against. Each library in the reading now carries whether its files are decodable, and the finding
+counts the two apart: 74 items, 48 backed by a file, 36 of those over a file nothing can decode.
+
+**A re-reading does not re-contaminate itself.** The provider comparison exists to measure that a
+library added the obvious way fetches names from the internet, and taking it means standing up a
+second instance whose whole purpose is to let a third party answer. `--skip-provider-comparison` is
+therefore the ordinary way to re-take a reading, and it **carries the previous record's list forward
+with the citation it was taken under** rather than dropping it — because a record with no list at
+all would let `tests/library/test_reference_reading.py` stop asserting the one thing that keeps the
+reading a reading of this repository's tree.
+
 ### 6.7 Identities
 
 Three roles, of which the run creates two:
@@ -1031,6 +1105,7 @@ therefore the only place a tool may look.
 | An allowlist entry matches nothing on any run | Counted per entry | Reported at the end: an entry that excuses nothing is either wrong or a converged difference | Delete it — the allowlist is a metric that should shrink |
 | A named comparison's runner raises | The runner | The row is **outstanding**, with the exception, and the run continues | A runner that cannot run is not a comparison that passed |
 | The harness is pointed at an Atrium as its reference, or vice versa | The `Server` **header**, never `ProductName` | Refuse, naming what was found. Measuring the wrong server files the answer under Jellyfin's name, which is `_probe.py`'s reason for its own guard | — |
+| **The container starts and then dies before it answers** | The readiness deadline of §6.5, after 180 s of connection refusals | Report the timeout. Measured 2026-09-02 while T11 was re-taking the reading: **two of five runs on one machine** ended with the container exiting `132` — `SIGILL` — seconds after *"Core startup complete"*, on the pinned image, natively (an `arm64` image on an `arm64` host, no emulation), with nothing of the run's own having happened yet. It is not the tree and not the configuration: the same tree and the same mounts came up on the next attempt and scanned in 3 s | **Run it again.** Worth knowing before T12, which stands up instances for twenty rows: a run that dies this way costs the deadline and nothing else, and `--rm` has already taken the container, so the exit code is what a watcher outside the run sees rather than the log |
 
 ## 8. Testing strategy
 
