@@ -136,15 +136,28 @@ of reason**: the behaviours.md section that argues a difference a server *chose*
 `content-hash`, `installation-path`. An entry with neither fails the run
 ([010 AC-6](../../specs/010-conformance-harness/spec.md#5-acceptance-criteria), refined 2026-09-01).
 
+The list itself is checked in as [allowlist.yaml](allowlist.yaml), and this table is a rendering of
+it. `tests/unit/test_allowlist.py` compares both — this one and
+[010 §3.3](../../specs/010-conformance-harness/spec.md#33-the-allowlist)'s — against the file row
+for row, so the two prose copies cannot drift apart from each other or from what the harness reads.
+
 | Field | Why it may differ | Because |
 |---|---|---|
-| `Id`, `ItemId`, `ServerId`, `ParentId`, `SeriesId`, … | Derivation differs by design (behaviours §1.4) | `derived-identifier` |
-| `DateCreated`, `DateLastSaved`, `DateLastMediaAdded` | Scan wall-clock time | `wall-clock` |
-| `Etag`, `ImageTags.*` | Content hashes over differently-derived inputs | `content-hash` |
+| `Id`, `ItemId`, `Key`, `ServerId`, `ParentId`, `SeriesId`, `SeasonId`, `AlbumId`, `ParentThumbItemId`, `ParentBackdropItemId`, `PlaylistItemId`, `ThumbImageItemId`, `BackdropImageItemId`, `UserId`, `DeviceId` | Derivation differs by design (behaviours §1.4) | `derived-identifier` |
+| `DateCreated`, `DateLastMediaAdded`, `LastActivityDate` | Scan wall-clock time | `wall-clock` |
+| `Etag`, `ETag`, `ImageTags.*` | Content hashes over differently-derived inputs | `content-hash` |
+| `PlaySessionId`, `AccessToken` | Generated once per session and per token, by each server for itself | `derived-identifier` |
 | `Path` | Different mount points, and on the by-name rows a different installation's data directory | `installation-path` |
 | `LocalAddress` | Deliberate divergence | [behaviours §4.2](behaviours.md#42-localaddress-does-not-get-an-https-override) |
-| `X-Response-Time-ms`, and the response clock | Move on every response | [behaviours §1.9](behaviours.md#19-every-response-carries-x-response-time-ms) |
+| `TotalRecordCount` on the by-name endpoints, on a request that carries no limit (`by-name-without-limit`) | Deliberate divergence | [behaviours §3.1](behaviours.md#31-totalrecordcount-is-0-on-by-name-endpoints-without-limit--class-b) |
+| `X-Response-Time-ms` and `Date`, the response clock | Move on every response | [behaviours §1.9](behaviours.md#19-every-response-carries-x-response-time-ms) |
+| `Server` | Deliberate divergence — this server says what it really is | [behaviours §4.1](behaviours.md#41-atrium-identifies-as-jellyfin-on-the-fields-clients-parse) |
 | `ChildCount` on a library view | The reference's value is a fresh random integer between 1 and 9 `[source: Emby.Server.Implementations/Dto/DtoService.cs:516-526 @ v10.11.11]` | [behaviours §3.25](behaviours.md#325-childcount-on-a-library-view-is-a-fresh-random-integer--class-b-diverged) |
+
+**`DateLastSaved` was in this table until 2026-09-02 and is not a property of an item body at
+all** — it is an `ItemFields` token, and the pinned document's `BaseItemDto` does not carry it
+`[spec: BaseItemDto, ItemFields]`. It was withdrawn when the table was written into the file, along
+with the identifier row's `…`, which a file cannot hold.
 
 **An entry is scoped to an endpoint and to a path inside the body, never to a bare field name.**
 `ChildCount` is why: the reference's number is excused on a library view, while the same property on
@@ -156,7 +169,10 @@ draw, no field of it is comparable: `/Items/{itemId}/Similar` and any listing or
 excused **as arrays** — their rows are not value-compared, while their key sets, types, envelope and
 row count still are. Four identical `Similar` requests returned 48 distinct items with none in
 common. `[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]` The same
-rule applies to these: the `Similar` array's reason is
+rule applies to these, and the two that depend on what the caller asked for carry a request-case
+id — `listing-ordered-at-random` and `listing-ordered-by-a-key-with-ties` — because an entry keyed
+on an endpoint and a pointer cannot say *"when the order was drawn"*. The `Similar` array's reason
+is
 [behaviours §3.23](behaviours.md#323-similar-is-a-random-draw-not-a-ranking--class-b-diverged), and
 a listing whose order is drawn or whose ties are engine-resolved is
 [behaviours §3.6](behaviours.md#36-ties-are-engine-resolved-and-paging-the-artist-sorts-loses-rows--class-b-diverged).
