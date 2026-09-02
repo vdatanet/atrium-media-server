@@ -60,6 +60,11 @@ def _load_engine() -> Any:
     assert spec is not None and spec.loader is not None, f"cannot load {path}"
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
+    # And registered under its own file name too, because `tools/differential.py` imports the
+    # engine as `_differential` on first use. Without the alias the suite would hold **two**
+    # copies of one module, and `Class.LENGTH is Class.LENGTH` would be false across them - which
+    # is exactly what the attribution of a known divergence turns on.
+    sys.modules.setdefault("_differential", module)
     spec.loader.exec_module(module)
     return module
 
@@ -1031,3 +1036,682 @@ def test_the_seat_password_is_generated_per_run_and_never_a_constant() -> None:
     name = differential.seat_name(differential.Role.RESTRICTED)
     assert first.passwords[name] != second.passwords[name]
     assert len(first.passwords[name]) >= 24
+
+
+# --------------------------------------------------------------------------------------------
+# The run loop, the report and the two-server guard — 010 T8, spec §3.2, §3.4, AC-3, AC-5, AC-14,
+# AC-16
+# --------------------------------------------------------------------------------------------
+#
+# The report is where this feature can lie. A run that could not reach a server, could not seat an
+# identity or skipped a case produces a document that looks exactly like a clean one unless it says
+# otherwise — so every test below asserts what the report says it did **not** do, and each of the
+# three guards is proven by deleting it.
+#
+# Nothing here opens a socket. The wire is a stub, which is why `Wire` takes a base URL and the
+# sweep takes an issuer.
+
+
+ENDPOINT = differential.Endpoint(method="GET", path="/Items", level="L3", feature="005")
+SECOND_ENDPOINT = differential.Endpoint(method="GET", path="/UserViews", level="L2", feature="005")
+
+
+def _case(
+    case_id: str,
+    endpoint: str = "GET /Items",
+    identities: tuple[str, ...] = (),
+    needs: tuple[str, ...] = (),
+    query: str = "",
+    body: str = "none",
+    content_type: str = "none",
+    anchors: tuple[Any, ...] = (),
+) -> Any:
+    return allowlist.RequestCase(
+        id=case_id,
+        endpoint=endpoint,
+        query=query,
+        body=body,
+        content_type=content_type,
+        anchors=anchors,
+        identities=identities,
+        needs=needs,
+        what_it_is_for="one case, written by hand so the sweep can be driven without a server",
+    )
+
+
+def _seat(role: str = "administrator") -> Any:
+    return differential.Seat(
+        role=role,
+        atrium=differential.Identity(
+            name=role, token=f"atrium-{role}", user_id="a" * 32, created_by_the_run=False
+        ),
+        reference=differential.Identity(
+            name=role, token=f"reference-{role}", user_id="b" * 32, created_by_the_run=False
+        ),
+    )
+
+
+class FakeWire:
+    """One server, recorded. The sweep never learns it is not a socket."""
+
+    def __init__(self, side: str, log: list[tuple[str, str, str]], body: Any = None) -> None:
+        self.side = side
+        self.log = log
+        self.body = body if body is not None else {"Items": [], "TotalRecordCount": 0}
+        self.sent: list[dict[str, Any]] = []
+
+    def as_seat(self, token: str) -> FakeWire:
+        return self
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        query: str = "",
+        body: Any = None,
+        content_type: str = "",
+    ) -> Any:
+        self.log.append((self.side, method, path))
+        self.sent.append(
+            {
+                "method": method,
+                "path": path,
+                "query": query,
+                "body": body,
+                "content_type": content_type,
+            }
+        )
+        return engine.Response(
+            status=200,
+            headers={"Content-Type": "application/json", "Server": self.side},
+            body=copy.deepcopy(self.body),
+            raw=b"{}",
+        )
+
+
+def _issuers(
+    cases: list[Any], log: list[tuple[str, str, str]], bodies: tuple[Any, Any] = (None, None)
+) -> tuple[dict[str, Any], dict[str, FakeWire]]:
+    wires = {
+        "atrium": FakeWire("atrium", log, bodies[0]),
+        "reference": FakeWire("reference", log, bodies[1]),
+    }
+    issuers = {
+        side: differential.Issuer(side, {"administrator": wire, "restricted": wire}, cases)
+        for side, wire in wires.items()
+    }
+    return issuers, wires
+
+
+def _report(**overrides: Any) -> Any:
+    """A `RunReport` with everything a rendered report needs and nothing a server has to supply."""
+    fields: dict[str, Any] = {
+        "identities": ("administrator", "restricted"),
+        "cases": 84,
+        "comparisons": (),
+        "named_run": (),
+        "named_outstanding": (),
+        "endpoints": (ENDPOINT,),
+        "provenance": (
+            ("date", "2026-09-02"),
+            ("atrium sha", "0123456789ab"),
+            ("reference version", "10.11.11"),
+        ),
+        "unused_entries": (),
+    }
+    fields.update(overrides)
+    return differential.RunReport(**fields)
+
+
+def _ran(identity: str = "administrator", **overrides: Any) -> Any:
+    fields: dict[str, Any] = {
+        "endpoint": ENDPOINT.key,
+        "level": ENDPOINT.level,
+        "case": "default",
+        "identity": identity,
+    }
+    fields.update(overrides)
+    return differential.Comparison(**fields)
+
+
+# -- the two-server guard --------------------------------------------------------------------
+
+
+def test_a_reference_that_is_actually_an_atrium_is_refused_by_the_server_header() -> None:
+    """The guard `_probe.py` cannot be, and the reason it cannot (plan §6.12).
+
+    `connect` refuses a server whose `ProductName` does not name Jellyfin, which is right for its
+    own job — the near miss it exists to catch is an Emby. Atrium answers `"Jellyfin Server"`
+    there on purpose (behaviours §4.1), so that check admits a run pointed at two Atriums: a
+    comparison of this project with itself, reporting parity it never measured. The second half of
+    this test is the half that matters — the pair the `Server` header refuses is a pair
+    `ProductName` waves through.
+    """
+    ours = {"Server": "Atrium/0.1.0", "Content-Type": "application/json"}
+    also_atrium = {"Server": "Atrium/0.1.0"}
+    a_real_reference = {"server": "Kestrel"}
+
+    with pytest.raises(differential.GuardError) as refused:
+        differential.check_two_servers(ours, also_atrium)
+    assert "Atrium" in str(refused.value)
+
+    # The wrong guard, asked of the very pair the right one just refused.
+    public = {"ProductName": "Jellyfin Server", "Version": "10.11.11"}
+    assert differential.product_name(public) == "Jellyfin Server"
+    assert differential.product_name(public) == differential.product_name(dict(public))
+
+    # And the right pair passes, with the header name in the other case: HTTP says it may be.
+    differential.check_two_servers(ours, a_real_reference)
+
+
+def test_two_references_are_refused_as_well_as_two_atriums() -> None:
+    """Both directions, because both report parity about nothing."""
+    with pytest.raises(differential.GuardError) as refused:
+        differential.check_two_servers({"Server": "Kestrel"}, {"Server": "Kestrel"})
+    assert "--atrium" in str(refused.value)
+
+
+# -- the report says what it did not ask -------------------------------------------------------
+
+
+def test_a_report_built_from_one_identity_says_one_identity() -> None:
+    """AC-14: the coverage line names what ran, and never the surface.
+
+    A run that authenticated once measures one row of a two-row table — 12 of 23 reads answer
+    differently to a restricted non-administrator — so a report that said *"59 endpoints"* and
+    nothing about the seat would be the shape of claim this feature exists to prevent.
+    """
+    report = _report(identities=("administrator",), comparisons=(_ran(),))
+    assert report.coverage() == (("administrator", 1, 0),)
+
+    text = differential.render(report)
+    assert "1 (administrator)" in text
+    assert "| administrator | 1 | 0 |" in text
+    # And it names the seats it did not have, by name, in the section a reader reaches first.
+    conclusions = text.split("## Coverage")[0]
+    assert "restricted" in conclusions
+    assert "playback-denied" in conclusions
+    assert "12 of twenty-three" in conclusions or "Twelve of twenty-three" in conclusions
+
+
+def test_a_run_with_an_outstanding_named_comparison_is_not_clean() -> None:
+    """AC-16: an unrun named comparison blocks the run, and the report names it and its need.
+
+    Every difference here is triaged — there are none — and every declared case was issued. The
+    only thing missing is one of the twenty differences a sweep cannot raise. Delete the named
+    half of `is_clean` and this passes, which is the failure this feature exists to prevent: one
+    directory away from the CI job that reported green because it ran nothing (008 T18).
+    """
+    outstanding = (
+        (
+            "playlist-entries-a-reader-cannot-reach",
+            "fixture needs a reference instance and --fixture was not asked for",
+        ),
+    )
+    report = _report(comparisons=(_ran(),), named_outstanding=outstanding)
+
+    assert not report.is_clean()
+    text = differential.render(report)
+    assert "playlist-entries-a-reader-cannot-reach" in text
+    assert "--fixture was not asked for" in text
+    assert "THIS RUN IS NOT CLEAN." in text
+
+    # The same run with nothing outstanding is clean, so the assertion above is about the named
+    # half and not about something else being wrong.
+    assert _report(comparisons=(_ran(),)).is_clean()
+
+
+def test_a_case_that_could_not_be_issued_is_not_a_case_that_agreed() -> None:
+    """A declared case the run did not issue keeps it from being clean, and says why.
+
+    Spec §3.4 names two conditions; this is the third and it is the same fact wearing the sweep's
+    clothes. A comparison that did not happen is not a comparison that agreed — and against a
+    server with no fixture, or a seat that could not be made, that is most of them.
+    """
+    skipped = _ran(
+        identity="restricted",
+        unreachable="{itemId} has no anchor in request-cases.yaml",
+    )
+    report = _report(comparisons=(_ran(), skipped))
+    assert not report.is_clean()
+    assert report.unasked == (skipped,)
+
+    text = differential.render(report)
+    assert "## Cases this run did not ask, and why" in text
+    assert "has no anchor in request-cases.yaml" in text
+    assert "did not agree; it was not asked" in text
+
+
+def test_the_report_ranks_missing_keys_first_in_its_own_table() -> None:
+    """AC-5, at the report rather than at the engine: the order of the rows, and the label."""
+    kinds = engine.Class
+    findings = (
+        engine.Difference(kinds.VALUE, "/Name", "here", "there"),
+        engine.Difference(kinds.EXTRA_KEY, "/Extra", "ours", None),
+        engine.Difference(kinds.MISSING_KEY, "/Missing", None, "theirs"),
+    )
+    report = _report(comparisons=(_ran(differences=findings),))
+    text = differential.render(report)
+
+    assert "Missing keys        (1)   <-- read these first" in text
+    table = text.split("## Differences, missing keys first")[1]
+    order = [line.split("|")[1].strip() for line in table.splitlines() if line.startswith("| ")]
+    assert order[1:4] == ["MISSING_KEY", "EXTRA_KEY", "VALUE"]
+
+
+def test_the_declared_conformance_level_is_printed_beside_every_endpoint() -> None:
+    """*"What the gate changed"* §2: the `level` column nothing has ever checked.
+
+    The eight `level: L3` rows are the only ones in this repository whose declared level this
+    program is the only thing that can pay for, so the report prints the declaration beside what
+    the run actually compared — including the endpoints it compared not at all.
+    """
+    report = _report(comparisons=(_ran(),), endpoints=(ENDPOINT, SECOND_ENDPOINT))
+    text = differential.render(report)
+    assert "| `GET /Items` | L3 | yes |" in text
+    assert "| `GET /UserViews` | L2 | **no** |" in text
+
+
+# -- the run loop ------------------------------------------------------------------------------
+
+
+def test_the_two_servers_are_asked_back_to_back_per_case_and_never_one_sweep_then_the_other() -> (
+    None
+):
+    """Plan §6.1: seconds matter to a draw and minutes matter to every clock-derived field.
+
+    A harness that swept one server and then the other would compare answers taken minutes apart,
+    which manufactures differences rather than finding them.
+    """
+    cases = [_case("default"), _case("second")]
+    log: list[tuple[str, str, str]] = []
+    issuers, _wires = _issuers(cases, log)
+    differential.sweep(
+        [ENDPOINT],
+        cases,
+        [],
+        [_seat()],
+        issuers,
+        differential.Inputs(roles=("administrator",)),
+        set(),
+    )
+    assert [side for side, _method, _path in log] == [
+        "atrium",
+        "reference",
+        "atrium",
+        "reference",
+    ]
+
+
+def test_the_identity_loop_is_outermost_so_a_reader_can_scan_one_seat_at_a_time() -> None:
+    """Plan §6.1, and it is what makes a one-seat run a shorter loop over the same code."""
+    cases = [_case("default")]
+    log: list[tuple[str, str, str]] = []
+    issuers, _wires = _issuers(cases, log)
+    seats = [_seat("administrator"), _seat("restricted")]
+    comparisons = differential.sweep(
+        [ENDPOINT, SECOND_ENDPOINT],
+        [*cases, _case("views", endpoint="GET /UserViews")],
+        [],
+        seats,
+        issuers,
+        differential.Inputs(roles=("administrator", "restricted")),
+        set(),
+    )
+    assert [(c.identity, c.endpoint) for c in comparisons] == [
+        ("administrator", "GET /Items"),
+        ("administrator", "GET /UserViews"),
+        ("restricted", "GET /Items"),
+        ("restricted", "GET /UserViews"),
+    ]
+
+
+def test_a_case_meaningful_for_no_seat_this_run_has_is_reported_and_not_dropped() -> None:
+    """The failure mode this feature is prone to, made visible instead of silent.
+
+    A case naming only the `playback-denied` seat, in a run that has no such seat, is a question
+    nobody asked. Dropping it would make a two-seat run look like a sweep of the surface.
+    """
+    cases = [_case("denied-only", identities=("playback-denied",))]
+    log: list[tuple[str, str, str]] = []
+    issuers, _wires = _issuers(cases, log)
+    comparisons = differential.sweep(
+        [ENDPOINT],
+        cases,
+        [],
+        [_seat()],
+        issuers,
+        differential.Inputs(roles=("administrator",)),
+        set(),
+    )
+    assert log == []
+    assert len(comparisons) == 1
+    assert "no seat in this run" in comparisons[0].unreachable
+    assert "playback-denied" in comparisons[0].unreachable
+
+
+def test_a_case_that_needs_a_fixture_instance_is_outstanding_with_that_reason() -> None:
+    """Plan §6.5, ADR-0007: the dependency buys coverage, and its absence costs it and says so."""
+    cases = [_case("multi-part", needs=("fixture",))]
+    log: list[tuple[str, str, str]] = []
+    issuers, _wires = _issuers(cases, log)
+    comparisons = differential.sweep(
+        [ENDPOINT],
+        cases,
+        [],
+        [_seat()],
+        issuers,
+        differential.Inputs(roles=("administrator",), fixture_asked=True),
+        set(),
+    )
+    assert log == []
+    assert "reference instance" in comparisons[0].unreachable
+    assert "010 T9" in comparisons[0].unreachable
+
+
+def test_an_anchor_names_a_row_of_each_servers_own_listing_and_never_one_identifier() -> None:
+    """Plan §6.1.1: the two servers derive identifiers differently by design (behaviours §1.4).
+
+    The anchor is resolved against **each** server separately, so the two requests name two
+    different items on purpose — which is the only way one case can address the same row twice.
+    """
+    listing = _case("movies-by-sort-name")
+    anchored = _case(
+        "bare-item",
+        endpoint="GET /Items/{itemId}",
+        anchors=(
+            allowlist.Anchor(
+                parameter="itemId",
+                kind="listing",
+                endpoint="GET /Items",
+                case="movies-by-sort-name",
+                at="0",
+            ),
+        ),
+    )
+    log: list[tuple[str, str, str]] = []
+    issuers, wires = _issuers(
+        [listing, anchored],
+        log,
+        bodies=({"Items": [{"Id": "ours"}]}, {"Items": [{"Id": "theirs"}]}),
+    )
+    seat = _seat()
+    assert issuers["atrium"].fill(anchored, seat) == "/Items/ours"
+    assert issuers["reference"].fill(anchored, seat) == "/Items/theirs"
+    assert wires["atrium"].sent[0]["path"] == "/Items"
+
+
+def test_a_userid_in_a_path_is_the_identitys_own_and_never_an_anchor() -> None:
+    """Plan §6.1.1 in as many words, and it differs per server because a seat is an account."""
+    case = _case("configuration", endpoint="POST /Users/{userId}/Configuration")
+    issuers, _wires = _issuers([case], [])
+    assert issuers["atrium"].fill(case, _seat()) == "/Users/" + "a" * 32 + "/Configuration"
+    assert issuers["reference"].fill(case, _seat()) == "/Users/" + "b" * 32 + "/Configuration"
+
+
+def test_a_case_that_substitutes_a_password_this_run_never_saw_is_unreachable_not_wrong() -> None:
+    """`POST /Users/AuthenticateByName`'s body *is* the seat's credentials, and `Identity` has none.
+
+    A created seat's password is the roster's, which is why `credentials_for` exists; the
+    administrator's is the operator's, and a run that authenticated by token never saw one. The
+    honest answer is a case reported unreachable with the reason, not a request with the literal
+    text `<identity.password>` in it.
+    """
+    seat = _seat()
+    assert differential.substitute("<identity.user_id>", seat, "atrium") == "a" * 32
+    with pytest.raises(differential.UnreachableError) as refused:
+        differential.substitute('{"Pw": "<identity.password>"}', seat, "reference")
+    assert "identity.password" in str(refused.value)
+
+
+# -- what the allowlist excuses, and what it merely explains ------------------------------------
+
+
+def test_a_length_on_a_drawn_array_is_reported_with_the_argument_that_already_covers_it() -> None:
+    """T4's inheritance: `Similar` answers `limit + 4` rows on a movie seed, on every run.
+
+    The count stays compared and permanently reported — excusing it would leave the endpoint with
+    nothing measured at all — and the report prints behaviours §3.24 beside it, because a reader
+    who does not see the argument will try to fix it.
+    """
+    entry = allowlist.Entry(
+        kind="drawn",
+        endpoint="GET /Items/{itemId}/Similar",
+        pointer="/Items",
+        case="*",
+        reason="a fresh draw per request",
+        because="behaviours §3.23",
+        since="2026-09-02",
+    )
+    length = engine.Difference(engine.Class.LENGTH, "/Items", 2, 6, note="2 against 6")
+    assert differential.attribute(length, [entry]) == "behaviours §3.23"
+
+    report = _report(comparisons=(_ran(attributed=((length, "behaviours §3.23"),)),))
+    text = differential.render(report)
+    assert "## Known divergences, reported every run" in text
+    assert "behaviours §3.23" in text
+
+
+def test_a_missing_key_inside_a_drawn_array_is_never_attributed_to_the_entry_that_excuses_it() -> (
+    None
+):
+    """AC-17, from the other end. Excusing an array must not excuse the shape of what is in it.
+
+    Widen `attribute` past `LENGTH` and this fails, which is the whole safeguard: an entry says
+    this array is a draw, and a key missing from a row of it is still the class the report ranks
+    first.
+    """
+    entry = allowlist.Entry(
+        kind="drawn",
+        endpoint="GET /Items/{itemId}/Similar",
+        pointer="/Items",
+        case="*",
+        reason="a fresh draw per request",
+        because="behaviours §3.23",
+        since="2026-09-02",
+    )
+    missing = engine.Difference(engine.Class.MISSING_KEY, "/Items", None, "theirs")
+    assert differential.attribute(missing, [entry]) == ""
+
+
+def test_a_derivation_class_never_attributes_a_length() -> None:
+    """AC-6's distinction, enforced where it would otherwise be forgotten.
+
+    A derivation class is a fact about two separate installations — a scan's clock, a mount point,
+    a hash over differently-derived inputs — and the number of rows in an answer is never one of
+    those. Only a behaviours section, which is an argument somebody wrote, can cover a count.
+    """
+    entry = allowlist.Entry(
+        kind="drawn",
+        endpoint="*",
+        pointer="/Items",
+        case="*",
+        reason="identifiers differ",
+        because="derived-identifier",
+        since="2026-09-02",
+    )
+    length = engine.Difference(engine.Class.LENGTH, "/Items", 2, 6)
+    assert differential.attribute(length, [entry]) == ""
+
+
+def test_an_untriaged_difference_blocks_the_run_and_a_known_one_is_printed_anyway() -> None:
+    """The two are counted separately and both appear. Neither is ever silently dropped."""
+    length = engine.Difference(engine.Class.LENGTH, "/Items", 2, 6)
+    value = engine.Difference(engine.Class.VALUE, "/Name", "here", "there")
+    known = _report(comparisons=(_ran(attributed=((length, "behaviours §3.24"),)),))
+    assert known.is_clean()
+    untriaged = _report(comparisons=(_ran(differences=(value,)),))
+    assert not untriaged.is_clean()
+
+
+# -- the needs vocabulary, and the twenty rows -------------------------------------------------
+
+
+def test_the_twenty_named_comparisons_are_all_reported_even_though_none_can_run() -> None:
+    """AC-16 against the register itself: twenty rows, none runnable, each outstanding by name."""
+    register = allowlist.load_named()
+    ran, outstanding = differential.named_outcomes(
+        register, differential.Inputs(roles=("administrator", "restricted"))
+    )
+    assert ran == ()
+    assert len(outstanding) == 20
+    assert {row for row, _why in outstanding} == {row.id for row in register}
+    assert all(why for _row, why in outstanding)
+
+
+def test_an_outstanding_row_says_which_need_was_missing_and_not_merely_that_it_did_not_run() -> (
+    None
+):
+    """Plan §4.2: *"four outstanding, and three of them because no fixture instance was
+    available"* is a different sentence from *"four outstanding"*, and it is what `needs` earns."""
+    register = {row.id: row for row in allowlist.load_named()}
+    inputs = differential.Inputs(roles=("administrator",))
+    reasons = dict(differential.named_outcomes(list(register.values()), inputs)[1])
+
+    assert "restricted" in reasons["playlist-read-names-its-reader"]
+    assert "instance" in reasons["multi-part-film-media-sources"]
+    assert "T12" in reasons["playlist-de-duplication-misses"]
+
+
+def test_a_reference_somebody_else_stood_up_makes_the_fixture_rows_askable() -> None:
+    """`--reference-url` is the degradation ADR-0007 promises: coverage bought, and said so.
+
+    Without a runtime and without T9, a machine still runs the sweep; with an instance somebody
+    else is running, the rows that need one stop being blocked on the instance and are blocked
+    only on the runner that has not been written.
+    """
+    without = differential.Inputs(roles=("administrator",), fixture_asked=True)
+    with_one = differential.Inputs(
+        roles=("administrator",), fixture_asked=True, instance_url="http://127.0.0.1:8097"
+    )
+    assert differential.unmet_need("fixture", without) != ""
+    assert differential.unmet_need("fixture", with_one) == ""
+    assert differential.unmet_need("wait", with_one) == ""
+    assert differential.unmet_need("bytes", without) == ""
+
+
+def test_selecting_one_named_comparison_leaves_the_other_nineteen_counted() -> None:
+    """`--named` narrows what is attempted and never what is reported: AC-16 counts twenty."""
+    register = allowlist.load_named()
+    _ran_ids, outstanding = differential.named_outcomes(
+        register,
+        differential.Inputs(roles=("administrator",), named_selected=("subtitle-burn-in",)),
+    )
+    assert len(outstanding) == 20
+    assert dict(outstanding)["manifest-announced-track-name"] == "not selected by --named"
+
+
+# -- the wire ----------------------------------------------------------------------------------
+
+
+def test_a_body_with_no_content_type_reaches_the_wire_without_one() -> None:
+    """The reason this harness does not use `tools/_probe.py`'s `Server`, measured not assumed.
+
+    `urllib.request` inserts `Content-type: application/x-www-form-urlencoded` into any request
+    that carries a body and names no type, in `AbstractHTTPHandler.do_request_` — so a client
+    built on it **cannot** issue the `body-with-no-content-type` case at all, which is one of the
+    two register rows plan §6.4 makes an ordinary request case and four cases T6 wrote for it.
+    """
+    sent: dict[str, Any] = {}
+
+    class FakeConnection:
+        def __init__(self, host: str, port: Any, timeout: int = 30) -> None:
+            sent["host"] = host
+
+        def request(self, method: str, target: str, body: Any, headers: dict[str, str]) -> None:
+            sent.update({"method": method, "target": target, "body": body, "headers": headers})
+
+        def getresponse(self) -> Any:
+            class Answer:
+                status = 400
+
+                @staticmethod
+                def read() -> bytes:
+                    return b"{}"
+
+                @staticmethod
+                def getheaders() -> list[tuple[str, str]]:
+                    return [("Content-Type", "application/json")]
+
+            return Answer()
+
+        def close(self) -> None:
+            return None
+
+    import http.client
+
+    original = http.client.HTTPConnection
+    http.client.HTTPConnection = FakeConnection  # type: ignore[misc, assignment]
+    try:
+        answer = differential.Wire("http://localhost:8096", token="t").request(
+            "POST", "/Items/x/PlaybackInfo", body=b"{}", content_type=""
+        )
+    finally:
+        http.client.HTTPConnection = original  # type: ignore[misc]
+
+    assert "Content-Type" not in sent["headers"]
+    assert sent["headers"]["X-Emby-Token"] == "t"
+    assert sent["body"] == b"{}"
+    assert answer.status == 400
+
+
+def test_a_delivery_response_compares_every_header_and_a_json_one_compares_the_content_type() -> (
+    None
+):
+    """Spec §3.2 asks for headers on the delivery routes, and this is why the line is there.
+
+    Comparing every header on every response would report a `Content-Length` difference on every
+    JSON body — the two bodies legitimately differ in length wherever an identifier does — which
+    is the cascade the `LENGTH` class exists to prevent, arriving through another door. A delivery
+    route is recognised by its answer rather than by a list of paths somebody maintains: a
+    response whose body is not JSON.
+    """
+    json_pair = [
+        engine.Response(
+            status=200,
+            headers={"Content-Type": "application/json", "Content-Length": str(length)},
+            body={"Name": "same"},
+        )
+        for length in (100, 200)
+    ]
+    assert differential.compare_pair(json_pair[0], json_pair[1], engine.NO_RULES) == ()
+
+    delivery = [
+        engine.Response(
+            status=200,
+            headers={"Content-Type": "video/mp4", "Content-Length": str(length)},
+            body=None,
+            raw=b"\x00",
+        )
+        for length in (100, 200)
+    ]
+    findings = differential.compare_pair(delivery[0], delivery[1], engine.NO_RULES)
+    assert [found.pointer for found in findings] == ["header:content-length"]
+
+
+def test_a_status_difference_stops_before_the_headers_as_well_as_before_the_bodies() -> None:
+    """One finding that explains every other, and nothing after it to bury it."""
+    ours = engine.Response(status=404, headers={"Content-Type": "application/json"}, body={})
+    theirs = engine.Response(status=200, headers={"Content-Type": "application/json"}, body={})
+    findings = differential.compare_pair(ours, theirs, engine.NO_RULES)
+    assert len(findings) == 1
+    assert findings[0].pointer == engine.STATUS_POINTER
+
+
+# -- the surface, read through the validator's own parser --------------------------------------
+
+
+def test_the_endpoints_come_from_the_surface_and_carry_the_level_it_declares() -> None:
+    """One parser, not a second one: `tools/extract_v1_surface.py`'s own `parse_surface`."""
+    endpoints = differential.load_endpoints(REPO_ROOT / "docs" / "compatibility" / "surface.yaml")
+    assert len(endpoints) == 59
+    assert sum(1 for endpoint in endpoints if endpoint.level == "L3") == 8
+    assert differential.Endpoint("GET", "/System/Info/Public", "L3", "001") in endpoints
+
+
+def test_every_endpoint_of_the_surface_is_reachable_by_at_least_one_declared_case() -> None:
+    """AC-3's floor, asserted where the run reads it rather than only where the file is checked."""
+    endpoints = differential.load_endpoints(REPO_ROOT / "docs" / "compatibility" / "surface.yaml")
+    cases = allowlist.load_cases(entries=allowlist.load())
+    for endpoint in endpoints:
+        assert allowlist.cases_for(cases, endpoint.key), endpoint.key

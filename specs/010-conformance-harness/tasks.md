@@ -930,7 +930,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T8 — `tools/differential.py`: the CLI `conformance.md` already publishes, and the report
 
-- [ ] **Changes:** new `tools/differential.py` with the invocation
+- [x] **Changes:** new `tools/differential.py` with the invocation
   [conformance.md](../../docs/compatibility/conformance.md#l3--differential) already documents —
   `--atrium`, `--jellyfin`, `--surface`, `--report` — **adopted rather than reinvented**, because
   the harness is a published interface before it is a program, plus `--identity`, `--fixture` and
@@ -961,6 +961,122 @@ written against twenty, and the `outstanding:` section they described is gone ra
   back empty, and `python3.9 tools/differential.py --help` reaching no server and reading no
   credentials.
 - **Spec reference:** §3.2, §3.4, §3.7, AC-3, AC-5, AC-14, AC-16; plan §5, §6.1, §6.11, §6.12
+
+> **Done (2026-09-02).** *The finding is in the first line of the loop: **an identity is an
+> account, and the two servers share none**, so a run holds two rosters and not one.*
+> [Plan §6.1](plan.md#61-the-run) says *"resolve identities"* and [§5](plan.md#5-contracts) hands
+> the loop one `Identity` per iteration — and `Roster` takes **one** client, because T7 built it
+> against one server. A restricted reader is `POST /Users/New` on a server; the reader that exists
+> on the reference does not exist on Atrium, its token is not valid there, its `user_id` is not
+> the same string, and the library it is narrowed to is that server's own. So the loop's unit is
+> the **role**, a `Seat` holds the two accounts behind it, and `{userId}` in a path resolves to a
+> different identifier per side — which is plan §6.1.1's *"`userId` is the identity's own"* turning
+> out to mean two things at once. Both rosters are entered together and the seats die before
+> anything that holds them, which is T7's ordering rule generalised. §5 and §6.1 carry it.
+>
+> *The second is that `is_clean()` needed a third condition, and without it this feature's own
+> characteristic failure is one flag away.* Spec §3.4 names two — an untriaged difference, an unrun
+> named comparison — and both say *a question was not answered*. **A declared request case the run
+> could not issue says a question was not asked**, which is strictly worse and looks identical in a
+> summary of zeros. It is not a corner and the number is a property of the registers rather than of
+> a server: **12 of the 84 cases declare `needs: fixture`**, on twelve distinct endpoints — every
+> image and subtitle route whose anchor wants a kind of item no reachable library has — and **10 of
+> the 20 named rows need the instance too**. Driven end to end over a stubbed pair with the two
+> default seats, that is 21 unasked comparisons across 15 distinct cases; a run that called itself
+> clean over those would be reporting the absence of the questions it skipped.
+> `test_a_case_that_could_not_be_issued_is_not_a_case_that_agreed` fails when the condition is
+> deleted, as do the other two halves when theirs are.
+>
+> *The third cost a client.* **`tools/_probe.py`'s `Server` cannot issue one of the two register
+> rows plan §6.4 makes an ordinary request case.** `urllib.request` inserts
+> `Content-type: application/x-www-form-urlencoded` into any request that carries a body and names
+> no type — `AbstractHTTPHandler.do_request_`, read in the 3.9 standard library this floor runs on
+> — so `body-with-no-content-type` and the four cases T6 wrote for it are **unissuable** through
+> `urllib`, whatever the caller asks for. The harness's wire is `http.client`, which sends the
+> headers it is given and nothing else; `_probe.py` is untouched, which is what
+> [plan §9's](plan.md#9-risks) last risk row asks for while the probe-cleanup fix is in flight, and
+> the finding is now [§6.12 finding 2](plan.md#612-what-this-plan-measured-and-what-came-back-false).
+>
+> *The fourth is one field short of a case that cannot run at all.* `POST /Users/AuthenticateByName`
+> is the second of the eight `level: L3` rows, its body **is** the seat's own credentials through
+> T6's `<identity.password>`, and T7's `Identity` keeps plan §5's four fields — deliberately, *"a
+> field would widen a contract T8 is written against"*. The password is the **roster's**: it
+> generated one per seat and threw it away. `Roster` now keeps it and hands it back through
+> `credentials_for`, which widens nothing on the wire and nothing in `Identity`; the administrator
+> has none, so that case is reported **unreachable with the reason** rather than sent with the
+> literal text `<identity.password>` in its body.
+>
+> *And the fifth is the one that would have made the report unreadable by the second week.*
+> Comparing every header on every response reports a **`Content-Length` difference on every JSON
+> body**, because the two bodies legitimately differ in length wherever an identifier does — the
+> cascade the `LENGTH` class exists to prevent, arriving through a door nobody had shut, on every
+> case of every run. Spec §3.2's *"headers are compared too, on the delivery routes"* is therefore
+> load-bearing and not a scope note: the whole header set is compared where the body is **not
+> JSON**, which is exactly where `Content-Length`, `Accept-Ranges`, `Content-Range` and
+> `Content-Type` are the contract, and elsewhere the content type alone — because 008 T16's finding
+> was a declared content type that serialised differently. Plan §6.2 says so now.
+>
+> **What a reader of the report may conclude, and what they may not.** May: that the requests in
+> `request-cases.yaml` which this run *issued*, from the seats it names, produced the differences it
+> lists — each with its endpoint, case, identity, JSON pointer and both values, missing keys first.
+> May not: anything about the surface. A run cannot be clean today and the report says so in its
+> own first section: all twenty named comparisons are outstanding (their runners are T12), the
+> fixture half is outstanding (its instance is T9), and every case that could not be issued is
+> listed by name with the reason. The three numbers a reader must not read as coverage are
+> *identical*, *allowlisted* and *endpoints compared* — the first counts comparisons that ran, the
+> second counts findings an entry suppressed, and the third counts endpoints reached by **some**
+> case for **some** seat. The report prints the declared conformance level beside every endpoint,
+> including a `**no**` for each one this run compared not at all.
+>
+> *Routine calls taken, none of which touches an accepted document's criteria.* **A `LENGTH` on an
+> array the allowlist marks `drawn` or `unordered`, whose `because` is a behaviours section, is
+> reported with that argument beside it and does not by itself block the run.** It is T4's decision
+> honoured rather than reopened — the count stays compared and permanently reported — and it is
+> spec §3.4's own word: *"an **untriaged** difference blocks the run"*, where the *Diverge* row
+> defines a triaged one as *"a behaviours.md entry with the argument, and an allowlist row"*, both
+> of which exist for `Similar`'s `limit + 4`. The shape is as narrow as it can be made: only
+> `LENGTH`, only at the entry's own pointer, and **never** for a derivation class, since a
+> derivation is a fact about two installations and the number of rows in an answer is not one. Two
+> tests fail if it is widened by either half. **The `allowlisted` line counts findings suppressed,
+> computed from outside the engine** by comparing each pair a second time with no rules: the engine
+> is pure and returns findings rather than a ledger, and plan §7 wants an entry that excused nothing
+> reported — that one is leave-one-out, and an entry already known to have excused something is
+> never re-checked. **A status difference stops before the headers as well as the bodies**, for the
+> reason §6.2 already gives about the body. **`--named` narrows what is attempted and never what is
+> reported**, because AC-16 counts twenty either way. **The report is Markdown at
+> `reference/differential-<date>-<sha>.md`** (plan §4.4), the sha read out of `.git/HEAD` rather
+> than asked of a subprocess, and `unknown` where there is none — a report that invented one would
+> be worse than one that admits it has none. **Exit codes are 0 clean, 1 not clean, 2 could not
+> start**, and `1` is the ordinary answer today.
+>
+> *A gotcha for anything else that loads two of these modules by path.* `tools/differential.py`
+> imports the engine as `_differential` on first use, so a suite that had already loaded it under
+> another name would hold **two copies of one module** — and `finding.klass is Class.LENGTH` is
+> false across them, which is exactly what the attribution above turns on. The suite registers the
+> engine under both names, in one line beside T2's `sys.modules` gotcha.
+>
+> *Nothing was written to any server.* The whole run is driven in the suite by a stub wire, which is
+> what `Wire`/`Issuer` taking a client rather than a base URL buys, and the end-to-end path was
+> exercised against two stub servers over the **real** registers — 59 endpoints, 84 cases, 85
+> allowlist entries, 20 named rows — to prove the loop, the resolution, the report and the entry
+> accounting run at all. Every claim about the wire in this note is from the pinned document, an
+> existing behaviours entry, or the standard library read at the 3.9 floor. Verified under
+> **3.9.25**: compiles, and `--help` reaches no server and reads no credentials.
+>
+> *What T9 must know.* **The degradation is already written and tested, and T9 only has to fill
+> one field.** `Inputs.instance_url` is what every `needs: fixture`, `rescan` and `wait` row
+> consults; `--reference-url` fills it today from an instance somebody else is running, and T9's
+> `ReferenceInstance` fills it from one the run stands up. With it empty, every such case and row
+> is **outstanding with the reason** and `is_clean()` is false — which is
+> [ADR-0007](../../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md)'s *"the
+> dependency buys coverage; its absence costs coverage and says so"*, already asserted. **`rescan`
+> and `wait` resolve to the instance and not to a capability**, deliberately: a rescan is a write to
+> a library, and the paused-session reading is *"a write held open for ten minutes, which is the one
+> thing an operator's server must not be asked for"* (spec §3.10). **The report header already has
+> both lines T9 fills** — `reference instance` and `reference image digest`, each currently saying
+> that no instance was stood up — so the digest ADR-0007 asks for lands beside the Atrium sha
+> without the report changing shape. And **the roster is entered around the sweep in `_execute`**, so the
+> instance's context manager wraps that call and nothing else moves.
 
 ## T9 — `tools/_reference.py`: a Jellyfin this project owns, uses once, and destroys
 

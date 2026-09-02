@@ -292,11 +292,37 @@ in the probe, to be found and fixed rather than assumed away. It is also the sec
 instance of its own: against an instance that is destroyed either way, a leaked artefact costs
 nothing.
 
+### The differential harness
+
+`differential.py` is not a probe: it answers no single question and it contradicts no
+documentation. It issues the same request to Atrium and to a real Jellyfin, as each identity it
+authenticates as, and writes the report [010 §3.4](../specs/010-conformance-harness/spec.md)
+specifies — which is the deliverable, and not a pass/fail line.
+
+```bash
+python3 tools/differential.py --atrium http://localhost:8096 --jellyfin http://your-jellyfin:8096
+```
+
+**It writes to the reference, and what it writes is a seat.** A run creates a restricted
+non-administrator on **each** server — a seat is an account and the two do not share one — and
+destroys both, on the success path and on the exception path alike. It refuses to start when a
+seat under its own fixed name is already there, because such a seat is either another run in
+flight or the wreckage of one (AC-15). The request cases that change user data name that created
+seat and never the administrator's, whose account is the operator's own.
+
+**Exit codes:** `0` the run is clean, `1` the run is **not** clean — an untriaged difference, a
+declared case it could not issue, or a named comparison it did not run — and `2` it could not
+start. `1` is the ordinary answer while the twenty named comparisons have no runners
+(010 T12): outstanding is not green, and the report says which of the three it was.
+
+Three supporting modules sit beside it, underscore-prefixed so CI does not try to start them:
+`_differential.py` (the pure comparison engine), `_allowlist.py` (the allowlist, the named
+comparisons and the request cases) and `_probe.py` (the `.env` reader it borrows).
+
 ### Planned
 
 | Script | Purpose | Arrives with |
 |---|---|---|
-| `differential.py` | Issue the same request to Atrium and a real Jellyfin and compare field by field (L3) | Feature 010 |
 | `probe_wire_format.py`, `probe_sort_vocabulary.py`, … | The **five** remaining prior-measurement debts in [reference-target.md](../docs/compatibility/reference-target.md) — three of which need a server this project may write to, and so wait on feature 010's single-use instance | Their owning features |
 
 A runner that executes every probe and summarises is deliberately **not** here yet: it is part of

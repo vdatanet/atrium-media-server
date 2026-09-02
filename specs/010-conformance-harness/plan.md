@@ -5,7 +5,7 @@ status: Accepted
 accepted: 2026-09-01
 created: 2026-09-01
 updated: 2026-09-02
-amended: 2026-09-02 at the tasks gate — reviewing the list against the code this plan names found two things it got wrong about this repository, and both are corrected above rather than left to a task's Done note. **§8's AC-2 row could not be written:** it maps the criterion to a probe run "by hand", and `tests/conformance/test_acceptance.py` resolves every entry as `module:function` through `importlib` while §2 of this plan inherits the rule that a `tools/` module is reached by path and never as a package — so the row would fail on import the day 010 flips to `Implemented`, which is 009 T14's *"a criterion with no test at all"* arriving one feature early. The probe now **records** the reference's reading of the fixture and the test compares Atrium's scan against that record, so AC-2 is checkable in the default job with no Jellyfin anywhere. **And §4.3's floor was the right floor for the surface and the wrong one for eight rows:** `surface.yaml` declares eight endpoints at `level: L3` and nothing in the repository has ever checked that a declared level is reached, while every feature's definition of done has been deferring exactly that half here — those eight are seeded first, per identity, and the report prints the declared level beside the coverage. A third finding is recorded in the task list rather than here, because it is a scope call on an accepted spec and is reserved for its owner as D-6: §3.10's sixteen named comparisons do not carry four debts that need precisely what D-1's instance provides, including the only surviving `⚠️ UNVERIFIED` in the compatibility documents (behaviours §5.2), whose own text names a disposable library as the remedy. **Amended again on 2026-09-02, hours later, by D-6 being taken:** the recommendation was accepted, so **§3.10 is twenty named comparisons and not sixteen**, and every place this plan counted them moves with it — §3's file tree, §3's argument for machine-readable registers, §4.2's register, §6.4's runner shapes and §8's row 16. §4.2's `needs` vocabulary gains `rescan` and `wait`, and §6.4 grows from four shapes to six: **the library changed underneath a rescan** (behaviours §5.2 and §5.6, where the signal is the difference between two scans) and **a reading after a deliberate wait** (007's paused-session ticker). The clause above recording D-6 as reserved is what this supersedes; 009's plan §8 went stale in exactly this way and the audit of 2026-09-01 caught it **Amended again on 2026-09-02 by T3, which wrote §4.1's file.** The allowlist has a **seventh field, `case`**: two rows of spec §3.3 are conditioned on the request and not on the route — `TotalRecordCount` on a by-name call carrying no limit, and the rows of a listing ordered at random — and with six columns each would have been strictly wider than the prose it came from, the second excusing the rows of every listing on every request. §6.3's `resolve(endpoint, case, identity)` already took the dimension; only the column was missing. It never widens: `*` is what an entry with no condition says, and an id no request case declares matches nothing, so the failure direction is under-excusing. §4.1's table carries the field. **Amended again on 2026-09-02 by T4, which landed the two array kinds.** §6.2's steps 1, 3 and 4 each said less than the code needs. **Step 1's cascade guard suppresses the *positional* comparison and never the comparison an array's own kind still owes**, or it deletes step 4 on the only endpoint step 4 exists for: `Similar` answers `limit + 4` rows on a movie seed (behaviours §3.24), so that array's two lengths differ on every run. **Step 3 did not say what an `unordered` array does when the multisets genuinely differ**, and the shape that asks is measured — the reference's artist paging duplicates rows as well as losing them, so a page holds one row twice and another not at all at an unchanged length, which neither the `LENGTH` guard nor the `ORDER` class catches; the rows that match are removed and only the residue is compared, and §9's risk row is corrected to say so. **Step 4's row walk is position-free**: the reference suppresses nulls globally, so a row's key set depends on which item it holds and a draw guarantees the two sides hold different items — pairing row 0 with row 0 would report content as shape. No acceptance criterion moves: AC-17 keeps the row count compared, which makes `Similar`'s `limit + 4` a difference the report states on every run rather than one the allowlist excuses. **Amended again on 2026-09-02 by T5, which wrote §4.2's register.** The named-comparison rows have a **seventh field, `written_at`**, because `behaviours` — *"the section that is the answer"* — cannot be filled on a quarter of them: **five of the twenty have no `behaviours.md` entry at all**, which is what that document is (an entry records what the reference *does*, and nobody has watched it do these — the same sentence as *"a sweep cannot raise it"*), and four more are answered by a row of §5's table, which carries no anchor of its own. `behaviours` therefore takes `none` and `written_at` names the document the row was collected from. It measured something the field was not asked for: **nineteen of the twenty came from one of the six inherited lists and behaviours §5.2 came from none of them**, which is precisely what the task list meant by *"the six lists **and** the compatibility documents"*. §4.2 also records that an **empty `needs` is a value**: the last two rows of §3.10 are ordinary request cases and need nothing at all, and a reader treating `[]` as an absence would drop two rows out of AC-16's twenty. No acceptance criterion moves.
+amended: 2026-09-02 at the tasks gate — reviewing the list against the code this plan names found two things it got wrong about this repository, and both are corrected above rather than left to a task's Done note. **§8's AC-2 row could not be written:** it maps the criterion to a probe run "by hand", and `tests/conformance/test_acceptance.py` resolves every entry as `module:function` through `importlib` while §2 of this plan inherits the rule that a `tools/` module is reached by path and never as a package — so the row would fail on import the day 010 flips to `Implemented`, which is 009 T14's *"a criterion with no test at all"* arriving one feature early. The probe now **records** the reference's reading of the fixture and the test compares Atrium's scan against that record, so AC-2 is checkable in the default job with no Jellyfin anywhere. **And §4.3's floor was the right floor for the surface and the wrong one for eight rows:** `surface.yaml` declares eight endpoints at `level: L3` and nothing in the repository has ever checked that a declared level is reached, while every feature's definition of done has been deferring exactly that half here — those eight are seeded first, per identity, and the report prints the declared level beside the coverage. A third finding is recorded in the task list rather than here, because it is a scope call on an accepted spec and is reserved for its owner as D-6: §3.10's sixteen named comparisons do not carry four debts that need precisely what D-1's instance provides, including the only surviving `⚠️ UNVERIFIED` in the compatibility documents (behaviours §5.2), whose own text names a disposable library as the remedy. **Amended again on 2026-09-02, hours later, by D-6 being taken:** the recommendation was accepted, so **§3.10 is twenty named comparisons and not sixteen**, and every place this plan counted them moves with it — §3's file tree, §3's argument for machine-readable registers, §4.2's register, §6.4's runner shapes and §8's row 16. §4.2's `needs` vocabulary gains `rescan` and `wait`, and §6.4 grows from four shapes to six: **the library changed underneath a rescan** (behaviours §5.2 and §5.6, where the signal is the difference between two scans) and **a reading after a deliberate wait** (007's paused-session ticker). The clause above recording D-6 as reserved is what this supersedes; 009's plan §8 went stale in exactly this way and the audit of 2026-09-01 caught it **Amended again on 2026-09-02 by T3, which wrote §4.1's file.** The allowlist has a **seventh field, `case`**: two rows of spec §3.3 are conditioned on the request and not on the route — `TotalRecordCount` on a by-name call carrying no limit, and the rows of a listing ordered at random — and with six columns each would have been strictly wider than the prose it came from, the second excusing the rows of every listing on every request. §6.3's `resolve(endpoint, case, identity)` already took the dimension; only the column was missing. It never widens: `*` is what an entry with no condition says, and an id no request case declares matches nothing, so the failure direction is under-excusing. §4.1's table carries the field. **Amended again on 2026-09-02 by T4, which landed the two array kinds.** §6.2's steps 1, 3 and 4 each said less than the code needs. **Step 1's cascade guard suppresses the *positional* comparison and never the comparison an array's own kind still owes**, or it deletes step 4 on the only endpoint step 4 exists for: `Similar` answers `limit + 4` rows on a movie seed (behaviours §3.24), so that array's two lengths differ on every run. **Step 3 did not say what an `unordered` array does when the multisets genuinely differ**, and the shape that asks is measured — the reference's artist paging duplicates rows as well as losing them, so a page holds one row twice and another not at all at an unchanged length, which neither the `LENGTH` guard nor the `ORDER` class catches; the rows that match are removed and only the residue is compared, and §9's risk row is corrected to say so. **Step 4's row walk is position-free**: the reference suppresses nulls globally, so a row's key set depends on which item it holds and a draw guarantees the two sides hold different items — pairing row 0 with row 0 would report content as shape. No acceptance criterion moves: AC-17 keeps the row count compared, which makes `Similar`'s `limit + 4` a difference the report states on every run rather than one the allowlist excuses. **Amended again on 2026-09-02 by T5, which wrote §4.2's register.** The named-comparison rows have a **seventh field, `written_at`**, because `behaviours` — *"the section that is the answer"* — cannot be filled on a quarter of them: **five of the twenty have no `behaviours.md` entry at all**, which is what that document is (an entry records what the reference *does*, and nobody has watched it do these — the same sentence as *"a sweep cannot raise it"*), and four more are answered by a row of §5's table, which carries no anchor of its own. `behaviours` therefore takes `none` and `written_at` names the document the row was collected from. It measured something the field was not asked for: **nineteen of the twenty came from one of the six inherited lists and behaviours §5.2 came from none of them**, which is precisely what the task list meant by *"the six lists **and** the compatibility documents"*. §4.2 also records that an **empty `needs` is a value**: the last two rows of §3.10 are ordinary request cases and need nothing at all, and a reader treating `[]` as an absence would drop two rows out of AC-16's twenty. No acceptance criterion moves. **Amended again on 2026-09-02 by T8, which landed the program §6.12 finding 1 says this repository had published and not written.** Three declarations move and one flag list grows. **An identity is an account and the two servers share none**, so a run holds **two rosters** — the restricted reader is created on each side, narrowed to that side's own library, and destroyed by that side's own roster — and §5's `(Case, Identity, Difference)` triple becomes a `Comparison`, which carries the case, the role, the endpoint and the level `surface.yaml` declares. **`is_clean()` gains a third condition**: a declared request case the run could not issue, which is spec §3.4's own sentence wearing the sweep's clothes — and it is a quarter of what a run declares, since 12 of the 84 request cases and 10 of the 20 named rows need an instance that does not exist until T9; every one is named in the report with its reason. **Headers are compared wholly only where the body is not JSON**, because comparing them everywhere reports a `Content-Length` difference on every JSON answer — the cascade the `LENGTH` class exists to prevent, arriving through another door — with the content type still compared everywhere, for 008 T16's reason. And §6.12's finding 2 is discharged: `conformance.md` names `JELLYFIN_URL`, the flags it publishes are the ones the program has, and `.env.example` gains the three `ATRIUM_` credentials, because no tool in this repository had ever authenticated against **this** server. No acceptance criterion moves.
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -379,14 +379,41 @@ class Case:                 # one row of request-cases.yaml, resolved
     identities: tuple[str, ...]      # the roles it is meaningful for; empty means all
 
 @dataclass(frozen=True)
+class Seat:                 # added by T8: an identity is two accounts, one per server
+    role: str
+    atrium: Identity
+    reference: Identity
+
+@dataclass(frozen=True)
+class Comparison:           # added by T8: one (endpoint, case, identity), including one that never ran
+    endpoint: str
+    level: str              # the level surface.yaml DECLARES, printed beside what was compared
+    case: str
+    identity: str
+    differences: tuple[Difference, ...]
+    attributed: tuple[tuple[Difference, str], ...]   # a finding a behaviours section already covers
+    excused: int
+    unreachable: str        # why this case was not issued; empty when it was
+
+@dataclass(frozen=True)
 class RunReport:
     identities: tuple[str, ...]
     cases: int
-    differences: tuple[tuple[Case, Identity, Difference], ...]
+    comparisons: tuple[Comparison, ...]
     named_run: tuple[str, ...]
     named_outstanding: tuple[tuple[str, str], ...]   # id, why
     def is_clean(self) -> bool
 ```
+
+**Two corrections T8 made to the three declarations above, both because a seat is an account.**
+`differences` was `(Case, Identity, Difference)` and is now derived from `Comparison`, which
+carries the case, the identity **and** the endpoint and its declared level — and an `Identity`
+could not have been the middle element, because the two servers do not share accounts: the run
+creates its restricted reader on **each** side, narrowed to that side's own library, and destroys
+it with that side's own roster. So the loop's unit is a **role**, and `Seat` is what holds the two
+accounts behind it. A `Comparison` also exists for a case that was **not** issued, carrying the
+reason: a case the run could not ask is not a case that agreed, which is the third condition
+`is_clean()` gained (§6.1).
 
 **`is_clean` is the contract that makes AC-16 real.** It is false while any difference is untriaged
 **and** while any named comparison is outstanding, and the two are not separable: a run that swept
@@ -394,6 +421,28 @@ class RunReport:
 same answers, which spec §3.10 says is a smaller claim than it sounds. `created_by_the_run` is on
 `Identity` and not on the run, because it is what the teardown iterates and what AC-15's refusal
 tests.
+
+**T8 added a third condition, and it is the same sentence wearing the sweep's clothes: a declared
+request case the run could not issue.** Spec §3.4 names two — an untriaged difference, an unrun
+named comparison — and both are about a question that was not answered. A case whose anchor could
+not be filled, whose `needs` this run cannot meet, or which is meaningful for no seat the run has
+is a question that was not *asked*, and a run reporting clean over eight of those is one directory
+away from the CI job that reported green because it ran nothing (008 T18). It is measured rather
+than hypothetical, and out of the registers rather than out of a server: **12 of the 84 request
+cases declare `needs: fixture`** and **10 of the 20 named rows need the instance**, so without one
+a run cannot ask a quarter of what it declares. Every one of them is named in the report with its
+reason.
+
+**And one difference is reported without blocking, which is the narrowest thing in this file.** A
+`LENGTH` on an array the allowlist marks `drawn` or `unordered` **whose `because` is a
+behaviours.md section** is a difference somebody has already triaged: spec §3.4's *Diverge* row is
+*"a behaviours.md entry with the argument, and an allowlist row"*, and both exist. That is
+`/Items/{itemId}/Similar` and nothing else today — `limit + 4` on a movie seed, differing on every
+run (behaviours §3.24) — so the report prints the count with the argument beside it, permanently,
+which is what T4 asked for and what stops a reader trying to fix it. Nothing else is ever
+attributed: a `MISSING_KEY` inside a drawn array is the finding AC-17 exists for, and a
+**derivation class** can never cover a count, because a derivation is a fact about two
+installations and the number of rows in an answer is not one (AC-6's distinction).
 
 ## 6. Algorithms
 
@@ -419,6 +468,14 @@ scan for *"what does the restricted seat see that the administrator does not"*, 
 question spec §3.9 exists to make askable. It also makes the degenerate run — one identity —
 structurally the same run with a shorter loop, rather than a different code path that could quietly
 become the only one anybody uses.
+
+**Two rosters, one per server, and T8 found it while writing the loop.** The pseudocode above says
+*"resolve identities"* as though an identity were one thing; it is an **account**, and the two
+servers share none. So the restricted reader is created on each side against that side's own
+movies library, signed in against that side, and destroyed by that side's own roster — `Roster`
+takes one client and a run has two of them. The loop's unit is therefore the **role**, and the
+pair of accounts behind it is a `Seat` (§5). Both rosters are entered together, and the seats die
+before whatever holds them.
 
 **The two servers are asked back to back, one case at a time**, rather than one server's whole
 sweep and then the other's. `/Items/{itemId}/Similar` is a fresh draw per request (spec §7 OQ-4), so
@@ -494,6 +551,17 @@ excuse `Id`.
 
 Headers are compared on the delivery routes only (spec §3.2), by name set and then by value, with
 `header:` pointers so one report holds both.
+
+**A delivery route is recognised by its answer and not by a list of paths, and the restriction is
+load-bearing rather than tidy — T8.** Comparing every header on every response reports a
+`Content-Length` difference on **every** JSON body, because the two bodies legitimately differ in
+length wherever an identifier does: that is the cascade the `LENGTH` class exists to prevent,
+arriving through a door nobody had shut. So the whole header set is compared where the body is not
+JSON — which is exactly where `Content-Length`, `Accept-Ranges`, `Content-Range` and
+`Content-Type` are the contract — and on a JSON answer the **content type alone** is compared,
+because 008 T16's finding was precisely a declared content type that serialised differently. A
+status difference stops before the headers as well as before the bodies, for the reason §6.2
+already gives about the body.
 
 ### 6.3 The allowlist, scoped, in three kinds
 
@@ -815,7 +883,20 @@ false, and each changes something in the task list rather than in the prose:
    the name is a claim about an implementation that does not exist yet. The probes reach their
    server through `JELLYFIN_URL` in the git-ignored `.env` (`tools/_probe.py`), and the harness
    uses the same name rather than a second one; `conformance.md`'s sentence is corrected by the
-   task that makes it true.
+   task that makes it true. **Both were done by T8 on 2026-09-02**, in the commit that landed the
+   program: the published invocation is the program's, four flags are documented beside it, and
+   the sentence names `JELLYFIN_URL`. What the harness did need and no name existed for is a
+   credential for **Atrium** — no tool had ever authenticated against this project's own server —
+   so `.env.example` gains `ATRIUM_USERNAME`, `ATRIUM_PASSWORD` and `ATRIUM_TOKEN`, and the URL
+   stays the published `--atrium` flag rather than becoming a fourth name.
+
+   **And one thing T8 could not build on `tools/_probe.py`'s `Server`.** `urllib.request` inserts
+   `Content-type: application/x-www-form-urlencoded` into any request carrying a body that names
+   no type (`AbstractHTTPHandler.do_request_`), so a client built on it **cannot issue a body with
+   no content type at all** — which is one of the two rows §6.4 makes an ordinary request case
+   (`body-with-no-content-type`) and the four cases T6 wrote for it. The harness's own client is
+   `http.client`, which sends the headers it is given and nothing else; `_probe.py` is untouched,
+   as §9's last risk row asks.
 3. **The prior-measurement register in `reference-target.md` is stale in four rows.** Its prose says
    *"six down, nine to go"*; the table holds fifteen rows of which **seven** are struck and
    **eight** open. Three of the eight open rows are debts that have in fact been paid under another
