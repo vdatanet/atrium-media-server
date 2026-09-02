@@ -799,7 +799,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T7 — The identities a run authenticates as, created and destroyed by the run
 
-- [ ] **Changes:** `tools/differential.py` gains `Role`, `Identity` and the seat lifecycle of
+- [x] **Changes:** `tools/differential.py` gains `Role`, `Identity` and the seat lifecycle of
   [plan §6.7](plan.md#67-identities): `administrator` from `.env` or from an instance's wizard;
   `restricted` from `POST /Users/New` then `POST /Users/{userId}/Policy` narrowing `EnabledFolders`
   to one library `[spec: CreateUserByName, UpdateUserPolicy]`; `playback-denied` the same with the
@@ -824,6 +824,109 @@ written against twenty, and the `outstanding:` section they described is gone ra
 > to be wrong is that nobody uses the second seat — 12 of 23 reads answer differently to it, two of
 > them as shorter lists — so the seats exist before the loop that consumes them, and T8's loop is
 > written over them rather than beside them.
+
+> **Done (2026-09-02).** *The seats are in, the pre-flight refuses, the teardown is a test rather
+> than a docstring — and the finding is that this task's own plan row names the wrong permission,
+> in the one seat whose whole purpose is to have a permission denied.*
+>
+> [Plan §6.7](plan.md#67-identities) asks for `playback-denied` as *"the same, with the
+> playback-processing permission denied"*, singular. There are **three**, and there is a fourth
+> whose name reads like the one and which is inert.
+> [Behaviours §2.21](../../docs/compatibility/behaviours.md) has measured all of it and nobody had
+> read it against this row: `EnableMediaPlayback` is consulted by **no** playback route on either
+> server — its only readers are the item DTO's `PlayAccess` property and the remote-control `Play`
+> command — so a seat built by denying the permission whose name says *playback* plays exactly as a
+> permitted one does, and the §3.10 comparison this seat exists for
+> (`delivery-time-policy-refusal`) would have compared two identical answers and reported parity.
+> The same entry decides how many to deny: at negotiation the three are **one gate**,
+> `SupportsTranscoding` dropping to `false` only when `EnableVideoPlaybackTranscoding`,
+> `EnableAudioPlaybackTranscoding` **and** `EnablePlaybackRemuxing` are all denied, with any single
+> denial changing nothing; at delivery two of them are read **per stream** and only from a video
+> request. So the seat denies all three — the only shape in which it is observably denied at both
+> ends — and leaves `EnableMediaPlayback` alone, because denying it as well would move `PlayAccess`
+> on every item body the sweep compares: a difference nobody argued for, arriving from the seat
+> that exists to measure one. Plan §6.7's row is corrected in this commit and carries the
+> reasoning.
+>
+> *The second finding is one line further down the same row, and it decides how a seat is built at
+> all.* `POST /Users/{userId}/Policy` takes a **whole** `UserPolicy`, of which exactly two of its
+> forty-four properties are required — `AuthenticationProviderId` and `PasswordResetProviderId`
+> `[spec: UpdateUserPolicy, UserPolicy]`. A body naming only the fields a seat narrows is therefore
+> not a patch: it is a complete policy in which every other property is whatever an absent value
+> binds to, and the seat would differ from a stock account in ways nobody chose and no report could
+> explain. The seat is built by reading the account's own policy and mutating it — which is what
+> `tools/probe_restricted_surface.py` already does and what the plan's *"narrowing `EnabledFolders`
+> to one library"* does not say. `test_the_restricted_seat_is_narrowed_from_its_own_policy_and_not_from_a_fresh_object`
+> asserts a property nobody touched survives, and fails when the read is dropped. And the
+> **denied** seat's folders are deliberately **not** narrowed: its comparison is a delivery of a
+> video item, so a seat that could not open one would answer the same refusal on both servers for
+> the wrong reason — 006 T5's hostile-path test, in this feature's shape.
+>
+> *The third is the pre-flight's own request.* `GET /Users` takes `isHidden` and `isDisabled` as
+> **optional filters** `[spec: GetUsers]`, and the leftover most likely to be sitting there is the
+> one an earlier run disabled instead of deleting — so the listing is asked for bare, and
+> `test_the_pre_flight_asks_for_every_user_and_not_a_filtered_page` asserts the call is exactly
+> `GET /Users`. The refusal names the account **and its identifier**, because the operator's next
+> action is to look at it and decide whether a run is in flight or a killed one left it.
+>
+> *And the fourth is that "a run that cannot seat its identities refuses" needed three refusals,
+> not one.* AC-15's is the seat already present. The other two are a seat that cannot be **made** —
+> no library for the restricted reader, no way to sign a created seat in — which now refuses
+> **before anything is contacted**, and a seat whose policy the server declines, which stops the
+> run and deletes the account it had already created. The half-made account is the interesting
+> one: an account created and not narrowed is an *ordinary* account, so a run that carried on would
+> have swept as a second administrator and reported parity it never measured, and the next run's
+> pre-flight would have refused on the leftover.
+>
+> *The cleanup is proven the way this repository proves a guard.* Every one of the six guards was
+> deleted in turn and the suite was re-run: the pre-flight, the teardown, the `Role` values, the
+> three-permission denial, the policy read, and the destruction of a half-made seat each have
+> exactly one failing test. The teardown attempts **every** seat even after one attempt fails, and
+> the two paths differ on purpose: a leak on the success path is **raised**, and a leak on the
+> exception path is printed to stderr, because a teardown that replaced the exception already on
+> its way out would hide why the run stopped. That is the 28-playlist lesson — the cleanup those
+> probes each promised in their own docstring — asserted rather than promised.
+>
+> *What cannot be proven until T9 exists, stated plainly.* **Nothing was written to any server.**
+> The only reachable Jellyfin is an operator's production instance, and creating and destroying
+> users is a write; T9's single-use instance is what makes any of this measurable. So every claim
+> here about the wire is from the pinned document or from an existing behaviours entry, and these
+> six are **unmeasured**: that `POST /Users/New` answers `200` with an `Id` for an administrator
+> `[spec: CreateUserByName]`; that `POST /Users/{userId}/Policy` answers `204` and that the
+> narrowed policy takes `[spec: UpdateUserPolicy]`; that a bare `GET /Users` really does list a
+> **disabled** leftover; that a freshly created seat can authenticate immediately under
+> `POST /Users/AuthenticateByName`; that the wizard's first user on an instance is the
+> administrator this roster is handed (plan §6.5 flags the same assumption); and that the three
+> denials are observable on both servers in the shape behaviours §2.21 predicts, which is the
+> named comparison T12 runs and not this task. The lifecycle is written against a client rather
+> than a base URL precisely so that all six become one substitution when T9 lands — and so that
+> the suite can drive it with a stub, since a test that opened a socket would fail the no-network
+> guard by design.
+>
+> *Routine calls taken, none of which touches an accepted document's criteria.* **The seat names
+> are `atrium-differential-restricted` and `atrium-differential-playback-denied`**, fixed and
+> distinct from `probe_restricted_surface.py`'s `atrium-probe-restricted-surface`: fixed is the
+> property the pre-flight needs, and distinct is what stops a probe run and a harness run refusing
+> each other. **`Identity` keeps plan §5's four fields** and does not gain a username — the account
+> name is `seat_name(role)` and adding a field would widen a contract T8 is written against.
+> **The module has a `--help` and no sweep**: CI runs `--help` on every non-underscore script in
+> `tools/` at both ends of the 3.9–3.14 range, so a file that exists must start, and running it
+> exits `2` saying the run loop is T8's. `tools/README.md`'s *Planned* row is left alone, because
+> what it promises — the command line — is what T8 lands. Verified under **3.9.6** and **3.9.25**:
+> compiles, and `--help` reaches no server and reads no credentials.
+>
+> *What T8 must know.* **`Roster.names` is what `case.identities_for` takes** — a tuple of role
+> values in the roster's own order — so `for identity in roster` over a one-seat roster is a
+> shorter loop and never a different path, and `test_a_one_identity_run_is_a_shorter_loop_and_not_a_different_code_path`
+> asserts exactly that against a real `RequestCase`. **`Role`'s values are asserted equal to
+> `_allowlist.ROLES`**, so the 84 cases T6 wrote cannot be silently narrowed by a rename.
+> **The roster is entered inside the reference instance's context, not beside it**, so the seats
+> are destroyed before the instance is. **`differential.py` imports nothing from `tools/` at module
+> scope** — `_probe` is imported inside `sign_in_against`, so loading the module by path costs no
+> socket and no credential — and the suite's loader puts `tools/` on `sys.path` for the modules
+> that do. And **the administrator is handed in, never created**: `created_by_the_run` is `False`
+> for it, which is the only thing keeping a teardown that iterates identities away from somebody's
+> real account.
 
 ## T8 — `tools/differential.py`: the CLI `conformance.md` already publishes, and the report
 
