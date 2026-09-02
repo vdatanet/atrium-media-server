@@ -121,7 +121,7 @@ say how it will be proven is not finished.
 | [007](007-user-data-and-playstate/) | User data and playstate | **Implemented** | **Implemented** | **Implemented** |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Implemented** | **Implemented** | **Implemented** |
 | [009](009-playlists/) | Playlists | **Implemented** | **Implemented** | **Implemented** |
-| [010](010-conformance-harness/) | Conformance harness | **Accepted** | **Accepted** | Draft |
+| [010](010-conformance-harness/) | Conformance harness | **Accepted** | **Accepted** | **Accepted** |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
 

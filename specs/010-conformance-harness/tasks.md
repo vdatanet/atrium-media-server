@@ -1,7 +1,8 @@
 ---
 feature: 010-conformance-harness
 title: Conformance harness — tasks
-status: Draft
+status: Accepted
+accepted: 2026-09-02
 created: 2026-09-02
 updated: 2026-09-02
 amended: 2026-09-02 — **D-6 is taken, and this list records the decision rather than the reservation.** The four readings of *"What the gate changed"* §3 — behaviours §5.2, behaviours §5.6, 005 §7 OQ-7 and 007's paused-session ticker — join spec §3.10 as named comparisons, so **§3.10 is twenty rows and AC-16 counts twenty**. The spec is amended and dated in its frontmatter the way D-3's was. T5 loses the `outstanding:` section it was to give the register, T12 grows from four runner shapes to six, and the definition of done counts twenty. Behaviours §5.2 keeps its `⚠️ UNVERIFIED` marker: a §3.10 row is an owner and a method, not the reading that discharges it. `status` stays `Draft` — this list's own gate is a separate act.
