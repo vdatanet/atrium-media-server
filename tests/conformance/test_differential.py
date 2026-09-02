@@ -19,8 +19,10 @@ The four **paired bodies** under `differential_pairs/` are hand-written and not 
 captured pair proves the engine agrees with whatever the capture happened to hold, and anything
 captured from the reference is somebody's library.
 
-T4 extends this file with the two array kinds — `drawn` and `unordered`; T7 and T8 with the
-identities, the report and the two-server guard.
+T4 extended this file with the two array kinds — `drawn` and `unordered` — and T7 with the
+identities, which are the half of the harness that has to be right before the sweep exists: a run
+that authenticates once passes green while saying nothing about the 12 of 23 reads that answer
+differently to a seat that can be refused. The report and the two-server guard are T8's.
 """
 
 from __future__ import annotations
@@ -654,3 +656,378 @@ def test_an_array_entry_names_the_array_and_never_a_row_inside_it() -> None:
     assert rules.drawn("/Items")
     assert rules.drawn("/Items/0") is None
     assert rules.drawn("/Items/0/Name") is None
+
+
+# --------------------------------------------------------------------------------------------
+# The identities a run authenticates as — 010 T7, spec §3.9, AC-14 and AC-15
+# --------------------------------------------------------------------------------------------
+#
+# The sweep is T8's and the seats are proven before it, because the failure this feature is prone
+# to is not a wrong comparison: it is a run that authenticated once, passed green, and said
+# nothing about the 12 of 23 reads that answer differently to somebody who can be refused.
+#
+# Nothing here opens a socket. The roster is driven against a stub directory, which is the whole
+# reason the lifecycle takes a client rather than a base URL.
+
+
+def _load_module(filename: str, name: str) -> Any:
+    """One more `tools/` module by path, with `tools/` reachable for the ones that import it."""
+    tools = str(REPO_ROOT / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    path = REPO_ROOT / "tools" / filename
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None, f"cannot load {path}"
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+differential = _load_module("differential.py", "atrium_differential_cli")
+allowlist = _load_module("_allowlist.py", "atrium_allowlist_for_identities")
+
+
+#: A stock policy, wide enough that narrowing it is visible and detailed enough that dropping the
+#: fields nobody touched is visible too. Only the two required properties of `UserPolicy` are
+#: required on the wire `[spec: UpdateUserPolicy, UserPolicy]`, which is exactly why the seat has
+#: to be built by mutating the account's own policy rather than by posting a fresh object.
+PROVIDER = "Jellyfin.Server.Implementations.Users."
+
+STOCK_POLICY = {
+    "AuthenticationProviderId": PROVIDER + "DefaultAuthenticationProvider",
+    "PasswordResetProviderId": PROVIDER + "DefaultPasswordResetProvider",
+    "IsAdministrator": False,
+    "EnableAllFolders": True,
+    "EnabledFolders": [],
+    "EnableMediaPlayback": True,
+    "EnableVideoPlaybackTranscoding": True,
+    "EnableAudioPlaybackTranscoding": True,
+    "EnablePlaybackRemuxing": True,
+    "MaxActiveSessions": 3,
+    "EnableContentDeletion": False,
+}
+
+LIBRARY = "f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1"
+
+
+class FakeDirectory:
+    """The four calls `Roster` makes of a client, and a log of every one of them.
+
+    `tools/_probe.py`'s `Server` is what a real run passes; this is the same four methods over a
+    dictionary, so the lifecycle can be asserted without a server the suite is forbidden to have.
+    """
+
+    def __init__(
+        self,
+        users: Any = (),
+        policy_status: int = 204,
+        delete_status: int = 204,
+        create_raises: str = "",
+    ) -> None:
+        self.users = [dict(user) for user in users]
+        self.policy_status = policy_status
+        self.delete_status = delete_status
+        self.create_raises = create_raises
+        self.calls: list[tuple[str, str]] = []
+        self.policies: dict[str, Any] = {}
+        self.passwords: dict[str, str] = {}
+        self._next = 0
+
+    def get(self, path: str, **params: Any) -> Any:
+        self.calls.append(("GET", path))
+        if path == "/Users":
+            return [dict(user) for user in self.users]
+        user_id = path.rsplit("/", 1)[1]
+        for user in self.users:
+            if user["Id"] == user_id:
+                return dict(user, Policy=dict(STOCK_POLICY))
+        raise AssertionError(f"no such user: {user_id}")
+
+    def post(self, path: str, body: Any = None, **params: Any) -> Any:
+        self.calls.append(("POST", path))
+        assert path == "/Users/New", path
+        if self.create_raises:
+            raise RuntimeError(self.create_raises)
+        self._next += 1
+        user_id = f"{self._next:032x}"
+        self.users.append({"Id": user_id, "Name": body["Name"]})
+        self.passwords[body["Name"]] = body["Password"]
+        return {"Id": user_id, "Name": body["Name"]}
+
+    def post_raw(self, path: str, body: Any = None, **params: Any) -> Any:
+        self.calls.append(("POST", path))
+        assert path.endswith("/Policy"), path
+        self.policies[path.split("/")[2]] = body
+        return self.policy_status, {}, b"" if self.policy_status == 204 else b"refused"
+
+    def delete_raw(self, path: str, **params: Any) -> Any:
+        self.calls.append(("DELETE", path))
+        user_id = path.rsplit("/", 1)[1]
+        if self.delete_status in (200, 204):
+            self.users = [user for user in self.users if user["Id"] != user_id]
+        return self.delete_status, {}, b""
+
+    # -- what the assertions read ------------------------------------------------------------
+
+    def named(self, name: str) -> Any:
+        return next((user for user in self.users if user["Name"] == name), None)
+
+    def deletes(self) -> list[str]:
+        return [path for method, path in self.calls if method == "DELETE"]
+
+    def creations(self) -> list[str]:
+        return [path for method, path in self.calls if method == "POST" and path == "/Users/New"]
+
+
+def _administrator() -> Any:
+    return differential.Identity(
+        name="administrator",
+        token="a token the run borrowed",
+        user_id="0" * 32,
+        created_by_the_run=False,
+    )
+
+
+def _sign_in(directory: FakeDirectory) -> Any:
+    def sign_in(username: str, password: str) -> tuple[str, str]:
+        user = directory.named(username)
+        assert user is not None, f"{username} was asked to sign in and does not exist"
+        assert directory.passwords[username] == password
+        return f"token-for-{username}", user["Id"]
+
+    return sign_in
+
+
+def _roster(directory: FakeDirectory, *roles: Any, library: str = LIBRARY) -> Any:
+    return differential.Roster(
+        directory,
+        _administrator(),
+        roles or (differential.Role.ADMINISTRATOR, differential.Role.RESTRICTED),
+        library_id=library,
+        sign_in=_sign_in(directory),
+    )
+
+
+def test_the_role_values_are_the_strings_the_request_cases_are_written_against() -> None:
+    """T6 wrote 84 cases against `_allowlist.ROLES`, so a value that drifts here narrows them.
+
+    An `identities:` naming a seat no `Role` spells resolves to nothing, and `identities_for`
+    would return an empty tuple — a case silently not run, which is this feature's own failure
+    mode wearing a different hat.
+    """
+    assert tuple(role.value for role in differential.Role) == allowlist.ROLES
+
+
+def test_a_one_identity_run_is_a_shorter_loop_and_not_a_different_code_path() -> None:
+    """AC-14 from the other end: the case decides which seats it is meaningful for, out of the
+    ones the run actually has, so a roster of one narrows the answer rather than bypassing it."""
+    directory = FakeDirectory()
+    with _roster(directory, differential.Role.ADMINISTRATOR) as roster:
+        assert roster.names == ("administrator",)
+        case = allowlist.RequestCase(
+            id="both-seats",
+            endpoint="GET /Items",
+            query="",
+            body="none",
+            content_type="none",
+            anchors=(),
+            identities=("administrator", "restricted"),
+            needs=(),
+            what_it_is_for="a case meaningful for two seats",
+        )
+        assert case.identities_for(roster.names) == ("administrator",)
+    with _roster(directory) as roster:
+        assert roster.names == ("administrator", "restricted")
+        assert case.identities_for(roster.names) == ("administrator", "restricted")
+
+
+def test_a_seat_that_already_exists_refuses_the_run_and_names_it() -> None:
+    """AC-15's precondition. Delete the `preflight` call in `__enter__` and this fails.
+
+    The refusal has to name the account, because the operator's next action is to look at it and
+    decide whether a run is in flight or a killed one left it behind.
+    """
+    name = differential.seat_name(differential.Role.RESTRICTED)
+    directory = FakeDirectory(users=[{"Id": "b" * 32, "Name": name}])
+    with pytest.raises(differential.SeatError) as refusal, _roster(directory):
+        raise AssertionError("the run started with a seat already on the server")
+    assert name in str(refusal.value)
+    assert "b" * 32 in str(refusal.value)
+    assert directory.creations() == [], "the pre-flight ran after something was created"
+    assert directory.deletes() == [], "the pre-flight deleted an account it does not own"
+
+
+def test_the_pre_flight_asks_for_every_user_and_not_a_filtered_page() -> None:
+    """`isHidden` and `isDisabled` are optional *filters* on `GET /Users` `[spec: GetUsers]`, and
+    the leftover most likely to be there is the one an earlier run disabled instead of deleting.
+    A pre-flight that passed either would be blind to exactly that seat."""
+    directory = FakeDirectory()
+    differential.preflight(directory, [differential.Role.RESTRICTED])
+    assert directory.calls == [("GET", "/Users")]
+
+
+def test_a_run_that_created_a_seat_tears_it_down_on_the_exception_path() -> None:
+    """The 28-playlist lesson, asserted rather than promised.
+
+    On 2026-09-01 the reference server 009's probes had run against still held 28 playlists they
+    had created; every one of those probes said in its own docstring that it deleted them. So the
+    teardown is a test and not a sentence: raise inside the run, and every `Identity` whose
+    `created_by_the_run` is true is still deleted.
+    """
+    directory = FakeDirectory()
+    roles = (
+        differential.Role.ADMINISTRATOR,
+        differential.Role.RESTRICTED,
+        differential.Role.PLAYBACK_DENIED,
+    )
+    fell_over = pytest.raises(RuntimeError, match="the sweep fell over")
+    with fell_over, _roster(directory, *roles) as roster:
+        made = {identity.user_id for identity in roster.created}
+        assert len(made) == 2
+        raise RuntimeError("the sweep fell over")
+    assert sorted(directory.deletes()) == sorted(f"/Users/{user_id}" for user_id in made)
+    assert directory.users == [], "a seat the run created survived it"
+
+
+def test_the_administrator_is_never_torn_down() -> None:
+    """`created_by_the_run` is a field of the identity for this reason: the administrator is
+    somebody's real account, borrowed from `.env`, and a teardown that iterated the run instead
+    of the identities would delete it."""
+    directory = FakeDirectory()
+    with _roster(directory) as roster:
+        assert roster[differential.Role.ADMINISTRATOR].created_by_the_run is False
+    assert f"/Users/{'0' * 32}" not in directory.deletes()
+
+
+def test_a_seat_whose_policy_is_refused_stops_the_run_and_leaves_nothing_behind() -> None:
+    """A run that cannot seat an identity refuses rather than proceeding with fewer.
+
+    The half-made account is the interesting half: an account created and then not narrowed is an
+    *ordinary* account, so a run that carried on would sweep as a second administrator and report
+    parity it never measured — and the next run's pre-flight would refuse on the leftover.
+    """
+    directory = FakeDirectory(policy_status=403)
+    with pytest.raises(differential.SeatError, match="403"), _roster(directory):
+        raise AssertionError("the run started with a seat that has no policy")
+    assert directory.users == [], "the half-made seat was left on the server"
+
+
+def test_a_roster_that_cannot_make_a_seat_refuses_before_contacting_anything() -> None:
+    """The restricted seat needs the library it may open, and without one it cannot be made.
+
+    Refusing here rather than dropping the seat is the whole of spec §3.9: a run that quietly
+    became an administrator-only run reports a surface of which 12 of 23 reads answer differently
+    to somebody else, and says nothing about it.
+    """
+    directory = FakeDirectory()
+    refusal = pytest.raises(differential.SeatError, match="rather than proceeding with fewer")
+    with refusal, _roster(directory, library=""):
+        raise AssertionError("the run started without the library the seat needs")
+    assert directory.calls == [], "something was contacted before the refusal"
+
+
+def test_a_seat_left_behind_by_a_successful_run_is_raised_and_not_logged() -> None:
+    """A cleanup that reports success while leaking is the failure this whole section is about."""
+    directory = FakeDirectory(delete_status=500)
+    with pytest.raises(differential.SeatError, match="could not destroy"), _roster(directory):
+        pass
+
+
+def test_a_leak_on_the_exception_path_never_masks_the_failure_that_caused_it(
+    capsys: Any,
+) -> None:
+    """The one place the teardown does not raise: the run is already failing, and replacing that
+    exception with the teardown's own would hide why the run stopped."""
+    directory = FakeDirectory(delete_status=500)
+    with pytest.raises(RuntimeError, match="the reference stopped answering"), _roster(directory):
+        raise RuntimeError("the reference stopped answering")
+    assert "could not destroy" in capsys.readouterr().err
+
+
+# -- the two policies -------------------------------------------------------------------------
+
+
+def test_the_restricted_seat_is_narrowed_from_its_own_policy_and_not_from_a_fresh_object() -> None:
+    """`POST /Users/{userId}/Policy` takes a whole `UserPolicy` and requires two of its 44
+    properties `[spec: UpdateUserPolicy, UserPolicy]`, so a body naming only the folder pair is a
+    complete policy in which everything else is whatever an absent value binds to. Read the
+    account's policy, mutate it, post it back — which is what
+    `tools/probe_restricted_surface.py` already does."""
+    directory = FakeDirectory()
+    with _roster(directory) as roster:
+        seat = roster[differential.Role.RESTRICTED]
+        written = directory.policies[seat.user_id]
+    assert written["EnableAllFolders"] is False
+    assert written["EnabledFolders"] == [LIBRARY]
+    assert written["MaxActiveSessions"] == 3, "a property nobody touched was dropped"
+    assert written["AuthenticationProviderId"] == STOCK_POLICY["AuthenticationProviderId"]
+
+
+def test_the_denied_seat_denies_the_three_permissions_behaviours_2_21_names() -> None:
+    """**The finding this task turned up, asserted so it cannot be undone by a tidier reading.**
+
+    [Plan §6.7](../../specs/010-conformance-harness/plan.md) asks for the seat with *"the
+    playback-processing permission denied"*, singular, and there are three of them. Behaviours
+    §2.21 measured what each does: at negotiation they are **one gate** — `SupportsTranscoding`
+    drops only when all three are denied, and any single denial changes nothing — and at delivery
+    two of them are read per stream, from a video request only. A seat denying one is therefore
+    observably a permitted seat on every negotiation both servers answer.
+    """
+    directory = FakeDirectory()
+    roles = (differential.Role.ADMINISTRATOR, differential.Role.PLAYBACK_DENIED)
+    with _roster(directory, *roles) as roster:
+        seat = roster[differential.Role.PLAYBACK_DENIED]
+        written = directory.policies[seat.user_id]
+    assert [written[permission] for permission in differential.PLAYBACK_PROCESSING_PERMISSIONS] == [
+        False,
+        False,
+        False,
+    ]
+
+
+def test_the_denied_seat_leaves_the_permission_whose_name_says_it_is_the_one() -> None:
+    """`EnableMediaPlayback` is read by no playback route at all — only by the item DTO's
+    `PlayAccess` and by the remote-control `Play` command (behaviours §2.21). Denying it would
+    build a seat that looks denied, plays like a permitted one, and moves `PlayAccess` on every
+    item body the sweep compares — a difference nobody asked for, in the seat that exists to
+    measure one."""
+    directory = FakeDirectory()
+    roles = (differential.Role.ADMINISTRATOR, differential.Role.PLAYBACK_DENIED)
+    with _roster(directory, *roles) as roster:
+        written = directory.policies[roster[differential.Role.PLAYBACK_DENIED].user_id]
+    assert written[differential.NEGOTIATION_INERT_PERMISSION] is True
+
+
+def test_the_denied_seat_keeps_every_library_it_can_open() -> None:
+    """It has to reach a video item to be compared at all: the delivery-time refusal is a video
+    request (behaviours §2.21). A seat narrowed like the restricted one would answer the same
+    refusal on both servers for the wrong reason — 006 T5's hostile-path test, here."""
+    directory = FakeDirectory()
+    roles = (differential.Role.ADMINISTRATOR, differential.Role.PLAYBACK_DENIED)
+    with _roster(directory, *roles) as roster:
+        written = directory.policies[roster[differential.Role.PLAYBACK_DENIED].user_id]
+    assert written["EnableAllFolders"] is True
+    assert written["EnabledFolders"] == []
+
+
+def test_a_seat_name_is_fixed_so_the_next_run_can_recognise_the_wreckage() -> None:
+    """A random name would make the pre-flight impossible to write: nothing would identify what a
+    killed run left. Fixed is the property, and it is why AC-15's refusal can exist."""
+    assert differential.seat_name(differential.Role.RESTRICTED) == "atrium-differential-restricted"
+    assert (
+        differential.seat_name(differential.Role.PLAYBACK_DENIED)
+        == "atrium-differential-playback-denied"
+    )
+
+
+def test_the_seat_password_is_generated_per_run_and_never_a_constant() -> None:
+    """Two runs never share a credential, and nothing in this repository holds one."""
+    first, second = FakeDirectory(), FakeDirectory()
+    with _roster(first):
+        pass
+    with _roster(second):
+        pass
+    name = differential.seat_name(differential.Role.RESTRICTED)
+    assert first.passwords[name] != second.passwords[name]
+    assert len(first.passwords[name]) >= 24

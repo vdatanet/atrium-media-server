@@ -659,7 +659,31 @@ Three roles, of which the run creates two:
 |---|---|---|
 | `administrator` | The wizard's own first user on an instance; `.env` credentials against an operator's server | Everything; the only seat every measurement before 2026-09-01 used |
 | `restricted` | `POST /Users/New`, then `POST /Users/{userId}/Policy` narrowing `EnabledFolders` to one library `[spec: CreateUserByName, UpdateUserPolicy]` | The 12 reads of spec §3.9, and three named comparisons |
-| `playback-denied` | The same, with the playback-processing permission denied | The delivery-time policy refusal (behaviours §2.21) |
+| `playback-denied` | The same, with **all three** playback-processing permissions denied — `EnableVideoPlaybackTranscoding`, `EnableAudioPlaybackTranscoding` and `EnablePlaybackRemuxing` `[spec: UserPolicy]` — and its folders left alone | The delivery-time policy refusal (behaviours §2.21) |
+
+**Corrected on 2026-09-02 by T7, which is the task that had to name the permission.** This row said
+*"the playback-processing permission"*, singular, and there are three — with a fourth,
+`EnableMediaPlayback`, whose name reads like the one and which
+[behaviours §2.21](../../docs/compatibility/behaviours.md) measured as consulted by **no** playback
+route on either server: its only readers are the item DTO's `PlayAccess` property and the
+remote-control `Play` command. So the obvious reading of this row builds a seat that plays exactly
+as a permitted one does, and the §3.10 comparison this seat exists for would compare two identical
+answers and call it parity. The same entry decides the count: at negotiation the three are **one
+gate** — `SupportsTranscoding` drops to `false` only when all three are denied, and any single
+denial changes nothing — while at delivery two of them are read per stream and only from a video
+request. Denying all three is the only shape in which the seat is observably a denied one at both,
+and denying `EnableMediaPlayback` with them would move `PlayAccess` on every item body the sweep
+compares, which is a difference nobody argued for arriving from the seat that exists to measure
+one. **Its folders are deliberately not narrowed**, unlike the restricted seat's: the comparison is
+a delivery of a video item, and a seat that could not open one would answer the same refusal on
+both servers for the wrong reason — 006 T5's hostile-path test in this feature's shape.
+
+**The policy is read and mutated, never posted fresh.** `POST /Users/{userId}/Policy` takes a whole
+`UserPolicy`, of which exactly two of forty-four properties are required —
+`AuthenticationProviderId` and `PasswordResetProviderId` `[spec: UpdateUserPolicy, UserPolicy]` — so
+a body naming only the fields a seat narrows is a complete policy in which everything else is
+whatever an absent value binds to, and the seat would differ from a stock account in ways nobody
+chose and no report could explain. `tools/probe_restricted_surface.py` already does it this way.
 
 **The refusal AC-15 asks for is a precondition, not a cleanup.** Before creating anything, the run
 lists the users and refuses to start if a seat with its own fixed name is already there — because a
@@ -670,6 +694,14 @@ already builds a seat this way, under a fixed name, and it is the shape to lift 
 **Against an operator's server the created seats are removed in a `finally`; against an instance
 they are not removed at all**, because the instance is. Both are correct and only one of them can
 leak, which is the argument spec §3.1 makes for the instance in one sentence.
+
+**T7 removes them in both cases, and the difference is why.** A roster cannot tell a disposable
+server from an operator's, so "not removed at all" is a teardown conditioned on a flag — and a
+teardown a wrong flag disables is the shape of promise this repository has already been caught
+making: on 2026-09-01 the server 009's probes ran against still held **28 playlists** those probes
+each said in their own docstring that they deleted. Deleting a seat on an instance that is about to
+be destroyed costs one request and cannot be wrong; the instance's own `__exit__` stays the
+backstop, and the roster is entered inside it so the two run in the right order.
 
 ### 6.8 The ignored-parameter report
 
