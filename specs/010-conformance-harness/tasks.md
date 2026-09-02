@@ -672,7 +672,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T6 — `docs/compatibility/request-cases.yaml`: the eight L3 rows first, then the surface
 
-- [ ] **Changes:** new `docs/compatibility/request-cases.yaml` — per endpoint, a name, the query,
+- [x] **Changes:** new `docs/compatibility/request-cases.yaml` — per endpoint, a name, the query,
   the body, the **anchor** that fills each path parameter, the identities the case is meaningful
   for, and a sentence saying what the case is for. Anchors, not identifiers: the two servers derive
   identifiers differently by design, so `GET /Items/{itemId}` is *"the item at position 3 of
@@ -694,6 +694,108 @@ written against twenty, and the `outstanding:` section they described is gone ra
   rejects it — an anchor is only as sound as the ordering it indexes, and without that refusal every
   such case is a comparison of an arbitrary row.
 - **Spec reference:** §3.2, AC-3; plan §4.3, §6.1.1
+
+> **Done (2026-09-02).** *The register is 84 cases over all 59 endpoints, 23 of them on the eight
+> `level: L3` rows, and the first finding is that the file cannot be seeded the way the plan says
+> it is.* [Plan §4.3](plan.md#43-docscompatibilityrequest-casesyaml) says the file starts at the
+> floor *"plus the cases the two analysed clients actually send"*. **Neither client document
+> carries a request inventory, by policy and in the same words**: `client-atrium-tvos.md` §7 and
+> `client-embeat-mobile.md` §8 each say the document *"does not become a second endpoint table"*,
+> and neither cites a line of its client's source, because AGENTS.md forbids naming a path outside
+> this repository. The video client's thirty operations are a **four-row count table** and the
+> music client's a six-row one; `limit`, `recursive`, `startIndex`, `parentId`,
+> `includeItemTypes`, `enableImages` and `sortOrder` appear **nowhere** in either file, and fifteen
+> endpoints of the surface are not named in either. What the two documents *do* give is about a
+> dozen concrete strings, and every one of them is a case here: the `{Username, Pw}` body,
+> `Fields=MediaSources` *"on six listing routes"*, `SearchTerm=` instead of `/Search/Hints`,
+> `static=true` on both stream routes, the capped FLAC with `AudioSampleRate=48000`, universal's
+> progressive MP3 under a deterministic `PlaySessionId`, `quality=90` on every image, the
+> lower-case `Stream.vtt`, `GET /Sessions?deviceId=` — a parameter neither server's route declares
+> — the by-name routes with **no** `Limit`, and the rename body that must carry `Genres`, `Tags`
+> and `ProviderIds`. The rest of the file is AC-3's floor and OQ-2's growth rule, which is what
+> those two say it should be; what is not true is that a fuller seed was available and skipped.
+>
+> *The finding that cost the most is that plan §6.1.1's anchor is one kind and this file needs
+> three.* A `listing:` anchor — a declared listing case and a row position — fills **32** of the
+> file's 55 anchors and cannot fill the other 23. **`response:`** is the second: a created
+> playlist's `Id` and a negotiated media source's `Id` are carried by a *response* and by no
+> listing at all, which is five routes. **`literal:`** is the third and the one that looks like a
+> shortcut: `{container}`, `{routeFormat}`, `{imageType}`, `{imageIndex}` and `{newIndex}` **do not
+> name items**, so no listing and no response can supply them, and with only the plan's kind five
+> more routes were unaskable. Plan §4.3 now carries all three, with the three fields T6 added —
+> `content_type`, `needs` and `what_it_is_for` — and `content_type` is the one that earns its
+> place: **a body with no `Content-Type` is not a query, not a body and not an identity**, and it
+> is one of the two register rows plan §6.4 makes an ordinary request case.
+>
+> *The third came from reading the routes rather than the documents, and it moves the floor on
+> three endpoints.* **Three routes have a required query parameter**, so a bare request there is
+> the framework's problem details on both servers and AC-3's floor case would have compared a
+> refusal and counted it as coverage: `searchTerm` on `GET /Search/Hints`, `deviceId` **and**
+> `playSessionId` on `DELETE /Videos/ActiveEncodings` — where `deviceId` is read by nothing and
+> declared anyway, so *"a route that took only what it uses would answer `204` to a call the
+> reference refuses"* — and `segmentLength` on the subtitle playlist, which the reference marks
+> required. Their floor cases carry the parameters.
+>
+> *The fourth is two shapes the plan's `Case` cannot express, and neither is a path parameter.* An
+> **item id in a body** (007's three reporting routes) and an **item id in a query** (`ids` and
+> `entryIds` on the playlist add and remove) are exactly as unfillable as an unanchored path
+> parameter and have no field to say so, because an anchor fills a path parameter by construction.
+> All four now carry `needs: [fixture]` with the reason written down. They were written first with
+> a **placeholder** — the identity's own user id standing in for an item id — which would have
+> compared two `404`s on every run and looked like coverage; that is the same shape as 006 T5's
+> hostile-path test passing with the check deleted, and it was removed rather than kept.
+>
+> *And the fifth is a limitation this task did not fix and is not hiding.* **A case id is unique
+> per endpoint and shared across endpoints on purpose** — that is what lets one allowlist entry
+> keyed on a case id cover a family, `by-name-without-limit` across five endpoints and `static`
+> across two stream routes. The cost is that one endpoint holds **one case per condition**, and
+> `GET /Items` has two requests that meet the same condition: the artist sort, which behaviours
+> §3.6 measured losing and duplicating rows across pages, and the **music client's year sort** —
+> `SortBy=Year` goes on the wire as `ProductionYear,PremiereDate,SortName`, of which only
+> `PremiereDate,SortName` is in the vocabulary, over albums that mostly have no premiere date.
+> `listing-ordered-by-a-key-with-ties` is spent on the artist sort, because an excuse should point
+> at the request its `because` was measured on. **The year sort is therefore not declared**:
+> declaring it under a second id would ship a tie-prone case with no entry to excuse it, reporting
+> row-order noise on every single run, which spec §6 says is how a harness stops being read by the
+> second week. It is written here rather than shipped, and it is the first thing a fourth case id
+> on that endpoint would resolve.
+>
+> *Routine calls taken, none of which touches an accepted document's criteria.* **The substitution
+> vocabulary is delimited by angle brackets and not braces**, found by loading the file: `{...}` is
+> what a path parameter uses *and* what a JSON object uses, so the first load rejected the video
+> client's own `DeviceProfile` as an undeclared token. **`identities` empty means every seat**, per
+> plan §5, and the shipped file names them anyway — the failure this feature is prone to is a case
+> set naming one seat, so the value that says nothing has to mean all of them and never the first.
+> **Every case that changes an account, or reads what one changed, names the created seat alone**
+> — fifteen endpoints — because the administrator's seat is whatever `.env` points at, which
+> before T9 is an operator's own; spec §3.5 asks a writing probe to clean up after itself and this
+> asks the sweep not to write there at all. The one exception is the rename, which the reference
+> declares administrator-only. **`_parse_block` now strips a matched pair of quotes** rather than
+> one character off either end, because a JSON body makes a single-quoted YAML scalar the only
+> spelling both readers agree on — and `test_the_three_registers_are_valid_yaml` earned itself
+> immediately, catching that `{itemId}` inside an **unquoted** flow sequence is a YAML flow
+> *mapping* while the two-regex reader saw a string.
+>
+> *Nothing was written to any server, and nothing here opens a socket or reads a clock.* Every
+> query and body came from the two client documents, the pinned OpenAPI document's own spellings
+> and this repository's route signatures, read rather than assumed. The three gates were proven by
+> breaking them: an anchor over `listing-ordered-at-random` is refused and the same anchor over
+> `movies-by-sort-name` is not; a path parameter with no anchor and no `fixture` fails; a second
+> case with one id on one endpoint fails. `test_every_surface_endpoint_has_at_least_one_case`
+> reads the surface through `extract_v1_surface.py`'s own `parse_surface`, and
+> `test_every_l3_row_has_a_case_for_every_identity_it_is_meaningful_for` fails on any of the eight
+> with one seat.
+>
+> *What T7 must know.* **The three ids T3 and T4 owed are declared and their entries now excuse
+> something on the wire**: `by-name-without-limit` on all five by-name endpoints,
+> `listing-ordered-at-random` and `listing-ordered-by-a-key-with-ties` on `GET /Items`. **The seat
+> names are `ROLES` in `tools/_allowlist.py`** — `administrator`, `restricted`, `playback-denied`
+> — and 84 cases are written against those three strings, so `differential.Role`'s values must be
+> exactly them. **No sweep case names `playback-denied`**: that seat belongs to the named
+> comparison behaviours §2.21 owns, and a sweep case naming it would run a §3.10 row under another
+> name and let a run count it as swept. And `identities_for(roster)` is what T8's loop calls — the
+> case decides which seats it is meaningful for, out of the ones the run actually has, so a
+> one-identity run is a shorter loop and never a different code path.
 
 ## T7 — The identities a run authenticates as, created and destroyed by the run
 

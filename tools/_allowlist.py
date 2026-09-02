@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The two registers a differential run is measured against, read from the files that hold them.
+"""The three registers a differential run is measured against, read from the files that hold them.
 
 The first is the allowlist — `docs/compatibility/allowlist.yaml` in, `Rules` mappings out. The
 second is the named-comparison register, `docs/compatibility/named-comparisons.yaml`, which is the
 twenty rows of 010 spec §3.10: the differences a sweep cannot raise, each with what a run must have
-before the row is even askable. Both live here because 010 plan §3 puts them here, and because a
-register nothing parses is prose — which is the 2026-09-01 audit's M1 finding, *"nothing reads it,
-so nothing fails when it drifts"*.
+before the row is even askable. The third is `docs/compatibility/request-cases.yaml`, the requests
+the sweep actually issues (AC-3), seeded L3-first. All three live here because 010 plan §3 puts the
+registers behind one reader, and because a register nothing parses is prose — which is the
+2026-09-01 audit's M1 finding, *"nothing reads it, so nothing fails when it drifts"*.
 
 Pure, like the engine it feeds. It reads one file and consults no socket and no clock, so the
 AC-6 proofs run in the default CI job where there is no Jellyfin and must not be one.
@@ -45,6 +46,7 @@ from typing import Dict, Iterable, Mapping, Sequence, Tuple
 
 DEFAULT_ALLOWLIST = Path("docs/compatibility/allowlist.yaml")
 DEFAULT_NAMED_COMPARISONS = Path("docs/compatibility/named-comparisons.yaml")
+DEFAULT_REQUEST_CASES = Path("docs/compatibility/request-cases.yaml")
 
 #: The three kinds of entry, and what each stops comparing (010 plan §6.3):
 #:
@@ -139,6 +141,69 @@ _BEHAVIOURS_SECTION = re.compile(r"^behaviours §\d+(?:\.\d+)*$")
 #: no list does. Never a path outside it (AGENTS.md: provenance names a version and a date, or a
 #: file inside Jellyfin's own tree, and a local path is neither verifiable nor ours to publish).
 _WRITTEN_AT = re.compile(r"^(?:specs|docs)/[\w./-]+\.md$")
+
+
+#: The three seats a run may authenticate as, spelled as `differential.Role`'s values (plan §6.7).
+#: A case names the ones it is meaningful for, and a run with one identity covers one (AC-14).
+ROLES = ("administrator", "restricted", "playback-denied")
+
+#: What a case may write where **only the running identity can supply the value**. Plan §6.1.1
+#: says `userId` *"is not an anchor: it is the identity's own"* and gives no way to write that
+#: down — and `POST /Users/AuthenticateByName` cannot be a case at all without one, since its body
+#: is the seat's own credentials. These three are the whole vocabulary; anything else in angle
+#: brackets fails the load, so a token nobody substitutes cannot reach a server as literal text.
+#:
+#: **Angle brackets and not braces**, which a path parameter uses: a body is JSON, and `{...}` in
+#: a JSON body is an object. A brace-delimited token was written first and matched the device
+#: profile's nested objects on the first load.
+SUBSTITUTIONS = ("identity.username", "identity.password", "identity.user_id")
+
+_SUBSTITUTION = re.compile(r"<([^<>]*)>")
+
+_PATH_PARAMETER = re.compile(r"\{(\w+)\}")
+
+#: The one path parameter that is never an anchor, for the reason plan §6.1.1 gives.
+IDENTITY_PATH_PARAMETER = "userId"
+
+_MEDIA_TYPE = re.compile(r"^[a-z]+/[a-z0-9.+-]+$")
+
+#: **Three kinds, because plan §6.1.1's one kind fills a minority of the path parameters here.**
+#:
+#: - `p=listing:<METHOD> <path>#<case>@<position>` — the plan's anchor: the row at that position
+#:   of that declared listing case, resolved against each server just before the case runs.
+#: - `p=response:<METHOD> <path>#<case>@<pointer>` — a value an earlier case's *response* carried
+#:   and no listing does: a created playlist's `Id`, a negotiated media source's `Id`.
+#: - `p=literal:<value>` — a parameter that does not name an item at all. `{container}`,
+#:   `{routeFormat}`, `{imageType}`, `{imageIndex}` and `{newIndex}` are the caller's own choice
+#:   and the same string on both servers; a grammar that could not say so leaves five routes
+#:   unaskable.
+_ANCHOR = re.compile(
+    r"^(?P<parameter>\w+)=(?P<kind>listing|response):"
+    r"(?P<endpoint>(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) [^#\s]+)"
+    r"#(?P<case>[a-z0-9]+(?:-[a-z0-9]+)*)@(?P<at>\S+)$"
+)
+
+_LITERAL_ANCHOR = re.compile(r"^(?P<parameter>\w+)=literal:(?P<value>[^,\s]+)$")
+
+_POSITION = re.compile(r"^\d+$")
+
+_CASE_REQUIRED = (
+    "id",
+    "endpoint",
+    "query",
+    "body",
+    "content_type",
+    "anchors",
+    "identities",
+    "needs",
+    "what_it_is_for",
+)
+
+#: `query` is the one field of the three registers whose **empty** value is its commonest one: the
+#: AC-3 floor case is a bare request, and a bare request is a case with nothing in its query. So
+#: presence is required and content is not, which is T5's *"an empty needs is a value"* met again
+#: on a scalar rather than on a list.
+_CASE_MAY_BE_EMPTY = ("query",)
 
 
 class AllowlistError(Exception):
@@ -236,6 +301,88 @@ class NamedComparison:
         return self.behaviours.split("§", 1)[1]
 
 
+def _scalar(raw: str) -> str:
+    """One value of the hand-written subset, with **one matching pair** of quotes removed.
+
+    It used to be `.strip().strip('"')`, which strips a quote off either end independently — so a
+    value that merely *ends* in one lost it, and a single-quoted scalar kept both. Neither shape
+    existed in the first two registers, and both exist in the third: a request body is JSON, whose
+    own double quotes make a YAML single-quoted scalar the only spelling that survives round-trip
+    through both this parser and a real YAML reader (`test_the_three_registers_are_valid_yaml`).
+    Stripping a matched pair is what the two agree on.
+    """
+    value = raw.strip()
+    for quote in ('"', "'"):
+        if len(value) >= 2 and value.startswith(quote) and value.endswith(quote):
+            return value[1:-1]
+    return value
+
+
+@dataclass(frozen=True)
+class Anchor:
+    """How one path parameter is filled, per server, immediately before the case runs.
+
+    Never an identifier: the two servers derive those differently by design (behaviours §1.4), so
+    a case that carried one would be comparing two different items (plan §6.1.1).
+    """
+
+    parameter: str
+    kind: str  # "listing", "response" or "literal"
+    endpoint: str  # empty for a literal
+    case: str  # empty for a literal
+    at: str  # a row position, a JSON Pointer into a response, or the literal value itself
+
+
+@dataclass(frozen=True)
+class RequestCase:
+    """One request the sweep issues, in the fields of 010 plan §4.3 and the three T6 added.
+
+    `content_type` is one of them, and it exists because two rows of the named-comparison register
+    are *"here to be recognised, not discovered"* — ordinary request cases (plan §6.4) — and one
+    of them is **a body with no content type**, which no combination of a query and a body can
+    say. `needs` is the second, from T6's own statement: a case whose anchor wants a particular
+    kind of item declares `fixture` and leaves the anchor unfilled, for T11 to fill. And
+    `what_it_is_for` is the third: the sentence review reads when the file grows.
+
+    `body` is the **raw** request body and is sent verbatim, which is what lets a malformed one
+    exist at all: the register's `body-binding-dollar-message` row is a case whose body is not
+    JSON, and a field parsed as JSON at load could not hold it.
+    """
+
+    id: str
+    endpoint: str
+    query: str
+    body: str
+    content_type: str
+    anchors: Tuple[Anchor, ...]
+    identities: Tuple[str, ...]
+    needs: Tuple[str, ...]
+    what_it_is_for: str
+
+    @property
+    def method(self) -> str:
+        return self.endpoint.split(" ", 1)[0]
+
+    @property
+    def path(self) -> str:
+        return self.endpoint.split(" ", 1)[1]
+
+    @property
+    def has_body(self) -> bool:
+        return self.body != NONE
+
+    def identities_for(self, roster: Sequence[str]) -> Tuple[str, ...]:
+        """The seats this case is meaningful for, out of the ones the run actually has.
+
+        An empty `identities` means *every* identity, which is the safe direction: the failure
+        this feature is prone to is a case set that names **one** seat, so the value that says
+        nothing has to mean all of them rather than the first of them (plan §5, spec §3.9).
+        """
+        if not self.identities:
+            return tuple(roster)
+        return tuple(role for role in roster if role in self.identities)
+
+
 def _parse_block(text: str, block: str, first: str) -> Tuple[Dict[str, str], ...]:
     """The hand-written YAML subset, as raw string mappings. Validation is a `check`'s job.
 
@@ -257,13 +404,13 @@ def _parse_block(text: str, block: str, first: str) -> Tuple[Dict[str, str], ...
             continue
         opening = start.match(raw)
         if opening:
-            current = {first: opening.group(1).strip().strip('"')}
+            current = {first: _scalar(opening.group(1))}
             rows.append(current)
             continue
         field = _FIELD.match(raw)
         if not field or current is None:
             continue
-        current[field.group(1)] = field.group(2).strip().strip('"')
+        current[field.group(1)] = _scalar(field.group(2))
 
     if not started:
         raise AllowlistError(f"the file has no `{block}:` block; the parser and the file disagree")
@@ -457,6 +604,247 @@ def load_named(path: Path = DEFAULT_NAMED_COMPARISONS) -> Tuple[NamedComparison,
     return check_named(parse_named(Path(path).read_text(encoding="utf-8")))
 
 
+def parse_cases(text: str) -> Tuple[Dict[str, str], ...]:
+    """The request-case register's rows. Validation is `check_cases`' job."""
+    return _parse_block(text, "cases", "id")
+
+
+def check_cases(rows: Sequence[Mapping[str, str]]) -> Tuple[RequestCase, ...]:
+    """Validate the request cases, or raise on the first thing that is wrong.
+
+    It raises for the reason the other two do, and for one more of its own: a case is what the
+    sweep *sends*. A row that half-loaded would not excuse a difference or miscount a coverage
+    line — it would issue a request nobody wrote, against a server, and compare the answer.
+    """
+    if not rows:
+        raise AllowlistError("the register has no cases; the parser and the file disagree")
+
+    seen: set[Tuple[str, str]] = set()
+    cases: list[RequestCase] = []
+    for index, row in enumerate(rows, start=1):
+        where = f"case {index} ({row.get('id', '?')} on {row.get('endpoint', '?')})"
+
+        missing = [
+            name
+            for name in _CASE_REQUIRED
+            if name not in row or (name not in _CASE_MAY_BE_EMPTY and not row[name].strip())
+        ]
+        if missing:
+            raise AllowlistError(f"{where}: missing {', '.join(missing)}")
+        extra = sorted(set(row) - set(_CASE_REQUIRED))
+        if extra:
+            raise AllowlistError(f"{where}: unknown field(s) {', '.join(extra)}")
+
+        identifier, endpoint = row["id"], row["endpoint"]
+        if not _CASE.match(identifier):
+            raise AllowlistError(f"{where}: id {identifier!r} is not a lowercase hyphenated name")
+        if not _ENDPOINT.match(endpoint):
+            raise AllowlistError(f"{where}: endpoint {endpoint!r} is not 'METHOD /path'")
+        if (endpoint, identifier) in seen:
+            raise AllowlistError(
+                f"{where}: a second case with this id on this endpoint. An id is unique per "
+                f"endpoint because the report names a difference by (endpoint, case, identity), "
+                f"and two cases under one name is one difference nobody can reproduce"
+            )
+        seen.add((endpoint, identifier))
+
+        query, body = row["query"], row["body"]
+        content_type = row["content_type"]
+        _check_substitutions(where, query, body)
+        _check_body(where, endpoint, body, content_type)
+
+        anchors = _anchors(where, endpoint, row["anchors"])
+        needs = _members(where, "needs", row["needs"], NEEDS)
+        identities = _members(where, "identities", row["identities"], ROLES)
+        _check_path_parameters(where, endpoint, anchors, needs)
+
+        cases.append(
+            RequestCase(
+                identifier,
+                endpoint,
+                query,
+                body,
+                content_type,
+                anchors,
+                identities,
+                needs,
+                row["what_it_is_for"],
+            )
+        )
+
+    _check_anchor_targets(cases)
+    return tuple(cases)
+
+
+def _check_substitutions(where: str, query: str, body: str) -> None:
+    for text in (query, body):
+        for token in _SUBSTITUTION.findall(text):
+            if token not in SUBSTITUTIONS:
+                raise AllowlistError(
+                    f"{where}: <{token}> is not one of {', '.join(SUBSTITUTIONS)}. A token "
+                    f"nothing substitutes would reach the server as those literal characters"
+                )
+
+
+def _check_body(where: str, endpoint: str, body: str, content_type: str) -> None:
+    method = endpoint.split(" ", 1)[0]
+    if body != NONE and method in {"GET", "HEAD"}:
+        raise AllowlistError(f"{where}: a {method} case cannot carry a body")
+    if body == NONE and content_type != NONE:
+        raise AllowlistError(
+            f"{where}: content_type {content_type!r} with no body describes nothing"
+        )
+    if content_type != NONE and not _MEDIA_TYPE.match(content_type):
+        raise AllowlistError(
+            f"{where}: content_type {content_type!r} is neither a media type nor {NONE!r}"
+        )
+
+
+def _members(where: str, field: str, raw: str, allowed: Sequence[str]) -> Tuple[str, ...]:
+    """`[]`, or `[a, b]` whose members are all declared. An empty list is a value."""
+    match = _LIST.match(raw)
+    if not match:
+        raise AllowlistError(f"{where}: {field} {raw!r} is not a list; an empty one is written []")
+    body = match.group(1).strip()
+    values = tuple(part.strip() for part in body.split(",")) if body else ()
+    for value in values:
+        if value not in allowed:
+            raise AllowlistError(f"{where}: {field} {value!r} is not one of {', '.join(allowed)}")
+    if len(set(values)) != len(values):
+        raise AllowlistError(f"{where}: {field} {raw!r} repeats a value")
+    return values
+
+
+def _anchors(where: str, endpoint: str, raw: str) -> Tuple[Anchor, ...]:
+    match = _LIST.match(raw)
+    if not match:
+        raise AllowlistError(f"{where}: anchors {raw!r} is not a list; an empty one is written []")
+    body = match.group(1).strip()
+    if not body:
+        return ()
+    anchors: list[Anchor] = []
+    for part in body.split(","):
+        # Quoted, because `{itemId}` inside an unquoted flow sequence is a YAML flow *mapping*
+        # and the two-regex reader cannot tell. `test_the_three_registers_are_valid_yaml` is what
+        # said so, on the first anchor that named a path with a parameter in it.
+        anchors.append(_anchor(where, endpoint, _scalar(part)))
+    if len({one.parameter for one in anchors}) != len(anchors):
+        raise AllowlistError(f"{where}: two anchors fill the same path parameter")
+    return tuple(anchors)
+
+
+def _anchor(where: str, endpoint: str, text: str) -> Anchor:
+    literal = _LITERAL_ANCHOR.match(text)
+    if literal:
+        return Anchor(literal.group("parameter"), "literal", "", "", literal.group("value"))
+
+    parsed = _ANCHOR.match(text)
+    if not parsed:
+        raise AllowlistError(
+            f"{where}: anchor {text!r} is none of '<parameter>=literal:<value>', "
+            f"'<parameter>=listing:<METHOD> <path>#<case>@<position>' or "
+            f"'<parameter>=response:<METHOD> <path>#<case>@<pointer>'"
+        )
+    anchor = Anchor(
+        parsed.group("parameter"),
+        parsed.group("kind"),
+        parsed.group("endpoint"),
+        parsed.group("case"),
+        parsed.group("at"),
+    )
+    if anchor.kind == "listing" and not _POSITION.match(anchor.at):
+        raise AllowlistError(f"{where}: a listing anchor ends in a row position, not {anchor.at!r}")
+    if anchor.kind == "response" and not anchor.at.startswith("/"):
+        raise AllowlistError(
+            f"{where}: a response anchor ends in a JSON Pointer, not {anchor.at!r}"
+        )
+    if anchor.endpoint == endpoint:
+        raise AllowlistError(
+            f"{where}: anchored on its own endpoint, which cannot be resolved before itself"
+        )
+    return anchor
+
+
+def _check_path_parameters(
+    where: str, endpoint: str, anchors: Sequence[Anchor], needs: Sequence[str]
+) -> None:
+    """Every `{parameter}` of the path is accounted for, or the case says it is waiting.
+
+    Three ways to account for one, and no fourth. An anchor fills it; `userId` is the identity's
+    own and never an anchor (plan §6.1.1); or the case declares `fixture` and leaves it unfilled
+    because the item it wants does not exist in any reachable library, which T11 resolves. A
+    parameter that is none of the three is a case that would be sent with a literal `{itemId}` in
+    its path and compared as two `404`s.
+    """
+    declared = {one.parameter for one in anchors}
+    for parameter in _PATH_PARAMETER.findall(endpoint):
+        if parameter in declared or parameter == IDENTITY_PATH_PARAMETER:
+            continue
+        if "fixture" in needs:
+            continue
+        raise AllowlistError(
+            f"{where}: path parameter {parameter!r} has no anchor, is not "
+            f"{IDENTITY_PATH_PARAMETER!r}, and the case does not declare `needs: [fixture]`"
+        )
+
+
+def _check_anchor_targets(cases: Sequence[RequestCase]) -> None:
+    """An anchor names a case, so the case has to be one this file declares."""
+    declared = {(one.endpoint, one.id) for one in cases}
+    for case in cases:
+        for anchor in case.anchors:
+            if anchor.kind == "literal":
+                continue
+            if (anchor.endpoint, anchor.case) not in declared:
+                raise AllowlistError(
+                    f"case {case.id} on {case.endpoint}: anchor {anchor.parameter} names "
+                    f"{anchor.case!r} on {anchor.endpoint!r}, which this register does not declare"
+                )
+
+
+def check_anchor_orderings(cases: Sequence[RequestCase], entries: Sequence[Entry]) -> None:
+    """**An anchor is only as sound as the ordering it indexes** (plan §6.1.1).
+
+    A `listing:` anchor says *"the row at position 3"*, so a listing the allowlist marks `drawn`
+    or `unordered` gives it an arbitrary row — and every case anchored on one is then a comparison
+    of two different items dressed up as a comparison of one. The register refuses it, which is
+    why this is a check over the two files together and not over either alone.
+    """
+    for case in cases:
+        for anchor in case.anchors:
+            if anchor.kind != "listing":
+                continue
+            rules = resolve(entries, anchor.endpoint, anchor.case)
+            excused = dict(rules.drawn_arrays)
+            excused.update(rules.unordered_arrays)
+            if excused:
+                raise AllowlistError(
+                    f"case {case.id} on {case.endpoint}: {anchor.parameter} is anchored on "
+                    f"{anchor.case!r} of {anchor.endpoint!r}, whose rows the allowlist excuses "
+                    f"({', '.join(sorted(excused))}). An anchor over a listing with no ordering "
+                    f"names an arbitrary row (plan §6.1.1)"
+                )
+
+
+def load_cases(
+    path: Path = DEFAULT_REQUEST_CASES, entries: Sequence[Entry] = ()
+) -> Tuple[RequestCase, ...]:
+    """Read, parse and validate the request cases against the allowlist entries.
+
+    `entries` is not optional in spirit: `check_anchor_orderings` is the half of the validation
+    that needs both files, and an empty tuple runs every other check and excuses nothing — which
+    is what a caller that only wants the shapes gets, and what it says it is getting.
+    """
+    cases = check_cases(parse_cases(Path(path).read_text(encoding="utf-8")))
+    check_anchor_orderings(cases, entries)
+    return cases
+
+
+def cases_for(cases: Iterable[RequestCase], endpoint: str) -> Tuple[RequestCase, ...]:
+    """Every case declared for one endpoint, in file order — the order a run issues them in."""
+    return tuple(case for case in cases if case.endpoint == endpoint)
+
+
 def resolve(
     entries: Iterable[Entry],
     endpoint: str,
@@ -493,19 +881,30 @@ def resolve(
 __all__ = [
     "DEFAULT_ALLOWLIST",
     "DEFAULT_NAMED_COMPARISONS",
+    "DEFAULT_REQUEST_CASES",
     "DERIVATION_CLASSES",
+    "IDENTITY_PATH_PARAMETER",
     "KINDS",
     "NEEDS",
     "NONE",
+    "ROLES",
+    "SUBSTITUTIONS",
     "AllowlistError",
+    "Anchor",
     "Entry",
     "NamedComparison",
+    "RequestCase",
     "Resolution",
+    "cases_for",
     "check",
+    "check_anchor_orderings",
+    "check_cases",
     "check_named",
     "load",
+    "load_cases",
     "load_named",
     "parse",
+    "parse_cases",
     "parse_named",
     "resolve",
 ]

@@ -137,6 +137,24 @@ outstanding, and three of them because no fixture instance was available"* rathe
 outstanding"* — and what stops a row that was never askable from being quietly dropped instead of
 counted as a miss.
 
+**What the sweep sends is checked in too**, as [request-cases.yaml](request-cases.yaml): per
+endpoint, a name, a query, a body, a content type, the **anchors** that fill its path parameters
+and the identities it is meaningful for. AC-3's floor is one case per endpoint — 59 — and 010's own
+gate measured that floor to be *not enough*: both differences it found on `/Items/{itemId}/Similar`
+are invisible to a bare request. **The eight `level: L3` rows of [surface.yaml](surface.yaml) are
+seeded first**, because that column is a required conformance level and nothing has ever checked
+that one is reached — `tools/extract_v1_surface.py` validates only that the value is one of
+`L0..L3`, and every implemented feature's definition of done has deferred the differential half
+here. Each of the eight carries more than one case and names more than one identity.
+
+**An anchor is never an identifier**, because the two servers derive those differently by design
+([§1.4](behaviours.md#14-item-identifiers-are-32-lowercase-hex-characters)). It is a declared
+listing case and a row position, resolved against each server immediately before the case runs — or
+a JSON Pointer into an earlier case's response, for the things no listing carries, or a literal for
+a path parameter that names a format rather than an item. **An anchor over a listing the allowlist
+marks `drawn` or `unordered` is refused**: an anchor is only as sound as the ordering it indexes,
+and over a listing with none it names an arbitrary row.
+
 **The allowlist** — fields that legitimately differ and are therefore compared by *shape* rather
 than by value — is checked in beside the tool, and **every entry declares one of exactly two kinds
 of reason**: the behaviours.md section that argues a difference a server *chose*, or one of four
