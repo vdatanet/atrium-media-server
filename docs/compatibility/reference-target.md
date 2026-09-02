@@ -119,19 +119,19 @@ start out substantive rather than speculative. But nobody can re-run them from h
 each one a **standing debt**: it is discharged by writing the probe script under `tools/` that
 reproduces the measurement, at which point the citation becomes a plain `[probe: …]`.
 
-| Claim | Cited at | Discharged by | Script |
+| Claim | Cited at | Discharged by | Status |
 |---|---|---|---|
-| The four accepted authentication mechanisms | 2026-06-13 | `tools/probe_auth_mechanisms.py` (feature 002) | not written |
-| Item ids are 32 lowercase hex, stable across rescans | 2026-06-13 | `tools/probe_item_ids.py` (feature 003) | not written |
-| `UserData` is returned without `Fields` | 2026-06-13 | `tools/probe_item_fields.py` (feature 005) | not written |
-| Item-level `Container` is a demuxer list | 2026-06-13 | `tools/probe_media_sources.py` (feature 008) | not written |
+| ~~The four accepted authentication mechanisms~~ | 2026-06-13 | `tools/probe_auth_mechanisms.py` (feature 002) | ✅ **discharged 2026-08-26**, under a name this row did not carry, which is why it read *"not written"* for three weeks. And it moved the claim: there are **five** mechanisms, not four ([behaviours §2.4](behaviours.md#24-there-are-five-authentication-mechanisms-and-one-of-them-wins)); the fifth entered the probe on 2026-08-28 and all five are re-measured on every run |
+| Item ids are 32 lowercase hex, **stable across rescans** | 2026-06-13 | `tools/probe_item_identity.py` (feature 003) — half of it | **Open, and half paid.** The form and the derivation are measured: 448 of 448 live ids reproduce from the item's own `Path` `[probe: tools/probe_item_identity.py, Jellyfin 10.11.11, 2026-08-27]`, and a value equal to that construction is 32 lowercase hex by construction. **Stability across rescans is not.** The probe reads one moment and never sees a second scan, and a rescan is a **write** — so it is the single-use reference instance's to answer, beside the scan [010 T10](../../specs/010-conformance-harness/tasks.md) already performs. [behaviours §1.4](behaviours.md#14-item-identifiers-are-32-lowercase-hex-characters) keeps the `prior-probe` for that half alone |
+| ~~`UserData` is returned without `Fields`~~ | 2026-06-13 | `tools/probe_item_shapes.py` (feature 005) | ✅ **discharged 2026-08-27**, under another name again. `UserData` is present on the bare list row of all nine content types and of `/UserViews` — 12 of 12 items each, with no `Fields` and no `EnableUserData` — and its keys include `Key` and `ItemId` `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`. It also narrowed the claim: a by-name row from `/Genres` carries **no** `UserData` at all, where the same genre through `/Items?ids=` does `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]` |
+| ~~Item-level `Container` is a demuxer list~~ | 2026-06-13 | `tools/probe_media_container.py` (feature 008) | ✅ **discharged 2026-08-29** — and the claim did not survive as written: the item level is a list for the mp4 family and a single word for everything else, and the single form on a listing is the **file's own extension** rather than anything a profile resolved ([behaviours §1.6](behaviours.md#16-container-at-item-level-is-a-list-for-some-formats-and-the-single-form-is-per-response)). The 2026-06-13 reading is kept rather than deleted: it was taken on an mp4 and is true of one — it generalised wrongly rather than failing to reproduce |
 | ~~`StartIndex` present in list envelopes~~ | 2026-06-13 | `tools/probe_query_envelope.py` (feature 005) | ✅ **discharged 2026-08-26** |
-| `/Users/Public` may return `[]` | 2026-06-13 | `tools/probe_auth_mechanisms.py` (feature 002) | not written |
-| The `SortBy` vocabulary | 2026-06-13 | `tools/probe_sort_vocabulary.py` (feature 005) | not written |
-| Dates carry seven fractional digits | 2026-06-19 | `tools/probe_wire_format.py` (feature 001) | not written |
+| `/Users/Public` may return `[]` | 2026-06-13 | `tools/probe_auth_mechanisms.py` (feature 002) reaches the route | **Open, and not for want of an author.** The probe reads the route on every run, and every run answers complete user objects. The `[]` needs an installation where **every** user is hidden from the login screen, which is a write to a user's configuration and not something to do to an operator's server. It becomes askable against the single-use instance of [ADR-0007](../decisions/0007-a-container-runtime-for-the-reference-instance.md), and is [010 T13](../../specs/010-conformance-harness/tasks.md)'s to pay |
+| The `SortBy` vocabulary | 2026-06-13 | `tools/probe_sort_stability.py` (feature 005) exercises the members | **Open, and doubted.** All eight members order rows and are honoured `[probe: tools/probe_sort_stability.py, Jellyfin 10.11.11, 2026-08-27]`, so what is unmeasured is the **closure** of the set: whether a token outside the eight orders anything. The reference's own enumeration names **thirty** `[source: Jellyfin.Data/Enums/ItemSortBy.cs @ v10.11.11]`, an unrecognised token is ignored rather than refused, and a shipping music client sends three that are not among the eight ([client-embeat-mobile §5.8](client-embeat-mobile.md#58-the-album-play-queue-is-correctly-ordered-by-accident)). A probe that asks those three settles it, read-only, against any reachable server |
+| Dates carry seven fractional digits | 2026-06-19 | `tools/probe_wire_format.py` (feature 001), unwritten | **Open, and nothing but an author is missing.** Read-only, answerable from any dated response on any reachable server: no instance, no write, no second identity. [behaviours §1.2](behaviours.md#12-dates-carry-up-to-seven-fractional-digits) |
 | ~~`/Sessions/Playing/Progress` needs no `MediaSourceId`~~ | 2026-06-13 | `tools/probe_playstate.py` (feature 007) | ✅ **discharged 2026-08-26** |
 | ~~PCM/WAV transcoding returns 500, and `/universal` returns headerless PCM~~ | 2026-08-03 | `tools/probe_universal_audio.py` (feature 008) | ✅ **discharged 2026-08-29** — and it moved both claims: the 500 has two causes rather than one, and the headerless body comes from the *transcoding* container rather than from `Container` |
-| `LocalAddress` gets an HTTPS override | 2026-08-14 | `tools/probe_local_address.py` (feature 001) | not written |
+| `LocalAddress` gets an HTTPS override | 2026-08-14 | `tools/probe_local_address.py` (feature 001), unwritten | **Open, and it needs a server this project configures.** The override appears only on an installation with HTTPS enabled and a certificate to enable it with, which is a write to the server's configuration. The same single-use instance answers it, and it is [010 T13](../../specs/010-conformance-harness/tasks.md)'s to pay |
 | ~~`TotalRecordCount` is 0 without `limit`~~ | 2026-08-05 | `tools/probe_by_name_counts.py` (feature 005) | ✅ **discharged 2026-08-28** |
 | ~~The `/System/Info/Public` payload: seven fields, their order and shapes~~ | 2026-06-13 | `tools/probe_public_info.py` (feature 001) | ✅ **discharged 2026-08-28** — the 2026-08-28 audit (M8) found this claim carried no register row at all |
 | ~~`AccessToken` is 32 lowercase hex~~ | 2026-06-13 | `tools/probe_auth_mechanisms.py` (feature 002) | ✅ **discharged 2026-08-28** — same audit finding: no row until the discharge |
@@ -141,16 +141,41 @@ reproduces the measurement, at which point the citation becomes a plain `[probe:
 proved nothing; the citation changes from `prior-probe` to `probe` only when it has been run and
 its finding recorded.
 
-**Six down, nine to go**, the last of them on 2026-08-29. The first two were re-measured on
-2026-08-26 against a live 10.11.11 and both held: `StartIndex` is present on every envelope, and
-`/Sessions/Playing/Progress` is accepted without a `MediaSourceId`. Every discharged citation is
-now a plain `probe:` and its row is struck from this register.
+**And discharged under another name is still discharged**, which is the half this register was
+missing. **Four** of its rows named a script nobody ever wrote while the question was already
+being answered — whole or in part — by a probe written for some other feature, and a row that says *"not written"* about a
+measurement somebody has taken is worse than no row at all: it hides work, and it makes the debt
+look bigger than it is. **The row now names the script that actually answered it**, and the test
+below refuses a struck row that names a file which is not there.
+
+**Ten down, five to go**, reconciled on 2026-09-02 at [010 T1](../../specs/010-conformance-harness/tasks.md).
+The first two were re-measured on 2026-08-26 against a live 10.11.11 and both held: `StartIndex` is
+present on every envelope, and `/Sessions/Playing/Progress` is accepted without a `MediaSourceId`.
+Every discharged citation is now a plain `probe:` and its row is struck from this register.
+
+**Each of the five that remain says why it is still open**, because AC-9 of
+[010](../../specs/010-conformance-harness/spec.md) asks for a probe script *or a recorded reason
+there cannot be one*, and a bare *"not written"* is neither. Three of the five are blocked on
+something other than an author: two need a **configuration** this project may not write to an
+operator's server, and one needs a library scanned **twice**. All three are what a single-use
+reference instance exists for ([ADR-0007](../decisions/0007-a-container-runtime-for-the-reference-instance.md)).
+The other two need somebody to write ten lines of `urllib`.
+
+`tests/unit/test_probe_convention.py` asserts the properties this table has to keep: a struck
+row names a script that exists under `tools/`, an open row names one that exists or carries its
+reason, the sentence above is recomputed from the rows rather than believed, and every dated
+`prior-probe` citation in the repository belongs to a row — which is the 2026-08-28 audit's M8
+finding, where three claims cited a prior measurement this register had never recorded.
 
 **Every run so far has returned more than the claim it was sent to check** — three envelope
 shapes the original measurement had never covered, a six-branch completion rule where the
 documentation had two thresholds, and, at the PCM/WAV row, a symptom with two causes where one
-was recorded and a symptom recorded against a parameter that does not produce it. That is the
-argument for discharging the rest rather than trusting them.
+was recorded and a symptom recorded against a parameter that does not produce it. The three rows
+struck on 2026-09-02 say the same thing again, and all three had been sitting in the register as
+*"not written"* while their answers were already recorded elsewhere: **four** authentication
+mechanisms turned out to be five, an item-level `Container` is a list for one family of formats and
+a single word for the rest, and `UserData` is on every item **except** a by-name row from
+`/Genres`. That is the argument for discharging the rest rather than trusting them.
 
 A claim that fails to reproduce when its probe is finally written is not quietly dropped: it goes
 into [behaviours.md](behaviours.md) as a behaviour that *changed*, with both dates.
