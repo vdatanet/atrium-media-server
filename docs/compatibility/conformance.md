@@ -340,6 +340,15 @@ Bumping the pinned Jellyfin version is a deliberate act with a fixed procedure:
 
 A version bump that skips step 2 has not been done; it has been declared.
 
+**Since 2026-09-02 the four steps are a program**: `tools/bump_reference_version.py` runs them in
+this order and stops at the first failure, with every later step reported *not run* rather than
+skipped quietly. It adds no mechanism — each step is a tool that already existed — and it removes
+the shortcut, which is the whole point. Two things it does that this prose could not: it decides
+the paragraph below by **measuring** the running reference's version rather than by taking
+somebody's word, and it validates step 1 against a **copy** of `surface.yaml` with the pin moved,
+because the validator's own version gate would otherwise fail step 1 on every bump before it could
+report a disappeared path.
+
 ### The two rows move separately
 
 [reference-target §1](reference-target.md#1-the-pinned-version) pins two things, and the procedure

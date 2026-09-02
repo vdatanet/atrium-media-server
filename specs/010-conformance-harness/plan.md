@@ -1049,6 +1049,54 @@ moves — the same server, a different document of it — step 2 has no input an
 and skips it, which is the move that was actually made on 2026-09-01. When the running reference
 changed, step 2 is mandatory and no flag skips it.
 
+**Five things this section did not know, written in on 2026-09-02 by the task that built it.**
+
+1. **Which move it is is measured, not declared, and an unreadable version is neither.** The
+   reference is asked its own version and it is compared with the **behavioural** row of
+   reference-target §1 — so there is no flag to spell the answer with, which is what makes *"no
+   flag skips step 2"* a property rather than a promise. A version that cannot be read at all is
+   `UNDECIDED` and the command **stops before step 1**: assuming contract-only there is the one
+   path that ends in a new pin over readings nobody took. The same guard reads the `Server` header
+   and refuses a reference URL that answers `Atrium/…`, because Atrium says
+   `ProductName: "Jellyfin Server"` on purpose (behaviours §4.1) and would otherwise confirm the
+   pin against itself, four steps green.
+2. **Step 1 cannot run the surface validator against the new document with the old pin in place.**
+   `tools/extract_v1_surface.py` compares the document's own `info.version` with `surface.yaml`'s
+   pin and errors when they differ — measured on 2026-09-02: exit 1, the mismatch the only error,
+   every path check having passed. So step 1 as written would fail at step 1 on every real bump,
+   before reporting the disappeared paths it exists to report. It therefore validates a **copy** of
+   the surface with the pin moved, written into the git-ignored output directory, which keeps step
+   4 the only thing that changes the repository.
+3. **The pin is in five files and nine places**, and nobody had written the list down:
+   `surface.yaml`'s document version and source tag, `property-names.json`'s
+   `reference_version` (regenerated from the new document rather than edited),
+   `src/atrium/__init__.py`'s `REFERENCE_VERSION` — the version the server *reports*, which
+   Principle I makes load-bearing — `tools/_reference.py`'s `IMAGE_VERSION` and `IMAGE_DIGEST`, and
+   reference-target §1's four rows. Step 4 locates every one of them **before writing any**, and
+   reads each back afterwards: a bump that moved four of the five is the *"new pin, stale
+   readings"* half-bump wearing a green tick. `--image` is required for the same reason — ADR-0007
+   pins by digest and never by tag, so a version this repository cannot stand up is one it cannot
+   measure.
+4. **Step 3 re-dates only what the probes said they confirmed, and never a citation.** The document
+   a probe supports is read from the probe's own report rather than from its source, and only the
+   `Last verified` header moves. A `[probe: …, Jellyfin 10.11.11, 2026-08-27]` records what was
+   measured and when; rewriting the version inside it would turn a measurement into a claim
+   (Principle II). Most of what the probes name is a `spec.md`, which has no such line and is left
+   alone, by name.
+5. **The step is the unit of the refusal, not the probe.** Step 3 runs all 56 probes and fails if
+   any did not pass; it does not stop at the first contradiction, because the probes are
+   independent and nothing downstream consumes one's output — what stops is the *procedure*, and
+   step 4 does not run. A bump wants every contradiction at once rather than one per day.
+
+**And the classification is what keeps a dead container from being reported as a changed
+reference.** Exit `1` is a contradiction, `2` is *it could not look*, `3` is 010 T13's leak — and
+`differential.py`'s exit `1` covers both a difference it found and a case it never asked, which its
+own summary line separates. The pinned image dies with `SIGILL` on some starts (§7), and it reaches
+the command as `2`, because all three probes that stand up their own instance convert an
+`InstanceError` into a `ProbeError`. What the command deliberately does **not** distinguish is a
+reference that died mid-run from one that was never reachable: both mean nothing was measured and
+both are re-run.
+
 ### 6.10 The probe convention, and the debt
 
 **§3.5's convention is `tools/_probe.py`, and all 53 probes already use it** — every one imports
