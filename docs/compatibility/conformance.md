@@ -129,6 +129,14 @@ called clean. There are **twenty** of them: sixteen when 010's spec was accepted
 [behaviours §5.2](behaviours.md) and [§5.6](behaviours.md), 005's OQ-7 and 007's paused-session
 ticker — were given this table as their owner rather than left as debts nobody was measuring.
 
+**The twenty are checked in as [named-comparisons.yaml](named-comparisons.yaml)**, one row each,
+and `tests/unit/test_allowlist.py` compares the file against 010 §3.10 row for row. Every row
+carries a **`needs`**: the seat, the fixture, the rescan, the wait, the latency, the bytes or the
+second run without which it cannot be asked at all. That is what lets a report say *"four
+outstanding, and three of them because no fixture instance was available"* rather than *"four
+outstanding"* — and what stops a row that was never askable from being quietly dropped instead of
+counted as a miss.
+
 **The allowlist** — fields that legitimately differ and are therefore compared by *shape* rather
 than by value — is checked in beside the tool, and **every entry declares one of exactly two kinds
 of reason**: the behaviours.md section that argues a difference a server *chose*, or one of four
