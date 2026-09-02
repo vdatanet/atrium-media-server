@@ -1,0 +1,91 @@
+{
+  "what": "A list envelope, which is the shape 010 OQ-1 decided the engine by. Nothing on the wire identifies a row - Path is absent from every default list row, 0 of 1000, and (Type, Name) is 976 distinct of 1000 - so rows are compared by position and the ordering is part of the contract under test. The excused fields are scoped through the array with the RFC 6901 index wildcard, because every field row of spec 3.3 lives inside a row of an envelope like this one and an entry that could only name a literal index could excuse none of them.",
+  "rules": {
+    "excused_fields": {
+      "/Items/-/Id": "derived-identifier",
+      "/Items/-/ServerId": "derived-identifier",
+      "/Items/-/DateCreated": "wall-clock",
+      "/Items/-/ImageTags": "content-hash"
+    }
+  },
+  "atrium": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "Items": [
+        {
+          "Name": "Bicycle Thieves",
+          "Id": "1c1f2a3b4c5d6e7f8091a2b3c4d5e6f7",
+          "ServerId": "0f2c9d6a4b1e4f7d8c3a5b6e7d8f9a0b",
+          "DateCreated": "2026-09-02T09:14:03.1120000Z",
+          "ProductionYear": 1948,
+          "Type": "Movie",
+          "IsFolder": false,
+          "ImageTags": { "Primary": "d41d8cd98f00b204e9800998ecf8427e" }
+        },
+        {
+          "Name": "Rashomon",
+          "Id": "2d2f3a4b5c6d7e8f9091a2b3c4d5e6f7",
+          "ServerId": "0f2c9d6a4b1e4f7d8c3a5b6e7d8f9a0b",
+          "DateCreated": "2026-09-02T09:14:03.2240000Z",
+          "ProductionYear": 1950,
+          "Type": "Movie",
+          "IsFolder": false,
+          "ImageTags": { "Primary": "c4ca4238a0b923820dcc509a6f75849b" }
+        },
+        {
+          "Name": "Tokyo Story",
+          "Id": "3e3f4a5b6c7d8e9f0091a2b3c4d5e6f7",
+          "ServerId": "0f2c9d6a4b1e4f7d8c3a5b6e7d8f9a0b",
+          "DateCreated": "2026-09-02T09:14:03.3360000Z",
+          "ProductionYear": 1953,
+          "Type": "Movie",
+          "IsFolder": false,
+          "ImageTags": { "Primary": "c81e728d9d4c2f636f067f89cc14862c" }
+        }
+      ],
+      "TotalRecordCount": 3,
+      "StartIndex": 0
+    }
+  },
+  "reference": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "Items": [
+        {
+          "Name": "Bicycle Thieves",
+          "Id": "8091a2b3c4d5e6f71c1f2a3b4c5d6e7f",
+          "ServerId": "e4f7d8c3a5b6e7d8f9a0b0f2c9d6a4b1",
+          "DateCreated": "2026-09-02T09:41:57.6650000Z",
+          "ProductionYear": 1948,
+          "Type": "Movie",
+          "IsFolder": false,
+          "ImageTags": { "Primary": "a87ff679a2f3e71d9181a67b7542122c" }
+        },
+        {
+          "Name": "Rashomon",
+          "Id": "9091a2b3c4d5e6f72d2f3a4b5c6d7e8f",
+          "ServerId": "e4f7d8c3a5b6e7d8f9a0b0f2c9d6a4b1",
+          "DateCreated": "2026-09-02T09:41:57.7770000Z",
+          "ProductionYear": 1950,
+          "Type": "Movie",
+          "IsFolder": false,
+          "ImageTags": { "Primary": "e4da3b7fbbce2345d7772b0674a318d5" }
+        },
+        {
+          "Name": "Tokyo Story",
+          "Id": "0091a2b3c4d5e6f73e3f4a5b6c7d8e9f",
+          "ServerId": "e4f7d8c3a5b6e7d8f9a0b0f2c9d6a4b1",
+          "DateCreated": "2026-09-02T09:41:57.8880000Z",
+          "ProductionYear": 1953,
+          "Type": "Movie",
+          "IsFolder": false,
+          "ImageTags": { "Primary": "1679091c5a880faf6fb5e6087eb1b2dc" }
+        }
+      ],
+      "TotalRecordCount": 3,
+      "StartIndex": 0
+    }
+  }
+}
