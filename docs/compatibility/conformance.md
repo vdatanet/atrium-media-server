@@ -177,6 +177,17 @@ is
 a listing whose order is drawn or whose ties are engine-resolved is
 [behaviours §3.6](behaviours.md#36-ties-are-engine-resolved-and-paging-the-artist-sorts-loses-rows--class-b-diverged).
 
+**An excused array's row count is still compared, and on `Similar` it differs every time.** The
+reference answers `limit + 4` rows on a movie seed where Atrium answers exactly `limit`
+`[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]`, which is the divergence
+[behaviours §3.24](behaviours.md#324-similar-answers-limit--4-on-a-movie-seed--class-b-diverged)
+argues. So every run of that endpoint reports the count, permanently, and that is the intended
+answer rather than a gap: the count is the only quantity of a drawn array a run can still check, so
+an entry excusing it would leave the endpoint with nothing measured at all, and a report line saying
+the known divergence is still exactly the known divergence is what notices the day it stops being
+`+ 4`. What the count must not do is stop the rows being walked for their shape — that split is
+[010 plan §6.2](../../specs/010-conformance-harness/plan.md).
+
 **Adding to the allowlist is a contract decision**, not a way to make a red test green. It happens
 in review, with the reason written in the table.
 

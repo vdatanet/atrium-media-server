@@ -462,7 +462,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T4 — The excused arrays, and an ordering that is not total
 
-- [ ] **Changes:** `tools/_differential.py` gains the two array kinds `Rules` already declares:
+- [x] **Changes:** `tools/_differential.py` gains the two array kinds `Rules` already declares:
   `drawn` compares the envelope, the **row count**, and every row's key set and types, and no row's
   values (AC-17); `unordered` compares as a multiset, so a difference in row order alone produces
   nothing (AC-18). The three excused arrays of spec §3.3 become entries in T3's file: the rows of
@@ -476,6 +476,91 @@ written against twenty, and the `outstanding:` section they described is gone ra
   excusing what is in it; and a reordered `unordered` array produces nothing while the same array
   reordered **and** changed produces exactly the change.
 - **Spec reference:** §3.3, §6, AC-17, AC-18; plan §6.2, §6.3
+
+> **Done (2026-09-02).** *The decision T3 handed over is taken: the row count stays compared, no
+> acceptance criterion is amended, and `Similar`'s `limit + 4` is a difference the report states on
+> every run.* §3.24 and AC-17 collide on the one endpoint the `drawn` kind exists for — the
+> reference answers `limit + 4` rows on a movie seed where Atrium answers exactly `limit`, measured
+> at 1, 5 and 20 on two seeds each
+> `[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]` — so the count differs
+> always. It is reported always, for three reasons. **The count is the last thing L3 can check
+> there:** a drawn array's rows are excused by construction, so excusing the count too would leave
+> the endpoint with nothing measured at all, and a run that compared nothing would report clean.
+> **The entry could not be written narrowly:** *"excuse the count, keep the shape"* is not
+> something a pointer says, and the widest reading of an array entry is the over-excusing
+> `allowlist.yaml` is written against. **And a repeated known divergence is a regression check**,
+> not noise: the line says `2 against 6` beside behaviours §3.24 every run, and it stops saying it
+> the day the surplus stops being exactly four or Atrium's own count moves. The alternative reading
+> — an AC-17 exception — would amend an accepted criterion to buy a quieter report, and this one
+> did not need it. Recorded in [conformance.md](../../docs/compatibility/conformance.md#l3--differential)
+> and in `allowlist.yaml`'s own comment, where the fourth entry would otherwise be written.
+>
+> *The finding is that a `drawn` array's shape walk cannot be positional, and the plan's own
+> sentence for it says otherwise.* Plan §6.2 step 4 says *"the rows are still walked"*, which reads
+> as row 0 against row 0. Do that and the walk reports **content as shape**: a null property is
+> absent everywhere by one setting on both servers
+> ([behaviours §1.7](../../docs/compatibility/behaviours.md)), so a row's key set depends on which
+> item it holds — an item with no production year simply has no `ProductionYear` — and a *draw*
+> guarantees the two sides hold different items (behaviours §3.23: four identical requests shared
+> **none**). Measured on the two-row case now in the suite, the positional reading reports one
+> `MISSING_KEY` and one `EXTRA_KEY` about nothing at all, on an array where every row is
+> legitimately a different film. The rows are reduced instead to one map of *generalised pointer →
+> the JSON types seen there across every row*, and the two maps compared;
+> `test_a_drawn_arrays_shape_walk_is_position_free_because_a_draw_holds_other_items` is what holds
+> it, and it fails under the obvious implementation rather than under a deleted guard.
+>
+> *T2's split is landed, and the ordering question it left open is answered.* A length difference
+> suppresses the **positional** comparison and nothing else — `drawn` still walks the shape,
+> `unordered` still compares the multiset — which is what keeps AC-17 alive on the one endpoint it
+> was written for. And **plan §6.2 did not say what an `unordered` array does when the multisets
+> genuinely differ**, while [plan §9's risk row](plan.md#9-risks) claimed the `LENGTH` guard and the
+> `ORDER` class covered it: neither fires on a page whose length is unchanged and whose rows are not
+> a permutation, which is exactly what paging the reference's artist sorts produces — one row twice
+> and another lost, at the same length
+> ([behaviours §3.6](../../docs/compatibility/behaviours.md)). **The answer: the rows that match are
+> removed and only the residue is aligned and compared.** On the measured shape that is 2 findings
+> where the positional fallback reports **10**, asserted as a count. Pairing rows arbitrarily is
+> legitimate only under an `unordered` entry, which is a written statement that this array has no
+> ordering to lose; an ordinary array keeps its index alignment on purpose, because matching equal
+> rows across positions would silently discard the ordering the sweep is testing — plan §9's row now
+> says so rather than claiming a mitigation it does not have.
+>
+> *And the second cascade arrives through the door the first one was shut on.* The shape walk emits
+> one finding per differing pointer, so a row that lost a whole `UserData` object reported one
+> `MISSING_KEY` per property inside it, and a `Genres` of objects against a `Genres` of strings
+> reported the type difference **and** a key inside the object it could not have. A difference at a
+> node now prunes its own subtree, which is what `_walk` already did with a `TYPE` and
+> `_walk_object` with a missing key — found by writing the nested-array case, not by reading.
+>
+> *Routine calls taken, none of which touches an accepted document.* **The presence of *an element
+> of* a nested array is not compared**, only its type: the pointer `/Items/-/Genres/-` exists on a
+> side only because some row held a non-empty array, and one film having three genres where another
+> has none is content, not shape. **An empty array has no shape**, so a `drawn` array that is empty
+> on one side reports its count and stops, rather than reporting every key of every row as missing
+> on an endpoint whose emptiness is a draw's own outcome. **`drawn` outranks `unordered`** where an
+> entry of each covers one array, since having no comparable values is strictly more than having no
+> comparable order. **An `unordered` array of a different length still reports one `LENGTH`**, with
+> a note counting the rows that matched nothing on either side — a lost row is a real difference and
+> a multiset needs no alignment to find it. And **no `zip`**: its `strict=` is 3.10 and `tools/` is
+> on the 3.9 floor (D-2), where the existing `strict=False` in `probe_sidecar_subtitles.py` would
+> raise if that line were ever reached.
+>
+> *Nothing was written to any server, and nothing here opens a socket, reads a file or reads a
+> clock.* The allowlist needed no new row: T3 had already written all three arrays of spec §3.3 into
+> the file, so this task is the engine that honours them. Both guards were proven by deletion —
+> remove the shape walk and three `drawn` assertions fail, including AC-17's own mutation row;
+> remove the residue and the artist-paging page reports 10 findings instead of 2 — and every
+> assertion is a count.
+>
+> *What T5, T6 and T8 inherit.* **Two of the three array entries are keyed on a request case that
+> does not exist yet**, so AC-18 is proven in the engine and excuses nothing on the wire until T6
+> declares `listing-ordered-at-random` and `listing-ordered-by-a-key-with-ties` (with
+> `by-name-without-limit`, T3's third). Until then a sweep of any listing compares its rows by
+> position, which is the safe half of being wrong and is *not* a green run: it is findings nobody
+> excused. **T8 must resolve the rules per `(endpoint, case)` and not per endpoint**, or those two
+> entries are unreachable no matter what T6 declares. And the report should print an excused array's
+> `LENGTH` beside its reason: on `Similar` that line is permanent, and a reader who does not see
+> behaviours §3.24 next to it will try to fix it.
 
 ## T5 — `docs/compatibility/named-comparisons.yaml`: twenty rows, and what each needs
 
