@@ -432,6 +432,14 @@ class InstanceSpec:
     image: str = IMAGE
     label: str = LABEL
     libraries: Tuple[Library, ...] = DEFAULT_LIBRARIES
+    #: Whether the runtime removes the container the moment it stops. On by default, because a
+    #: lost `finally` then leaves nothing but the volumes and the next run's sweep takes those.
+    #: **Off for a run that has to restart the instance**: `restart` is a stop and a start, and a
+    #: container marked for auto-removal does not survive the stop half - measured on Docker 29.4
+    #: on 2026-09-02, where a restarted instance was gone before it could be waited for. The
+    #: teardown is unaffected either way: `destroy` removes the container by force and the label
+    #: sweep removes anything a killed run left.
+    auto_remove: bool = True
     server_name: str = "atrium-reference"
     ready_timeout: float = 180.0
     scan_timeout: float = 900.0
@@ -575,8 +583,6 @@ class ReferenceInstance:
         arguments = [
             "run",
             "--detach",
-            # Even a lost `finally` then leaves nothing but the volumes, which the sweep takes.
-            "--rm",
             "--name",
             self.container,
             "--label",
@@ -597,8 +603,11 @@ class ReferenceInstance:
             # failure because the noise would be invisible (ADR-0007).
             "--volume",
             f"{root.resolve()}:{FIXTURE_MOUNT}:ro",
-            self.spec.image,
         ]
+        if self.spec.auto_remove:
+            # Even a lost `finally` then leaves nothing but the volumes, which the sweep takes.
+            arguments.insert(2, "--rm")
+        arguments.append(self.spec.image)
         started = runtime(*arguments)
         if not started.ok:
             self._started = True  # a failed `run` can still have left a container to remove
@@ -827,6 +836,38 @@ class ReferenceInstance:
             )
         self._announce("the library scan was asked for by name")
 
+    # -- the one configuration the instance cannot be handed at start --------------------------
+
+    def restart(self) -> None:
+        """Stop and start the container, keep its volumes, and wait for the API again.
+
+        **One configuration is only read at startup**, which is what this exists for: the
+        reference loads its certificate while the host is being built and re-reads it never - a
+        change to the network configuration validates the new path and then asks for a restart
+        `[source: Emby.Server.Implementations/ApplicationHost.cs:457-458, 761-764 @ v10.11.11]`.
+        So `LocalAddress`'s HTTPS override cannot be measured on an instance that has been running
+        since before the certificate existed, and `tools/probe_local_address.py` is the one caller.
+
+        The container survives this even though it was started with `--rm`: the runtime removes it
+        when it *exits*, and a restart is not an exit it sees that way (measured on Docker 29.4 on
+        2026-09-02). Should a runtime disagree, the readiness wait below reports it as a timeout
+        with the container's own log, which is a finding rather than a silent half-run.
+
+        The administrator's token is carried across by hand: `_wait_for_api` builds a fresh client
+        and would otherwise hand back an unauthenticated one, while the account itself survives in
+        the `/config` volume.
+        """
+        if not self._started or self._runtime is None:
+            raise InstanceError("there is no running instance to restart")
+        token = self.api.token if self.api is not None else ""
+        self._announce(f"restarting {self.container} so it re-reads its configuration")
+        restarted = self._runtime("restart", self.container)
+        if not restarted.ok:
+            raise InstanceError(restarted.failure("restarting the reference instance"))
+        self._wait_for_api()
+        if self.api is not None:
+            self.api.token = token
+
     # -- teardown ------------------------------------------------------------------------------
 
     def destroy(self) -> Tuple[str, ...]:
@@ -918,6 +959,7 @@ def stand_up(
 _SPEC_FIELDS = {
     "image",
     "label",
+    "auto_remove",
     "server_name",
     "ready_timeout",
     "scan_timeout",

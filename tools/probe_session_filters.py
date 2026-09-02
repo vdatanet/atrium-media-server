@@ -35,13 +35,13 @@ import time
 import urllib.parse
 from typing import Any
 
-import _probe
 from _probe import Probe, ProbeError, Server, main
 
-#: The throwaway account and the device it authenticates from. The device id has to differ from
-#: `_probe.DEVICE_ID` or the two sessions are one session and every filter measures nothing.
+#: The throwaway account. Its device has to differ from the administrator's or the two sessions
+#: are one session and every filter measures nothing - which `_probe.Server` now guarantees by
+#: deriving a device from the account (010 T13), where this probe used to swap a module constant
+#: around the sign-in and was the only one that did.
 THROWAWAY_USER = "atrium-probe-sessions"
-THROWAWAY_DEVICE = "atrium-probe-sessions-0001"
 
 #: A well-formed identifier no user owns - the same constant probe_playback_info.py uses, and for
 #: the same reason: a malformed one measures the model binder rather than the lookup.
@@ -148,7 +148,7 @@ def _active_battery(server: Server, probe: Probe) -> list[bool]:
 
 
 def _controllable_battery(
-    server: Server, probe: Probe, other_user_id: str, theirs: str
+    server: Server, probe: Probe, other_user_id: str, own: str, theirs: str
 ) -> list[bool]:
     checks: list[bool] = []
     mine = _sessions(server, controllableByUserId=server.user_id)
@@ -174,7 +174,7 @@ def _controllable_battery(
     probe.observe("controllableByUserId, a user nothing owns", _count(nobody))
     checks.append(nobody[0] == 200 and not nobody[1])
 
-    both = _sessions(server, controllableByUserId=other_user_id, deviceId=_probe.DEVICE_ID)
+    both = _sessions(server, controllableByUserId=other_user_id, deviceId=own)
     probe.observe("controllableByUserId with a deviceId that is not theirs", _count(both))
     checks.append(both[0] == 200)
     return checks
@@ -229,13 +229,8 @@ def run(server: Server, args) -> Probe:
     made = server.post("/Users/New", body={"Name": THROWAWAY_USER, "Password": password})
     user_id = made["Id"]
     try:
-        previous_device = _probe.DEVICE_ID
-        _probe.DEVICE_ID = THROWAWAY_DEVICE
-        try:
-            other = Server(server.base, timeout=server.timeout)
-            other.connect(THROWAWAY_USER, password, None)
-        finally:
-            _probe.DEVICE_ID = previous_device
+        other = Server(server.base, timeout=server.timeout)
+        other.connect(THROWAWAY_USER, password, None)
 
         #: Without this the throwaway session is not remote-controllable, and every
         #: controllableByUserId answer is empty for a reason that has nothing to do with the
@@ -252,16 +247,16 @@ def run(server: Server, args) -> Probe:
         if status != 204:
             raise ProbeError(f"could not make the throwaway session controllable: {status}")
 
-        channel = open_control_channel(other, THROWAWAY_DEVICE)
+        channel = open_control_channel(other, other.device_id)
         probe.observe(
             "control channel for the throwaway session",
             "open" if channel else "refused - controllableByUserId cannot be measured",
         )
 
-        checks = _device_battery(server, probe, _probe.DEVICE_ID, THROWAWAY_DEVICE)
+        checks = _device_battery(server, probe, server.device_id, other.device_id)
         checks += _active_battery(server, probe)
-        checks += _controllable_battery(server, probe, user_id, THROWAWAY_DEVICE)
-        checks += _visibility_battery(server, other, probe, _probe.DEVICE_ID, THROWAWAY_DEVICE)
+        checks += _controllable_battery(server, probe, user_id, server.device_id, other.device_id)
+        checks += _visibility_battery(server, other, probe, server.device_id, other.device_id)
         if channel is not None:
             channel.close()
     finally:

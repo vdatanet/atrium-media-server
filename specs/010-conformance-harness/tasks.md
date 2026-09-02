@@ -1700,7 +1700,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T13 — The probe convention enforced, the cleanup contract shared, and the last two debts paid
 
-- [ ] **Changes:** `tests/unit/test_probe_convention.py` gains its convention half — a sweep over
+- [x] **Changes:** `tests/unit/test_probe_convention.py` gains its convention half — a sweep over
   every `tools/probe_*.py` in the shape `tests/unit/test_import_directions.py` already uses for the
   production ledger: each reaches `_probe.main`, names a document and a section, and declares
   `needs_writes` where it writes. Twenty-five of the 53 declare it today. `tools/_probe.py` gains a
@@ -1721,6 +1721,99 @@ written against twenty, and the `outstanding:` section they described is gone ra
   object, raises, and asserts the register tore it down — delete the `finally` and it fails, which
   is the requirement the server disproved on 2026-09-01 turned into a test.
 - **Spec reference:** §3.5, AC-7, AC-8, AC-9; plan §6.10
+
+> **Done (2026-09-02).** *The cleanup contract is not where this task put it, and putting it there
+> would have left the twenty-six probes that leaked exactly as they were.*
+>
+> **A register a probe has to call is the promise those probes already made.** Every one of the 28
+> playlists 009 left behind came from a script that had *already written its own teardown*; what
+> none of them had was one that ran on the path out it was not written for. So `_probe.Server`
+> records the creation **as the request happens** — `POST /Playlists` and `POST /Users/New` are the
+> two routes in this repository that make something outliving the request — a removal the probe
+> issues itself **de-registers** what it removed, and `main` tears down whatever is left in a
+> `finally`. Nothing in the twenty-six had to be edited and the contract now holds for all of them,
+> including the twenty-seventh nobody has written. Proven the way this repository proves a guard:
+> `test_a_writing_probe_that_leaks_fails_the_sweep` registers an object, raises, and asserts the
+> object was removed — **delete the `finally` and it fails**, checked by deleting it. And proven on
+> a live server rather than only in the suite: `probe_public_users.py`'s first run printed
+> *"the shared register removed 1 object(s) the probe had not removed itself"* over a real account.
+>
+> **The three teardown failures that are not leaks are three and not two.** T12 measured a revoked
+> `401` and a connection refused; a `404` is the third — an object a probe removed through a path
+> the register did not see. `ProbeError` carries `status` and `transport` now, so the classification
+> reads the response rather than parsing our own prose, and only an unexplained failure exits `3`.
+> Reporting the other three as leaks is exactly spec §6's *"does not cry wolf"* pointed at the
+> teardown.
+>
+> ***The `needs_writes` sweep needed two shapes, and the first fix for it was wrong.*** It found
+> three probes reaching a write route without declaring one. `probe_routing.py` is not one: it
+> sends a `PUT` at a route serving `POST` and `DELETE` to read its `405`'s `Allow` header, so the
+> exemption list is `(method, route)` **pairs** — exempting the route would have exempted the
+> `POST` that writes. The other two, `probe_playback_info.py` and `probe_subtitle_negotiation.py`,
+> create user accounts and **already declare `--allow-writes` themselves**, because for them the
+> flag *adds a battery* rather than gating the run; `tools/README.md` has listed both with the flag
+> all along. Adding `needs_writes=True` made argparse refuse the duplicate option — caught by CI's
+> own 3.9 `--help` sweep, run locally. Two enforcement layers meeting is the reason the rule is
+> *"declares it at the entry point **or** declares the option and branches on it"*.
+>
+> **The two register debts are paid, and one of them moved.** `tools/probe_public_users.py`:
+> `/Users/Public` honours the flag in both directions — two un-hidden accounts, one hidden, none —
+> and **`IsHidden` is `true` by default**, on the administrator the wizard creates and on every
+> account `POST /Users/New` creates `[source: Jellyfin.Data/UserEntityExtensions.cs:174 @
+> v10.11.11]`, so a reference nobody has configured already answers `200 []`. The empty answer is
+> the default rather than a hardened configuration, which makes behaviours §2.2's client guidance
+> matter far more than it read. The first draft of that probe sent the administrator's token and
+> measured `[]` at **every** step: two of the route's four filters read the caller
+> `[source: Jellyfin.Api/Controllers/UserController.cs:635-651 @ v10.11.11]`, so it is read with no
+> credential now, which is who calls it. `tools/probe_local_address.py`: the HTTPS override
+> reproduces exactly — `http://<address>:8096` before a certificate and `https://<address>:8920`
+> after one, scheme *and* port, on a plain-HTTP request, on `/System/Info/Public` and `/System/Info`
+> alike — which is the condition behaviours §4.2's whole argument rests on.
+> `[probe: tools/probe_public_users.py and tools/probe_local_address.py, Jellyfin 10.11.11,
+> 2026-09-02]` The register is **twelve down, three to go**, and the three left are one author's
+> afternoon and one library scanned twice.
+>
+> ***And a difference against implemented 002, which is not this feature's to decide.*** Atrium's
+> user record defaults `is_hidden` to `false` where the reference's is set, so the first account on
+> each server answers a different `/Users/Public` — one row here, none there, on a login screen.
+> Recorded in [behaviours §2.2](../../docs/compatibility/behaviours.md) in the shape T12 used for
+> the `SupportsTranscoding` finding, and left to 002 through §3.0: the harness triages and the
+> feature that owns the endpoint answers (spec §2). The flag's *effect* is parity — both servers
+> exclude a hidden user and both answer `200 []` when every account is hidden.
+>
+> **T4's debt and T12's are paid, and T4's had a guard-shaped hole behind it.**
+> `probe_sidecar_subtitles.py:284`'s `zip(..., strict=False)` is gone — and it survived because CI
+> cannot see that class of breach: the `tools` job compiles on 3.9 and runs every `--help`, and a
+> 3.10 *keyword argument* compiles and raises only when the line is reached. So the sweep has a
+> fourth test over **every** `tools/*.py`, not only the probes.
+> For T12's: `Server` derives a **device per account** now, so two accounts in one process are two
+> sessions by construction. `probe_session_filters.py` had been swapping a module constant around
+> its second sign-in and was the only probe that did; every other one that signs in twice was
+> exposed, and `probe_transcode_session.py` now names its own session through `server.device_id`.
+>
+> *Routine calls taken.* **The concurrent leak fix had not landed** — `main` was at T12's merge with
+> nothing of it — so this task built on `_probe.py` as it stood and nothing was written beside it.
+> **`_reference.py` gains `restart()` and an `auto_remove` flag**, because the reference reads its
+> certificate at startup `[source: Emby.Server.Implementations/ApplicationHost.cs:457-458 @
+> v10.11.11]` and a container started `--rm` does not survive the stop half of a restart — measured
+> here first, as a 180-second readiness timeout over a container that no longer existed. `--rm`
+> stays the default and the label sweep still covers a killed run. **`probe_local_address.py` shells
+> out to `openssl`** for one PKCS#12, because the reference loads only a bundle carrying a private
+> key and the standard library cannot write one; it says so and refuses to guess when `openssl` is
+> absent. **The two `prior-probe` citations became `[probe:]`** in behaviours §2.2, §2.3,
+> `api-surface-v1.md` and **001's accepted spec**, because the register defines a discharge as
+> exactly that — the same call T1 took for its own three rows. Nothing was written to any server
+> anybody owns: every reading here came from an instance this run created and destroyed, verified
+> afterwards with `docker ps -a` and `docker volume ls` on the run's label, both empty.
+>
+> *What T14 must know.* A probe can now exit **`3`**, which is neither a finding nor an inability to
+> look: it means the run created something it could not remove and nothing explains why.
+> `bump_reference_version.py` re-runs every probe at step 3, so its step must treat `3` as a failure
+> of the run and not as a contradiction to triage — and must not treat it as success because it is
+> not `1`. And two of the probes it re-runs — `probe_public_users.py` and `probe_local_address.py`,
+> beside `probe_reference_scan.py` — **refuse a server argument** and stand up their own instance,
+> so a bump on a machine with no container runtime cannot run three of the probes at all and has to
+> say so rather than skip them.
 
 ## T14 — `tools/bump_reference_version.py`: four steps in order, and no way past a failure
 

@@ -199,7 +199,7 @@ them. `[source: Emby.Server.Implementations/ApplicationHost.cs:871-949 @ v10.11.
 **Deliberate divergence.** In tier 3 the reference overrides the scheme to HTTPS, with the HTTPS
 port, whenever a certificate is configured — regardless of the scheme the request arrived on. This
 has a measured cost: clients that hand this address to a device with no TLS stack (a DLNA renderer)
-break. `[prior-probe: Jellyfin 10.11.11, 2026-08-14]`
+break. `[probe: tools/probe_local_address.py, Jellyfin 10.11.11, 2026-09-02]`
 
 **Atrium reports the scheme and port the server is actually reachable on for that network.** Logged
 as a deliberate divergence in

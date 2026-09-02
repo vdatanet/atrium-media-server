@@ -87,6 +87,8 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_reference_determinism.py`](probe_reference_determinism.py) | Does the reference answer the same request the same way twice? | 010 §3.3, §7 OQ-3, OQ-4; behaviours §1.9 | no |
 | [`probe_restricted_surface.py`](probe_restricted_surface.py) | How much of the surface answers differently to a restricted non-administrator? | 010 §3.9, §3.10, AC-14, AC-15; behaviours §3.16, §3.17 | yes |
 | [`probe_reference_scan.py`](probe_reference_scan.py) | Given this repository's fixture tree, what does a reference server's library contain — and how much of that reading came from a metadata provider rather than from the tree? | 010 §3.1, AC-2, AC-7, AC-8; plan §6.6, §11 D-4 | yes, and **only to an instance it creates and destroys** |
+| [`probe_public_users.py`](probe_public_users.py) | Does `/Users/Public` answer an empty list when every account is hidden from the login screen? | 010 §3.5, AC-9; reference-target §2; behaviours §2.2 | yes, and **only to an instance it creates and destroys** |
+| [`probe_local_address.py`](probe_local_address.py) | Does `LocalAddress` advertise the HTTPS scheme and port once a certificate is configured, on a request that came in over HTTP? | 010 §3.5, AC-9; reference-target §2; behaviours §2.3, §4.2; 001 §3.4 | yes, and **only to an instance it creates and destroys** |
 
 ### Running them
 
@@ -140,6 +142,17 @@ python3 tools/probe_sidecar_subtitles.py
 python3 tools/probe_stream_display_title.py
 python3 tools/probe_progressive_production.py --allow-writes
 python3 tools/probe_session_filters.py --allow-writes
+```
+
+**Three probes are not in the list above because they take no server at all**, and each refuses one
+that is offered: `probe_reference_scan.py`, `probe_public_users.py` and `probe_local_address.py`
+stand up a single-use instance of the pinned version, ask it their question and destroy it. Each
+needs a container runtime and nothing else:
+
+```bash
+python3 tools/probe_reference_scan.py  --allow-writes
+python3 tools/probe_public_users.py    --allow-writes
+python3 tools/probe_local_address.py   --allow-writes   # also needs openssl on the PATH
 ```
 
 `probe_uninspected_source.py` is the exception to the list above, and it says so in its own
@@ -260,12 +273,16 @@ everything else here is: a probe runs before any environment is built.
 
 **Exit codes:** `0` the finding agrees with the documentation, or the documentation had an open
 question and now has an answer. `1` the finding **contradicts** the documentation — read the
-message, it names the section to change. `2` the question could not be answered at all.
+message, it names the section to change. `2` the question could not be answered at all. `3` the run
+created something on the server that it could not remove and nothing explains why — a leak, and a
+defect in the probe rather than a finding.
 
 ### Writes
 
-Eleven of the probes cannot answer their question without writing, and they say so rather than
-doing it quietly: each refuses to run without `--allow-writes`.
+The probes that cannot answer their question without writing say so rather than doing it quietly:
+each refuses to run without `--allow-writes`, and `tests/unit/test_probe_convention.py` fails a
+probe that reaches a write route without declaring it — which caught two on 2026-09-02 that had
+been creating user accounts without asking.
 
 | Probe | What it creates | Cleanup |
 |---|---|---|
@@ -280,19 +297,38 @@ doing it quietly: each refuses to run without `--allow-writes`.
 | `probe_playstate.py` | Play state and favourite marks on one long item, one short item, one season's episodes and one artist; a live playback reported and stopped | Chooses only items with no user data at all, so restoring them is exact; sweeps the season's episodes and the artist's favourite clean including on failure, and stops the playback it started |
 | `probe_restricted_surface.py` | A throwaway non-administrator user restricted to one library, and 1 private playlist holding an item from that library and an item from outside it | Deletes both, including on failure. Refuses to run if a user of that name already exists, so it can never touch a real account |
 | `probe_next_up.py` | Played marks on a handful of episodes | Chooses series whose episodes carry no user data, deletes every mark including on failure, and verifies the episodes pristine afterwards |
-| `probe_reference_scan.py` | Two whole servers: a single-use reference instance each for its two readings, three libraries scanned into each | Destroys the container, its volumes and everything written inside them, on both paths — and refuses a server argument outright, because its question cannot be asked without writing a library into the server being asked. **The only writing probe that can never touch an operator's data**, which is the argument [ADR-0007](../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md) makes in one line |
+| `probe_public_users.py` | A whole server: a single-use instance, plus one throwaway account on it, and every account's `IsHidden` flipped in both directions | Destroys the container, its volumes and everything inside them. Refuses a server argument outright: hiding every account changes what an operator's login screen shows |
+| `probe_local_address.py` | A whole server: a single-use instance given a throwaway self-signed certificate, HTTPS turned on, and restarted so the certificate is read | The same, and the certificate is generated into a git-ignored directory that goes with the run. Refuses a server argument outright |
+| `probe_reference_scan.py` | Two whole servers: a single-use reference instance each for its two readings, three libraries scanned into each | Destroys the container, its volumes and everything written inside them, on both paths — and refuses a server argument outright, because its question cannot be asked without writing a library into the server being asked. **One of the three writing probes that can never touch an operator's data** — the two above it are the others — which is the argument [ADR-0007](../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md) makes in one line |
 
 `probe_playstate.py` refuses to run at all if it cannot find a long item with no existing user
 data. It will not overwrite a real resume position, because it could not put one back exactly.
 
-**The Cleanup column above is the intent, and on 2026-09-01 it was checked and did not hold.** The
+**The Cleanup column above was the intent, and on 2026-09-01 it was checked and did not hold.** The
 server 009's probes ran against still held **28 playlists** created by them, all carrying the name
-those probes create them under. So *"deletes them, including on failure"* describes what each probe
-is written to do, not something anyone has verified after a run — and a leaked playlist is a defect
-in the probe, to be found and fixed rather than assumed away. It is also the second reason
-[010 §3.1](../specs/010-conformance-harness/spec.md) has a run stand up a disposable reference
-instance of its own: against an instance that is destroyed either way, a leaked artefact costs
-nothing.
+those probes create them under: *"deletes them, including on failure"* described what each probe
+was written to do, and each of them had written it separately.
+
+**Since 2026-09-02 it is a mechanism instead of a column** (010 T13). `_probe.py` holds one
+**created-and-owned register**: `Server` records a creation as it happens — `POST /Playlists` and
+`POST /Users/New` are the two routes that make something outliving the request — a removal the
+probe issues itself de-registers what it removed, and `main` tears down whatever is left **in a
+`finally`**, so a probe that fails on any path out still removes what the run made. A probe no
+longer has to remember, which is the difference between the contract and the claim: the twenty-six
+scripts with a teardown of their own keep it and the register sees nothing to do, and the
+twenty-seventh is covered without being edited. `tests/unit/test_probe_convention.py` drives it
+with a run that raises and fails if that `finally` is deleted.
+
+**Three teardown failures are not leaks, and the run says which it was.** A `401` means the token
+was revoked out from under the run — the reference binds a token to a device, so two accounts on
+one device were one session until each account got a device of its own (010 T12, T13); a connection
+refused means the server stopped answering, which the single-use instance does often enough to have
+been counted; and a `404` means it was already gone. Only an unexplained failure exits `3`, because
+an enforcement that cries wolf is one nobody reads.
+
+It is also the second reason [010 §3.1](../specs/010-conformance-harness/spec.md) has a run stand up
+a disposable reference instance of its own: against an instance that is destroyed either way, a
+leaked artefact costs nothing.
 
 ### The differential harness
 
@@ -378,7 +414,7 @@ reported *outstanding with the reason* rather than skipped.
 
 | Script | Purpose | Arrives with |
 |---|---|---|
-| `probe_wire_format.py`, `probe_sort_vocabulary.py`, … | The **five** remaining prior-measurement debts in [reference-target.md](../docs/compatibility/reference-target.md) — three of which need a server this project may write to, which the single-use instance above now provides | Their owning features |
+| `probe_wire_format.py`, `probe_sort_vocabulary.py`, … | The **three** remaining prior-measurement debts in [reference-target.md](../docs/compatibility/reference-target.md). The two that needed a server this project may configure were paid on 2026-09-02 by `probe_public_users.py` and `probe_local_address.py`; of what is left, two need ten lines of `urllib` against any reachable server and one needs a library scanned **twice**, which is the instance's | Their owning features |
 
 A runner that executes every probe and summarises is deliberately **not** here yet: it is part of
 the harness feature 010 specifies, and building it before that spec is accepted would be

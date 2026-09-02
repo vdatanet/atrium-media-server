@@ -281,7 +281,11 @@ def _reproduce(
             f"reported {[posixpath.basename(s.get('Path') or '?') for s in actual]}"
         )
     mismatches = []
-    for (name, parsed), stream in zip(predicted, actual, strict=False):
+    # B905: `zip(..., strict=)` arrived in 3.10 and tools/ runs on the 3.9 floor (010 plan D-2),
+    # where `zip` takes no keyword argument at all - so this line raised `TypeError` on the
+    # interpreter the README promises, every time it was reached. The lengths are equal by the
+    # return above, which is what `strict=` would have asserted. Found by 010 T4, paid at T13.
+    for (name, parsed), stream in zip(predicted, actual):  # noqa: B905
         reported = posixpath.basename(stream.get("Path") or "")
         if reported != name:
             mismatches.append(f"order: expected {name!r}, got {reported!r}")

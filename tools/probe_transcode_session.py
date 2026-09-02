@@ -69,7 +69,7 @@ from _playback import (
     pick_video_source,
     stop_encoding,
 )
-from _probe import DEVICE_ID, Probe, ProbeError, Server, main
+from _probe import Probe, ProbeError, Server, main
 
 #: The reference's throttle threshold when an operator turns throttling on, in seconds.
 THROTTLE_GAP_SECONDS = 180
@@ -107,8 +107,12 @@ KILL_POLL_SECONDS = 3
 DELETION_WATCH_SECONDS = 45
 
 
-def transcoding_info(server: Server, device: str = DEVICE_ID) -> dict[str, Any] | None:
+def transcoding_info(server: Server, device: str | None = None) -> dict[str, Any] | None:
     """One device's session's `TranscodingInfo`, or `None` when it carries none at all.
+
+    The device defaults to **this connection's**, `_probe.Server.device_id`, and not to the module
+    constant it used to: a device is per account since 010 T13, because the reference binds a
+    token to one and two accounts on one device are one session.
 
     **`None` here means the property is absent**, not that the numbers inside it are: every
     response passes through the reference's global null suppression (behaviours section 1.7), so
@@ -117,15 +121,16 @@ def transcoding_info(server: Server, device: str = DEVICE_ID) -> dict[str, Any] 
     two - which is what reading `CompletionPercentage` straight off the session does - is how a
     stop that leaves the object behind reads as a stop that removed it.
     """
+    wanted = device or server.device_id
     for session in server.get("/Sessions"):
-        if session.get("DeviceId") == device:
+        if session.get("DeviceId") == wanted:
             found = session.get("TranscodingInfo")
             if found:
                 return dict(found)
     return None
 
 
-def completion(server: Server, device: str = DEVICE_ID) -> float | None:
+def completion(server: Server, device: str | None = None) -> float | None:
     info = transcoding_info(server, device)
     return None if info is None else info.get("CompletionPercentage")
 
@@ -591,7 +596,9 @@ def deletion_battery(
     sessions.add(play_session_id)
 
     def fetch(index: int) -> tuple[int, float, int]:
-        return timed_fetch(server, with_session(lists.segments[index], DEVICE_ID, play_session_id))
+        return timed_fetch(
+            server, with_session(lists.segments[index], server.device_id, play_session_id)
+        )
 
     for index in (doomed, survivor, far_index):
         status, _elapsed, _size = fetch(index)
@@ -718,7 +725,7 @@ def kill_battery(
     # The three rows that need no encoder at all, first: what the stop route refuses, and how.
     status, headers, body = server.delete_raw(
         "/Videos/ActiveEncodings",
-        deviceId=DEVICE_ID,
+        deviceId=server.device_id,
         playSessionId=uuid.uuid4().hex,
         send_token=False,
     )
@@ -797,7 +804,7 @@ def kill_battery(
         raise ProbeError("the unknown-session row's session never reported a percentage")
     status, _headers, _body = server.delete_raw(
         "/Videos/ActiveEncodings",
-        deviceId=DEVICE_ID,
+        deviceId=server.device_id,
         playSessionId=uuid.uuid4().hex,
     )
     time.sleep(3)
