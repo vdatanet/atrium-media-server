@@ -189,7 +189,9 @@ def stop_encoding(server: Server, play_session_id: str) -> int:
     """Stop one transcoding session; the probes' cleanup path, called on failure too."""
     status, _, _ = server.delete_raw(
         "/Videos/ActiveEncodings",
-        deviceId="atrium-probe-0000",
+        # This connection's own device, never the module constant: a device is per account
+        # since 010 T13, and a stop naming somebody else's device stops nothing.
+        deviceId=server.device_id,
         playSessionId=play_session_id,
     )
     return status

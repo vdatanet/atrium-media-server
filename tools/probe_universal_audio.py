@@ -164,7 +164,7 @@ def run(server: Server) -> Probe:
 
     common = {
         "UserId": server.user_id or "",
-        "DeviceId": "atrium-probe-0000",
+        "DeviceId": server.device_id,
         "api_key": server.token or "",
     }
 

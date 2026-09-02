@@ -937,7 +937,7 @@ def run(server: Server) -> Probe:
         checks.append(percent is not None and percent > 80)
 
         # OQ-6: the stop route's parameters and its effect.
-        status, _, body = server.delete_raw("/Videos/ActiveEncodings", deviceId="atrium-probe-0000")
+        status, _, body = server.delete_raw("/Videos/ActiveEncodings", deviceId=server.device_id)
         errors = json.loads(body).get("errors", {}) if body else {}
         probe.observe(
             "DELETE without playSessionId", f"{status}, errors keys {sorted(errors) or 'none'}"

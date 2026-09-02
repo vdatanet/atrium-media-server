@@ -747,6 +747,31 @@ def test_a_creation_is_registered_without_the_probe_being_changed() -> None:
     module.OWNED.clear()
 
 
+def test_no_tool_writes_the_device_id_out_by_hand() -> None:
+    """Every device a request names is **this connection's**, and one place decides what that is.
+
+    The base was a module constant and five files had copied its value into a string literal: a
+    `stop_encoding`, a `DELETE /Videos/ActiveEncodings`, a session lookup, a `/universal` query and
+    a progressive-production query. Deriving a device per account (above) made every one of those
+    name a device nothing was signed in from — silently, since a stop that names the wrong device
+    stops nothing and a session lookup that finds nothing looks like a session that ended.
+
+    So the literal appears in `_probe.py` and nowhere else. A sixth copy fails here rather than by
+    leaving an encoder running on somebody's server.
+    """
+    module = load_probe_module()
+    offenders = {
+        tool.name: module.DEVICE_ID
+        for tool in tools()
+        if tool.name != "_probe.py" and module.DEVICE_ID in tool.read_text(encoding="utf-8")
+    }
+    assert not offenders, (
+        f"{sorted(offenders)} write {module.DEVICE_ID!r} out as a literal. It is the **base** of a "
+        f"device id and not one: `_probe.Server.device_id` is what a request names, and a copy of "
+        f"the base names a device no account signed in from."
+    )
+
+
 def test_two_accounts_do_not_share_one_device() -> None:
     """010 T12's finding, as a property of `_probe.Server` rather than of one probe's workaround.
 

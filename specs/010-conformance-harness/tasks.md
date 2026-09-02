@@ -1789,7 +1789,20 @@ written against twenty, and the `outstanding:` section they described is gone ra
 > For T12's: `Server` derives a **device per account** now, so two accounts in one process are two
 > sessions by construction. `probe_session_filters.py` had been swapping a module constant around
 > its second sign-in and was the only probe that did; every other one that signs in twice was
-> exposed, and `probe_transcode_session.py` now names its own session through `server.device_id`.
+> exposed.
+>
+> ***And that fix had a silent blast radius nobody would have seen.*** **Five files had copied the
+> old device id out as a string literal** — `_playback.stop_encoding`, a
+> `DELETE /Videos/ActiveEncodings`, a session lookup in `probe_transcode_decision.py`, and two
+> query strings in `probe_progressive_production.py` and `probe_universal_audio.py`. Every one of
+> them names *this run's own device*, so a derived one would have left all five naming a device
+> nothing was signed in from — and the failure is invisible in both directions: a stop that names
+> the wrong device stops nothing, and a session lookup that finds nothing reads as a session that
+> ended. `stop_encoding` is the **cleanup path of every playback probe**, so the device fix would
+> have left encoders running on the very server this task exists to stop leaking onto. All five go
+> through `server.device_id` now, `test_no_tool_writes_the_device_id_out_by_hand` fails the sixth
+> copy, and `probe_subtitle_negotiation.py`'s one `stop_encoding(as_user, …)` is *more* correct
+> than before: it had been stopping the administrator's device while meaning the throwaway's.
 >
 > *Routine calls taken.* **The concurrent leak fix had not landed** — `main` was at T12's merge with
 > nothing of it — so this task built on `_probe.py` as it stood and nothing was written beside it.

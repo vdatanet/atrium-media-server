@@ -31,8 +31,6 @@ import uuid
 from _playback import stop_encoding
 from _probe import Probe, ProbeError, Server, main
 
-DEVICE = "atrium-probe-0000"
-
 #: The containers whose bitrate cannot be honoured without re-encoding every sample, which is
 #: what makes the produced size unknowable before the last byte.
 LOSSLESS = ("flac", "alac", "wav", "ape", "wv", "aiff")
@@ -140,7 +138,12 @@ def run(server: Server) -> Probe:
     )
     checks = _declared(server, probe)
 
-    query = f"?DeviceId={DEVICE}&AudioCodec=mp3&Container=mp3&audioBitRate={CAP_BITS_PER_SECOND}"
+    # The connection's own device rather than a constant: the sessions these requests create
+    # are the sessions `stop_encoding` has to name on the way out (010 T13).
+    query = (
+        f"?DeviceId={server.device_id}&AudioCodec=mp3&Container=mp3"
+        f"&audioBitRate={CAP_BITS_PER_SECOND}"
+    )
     first_session = uuid.uuid4().hex
     second_session = uuid.uuid4().hex
     sessions = [first_session, second_session]
@@ -185,7 +188,7 @@ def run(server: Server) -> Probe:
             ),
         )
         universal = (
-            f"/Audio/{item_id}/universal?DeviceId={DEVICE}&UserId={server.user_id}"
+            f"/Audio/{item_id}/universal?DeviceId={server.device_id}&UserId={server.user_id}"
             "&AudioCodec=mp3&Container=mp3&TranscodingContainer=mp3&TranscodingProtocol=http"
             f"&MaxStreamingBitrate={CAP_BITS_PER_SECOND}"
         )
