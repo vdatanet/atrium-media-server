@@ -354,7 +354,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T3 — `docs/compatibility/allowlist.yaml` and `tools/_allowlist.py`: three kinds, scoped
 
-- [ ] **Changes:** new `docs/compatibility/allowlist.yaml` in the hand-written YAML subset
+- [x] **Changes:** new `docs/compatibility/allowlist.yaml` in the hand-written YAML subset
   `surface.yaml` uses, with the six fields of [plan §4.1](plan.md#41-docscompatibilityallowlistyaml)
   — `kind` (`field`, `drawn`, `unordered`), `endpoint`, `pointer`, `reason`, `because`, `since`.
   Every row of spec §3.3's two tables becomes an entry, **scoped by endpoint and JSON pointer and
@@ -377,6 +377,88 @@ written against twenty, and the `outstanding:` section they described is gone ra
   2026-09-01 audit's M1 finding asked for, *"a table of tests is the section most prone to this:
   nothing reads it, so nothing fails when it drifts"*.
 - **Spec reference:** §3.3, AC-6, AC-17, AC-18; plan §4.1, §6.3
+
+> **Done (2026-09-02).** *Writing spec §3.3's two tables into the file they describe cost four of
+> their rows, and the sharpest is that one of them names nothing on the wire.* **`DateLastSaved` is
+> not a property of an item body.** It is an `ItemFields` **token** — a thing a request asks for —
+> and the pinned document's `BaseItemDto` carries 153 properties without it; it is likewise absent
+> from `property-names.json`, this project's own extraction of all 1026 property names the
+> reference uses `[spec: BaseItemDto, ItemFields]`. It has been in the wall-clock row of both prose
+> copies since 010's spec was written, and an entry for it would have excused a field neither
+> server can send. Withdrawn from both, and `test_datelastsaved_is_not_excused_because_it_is_not_a_property`
+> is what keeps it out.
+>
+> *The second is that the ellipsis was hiding five identifiers.* `…` is not something a file can
+> hold, so the row had to be enumerated against what Atrium actually serialises — and the
+> enumeration named five the table had never listed: **`Key` and `ItemId` inside `UserData`**, which
+> are both the item's own derived identity, **`ParentThumbItemId` and `ParentBackdropItemId`** on
+> the rows that inherit an image, and **`PlaylistItemId`**, which 009's gate measured to *be* the
+> item's `Id`. Four more come from the shapes that are not items — `ThumbImageItemId` and
+> `BackdropImageItemId` on a search hint, `UserId` and `DeviceId` on a session. Fifteen names where
+> the table listed seven and a full stop.
+>
+> *The third is that D-3's promise was already false on the day it was made.*
+> [Plan §6.3](plan.md#63-the-allowlist-scoped-in-three-kinds) says conformance.md's rendering
+> carries the `because` column *"so the two prose copies cannot drift apart while §6.3's file is
+> being written"*. They had already drifted: **conformance.md was carrying seven of §3.3's nine
+> field rows**, missing `PlaySessionId`/`AccessToken` and `TotalRecordCount` outright and
+> `LastActivityDate` from the wall-clock row. Nothing read either table, which is the 2026-09-01
+> audit's M1 finding exactly; `test_the_two_prose_tables_say_what_the_file_says` now reads both and
+> compares them to the file, and it was proven by adding a row to the file and watching it fail.
+>
+> *And the fourth decides a mechanism.* **Plan §4.1's six fields cannot express two of §3.3's own
+> rows**, because both are conditioned on the **request** and not on the route: `TotalRecordCount`
+> *"on by-name endpoints without a limit"*, and *"the rows of any listing ordered at random"*.
+> Written with six columns each is strictly wider than the prose it comes from — the first excuses
+> a real count difference on every by-name request that *does* carry a limit, and the second
+> excuses the rows of **every listing on every request**, which deletes L3 for the largest thing
+> this harness compares. Plan §6.3's own resolver signature is `resolve(endpoint, case, identity)`,
+> so the dimension was already promised and only the column was missing. **A seventh field, `case`,
+> is the routine call taken**: it only ever narrows — `*` is what an entry with no condition says,
+> and an id no case declares matches nothing, so its failure direction is under-excusing. **T6 owes
+> three ids**: `by-name-without-limit`, `listing-ordered-at-random` and
+> `listing-ordered-by-a-key-with-ties`. Until `request-cases.yaml` declares them those three
+> entries excuse nothing, which is the safe half of being wrong.
+>
+> *T2's owed row is written, and it grew a second header.* `header:Server` is in, on `*`
+> (behaviours §4.1) — `Atrium/<version>` against `Kestrel`
+> `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]`, a difference on every response
+> of every case. Beside it, §3.3's *"and the response clock"* is now spelled `Date`, because a
+> pointer is a name and a file cannot excuse a phrase.
+>
+> *Routine calls taken, none of which touches behaviour.* **`ETag` joins `Etag`**: a media source
+> spells it with the uppercase T the reference gives it and the item property does not, so one name
+> would have left the other compared. **`ChannelId` is deliberately not excused** although it is
+> uuid-typed on both schemas — it is an explicit `null` on every item of every response, 208 of 208
+> `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`, so excusing it would hide
+> the day one server stopped sending it, and a missing key is the class the report ranks first;
+> `test_no_entry_excuses_a_key_that_is_measured_identical_on_both_servers` holds it out.
+> **`identity` is accepted by `resolve` and selects nothing**, said in the docstring and asserted
+> rather than left to be discovered: no row of §3.3 is conditioned on who asked, and spec §3.9's
+> twelve differing reads are *findings*, not excuses. **85 entries**, and `*` is used only where a
+> pointer is precise enough to carry the scoping on its own — `ChildCount`, `TotalRecordCount` and
+> `LocalAddress` name their endpoints, and the first of those is the test that would fail if the
+> column were dropped.
+>
+> *What T4 and T8 inherit.* **§3.24 and AC-17 collide, and no allowlist row can settle it.**
+> `Similar` answers `limit + 4` rows on a movie seed (behaviours §3.24) while AC-17 says a `drawn`
+> array's **row count** is still compared — so that count differs on every single run of the one
+> endpoint the `drawn` kind exists for, and the entry cannot say *"excuse the count, keep the
+> shape"* without becoming the over-excusing this file is written against. T4 decides whether that
+> is a permanently reported known divergence or an exception AC-17 owes. And **the sweep will
+> report differences no row covers, which is the design and not a gap**: `/System/Info`'s seven
+> installation paths (`ProgramDataPath`, `WebPath`, `ItemsByNamePath`, `CachePath`, `LogPath`,
+> `InternalMetadataPath`, `TranscodingTempPath`), `ServerName` — an operator setting T9's instance
+> can simply be given to match — `SupportsLibraryMonitor`, `LastLoginDate`, `LastPlaybackCheckIn`,
+> and `DELETE /Items/{itemId}`'s `403` (behaviours §4.3). Each is §3.4's triage, and adding an
+> entry for any of them is a contract decision made in review rather than by the task that first
+> saw it red.
+>
+> *Nothing was written to any server, and nothing here opens a socket or reads a clock.* Every
+> claim above came from the pinned OpenAPI document, `property-names.json`, this repository's own
+> serialisation code and the probes already recorded. Both AC-6 tests construct the bad entry and
+> assert the loader raises; the scoping test was proven by widening the `ChildCount` entry to `*`
+> and watching it fail; the prose test by adding a row the tables do not have.
 
 ## T4 — The excused arrays, and an ordering that is not total
 
