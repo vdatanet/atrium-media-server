@@ -889,6 +889,66 @@ def test_an_undeclared_substitution_fails_the_load() -> None:
     assert "identity.user_id" in str(raised.value)
 
 
+def test_an_anchor_can_fill_a_token_in_a_query_or_a_body() -> None:
+    """010 T11's fourth vocabulary member, and the four shapes T6 could not express.
+
+    An item id in a **body** (007's three reporting routes) and an item id in a **query** (`ids`
+    on the playlist add, `entryIds` on the remove) are exactly as unfillable as an unanchored path
+    parameter, and an anchor fills a path parameter by construction. `<anchor.p>` is the whole
+    addition: it resolves to whatever the anchor named `p` resolves to, through the same three
+    kinds and the same per-server resolution, so nothing new became resolvable and no case may
+    carry an identifier.
+    """
+    filled = allowlist.check_cases(
+        [
+            _case_row(id="a-listing", endpoint="GET /Items"),
+            _case_row(
+                id="report-start",
+                endpoint="POST /Sessions/Playing",
+                body='{"ItemId": "<anchor.itemId>"}',
+                content_type="application/json",
+                anchors='["itemId=listing:GET /Items#a-listing@0"]',
+            ),
+        ]
+    )
+    assert filled[1].anchors[0].parameter == "itemId"
+
+    # A token naming an anchor the case does not declare fills with nothing.
+    with pytest.raises(allowlist.AllowlistError) as raised:
+        allowlist.check_cases(
+            [
+                _case_row(
+                    id="a-report", endpoint="POST /Sessions/Playing", query="ids=<anchor.itemId>"
+                )
+            ]
+        )
+    assert "anchor.itemId" in str(raised.value)
+
+
+def test_an_anchor_that_fills_nothing_fails_the_load() -> None:
+    """The other direction, and it is the one that would let a case *look* filled.
+
+    An anchor naming neither a path parameter of its endpoint nor a `<anchor.p>` token in its
+    query or body is read by nothing, so the case goes on sending exactly what it sent before -
+    the shape T6 refused when it removed a placeholder item id that compared two `404`s and
+    counted as coverage.
+    """
+    with pytest.raises(allowlist.AllowlistError) as raised:
+        allowlist.check_cases(
+            [
+                _case_row(id="a-listing", endpoint="GET /Items"),
+                _case_row(
+                    id="reads-nothing",
+                    endpoint="POST /Sessions/Playing",
+                    body='{"PlaySessionId": "x"}',
+                    content_type="application/json",
+                    anchors='["itemId=listing:GET /Items#a-listing@0"]',
+                ),
+            ]
+        )
+    assert "fills no path parameter" in str(raised.value)
+
+
 def test_a_body_a_get_cannot_carry_and_a_content_type_with_no_body() -> None:
     """Two shapes that describe nothing, refused rather than sent."""
     with pytest.raises(allowlist.AllowlistError) as raised:

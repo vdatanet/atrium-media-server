@@ -71,6 +71,19 @@ directory and scanned by the real pipeline (`tests/fixtures/media.py`). Tests th
 binaries carry the `ffmpeg` marker; `pytest -m "not ffmpeg"` staying green is the check that they
 all do.
 
+**Both worlds go across to a reference instance, and that was measured rather than assumed.** 010's
+plan defaulted to porting the structural cases into the media world and giving a reference server
+one library; the reference in fact makes items out of the paths-and-filler tree as well — it
+resolves an item from a path and probes it afterwards, and a probe that fails leaves an item with no
+streams rather than no item — so both trees are handed across as libraries of their own, beside one
+library with nothing in it at all
+`[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`.
+`tests/fixtures/reference_tree.py` is what composes the three, and
+`docs/compatibility/reference-fixture-reading.json` is the reference's recorded reading of them,
+compared against Atrium's own scan by `tests/library/test_reference_reading.py` with no Jellyfin
+anywhere. The comparison is **not an equality**: forty-seven declared differences, where one that is
+not declared fails and a declared one that has gone away fails too.
+
 The fixture library covers, deliberately, the cases that break naive scanners:
 
 - A film in a folder, a film as a bare file, and a film with a year in the title.
@@ -78,6 +91,12 @@ The fixture library covers, deliberately, the cases that break naive scanners:
 - An album split across discs, a compilation with per-track album artists, and a track whose
   embedded tags disagree with its filename.
 - Non-ASCII names, names with brackets and dots, and a name that differs only by case.
+- A directory excluded by an **empty** `.ignore` marker, which is the only kind that excludes
+  anything, and a zero-byte file that is an incomplete copy rather than an exclusion.
+- A subtitle file in a **legacy single-byte encoding**, which is the one input
+  [behaviours §5.11](behaviours.md#511-a-subtitle-file-in-a-legacy-encoding-is-decoded-by-a-rule-and-not-by-a-detector)
+  has, and an image carrying an **EXIF orientation** planted beside a film, which is the one input
+  the resize edge 006 owes has. Both exist because no remote request reaches either.
 
 L2 tests then assert real values: that the album with two discs yields one album and N tracks with
 the right `ParentIndexNumber`, that resume position round-trips through ticks, that sort order

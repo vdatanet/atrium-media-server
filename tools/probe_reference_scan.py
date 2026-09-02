@@ -219,6 +219,12 @@ def read_instance(instance: Any, tree: Path, libraries: Sequence[Any]) -> List[D
             {
                 "name": library.name,
                 "collection_type": library.collection_type,
+                # Carried into the record because the finding turns on it: the 003 tree is paths
+                # and filler and the media world is media a prober opens, so "backed by a file
+                # nothing can decode" is a statement about some of these libraries and not all of
+                # them. Reading it off the entry point rather than off the file names keeps the
+                # two declarations from drifting.
+                "decodable": bool(library.decodable),
                 "item_count": len(rows),
                 "counts_by_type": counts_by_type(rows),
                 "items": rows,
@@ -354,8 +360,43 @@ class Scan:
                     )
         return differences
 
+    def carried_forward(self, path: Path) -> Dict[str, Any]:
+        """The provider comparison a previous record already holds, when this run skipped it.
+
+        **Skipping it is the ordinary way to re-take the reading, and losing the finding with it
+        would be wrong.** The comparison costs a second instance whose whole purpose is to *let*
+        a third party's database answer - which is a run that contacts a metadata provider, and
+        the only reason to make one is to measure that it happens. It was measured on 2026-09-02
+        and it is a property of the reference and of the reference's own defaults, not of this
+        repository's tree: nine names of the 003 tree came back from a fetcher, and no entry added
+        here changes that.
+
+        So a run with `--skip-provider-comparison` carries the previous record's list forward
+        **with the citation it was taken under**, and says so. A reading with no such list at all
+        would let `tests/library/test_reference_reading.py` stop asserting that the fetchers were
+        the difference, which is the one thing keeping the record from being a reading of somebody
+        else's database.
+        """
+        if not path.is_file():
+            return {}
+        try:
+            previous = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:  # pragma: no cover - a hand-edited record
+            return {}
+        remote = previous.get("remote_metadata") or {}
+        supplied = remote.get("names_a_fetcher_supplied") or []
+        if not supplied:
+            return {}
+        return {
+            "names_a_fetcher_supplied": supplied,
+            "carried_forward_from": str(
+                remote.get("carried_forward_from") or previous.get("citation") or ""
+            ),
+        }
+
     def record(self, path: Path, citation: str, finding: str) -> Dict[str, Any]:
         renamed = self.renamed_by_a_fetcher()
+        carried = {} if self.compared_providers else self.carried_forward(path)
         document = {
             "_": (
                 "The reference's own reading of this repository's fixture tree, written by the "
@@ -383,8 +424,12 @@ class Scan:
                     "MetadataFetchers list. LibraryOptions.EnableInternetProviders is declared, "
                     "stored and read by nothing in the reference"
                 ),
-                "names_a_fetcher_supplied": renamed,
+                "names_a_fetcher_supplied": renamed or carried.get("names_a_fetcher_supplied", []),
                 "compared": self.compared_providers,
+                # Empty when this run took the comparison itself; the earlier probe's citation
+                # when it carried the list forward, so a reader can tell a measurement from a
+                # measurement that was not re-taken.
+                "carried_forward_from": carried.get("carried_forward_from", ""),
             },
             "totals": {
                 "libraries": len(self.recorded),
@@ -407,14 +452,26 @@ class Scan:
             for entry in library["items"]
             if entry["file"] is not None
         )
+        # **The two are counted apart, and the first run of this probe conflated them.** Until 010
+        # T11 the tree was the 003 world alone, so every file-backed row was a row over a file no
+        # prober could open and the finding said so about all of them. The composed tree is both
+        # worlds, and calling a real `h264` file undecodable in the record would be a false
+        # statement in the one document AC-2 is checked against.
+        undecodable = sum(
+            1
+            for library in self.recorded
+            if not library.get("decodable")
+            for entry in library["items"]
+            if entry["file"] is not None
+        )
         makes_items = items > 0
 
         finding = (
             (
                 f"the reference makes {items} items out of the fixture tree, {media} of them "
-                f"backed by a file none of its probers can open - so a tree of paths and filler "
-                f"bytes is a library to it, and D-4's second branch is the measured one: both "
-                f"worlds go across"
+                f"backed by a file and {undecodable} of those over a file none of its probers can "
+                f"open - so a tree of paths and filler bytes is a library to it, and D-4's second "
+                f"branch is the measured one: both worlds go across as libraries of their own"
             )
             if makes_items
             else (
@@ -432,12 +489,17 @@ class Scan:
         )
         for library in self.recorded:
             found.observe(
-                f"{library['name']} ({library['collection_type']})",
+                "{} ({}{})".format(
+                    library["name"],
+                    library["collection_type"],
+                    "" if library.get("decodable") else ", filler",
+                ),
                 f"{library['item_count']} items: "
                 + ", ".join(f"{name} {count}" for name, count in library["counts_by_type"].items()),
             )
         found.observe("items in total", items)
         found.observe("of them backed by a file", media)
+        found.observe("of those over a file no prober can open", undecodable)
 
         renamed = self.renamed_by_a_fetcher()
         if self.compared_providers:
@@ -458,11 +520,20 @@ class Scan:
                 "v10.11.11]. The item set is the same either way: only names moved."
             )
         else:
+            carried = self.carried_forward(args.record)
             found.note(
                 "--skip-provider-comparison: the reading was taken with the fetchers off and the "
-                "one with them on was not taken, so this run says nothing about what a fetcher "
-                "would have supplied."
+                "one with them on was not taken, so nothing this run saw came from a metadata "
+                "provider."
             )
+            if carried:
+                found.observe(
+                    "names a remote fetcher supplied",
+                    "{} carried forward from {}".format(
+                        len(carried["names_a_fetcher_supplied"]),
+                        carried["carried_forward_from"] or "an earlier record",
+                    ),
+                )
 
         if not args.skip_record:
             self.record(args.record, citation, finding)

@@ -67,9 +67,16 @@ class BuiltFixture:
         raise KeyError(f"no {collection_type!r} library in the fixture")
 
 
+#: The kinds that get no bytes at all, and they are two rather than one. EMPTY is an incomplete
+#: copy - a file that is empty. MARKER is a file whose emptiness *is* its meaning: a non-empty
+#: `.ignore` is read as gitignore-style rules and excludes nothing, so writing the banner into one
+#: turned the tree's exclusion case into a rule set matching nothing (010 T10, T11).
+ZERO_BYTE_KINDS = (Kind.EMPTY, Kind.MARKER)
+
+
 def size_of(entry: Entry) -> int:
     """How many bytes this entry gets. Derived from its path, so it is stable and it varies."""
-    if entry.kind is Kind.EMPTY:
+    if entry.kind in ZERO_BYTE_KINDS:
         return 0
     spread = hashlib.sha256(f"size:{entry.path}".encode()).digest()[0]
     return len(_head(entry)) + MINIMUM_BODY + spread * 4
@@ -77,7 +84,7 @@ def size_of(entry: Entry) -> int:
 
 def content_of(entry: Entry) -> bytes:
     """The exact bytes this entry gets, as a pure function of its declared path and kind."""
-    if entry.kind is Kind.EMPTY:
+    if entry.kind in ZERO_BYTE_KINDS:
         return b""
     if entry.path.endswith(".nfo"):
         return _sidecar(entry)

@@ -2140,7 +2140,13 @@ def test_a_fixture_run_with_no_runtime_reports_every_fixture_row_outstanding_and
 
     cases = allowlist.load_cases(entries=allowlist.load())
     needing = [case for case in cases if set(case.needs) & set(differential.NEEDS_THE_INSTANCE)]
-    assert len(needing) == 12
+    # **Eight, and it was twelve when T8 wrote this.** Six of the twelve declared `fixture` for a
+    # reason that was never the fixture: T6 had no way to fill an item id in a body or a query, so
+    # it wrote the reason down as `fixture` and left the value out. 010 T11 gave an anchor a name a
+    # body and a query can spell, so those six ask on any reachable server; two listings that name
+    # a fixture film by name joined in their place. The number is asserted rather than derived so
+    # that a case quietly losing its `fixture` has to come here and say why.
+    assert len(needing) == 8
     for case in needing:
         assert differential.unmet_needs(case.needs, inputs), case.id
 

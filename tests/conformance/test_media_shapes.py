@@ -40,9 +40,8 @@ from tests.fixtures.media import (
     TWO_PARTER_FIRST,
     TWO_PARTER_SECOND,
     BuiltMedia,
-    ScannedMediaWorld,
-    build_scanned_media_world,
 )
+from tests.fixtures.media_world import ScannedMediaWorld, build_scanned_media_world
 
 pytestmark = [pytest.mark.conformance, pytest.mark.ffmpeg]
 

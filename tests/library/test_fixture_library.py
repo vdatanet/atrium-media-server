@@ -277,3 +277,33 @@ def test_the_empty_entry_is_empty_and_is_the_only_one(tmp_path: Path) -> None:
     assert empty, "nothing in the tree exercises the zero-byte rule"
     for path in empty:
         assert path.stat().st_size == 0
+
+
+def test_the_exclusion_marker_is_zero_bytes(tmp_path: Path) -> None:
+    """A non-empty `.ignore` excludes **nothing**, so a marker with a banner in it is not a marker.
+
+    The reference ignores a directory outright for a zero-byte marker and reads a non-empty one as
+    gitignore-style rules `[source:
+    Emby.Server.Implementations/Library/DotIgnoreIgnoreRule.cs:58-66 @ v10.11.11]`. Until 010 T11
+    this entry was declared `Kind.IGNORED`, which gets the generator's banner and filler like every
+    other entry - so the excluded film was an item on the reference and not here, and the case the
+    entry exists for was unexercised on exactly the server it was written for
+    `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`.
+
+    Asserted on the built bytes rather than on the declaration, because the declaration is what was
+    wrong: `Kind.MARKER` says zero and `generate.py` is what has to honour it.
+    """
+    built = build_fixture_library(tmp_path / "library")
+    markers = [
+        library.path_of(entry.path)
+        for library in built.libraries
+        for entry in library.library.entries
+        if entry.kind is Kind.MARKER
+    ]
+    assert markers, "the tree declares no exclusion marker, so nothing exercises the rule"
+    for path in markers:
+        assert path.name == ".ignore"
+        assert path.stat().st_size == 0, (
+            f"{path.name} carries {path.stat().st_size} bytes; a non-empty marker is read as "
+            "gitignore rules and excludes nothing"
+        )

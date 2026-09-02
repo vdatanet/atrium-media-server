@@ -71,7 +71,7 @@ def test_nothing_declared_ignored_is_a_candidate(
 ) -> None:
     found_paths = paths_of(fixture_library, collection_type)
     for entry in fixture_library.of(collection_type).library.entries:
-        if entry.kind in (Kind.IGNORED, Kind.SIDECAR, Kind.EMPTY):
+        if entry.kind in (Kind.IGNORED, Kind.SIDECAR, Kind.EMPTY, Kind.MARKER):
             assert entry.path not in found_paths, f"{entry.path}: {entry.reason}"
 
 

@@ -1365,7 +1365,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T11 — The fixture world gets what §3.1 owes, written against T10's answer
 
-- [ ] **Changes:** the fixture the instance is given, extended with the five entries spec §3.1 owes
+- [x] **Changes:** the fixture the instance is given, extended with the five entries spec §3.1 owes
   and the two the named comparisons need, through the generator that already builds it rather than a
   third world (plan §6.6). `tests/fixtures/media.py` already carries the **multi-part film**
   (`two_parter_first` / `two_parter_second`), a **film with a subtitle file beside it** and an
@@ -1389,6 +1389,132 @@ written against twenty, and the `outstanding:` section they described is gone ra
   names. And `test_the_legacy_encoded_sidecar_is_not_utf8`, which fails the day somebody "fixes" the
   encoding — a fixture that is valid UTF-8 cannot exercise behaviours §5.11.
 - **Spec reference:** §3.1, AC-1, AC-13; plan §6.6, §9
+
+> **Done (2026-09-02).** *The four entries were the small half. The big half is that composing both
+> worlds moved five anchors that were already filled, and that a repaired fixture removed a
+> difference nobody had been able to remove.*
+>
+> **`Excluded/.ignore` was fixed first, and it closed a declared difference.** T10 recorded it as a
+> defect in the tree: an `.ignore` marker excludes a directory outright only when it is **empty**,
+> and a non-empty one is read as gitignore-style rules
+> `[source: Emby.Server.Implementations/Library/DotIgnoreIgnoreRule.cs:58-66 @ v10.11.11]`, so the
+> banner `generate.py` writes into every declared entry made the fixture's marker a rule set
+> matching nothing. `Kind.IGNORED` is the wrong kind for it and `Kind.EMPTY` is the wrong kind too
+> — that one means *an incomplete copy*, which is a different case the same tree also carries — so
+> the manifest has a fifth kind, `Kind.MARKER`, and `generate.py` writes zero bytes for both. The
+> two servers now **agree** about `Excluded/An Excluded Film (2000).mkv`: the reference's Movies
+> library is 18 items where it was 19, the declared difference is gone from
+> `tests/library/test_reference_reading.py`, and the case the entry was written for is exercised
+> for the first time on the side it was written for.
+>
+> **Both worlds go across, and the composition needed three things D-4's answer did not say.**
+> `tests/fixtures/reference_tree.py` writes the 003 tree in place, copies the media world in under
+> a `Decodable/` subtree and makes one directory with nothing in it — **six libraries, 72 files**.
+> The two worlds both name a root `Movies` and a root `Music`, so a flat layout would have merged
+> one into the other silently and a reading keyed on a library's name would have held one library
+> where there were two; the media libraries take the names Atrium's own side already gives them,
+> `Films` and `Tunes`. **`tests/fixtures/media.py` had to become importable without this project's
+> runtime**, because that entry point is reached by `tools/probe_reference_scan.py` on the 3.9 floor
+> where no environment exists, and it imported SQLAlchemy and the `atrium` package for the scanned
+> world it also carried — that half is `tests/fixtures/media_world.py` now and nothing else moved.
+> And **the prober follows the library**: Atrium's side of AC-2 scans the 003 tree with the stub
+> that refuses, which its own generator says is the truth about those files, and the media world
+> with the real one, because scanning real media with a stub would have compared Atrium's
+> *unexamined* reading against a reference that examined everything.
+>
+> *What §3.1 actually owed was four files and one thing that is not a file.* `media.py` already
+> carried the multi-part film, the film with a subtitle file beside it and the image subtitle
+> track. What it did not have: a **subtitle file in a legacy encoding** — `SidecarFile.encoding` is
+> a declared field now, and the one entry that uses it is `cp1251`, chosen because `cp1251` and
+> `cp1252` share every byte position so the words decode to *different letters* rather than to an
+> error, which is the half of behaviours §5.11 a client sees directly; an **EXIF orientation** on a
+> planted image, written by splicing an APP1 segment into an mjpeg output because this module has
+> no image library and must not grow one — the same move `pgs_bitstream` makes for a subtitle codec
+> with no encoder — with a **second, untagged image beside it**, since a resize that honours the
+> tag and one that ignores it are only distinguishable against a control produced the same way; and
+> an **empty library**, which is a directory and a declaration in the entry point rather than an
+> entry in either manifest. **A playlist is not a file**, so the fifth thing §3.1 lists cannot be in
+> a tree at all: what a tree can owe is the two libraries and a reader who may open one of them, and
+> the playlist itself is written through the API by the run — §3.10's row, T12's runner. Before this
+> tree, every reachable library a seat could be restricted to held one collection type, so that row
+> was unaskable for a reason nobody had written down.
+>
+> *The finding that cost the most is that filling the unfilled anchors was the easy half.* T6 left
+> four shapes unfillable — an item id in a **body** (007's three reporting routes) and in a
+> **query** (`ids` and `entryIds`) — and `<anchor.p>` fills them: one token, resolving to whatever
+> the anchor named `p` resolves to, through the same three kinds and the same per-server
+> resolution, so nothing new became resolvable and no case may carry an identifier. Two checks came
+> with it, and the second is the one that matters: **an anchor that fills nothing** — neither a path
+> parameter nor a token — is refused, because otherwise a case *looks* filled while it goes on
+> sending what it sent before. **Six cases lost their `fixture` with it**, since for those six
+> `fixture` had never meant the fixture; `test_a_fixture_run_with_no_runtime...` counts eight where
+> it counted twelve. **But five anchors that were already filled were pointing at the wrong film.**
+> T6 anchored the two image cases and the three subtitle cases on
+> `GET /Items#movies-by-sort-name@0` under *"the fixture is what guarantees the anchored film HAS
+> one"* — true of the world the plan defaulted to, and false the moment D-4 chose both worlds, since
+> a movie listing sorted by `SortName` now spans the 003 tree and its first row is a film of filler
+> bytes with no image, no subtitle stream and nothing a prober can open. Two listing cases narrowed
+> by `searchTerm` name one fixture film each and the five anchor on those. **One anchor is still
+> unfilled and is not dressed up**: `playlistId` on the HLS segment route is carried by an m3u8
+> body, and addressing a text body is a fourth anchor kind — a mechanism, not a fixture.
+>
+> *Three differences nobody predicted, from the two libraries the reading gained.* Over files both
+> servers can actually open the disagreement is **five names and nothing else** — same items, same
+> files, same types — which is the sharpest thing in the record. The three that are new: the
+> reference names a library's root `Folder` row after the **directory** and not after the library,
+> so `Films` comes back as `Movies` where `/UserViews` answers `Films` — invisible in the 003 tree,
+> where directory and library names are equal; it takes a `MusicArtist` from the **directory** even
+> where the file's tags name another, while taking that same file's **album** from the tags, so the
+> two readings are not simply "tags here, paths there"; and an **empty library is nothing at all to
+> it** — zero rows, not even the root `Folder` it gives every other library — where Atrium carries
+> its `CollectionFolder`. The reading is 74 items over six libraries and the comparison is
+> **forty-seven** declared differences where it was twenty-six
+> `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`.
+>
+> *Two things about the record itself, and the first was a false statement in it.* Its finding
+> counted every file-backed row as *"backed by a file none of its probers can open"*, which was true
+> of the 003 tree alone and would have described a real `h264` file as unopenable in the one
+> document AC-2 is checked against; each library carries whether its files are decodable now and the
+> finding counts the two apart — 74 items, 48 backed by a file, **36** of those over a file nothing
+> can decode. And **no run of this task contacted a metadata provider**: the provider comparison
+> exists to measure that a library added the obvious way fetches names from the internet, so taking
+> it means standing up an instance whose whole purpose is to let a third party answer.
+> `--skip-provider-comparison` is the ordinary way to re-take a reading now, and it **carries T10's
+> list forward with the citation it was taken under** rather than dropping it — a record with no
+> list would let the test that keeps the reading honest stop asserting anything.
+>
+> *Routine calls taken, none of which touches an accepted document's criteria.* **The empty library
+> is declared in the entry point and not in either manifest**, because it belongs to the composition
+> rather than to a world: adding it to `LIBRARIES` would have put an empty library into every 003
+> test. **`test_reference_reading.py`'s two comparing tests carry the `ffmpeg` marker** — building
+> the tree means encoding it — while the four that read only the record do not, so a machine without
+> the binaries still checks the record's citation, its fetcher line and its own arithmetic; CI
+> installs ffmpeg, so AC-2 runs there. **The declared-difference count is asserted rather than
+> described**, because forty-seven in a docstring that nothing counts goes stale the way the
+> prior-measurement register did. **`GENERATOR_VERSION` is 3**, so no cached tree from before the
+> encoding field and the planted images can be read.
+>
+> *A failure worth knowing before T12, because T12 stands up instances for twenty rows.* **Two of
+> five instance starts on this machine died before answering**, with the container exiting `132` —
+> `SIGILL` — seconds after *"Core startup complete"*, on the pinned image, natively (an `arm64`
+> image on an `arm64` host, no emulation), with nothing of the run's own having happened yet. Not
+> the tree and not the configuration: the same tree and the same mounts came up on the next attempt
+> and scanned in **3 s**. It costs the 180 s readiness deadline and nothing else, and `--rm` has
+> already taken the container by the time the run asks for its logs — so the exit code is only
+> visible to a watcher outside the run. Plan §7 carries the row.
+>
+> *What T12 must know.* **The tree it gets is six libraries and it is composed, not declared**:
+> `reference_tree.libraries()` is the list, `ReferenceLibrary.decodable` says which side of the two
+> worlds a library is on, and the media libraries are `Films` and `Tunes` rather than `Movies` and
+> `Music`. **Every fixture-dependent row now has its input**: the multi-part film, the film with a
+> subtitle file, the image subtitle track, the legacy-encoded sidecar, the planted EXIF poster with
+> its untagged control, the two libraries a restricted seat can be split across, and the empty
+> library — whose *scan* half is already measured (zero rows there, a `CollectionFolder` here) while
+> its **played state**, which is what behaviours §5.7 asks, is still T12's to run. **`needs:
+> [fixture]` on a request case means the fixture now**, not "waiting on T11": eight cases carry it
+> and two of those are the listings that name a fixture film. And **a scan of the composed tree
+> takes 3 s** with the fetchers off, against T10's 26–34 s with them on, so the deadline is not
+> where a fixture run spends its time — the instance's start is.
 
 ## T12 — The named comparisons: six runner shapes over twenty rows
 

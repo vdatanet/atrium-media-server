@@ -27,12 +27,22 @@ class Kind(Enum):
     The distinction between IGNORED and SIDECAR is not about behaviour, which is identical: both
     produce no item. It is about *why*, and 004 will read the sidecars while nothing will ever
     read the rest.
+
+    MARKER and EMPTY are both zero bytes and are also not the same thing. EMPTY is a *file* that
+    is empty - an incomplete copy, and a case a scanner has to skip. MARKER is a file whose whole
+    content is its own absence: the reference reads a non-empty `.ignore` as gitignore-style
+    rules and ignores the directory outright only when the file is empty
+    `[source: Emby.Server.Implementations/Library/DotIgnoreIgnoreRule.cs:58-66 @ v10.11.11]`, so
+    a marker carrying the generator's banner is a rule set matching nothing rather than an
+    exclusion. Declaring it IGNORED - which is what it was until 010 T11 - wrote the banner into
+    it and left the exclusion case unexercised on the reference side of the comparison.
     """
 
     MEDIA = "becomes an item"
     SIDECAR = "read by 004, never an item"
     IGNORED = "present, and deliberately produces nothing"
     EMPTY = "zero bytes, which is an incomplete copy rather than a file"
+    MARKER = "zero bytes, and a marker whose emptiness is what it means"
 
 
 @dataclass(frozen=True)
@@ -182,7 +192,16 @@ MOVIES = Library(
             Kind.IGNORED,
             "a path component beginning with a dot",
         ),
-        Entry("Excluded/.ignore", Kind.IGNORED, "the operator's explicit exclusion marker"),
+        Entry(
+            "Excluded/.ignore",
+            Kind.MARKER,
+            "the operator's explicit exclusion marker, and it has to be EMPTY: the reference "
+            "ignores the directory outright only for a zero-byte marker and reads a non-empty one "
+            "as gitignore-style rules [source: "
+            "Emby.Server.Implementations/Library/DotIgnoreIgnoreRule.cs:58-66 @ v10.11.11]. 010 "
+            "T10 measured the consequence - the excluded film was an item on the reference and "
+            "not here, so the case was unexercised on the side it was written for",
+        ),
         Entry(
             "Excluded/An Excluded Film (2000).mkv",
             Kind.IGNORED,

@@ -41,9 +41,8 @@ from tests.fixtures.media import (
     REJECTED_CONTAINER,
     BuiltMedia,
     MediaFile,
-    ScannedMediaWorld,
-    build_scanned_media_world,
 )
+from tests.fixtures.media_world import ScannedMediaWorld, build_scanned_media_world
 
 pytestmark = [pytest.mark.conformance, pytest.mark.ffmpeg]
 

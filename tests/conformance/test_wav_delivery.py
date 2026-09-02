@@ -46,11 +46,10 @@ from tests.conformance.test_golden import STATE
 from tests.fixtures.media import (
     HIGH_RATE_AUDIO,
     BuiltMedia,
-    ScannedMediaWorld,
     binary,
-    build_scanned_media_world,
     probe,
 )
+from tests.fixtures.media_world import ScannedMediaWorld, build_scanned_media_world
 
 pytestmark = [pytest.mark.conformance, pytest.mark.ffmpeg]
 

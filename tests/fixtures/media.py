@@ -62,13 +62,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
-from sqlalchemy.orm import Session as OrmSession
-
-from atrium.db.repositories import ItemRepository, LibraryRepository
-from atrium.domain.items import CollectionType, Item, ItemType
-from atrium.domain.library import Library
-from atrium.library.config import normalise_root
-from atrium.library.scan import scan
 from tests.fixtures.library.generate import FIXED_MTIME_NS
 
 #: The two binaries. Named once so the skip in `tests/conftest.py` and the failure raised here
@@ -81,7 +74,10 @@ BINARIES = ("ffmpeg", "ffprobe")
 #:
 #: 2: 011 T1. Subtitle tracks are muxed in, subtitle sources are written beside the media, and an
 #: entry that declares one is mapped stream by stream rather than left to ffmpeg's own selection.
-GENERATOR_VERSION = 2
+#:
+#: 3: 010 T11. A sidecar is written in the encoding it declares rather than always in UTF-8, and
+#: an entry may plant an image carrying an EXIF orientation beside its film.
+GENERATOR_VERSION = 3
 
 #: Where a cached tree lands, unless the environment names somewhere else. A digest directory
 #: under it holds one build.
@@ -211,6 +207,54 @@ class SidecarFile:
     reason: str
     cues: tuple[Cue, ...] = SIDECAR_CUES
 
+    encoding: str = "utf-8"
+    """How the file's bytes are written, and it is a **fixture case** rather than a detail.
+
+    Every sidecar in this module was `utf-8` until 010 T11, which made
+    [behaviours section 5.11](../../docs/compatibility/behaviours.md) unreachable in the suite as
+    well as in a differential: the reference runs a statistical charset detector over a subtitle
+    file before reading a cue out of it and this server decides by a rule - a byte order mark,
+    then strict UTF-8, then one `cp1252` fallback - and the two answers can only differ on a file
+    that is neither UTF-8 nor `cp1252`. A world in which no such file exists cannot tell the two
+    apart, so it is declared here and written out in whatever encoding the entry names.
+    """
+
+
+#: The tag EXIF calls `Orientation`, and the value that means *rotate 90 degrees clockwise for
+#: display*. Chosen rather than 1 (`Normal`) because 1 is what every writer emits by default and
+#: is indistinguishable from no tag at all: the difference 006 owes 010 is whether a resize
+#: *applies* the rotation, and only a non-identity value can show it.
+EXIF_ORIENTATION_TAG = 0x0112
+EXIF_ORIENTATION_ROTATE_90 = 6
+
+#: The value that means *no rotation*, carried by the backdrop beside the poster. Two images on
+#: one item, encoded by one encoder, differing in the tag and in nothing else: that is what makes
+#: "the resize honoured the orientation" a comparison rather than a reading of one number.
+EXIF_ORIENTATION_NORMAL = 1
+
+
+@dataclass(frozen=True)
+class PlantedImage:
+    """An image file written beside a media file, carrying an EXIF orientation.
+
+    **The one case no remote request can reach** (006 plan section 6.8 row 1, and the
+    `exif-orientation-on-resize` row of `docs/compatibility/named-comparisons.yaml`): deciding
+    whether a resize honours the tag needs *a planted file in a controlled library*, which is what
+    the single-use reference instance of 010 spec section 3.1 finally provides. `images.py` draws
+    the images 006's own tests read; that module needs Pillow and this one is standard library
+    only, so the tag is spliced into a JPEG this module has ffmpeg produce (see
+    `exif_orientation_segment`).
+
+    Named `poster.jpg` where it is meant to become an item's primary image - what both servers
+    claim beside a film - which is why the name is the declaration here as it is for a sidecar.
+    """
+
+    name: str
+    reason: str
+    width: int
+    height: int
+    orientation: int = EXIF_ORIENTATION_ROTATE_90
+
 
 @dataclass(frozen=True)
 class MediaFile:
@@ -301,6 +345,11 @@ class MediaFile:
     """Written beside the file rather than into it. An entry that has one **renumbers its own
     streams** the moment 011 discovers it, so a sidecar never goes beside an entry another
     feature's tests already assert stream indices about."""
+
+    images: tuple[PlantedImage, ...] = ()
+    """Artwork written beside the file. Nothing muxes these and 003 does not walk them as media;
+    they exist so that a differential has an image with an EXIF orientation to ask both servers
+    about."""
 
     @property
     def has_video(self) -> bool:
@@ -601,6 +650,99 @@ UNCONVERTIBLE_SUBTITLE = MediaFile(
     ),
 )
 
+#: The Cyrillic cue text the legacy-encoded sidecar carries, and it is chosen rather than
+#: decorative. `cp1251` and `cp1252` share every byte position, so these words are **valid
+#: `cp1252`** and decode to different letters rather than to an error: the reference's detector
+#: names `cp1251` and draws the words, this server's rule falls back to `cp1252` and draws
+#: mojibake. A file that merely *failed* to decode would prove the refusal path and not the
+#: divergence, which is the half behaviours section 5.11 argues a client sees directly.
+LEGACY_CUES: tuple[Cue, ...] = (
+    Cue(0.5, 1.25, "Здравствуйте"),
+    Cue(1.75, 2.5, "Прощайте"),
+)
+
+#: What that sidecar is written in. Not `latin-1`, which decodes every byte there is and would
+#: make the refusal unreachable, and not `cp1252`, which is this server's own fallback and would
+#: make the two servers agree.
+LEGACY_ENCODING = "cp1251"
+
+LEGACY_SUBTITLE = MediaFile(
+    key="legacy_subtitle",
+    root=MOVIES_ROOT,
+    path="The Legacy Encoding (2010)/The Legacy Encoding (2010).mkv",
+    reason="010 spec section 3.1's fourth owed entry, and behaviours section 5.11's only "
+    "reachable input: every sidecar in this module was UTF-8, so the one difference a client sees "
+    "as the wrong letters on the screen had nothing to run on. In a directory of its own because "
+    "a sidecar is claimed by stem, and beside a film nothing else asserts stream indices about",
+    muxer="matroska",
+    demuxers="matroska,webm",
+    video_codec="h264",
+    video_encoder="libx264",
+    width=320,
+    height=240,
+    frame_rate="25",
+    audio_codec="aac",
+    audio_encoder="aac",
+    sample_rate=48000,
+    channels=2,
+    audio_bitrate="96k",
+    duration_seconds=4.0,
+    sidecars=(
+        SidecarFile(
+            name="The Legacy Encoding (2010).rus.srt",
+            reason="The legacy-encoded file itself. `rus` is a language the right-to-left name "
+            "read claims, so the entry exercises the naming rule as well - and the bytes are the "
+            "case, which is why the encoding is declared beside the cues",
+            cues=LEGACY_CUES,
+            encoding=LEGACY_ENCODING,
+        ),
+    ),
+)
+
+PLANTED_POSTER = MediaFile(
+    key="planted_poster",
+    root=MOVIES_ROOT,
+    path="The Planted Poster (2011)/The Planted Poster (2011).mp4",
+    reason="The planted file 006 owes 010: an image carrying an EXIF orientation, beside a film, "
+    "in a library this project may write to. 006's own probe says the edge is unreachable from "
+    "outside - 'it needs a planted file in a controlled library' - and this is that file's film. "
+    "In a directory of its own so the artwork is the film's primary image and not the library's",
+    muxer="mp4",
+    demuxers="mov,mp4,m4a,3gp,3g2,mj2",
+    video_codec="h264",
+    video_encoder="libx264",
+    width=320,
+    height=240,
+    frame_rate="25",
+    audio_codec="aac",
+    audio_encoder="aac",
+    sample_rate=48000,
+    channels=2,
+    audio_bitrate="96k",
+    duration_seconds=4.0,
+    images=(
+        PlantedImage(
+            name="poster.jpg",
+            reason="The item's primary image, and not square - which is the whole of what makes "
+            "the tag observable: a rotation applied to a 2:3 source answers 3:2, and a rotation "
+            "applied to a square one answers nothing at all",
+            width=400,
+            height=600,
+        ),
+        PlantedImage(
+            name="backdrop.jpg",
+            reason="The control, and the reason the same film carries two images: it is the same "
+            "encoder, the same colour bars and the same splice with the tag set to `Normal`, so a "
+            "difference between the two answers is attributable to the orientation and to nothing "
+            "else. It is also the only Backdrop at index 0 either fixture world has, without "
+            "which the indexed image case compares two refusals",
+            width=640,
+            height=360,
+            orientation=EXIF_ORIENTATION_NORMAL,
+        ),
+    ),
+)
+
 HIGH_RATE_AUDIO = MediaFile(
     key="high_rate_audio",
     root=MUSIC_ROOT,
@@ -643,6 +785,8 @@ FILMS: tuple[MediaFile, ...] = (
     HIGH_RANGE,
     BOTH_SUBTITLE_KINDS,
     UNCONVERTIBLE_SUBTITLE,
+    LEGACY_SUBTITLE,
+    PLANTED_POSTER,
 )
 
 #: Everything under the music root.
@@ -693,6 +837,47 @@ _PGS_OBJECT_HEIGHT = 8
 #: demuxer that read the two as disagreeing would still call this a subtitle stream.
 _PGS_CANVAS = (320, 240)
 _PGS_TICKS_PER_SECOND = 90_000
+
+
+#: The two JPEG markers this module has to know: the start of image, and the application segment
+#: EXIF lives in. A JPEG is a marker stream, so a tag can be *added* to a finished file rather
+#: than asked of the encoder - which is what lets an image with an EXIF orientation be built by a
+#: module that has no image library (see `exif_orientation_segment`).
+_JPEG_SOI = b"\xff\xd8"
+_JPEG_APP1 = b"\xff\xe1"
+
+
+def exif_orientation_segment(orientation: int) -> bytes:
+    """A whole APP1 segment holding one EXIF tag: the orientation, and nothing else.
+
+    **Written here rather than drawn by an image library**, because this module is standard
+    library only - `tests/fixtures/reference_tree.py` imports it from a `tools/` program on the
+    Python 3.9 floor, where Pillow does not exist - and because ffmpeg has no way to ask for an
+    EXIF tag on an mjpeg output. It is the same move `pgs_bitstream` makes for a subtitle codec
+    with no encoder: the format is small enough to write, so it is written.
+
+    The payload is `Exif\\0\\0` and then a TIFF file of exactly one image file directory: the
+    big-endian byte order mark, the 42 that says TIFF, the offset of the first directory, one
+    entry - `Orientation`, type SHORT, one value - and a zero saying no directory follows. A
+    SHORT's value fits in the entry's own four-byte field and is left-aligned in it, which is the
+    one detail a hand-written directory usually gets wrong.
+    """
+    entry = struct.pack(">HHIHH", EXIF_ORIENTATION_TAG, 3, 1, orientation, 0)
+    tiff = b"MM" + struct.pack(">HI", 42, 8) + struct.pack(">H", 1) + entry + struct.pack(">I", 0)
+    payload = b"Exif\x00\x00" + tiff
+    return _JPEG_APP1 + struct.pack(">H", len(payload) + 2) + payload
+
+
+def with_exif_orientation(jpeg: bytes, orientation: int) -> bytes:
+    """The same JPEG, with the orientation segment spliced in directly after the start marker.
+
+    First rather than after whatever the encoder wrote, because that is where the EXIF
+    specification puts APP1 and where a reader that stops at the first application segment will
+    look for it.
+    """
+    if not jpeg.startswith(_JPEG_SOI):
+        raise ValueError("not a JPEG: it does not begin with the start-of-image marker")
+    return _JPEG_SOI + exif_orientation_segment(orientation) + jpeg[len(_JPEG_SOI) :]
 
 
 def _pgs_segment(kind: int, seconds: float, payload: bytes) -> bytes:
@@ -975,9 +1160,51 @@ def generate(one: MediaFile, into: Path) -> Path:
     os.utime(destination, ns=(FIXED_MTIME_NS, FIXED_MTIME_NS))
     for sidecar in one.sidecars:
         beside = destination.with_name(sidecar.name)
-        beside.write_text(srt_document(sidecar.cues), encoding="utf-8")
+        # `errors="strict"` by construction: an encoding that cannot hold the declared cues is a
+        # declaration that is wrong, and a silently replaced character would be a fixture nobody
+        # could tell from a decoder bug.
+        beside.write_bytes(srt_document(sidecar.cues).encode(sidecar.encoding))
+        os.utime(beside, ns=(FIXED_MTIME_NS, FIXED_MTIME_NS))
+    for planted in one.images:
+        beside = destination.with_name(planted.name)
+        beside.write_bytes(planted_image(planted))
         os.utime(beside, ns=(FIXED_MTIME_NS, FIXED_MTIME_NS))
     return destination
+
+
+def planted_image(planted: PlantedImage) -> bytes:
+    """One planted image's bytes: colour bars encoded as a JPEG, with an EXIF orientation in it.
+
+    Encoded through ffmpeg rather than drawn, for the reason the media beside it is: this module
+    has no image library and must not grow one. The tag is spliced in afterwards, which is what
+    makes the result independent of whether the encoder would have written an EXIF block at all.
+    """
+    with tempfile.TemporaryDirectory(prefix="atrium-planted-image.") as scratch:
+        drawn = Path(scratch) / "drawn.jpg"
+        _run(
+            [
+                binary("ffmpeg"),
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-nostdin",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                f"smptebars=size={planted.width}x{planted.height}:rate=1:duration=1",
+                "-frames:v",
+                "1",
+                "-fflags",
+                "+bitexact",
+                "-flags:v",
+                "+bitexact",
+                "-f",
+                "mjpeg",
+                str(drawn),
+            ]
+        )
+        return with_exif_orientation(drawn.read_bytes(), planted.orientation)
 
 
 @dataclass(frozen=True)
@@ -1004,6 +1231,10 @@ class BuiltMedia:
         """Where a declared sidecar landed - beside its film, always, which is the only place a
         stem match can find it."""
         return self.path_of(one).with_name(sidecar.name)
+
+    def image_path_of(self, one: MediaFile, planted: PlantedImage) -> Path:
+        """Where a declared planted image landed - beside its film, for the same reason."""
+        return self.path_of(one).with_name(planted.name)
 
     def copy_into(self, destination: Path) -> BuiltMedia:
         """The whole tree, somewhere a test may write to. The cache never is."""
@@ -1197,89 +1428,26 @@ def keyframe_seconds(path: Path) -> tuple[float, ...]:
     return tuple(float(line.rstrip(",")) for line in output.split() if line.rstrip(","))
 
 
-# ------------------------------------------------------------------------------------------
-# The scanned world
-# ------------------------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class ScannedMediaWorld:
-    """Two libraries, scanned by the real 003 pipeline over the generated tree.
-
-    Scanned rather than seeded, unlike `query.py`: the whole point of this world is that the rows
-    and the files agree, and a seeded row is a statement about a file nobody read.
-    """
-
-    files: BuiltMedia
-    movies: Library
-    music: Library
-    items: Mapping[str, Item]
-    """Every item both scans produced, keyed by identifier."""
-
-    def of(self, one: MediaFile) -> Item:
-        """The item this file backs - found through its sources, never assumed from its name."""
-        wanted = one.path
-        for candidate in self.items.values():
-            if any(source.relative_path == wanted for source in candidate.sources):
-                return candidate
-        raise KeyError(f"nothing scanned from {wanted!r}")
-
-    def by_type(self, item_type: ItemType) -> tuple[Item, ...]:
-        return tuple(
-            item
-            for item in self.items.values()
-            if item.type is item_type and item.removed_at is None
-        )
-
-
-def build_scanned_media_world(session: OrmSession, files: BuiltMedia) -> ScannedMediaWorld:
-    """Declare the two libraries over the generated tree and scan them, in the caller's session.
-
-    Fixed library identifiers, like every fixture world here, so two builds derive the same items
-    (Principle VII). `config.create` would mint a random one.
-    """
-    libraries = LibraryRepository(session)
-    movies = libraries.add(
-        Library(
-            id=MOVIES_LIBRARY_ID,
-            name="Films",
-            collection_type=CollectionType.MOVIES,
-            roots=(normalise_root(str(files.movies_root)),),
-        )
-    )
-    music = libraries.add(
-        Library(
-            id=MUSIC_LIBRARY_ID,
-            name="Tunes",
-            collection_type=CollectionType.MUSIC,
-            roots=(normalise_root(str(files.music_root)),),
-        )
-    )
-    for library in (movies, music):
-        scan(library, session)
-
-    items = ItemRepository(session)
-    return ScannedMediaWorld(
-        files=files,
-        movies=movies,
-        music=music,
-        items={**items.by_library(movies.id), **items.by_library(music.id)},
-    )
-
-
 __all__ = [
     "BINARIES",
     "BOTH_SUBTITLE_KINDS",
     "CUES",
     "DIRECT_PLAY",
+    "EXIF_ORIENTATION_NORMAL",
+    "EXIF_ORIENTATION_ROTATE_90",
+    "EXIF_ORIENTATION_TAG",
     "FILMS",
     "HIGH_RANGE",
     "HIGH_RATE_AUDIO",
     "IMAGE_SUBTITLE_CODEC",
+    "LEGACY_CUES",
+    "LEGACY_ENCODING",
+    "LEGACY_SUBTITLE",
     "LONG_TAKE",
     "MATRIX",
     "MOVIES_LIBRARY_ID",
     "MUSIC_LIBRARY_ID",
+    "PLANTED_POSTER",
     "REJECTED_AUDIO",
     "REJECTED_CONTAINER",
     "REJECTED_VIDEO",
@@ -1293,12 +1461,12 @@ __all__ = [
     "FfmpegFailedError",
     "FfmpegUnavailableError",
     "MediaFile",
-    "ScannedMediaWorld",
+    "PlantedImage",
     "SidecarFile",
     "SubtitleTrack",
     "binary",
     "build_media_files",
-    "build_scanned_media_world",
+    "exif_orientation_segment",
     "extraction_offset_seconds",
     "ffmpeg_version",
     "frame_count",
@@ -1306,9 +1474,11 @@ __all__ = [
     "keyframe_seconds",
     "missing_binaries",
     "pgs_bitstream",
+    "planted_image",
     "probe",
     "srt_document",
     "srt_timestamp",
     "subtitle_packet_seconds",
     "subtitle_sources",
+    "with_exif_orientation",
 ]
