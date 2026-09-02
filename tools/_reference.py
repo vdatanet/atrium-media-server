@@ -103,6 +103,30 @@ ENV_RUNTIME = "ATRIUM_CONTAINER_RUNTIME"
 #: The scheduled task the reference runs a library scan as `[spec: GetTasks, TaskInfo.Key]`.
 SCAN_TASK_KEY = "RefreshLibrary"
 
+#: The item types a library of this fixture produces, spelled as the reference spells them when it
+#: looks a type's options up - `item.GetType().Name`
+#: `[source: MediaBrowser.Providers/Manager/ProviderManager.cs:384 @ v10.11.11]`. A type named here
+#: with an **empty** fetcher list has every remote provider disabled for it, because the library's
+#: own type options are an allowlist and not a deny list: *"return libraryTypeOptions.
+#: MetadataFetchers.Contains(name)"*
+#: `[source: MediaBrowser.Controller/BaseItemManager/BaseItemManager.cs:42 @ v10.11.11]`. A type
+#: absent from the list falls through to the server's defaults, which is why the list is spelled
+#: out rather than inferred from what a scan happens to produce.
+FETCHED_TYPES: Tuple[str, ...] = (
+    "Movie",
+    "Series",
+    "Season",
+    "Episode",
+    "MusicArtist",
+    "MusicAlbum",
+    "Audio",
+    "MusicVideo",
+    "Video",
+    "Folder",
+    "BoxSet",
+    "Trailer",
+)
+
 
 # --------------------------------------------------------------------------------------------
 # Failures, typed so that a caller can degrade rather than die
@@ -332,11 +356,23 @@ class Library:
     is given, and in how many libraries, is **D-4** and is measured by `probe_reference_scan.py`
     (010 T10); this class is what lets that measurement ask either shape without changing this
     module.
+
+    **`internet_providers` defaults to off, and that default is a measurement rather than a
+    preference.** With it on - which is what a `LibraryOptions` body naming only `PathInfos`
+    binds to - the reference's reading of the fixture is not a reading of the fixture: over the
+    003 tree it named a film `WALL-E's Treasures & Trinkets`, an episode `Highlander: Reunion`
+    and another `12:00 A.M.-1:00 A.M.`, none of which is in the tree or derivable from it. A
+    remote provider answered, so the comparison AC-2 asks for would have compared this project's
+    scanner against a third party's database, on values that change without either server
+    changing `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`. The field
+    exists rather than the default being hard-coded because the difference between the two
+    readings is the measurement, and a probe has to be able to take both.
     """
 
     name: str
     collection_type: str = ""
     subpath: str = ""
+    internet_providers: bool = False
 
     def path_in(self, mount: str) -> str:
         return mount + "/" + self.subpath.strip("/") if self.subpath.strip("/") else mount
@@ -346,6 +382,42 @@ class Library:
 #: `movies`, because naming a collection type is an assertion about what the tree holds and this
 #: module does not know.
 DEFAULT_LIBRARIES: Tuple[Library, ...] = (Library(name="Fixture"),)
+
+
+def library_options(library: Library, path: str) -> Dict[str, Any]:
+    """The `LibraryOptions` body one library is added with `[spec: AddVirtualFolder]`.
+
+    Everything not named here is left to whatever an absent value binds to, deliberately: a
+    freshly created library has no policy anybody set, and what this instance exists to measure
+    is the reference's own defaults. **Remote metadata is the one exception**, and the shape of
+    the exception is a finding rather than a choice.
+
+    `LibraryOptions.EnableInternetProviders` is the property that reads like the switch and is
+    not one: it is declared `[spec: LibraryOptions]`, it is stored, it reads back `false` - and
+    **nothing in the reference consults it**, the declaration on
+    `MediaBrowser.Model/Configuration/LibraryOptions.cs:64 @ v10.11.11` being its only occurrence
+    in the source. Set alone it changed **nothing**: the reading over the 003 tree was identical
+    to the one taken with it unset, remote titles and all
+    `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`. It is still sent,
+    because it is what the document declares and a later version may honour it, but it is not
+    what does the work.
+
+    What does the work is the library's own **type options**, which are an allowlist: a type that
+    has them enables exactly the fetchers they name
+    `[source: MediaBrowser.Controller/BaseItemManager/BaseItemManager.cs:42 @ v10.11.11]`. Empty
+    lists for every type the fixture produces therefore leave the local readers - the `.nfo`
+    sidecars, the embedded tags - and take the network out of the reading.
+    """
+    options: Dict[str, Any] = {
+        "PathInfos": [{"Path": path}],
+        "EnableInternetProviders": library.internet_providers,
+    }
+    if not library.internet_providers:
+        options["TypeOptions"] = [
+            {"Type": name, "MetadataFetchers": [], "ImageFetchers": [], "ImageOptions": []}
+            for name in FETCHED_TYPES
+        ]
+    return options
 
 
 @dataclass(frozen=True)
@@ -674,7 +746,7 @@ class ReferenceInstance:
         answer = api.request(
             "POST",
             "/Library/VirtualFolders",
-            body={"LibraryOptions": {"PathInfos": [{"Path": path}]}},
+            body={"LibraryOptions": library_options(library, path)},
             query=query,
         )
         if not answer.ok:
@@ -682,7 +754,8 @@ class ReferenceInstance:
                 f"POST /Library/VirtualFolders for {library.name!r} at {path} answered "
                 f"{answer.status} {answer.raw[:400]!r}"
             )
-        self._announce(f"library {library.name!r} added over {path}")
+        fetching = "internet providers on" if library.internet_providers else "no remote metadata"
+        self._announce(f"library {library.name!r} added over {path} ({fetching})")
 
     # -- step 5: wait for the scan, on the server's own answer ---------------------------------
 

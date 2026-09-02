@@ -1238,7 +1238,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T10 — `tools/probe_reference_scan.py`: D-4's measurement, and the reading AC-2 is checked against
 
-- [ ] **Changes:** new `tools/probe_reference_scan.py`, the instance's **first run** and the task
+- [x] **Changes:** new `tools/probe_reference_scan.py`, the instance's **first run** and the task
   that performs the measurement D-4 reserved: *given the fixture tree, what does a reference
   server's library contain?* The 003 tree is paths and filler bytes by design — its own generator
   says *"these are not decodable media"* — and **whether a reference makes items out of a file its
@@ -1261,6 +1261,107 @@ written against twenty, and the `outstanding:` section they described is gone ra
   runs in the default CI job with no Jellyfin anywhere, it fails when Atrium's scan of the fixture
   moves, and re-running the probe is what moves the record.
 - **Spec reference:** §3.1, AC-2, AC-7, AC-8; plan §6.6, §11 D-4
+
+> **Done (2026-09-02).** *D-4's default is wrong, and the two findings beside it are bigger than
+> D-4.*
+>
+> **The reference makes 59 items out of the 003 tree** — 19 in `Movies`, 20 in `Shows`, 20 in
+> `Music` — and **37 of them are backed by a file none of its probers can open**: an empty `.mkv`,
+> a `.flac` of filler bytes, a `.ts` that is not a transport stream
+> `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`. *Undecodable* is not
+> *unresolvable*: the reference resolves an item from a **path** and probes it afterwards, and a
+> probe that fails leaves an item with no streams rather than no item. So [plan §6.6](plan.md#66-the-fixture-on-the-other-server)'s
+> **second** branch is the measured one — both trees go across as libraries of their own and AC-2
+> compares both — and the default it stood on, *the media world extended with the structural entries
+> §3.1 owes*, is withdrawn. The plan, §11 D-4 and §9's risk row say so, dated. It also settles the
+> question T9 handed over: `InstanceSpec.libraries` is asked for **three typed libraries**, one per
+> collection type the manifest declares, because Atrium's own libraries carry those types and a
+> comparison that gave one server three typed libraries and the other one untyped library would be
+> measuring the typing.
+>
+> *The first finding beside it is that the reading was not a reading of the tree at all.* A library
+> added the way [plan §6.5](plan.md#65-the-single-use-reference-instance) step 4 described it — a
+> `LibraryOptions` naming only its path — **fetches metadata from the internet**, and over this tree
+> it answered with names no part of the tree contains: `WALL·E's Treasures & Trinkets` for
+> `Wall-E (2008).mkv`, `Highlander: Reunion` for `The Series - S00E01 - A Special.mkv`,
+> `12:00 A.M.-1:00 A.M.` for an episode of a series called `24`. **Nine of the fifty-nine names**,
+> from a third party's database, moving whenever that database does — into the one comparison whose
+> whole value is that a difference means a difference in a server. And the property that reads like
+> the switch is not one: `LibraryOptions.EnableInternetProviders` is declared, is stored, reads back
+> `false` — and is consulted by **nothing**, its declaration at
+> `MediaBrowser.Model/Configuration/LibraryOptions.cs:64 @ v10.11.11` being its only occurrence in
+> the reference's source. Set alone it changed not one of the nine names. What works is the
+> library's own `TypeOptions`, which are an **allowlist** rather than a deny list
+> `[source: MediaBrowser.Controller/BaseItemManager/BaseItemManager.cs:42 @ v10.11.11]`: an empty
+> fetcher list per type takes the network out of the reading and leaves the local readers, so both
+> servers still read the `.nfo` sidecars and can be compared on them. **The item set was identical
+> either way** — only names moved — which is what makes this a contamination of the comparison and
+> not a difference in the scan. `tools/_reference.py` sends it now, `Library.internet_providers`
+> asks for the other shape, and the probe takes **both** readings by default because the difference
+> between them is the finding and a citation a probe cannot reproduce is not one.
+>
+> *The second is Atrium's, and the comparison is what found it.* `tests/library/test_reference_reading.py`
+> failed about **one run in ten**, on the series name: `metadata/refresh.py`'s `_first_file_backed`
+> walked a container's children **in identifier order**, and an identifier is a hash of the
+> **absolute** path (003 §3.6) — so which descendant a container borrowed its directory from moved
+> with the mount point. That is not the harmless tie the genre spelling beside it already tolerates:
+> the descendants of one container sit at different depths — a series whose second season has no
+> season directory has an episode one level below it and the rest two — and the caller walks up a
+> **fixed** number of levels from whichever it is handed. Land on the wrong one and the series looks
+> for its `tvshow.nfo` in the library root, finds none, and keeps the path-derived name, where the
+> reference reads that sidecar every time. It now gathers every file-backed descendant and takes the
+> one whose **relative** path sorts first, which is a property of the tree; the guard is
+> `test_a_container_borrows_the_same_directory_wherever_the_library_is_mounted`, and it fails on the
+> old ordering. What is **not** fixed is that the borrowing is a guess at all — a two-disc album
+> still borrows `CD1` and so never sees its own `album.nfo` — which is 004's to decide and is
+> recorded here rather than taken.
+>
+> *So AC-2 is a test, and it is not an equality.* The probe writes
+> `docs/compatibility/reference-fixture-reading.json` — 59 rows of `(type, name, file)` per library,
+> with its own citation, the image digest and the nine fetched names inside it — and the test
+> compares Atrium's scan of the same tree against it, in the default job, with no Jellyfin anywhere.
+> **The two servers disagree in twenty-six places** and every one is declared with its reason: two
+> files only the reference makes an item of, twenty files both make an item of under different
+> names, and four container rows. Nothing is excused silently, a difference that is not declared
+> fails, and a declared difference that has gone away fails too — so the table cannot outlive what
+> it describes. Deciding what Atrium *does* about any of them is the owning feature's, per
+> [spec §2](spec.md#2-scope).
+>
+> **The two sharpest of the twenty-six are worth naming here.** A **zero-byte** film is an item
+> there and not here, which is 003 §3.2's deliberate rule meeting a server that has no such rule.
+> And the `.ignore` exclusion **is not being exercised on the reference side at all**: an empty
+> `.ignore` ignores the directory outright and one with content is read as gitignore-style rules
+> `[source: Emby.Server.Implementations/Library/DotIgnoreIgnoreRule.cs:58-66 @ v10.11.11]`, and
+> `generate.py` writes a banner and filler into every declared entry — so the fixture's marker is a
+> file full of rules that match nothing. **That is a defect in the fixture**, it is T11's, and it is
+> written into the declared table so that repairing it moves a row rather than surprising somebody.
+>
+> *Routine calls taken, none of which touches an accepted document's criteria.* **The reading is
+> JSON and not YAML**, for the reason `property-names.json` is: a file a program writes is read by a
+> program, and the prose that justifies a row belongs in the probe that took it. **The tree is built
+> by a new entry point, `tests/fixtures/reference_tree.py`** — plan §6.6 asked for one — which names
+> the tree, the three libraries and their collection types from 003's own manifest, so a renamed
+> library moves both sides at once. **`tools/_probe.py` gained `connect_with`**, one parameter, so
+> that the probe whose server does not exist until it makes one still reaches `_probe.main` and
+> still prints the convention's citation and exit code; the instance is torn down *after* the
+> report, because a report printed after the teardown would name a server that no longer exists.
+> **The probe refuses a server argument**: its question cannot be asked without writing a library
+> into the server being asked. And **the tree is built under the git-ignored `reference/`** and not
+> under `tempfile`'s directory, which on macOS is a path the container runtime does not share — the
+> container then starts, finds nothing at the mount, and exits, which arrives three minutes later as
+> a readiness timeout with `--rm` having already removed the evidence.
+>
+> *What T11 must know.* **It builds both worlds, not one.** The 003 tree goes across as it stands —
+> that is what this measurement bought — so what T11 owes is the media world beside it and the
+> entries [spec §3.1](spec.md) still owes, and `reference_tree.py` is where the second world is
+> named. **Fix the `.ignore` first**: `Excluded/.ignore` must be **empty** for the case to exist on
+> either server, which means `Kind.IGNORED` is not the right kind for a marker file and
+> `generate.py` needs to be able to write a zero-byte entry that is not `Kind.EMPTY`. **A scan of
+> the whole three-library tree takes 26–34 s with the fetchers on and about 2 s with them off**, so
+> the 900 s deadline is generous either way and the provider comparison is what costs a run its
+> three minutes. **The instance's label is fixed across runs**, so two runs cannot overlap: the
+> second sweeps the first's container out from under it, which is the design and is worth knowing
+> before running two by hand.
 
 ## T11 — The fixture world gets what §3.1 owes, written against T10's answer
 

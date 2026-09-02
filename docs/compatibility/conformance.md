@@ -189,6 +189,31 @@ that one is reached — `tools/extract_v1_surface.py` validates only that the va
 `L0..L3`, and every implemented feature's definition of done has deferred the differential half
 here. Each of the eight carries more than one case and names more than one identity.
 
+**And what the reference makes of the fixture is checked in as well**, as
+[reference-fixture-reading.json](reference-fixture-reading.json): every item of every library the
+reference builds from this repository's own tree, as a type, a name and the file behind it, with
+the probe's citation and the image digest inside the file. It exists because AC-2 — *both servers,
+pointed at the same built fixture, produce libraries with the same item count and the same
+structure* — needs two servers to be **taken** and only one to be **checked**, so the reading is
+recorded once by `tools/probe_reference_scan.py` against a single-use instance and compared against
+Atrium's own scan by `tests/library/test_reference_reading.py`, in the default job, with no Jellyfin
+anywhere. **The comparison is not an equality**: the two servers disagree over that tree in
+twenty-six places, each declared in that module with its reason, and a difference that is not
+declared fails. Re-running the probe is what moves the record; editing the table is what moves what
+is expected of the comparison, and doing the second to make the first go away is the one thing it
+is for preventing.
+
+**The reading is a reading of the tree only because the instance is configured for it.** A library
+added with nothing but its path fetches metadata from the internet, and over this tree that supplied
+nine of the fifty-nine names — `Highlander: Reunion` for an episode of a series that does not exist
+— which would have put a third party's database into the comparison, moving without either server
+moving. `LibraryOptions.EnableInternetProviders` does not stop it: it is declared, it is stored, it
+reads back, and nothing in the reference consults it
+`[source: MediaBrowser.Model/Configuration/LibraryOptions.cs:64 @ v10.11.11]`. The per-type fetcher
+list does, because it is an allowlist
+`[source: MediaBrowser.Controller/BaseItemManager/BaseItemManager.cs:42 @ v10.11.11]`.
+`[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`
+
 **An anchor is never an identifier**, because the two servers derive those differently by design
 ([§1.4](behaviours.md#14-item-identifiers-are-32-lowercase-hex-characters)). It is a declared
 listing case and a row position, resolved against each server immediately before the case runs — or
