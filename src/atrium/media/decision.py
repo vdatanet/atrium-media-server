@@ -52,9 +52,16 @@ transcoding, audio transcoding **and** remuxing are all denied at once, and an a
 the audio permission alone `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28;
 source: Jellyfin.Api/Helpers/MediaInfoHelper.cs:278-293 @ v10.11.11]`. With **no** profile the
 builder is never reached, and then a **single** permission decides, per media kind, on the source
-itself: see `unnegotiated_transcoding` and `Decision.remuxing_denied`
+itself: see `unnegotiated_transcoding` and `unnegotiated_direct_stream`
 `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. Either way the answer is
 flags, never an error.
+
+**A listing is the profile-less rule too, and those two functions are where 005 reads it.** The
+reference builds an item body's `MediaSources` and a profile-less negotiation's from one function
+`[source: Emby.Server.Implementations/Dto/DtoService.cs:261,
+Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`, so this module
+owns the rule for both and `api/item_dto.py` calls it rather than restating it
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`.
 
 **The subtitle half arrived at 011 T9**, and it is not a second ladder beside this one - it hangs
 off the same answer, because the reference resolves a delivery method *per subtitle stream* from
@@ -407,8 +414,9 @@ class Decision:
     a **video** item `SupportsDirectStream` is `EnablePlaybackRemuxing` `[source:
     Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`, `[probe:
     tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. An audio item's is untouched by
-    any permission, measured on the same run, which is why this reads `is_video and ...` at its
-    one caller rather than the permission alone."""
+    any permission, measured on the same run, which is why `unnegotiated_direct_stream` - the one
+    spelling of that rule, and what sets this - reads the media kind rather than the permission
+    alone."""
 
     target: TranscodingProfile | None = None
     """The client's own entry this answer was built from, `None` when nothing is produced.
@@ -1426,8 +1434,34 @@ def unnegotiated_transcoding(policy: PlaybackPolicy, *, is_video: bool) -> bool:
     So a single denial **is** observable, on exactly the request that negotiates nothing - which is
     the opposite of what happens one branch down, and the reason the two rules live in two
     functions rather than in one with a flag.
+
+    **A listing is the same moment**, and that is the second reader this function grew. An item
+    body carrying `MediaSources` is built from the same reference function as a profile-less
+    negotiation, so the flags on a listed source are the account's own - measured across the six
+    policy shapes on `GET /Items/{itemId}`, `GET /Items` and `GET /Items/Latest`, on a video item,
+    an audio item and a video item nothing ever inspected `[probe:
+    tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. `api/item_dto.py` calls it for
+    that, which is why it is a function of the policy and the media kind and of nothing a
+    negotiation knows.
     """
     return policy.enable_video_transcoding if is_video else policy.enable_audio_transcoding
+
+
+def unnegotiated_direct_stream(policy: PlaybackPolicy, *, is_video: bool) -> bool:
+    """`SupportsDirectStream` on that same never-negotiated source, and it is **one** permission.
+
+    A **video** source's flag is `EnablePlaybackRemuxing`; an audio source's is untouched by all
+    three permissions, which is why this reads the media kind rather than the permission alone
+    `[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`,
+    `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. `SupportsDirectPlay`
+    is untouched on both kinds, measured in the same run and in the same six shapes, so nothing
+    here writes it.
+
+    It is spelled once and read three times - the ladder's rule 1 (`Decision.remuxing_denied`),
+    the negotiation's un-inspected source, and a listing's `MediaSources` - because a second
+    spelling is how the three come to disagree.
+    """
+    return not is_video or policy.enable_remuxing
 
 
 def _may_process(policy: PlaybackPolicy, *, is_video: bool) -> bool:
@@ -1520,7 +1554,7 @@ def decide(
             video=None,
             audio=None,
             supports_transcoding=unnegotiated_transcoding(policy, is_video=is_video),
-            remuxing_denied=is_video and not policy.enable_remuxing,
+            remuxing_denied=not unnegotiated_direct_stream(policy, is_video=is_video),
         )
 
     max_bitrate = switches.max_streaming_bitrate or profile.max_streaming_bitrate
@@ -1690,5 +1724,6 @@ __all__ = [
     "method_named",
     "refused_by_policy",
     "subtitle_answers",
+    "unnegotiated_direct_stream",
     "unnegotiated_transcoding",
 ]

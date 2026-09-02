@@ -41,6 +41,11 @@ from typing import Any
 from atrium.db.item_queries import Ancestor, ContainerAggregates, HydratedItem
 from atrium.domain.items import BY_NAME, FILE_BACKED, MEDIA_TYPE_OF, ItemType
 from atrium.media import info as media_info
+from atrium.media.decision import (
+    PlaybackPolicy,
+    unnegotiated_direct_stream,
+    unnegotiated_transcoding,
+)
 from atrium.metadata.artwork import ImageKind
 
 from .item_models import BaseItemDto, BaseItemPerson, ExternalUrl, NameGuidPair, UserItemDataDto
@@ -67,6 +72,23 @@ class BuildContext:
     """Everything the batch shares. Routes fill it; the builder only reads it."""
 
     server_id: str
+    #: **Whose** playback permissions the sources in this batch are answered with, and it has no
+    #: default on purpose. The reference writes the account's own permissions onto every static
+    #: media source it builds, one per media kind, so a permitted default is exactly the wrong
+    #: answer for a denied seat - which is the shortfall this field closed, carried as an
+    #: accepted gap until 2026-09-02, whose closing mechanism was named as *"the caller's policy
+    #: reaching the item builder, which is a shared context and not one route"*. A field with no
+    #: default is that mechanism: a route that emits an item cannot be written without deciding
+    #: whose policy it emits under, where a default would have let the next one forget in silence
+    #: `[source: Emby.Server.Implementations/Dto/DtoService.cs:261,
+    #: Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`.
+    #:
+    #: It is the **effective** user's - `userId` when the request names one, the token holder
+    #: otherwise - and not the caller's: an administrator reading an item for a denied account is
+    #: answered that account's flags, and reading it for themselves is answered their own
+    #: `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. Which is
+    #: `effective_user`, already resolved by every route here.
+    policy: PlaybackPolicy
     width: Width = Width.LIST_ROW
     #: The resolved `fields` tokens, wire spellings, unknown ones already dropped and recorded
     #: by `compat.query_params` (behaviours section 1.12).
@@ -518,11 +540,30 @@ def _root_of(one: HydratedItem, ctx: BuildContext) -> str | None:
 
 
 def _media_sources(one: HydratedItem, ctx: BuildContext) -> list[Any] | None:
+    """Every part of the item, with the reading account's playback permissions written on.
+
+    **A listing is the profile-less negotiation's rule, because it is the reference's own
+    function.** An item body's `MediaSources` and a `PlaybackInfo` that reaches no stream builder
+    are built by one call there `[source: Emby.Server.Implementations/Dto/DtoService.cs:261,
+    Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`, so the two
+    flags a permission moves are read from `media/decision.py` rather than restated here - one
+    per media kind, and `SupportsDirectPlay` untouched by all three. Measured across the six
+    policy shapes on `GET /Items/{itemId}`, `GET /Items` and `GET /Items/Latest`, on a video item,
+    an audio item and a video item nothing had ever inspected - which carries the account's flags
+    exactly as an annotated one does `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11,
+    2026-09-02]`.
+
+    The negotiation overwrites both again from its own answer, so an item asked for through
+    `PlaybackInfo` is unaffected by what is written here (008 spec section 3.3).
+    """
     if not one.item.sources:
         return None
-    return media_info.sources_for(
-        one.item, one.probes, _root_of(one, ctx), is_video=one.item.type in VIDEO_TYPES
-    )
+    is_video = one.item.type in VIDEO_TYPES
+    sources = media_info.sources_for(one.item, one.probes, _root_of(one, ctx), is_video=is_video)
+    for source in sources:
+        source.supports_transcoding = unnegotiated_transcoding(ctx.policy, is_video=is_video)
+        source.supports_direct_stream = unnegotiated_direct_stream(ctx.policy, is_video=is_video)
+    return sources
 
 
 def _media_streams(one: HydratedItem, ctx: BuildContext) -> list[Any] | None:

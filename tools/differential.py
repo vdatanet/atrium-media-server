@@ -1999,9 +1999,20 @@ def named_delivery_time_policy_refusal(
     neither of them refuses. The force-copy edge itself is still uncompared - reaching it needs a
     segment request built by hand, because a denied seat's own negotiation hands over no address
     to follow.
+
+    **The listing is asked here too, since 2026-09-02.** The same reference function builds an item
+    body's `MediaSources` and a profile-less negotiation's [source:
+    Emby.Server.Implementations/Dto/DtoService.cs:261,
+    Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11], so this seat
+    reads its own flags on `GET /Items/{itemId}` as well - and that half was an accepted gap
+    between the 008 fix that recorded it and the 005 fix that closed it. It is one more request on
+    a seat this row already holds, against the item it already resolved, which is the whole reason
+    it is here rather than in a row of its own: a seat with a denied playback permission is what no
+    sweep has, and building a second one to ask one more question of it would be the expensive way
+    to ask it.
     """
     denied = seat_of(identities, Role.PLAYBACK_DENIED.value)
-    answers: Dict[str, Tuple[Any, int, str]] = {}
+    answers: Dict[str, Tuple[Any, int, str, Any, Any]] = {}
     for side in SIDES:
         held = instances.wire(side).as_seat(denied.identity(side).token)
         directory = WireDirectory(held)
@@ -2017,23 +2028,49 @@ def named_delivery_time_policy_refusal(
             "/Videos/" + str(film["Id"]) + "/stream.mp4",
             query="static=false&videoCodec=h264&audioCodec=aac",
         )
-        answers[side] = (supports, delivered.status, status_line(delivered))
+        body = directory.get("/Items/" + str(film["Id"]), userId=user_id)
+        listed = one_of(
+            body.get("MediaSources", []) if isinstance(body, dict) else [],
+            "media source on the item body",
+        )
+        answers[side] = (
+            supports,
+            delivered.status,
+            status_line(delivered),
+            listed.get("SupportsTranscoding"),
+            listed.get("SupportsDirectStream"),
+        )
     ours, theirs = answers["atrium"], answers["reference"]
     return NamedResult(
         row="delivery-time-policy-refusal",
         finding=(
             "with all three processing permissions denied, the negotiation answers "
-            f"SupportsTranscoding={ours[0]!r} here and {theirs[0]!r} there, and a delivery that "
-            f"would have to re-encode answers {ours[1]} here and {theirs[1]} there - a route with "
-            "no user on either contract, so neither server refuses it"
+            f"SupportsTranscoding={ours[0]!r} here and {theirs[0]!r} there, the item body's own "
+            f"media source answers SupportsTranscoding={ours[3]!r}/{theirs[3]!r} and "
+            f"SupportsDirectStream={ours[4]!r}/{theirs[4]!r}, and a delivery that would have to "
+            f"re-encode answers {ours[1]} here and {theirs[1]} there - a route with no user on "
+            "either contract, so neither server refuses it"
         ),
-        atrium=f"SupportsTranscoding={ours[0]!r}; delivery {ours[2]}",
-        reference=f"SupportsTranscoding={theirs[0]!r}; delivery {theirs[2]}",
-        # behaviours 2.21: the negotiation gates to `false` on both servers, and this delivery
-        # route reads no policy on either - see the docstring for why the force-copy edge is not
-        # what these two statuses can measure.
+        atrium=(
+            f"SupportsTranscoding={ours[0]!r}; listing {ours[3]!r}/{ours[4]!r}; delivery {ours[2]}"
+        ),
+        reference=(
+            f"SupportsTranscoding={theirs[0]!r}; listing {theirs[3]!r}/{theirs[4]!r}; "
+            f"delivery {theirs[2]}"
+        ),
+        # behaviours 2.21: the negotiation gates to `false` on both servers, the listing carries
+        # the same per-kind rule on a video item - transcoding off, direct stream off - and this
+        # delivery route reads no policy on either. See the docstring for why the force-copy edge
+        # is not what these two statuses can measure.
         as_documented=(
-            ours[0] is False and theirs[0] is False and ours[1] == 200 and theirs[1] == 200
+            ours[0] is False
+            and theirs[0] is False
+            and ours[1] == 200
+            and theirs[1] == 200
+            and ours[3] is False
+            and theirs[3] is False
+            and ours[4] is False
+            and theirs[4] is False
         ),
     )
 

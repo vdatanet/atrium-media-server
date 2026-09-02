@@ -82,6 +82,7 @@ from typing import Annotated, ClassVar, Literal
 
 from fastapi import APIRouter, Depends, Request, Response
 
+from atrium.api.delivery import policy_of
 from atrium.api.deps import get_sessions, get_state, require_user
 from atrium.api.item_dto import BuildContext, Width, build_dtos
 from atrium.api.item_models import BaseItemDtoQueryResult
@@ -496,6 +497,7 @@ async def playlist_items(
         rows = _in_playlist_order(queries, target, wanted)
         context = BuildContext(
             server_id=state.server_id,
+            policy=policy_of(target),
             width=Width.LIST_ROW,
             playlist_row=True,
             fields=asked_fields,

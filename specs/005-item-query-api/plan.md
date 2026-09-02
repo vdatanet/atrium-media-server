@@ -3,9 +3,9 @@ feature: 005-item-query-api
 title: Item query API — implementation plan
 status: Implemented
 created: 2026-08-27
-updated: 2026-08-28
+updated: 2026-09-02
 implemented: 2026-08-28
-amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8; by T12 - sections 6.9 and 8; by T13 - section 6.8; by T14 - section 6.7; by T15 - sections 6.6 and 6.11; by T16 - section 6.10
+amended: 2026-08-27 by the tasks gate - sections 6.6 and 8; 2026-08-28 by T9 - sections 5 and 6.5; by T10 - section 6.12; by T11 - section 6.8; by T12 - sections 6.9 and 8; by T13 - section 6.8; by T14 - section 6.7; by T15 - sections 6.6 and 6.11; by T16 - section 6.10; and 2026-09-02 by the listing media-source policy fix - section 6.5, where `BuildContext` gains a **required** `policy` field: `MediaSources` is the one emitter whose value depends on the reading account, and a default would let the next route that emits an item forget in silence
 spec_status_required: Accepted
 spec_status_actual: Implemented
 accepted: 2026-08-27
@@ -324,6 +324,26 @@ patterns, `Tmdb` being the one key whose URL depends on the item's type
 `Chapters`, `Width` and `Height` — everything probing a file would fill — stay **undeclared on
 the model**, so the §1 sequencing gap is structural rather than remembered, and a test asserts
 the absence so 008's arrival changes a failing test rather than nothing.
+
+**Amended 2026-09-02: the context carries the reader, and the field it carries them in has no
+default.** `MediaSources` turned out to be the one emitter whose value is not a function of the
+item alone — the reference writes the reading account's playback permissions onto every static
+source it builds, one per media kind, so a seat denied video transcoding reads
+`SupportsTranscoding: false` where a permitted one reads `true`
+`[source: Emby.Server.Implementations/Dto/DtoService.cs:261,
+Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`,
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. `BuildContext` therefore
+gains `policy`, filled from the **effective** user each route already resolves, and the rule
+itself is imported from `media/decision.py` rather than restated: it is the same one 008's
+profile-less negotiation applies, and a second spelling is how the two come to disagree.
+
+The field is **required**, which is the part worth writing down. It was recorded for a day as an
+accepted gap whose closing mechanism behaviours §5 described as *"a shared context and not one
+route"* — every route that emits an item fills this context, so a fix proven on the route that
+noticed is a fix nine routes do not have. A field with no default makes that structural: a route
+cannot be written at all without deciding whose permissions it emits under, and the alternative —
+a default of "every permission granted" — is exactly the wrong answer a forgotten route would
+silently ship.
 
 ### 6.6 The four shapes
 

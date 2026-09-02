@@ -1296,14 +1296,15 @@ or where nothing has yet compared them:
   answer `200` and the refusal is not in that answer. Reaching it means asking the **segment**
   route, whose URI has to be built by hand: the reference's own negotiation hands a denied seat no
   `TranscodingUrl` to follow, which is precisely why this edge has survived unmeasured.
-* **A listing's `MediaSources` carry no playback permissions, and that is 005's shape rather than
-  this feature's** ([behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)).
-  The reference builds an item body's sources through the same function its profile-less
-  negotiation uses, so an account denied video transcoding reads
-  `SupportsTranscoding: false` on `/Items?fields=MediaSources` there and `true` here. The
-  negotiation half was fixed on 2026-09-02; this half needs the caller's policy inside the item
-  builder's shared context, which every route that emits an item fills, so it is one change across
-  all of them or none.
+* ~~**A listing's `MediaSources` carry no playback permissions**~~ — **paid on 2026-09-02 by
+  005**, one change across all fifteen places that build the item context rather than on the route
+  it was noticed on. `api/item_dto.py`'s `BuildContext` gained a **required** `policy`, and its
+  emitter calls this feature's own `unnegotiated_transcoding` and `unnegotiated_direct_stream`
+  rather than restating them, so the listing and the profile-less negotiation cannot drift apart.
+  The measurement that closed it added three facts to
+  [behaviours §2.21](../../docs/compatibility/behaviours.md#221-playback-policy-permissions-are-negotiation-inert):
+  an un-inspected source is not exempt, the policy is the **effective** user's, and a request
+  naming no user is the token holder's rather than none.
 * **behaviours §3.7 and §3.8's divergent answers** — a sample-rate ceiling met exactly rather than
   from the Opus ladder, and a codec-less `/universal` transcode answered with a real stream rather
   than an empty `200`. Both narrow: §3.8's difference exists only where a client names a

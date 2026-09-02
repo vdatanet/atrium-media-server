@@ -41,7 +41,7 @@ import json
 import secrets
 from typing import Any
 
-from _playback import base_profile, negotiate, pick_video_source
+from _playback import PLAYABLE_SEARCH_LIMIT, base_profile, negotiate, pick_video_source
 from _probe import Probe, ProbeError, Server, main
 
 #: A well-formed identifier nothing owns. The refusal battery needs the *item* lookup to fail,
@@ -172,6 +172,8 @@ def _policy_battery(server: Server, probe: Probe, source, reject_vcodec) -> list
             # The contrast is the finding: only the all-denied row moves against a profile.
             checks.append(one.get("SupportsTranscoding") is (video or audio or remux))
 
+        checks.extend(_listing_battery(server, probe, as_user, user_id, set_policy, unnegotiated))
+
         set_policy(EnableAllFolders=False, EnabledFolders=[])
         status, headers, body = as_user.post_raw(
             f"/Items/{source.item_id}/PlaybackInfo", body={"UserId": as_user.user_id}
@@ -186,6 +188,149 @@ def _policy_battery(server: Server, probe: Probe, source, reject_vcodec) -> list
     finally:
         status, _, _ = server.delete_raw(f"/Users/{user_id}")
         probe.observe("throwaway user deleted", status)
+    return checks
+
+
+def _listed(row: dict) -> tuple:
+    """One row's first media source as the three flags, in the wire's own order."""
+    one = (row.get("MediaSources") or [{}])[0]
+    return (
+        one.get("SupportsDirectPlay"),
+        one.get("SupportsDirectStream"),
+        one.get("SupportsTranscoding"),
+    )
+
+
+def _pick_listing_items(server: Server) -> dict:
+    """A video item, an audio item and - if the library has one - a video item never inspected.
+
+    The third is the discriminating case, and it is a *listing* question rather than a negotiation
+    one: a file nothing has opened carries no runtime, no bitrate and no streams, and whether the
+    permissions still reach it cannot be asked on the negotiation path at all, because that path
+    opens the file inside the request (behaviours section 2.23).
+    """
+    films = server.get(
+        "/Items",
+        UserId=server.user_id,
+        IncludeItemTypes="Movie",
+        Recursive="true",
+        Fields="MediaSources",
+        Limit=PLAYABLE_SEARCH_LIMIT,
+        SortBy="SortName",
+    ).get("Items", [])
+    tracks = server.get(
+        "/Items",
+        UserId=server.user_id,
+        IncludeItemTypes="Audio",
+        Recursive="true",
+        Fields="MediaSources",
+        Limit=PLAYABLE_SEARCH_LIMIT,
+        SortBy="SortName",
+    ).get("Items", [])
+    if not films or not tracks:
+        raise ProbeError(
+            "the listing battery needs a movie and a track in one library: this server offers "
+            f"{len(films)} movie(s) and {len(tracks)} track(s)"
+        )
+
+    def annotated(rows: list) -> bool:
+        return bool((rows[0].get("MediaSources") or [{}])[0].get("RunTimeTicks"))
+
+    chosen = {"video": films[0], "audio": tracks[0], "uninspected": None}
+    for row in films:
+        if not (row.get("MediaSources") or [{}])[0].get("RunTimeTicks"):
+            chosen["uninspected"] = row
+        elif annotated([row]):
+            chosen["video"] = row
+    return chosen
+
+
+def _listing_battery(
+    server: Server, probe: Probe, as_user: Server, user_id: str, set_policy, shapes: tuple
+) -> list[bool]:
+    """**The same rule, on the routes that never negotiate anything.**
+
+    The reference builds an item body's `MediaSources` and a profile-less negotiation's from one
+    function `[source: Emby.Server.Implementations/Dto/DtoService.cs:261,
+    Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`, so a listing
+    that asks for them should carry the account's own flags - one permission per media kind. That
+    sentence was in behaviours section 2.21 from 2026-09-02 with nothing here measuring it, and
+    the shortfall was carried as an accepted gap; this battery is what closed it on 2026-09-02.
+
+    Three questions rather than one, because each has been wrong somewhere before:
+
+    * the **per-kind** rule on a listing, over the same five policy shapes the negotiation half
+      uses, on `GET /Items/{itemId}`, `GET /Items` and `GET /Items/Latest`;
+    * **whose** policy - the `userId` the request names, or the token holder. Both, in that order:
+      an administrator naming a denied account is answered that account's flags, and a denied
+      account naming nobody is answered its own, so there is no *"no user, no policy"* case;
+    * an **un-inspected** source, which carries the flags exactly as an annotated one does.
+
+    Read-only apart from the policy flips the caller already owns.
+    """
+    checks: list[bool] = []
+    items = _pick_listing_items(server)
+    video_id = items["video"]["Id"]
+    audio_id = items["audio"]["Id"]
+    wanted = ",".join([video_id, audio_id])
+
+    for label, (video, audio, remux), transcoding, direct_stream in shapes:
+        set_policy(
+            EnableVideoPlaybackTranscoding=video,
+            EnableAudioPlaybackTranscoding=audio,
+            EnablePlaybackRemuxing=remux,
+        )
+        full = as_user.get(f"/Items/{video_id}", userId=user_id)
+        track = as_user.get(f"/Items/{audio_id}", userId=user_id)
+        listed = as_user.get(
+            "/Items", userId=user_id, Recursive="true", Fields="MediaSources", Ids=wanted
+        ).get("Items", [])
+        by_id = {row["Id"]: row for row in listed}
+        latest = as_user.get("/Items/Latest", userId=user_id, Fields="MediaSources", Limit=60)
+        latest_video = [_listed(row) for row in latest if row.get("Type") in ("Movie", "Episode")]
+
+        probe.observe(
+            f"listing, {label}",
+            f"full video {_listed(full)}, full audio {_listed(track)}, "
+            f"/Items video {_listed(by_id.get(video_id, {}))}, "
+            f"/Items audio {_listed(by_id.get(audio_id, {}))}",
+        )
+        # A video source reads video transcoding and remuxing; an audio source reads audio
+        # transcoding and nothing else. `SupportsDirectPlay` is untouched on both.
+        checks.append(_listed(full) == (True, direct_stream, transcoding))
+        checks.append(_listed(track) == (True, True, audio))
+        checks.append(_listed(by_id.get(video_id, {})) == (True, direct_stream, transcoding))
+        checks.append(_listed(by_id.get(audio_id, {})) == (True, True, audio))
+        checks.append(all(one == (True, direct_stream, transcoding) for one in latest_video))
+
+        if items["uninspected"] is not None:
+            bare_id = items["uninspected"]["Id"]
+            bare = as_user.get(f"/Items/{bare_id}", userId=user_id)
+            probe.observe(f"listing, un-inspected source, {label}", str(_listed(bare)))
+            checks.append(_listed(bare) == (True, direct_stream, transcoding))
+
+    # Whose policy. The administrator's own token, naming the denied account and then nobody.
+    set_policy(
+        EnableVideoPlaybackTranscoding=False,
+        EnableAudioPlaybackTranscoding=False,
+        EnablePlaybackRemuxing=False,
+    )
+    named = server.get(f"/Items/{video_id}", userId=user_id)
+    own = server.get(f"/Items/{video_id}", userId=server.user_id)
+    unnamed_admin = server.get(f"/Items/{video_id}")
+    unnamed_denied = as_user.get(f"/Items/{video_id}")
+    probe.observe(
+        "whose policy",
+        f"admin naming the denied user {_listed(named)}, admin naming itself {_listed(own)}, "
+        f"admin naming nobody {_listed(unnamed_admin)}, "
+        f"denied user naming nobody {_listed(unnamed_denied)}",
+    )
+    checks.append(_listed(named) == (True, False, False))
+    checks.append(_listed(own) == (True, True, True))
+    # **No `userId` is the token holder's policy, not "no policy"** - which is why the two rows
+    # below disagree with each other on the same request.
+    checks.append(_listed(unnamed_admin) == (True, True, True))
+    checks.append(_listed(unnamed_denied) == (True, False, False))
     return checks
 
 
