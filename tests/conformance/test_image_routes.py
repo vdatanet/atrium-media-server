@@ -105,9 +105,16 @@ def decoded(payload: bytes) -> Image.Image:
 
 def recorded(app: FastAPI) -> dict[tuple[str, str], int]:
     """What the server was sent and did not act on, per `(route, parameter)` - the trail 005
-    section 6.12 built and this feature inherits without a line of image code."""
-    counts: dict[tuple[str, str], int] = app.state.ignored_parameters.counts
-    return counts
+    section 6.12 built and this feature inherits without a line of image code.
+
+    The tally itself keys on `(route, parameter, client)` since 010 T15 gave it AC-10's fourth
+    column; these three assertions are about **what** was recorded and never about who sent it, so
+    the client is summed away here rather than written into each of them.
+    """
+    folded: dict[tuple[str, str], int] = {}
+    for (route, parameter, _client), count in app.state.ignored_parameters.counts.items():
+        folded[route, parameter] = folded.get((route, parameter), 0) + count
+    return folded
 
 
 # ------------------------------------------------------------------------------------------

@@ -117,16 +117,31 @@ python3 tools/differential.py \
     --report   reference/differential-report.md
 ```
 
-Five more flags sit beside those: `--identity` (repeatable; the default is the administrator and a
+Six more flags sit beside those: `--identity` (repeatable; the default is the administrator and a
 restricted non-administrator, which is [010 §3.9](../../specs/010-conformance-harness/spec.md)'s
 minimum), `--fixture` (ask the half that needs a reference instance over this repository's own
 fixture), `--fixture-root` (the tree that instance is given as its only library), `--named`
-(attempt only these named comparisons, by id — the rest are still *reported*, outstanding) and
-`--reference-url` (an instance somebody else stood up, instead of one this run makes). Credentials
+(attempt only these named comparisons, by id — the rest are still *reported*, outstanding),
+`--reference-url` (an instance somebody else stood up, instead of one this run makes) and
+`--ignored-parameters` (Atrium's data directory, from which the run also writes
+`reference/ignored-parameters-<date>.md` — [010 §3.6](../../specs/010-conformance-harness/spec.md)'s
+parameter, endpoint, count and client). That last one reads **the tally Atrium wrote when it last
+stopped**, which is the only moment the count is complete, and never this run's own sweep: the same
+fact that makes it a file in the data directory and not an endpoint Jellyfin does not have. Credentials
 come from the
 same git-ignored `.env` the probes read: `JELLYFIN_URL`, `JELLYFIN_USERNAME`, `JELLYFIN_PASSWORD`
 or `JELLYFIN_TOKEN` for the reference, and `ATRIUM_USERNAME`, `ATRIUM_PASSWORD` or `ATRIUM_TOKEN`
 for the server under test.
+
+**A row of [surface.yaml](surface.yaml) declaring `level: L3` is a claim only this program can
+pay for, and the report says which seats paid it.** Eight rows declare it, and until 2026-09-02
+nothing had read the column at all: `tools/extract_v1_surface.py` checks that the value is one of
+`L0..L3` — the vocabulary and not the claim — and the route tests read `feature` and `consumers`.
+The report now prints the declared level beside every endpoint, with `**partly**` and the seat names
+where a run compared it from **some** of its identities: on a surface where 12 of 23 reads answer
+differently to a restricted non-administrator, an endpoint compared from the administrator's seat
+alone was compared from the one seat that can be refused nothing, and a `yes` there would be a level
+claimed rather than reached.
 
 **The two servers are told apart by the `Server` header and never by `ProductName`.** Atrium
 answers `ProductName: "Jellyfin Server"` on purpose

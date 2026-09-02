@@ -20,9 +20,25 @@ below is the one place that keeps the good tokens and records the rest.
 **A parameter this server does not implement is ignored and counted** (spec 005 section 3.3).
 `/Items` declares 86 query parameters and v1 answers 32 of them; rejecting the others would turn a
 partial answer into no answer *and* be a delta of its own. The bounded delta is accepted with a
-mechanism attached: every ignored `(route, parameter)` pair is counted and logged once, so the set
-real clients actually send becomes measurable rather than assumed. 010 section 3.6 turns that into
-a report; this module makes the events exist.
+mechanism attached: every ignored `(route, parameter, client)` triple is counted and logged once,
+so the set real clients actually send becomes measurable rather than assumed. 010 section 3.6
+turns that into a report; this module makes the events exist.
+
+**The client is the third of AC-10's four columns and it was missing** (010 plan section 6.8,
+D-5, taken 2026-09-01). The count was reaching nothing at all: `counts` and `total()` had no
+reader anywhere in `src/`, and `record` took no client although every authenticated request
+carries one in the header `compat/auth.py` already parses. A tally that says *"`is3D` was sent
+1 412 times to `/Items`"* cannot be acted on, because promoting a parameter to Tier 2 or declining
+it in writing is a decision about **whose** client would notice. So `record` takes the client, the
+counter keys on the triple, and `IgnoredParameters.write` puts the tally in the data directory
+when the process stops.
+
+**Into the data directory, and never into a route.** An endpoint serving the tally would be an
+endpoint Jellyfin does not have, which is Principle I's first forbidden line - and "optional,
+behind a flag" does not save it, because an extension a client can discover is still a delta. It
+is diagnostic output of this server about itself: it leaves as a file nothing on the wire can ask
+for, or it does not leave at all. A file is also the only form that can be complete, since the
+last request a route could have answered is the one before shutdown.
 
 **The rewrite never touches a value.** Only the key is unquoted, matched and replaced; the bytes
 after the first `=` are copied across exactly as they arrived. Re-encoding the whole pair would
@@ -32,15 +48,21 @@ difference in a search term rather than in a parameter name.
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import Enum
+from pathlib import Path
+from typing import Protocol
 from urllib.parse import quote, unquote_plus
 
+from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from atrium.compat.auth import QUERY_PARAMETERS as AUTHENTICATION_PARAMETERS
+from atrium.compat.auth import client_name
 from atrium.compat.routing import RouteTable
 
 logger = logging.getLogger(__name__)
@@ -127,33 +149,100 @@ def _declared(dependant: object) -> Iterator[str]:
         yield from _declared(sub)
 
 
-@dataclass(slots=True)
-class IgnoredParameters:
-    """What the server was sent and did not act on, per `(route, parameter)`.
+#: What an unauthenticated caller - or one whose client header carries no `Client=` - is recorded
+#: as. An empty string in the key and this word in the file, so that a reader of the tally is
+#: never left wondering whether a blank cell means "nobody" or "not written yet".
+UNKNOWN_CLIENT = "unknown"
 
-    The measurable trail spec 005 section 3.3 promises in exchange for the one delta v1 accepts
-    knowingly. Counted always; logged **once per distinct pair per process**, because a client
-    that sends an unimplemented parameter sends it on every request and the useful signal is the
-    set, not the volume.
+
+class Recorder(Protocol):
+    """What the parsers need of a tally: somewhere to put a `(route, parameter)` they dropped.
+
+    A protocol rather than `IgnoredParameters` itself, because a route hands its parsers a
+    recorder that already knows **who** is asking (`ClientBoundRecorder`), and a parser has no
+    business knowing that a client exists.
     """
 
-    counts: dict[tuple[str, str], int] = field(default_factory=dict)
-    _announced: set[tuple[str, str]] = field(default_factory=set)
+    def record(self, route: str, parameter: str) -> None: ...
 
-    def record(self, route: str, parameter: str) -> None:
-        pair = (route, parameter)
-        self.counts[pair] = self.counts.get(pair, 0) + 1
-        if pair not in self._announced:
-            self._announced.add(pair)
+
+@dataclass(slots=True)
+class IgnoredParameters:
+    """What the server was sent and did not act on, per `(route, parameter, client)`.
+
+    The measurable trail spec 005 section 3.3 promises in exchange for the one delta v1 accepts
+    knowingly, with the client 010 AC-10 asks for. Counted always; logged **once per distinct
+    triple per process**, because a client that sends an unimplemented parameter sends it on every
+    request and the useful signal is the set, not the volume.
+    """
+
+    counts: dict[tuple[str, str, str], int] = field(default_factory=dict)
+    _announced: set[tuple[str, str, str]] = field(default_factory=set)
+
+    def record(self, route: str, parameter: str, client: str = "") -> None:
+        key = (route, parameter, client)
+        self.counts[key] = self.counts.get(key, 0) + 1
+        if key not in self._announced:
+            self._announced.add(key)
             logger.info(
-                "ignored query parameter %s on %s; it is not implemented in v1 and the request "
-                "was answered without it",
+                "ignored query parameter %s on %s sent by %s; it is not implemented in v1 and "
+                "the request was answered without it",
                 parameter,
                 route,
+                client or UNKNOWN_CLIENT,
             )
+
+    def for_client(self, client: str) -> ClientBoundRecorder:
+        """This tally, seen from one request, so a parser records the client without knowing it."""
+        return ClientBoundRecorder(self, client)
 
     def total(self) -> int:
         return sum(self.counts.values())
+
+    def rows(self) -> list[dict[str, object]]:
+        """AC-10's four columns, ordered loudest first and then alphabetically.
+
+        The order is part of the report: a tally sorted by name buries the parameter every client
+        sends under the one a single request sent once.
+        """
+        return [
+            {
+                "parameter": parameter,
+                "endpoint": route,
+                "count": count,
+                "client": client or UNKNOWN_CLIENT,
+            }
+            for (route, parameter, client), count in sorted(
+                self.counts.items(), key=lambda item: (-item[1], item[0])
+            )
+        ]
+
+    def write(self, destination: Path) -> None:
+        """The tally, as a file in the data directory, at the one moment it is complete.
+
+        JSON because a program reads it - `tools/differential.py` renders 010 section 3.6's report
+        from it - for the same reason `property-names.json` is JSON. Written even when it is
+        empty: *no client sent an unimplemented parameter* is a finding, and an absent file cannot
+        be told apart from a server that stopped before it could write one.
+        """
+        payload = {
+            "generated": datetime.now(UTC).isoformat(timespec="seconds"),
+            "total": self.total(),
+            "rows": self.rows(),
+        }
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+@dataclass(frozen=True, slots=True)
+class ClientBoundRecorder:
+    """One request's view of the tally: the same counter, with the client already filled in."""
+
+    tally: IgnoredParameters
+    client: str
+
+    def record(self, route: str, parameter: str) -> None:
+        self.tally.record(route, parameter, self.client)
 
 
 def known_tokens[TokenT: Enum](
@@ -162,7 +251,7 @@ def known_tokens[TokenT: Enum](
     *,
     route: str = "",
     parameter: str = "",
-    ignored: IgnoredParameters | None = None,
+    ignored: Recorder | None = None,
 ) -> tuple[TokenT, ...]:
     """The members of `vocabulary` named in `values`, with unrecognised tokens dropped.
 
@@ -231,12 +320,16 @@ class CanonicalQueryMiddleware:
             await self.app(scope, receive, send)
             return
 
-        rewritten = self._rewrite(scope["query_string"], template)
+        # Who is asking, for the tally's fourth column (010 AC-10). Read here rather than in the
+        # recorder because this is the layer that still has the request: by the time a route's
+        # parser drops a token, the headers are three frames up.
+        client = client_name(Headers(scope=scope))
+        rewritten = self._rewrite(scope["query_string"], template, client)
         if rewritten != scope["query_string"]:
             scope = {**scope, "query_string": rewritten}
         await self.app(scope, receive, send)
 
-    def _rewrite(self, query_string: bytes, template: str) -> bytes:
+    def _rewrite(self, query_string: bytes, template: str, client: str = "") -> bytes:
         parts: list[bytes] = []
         for pair in query_string.split(b"&"):
             if not pair:
@@ -245,7 +338,7 @@ class CanonicalQueryMiddleware:
             decoded = unquote_plus(key.decode("utf-8", "replace"))
             canonical = self.table.canonical(template, decoded)
             if canonical is None:
-                self.ignored.record(template, decoded)
+                self.ignored.record(template, decoded, client)
                 parts.append(pair)
                 continue
             # The value is copied, never re-encoded: `+`, `;` and an over-escaped octet all mean
@@ -257,9 +350,12 @@ class CanonicalQueryMiddleware:
 __all__ = [
     "GLOBAL_PARAMETERS",
     "ORIGINAL_QUERY_STRING",
+    "UNKNOWN_CLIENT",
     "AmbiguousParameterError",
     "CanonicalQueryMiddleware",
+    "ClientBoundRecorder",
     "IgnoredParameters",
     "QueryParameterTable",
+    "Recorder",
     "known_tokens",
 ]

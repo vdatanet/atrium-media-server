@@ -30,6 +30,8 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import re
+import socket
 import sys
 from pathlib import Path
 from typing import Any
@@ -1306,10 +1308,184 @@ def test_the_declared_conformance_level_is_printed_beside_every_endpoint() -> No
     program is the only thing that can pay for, so the report prints the declaration beside what
     the run actually compared — including the endpoints it compared not at all.
     """
-    report = _report(comparisons=(_ran(),), endpoints=(ENDPOINT, SECOND_ENDPOINT))
+    report = _report(
+        comparisons=(_ran(),),
+        endpoints=(ENDPOINT, SECOND_ENDPOINT),
+        identities=("administrator",),
+    )
     text = differential.render(report)
-    assert "| `GET /Items` | L3 | yes |" in text
-    assert "| `GET /UserViews` | L2 | **no** |" in text
+    assert "| `GET /Items` | L3 | yes | administrator |" in text
+    assert "| `GET /UserViews` | L2 | **no** | - |" in text
+
+
+def test_an_endpoint_compared_from_one_seat_of_two_is_partly_and_never_yes() -> None:
+    """**010 T15\'s own finding, and it is AC-14 arriving in the level table.**
+
+    `Compared` was a flat set: an endpoint reached by the administrator alone printed exactly the
+    same `yes` as one reached by both seats. On a surface where **12 of 23 reads answer differently
+    to a restricted non-administrator** - two of them as shorter lists and not as refusals
+    (spec section 3.9) - that is a declared conformance level claimed from the one seat that can be
+    refused nothing. The eight `level: L3` rows are the ones this feature is the only thing able to
+    pay for, so a half-paid row must not read like a paid one.
+    """
+    report = _report(
+        comparisons=(
+            _ran(identity="administrator"),
+            _ran(identity="restricted", endpoint=SECOND_ENDPOINT.key),
+        ),
+        endpoints=(ENDPOINT, SECOND_ENDPOINT),
+        identities=("administrator", "restricted"),
+    )
+    text = differential.render(report)
+    assert "| `GET /Items` | L3 | **partly** | administrator |" in text
+    assert "| `GET /UserViews` | L2 | **partly** | restricted |" in text
+    assert "`partly` is not `yes`" in text
+
+    both = _report(
+        comparisons=(
+            _ran(identity="administrator"),
+            _ran(identity="restricted"),
+        ),
+        endpoints=(ENDPOINT,),
+        identities=("administrator", "restricted"),
+    )
+    assert "| `GET /Items` | L3 | yes | administrator, restricted |" in differential.render(both), (
+        "and a row both seats compared is `yes`, or `partly` says nothing"
+    )
+
+
+def test_the_ignored_parameter_report_lists_parameter_endpoint_count_and_client(
+    tmp_path: Path,
+) -> None:
+    """AC-10, over a tally seeded by hand, and the fourth column is the one D-5 added.
+
+    Three of the four columns were already being counted in a live process and read by nothing.
+    The client was not counted at all, which is what made the report unactionable: promoting a
+    parameter to Tier 2 or declining it in writing is a decision about **whose** client would
+    notice, and a count with no name answers a different question.
+    """
+    (tmp_path / "ignored-parameters.json").write_text(
+        json.dumps(
+            {
+                "generated": "2026-09-02T10:00:00+00:00",
+                "total": 5,
+                "rows": [
+                    {
+                        "parameter": "is3D",
+                        "endpoint": "/Items",
+                        "count": 4,
+                        "client": "Atrium tvOS",
+                    },
+                    {
+                        "parameter": "fields=Chapters",
+                        "endpoint": "/Items",
+                        "count": 1,
+                        "client": "Embeat",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    tally = differential.read_ignored_parameters(tmp_path)
+    text = differential.render_ignored_parameters(tally)
+
+    assert "| Parameter | Endpoint | Count | Client |" in text
+    assert "| `is3D` | `/Items` | 4 | Atrium tvOS |" in text
+    assert "| `fields=Chapters` | `/Items` | 1 | Embeat |" in text
+    assert "2026-09-02T10:00:00+00:00" in text, "a tally with no date cannot be read as evidence"
+
+
+def test_the_ignored_parameter_report_is_read_from_a_file_and_never_asked_of_a_route(
+    tmp_path: Path,
+) -> None:
+    """The tally is complete only at shutdown, which is also why it can never be an endpoint.
+
+    A differential runs against a server that is still answering, so what it reads is that
+    server's **previous** run. Making it fresher would mean asking the server for it - an endpoint
+    Jellyfin does not have, which is the delta Principle I forbids and which "optional, behind a
+    flag" does not save, because an extension a client can discover is still a delta. The report
+    says which tally it read rather than implying it covers the sweep beside it.
+    """
+    empty = tmp_path / "ignored-parameters.json"
+    empty.write_text(json.dumps({"generated": "2026-09-02T10:00:00+00:00", "total": 0, "rows": []}))
+    text = differential.render_ignored_parameters(differential.read_ignored_parameters(empty))
+    assert "never this run's own sweep" in text
+    assert "No client sent a parameter this server does not implement" in text, (
+        "an empty tally is a finding - the accepted delta cost nothing - and not an empty report"
+    )
+
+    nonsense = tmp_path / "not-a-tally.json"
+    nonsense.write_text(json.dumps({"total": 3}), encoding="utf-8")
+    with pytest.raises(differential.WireError, match="not an ignored-parameter tally"):
+        differential.read_ignored_parameters(nonsense)
+
+
+# -- AC-11: the default job, with no Jellyfin and no network -----------------------------------
+
+
+def test_a_test_that_opens_a_tcp_connection_fails_rather_than_skipping() -> None:
+    """**AC-11, which had no test at all until 010 T15.**
+
+    Plan section 8 mapped this criterion to *"CI, unchanged"* - a claim about a workflow file and
+    a `conftest.py` fixture, with nothing asserting either. That is 009 T14\'s finding in this
+    feature\'s own shape, and it matters more here than anywhere: 010 is the feature whose whole
+    value is a second server, so it is the feature most likely to grow a test that quietly needs
+    one. The guard is proven by **making it fire**, the way this repository proves every guard,
+    because a guard nobody has watched refuse is a guard that may already have been monkeypatched
+    away by an earlier fixture.
+    """
+    with (
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM) as opened,
+        pytest.raises(AssertionError, match="opened a TCP connection"),
+    ):
+        opened.connect(("127.0.0.1", 8096))
+
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as datagram:
+        datagram.connect(("192.0.2.1", 9))  # a datagram connect sends nothing and needs nobody
+
+
+def test_nothing_this_feature_adds_needs_a_reference() -> None:
+    """The definition of done\'s own line, asserted rather than promised.
+
+    Every proof this feature ships runs on checked-in pairs, stubbed wires and recorded readings,
+    so **no test 010 added carries `needs_reference`**. The one test in the repository that does is
+    004\'s live-provider replay, and naming it here is what makes this fail on the second - which
+    would be a differential test that had quietly become opt-in, reported as coverage by a CI job
+    that never ran it. That is 008 T18\'s finding, one directory away.
+    """
+    root = Path(__file__).resolve().parents[2]
+    marked = sorted(
+        path.relative_to(root).as_posix()
+        for path in (root / "tests").rglob("test_*.py")
+        if re.search(
+            r"^\s*@pytest\.mark\.needs_reference", path.read_text(encoding="utf-8"), re.MULTILINE
+        )
+    )
+    assert marked == ["tests/metadata/test_remote_refresh.py"], (
+        f"{marked} carry the marker. A test exempt from the no-network guard does not run in CI "
+        f"and is skipped by default, so the coverage it claims is coverage nobody has."
+    )
+
+
+def test_no_ci_job_contacts_or_starts_a_jellyfin() -> None:
+    """ADR-0007 on the merits: a gate whose result depends on somebody else\'s image is not a gate.
+
+    The consequence - *the strongest check in the project is the one that is never automatic* - is
+    stated rather than worked around, and the two mechanisms that answer it are
+    `bump_reference_version.py` and `is_clean()`. What this asserts is the premise: the workflow
+    starts no container and runs neither the harness nor a probe.
+    """
+    root = Path(__file__).resolve().parents[2]
+    workflow = (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    steps = "\n".join(line for line in workflow.splitlines() if not line.lstrip().startswith("#"))
+    for forbidden in ("docker ", "podman ", "tools/differential.py", "tools/reference_instance.py"):
+        assert forbidden not in steps, (
+            f"{forbidden!r} appears in a CI step. No job may contact or start a Jellyfin "
+            f"(ADR-0007), and the `--help` sweep is the only thing that may name these tools."
+        )
+    assert "JELLYFIN_URL" not in steps, "a job that is handed a reference is a job that uses one"
 
 
 # -- the run loop ------------------------------------------------------------------------------

@@ -36,6 +36,12 @@ STATE_FILE = "state.json"
 #: belong to the instance; copying the directory while it is stopped copies a consistent database.
 DATABASE_FILE = "atrium.db"
 
+#: What the server was sent and did not act on, written when the process stops (010 section 3.6,
+#: D-5). **A file and never a route**: an endpoint serving it would be an endpoint Jellyfin does
+#: not have (Principle I), and this is the one moment the tally is complete - after the last
+#: request a route could have answered.
+IGNORED_PARAMETERS_FILE = "ignored-parameters.json"
+
 
 class ConfigurationError(RuntimeError):
     """The instance cannot be configured, so it must not start.
@@ -79,6 +85,10 @@ class DataPaths:
     @property
     def database(self) -> Path:
         return self.root / DATABASE_FILE
+
+    @property
+    def ignored_parameters(self) -> Path:
+        return self.root / IGNORED_PARAMETERS_FILE
 
     @property
     def cache(self) -> Path:

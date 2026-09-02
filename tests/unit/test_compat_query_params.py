@@ -13,8 +13,10 @@ symptom is a client that never scrolls rather than a test that fails.
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
 from enum import StrEnum
+from pathlib import Path
 
 import httpx
 import pytest
@@ -31,6 +33,7 @@ from atrium.compat.errors import (
 )
 from atrium.compat.query_params import (
     GLOBAL_PARAMETERS,
+    UNKNOWN_CLIENT,
     AmbiguousParameterError,
     CanonicalQueryMiddleware,
     IgnoredParameters,
@@ -39,6 +42,8 @@ from atrium.compat.query_params import (
 )
 from atrium.compat.responses import AtriumJSONResponse
 from atrium.compat.routing import RelaxedPathMiddleware, RouteTable
+from atrium.config.paths import IGNORED_PARAMETERS_FILE
+from tests.conftest import data_dir
 
 
 class Colour(StrEnum):
@@ -184,7 +189,7 @@ async def test_an_unmatched_key_lands_in_the_recorder(
 ) -> None:
     answer = await client.get("/Items", params={"limit": 2, "is3D": "true"})
     assert answer.status_code == 200, "a Tier 3 parameter is ignored, never rejected"
-    assert recorder.counts == {("/Items", "is3D"): 1}
+    assert recorder.counts == {("/Items", "is3D", ""): 1}
 
 
 async def test_the_recorder_counts_rather_than_deduplicates(
@@ -192,7 +197,7 @@ async def test_the_recorder_counts_rather_than_deduplicates(
 ) -> None:
     for _ in range(3):
         await client.get("/Items", params={"is3D": "true"})
-    assert recorder.counts[("/Items", "is3D")] == 3
+    assert recorder.counts[("/Items", "is3D", "")] == 3
     assert recorder.total() == 3
 
 
@@ -203,7 +208,7 @@ async def test_the_recorder_keys_on_the_route_template_not_the_path(
     a tally as long as the library rather than as long as the parameter set."""
     await client.get("/Items/known", params={"madeUp": 1})
     await client.get("/Items/other", params={"madeUp": 1})
-    assert recorder.counts == {("/Items/{itemId}", "madeUp"): 2}
+    assert recorder.counts == {("/Items/{itemId}", "madeUp", ""): 2}
 
 
 async def test_a_request_matching_no_route_records_nothing(
@@ -225,7 +230,97 @@ def test_each_distinct_pair_is_logged_once(
             recorder.record("/Items", "is3D")
         recorder.record("/Items", "isHD")
     assert len(caplog.records) == 2
-    assert recorder.counts[("/Items", "is3D")] == 5
+    assert recorder.counts[("/Items", "is3D", "")] == 5
+
+
+async def test_the_tally_names_the_client_that_sent_the_parameter(
+    client: httpx.AsyncClient, recorder: IgnoredParameters
+) -> None:
+    """AC-10's fourth column, and the one 010 plan section 6.8 found missing.
+
+    Three of the four columns were already here. The client was not, although every request that
+    carries a client-identification header carries it - and without it the tally cannot be acted
+    on: promoting a parameter to Tier 2 or declining it in writing is a decision about **whose**
+    client would notice, and a count with no name answers a different question.
+    """
+    await client.get(
+        "/Items",
+        params={"is3D": "true"},
+        headers={"X-Emby-Authorization": 'MediaBrowser Client="Embeat", DeviceId="d", Version="1"'},
+    )
+    await client.get(
+        "/Items",
+        params={"is3D": "true"},
+        headers={"Authorization": 'MediaBrowser Client="Atrium tvOS", DeviceId="e", Version="2"'},
+    )
+    await client.get("/Items", params={"is3D": "true"})
+    assert recorder.counts == {
+        ("/Items", "is3D", "Embeat"): 1,
+        ("/Items", "is3D", "Atrium tvOS"): 1,
+        ("/Items", "is3D", ""): 1,
+    }, "one parameter, one endpoint, three callers - and the tally must be able to tell them apart"
+    assert [row["client"] for row in recorder.rows()] == [
+        UNKNOWN_CLIENT,
+        "Atrium tvOS",
+        "Embeat",
+    ], "a caller that named itself is a row of its own, and one that did not is not a blank cell"
+
+
+async def test_a_dropped_token_carries_the_client_too(
+    client: httpx.AsyncClient, recorder: IgnoredParameters
+) -> None:
+    """The other half of the recorder, and the half a middleware cannot reach.
+
+    An unrecognised enum token is dropped inside a route's own parser (behaviours section 1.12),
+    three frames above the headers. The route hands its parsers a recorder that already knows who
+    is asking, which is why `known_tokens` takes a `Recorder` and not the tally itself - a parser
+    has no business knowing that a client exists.
+    """
+    bound = recorder.for_client("Embeat")
+    known_tokens(["Nonsense"], Colour, route="/Items", parameter="colour", ignored=bound)
+    assert recorder.counts == {("/Items", "colour=Nonsense", "Embeat"): 1}
+
+
+async def test_the_tally_is_written_to_the_data_directory_at_shutdown_and_to_no_route(
+    tmp_path: Path,
+) -> None:
+    """D-5's shape, both halves, and the second one is a principle rather than a preference.
+
+    **A file in the data directory**, written in the lifespan's `finally` because that is the one
+    moment the tally is complete - it is after the last request a route could have answered.
+    **And never a route**: an endpoint serving it would be an endpoint Jellyfin does not have,
+    which is Principle I's first forbidden line, and "optional, behind a flag" does not save it
+    because an extension a client can discover is still a delta.
+    """
+    from atrium.server import ROUTERS, create_app
+
+    paths = data_dir(tmp_path / "atrium")
+    built = create_app(paths)
+    assert not paths.ignored_parameters.exists(), "nothing is written before the process stops"
+    async with built.router.lifespan_context(built):
+        built.state.ignored_parameters.record("/Items", "is3D", "Embeat")
+        assert not paths.ignored_parameters.exists(), (
+            "a tally written while the server is still answering is a tally that is not complete"
+        )
+
+    written = json.loads(paths.ignored_parameters.read_text(encoding="utf-8"))
+    assert written["total"] == 1
+    assert written["rows"] == [
+        {"parameter": "is3D", "endpoint": "/Items", "count": 1, "client": "Embeat"}
+    ], "AC-10 names four columns: parameter, endpoint, count and client"
+
+    templates = {template for _method, template in RouteTable.from_routers(ROUTERS).paths()}
+    serving = [
+        template
+        for template in templates
+        if "ignored" in template.lower() or "parameter" in template.lower()
+    ]
+    assert not serving, (
+        f"{serving} would serve this server's own diagnostics over HTTP. Jellyfin has no such "
+        f"endpoint, so it is a delta a client can discover (Principle I) - and the tally is a "
+        f"file for exactly that reason"
+    )
+    assert IGNORED_PARAMETERS_FILE not in str(templates)
 
 
 # ------------------------------------------------------------------------------------------

@@ -6,6 +6,7 @@ accepted: 2026-09-02
 created: 2026-09-02
 updated: 2026-09-02
 amended: 2026-09-02 — **D-6 is taken, and this list records the decision rather than the reservation.** The four readings of *"What the gate changed"* §3 — behaviours §5.2, behaviours §5.6, 005 §7 OQ-7 and 007's paused-session ticker — join spec §3.10 as named comparisons, so **§3.10 is twenty rows and AC-16 counts twenty**. The spec is amended and dated in its frontmatter the way D-3's was. T5 loses the `outstanding:` section it was to give the register, T12 grows from four runner shapes to six, and the definition of done counts twenty. Behaviours §5.2 keeps its `⚠️ UNVERIFIED` marker: a §3.10 row is an owner and a method, not the reading that discharges it. `status` stays `Draft` — this list's own gate is a separate act.
+closing_review: 2026-09-02 — **all fifteen tasks are done and 010 is not `Implemented`.** T15 wrote the acceptance map, the ignored-parameter report (D-5) and the first reader of `surface.yaml`'s `level` column, and found the class its three predecessors found: a criterion with no test at all (AC-11, mapped to *"CI, unchanged"* and asserted nowhere), a criterion half with no test (AC-7's citation, the mechanism Principle II rests on), and a criterion whose own measurement contradicts it — **AC-2**, which claims the two servers produce *"the same item count and the same structure"* where the comparison declares **forty-seven differences**, every one of them owned by 003 or 004 and therefore outside this feature by §2. Amending it is **D-7**, reserved for its owner below. Until it is taken, the status line stays `Accepted` in all six documents.
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -126,8 +127,18 @@ count, and the register has no separate `outstanding` section for them.
 |---|---|---|
 | **D-6** | Whether the four debts above join `named-comparisons.yaml` as named comparisons, widening spec §3.10 and AC-16 from sixteen | **Yes, as four new §3.10 rows.** The spec is amended and the amendment is dated in its frontmatter the way D-3's was: §3.10 carries the four with their provenance and the reason each needs the instance, **AC-16 names twenty where it counted sixteen**, and [spec §7](spec.md#7-open-questions) records the decision. All four are differences a sweep cannot raise, which is exactly what §3.10 is for; behaviours §5.2's `⚠️` in particular is a claim this repository has carried unmeasured since it was written and can now be settled — **the marker itself stays**, because `behaviours.md` is not a specification and the reading that would discharge it has not been taken yet. The cost was one amendment to an accepted spec and four rows on a register; the cost of the alternative was a run reporting *"sixteen of sixteen"* while four questions with a written home went on being nobody's |
 
-**Nothing in this list is now waiting on a decision.** T5, T12 and the definition of done are
-written against twenty, and the `outstanding:` section they described is gone rather than empty.
+**Nothing in this list was waiting on a decision when it was accepted.** T5, T12 and the definition
+of done are written against twenty, and the `outstanding:` section they described is gone rather
+than empty.
+
+## The decision T15 reserved on 2026-09-02, and why it is not this task's to take
+
+| # | The call | The recommendation |
+|---|---|---|
+| **D-7** | Whether **AC-2** is amended to state the comparison it turned out to be, or 010 stays open until the forty-seven differences its own measurement declares are closed by the features that own them | **Amend it, and amend nothing else.** AC-2 reads *"both servers, pointed at the same built fixture, produce libraries with the same item count and the same structure"*, and the measurement says they produce **forty-seven declared differences** over the six libraries T11 composed — a zero-byte film that is an item there and not here (003 §3.2), twenty-five files named differently, an empty library that is nothing at all to the reference, and every library's own root row `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`. **This is not a harness defect and closing it is not 010's to do**: [spec §2](spec.md#2-scope) puts *"deciding what Atrium does about a difference this feature finds"* with the feature that owns the endpoint, and every one of the forty-seven is 003's or 004's. AC-2 is the only one of the eighteen that asserts a property of *Atrium's conformance* rather than of the harness, and it was written on 2026-08-26 before anything had been measured. The recommended wording is the thing that exists and runs: *"the reference's reading of the built fixture is recorded, and Atrium's scan of the same tree is compared against it in the default job; every difference is declared with its reason and its owning feature, an undeclared difference fails, and a declared difference that has gone away fails too."* The alternative — holding 010 open — makes this feature's status depend on work in two other features that this feature exists to **report** rather than to do, and leaves the harness unusable meanwhile. **Whichever way it goes, `spec.md`, `plan.md`, `tasks.md`, [`specs/README.md`](../README.md), [`docs/roadmap.md`](../../docs/roadmap.md) and [AGENTS.md](../../AGENTS.md) move together**, and `tests/conformance/test_acceptance.py` already holds the eighteen rows so the flip is one line and not a task |
+
+**Until D-7 is taken, 010 is `Accepted` and not `Implemented`**, and every document says so. That is
+the whole of what stands between the fifteen tasks and the status line.
 
 ## Legend
 
@@ -1947,7 +1958,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T15 — The ignored-parameter report, the acceptance map, the levels, and 010 is Implemented
 
-- [ ] **Changes:** two things, and the first is D-5. `src/atrium/compat/query_params.py`'s
+- [x] **Changes:** two things, and the first is D-5. `src/atrium/compat/query_params.py`'s
   `IgnoredParameters.record` gains the **client**, read from the header `compat/auth.py` already
   parses — AC-10 names four columns and the recorder takes two, and nothing anywhere reads `counts`
   or `total()`, so the count exists in a live process and reaches nothing. The tally is written into
@@ -1983,37 +1994,186 @@ written against twenty, and the `outstanding:` section they described is gone ra
 > contradict, and a definition of done that was false when it was written. Read those three Done
 > notes before starting this one.
 
+> **Done (2026-09-02) — and the one thing this task must not do, it did not do. 010 is not
+> `Implemented`.** *An acceptance criterion says something its own measurement contradicts, and it
+> is the criterion that is about this project rather than about this harness.*
+>
+> **AC-2 is not satisfied, and it cannot be satisfied by anything 010 is allowed to do.** It reads
+> *"both servers, pointed at the same built fixture, produce libraries with the same item count and
+> the same structure"*. Measured, over the six libraries T11 composed: the reference makes **74
+> items**, and the two readings differ in **forty-seven declared places**
+> `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]` — a zero-byte film that is
+> an item there and not here (003 §3.2), twenty-five files named differently, an empty library that is
+> *nothing at all* to the reference, and every library's own root row. The harness did its half and
+> did it well: `tests/library/test_reference_reading.py` compares Atrium's scan against the recorded
+> reading in the default job with no Jellyfin anywhere, an undeclared difference fails and a
+> declared one that has gone away fails too. What it cannot do is make the criterion true, because
+> **deciding what Atrium does about a difference this feature finds is outside this feature**
+> ([spec §2](spec.md#2-scope)) — every one of the forty-seven belongs to 003 or 004. AC-2 is the
+> only one of the eighteen that asserts a property of *Atrium's conformance* rather than of the
+> harness, and that asymmetry is the evidence: it was written on 2026-08-26, before anything had
+> been measured, and it did not survive being measured. **Reserved as D-7 below with a
+> recommendation, rather than taken here**, because amending an accepted criterion is the shape of
+> D-3 and D-6 and belongs to its owner. Until it is taken, `spec.md`, `plan.md` and this file stay
+> `Accepted` and `specs/README.md`, `docs/roadmap.md` and AGENTS.md say the same thing — *a status
+> line that overstates the work is the one thing this task exists to prevent.*
+>
+> **A criterion with no test at all, which is 009 T14's finding arriving in the feature least
+> entitled to it.** **AC-11** — *"the default CI job passes with no Jellyfin available and no
+> network access"* — was mapped by [plan §8](plan.md#8-testing-strategy) to *"CI, unchanged"*, a
+> claim about a workflow file and a `conftest.py` fixture with **nothing asserting either**. 010 is
+> the feature whose entire value is a second server, so it is the feature most likely to grow a
+> test that needs one; three tests now hold it. The socket guard is proven by **making it fire**,
+> because a guard nobody has watched refuse may already have been replaced by an earlier fixture.
+> The `needs_reference` sweep asserts that the **only** test in the repository carrying the marker
+> is 004's live-provider replay — a differential test that quietly became opt-in would be reported
+> as coverage by a job that never ran it, which is 008 T18's finding one directory away. And the
+> workflow is read for a container runtime, the harness, the instance command and a reference URL,
+> which is ADR-0007's premise rather than its consequence.
+>
+> **A criterion half with no test, in the mechanism Principle II rests on.** **AC-7** is two claims
+> joined by *and*: *"every probe prints a citation in the documented form"* **and** *"exits non-zero
+> when its finding contradicts the documentation"*. T13 asserted the second. The first was asserted
+> nowhere on either side of the run — the sweeps check that a probe reaches `_probe.main`, and both
+> report tests read the exit code and the contradiction message and threw the output away, one of
+> them calling `capsys.readouterr()` purely to discard it. A citation is what turns a finding into
+> provenance; a finding printed in another shape is one no document can cite.
+> `test_a_report_prints_the_citation_in_the_documented_form` asserts AGENTS.md's own three fields.
+>
+> ***And the levels check found the report saying `yes` where it had measured half a table.*** The
+> coverage section printed `| Endpoint | Declared level | Compared |` from a **flat set** of
+> endpoints, so a row reached by the administrator alone read exactly like one both seats reached —
+> on a surface where **12 of 23 reads answer differently to a restricted non-administrator**, two of
+> them as shorter lists rather than as refusals ([spec §3.9](spec.md)). That is this feature's own
+> characteristic failure arriving inside its own report: a declared conformance level claimed from
+> the one seat that can be refused nothing. It says `**partly**` and names the seats now, and
+> `test_an_endpoint_compared_from_one_seat_of_two_is_partly_and_never_yes` fails when either half is
+> dropped. **`surface.yaml`'s `level` column also has its first reader**:
+> `tests/conformance/test_routes.py` — the module that had read `feature` and `consumers` and never
+> `level` — now asserts the distribution (1 L1, 50 L2, 8 L3), names the eight L3 endpoints so a row
+> promoted into or out of L3 fails rather than drifting, and checks each belongs to an implemented
+> feature that serves it. `tests/unit/test_allowlist.py` already held the other half, that each of
+> the eight has a case per seat.
+>
+> **What no run has done, stated rather than implied.** **The eight `level: L3` rows have not been
+> shown to reach L3.** T12 ran fourteen of the twenty named comparisons against a real pair; no
+> complete sweep of the 84 cases is recorded anywhere, and until this task the report could not have
+> said which endpoints were compared *per identity* even if one had. And the reason is structural
+> rather than incidental: **a running Atrium cannot be given a library at all.**
+> `atrium.library.config.create` and `atrium.library.scan.scan` have **no caller** in `src/` or
+> `tools/` — only the test suite calls them, and `config.toml` has no libraries section — so
+> `--fixture`, which `tools/README.md` says *"means the fixture on **both** servers"*, can put it on
+> only one of the two. That is a v1 condition the roadmap already files (*"Libraries: add, rename,
+> remove, list, trigger a scan"* is v2's CLI, and v1's way is *"direct database access"*), not a
+> defect found here — but it is why AC-2 had to become a recorded reading, and it is on the owes
+> list below rather than left for the next person to rediscover.
+>
+> **Six of the twenty named comparisons are outstanding, and two of them are outstanding because
+> they are not comparisons.** T12's numbers, restated because a report that counts them as run would
+> be claiming coverage this feature does not have: the two `rescan` rows (behaviours §5.2 and §5.6)
+> need a second scan on **both** servers and **Atrium has no library-refresh route** —
+> `POST /Library/Refresh` is the reference's and Principle VI keeps it out — so only the reference
+> half can be taken, and a one-server reading is not a differential. Both entries carry their
+> reference-side reading and both rows stay outstanding, which is the only honest shape. The other
+> four: burn-in, whose two transcodes per side killed the instance before it answered; the
+> manifest's announced track name, where the reference answers `400` to the master playlist of the
+> fixture film that has an `ass` track; and the last two rows of §3.10, which are ordinary request
+> cases and need a **sweep**. AC-16 is satisfied — twenty rows, each run or reported outstanding by
+> name — and the run is not clean, which is what AC-16 exists to make visible.
+>
+> **D-5 landed, and the client is read in two places rather than one.** `record` keys on
+> `(route, parameter, client)`; the raw-ASGI middleware reads the client from the scope for an
+> undeclared query key, and a route hands its own parsers a **client-bound recorder** for a dropped
+> enum token, which happens three frames above the headers — so `known_tokens` takes a `Recorder`
+> protocol and a parser never learns that a client exists. The tally is written in the lifespan's
+> `finally`, to `<data dir>/ignored-parameters.json`, suppressed on `OSError` because losing a
+> diagnostic on the way out must not turn a clean stop into a traceback. **The consequence nobody
+> had written down**: a differential runs against a server that is still answering, so what
+> `--ignored-parameters` reads is that server's **previous** run — the tally is complete only after
+> the last request a route could have answered, which is the same sentence as *"it can never be a
+> route"*. The report says which tally it read and when, rather than implying it covers the sweep
+> beside it.
+>
+> *One sentence T12 left for this task, and it is left alone deliberately.* Spec §3.10, *"What the
+> gate changed"* §3 and the named-comparison register all say behaviours §5.2 *"carries the only
+> surviving `⚠️ UNVERIFIED` in the compatibility documents"*. It stopped being true the moment that
+> row ran and the marker was discharged — the belief was wrong, and an emptied container is
+> **still fetchable** on the reference, which is parity rather than a gap. The sentences are the
+> record of why the row was added, and rewriting them would amend an accepted spec to restate a
+> justification rather than a criterion. [behaviours §5.2](../../docs/compatibility/behaviours.md)
+> carries the reading, which is where a reader looking for the claim goes.
+>
+> *Routine calls taken, none of which touches an accepted document's criteria.* **The acceptance map
+> is written and 010 is in `FEATURES`** although it is not `Implemented`: the map only *requires*
+> implemented features, and writing the eighteen rows now is what makes every criterion's proof
+> named and unable to rot, so taking D-7 is one line rather than a task. Three of its entries carry
+> what they do **not** prove — AC-2's contradiction, AC-15's *"created and destroyed by the run"*
+> being unsatisfiable on Atrium by design, and AC-3's *"covers every endpoint"* being a property of
+> the declared cases and not of any run. **`recorded()` in `tests/conformance/test_image_routes.py`
+> sums the client away** rather than three assertions gaining a column they are not about.
+> **Plan §1's and §3's `53 probes` are 56**, which T14 flagged and §6.10's own note had already
+> fixed in the place it mattered. **`bump_reference_version.py` is not a probe** and the map does not
+> treat it as one: AC-12 resolves to `tests/unit/test_version_bump.py`, as `module:function`.
+> **`surface.yaml` is unchanged and the router serves the same 59 routes** —
+> `test_no_route_ships_ahead_of_its_feature` reports exactly what it reported before, which is the
+> assertion that catches a harness that grew an endpoint, and 010 owns no row of the surface.
+>
+> *Nothing was written to any server, and no container was started.* Every finding above came from
+> the files in this repository, the tests already here and the readings the fourteen tasks recorded.
+> The full gate is green: `ruff check`, `ruff format --check`, `mypy` over 132 source files, the
+> whole suite, and `tools/extract_v1_surface.py`.
+
 ---
 
 ## Definition of done
 
 The feature is done when **all** of these hold:
 
-- [ ] Every one of spec §5's **eighteen** acceptance criteria has a passing test, named in
-      `FEATURE_010`. **AC-2 is a test and not a command** (*"What the gate changed"* §1): the
-      reference's reading of the fixture is recorded by `probe_reference_scan.py` and checked in,
-      and Atrium's scan is compared against the record in the default suite.
-- [ ] Every endpoint reaches the conformance level declared in `surface.yaml`, and for the **eight
+- [!] Every one of spec §5's **eighteen** acceptance criteria has a passing test, named in
+      `FEATURE_010`. **All eighteen are named, every named test exists, and the map is green.**
+      **AC-2 is the one whose tests do not assert what the criterion says**: the reference's reading
+      of the fixture is recorded by `probe_reference_scan.py` and checked in, and Atrium's scan is
+      compared against the record in the default suite (*"What the gate changed"* §1) — and that
+      comparison's answer is **forty-seven declared differences**, where the criterion claims *"the
+      same item count and the same structure"*. **Blocked by D-7**, which is the owner's to take.
+- [~] Every endpoint reaches the conformance level declared in `surface.yaml`, and for the **eight
       rows declared L3** that is a claim this feature is the first thing in the repository able to
-      make. The report names them and says which were compared, per identity.
-- [ ] `surface.yaml` is unchanged and the router serves the same 59 routes. **This feature adds no
+      make. The report names them and says which were compared, per identity. **The machinery is in
+      and the claim is not yet paid**: `surface.yaml`'s `level` column has its first reader
+      (`tests/conformance/test_routes.py`), each of the eight has a request case per seat
+      (`tests/unit/test_allowlist.py`), and the report says `**partly**` and names the seats where
+      it used to say `yes` from a flat set — but **no complete sweep of the 84 cases against a real
+      pair is recorded anywhere**, so no L3 row has been shown to reach L3. On the owes list below.
+- [x] `surface.yaml` is unchanged and the router serves the same 59 routes. **This feature adds no
       endpoint**, and the ignored-parameter tally is a file in the data directory precisely so that
-      it cannot become one.
-- [ ] Every one of `§3.10`'s **twenty** named comparisons is run or reported outstanding **by
+      it cannot become one — asserted by
+      `test_the_tally_is_written_to_the_data_directory_at_shutdown_and_to_no_route`, which sweeps
+      the router for a path that would serve it.
+- [x] Every one of `§3.10`'s **twenty** named comparisons is run or reported outstanding **by
       name**, and an outstanding one keeps the run from being clean. The four D-6 added are inside
-      that count and not beside it.
-- [ ] Every allowlist entry declares a `behaviours.md` section or one of the four derivation
+      that count and not beside it. **Fourteen ran on 2026-09-02 and six are outstanding**, two of
+      them because they are not comparisons at all: the reference has `POST /Library/Refresh` and
+      Atrium has no library-refresh route, so behaviours §5.2 and §5.6 can take only the reference
+      half.
+- [x] Every allowlist entry declares a `behaviours.md` section or one of the four derivation
       classes, is scoped by endpoint and JSON pointer, and carries a date — and an entry that
       excuses nothing on a run is reported, because the allowlist is a metric that should shrink.
-- [ ] The default CI job passes with no Jellyfin available and no network access, and **nothing this
+- [x] The default CI job passes with no Jellyfin available and no network access, and **nothing this
       feature adds carries `needs_reference`**: the mutation proofs run on checked-in pairs, and
-      `tests/conftest.py`'s socket guard is unchanged.
-- [ ] Every prior-measurement debt in `reference-target.md` has a probe script or a recorded reason
+      `tests/conftest.py`'s socket guard is unchanged. **Asserted rather than claimed since T15**,
+      in three tests — the guard proven by making it fire, the marker swept for across the whole
+      suite, and the workflow read for a runtime, the harness, the instance command and a reference
+      URL.
+- [x] Every prior-measurement debt in `reference-target.md` has a probe script or a recorded reason
       it cannot have one, and the register's prose count matches its own table.
-- [ ] Anything learned during implementation is back in `spec.md` and `plan.md`, in the same change,
-      and any decision a task escalates is taken by its owner rather than improvised.
+- [x] Anything learned during implementation is back in `spec.md` and `plan.md`, in the same change,
+      and any decision a task escalates is taken by its owner rather than improvised. **D-7 is
+      reserved and not improvised**, which is the reason the last box is not ticked.
 - [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`, with `specs/README.md`,
-      `docs/roadmap.md` and `AGENTS.md` saying the same thing.
+      `docs/roadmap.md` and `AGENTS.md` saying the same thing. **Not done, deliberately.** A status
+      line that overstates the work is the one thing this feature exists to prevent in others, and
+      AC-2 is unproven until D-7 is taken. All six documents say `Accepted`: fifteen of fifteen
+      tasks done, seventeen of eighteen criteria proven, one disproven by its own measurement.
 
 ## What is out of scope, recorded so it is not mistaken for an oversight
 
@@ -2033,3 +2193,81 @@ The feature is done when **all** of these hold:
   requests it recorded, while the defect class L3 exists to find is the field nobody thought to ask
   for. It is a regression net, recorded here so a later reader does not rediscover the idea and
   mistake it for the gate.
+
+## What this feature owes the next ones
+
+Six lists fed into this one ([005](../005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones),
+[006](../006-images/tasks.md#what-this-feature-owes-the-next-ones),
+[007](../007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones),
+[008](../008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones),
+[009](../009-playlists/tasks.md#what-this-feature-owes-the-next-ones),
+[011](../011-subtitle-delivery/tasks.md#what-this-feature-owes-the-next-ones)) and this is what
+comes back out. It is written here rather than in AGENTS.md so it cannot go stale.
+
+**To 003, and it is the largest.** **A running Atrium cannot be given a library.**
+`atrium.library.config.create` and `atrium.library.scan.scan` have no caller in `src/` or `tools/` —
+only the test suite calls them, and `config.toml` has no libraries section. The roadmap already
+files library administration under v2's CLI and names *"direct database access"* as v1's way, so
+this is a recorded condition and not a defect found here; what is new is the price it puts on this
+feature. `tools/differential.py --fixture` documents itself as *"the fixture on **both** servers"*
+(AC-2) and can only put it on one of them, which is why AC-2 had to become Atrium's in-process scan
+compared against a recorded reading, and why every `needs: fixture` request case resolves its
+anchors against a reference holding the fixture and an Atrium holding whatever its operator loaded
+by hand. Beside it: of the **forty-seven** declared differences in
+`tests/library/test_reference_reading.py`, **twenty-five are one file named two ways** — 003's name
+derivation against the reference's whole-filename and whole-directory rules — and **twenty-one are
+container rows**, each written down with its reason; the forty-seventh is the zero-byte film that is
+an item there and not here, which is 003 §3.2 meeting a server with no such rule.
+
+**To 004.** **A two-disc album still borrows `CD1`**, so it never reads its own `album.nfo`, where
+the reference names the album after its directory — T10 fixed the *ordering* of
+`metadata/refresh.py`'s `_first_file_backed` (relative path, not identifier, so a container borrows
+the same directory wherever the library is mounted) and deliberately did not fix that the borrowing
+is a guess at all. Two rows of the declared-difference table are that guess.
+
+**To 008.** **A seat with all three playback-processing permissions denied negotiates
+`SupportsTranscoding: true` here and `false` there**, measured on 2026-09-02 against a real pair, so
+[behaviours §2.21](../../docs/compatibility/behaviours.md)'s *"the same negotiation semantics — the
+all-three gate"* is false **of this server**. It is the first difference this harness has found in
+Atrium rather than in a document, and per spec §2 it is 008's to decide through
+[behaviours §3.0](../../docs/compatibility/behaviours.md#30-how-the-decision-is-made).
+
+**To 002.** **Atrium's user record defaults `is_hidden` to `false` where the reference's is set**
+`[source: Jellyfin.Data/UserEntityExtensions.cs:174 @ v10.11.11]`, so the first account on each
+server answers a different `/Users/Public` — one row here, none there, on a login screen. Recorded in
+behaviours §2.2 by T13 and left to 002 for the same reason.
+
+**To 011 and 005, and both are readings rather than decisions.** The image track's `400` arrives in
+**10 ms** on the reference where 011 recorded twenty seconds, so that claim does not reproduce
+against a four-second fixture film and needs a source whose extraction is expensive. And the
+paused-session ticker freeze cannot be read at all yet: both servers commit
+`PlaybackPositionTicks: 0` after eleven minutes of silence, so **neither commits the paused position**
+and the freeze cited from the reference's source is invisible from the wire — what it needs is one
+request more, proving the paused report was stored before the silence begins.
+
+**To whoever runs the harness next, three things that are true of it today.**
+
+1. **No complete sweep has been run.** Fourteen of the twenty named comparisons ran against a real
+   pair on 2026-09-02; the 84 request cases have only ever been driven over stub wires. **So no
+   `level: L3` row has been shown to reach L3**, which is the half of every feature's definition of
+   done that was deferred here. The report can finally answer it — it prints the declared level
+   beside each endpoint and, since T15, `**partly**` with the seats where it used to print `yes`
+   from a flat set — and nothing has asked it.
+2. **The pinned image dies with `SIGILL`, exit 132, on about half of starts** on an `arm64` host
+   with no emulation, at startup and mid-sweep alike (plan §7). It costs the readiness deadline and
+   `--rm` has already removed the container before the run can read its logs, so the exit code is
+   only visible to a watcher outside the run. Batching a run against an instance stood up by hand
+   with `tools/reference_instance.py` and `--reference-url` is the working practice, and it is
+   ADR-0007's degradation rather than a workaround.
+3. **Two of the twenty named comparisons are not comparisons.** behaviours §5.2 and §5.6 need a
+   second scan on **both** servers; `POST /Library/Refresh` is the reference's and Principle VI
+   keeps it out of the surface, so only the reference half can be taken. Both entries carry that
+   half and both rows stay outstanding — a one-server reading is not a differential, and counting it
+   as run would be this feature claiming coverage it does not have.
+
+**And one thing this feature hands back rather than forward.** The three remaining
+prior-measurement debts in [reference-target.md](../../docs/compatibility/reference-target.md) are
+*"one author's afternoon and one library scanned twice"*: the `SortBy` closure — the cheapest of the
+three and the only one with a shipping client waiting on it, since a music client sends three tokens
+outside the eight this project implements — and the item-identity row's second half, *stable across
+rescans*, which needs the single-use instance and a library scanned twice rather than a new probe.

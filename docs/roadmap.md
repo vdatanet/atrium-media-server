@@ -151,7 +151,21 @@ pinned version, the repository's fixture tree as its only library, used for the 
 destroyed with everything it wrote, including on failure. AC-2 is unblocked, 010 §7's OQ-5 is
 answered, and with them every one of 010 §3.10's named comparisons that needs a planted file, a
 multi-part film, a legacy-encoded subtitle or an empty library. What such an instance runs on is
-010's plan, which does not exist yet.
+[ADR-0007](decisions/0007-a-container-runtime-for-the-reference-instance.md), decided the same day.
+
+**And then the instance was built, the comparison was taken, and AC-2 did not survive it.** 010's
+fifteen tasks all ran on 2026-09-02. The instance stands up from a pinned digest, configures itself
+over the reference's own first-time-setup operations with no human, scans the repository's fixture
+tree as six typed libraries and dies with everything it wrote; the reading it produced is checked in
+and Atrium's scan is compared against it in the default job with no Jellyfin anywhere. **The two
+readings differ in forty-seven declared places** — a zero-byte film that is an item there and not
+here, twenty-five files named two ways, twenty-one container rows — so the criterion's *"the same
+item count and the same structure"* is false, and every one of the forty-seven belongs to 003 or 004
+rather than to the harness, which [010 §2](../specs/010-conformance-harness/spec.md) puts outside
+this feature entirely. **010 is therefore `Accepted` and not `Implemented`**: amending AC-2 to state
+the comparison it turned out to be is **D-7**, reserved for its owner by the closing task rather
+than improvised by it. A status line that overstates the work is the one thing this feature exists
+to prevent in others.
 
 **The second reason is the one that decides how the tooling is judged.** A disposable instance
 takes every writing measurement off a server somebody uses. The convention says a probe that writes

@@ -1208,6 +1208,138 @@ FEATURE_009: dict[int, tuple[str, ...]] = {
 }
 
 
+#: Feature 010. **The eighteen, and one of them is mapped to a test that contradicts it.**
+#:
+#: AC-2 says *"both servers, pointed at the same built fixture, produce libraries with the same
+#: item count and the same structure"*, and the tests named for it assert the opposite: Atrium's
+#: scan of the fixture differs from the reference's recorded reading in **forty-seven declared
+#: places**, one of them an item count. That is not a harness defect - the comparison exists, runs
+#: in the default job with no Jellyfin, and writes every difference down with its reason - it is
+#: the criterion asserting a conformance property that spec section 2 puts outside this feature:
+#: *"deciding what Atrium does about a difference this feature finds"* belongs to the feature that
+#: owns the endpoint. Every other criterion here is about the harness; AC-2 alone is about Atrium.
+#: The row is mapped so the tests cannot rot, and 010 is **not** marked Implemented while it
+#: stands: the call is reserved as **D-7** in
+#: [010's tasks](../../specs/010-conformance-harness/tasks.md).
+#:
+#: Two other rows say less than they look, and both say so in their own entry rather than in a
+#: paragraph nobody reads: AC-15's *"created and destroyed by the run"* is true of the reference
+#: and **unsatisfiable on Atrium by design** (010 T12, plan section 6.7), and AC-3's *"covers every
+#: endpoint"* is a property of the declared cases, not of what any run has issued.
+FEATURE_010: dict[int, tuple[str, ...]] = {
+    # Two builds of each world, byte for byte: the paths-and-filler tree and the media one.
+    1: (
+        "tests.library.test_fixture_library:test_two_builds_are_byte_identical",
+        "tests.unit.test_media_fixtures:test_two_builds_of_one_entry_are_byte_identical",
+        "tests.unit.test_media_fixtures:test_two_builds_of_a_planted_entry_are_byte_identical",
+    ),
+    # **Read the comment above before reading this row.** These tests assert the declared
+    # differences between the two readings, which is a comparison and not the equality AC-2 states.
+    2: (
+        "tests.library.test_reference_reading:test_atriums_scan_of_the_fixture_matches_the_recorded_reference_reading",
+        "tests.library.test_reference_reading:test_the_reading_states_the_item_count_of_every_library",
+        "tests.library.test_reference_reading:test_the_declared_differences_are_the_number_this_module_claims",
+        "tests.library.test_reference_reading:test_the_record_carries_its_own_citation",
+    ),
+    3: (
+        "tests.unit.test_allowlist:test_every_surface_endpoint_has_at_least_one_case",
+        "tests.conformance.test_differential:test_every_endpoint_of_the_surface_is_reachable_by_at_least_one_declared_case",
+        "tests.conformance.test_differential:test_the_endpoints_come_from_the_surface_and_carry_the_level_it_declares",
+        "tests.conformance.test_differential:test_the_declared_conformance_level_is_printed_beside_every_endpoint",
+    ),
+    # Spec section 6's mutation table, one row per class, every assertion a count.
+    4: (
+        "tests.conformance.test_differential:test_a_removed_field_is_exactly_one_missing_key",
+        "tests.conformance.test_differential:test_an_added_field_is_exactly_one_extra_key",
+        "tests.conformance.test_differential:test_an_integer_sent_as_a_string_is_exactly_one_type_difference",
+        "tests.conformance.test_differential:test_a_changed_title_is_exactly_one_value_difference",
+        "tests.conformance.test_differential:test_a_reordered_thousand_row_array_is_exactly_one_order_and_no_values",
+        "tests.conformance.test_differential:test_a_shorter_array_is_exactly_one_length_and_no_findings_from_its_rows",
+    ),
+    5: (
+        "tests.conformance.test_differential:test_the_report_ranks_missing_keys_first",
+        "tests.conformance.test_differential:test_the_report_ranks_missing_keys_first_in_its_own_table",
+    ),
+    # AC-6 proven by making it fire: the bad entry is constructed and the loader must refuse it.
+    6: (
+        "tests.unit.test_allowlist:test_an_entry_with_no_because_fails_the_load",
+        "tests.unit.test_allowlist:test_an_entry_whose_because_is_an_excuse_fails_the_load",
+        "tests.unit.test_allowlist:test_a_fifth_derivation_class_fails_the_load",
+        "tests.unit.test_allowlist:test_a_behaviours_section_is_a_because_and_a_bare_section_number_is_not",
+        "tests.unit.test_allowlist:test_every_behaviours_section_cited_exists",
+    ),
+    # Two claims joined by "and", and the first had no test at all until 010 T15.
+    7: (
+        "tests.unit.test_probe_convention:test_a_report_prints_the_citation_in_the_documented_form",
+        "tests.unit.test_probe_convention:test_report_returns_one_on_a_contradiction",
+        "tests.unit.test_probe_convention:test_every_probe_reaches_the_shared_entry_point",
+    ),
+    8: (
+        "tests.unit.test_probe_convention:test_a_contradiction_names_the_document_and_the_section",
+        "tests.unit.test_probe_convention:test_every_probe_names_a_document_and_a_section",
+    ),
+    9: (
+        "tests.unit.test_probe_convention:test_every_register_row_names_a_script_that_exists_or_says_why_not",
+        "tests.unit.test_probe_convention:test_the_prose_count_matches_the_table",
+        "tests.unit.test_probe_convention:test_every_prior_probe_citation_belongs_to_a_row_of_the_register",
+    ),
+    # D-5: the fourth column, the file it is written to, and the route it must never become.
+    10: (
+        "tests.unit.test_compat_query_params:test_the_tally_names_the_client_that_sent_the_parameter",
+        "tests.unit.test_compat_query_params:test_a_dropped_token_carries_the_client_too",
+        "tests.unit.test_compat_query_params:test_the_tally_is_written_to_the_data_directory_at_shutdown_and_to_no_route",
+        "tests.conformance.test_differential:test_the_ignored_parameter_report_lists_parameter_endpoint_count_and_client",
+        "tests.conformance.test_differential:test_the_ignored_parameter_report_is_read_from_a_file_and_never_asked_of_a_route",
+    ),
+    # AC-11 was mapped to "CI, unchanged" and asserted nowhere. 010 T15 wrote the three.
+    11: (
+        "tests.conformance.test_differential:test_a_test_that_opens_a_tcp_connection_fails_rather_than_skipping",
+        "tests.conformance.test_differential:test_nothing_this_feature_adds_needs_a_reference",
+        "tests.conformance.test_differential:test_no_ci_job_contacts_or_starts_a_jellyfin",
+    ),
+    12: (
+        "tests.unit.test_version_bump:test_a_failed_step_stops_the_procedure_and_the_later_steps_do_not_run",
+        "tests.unit.test_version_bump:test_no_flag_skips_step_two_when_the_running_reference_changed",
+        "tests.unit.test_version_bump:test_only_passed_and_skipped_let_the_procedure_reach_the_next_step",
+    ),
+    13: (
+        "tests.library.test_fixture_library:test_the_generator_is_the_only_source_of_media",
+        "tests.unit.test_media_fixtures:test_every_file_in_the_media_tree_is_generated_by_a_declared_entry",
+    ),
+    14: (
+        "tests.conformance.test_differential:test_a_report_built_from_one_identity_says_one_identity",
+        "tests.conformance.test_differential:test_a_one_identity_run_is_a_shorter_loop_and_not_a_different_code_path",
+        "tests.conformance.test_differential:test_an_endpoint_compared_from_one_seat_of_two_is_partly_and_never_yes",
+    ),
+    # The pre-flight and the teardown. **On the reference only** - the three routes a seat is made
+    # with are not in surface.yaml, so on Atrium a seat is handed in (010 T12, plan section 6.7).
+    15: (
+        "tests.conformance.test_differential:test_a_seat_that_already_exists_refuses_the_run_and_names_it",
+        "tests.conformance.test_differential:test_a_run_that_created_a_seat_tears_it_down_on_the_exception_path",
+        "tests.conformance.test_differential:test_a_seat_whose_policy_is_refused_stops_the_run_and_leaves_nothing_behind",
+        "tests.conformance.test_differential:test_the_administrator_is_never_torn_down",
+    ),
+    16: (
+        "tests.unit.test_allowlist:test_the_register_is_spec_310s_table",
+        "tests.unit.test_allowlist:test_the_register_counts_twenty",
+        "tests.conformance.test_differential:test_the_twenty_named_comparisons_are_all_reported_even_though_none_can_run",
+        "tests.conformance.test_differential:test_a_run_with_an_outstanding_named_comparison_is_not_clean",
+        "tests.conformance.test_differential:test_an_outstanding_row_says_which_need_was_missing_and_not_merely_that_it_did_not_run",
+    ),
+    17: (
+        "tests.conformance.test_differential:test_a_key_removed_from_a_drawn_array_is_reported_and_a_changed_value_is_not",
+        "tests.conformance.test_differential:test_a_drawn_array_excuses_its_rows_and_never_the_envelope_around_them",
+        "tests.conformance.test_differential:test_a_drawn_arrays_length_is_reported_and_the_shape_walk_still_runs",
+        "tests.conformance.test_differential:test_a_drawn_arrays_shape_walk_is_position_free_because_a_draw_holds_other_items",
+    ),
+    18: (
+        "tests.conformance.test_differential:test_a_reordered_unordered_array_reports_nothing_at_all",
+        "tests.conformance.test_differential:test_an_unordered_array_reordered_and_changed_reports_exactly_the_change",
+        "tests.conformance.test_differential:test_an_unordered_page_that_lost_a_row_and_repeated_another_is_the_residue_only",
+    ),
+}
+
+
 FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "001-server-identity-and-discovery": FEATURE_001,
     "002-authentication-users-and-sessions": FEATURE_002,
@@ -1218,6 +1350,7 @@ FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "007-user-data-and-playstate": FEATURE_007,
     "008-playback-negotiation-and-delivery": FEATURE_008,
     "009-playlists": FEATURE_009,
+    "010-conformance-harness": FEATURE_010,
     "011-subtitle-delivery": FEATURE_011,
 }
 

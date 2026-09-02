@@ -55,6 +55,7 @@ import importlib.util
 import re
 import sys
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -571,6 +572,47 @@ def test_report_returns_one_on_a_contradiction(capsys: pytest.CaptureFixture[str
         "proves nothing: a report that always failed would satisfy AC-7 and no run would ever pass"
     )
     capsys.readouterr()
+
+
+def test_a_report_prints_the_citation_in_the_documented_form(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """**AC-7\'s first half, which had no test at all until 010 T15.**
+
+    The criterion is two claims joined by *and*: *"every probe prints a citation in the documented
+    form"* **and** *"exits non-zero when its finding contradicts the documentation"*. The second
+    was asserted at T13; the first was asserted nowhere, on either side of the run - the sweeps
+    check that a probe reaches `_probe.main`, and the two report tests read the exit code and the
+    contradiction message and threw the output away.
+
+    That is the gap Principle II is built on: a citation is what turns a finding into provenance,
+    and a finding printed in some other shape is one a document cannot cite. The form is
+    AGENTS.md\'s own - `[probe: tools/<script>, Jellyfin <version>, <date>]` - and the date is
+    the run\'s, in UTC, because a citation carries a date that means the same thing wherever it
+    was taken.
+    """
+    module = load_probe_module()
+    probe = module.Probe(
+        script="probe_example.py",
+        question="does the documented thing happen?",
+        document="docs/compatibility/behaviours.md",
+        section="§9.9",
+        expectation="it happens",
+    )
+    probe.conclude("it happens", matches_documentation=True)
+    assert probe.report(Recording()) == 0
+    printed = capsys.readouterr().out
+
+    today = datetime.now(UTC).date().isoformat()
+    expected = f"[probe: tools/probe_example.py, Jellyfin 10.11.11, {today}]"
+    assert expected in printed, (
+        f"the citation printed was not the documented form. AGENTS.md gives exactly one shape for "
+        f"a measurement taken by a script in this repository, and a probe that prints another is "
+        f"one whose finding cannot be pasted into a document as provenance.\n{printed}"
+    )
+    assert re.search(
+        r"\[probe: tools/[a-z0-9_]+\.py, Jellyfin \d+\.\d+\.\d+, \d{4}-\d{2}-\d{2}\]", printed
+    ), "the three fields are the script, the version measured against, and the date"
 
 
 def test_a_contradiction_names_the_document_and_the_section(

@@ -263,6 +263,14 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
             live_ledger: ProductionLedger | None = getattr(_app.state, "productions", None)
             if live_ledger is not None:
                 await live_ledger.shutdown()
+            # What this process was sent and did not act on, into the data directory - 010
+            # section 3.6's report, AC-10's four columns, D-5's shape. **Here** because this is
+            # the moment the tally is complete: it is after the last request a route could have
+            # answered, which is also the reason it can never be a route. Suppressed rather than
+            # raised: a read-only data directory is an operator's problem to fix, and losing a
+            # diagnostic on the way out must not turn a clean stop into a traceback.
+            with suppress(OSError):
+                ignored_parameters.write(resolved.ignored_parameters)
             # Returns every pooled connection, which is what closes the WAL cleanly. Without it a
             # test that builds hundreds of instances leaves hundreds of open files behind.
             engine.dispose()

@@ -656,7 +656,9 @@ async def test_ac15_a_tier_3_parameter_is_ignored_answered_and_recorded(
     assert answered.json()["TotalRecordCount"] == bare["TotalRecordCount"], (
         "a tier 3 parameter must not filter"
     )
-    recorded = app.state.ignored_parameters.counts
+    recorded = {
+        (route, parameter) for route, parameter, _client in app.state.ignored_parameters.counts
+    }
     assert ("/Items", "isMovie") in recorded
 
 
@@ -667,7 +669,10 @@ async def test_an_unrecognised_sort_token_drops_and_is_recorded(
     exists."""
     answered = await client.get("/Items", params={"sortBy": "Nonsense", "limit": "1"})
     assert answered.status_code == 200
-    assert ("/Items", "sortBy=Nonsense") in app.state.ignored_parameters.counts
+    assert ("/Items", "sortBy=Nonsense", "") in app.state.ignored_parameters.counts, (
+        "the tally keys on (route, parameter, client) since 010 T15 gave it AC-10's fourth "
+        "column, and this request named no client"
+    )
 
 
 async def test_a_real_kind_this_version_cannot_produce_narrows_to_nothing(
