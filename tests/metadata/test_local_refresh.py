@@ -530,3 +530,41 @@ def test_local_only_is_the_whole_of_this_slice(engine: Engine, tmp_path: Path) -
     film = one(engine, ItemType.MOVIE)
     assert film.name == "The Fixture"
     assert film.overview is not None
+
+
+def test_a_container_borrows_the_same_directory_wherever_the_library_is_mounted(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A container has no directory of its own and borrows a descendant's, and **which** one it
+    borrows used to be a hash of the absolute path.
+
+    `_first_file_backed` walked the children in identifier order, and an identifier is derived from
+    the absolute path (003 spec section 3.6), so the choice moved with the mount point. That is not
+    the harmless tie the genre spelling above is: the descendants of one container sit at different
+    depths — a series whose second season has no season directory has an episode one level below it
+    and the rest two — and the caller walks up a **fixed** number of levels from whichever it is
+    handed. Land on the wrong one and the series looks for its `tvshow.nfo` in the library root,
+    finds none, and keeps the path-derived name. Measured while writing 010 T10's comparison
+    against a real reference, which reads that sidecar every time: about one run in ten
+    `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`.
+
+    The series here is that shape deliberately, and the assertion is on the **name**, because the
+    borrowed directory is only visible through what was read from it.
+    """
+    for mount in ("aaaa", "zzzz"):
+        root = tmp_path / mount / "shows"
+        nested = root / "The Series" / "Season 01"
+        nested.mkdir(parents=True)
+        (nested / "The Series - S01E01 - Pilot.mkv").write_bytes(b"atrium fixture\n" + b"\0" * 600)
+        stray = root / "The Series" / "The Series - S02E01 - Elsewhere.mkv"
+        stray.write_bytes(b"atrium fixture\n" + b"\0" * 600)
+        (root / "The Series" / "tvshow.nfo").write_text(
+            "<tvshow><title>Named By Its Sidecar</title></tvshow>", encoding="utf-8"
+        )
+        scanned(engine, a_library(engine, root, "tvshows"))
+
+    series = sorted(row.name for row in items(engine) if row.type == ItemType.SERIES)
+    assert series == ["Named By Its Sidecar", "Named By Its Sidecar"], (
+        "the series took its name from `tvshow.nfo` under one mount point and not under the "
+        "other, so the directory a container borrows still depends on where the library sits"
+    )

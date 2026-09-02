@@ -2032,7 +2032,48 @@ def test_the_library_is_added_over_the_mount_and_asks_for_the_refresh(tmp_path: 
         "refreshLibrary": "true",
         "collectionType": "movies",
     }
-    assert added["body"] == {"LibraryOptions": {"PathInfos": [{"Path": "/fixture/Movies"}]}}
+    options = added["body"]["LibraryOptions"]
+    assert options["PathInfos"] == [{"Path": "/fixture/Movies"}]
+
+    # **And the fetchers are off, which 010 T10 had to measure to know how to spell.** A library
+    # added with nothing but its path fetches metadata from the internet, and over the fixture tree
+    # that named a film `WALL·E's Treasures & Trinkets` and an episode `Highlander: Reunion` —
+    # values from a third party's database that change without either server changing
+    # `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`. The property that
+    # reads like the switch is not one: `EnableInternetProviders` is declared, stored, and consulted
+    # by nothing `[source: MediaBrowser.Model/Configuration/LibraryOptions.cs:64 @ v10.11.11]`. It
+    # is still sent, and what does the work is the per-type allowlist beside it
+    # `[source: MediaBrowser.Controller/BaseItemManager/BaseItemManager.cs:42 @ v10.11.11]`.
+    assert options["EnableInternetProviders"] is False
+    assert {entry["Type"] for entry in options["TypeOptions"]} == set(reference.FETCHED_TYPES)
+    assert all(
+        entry["MetadataFetchers"] == [] and entry["ImageFetchers"] == []
+        for entry in options["TypeOptions"]
+    ), "a type option that names a fetcher enables it, because the list is an allowlist"
+
+
+def test_a_library_asked_for_with_the_fetchers_on_sends_no_type_options(tmp_path: Path) -> None:
+    """The other half of the same measurement, and the reason it is a field rather than a constant.
+
+    The difference between the two readings *is* 010 T10's finding — nine of fifty-nine names — so
+    the probe has to be able to ask for both shapes, and asking for the fetchers must leave the
+    reference's own defaults alone rather than sending an empty allowlist that disables them.
+    """
+    made, _runtime, api = _instance(
+        tmp_path,
+        libraries=(
+            reference.Library(
+                name="Movies", collection_type="movies", subpath="Movies", internet_providers=True
+            ),
+        ),
+    )
+    with made:
+        pass
+
+    added = next(sent for sent in api.sent if sent["path"] == "/Library/VirtualFolders")
+    options = added["body"]["LibraryOptions"]
+    assert options["EnableInternetProviders"] is True
+    assert "TypeOptions" not in options
 
 
 # -- the scan, waited for on the server's own answer ------------------------------------------

@@ -16,6 +16,7 @@ Standard library only. These run before any environment is built.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import getpass
 import json
 import os
@@ -462,18 +463,46 @@ def connect(args: argparse.Namespace) -> Server:
     return server
 
 
+@contextlib.contextmanager
+def _connection(args: argparse.Namespace, connect_with: Any, env_file: Path | None) -> Any:
+    """The server a probe measures, for as long as the probe needs it.
+
+    The ordinary case is one connection to a server somebody else is running, and nothing has to
+    be torn down. `connect_with` is the other one, and it exists because of what it has to
+    guarantee: a probe that *makes* its own server must destroy it after the report, on every
+    path out, and a report printed after the teardown would print the version of a server that no
+    longer exists.
+    """
+    if connect_with is not None:
+        with connect_with(args) as server:
+            yield server
+        return
+    server = connect(args)
+    if env_file:
+        print(f"credentials from {env_file}", file=sys.stderr)
+    yield server
+
+
 def main(
     run: Any,
     description: str,
     needs_writes: bool = False,
     extra_arguments: Any = None,
     with_args: bool = False,
+    connect_with: Any = None,
 ) -> int:
     """Entry point shared by every probe: parse, connect, run, report, translate errors.
 
     `extra_arguments` adds a probe's own options to the parser; `with_args` hands the parsed
     namespace to `run` alongside the server. Both default off, so a probe that needs neither
     stays a one-line entry point.
+
+    `connect_with` replaces *"connect to the server the environment names"* with a probe's own
+    context manager, and exactly one probe needs it: `probe_reference_scan.py` measures a server
+    that does not exist until it stands one up, and must destroy it afterwards whatever happened
+    (010 spec section 3.1). It is a parameter rather than a second entry point so that every probe
+    still reaches this function — the citation, the contradiction and the exit code are the
+    convention, and a probe that printed its own would be outside it.
     """
     env_file = load_env_file()
     parser = build_parser(description, needs_writes=needs_writes, extra_arguments=extra_arguments)
@@ -489,15 +518,12 @@ def main(
         return 2
 
     try:
-        server = connect(args)
-        if env_file:
-            print(f"credentials from {env_file}", file=sys.stderr)
-        probe = run(server, args) if with_args else run(server)
+        with _connection(args, connect_with, env_file) as server:
+            probe = run(server, args) if with_args else run(server)
+            return probe.report(server)
     except ProbeError as exc:
         print(f"cannot answer the question: {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
         print("\ninterrupted", file=sys.stderr)
         return 130
-
-    return probe.report(server)

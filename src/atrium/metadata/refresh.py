@@ -572,17 +572,45 @@ def _directories(items: Mapping[str, Item], roots: Sequence[Path]) -> dict[str, 
 def _first_file_backed(
     item_id: str, items: Mapping[str, Item], children: Mapping[str, list[str]]
 ) -> Item | None:
-    """Depth-first, in identifier order, so the answer does not depend on row order."""
-    for child_id in sorted(children.get(item_id, ())):
-        child = items.get(child_id)
-        if child is None:
-            continue
-        if child.type in FILE_BACKED and child.relative_path:
-            return child
-        found = _first_file_backed(child_id, items, children)
-        if found is not None:
-            return found
-    return None
+    """Depth-first, in **path** order, so the answer does not depend on row order or on the mount.
+
+    It sorted by identifier until 2026-09-02, and identifier order is a hash of the **absolute**
+    path (003 spec section 3.6), so which descendant a container borrowed a directory from moved
+    with the mount point. That is not a tie between two equal answers, which this project already
+    tolerates for a genre's spelling: the descendants of one container sit at different depths in
+    the tree, the caller walks up a fixed number of levels from whichever it is given, and only
+    some of them land on the container's own directory. Measured on the fixture library, a series
+    whose second season has no season directory borrowed that episode's directory about one run in
+    ten and then looked for its `tvshow.nfo` one level too high - so the same tree, mounted
+    somewhere else, gave the series a different **name**
+    `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`, where the reference
+    reads the sidecar every time.
+
+    Relative-path order is a property of the tree and of nothing else, and for the ordinary layout
+    it picks the deepest-nested branch first, which is the one the caller's arithmetic is written
+    for. It does not make the borrowing *correct* - a two-disc album still borrows a disc
+    directory - and that is 004's to decide, not this ordering's.
+    """
+    backed: list[Item] = []
+    seen: set[str] = set()
+    pending = [item_id]
+    while pending:
+        for child_id in children.get(pending.pop(), ()):
+            if child_id in seen:
+                continue
+            seen.add(child_id)
+            child = items.get(child_id)
+            if child is None:
+                continue
+            if child.type in FILE_BACKED and child.relative_path:
+                backed.append(child)
+            else:
+                pending.append(child_id)
+    if not backed:
+        return None
+    # Every descendant is gathered before one is chosen, so the answer does not depend on which
+    # branch was walked first either - which the recursion it replaced did.
+    return min(backed, key=lambda child: (child.relative_path, child.id))
 
 
 def _depth(kind: ItemType) -> int:

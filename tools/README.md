@@ -86,6 +86,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_differential_join.py`](probe_differential_join.py) | What can join an item on two servers whose identifiers are derived differently? | 010 §3.2, §7 OQ-1; behaviours §1.4, §3.6 | no |
 | [`probe_reference_determinism.py`](probe_reference_determinism.py) | Does the reference answer the same request the same way twice? | 010 §3.3, §7 OQ-3, OQ-4; behaviours §1.9 | no |
 | [`probe_restricted_surface.py`](probe_restricted_surface.py) | How much of the surface answers differently to a restricted non-administrator? | 010 §3.9, §3.10, AC-14, AC-15; behaviours §3.16, §3.17 | yes |
+| [`probe_reference_scan.py`](probe_reference_scan.py) | Given this repository's fixture tree, what does a reference server's library contain — and how much of that reading came from a metadata provider rather than from the tree? | 010 §3.1, AC-2, AC-7, AC-8; plan §6.6, §11 D-4 | yes, and **only to an instance it creates and destroys** |
 
 ### Running them
 
@@ -279,6 +280,7 @@ doing it quietly: each refuses to run without `--allow-writes`.
 | `probe_playstate.py` | Play state and favourite marks on one long item, one short item, one season's episodes and one artist; a live playback reported and stopped | Chooses only items with no user data at all, so restoring them is exact; sweeps the season's episodes and the artist's favourite clean including on failure, and stops the playback it started |
 | `probe_restricted_surface.py` | A throwaway non-administrator user restricted to one library, and 1 private playlist holding an item from that library and an item from outside it | Deletes both, including on failure. Refuses to run if a user of that name already exists, so it can never touch a real account |
 | `probe_next_up.py` | Played marks on a handful of episodes | Chooses series whose episodes carry no user data, deletes every mark including on failure, and verifies the episodes pristine afterwards |
+| `probe_reference_scan.py` | Two whole servers: a single-use reference instance each for its two readings, three libraries scanned into each | Destroys the container, its volumes and everything written inside them, on both paths — and refuses a server argument outright, because its question cannot be asked without writing a library into the server being asked. **The only writing probe that can never touch an operator's data**, which is the argument [ADR-0007](../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md) makes in one line |
 
 `probe_playstate.py` refuses to run at all if it cannot find a long item with no existing user
 data. It will not overwrite a real resume position, because it could not put one back exactly.
