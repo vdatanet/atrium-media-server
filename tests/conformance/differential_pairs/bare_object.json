@@ -1,0 +1,82 @@
+{
+  "what": "A bare item body, the narrowest shape the sweep meets. Hand-written and not captured: a captured pair proves the engine agrees with whatever the capture happened to hold, and anything captured from the reference is somebody's library. The two sides differ only in what 010 spec 3.3 excuses - the derived identifiers, the scan's wall clock, the content hashes and the installation's own path - so a difference reported here is the engine crying wolf. ChannelId is an explicit null on both sides on purpose: the reference suppresses nulls globally and sends this one anyway, 208 of 208 items, so an engine that read a null as an absent key would report nothing on the one shape that proves key presence matters.",
+  "rules": {
+    "excused_fields": {
+      "/Id": "derived-identifier",
+      "/ServerId": "derived-identifier",
+      "/ParentId": "derived-identifier",
+      "/Etag": "content-hash",
+      "/ImageTags": "content-hash",
+      "/DateCreated": "wall-clock",
+      "/Path": "installation-path"
+    }
+  },
+  "atrium": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "Name": "The Third Man",
+      "OriginalTitle": "The Third Man",
+      "ServerId": "0f2c9d6a4b1e4f7d8c3a5b6e7d8f9a0b",
+      "Id": "3a7f1c92b4e8460d9f21c5a7b3d6e084",
+      "Etag": "8f14e45fceea167a5a36dedd4bea2543",
+      "DateCreated": "2026-09-02T09:14:03.1120000Z",
+      "ChannelId": null,
+      "SortName": "third man",
+      "Path": "/srv/fixtures/movies/The Third Man (1949)/The Third Man (1949).mkv",
+      "ParentId": "b91d0e2f3a4c5d6e7f8091a2b3c4d5e6",
+      "ProductionYear": 1949,
+      "IndexNumber": 1,
+      "IsFolder": false,
+      "Type": "Movie",
+      "CommunityRating": 8.1,
+      "RunTimeTicks": 62880000000,
+      "UserData": {
+        "PlaybackPositionTicks": 0,
+        "PlayCount": 0,
+        "IsFavorite": false,
+        "Played": false
+      },
+      "ImageTags": {
+        "Primary": "d41d8cd98f00b204e9800998ecf8427e"
+      },
+      "BackdropImageTags": [],
+      "LocationType": "FileSystem",
+      "MediaType": "Video"
+    }
+  },
+  "reference": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "Name": "The Third Man",
+      "OriginalTitle": "The Third Man",
+      "ServerId": "e4f7d8c3a5b6e7d8f9a0b0f2c9d6a4b1",
+      "Id": "c5a7b3d6e0843a7f1c92b4e8460d9f21",
+      "Etag": "45c48cce2e2d7fbdea1afc51c7c6ad26",
+      "DateCreated": "2026-09-02T09:41:57.6650000Z",
+      "ChannelId": null,
+      "SortName": "third man",
+      "Path": "/var/lib/jellyfin/fixtures/movies/The Third Man (1949)/The Third Man (1949).mkv",
+      "ParentId": "3a4c5d6e7f8091a2b3c4d5e6b91d0e2f",
+      "ProductionYear": 1949,
+      "IndexNumber": 1,
+      "IsFolder": false,
+      "Type": "Movie",
+      "CommunityRating": 8.1,
+      "RunTimeTicks": 62880000000,
+      "UserData": {
+        "PlaybackPositionTicks": 0,
+        "PlayCount": 0,
+        "IsFavorite": false,
+        "Played": false
+      },
+      "ImageTags": {
+        "Primary": "6f4922f45568161a8cdf4ad2299f6d23"
+      },
+      "BackdropImageTags": [],
+      "LocationType": "FileSystem",
+      "MediaType": "Video"
+    }
+  }
+}

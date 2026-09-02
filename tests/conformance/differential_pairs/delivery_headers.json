@@ -1,0 +1,39 @@
+{
+  "what": "A static delivery 200, where the headers are the contract rather than the body: Content-Length, Accept-Ranges, Content-Range and Content-Type (010 spec 3.2). Three header values differ on every response ever taken from the two servers, and the pair carries all three - the response clock and X-Response-Time-ms, which behaviours 1.9 records and spec 3.3 excuses, and Server, which behaviours 4.1 records as a measured divergence, Atrium/<version> against the reference's Kestrel, and which spec 3.3 does NOT carry a row for. Accept-Ranges is spelled in different cases on the two sides on purpose: HTTP says header names are case-insensitive and the two servers are different stacks, so an engine that matched them by their bytes would report a finding about nothing on every delivery route.",
+  "rules": {
+    "excused_fields": {
+      "header:date": "wall-clock",
+      "header:x-response-time-ms": "behaviours 1.9",
+      "header:etag": "content-hash",
+      "header:server": "behaviours 4.1"
+    }
+  },
+  "atrium": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "video/x-matroska",
+      "Content-Length": "104857600",
+      "accept-ranges": "bytes",
+      "ETag": "8f14e45fceea167a5a36dedd4bea2543",
+      "Server": "Atrium/0.1.0",
+      "Date": "Wed, 02 Sep 2026 09:14:03 GMT",
+      "X-Response-Time-ms": "1.8042"
+    },
+    "body": null,
+    "raw": ""
+  },
+  "reference": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "video/x-matroska",
+      "Content-Length": "104857600",
+      "Accept-Ranges": "bytes",
+      "ETag": "45c48cce2e2d7fbdea1afc51c7c6ad26",
+      "Server": "Kestrel",
+      "Date": "Wed, 02 Sep 2026 09:41:57 GMT",
+      "X-Response-Time-ms": "2.1329"
+    },
+    "body": null,
+    "raw": ""
+  }
+}

@@ -227,7 +227,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T2 — `tools/_differential.py`: the comparison engine, pure, in five classes
 
-- [ ] **Changes:** new `tools/_differential.py` — `Response`, `Class`, `Difference`, `Rules`,
+- [x] **Changes:** new `tools/_differential.py` — `Response`, `Class`, `Difference`, `Rules`,
   `compare` and `compare_headers` exactly as [plan §5](plan.md#5-contracts) declares them. Five
   classes and not three: `MISSING_KEY`, `EXTRA_KEY`, `TYPE`, `LENGTH`, `ORDER`, `VALUE`, ordered by
   severity so the report ranks missing keys first (AC-5). Arrays follow
@@ -254,6 +254,103 @@ written against twenty, and the `outstanding:` section they described is gone ra
 > Second on purpose, and it is the only part of this feature that ever runs in CI. A comparison that
 > cannot be unit-tested is the one thing this feature must not ship (plan §3), and a comparison that
 > cries wolf is a harness nobody reads by the second week.
+
+> **Done (2026-09-02).** *The cascade guard, applied in the order [plan §6.2](plan.md#62-the-comparison-in-five-classes)
+> writes it, deletes AC-17 on the only endpoint AC-17 was written for.* Step 1 says different
+> lengths are one `LENGTH` finding and *"the array's rows are **not** compared at all"*; step 4 says
+> a `drawn` array compares *"the envelope, the row count, and every row's key set and types"*.
+> Those two are in conflict on the project's only measured `drawn` array, and always:
+> `/Items/{itemId}/Similar` answers `limit + 4` rows on a **movie** seed where Atrium answers
+> exactly `limit` — measured at 1, 5 and 20, on two seeds each
+> `[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]`,
+> [behaviours §3.24](../../docs/compatibility/behaviours.md) — so the lengths differ on **every**
+> run of that route, step 1 fires first, and the row walk AC-17 exists for never happens. It was
+> not visible from either document because each states its half in its own paragraph. **The fix is
+> T4's and the shape of it is fixed here:** a length difference suppresses the *positional*
+> comparison, which is the thing that cascades, and never the shape walk a `drawn` array still
+> owes. `tests/conformance/differential_pairs/drawn_array.json` is written two rows against six for
+> that reason, and `test_the_cascade_guard_suppresses_the_row_walk_on_the_only_measured_drawn_array`
+> asserts today's behaviour with the correction named in its own docstring, so T4 cannot land
+> without meeting it.
+>
+> *Two more things the plan asserts that measure false, both found by making them fire rather than
+> by reading.*
+>
+> - **The fingerprint's mask has to keep the key present and keep its type.** §6.2 says a row is
+>   reduced to *"the row after the allowlist's masking, serialised canonically"*, and the natural
+>   reading of masking is dropping the key. Do that, and a row where Atrium omits `Id` **entirely**
+>   fingerprints identically to the reference's row that carries it: the two arrays compare equal,
+>   *"nothing more is said"*, and `MISSING_KEY` — the class the report ranks first and the only
+>   defect class this project cannot find any other way — is never emitted at all. Masking by
+>   deletion makes `test_a_masked_field_still_reports_a_missing_key_under_a_reordering` report `[]`
+>   against one expected finding. The engine masks to a marker naming the value's JSON type instead.
+> - **`pointer` cannot address a single row of spec §3.3 without an array-index wildcard.** Plan
+>   §4.1 defines it as *"JSON Pointer to the field or array, relative to the body"*, and every
+>   field row of §3.3 — `Id`, `DateCreated`, `Etag`, `ImageTags`, `ChildCount` — lives inside a
+>   **row of a list envelope**. A literal index is both unwritable across a thousand-row page and
+>   wrong under a reordering, because the index moves. The engine reads RFC 6901's `-` as *"an
+>   element of this array"*, and consults the mask under an index-generalised pointer so that a
+>   fingerprint does not depend on where its row currently sits — without which reordering an array
+>   changes the very values the ordering comparison exists to hold still. **T3 writes the entries in
+>   that spelling**: `/Items/-/Id`, not `/Items/0/Id` and not `Id`.
+>
+> *And one finding that is T3's to fix rather than T2's.* **The `Server` header differs on every
+> single response and spec §3.3 carries no row for it.** It is `Atrium/<version>` here against the
+> reference's `Kestrel` `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]`, recorded
+> as a deliberate divergence in [behaviours §4.1](../../docs/compatibility/behaviours.md) and made
+> the two-server discriminator by plan §6.12 — so until the allowlist has the entry, every case in
+> the sweep reports the same header difference.
+> `test_the_server_header_differs_on_every_response_and_spec_33_has_no_row_for_it` asserts that it
+> is needed, by removing the excuse and counting the finding.
+>
+> *What T4 inherits beyond the split above.* **The equal-length, unequal-multiset array still
+> cascades**, and plan §9's risk row claims otherwise: it names *"the `LENGTH` cascade guard and the
+> `ORDER` class"* as the mitigation for a positional comparison drowning the report, and neither
+> fires on a page whose length is unchanged and whose rows are not a permutation. That shape is
+> measured, not hypothetical — paging the reference's artist sorts *"loses and duplicates rows"*
+> ([behaviours §3.6](../../docs/compatibility/behaviours.md)), so a page can hold one row twice and
+> another not at all at the same length. §6.2 does not say what an `unordered` array does when the
+> multisets genuinely differ, and that is the question T4 answers. Relatedly, the `ORDER` note here
+> counts multiplicities rather than collapsing them: a set-based answer would report a page that
+> lost one row and repeated another as a pure reordering, which is the conflation this class exists
+> to prevent, running backwards.
+>
+> *Routine calls taken, since none of them touches behaviour or an accepted document.*
+> **The status is compared, inside `compare`, and a difference in it is one finding that stops
+> there** — neither the task nor §6.2 mentions the status at all, while plan §7 files it as *"a
+> `VALUE` difference on the status"*, singular; a `404`'s problem details walked against a `200`'s
+> item body would bury the one fact that explains every other finding under fifty that do not. It is
+> filed under `status`, which is neither a JSON Pointer nor a header and so cannot collide with one.
+> **`json_type` separates `boolean` before `integer`**, because `bool` is a subclass of `int` in
+> Python and the obvious `isinstance` ladder reports `true` and `1` as the same type — on exactly
+> the flags a decoder breaks on — **and separates `integer` from `number`**, because Principle VIII
+> says numeric type is part of the contract *and only visible in the serialised form*, which is
+> where `0` and `0.0` differ. **A key holding an explicit `null` is present**, which is measured
+> rather than tidy: the reference suppresses nulls globally and sends `ChannelId: null` on every
+> item anyway, 208 of 208
+> `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`. **Header names are matched
+> case-insensitively and header order is not compared**, because HTTP says the first and the two
+> servers are different stacks. **`raw` is never compared** — spec §6 declines to byte-compare
+> produced media, and three §3.10 rows exist precisely because their difference is in the bytes.
+> **A `TYPE` difference stops the walk at that node**, since a list against an object cannot be
+> walked and walking anyway is a second cascade. Two helpers beyond the declared contract, `rank`
+> and `counts`, because AC-5 is a property of an ordering and a report should not have to guess a
+> zero; T8 consumes them. `Response`'s `headers`, `body` and `raw` and all three of `Rules`'
+> mappings gained empty defaults, with a shared frozen `NO_RULES`, so a mutation case can be built
+> from a status alone.
+>
+> *A gotcha the inherited pattern does not carry.* Loading a `tools/` module by path needs
+> `sys.modules[name] = module` **before** `exec_module`: `dataclasses` resolves a field's annotation
+> by looking the defining module up by name, so the first `@dataclass` raises without it. Neither
+> `tests/conformance/test_routes.py` nor `test_universal_audio.py` hits this, because neither module
+> they load declares one — so the pattern every later task will copy is one line short for anything
+> under `tools/` that does, which is `_allowlist.py`, `_reference.py` and `differential.py`.
+>
+> *Nothing was written to any server, and nothing here opens a socket, reads a file or reads a
+> clock.* The three guards were proven by deletion rather than by argument: remove the fingerprint
+> step and the reordered thousand-row case reports **2000** findings instead of one `ORDER`; remove
+> the length check and the shorter-array case reports its rows; mask by deletion and the missing key
+> disappears. Every assertion is a count, so none of them can pass by accident.
 
 ## T3 — `docs/compatibility/allowlist.yaml` and `tools/_allowlist.py`: three kinds, scoped
 

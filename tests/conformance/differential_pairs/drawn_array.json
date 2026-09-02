@@ -1,0 +1,96 @@
+{
+  "what": "GET /Items/{itemId}/Similar with limit=2 on a movie seed, the only drawn array the project has measured. Two things are true of it at once and they pull against each other. The rows are a fresh draw - four identical requests returned 48 distinct items with none in common - so no row's value is comparable (behaviours 3.23). And the reference answers limit + 4 rows on a movie seed where Atrium answers exactly limit (behaviours 3.24), so the two lengths differ on every single run of this endpoint. That is why this pair is written with two rows against six: it is the shape the cascade guard meets first, and 010 AC-17 says the row count is a finding while each row's key set and types are still compared. TotalRecordCount is held equal on both sides here so that the pair isolates the array; the reference's own is the number of rows it returned and Atrium's is the pre-limit pool, which is behaviours 3.24's second half and an allowlist row rather than an engine question.",
+  "rules": {
+    "excused_fields": {
+      "/Items/-/Id": "derived-identifier",
+      "/Items/-/ServerId": "derived-identifier"
+    },
+    "drawn_arrays": {
+      "/Items": "behaviours 3.23 - a fresh draw per request; four identical requests shared no item"
+    }
+  },
+  "atrium": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "Items": [
+        {
+          "Name": "Le Samourai",
+          "Id": "aa1f2a3b4c5d6e7f8091a2b3c4d5e6f7",
+          "ServerId": "0f2c9d6a4b1e4f7d8c3a5b6e7d8f9a0b",
+          "Type": "Movie",
+          "IsFolder": false,
+          "ProductionYear": 1967
+        },
+        {
+          "Name": "Touch of Evil",
+          "Id": "bb2f3a4b5c6d7e8f9091a2b3c4d5e6f7",
+          "ServerId": "0f2c9d6a4b1e4f7d8c3a5b6e7d8f9a0b",
+          "Type": "Movie",
+          "IsFolder": false,
+          "ProductionYear": 1958
+        }
+      ],
+      "TotalRecordCount": 9,
+      "StartIndex": 0
+    }
+  },
+  "reference": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "Items": [
+        {
+          "Name": "Night and the City",
+          "Id": "cc3f4a5b6c7d8e9f0091a2b3c4d5e6f7",
+          "ServerId": "e4f7d8c3a5b6e7d8f9a0b0f2c9d6a4b1",
+          "Type": "Movie",
+          "IsFolder": false,
+          "ProductionYear": 1950
+        },
+        {
+          "Name": "Le Samourai",
+          "Id": "dd4f5a6b7c8d9e0f1091a2b3c4d5e6f7",
+          "ServerId": "e4f7d8c3a5b6e7d8f9a0b0f2c9d6a4b1",
+          "Type": "Movie",
+          "IsFolder": false,
+          "ProductionYear": 1967
+        },
+        {
+          "Name": "The Killers",
+          "Id": "ee5f6a7b8c9d0e1f2091a2b3c4d5e6f7",
+          "ServerId": "e4f7d8c3a5b6e7d8f9a0b0f2c9d6a4b1",
+          "Type": "Movie",
+          "IsFolder": false,
+          "ProductionYear": 1946
+        },
+        {
+          "Name": "Gilda",
+          "Id": "ff6f7a8b9c0d1e2f3091a2b3c4d5e6f7",
+          "ServerId": "e4f7d8c3a5b6e7d8f9a0b0f2c9d6a4b1",
+          "Type": "Movie",
+          "IsFolder": false,
+          "ProductionYear": 1946
+        },
+        {
+          "Name": "Touch of Evil",
+          "Id": "007f8a9b0c1d2e3f4091a2b3c4d5e6f7",
+          "ServerId": "e4f7d8c3a5b6e7d8f9a0b0f2c9d6a4b1",
+          "Type": "Movie",
+          "IsFolder": false,
+          "ProductionYear": 1958
+        },
+        {
+          "Name": "The Big Heat",
+          "Id": "118f9a0b1c2d3e4f5091a2b3c4d5e6f7",
+          "ServerId": "e4f7d8c3a5b6e7d8f9a0b0f2c9d6a4b1",
+          "Type": "Movie",
+          "IsFolder": false,
+          "ProductionYear": 1953
+        }
+      ],
+      "TotalRecordCount": 9,
+      "StartIndex": 0
+    }
+  }
+}
