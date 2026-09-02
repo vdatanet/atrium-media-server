@@ -1208,19 +1208,22 @@ FEATURE_009: dict[int, tuple[str, ...]] = {
 }
 
 
-#: Feature 010. **The eighteen, and one of them is mapped to a test that contradicts it.**
+#: Feature 010. **The eighteen, and one of them was mapped to tests that contradicted it.**
 #:
-#: AC-2 says *"both servers, pointed at the same built fixture, produce libraries with the same
+#: AC-2 **said** *"both servers, pointed at the same built fixture, produce libraries with the same
 #: item count and the same structure"*, and the tests named for it assert the opposite: Atrium's
 #: scan of the fixture differs from the reference's recorded reading in **forty-seven declared
 #: places**, one of them an item count. That is not a harness defect - the comparison exists, runs
-#: in the default job with no Jellyfin, and writes every difference down with its reason - it is
+#: in the default job with no Jellyfin, and writes every difference down with its reason - it was
 #: the criterion asserting a conformance property that spec section 2 puts outside this feature:
 #: *"deciding what Atrium does about a difference this feature finds"* belongs to the feature that
-#: owns the endpoint. Every other criterion here is about the harness; AC-2 alone is about Atrium.
-#: The row is mapped so the tests cannot rot, and 010 is **not** marked Implemented while it
-#: stands: the call is reserved as **D-7** in
-#: [010's tasks](../../specs/010-conformance-harness/tasks.md).
+#: owns the endpoint. Every other criterion here is about the harness; AC-2 alone was about Atrium.
+#: The row was mapped so the tests could not rot while the call was reserved as **D-7** in
+#: [010's tasks](../../specs/010-conformance-harness/tasks.md); **D-7 was taken on 2026-09-02 and
+#: AC-2 now states the comparison these four tests make** - the record and its citation, the item
+#: count of every library, the declared count, and the two failure directions (an undeclared
+#: difference, and a declared one that has gone away). 010 is Implemented from that date. The
+#: forty-seven differences are unchanged and still belong to 003 and 004.
 #:
 #: Two other rows say less than they look, and both say so in their own entry rather than in a
 #: paragraph nobody reads: AC-15's *"created and destroyed by the run"* is true of the reference
@@ -1234,7 +1237,8 @@ FEATURE_010: dict[int, tuple[str, ...]] = {
         "tests.unit.test_media_fixtures:test_two_builds_of_a_planted_entry_are_byte_identical",
     ),
     # **Read the comment above before reading this row.** These tests assert the declared
-    # differences between the two readings, which is a comparison and not the equality AC-2 states.
+    # differences between the two readings, which is the comparison AC-2 states since D-7 and not
+    # the equality it stated when it was written.
     2: (
         "tests.library.test_reference_reading:test_atriums_scan_of_the_fixture_matches_the_recorded_reference_reading",
         "tests.library.test_reference_reading:test_the_reading_states_the_item_count_of_every_library",

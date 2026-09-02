@@ -28,12 +28,12 @@ Both reasons collapse into a single design rule, stated in the [constitution](do
 
 ## Status
 
-**Ten of twelve features are implemented.** 001 through 009 are done — identity and discovery,
+**Eleven of twelve features are implemented.** 001 through 009 are done — identity and discovery,
 authentication and sessions, scanning, metadata, the item query API, images, user data and
 playstate, as of 2026-08-29 playback negotiation and delivery, and as of 2026-09-01 playlists —
-and 011 (subtitle delivery) landed on 2026-08-31. **No draft is left**: 010 (the conformance
-harness) was accepted at its own measurement gate on 2026-09-01, and 012 (negotiation inputs) on
-2026-08-29. Neither is built yet. The
+011 (subtitle delivery) landed on 2026-08-31, and 010 (the conformance harness) on 2026-09-02,
+across fifteen tasks and one amended acceptance criterion. **No draft is left**: 012 (negotiation
+inputs) was accepted at its own gate on 2026-08-29 and is the only feature not built. The
 [status table](specs/README.md) is the authority; this paragraph is not.
 
 The first request a Jellyfin client makes is answered the way it expects:

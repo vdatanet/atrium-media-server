@@ -141,8 +141,9 @@ by CI. What 010 delivers as a feature is the *differential* layer, which needs a
 enough to compare.
 
 **And the differential layer needed one thing this project did not have, which it now makes for
-itself.** 010's spec was accepted on 2026-09-01 with its AC-2 — *"both servers, pointed at the same
-built fixture, produce libraries with the same item count and the same structure"* — recorded as
+itself.** 010's spec was accepted on 2026-09-01 with its AC-2, which then read *"both servers,
+pointed at the same built fixture, produce libraries with the same item count and the same
+structure"* — recorded as
 **blocked**, because the only Jellyfin this repository could reach was an operator's own server,
 holding an operator's own library, on another machine: the fixture tree is not on its filesystem
 and adding a library to it would be writing to data this project does not own. **Decided the same
@@ -162,10 +163,19 @@ readings differ in forty-seven declared places** — a zero-byte film that is an
 here, twenty-five files named two ways, twenty-one container rows — so the criterion's *"the same
 item count and the same structure"* is false, and every one of the forty-seven belongs to 003 or 004
 rather than to the harness, which [010 §2](../specs/010-conformance-harness/spec.md) puts outside
-this feature entirely. **010 is therefore `Accepted` and not `Implemented`**: amending AC-2 to state
-the comparison it turned out to be is **D-7**, reserved for its owner by the closing task rather
-than improvised by it. A status line that overstates the work is the one thing this feature exists
-to prevent in others.
+this feature entirely. **The criterion moved rather than the measurement**: amending AC-2 to state
+the comparison it turned out to be was **D-7**, reserved for its owner by the closing task rather
+than improvised by it, and **taken on 2026-09-02** — the reference's reading is recorded, Atrium's
+scan of the same tree is compared against it in the default job, every difference is declared with
+its reason and its owning feature, an undeclared difference fails, and a declared difference that
+has gone away fails too. A status line that overstates the work is the one thing this feature exists
+to prevent in others, which is why the flip waited for the decision and why the word is bounded:
+**010 is `Implemented` on 2026-09-02** — fifteen of fifteen tasks, eighteen of eighteen criteria —
+and that is not a claim that the harness has swept everything. Six of the twenty named comparisons
+are outstanding with their owners, two of them because Atrium has no library-refresh route to make
+them comparisons at all, and **no `level: L3` row has been shown to reach L3**: no complete sweep of
+the 84 request cases against a real pair is recorded anywhere. Both are on 010's own owes list, and
+the forty-seven differences stay 003's and 004's to decide.
 
 **The second reason is the one that decides how the tooling is judged.** A disposable instance
 takes every writing measurement off a server somebody uses. The convention says a probe that writes

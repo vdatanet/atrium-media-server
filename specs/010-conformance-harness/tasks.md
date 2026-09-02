@@ -1,14 +1,15 @@
 ---
 feature: 010-conformance-harness
 title: Conformance harness — tasks
-status: Accepted
+status: Implemented
 accepted: 2026-09-02
 created: 2026-09-02
 updated: 2026-09-02
+implemented: 2026-09-02
 amended: 2026-09-02 — **D-6 is taken, and this list records the decision rather than the reservation.** The four readings of *"What the gate changed"* §3 — behaviours §5.2, behaviours §5.6, 005 §7 OQ-7 and 007's paused-session ticker — join spec §3.10 as named comparisons, so **§3.10 is twenty rows and AC-16 counts twenty**. The spec is amended and dated in its frontmatter the way D-3's was. T5 loses the `outstanding:` section it was to give the register, T12 grows from four runner shapes to six, and the definition of done counts twenty. Behaviours §5.2 keeps its `⚠️ UNVERIFIED` marker: a §3.10 row is an owner and a method, not the reading that discharges it. `status` stays `Draft` — this list's own gate is a separate act.
-closing_review: 2026-09-02 — **all fifteen tasks are done and 010 is not `Implemented`.** T15 wrote the acceptance map, the ignored-parameter report (D-5) and the first reader of `surface.yaml`'s `level` column, and found the class its three predecessors found: a criterion with no test at all (AC-11, mapped to *"CI, unchanged"* and asserted nowhere), a criterion half with no test (AC-7's citation, the mechanism Principle II rests on), and a criterion whose own measurement contradicts it — **AC-2**, which claims the two servers produce *"the same item count and the same structure"* where the comparison declares **forty-seven differences**, every one of them owned by 003 or 004 and therefore outside this feature by §2. Amending it is **D-7**, reserved for its owner below. Until it is taken, the status line stays `Accepted` in all six documents.
+closing_review: 2026-09-02 — **all fifteen tasks are done, D-7 is taken, and 010 is `Implemented`.** T15 wrote the acceptance map, the ignored-parameter report (D-5) and the first reader of `surface.yaml`'s `level` column, and found the class its three predecessors found: a criterion with no test at all (AC-11, mapped to *"CI, unchanged"* and asserted nowhere), a criterion half with no test (AC-7's citation, the mechanism Principle II rests on), and a criterion whose own measurement contradicts it — **AC-2**, which claimed the two servers produce *"the same item count and the same structure"* where the comparison declares **forty-seven differences**, every one of them owned by 003 or 004 and therefore outside this feature by §2. Amending it was **D-7**, reserved for its owner below and **taken on 2026-09-02, the recommendation accepted**: AC-2 states the comparison that exists and runs, the spec is amended and dated the way D-3's and D-6's were, and the status line moves in all six documents. **What `Implemented` means here is stated rather than assumed**: the fifteen tasks are done and the eighteen criteria are proven by tests that assert what the criterion says — not that the harness has swept everything. Six of the twenty named comparisons are still outstanding with their owners, no `level: L3` row has been shown to reach L3, and both are on the owes list rather than inside the status word.
 plan_status_required: Accepted
-plan_status_actual: Accepted
+plan_status_actual: Implemented
 ---
 
 # 010 — Tasks
@@ -131,14 +132,17 @@ count, and the register has no separate `outstanding` section for them.
 of done are written against twenty, and the `outstanding:` section they described is gone rather
 than empty.
 
-## The decision T15 reserved on 2026-09-02, and why it is not this task's to take
+## The decision T15 reserved on 2026-09-02, and taken by its owner the same day
 
-| # | The call | The recommendation |
+| # | The call | The decision, taken 2026-09-02 |
 |---|---|---|
-| **D-7** | Whether **AC-2** is amended to state the comparison it turned out to be, or 010 stays open until the forty-seven differences its own measurement declares are closed by the features that own them | **Amend it, and amend nothing else.** AC-2 reads *"both servers, pointed at the same built fixture, produce libraries with the same item count and the same structure"*, and the measurement says they produce **forty-seven declared differences** over the six libraries T11 composed — a zero-byte film that is an item there and not here (003 §3.2), twenty-five files named differently, an empty library that is nothing at all to the reference, and every library's own root row `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`. **This is not a harness defect and closing it is not 010's to do**: [spec §2](spec.md#2-scope) puts *"deciding what Atrium does about a difference this feature finds"* with the feature that owns the endpoint, and every one of the forty-seven is 003's or 004's. AC-2 is the only one of the eighteen that asserts a property of *Atrium's conformance* rather than of the harness, and it was written on 2026-08-26 before anything had been measured. The recommended wording is the thing that exists and runs: *"the reference's reading of the built fixture is recorded, and Atrium's scan of the same tree is compared against it in the default job; every difference is declared with its reason and its owning feature, an undeclared difference fails, and a declared difference that has gone away fails too."* The alternative — holding 010 open — makes this feature's status depend on work in two other features that this feature exists to **report** rather than to do, and leaves the harness unusable meanwhile. **Whichever way it goes, `spec.md`, `plan.md`, `tasks.md`, [`specs/README.md`](../README.md), [`docs/roadmap.md`](../../docs/roadmap.md) and [AGENTS.md](../../AGENTS.md) move together**, and `tests/conformance/test_acceptance.py` already holds the eighteen rows so the flip is one line and not a task |
+| **D-7** | Whether **AC-2** is amended to state the comparison it turned out to be, or 010 stays open until the forty-seven differences its own measurement declares are closed by the features that own them | **Amend it, and amend nothing else — the recommendation, accepted.** AC-2 read *"both servers, pointed at the same built fixture, produce libraries with the same item count and the same structure"*, and the measurement says they produce **forty-seven declared differences** over the six libraries T11 composed — a zero-byte film that is an item there and not here (003 §3.2), twenty-five files named differently, an empty library that is nothing at all to the reference, and every library's own root row `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`. **This is not a harness defect and closing it is not 010's to do**: [spec §2](spec.md#2-scope) puts *"deciding what Atrium does about a difference this feature finds"* with the feature that owns the endpoint, and every one of the forty-seven is 003's or 004's. AC-2 was the only one of the eighteen that asserts a property of *Atrium's conformance* rather than of the harness, and it was written on 2026-08-26 before anything had been measured. **The wording it now carries is the thing that exists and runs**: *"the reference's reading of the built fixture is recorded, and Atrium's scan of the same tree is compared against it in the default job; every difference is declared with its reason and its owning feature, an undeclared difference fails, and a declared difference that has gone away fails too."* The alternative — holding 010 open — would have made this feature's status depend on work in two other features that this feature exists to **report** rather than to do, and left the harness unusable meanwhile. **`spec.md`, `plan.md`, `tasks.md`, [`specs/README.md`](../README.md), [`docs/roadmap.md`](../../docs/roadmap.md) and [AGENTS.md](../../AGENTS.md) moved together**, in the commit that took this decision; the spec's amendment is dated in its frontmatter the way D-3's and D-6's were, [spec §7](spec.md#7-open-questions) records the decision, and `tests/conformance/test_acceptance.py` already held the eighteen rows, so the flip was one line and not a task |
 
-**Until D-7 is taken, 010 is `Accepted` and not `Implemented`**, and every document says so. That is
-the whole of what stands between the fifteen tasks and the status line.
+**D-7 is taken and 010 is `Implemented`.** That was the whole of what stood between the fifteen
+tasks and the status line — and the status word says what it says here and nothing more: fifteen of
+fifteen tasks done and eighteen of eighteen criteria proven. **It does not say the harness has swept
+everything.** Six of the twenty named comparisons are outstanding with their owners, no `level: L3`
+row has been shown to reach L3, and both are on the owes list at the end of this file.
 
 ## Legend
 
@@ -1994,9 +1998,12 @@ the whole of what stands between the fifteen tasks and the status line.
 > contradict, and a definition of done that was false when it was written. Read those three Done
 > notes before starting this one.
 
-> **Done (2026-09-02) — and the one thing this task must not do, it did not do. 010 is not
-> `Implemented`.** *An acceptance criterion says something its own measurement contradicts, and it
-> is the criterion that is about this project rather than about this harness.*
+> **Done (2026-09-02) — and the one thing this task must not do, it did not do: it did not flip a
+> status line over an unproven criterion.** *An acceptance criterion says something its own
+> measurement contradicts, and it is the criterion that is about this project rather than about
+> this harness.* **Its owner took D-7 the same day and 010 is `Implemented`** — this note is the
+> record of what the task measured and of the call it declined to make, and the paragraph below is
+> read against the criterion as it stood before the amendment.
 >
 > **AC-2 is not satisfied, and it cannot be satisfied by anything 010 is allowed to do.** It reads
 > *"both servers, pointed at the same built fixture, produce libraries with the same item count and
@@ -2014,9 +2021,11 @@ the whole of what stands between the fifteen tasks and the status line.
 > harness, and that asymmetry is the evidence: it was written on 2026-08-26, before anything had
 > been measured, and it did not survive being measured. **Reserved as D-7 below with a
 > recommendation, rather than taken here**, because amending an accepted criterion is the shape of
-> D-3 and D-6 and belongs to its owner. Until it is taken, `spec.md`, `plan.md` and this file stay
-> `Accepted` and `specs/README.md`, `docs/roadmap.md` and AGENTS.md say the same thing — *a status
-> line that overstates the work is the one thing this task exists to prevent.*
+> D-3 and D-6 and belongs to its owner. Until it was taken, `spec.md`, `plan.md` and this file said
+> `Accepted` and `specs/README.md`, `docs/roadmap.md` and AGENTS.md said the same thing — *a status
+> line that overstates the work is the one thing this task exists to prevent.* **Taken 2026-09-02,
+> the recommendation accepted**: AC-2 now states the recorded comparison this task built, and all
+> six documents moved together in the commit that took it (the D-7 row above).
 >
 > **A criterion with no test at all, which is 009 T14's finding arriving in the feature least
 > entitled to it.** **AC-11** — *"the default CI job passes with no Jellyfin available and no
@@ -2104,9 +2113,10 @@ the whole of what stands between the fifteen tasks and the status line.
 > carries the reading, which is where a reader looking for the claim goes.
 >
 > *Routine calls taken, none of which touches an accepted document's criteria.* **The acceptance map
-> is written and 010 is in `FEATURES`** although it is not `Implemented`: the map only *requires*
-> implemented features, and writing the eighteen rows now is what makes every criterion's proof
-> named and unable to rot, so taking D-7 is one line rather than a task. Three of its entries carry
+> is written and 010 is in `FEATURES`** although it was not yet `Implemented` when this task ran:
+> the map only *requires* implemented features, and writing the eighteen rows then is what makes
+> every criterion's proof named and unable to rot, so taking D-7 was one line rather than a task —
+> which is how it went, the same day. Three of its entries carry
 > what they do **not** prove — AC-2's contradiction, AC-15's *"created and destroyed by the run"*
 > being unsatisfiable on Atrium by design, and AC-3's *"covers every endpoint"* being a property of
 > the declared cases and not of any run. **`recorded()` in `tests/conformance/test_image_routes.py`
@@ -2127,15 +2137,24 @@ the whole of what stands between the fifteen tasks and the status line.
 
 ## Definition of done
 
-The feature is done when **all** of these hold:
+The feature is done when **all** of these hold. **One of them holds in part and says so rather than
+rounding up**: the L3 line below. `Implemented` here means the fifteen tasks are done and the
+eighteen criteria are proven by tests that assert what the criterion says — it does not mean the
+harness has swept everything, and what it has not swept is on the owes list rather than inside the
+status word.
 
-- [!] Every one of spec §5's **eighteen** acceptance criteria has a passing test, named in
+- [x] Every one of spec §5's **eighteen** acceptance criteria has a passing test, named in
       `FEATURE_010`. **All eighteen are named, every named test exists, and the map is green.**
-      **AC-2 is the one whose tests do not assert what the criterion says**: the reference's reading
-      of the fixture is recorded by `probe_reference_scan.py` and checked in, and Atrium's scan is
-      compared against the record in the default suite (*"What the gate changed"* §1) — and that
-      comparison's answer is **forty-seven declared differences**, where the criterion claims *"the
-      same item count and the same structure"*. **Blocked by D-7**, which is the owner's to take.
+      **AC-2 was the one whose tests did not assert what the criterion said**: the reference's
+      reading of the fixture is recorded by `probe_reference_scan.py` and checked in, and Atrium's
+      scan is compared against the record in the default suite (*"What the gate changed"* §1) — and
+      that comparison's answer is **forty-seven declared differences**, where the criterion claimed
+      *"the same item count and the same structure"*. **D-7 was taken on 2026-09-02 and the
+      criterion now states that comparison**, so the four tests named for AC-2 assert what it says:
+      the record and its citation, the item count of every library, the declared count, and the two
+      failure directions — an undeclared difference and a declared one that has gone away. The
+      forty-seven themselves are 003's and 004's to decide (spec §2), and this box is not a claim
+      that any of them is closed.
 - [~] Every endpoint reaches the conformance level declared in `surface.yaml`, and for the **eight
       rows declared L3** that is a claim this feature is the first thing in the repository able to
       make. The report names them and says which were compared, per identity. **The machinery is in
@@ -2167,13 +2186,17 @@ The feature is done when **all** of these hold:
 - [x] Every prior-measurement debt in `reference-target.md` has a probe script or a recorded reason
       it cannot have one, and the register's prose count matches its own table.
 - [x] Anything learned during implementation is back in `spec.md` and `plan.md`, in the same change,
-      and any decision a task escalates is taken by its owner rather than improvised. **D-7 is
-      reserved and not improvised**, which is the reason the last box is not ticked.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`, with `specs/README.md`,
-      `docs/roadmap.md` and `AGENTS.md` saying the same thing. **Not done, deliberately.** A status
-      line that overstates the work is the one thing this feature exists to prevent in others, and
-      AC-2 is unproven until D-7 is taken. All six documents say `Accepted`: fifteen of fifteen
-      tasks done, seventeen of eighteen criteria proven, one disproven by its own measurement.
+      and any decision a task escalates is taken by its owner rather than improvised. **D-7 was
+      reserved and not improvised**, and its owner took it on 2026-09-02 — the recommendation
+      accepted, the spec amended and dated in its frontmatter the way D-3's and D-6's were.
+- [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`, with `specs/README.md`,
+      `docs/roadmap.md` and `AGENTS.md` saying the same thing. **Done on 2026-09-02, in the commit
+      that took D-7 and not before it.** A status line that overstates the work is the one thing
+      this feature exists to prevent in others, and AC-2 was unproven until the criterion stated
+      the comparison its own measurement supports. All six documents now say `Implemented`: fifteen
+      of fifteen tasks done, eighteen of eighteen criteria proven — **and six of the twenty named
+      comparisons still outstanding, with no L3 row shown to reach L3**, which is the line above
+      and the owes list below rather than anything the status word covers.
 
 ## What is out of scope, recorded so it is not mistaken for an oversight
 
