@@ -1579,7 +1579,8 @@ def test_an_outstanding_row_says_which_need_was_missing_and_not_merely_that_it_d
 
     assert "restricted" in reasons["playlist-read-names-its-reader"]
     assert "instance" in reasons["multi-part-film-media-sources"]
-    assert "T12" in reasons["playlist-de-duplication-misses"]
+    # Its `needs` is met and its runner exists (010 T12); what this run has not got is a server.
+    assert "no servers to ask" in reasons["playlist-de-duplication-misses"]
 
 
 def test_a_reference_somebody_else_stood_up_makes_the_fixture_rows_askable() -> None:
@@ -2184,3 +2185,358 @@ def test_the_instance_command_line_starts_nothing_when_it_is_asked_for_help() ->
         command.main(["--help"])
     assert leaving.value.code == 0
     assert command.build_parser().prog == "reference_instance.py"
+
+
+# --------------------------------------------------------------------------------------------
+# The named comparisons: six runner shapes over twenty rows — 010 T12, spec §3.10, AC-16
+# --------------------------------------------------------------------------------------------
+#
+# Most of the twenty need two real servers, a fixture and in one case eleven minutes, so what runs
+# here is what can be driven without any of that: the mechanism that keeps an unrunnable row
+# **outstanding** rather than silently absent, and the one runner whose whole signal is a number
+# that a body comparison cannot see.
+#
+# Nothing here opens a socket. The wire is a stub, as it is for the sweep above.
+
+
+def _named_rows(*rows: Any) -> list[Any]:
+    """Register rows built by the register's own loader, so a test cannot invent a shape."""
+    return list(allowlist.check_named([dict(row) for row in rows]))
+
+
+def _named_row(**overrides: str) -> dict[str, str]:
+    row = {
+        "id": "playlist-de-duplication-misses",
+        "what": "The de-duplication that misses",
+        "why_the_sweep_misses_it": "The reference disagrees with itself",
+        "needs": "[]",
+        "behaviours": "behaviours §3.18",
+        "written_at": "specs/009-playlists/tasks.md",
+        "runner": "named_playlist_de_duplication_misses",
+    }
+    row.update(overrides)
+    return row
+
+
+def test_every_register_row_names_a_runner_this_module_actually_has() -> None:
+    """The register is a file and the runners are code; this is what keeps the two together.
+
+    `RUNNERS` is a mapping rather than a `getattr` on the module, so a row can only ever name
+    something somebody wrote as a runner — and a renamed function fails here rather than on the
+    one run that needed the row.
+    """
+    register = allowlist.load_named()
+    assert len(register) == 20
+    unknown = [row.id for row in register if row.runner not in differential.RUNNERS]
+    assert not unknown, f"the register names runners differential.py has not got: {unknown}"
+    assert len(differential.RUNNERS) == 20, "a runner exists that no register row names"
+
+
+def test_a_runner_that_raises_leaves_its_row_outstanding_and_the_run_continues(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Twenty comparisons that stopped at the first unaskable one would report nothing about the
+    nineteen after it, and the nineteen are the point.
+
+    The exception's own sentence is what reaches the report, because *"outstanding"* with a
+    generic reason is a skip wearing a longer word — the same rule T9 applied to an absent
+    runtime. Delete the `except` and this test errors out instead of failing, which is the
+    behaviour it exists to forbid.
+    """
+
+    def explodes(instances: Any, identities: Any) -> Any:
+        raise differential.NamedError("no film in this library carries a subtitle file")
+
+    def answers(instances: Any, identities: Any) -> Any:
+        return differential.NamedResult(
+            row="subtitle-burn-in", finding="ran", atrium="a", reference="b"
+        )
+
+    monkeypatch.setitem(differential.RUNNERS, "named_playlist_de_duplication_misses", explodes)
+    monkeypatch.setitem(differential.RUNNERS, "named_subtitle_burn_in", answers)
+    register = _named_rows(
+        _named_row(),
+        _named_row(
+            id="subtitle-burn-in",
+            what="Burn-in",
+            behaviours="behaviours §5",
+            written_at="specs/011-subtitle-delivery/tasks.md",
+            runner="named_subtitle_burn_in",
+        ),
+    )
+    instances = differential.Instances(atrium=object(), reference=object())
+
+    ran, outstanding = differential.named_outcomes(
+        register, differential.Inputs(), instances, [_seat()]
+    )
+
+    assert [result.row for result in ran] == ["subtitle-burn-in"], "the run stopped at the raise"
+    assert len(outstanding) == 1
+    row, why = outstanding[0]
+    assert row == "playlist-de-duplication-misses"
+    assert "no film in this library carries a subtitle file" in why
+    assert "NamedError" in why
+
+
+def test_a_named_comparison_that_contradicts_its_own_entry_is_not_a_clean_run() -> None:
+    """The fourth condition on `is_clean`, and it is the first three read the other way round.
+
+    A row that *ran* and measured something its own citation does not predict is an untriaged
+    difference arriving through a runner. Without this, all twenty could run, every one of them
+    contradict the entry it cites, and the report say `20 run, 0 outstanding`.
+    """
+    agreed = differential.NamedResult("subtitle-burn-in", "as behaviours §5 says", "a", "b")
+    surprised = differential.NamedResult(
+        "subtitle-burn-in", "the reference burned nothing in", "a", "a", as_documented=False
+    )
+    assert _report(named_run=(agreed,), comparisons=(_ran(),)).is_clean()
+    unclean = _report(named_run=(surprised,), comparisons=(_ran(),))
+    assert not unclean.is_clean()
+    assert "**NO**" in differential.render(unclean)
+
+
+class NamedFakeWire:
+    """Both servers for the §3.17 runner, differing **only** in how many rows they hand over.
+
+    Every field of every row the two have in common is byte-identical on purpose: that is what
+    behaviours §3.17 measures, and it is why this runner may not compare bodies.
+    """
+
+    def __init__(self, side: str, rows: int) -> None:
+        self.side = side
+        self.rows = rows
+        self.token = ""
+        self.base_url = "http://" + side
+        self.timeout = 30
+
+    def as_seat(self, token: str) -> NamedFakeWire:
+        return self
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        query: str = "",
+        body: Any = None,
+        content_type: str = "",
+    ) -> Any:
+        body_out = self._body(method, path, query)
+        return engine.Response(
+            status=self._status(method, path),
+            headers={"Content-Type": "application/json"},
+            body=body_out,
+            raw=json.dumps(body_out).encode("utf-8"),
+        )
+
+    @staticmethod
+    def _status(method: str, path: str) -> int:
+        # The restricted seat really cannot reach the tracks: 006 T5's lesson, in this shape.
+        if method == "GET" and path.startswith("/Items/") and "Playlists" not in path:
+            return 404
+        return 200
+
+    def _body(self, method: str, path: str, query: str) -> Any:
+        if path == "/Items":
+            wanted = "Movie" if "Movie" in query else "Audio"
+            return {"Items": ENTRY_ROWS[wanted], "TotalRecordCount": len(ENTRY_ROWS[wanted])}
+        if path == "/Playlists":
+            return {"Id": "p" * 32}
+        if path.endswith("/Items") and path.startswith("/Playlists/"):
+            shown = ENTRY_ROWS["shown"][: self.rows]
+            return {"Items": shown, "TotalRecordCount": len(shown)}
+        return {}
+
+
+#: One movie the reader may open and two tracks it may not — identical rows on both servers.
+ENTRY_ROWS: dict[str, list[dict[str, Any]]] = {
+    "Movie": [{"Id": "m" * 32, "Name": "A Film", "Type": "Movie"}],
+    "Audio": [
+        {"Id": "1" * 32, "Name": "A Track", "Type": "Audio"},
+        {"Id": "2" * 32, "Name": "Another Track", "Type": "Audio"},
+    ],
+    "shown": [
+        {"Id": "m" * 32, "Name": "A Film", "Type": "Movie"},
+        {"Id": "1" * 32, "Name": "A Track", "Type": "Audio"},
+        {"Id": "2" * 32, "Name": "Another Track", "Type": "Audio"},
+    ],
+}
+
+
+def test_the_row_count_is_the_signal_for_the_unreachable_entries_row() -> None:
+    """behaviours §3.17: **the row count is the whole signal**, so the runner must read the count.
+
+    The two servers here agree on every field of every row they both show — which is what they do
+    in life, because what the reference hides in a playlist is hidden by a parental-rating check
+    and never by library access. A runner that diffed the bodies would find nothing and report
+    parity; this one reads how many rows came back, and the second half of the test is the half
+    that matters: give the two servers the *same* count and the row stops being as documented.
+    """
+    reader = _seat("restricted")
+    administrator = _seat()
+
+    differing = differential.Instances(
+        atrium=NamedFakeWire("atrium", rows=1), reference=NamedFakeWire("reference", rows=3)
+    )
+    result = differential.named_playlist_entries_a_reader_cannot_reach(
+        differing, [administrator, reader]
+    )
+    assert result.as_documented
+    assert "1 rows here against 3 there" in result.finding
+    assert "TotalRecordCount=1" in result.atrium
+    assert "TotalRecordCount=3" in result.reference
+
+    # The same rows, the same fields, the same everything — except that both now show all three.
+    agreeing = differential.Instances(
+        atrium=NamedFakeWire("atrium", rows=3), reference=NamedFakeWire("reference", rows=3)
+    )
+    both = differential.named_playlist_entries_a_reader_cannot_reach(
+        agreeing, [administrator, reader]
+    )
+    assert not both.as_documented, "a runner that could not see the count would pass here"
+
+
+def test_a_seat_this_run_has_not_got_is_a_named_row_outstanding_and_never_a_crash() -> None:
+    """Two of the twenty are invisible without the restricted seat, so a run without one says so."""
+    instances = differential.Instances(atrium=object(), reference=object())
+    with pytest.raises(differential.NamedError) as refused:
+        differential.named_playlist_read_names_its_reader(instances, [_seat()])
+    assert "restricted" in str(refused.value)
+
+
+def test_the_two_rows_here_to_be_recognised_read_the_sweep_and_never_ask_again() -> None:
+    """Plan §6.4: the last two of §3.10 are ordinary request cases, and the register makes them
+    countable so nobody triages them twice. A runner that re-issued the request would be a second
+    measurement of one question — and would report a difference the sweep has already reported."""
+    missing = engine.Difference(engine.Class.MISSING_KEY, "/errors/$", None, ["required"])
+    swept = (
+        _ran(case="malformed-body", differences=(missing,)),
+        _ran(case="malformed-body", identity="restricted"),
+        _ran(case="a-device-profile"),
+    )
+    instances = differential.Instances(atrium=object(), reference=object(), swept=swept)
+    result = differential.named_body_binding_dollar_message(instances, [_seat()])
+    assert "2 comparison(s) of 'malformed-body'" in result.finding
+    assert "1 difference(s)" in result.finding
+
+    # And a run that could not issue the case does not get to count the row as run.
+    unasked = (_ran(case="malformed-body", unreachable="the anchor could not be filled"),)
+    with pytest.raises(differential.NamedError) as refused:
+        differential.named_body_binding_dollar_message(
+            differential.Instances(atrium=object(), reference=object(), swept=unasked), [_seat()]
+        )
+    assert "unasked" in str(refused.value)
+
+
+def test_a_fixture_run_compares_the_instance_and_never_a_second_reference() -> None:
+    """010 T12's structural finding: `--fixture` means the fixture on **both** servers (AC-2).
+
+    Every `needs: fixture` request case resolves its anchor against the reference under
+    comparison, and every fixture-dependent named comparison asks that same reference for a film
+    by name. An instance stood up beside a `--jellyfin` pointing somewhere else would have all of
+    them asked of a server that has never seen this repository's tree — and answered `404` rather
+    than reporting a difference.
+    """
+    stood_up = differential.FixtureInstance(
+        differential.build_parser().parse_args(
+            ["--atrium", "http://localhost:8096", "--jellyfin", "http://elsewhere:8096"]
+        )
+    )
+    stood_up.url = "http://127.0.0.1:8099"
+    with pytest.raises(differential.GuardError) as refused:
+        differential._run_against(stood_up.args, stood_up)
+    assert "http://127.0.0.1:8099" in str(refused.value)
+    assert "404s as coverage" in str(refused.value)
+
+
+def test_an_instance_hands_the_run_its_own_administrator_and_never_the_operators() -> None:
+    """An instance the run stood up has no operator: its administrator is the one its own wizard
+    made seconds ago, and `.env`'s credentials belong to somebody else's server."""
+    args = differential.build_parser().parse_args(["--atrium", "http://localhost:8096"])
+    without = differential.FixtureInstance(args)
+    assert differential.reference_credentials(without)[0] == ""
+
+    reference = _load_module("_reference.py", "atrium_reference_for_credentials")
+    with_one = differential.FixtureInstance(args)
+    with_one.administrator = reference.Credentials(username="atrium-reference-admin", password="x")
+    assert differential.reference_credentials(with_one) == ("atrium-reference-admin", "x", "")
+
+
+def test_a_query_a_client_really_sends_reaches_the_wire_encoded() -> None:
+    """Measured on the first live run (010 T12): a space in a query is not a request line.
+
+    `request-cases.yaml` writes what a client sends — `searchTerm=The Planted Poster` — and
+    `http.client` refuses a target carrying a space outright, so every case with one was
+    unissuable and the run stopped before it compared anything. The stub wire the tests above
+    drive never builds a target, which is why nothing had noticed.
+    """
+    encoded = differential.encode_query("searchTerm=The Planted Poster&sortBy=SortName")
+    assert " " not in encoded
+    assert encoded == "searchTerm=The%20Planted%20Poster&sortBy=SortName"
+    # The separators a query is made of survive, and so does an escape a case wrote itself —
+    # re-encoding `%` would turn one case's `%20` into a literal per cent sign.
+    assert differential.encode_query("a=1&b=2,3&c=x%20y") == "a=1&b=2,3&c=x%20y"
+    # Every query the register declares is issuable, which is the assertion that fails the day a
+    # case is written with something no request line may carry.
+    for case in allowlist.load_cases(entries=allowlist.load()):
+        assert " " not in differential.encode_query(case.query), case.id
+
+
+def test_every_account_gets_a_device_of_its_own() -> None:
+    """The reference binds a token to a device, so two accounts on one `DeviceId` are one session.
+
+    Measured on the first live run: the seats were created, the sweep signed them in on the one
+    fixed `DeviceId` every request carried, and the teardown could not delete them because the
+    administrator's own token had been revoked by its second seat's sign-in — reported as *"the
+    run created seats it could not destroy"*, which is the leak this whole lifecycle exists to
+    prevent.
+    """
+    devices = {
+        differential.device_for(name)
+        for name in ("atrium-differential-restricted", "atrium-differential-playback-denied", "j")
+    }
+    assert len(devices) == 3, "two accounts share a device id"
+    assert all(device.startswith(differential.DEVICE_ID) for device in devices)
+
+    base = differential.Wire("http://localhost:8096")
+    seated = base.as_seat("a-token", device=differential.device_for("someone"))
+    assert seated.device != base.device
+    assert base.as_seat("a-token").device == base.device
+
+
+def test_the_login_case_is_issued_on_a_device_of_its_own() -> None:
+    """A login is the one case whose effect is on the caller, and it revoked the run's own token.
+
+    Measured on the first live run that got as far as the sweep: `POST /Users/AuthenticateByName`
+    is one of the eight `level: L3` rows, its body **is** the seat's own credentials, and the
+    reference mints a fresh token per device — so issuing it as a seat, on that seat's device,
+    logged the seat out. The sweep finished and the teardown then answered `401` on every account
+    it had created, which is the leak the whole roster lifecycle exists to prevent.
+    """
+    seat = differential.Seat(
+        role="administrator",
+        atrium=differential.Identity("administrator", "t", "a" * 32, False),
+        reference=differential.Identity("administrator", "t", "b" * 32, False),
+        atrium_credentials=("joan", "secret"),
+        reference_credentials=("joan", "secret"),
+    )
+    wire = differential.Wire("http://localhost:8096", token="t")
+    issuer = differential.Issuer("atrium", {"administrator": wire}, [])
+
+    login = _case("username-and-pw", endpoint=differential.LOGIN_ENDPOINT, body='{"Username": "x"}')
+    ordinary = _case("default")
+    seen: list[str] = []
+
+    def record(self: Any, method: str, path: str, **rest: Any) -> Any:
+        seen.append(self.device)
+        return engine.Response(status=200, headers={}, body={}, raw=b"{}")
+
+    original = differential.Wire.request
+    try:
+        differential.Wire.request = record  # type: ignore[method-assign]
+        issuer.issue(ordinary, seat)
+        issuer.issue(login, seat)
+    finally:
+        differential.Wire.request = original  # type: ignore[method-assign]
+
+    assert seen[0] == wire.device
+    assert seen[1] != wire.device, "the login was sent on the device it would have logged out"

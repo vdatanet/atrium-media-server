@@ -535,9 +535,16 @@ def test_every_row_that_d6_added_needs_the_single_use_instance() -> None:
     assert rows["paused-session-ticker-freeze"].needs == ("wait",)
 
 
-def test_every_row_is_outstanding_until_a_runner_is_written() -> None:
-    """Every one of the twenty, today. T12 is what changes this, one runner shape at a time."""
-    assert all(row.is_outstanding for row in NAMED)
+def test_every_row_names_a_runner_and_none_of_them_is_none() -> None:
+    """All twenty since 010 T12, where every one of them read `none` before it.
+
+    The name is only half the check: `tests/conformance/test_differential.py` resolves each of
+    these against `differential.RUNNERS`, so a row naming a function nobody wrote fails there
+    rather than on the one run that needed it.
+    """
+    outstanding = [row.id for row in NAMED if row.is_outstanding]
+    assert not outstanding, f"these rows still name no runner: {outstanding}"
+    assert len({row.runner for row in NAMED}) == 20, "two rows name the same runner"
 
 
 def test_an_unknown_need_fails_the_load() -> None:

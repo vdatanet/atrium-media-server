@@ -444,9 +444,25 @@ class RunReport:
     identities: tuple[str, ...]
     cases: int
     comparisons: tuple[Comparison, ...]
-    named_run: tuple[str, ...]
+    named_run: tuple[NamedResult, ...]               # corrected by T12: a result, not an id
     named_outstanding: tuple[tuple[str, str], ...]   # id, why
     def is_clean(self) -> bool
+
+@dataclass(frozen=True)
+class NamedResult:              # added by T12: what one named comparison found
+    row: str
+    finding: str                # one sentence, printed in the report
+    atrium: str
+    reference: str
+    as_documented: bool = True  # whether it is what the entry the row cites predicts
+
+@dataclass(frozen=True)
+class Instances:                # added by T12: the `instances` half of a runner's signature
+    atrium: Wire
+    reference: Wire
+    inputs: Inputs
+    swept: tuple[Comparison, ...] = ()   # the two rows whose runner reads the sweep (§6.4)
+    fixture_root: Path | None = None     # the two `rescan` rows change files, not routes
 ```
 
 **Two corrections T8 made to the three declarations above, both because a seat is an account.**
@@ -674,6 +690,40 @@ difference is the entire value of §3.10: a green run that quietly dropped nine 
 failure this feature exists to prevent, one directory away from the CI job that reported green
 because it ran nothing (008 T18's finding, and `pyproject.toml`'s own comment about it).
 
+**Four corrections T12 made, and the first two are the ones that decide whether a fixture run
+compares anything at all.**
+
+- **The instance is the reference, and it is stood up before the reference is authenticated.**
+  This plan wrapped it round the sweep, which is the right lifetime and the wrong *place*: every
+  `needs: fixture` request case resolves its anchor against the reference **under comparison**, and
+  every fixture-dependent runner asks that same reference for a film by name. With an instance
+  standing beside a `--jellyfin` pointing somewhere else, all of them would have been asked of a
+  server that has never seen this repository's tree — and answered `404` rather than reporting a
+  difference. `--fixture` therefore *means* the fixture on both servers (AC-2): the run takes the
+  instance's URL as the reference, takes the **wizard's** administrator rather than `.env`'s, and
+  refuses a `--jellyfin` naming anything else.
+- **And the instance was being given the wrong world.** It was stood up with
+  `_reference.DEFAULT_LIBRARIES` — *one mixed-content library over the whole tree* — where D-4
+  chose **six typed** ones and T11 composed them. A mixed library has no `CollectionType`, so the
+  run could not find a movies view to narrow the restricted seat to and stopped before it compared
+  anything. `differential.py` imports `tests/fixtures/reference_tree.py` for the library list the
+  way `probe_reference_scan.py` already does, and builds the tree there when `--fixture-root` names
+  none.
+- **The fifth shape is not a comparison, and the instance was necessary rather than sufficient.**
+  *The library changed underneath a rescan* needs a second scan on **both** servers, and Atrium has
+  no library-refresh route: `POST /Library/Refresh` is the reference's, it is not in
+  [surface.yaml](../../docs/compatibility/surface.yaml), and Principle VI keeps it out until a
+  client is measured calling it. So `container-that-lost-every-file` and
+  `replaced-poster-default-rescan` **take the reference half and report outstanding**, carrying the
+  reading they took — which is what discharges behaviours §5.2's `⚠️ UNVERIFIED` and §5.6's
+  *"unmeasured from here"* without pretending a one-server reading is a differential.
+- **A runner reports whether what it measured is what the entry it cites predicts**, and
+  `is_clean()` gains a fourth condition for it. Every one of these rows exists because two servers
+  are *expected* to differ; a row that ran and found something else is an untriaged difference
+  arriving through a runner rather than through `compare`, and without the condition all twenty
+  could run, every one contradict its citation, and the report still say *"20 run, 0
+  outstanding"*.
+
 ### 6.5 The single-use reference instance
 
 Nothing about this exists yet, and it is the largest thing in the feature. The lifecycle, in the
@@ -894,6 +944,23 @@ Three roles, of which the run creates two:
 | `restricted` | `POST /Users/New`, then `POST /Users/{userId}/Policy` narrowing `EnabledFolders` to one library `[spec: CreateUserByName, UpdateUserPolicy]` | The 12 reads of spec §3.9, and three named comparisons |
 | `playback-denied` | The same, with **all three** playback-processing permissions denied — `EnableVideoPlaybackTranscoding`, `EnableAudioPlaybackTranscoding` and `EnablePlaybackRemuxing` `[spec: UserPolicy]` — and its folders left alone | The delivery-time policy refusal (behaviours §2.21) |
 
+**Corrected again on 2026-09-02 by T12, and this is the row's largest correction: on a server
+that implements the v1 surface, the run cannot make a seat at all.** Both `POST /Users/New` and
+`POST /Users/{userId}/Policy` are the *reference's* routes, and so is the `GET /Users` the
+pre-flight reads; **none of the three is in
+[surface.yaml](../../docs/compatibility/surface.yaml)**, because Principle VI keeps an endpoint out
+until a client is measured calling it and neither analysed client administers accounts. The first
+run of `differential.py` against a real Atrium therefore stopped at `GET /Users -> 404` before it
+compared anything — a two-identity run was impossible against the very server this harness exists
+to measure, and nothing had noticed because T7 built the roster with no Atrium to write to and T9
+proved it against the reference. **So a seat is either created or handed in**: `Roster` takes a
+username and password per role, signs in as that account, marks it `created_by_the_run=False` and
+never tears it down — exactly what the administrator has always been. The pre-flight runs over the
+roles the roster actually creates, so it neither refuses the operator's own account nor asks a
+server for a listing it does not serve. The table above is what a run does **where the routes
+exist**, which today is the single-use instance and an operator's Jellyfin; AC-15's *"created and
+destroyed by the run"* is satisfied there and is unsatisfiable on Atrium by design.
+
 **Corrected on 2026-09-02 by T7, which is the task that had to name the permission.** This row said
 *"the playback-processing permission"*, singular, and there are three — with a fourth,
 `EnableMediaPlayback`, whose name reads like the one and which
@@ -1105,7 +1172,7 @@ therefore the only place a tool may look.
 | An allowlist entry matches nothing on any run | Counted per entry | Reported at the end: an entry that excuses nothing is either wrong or a converged difference | Delete it — the allowlist is a metric that should shrink |
 | A named comparison's runner raises | The runner | The row is **outstanding**, with the exception, and the run continues | A runner that cannot run is not a comparison that passed |
 | The harness is pointed at an Atrium as its reference, or vice versa | The `Server` **header**, never `ProductName` | Refuse, naming what was found. Measuring the wrong server files the answer under Jellyfin's name, which is `_probe.py`'s reason for its own guard | — |
-| **The container starts and then dies before it answers** | The readiness deadline of §6.5, after 180 s of connection refusals | Report the timeout. Measured 2026-09-02 while T11 was re-taking the reading: **two of five runs on one machine** ended with the container exiting `132` — `SIGILL` — seconds after *"Core startup complete"*, on the pinned image, natively (an `arm64` image on an `arm64` host, no emulation), with nothing of the run's own having happened yet. It is not the tree and not the configuration: the same tree and the same mounts came up on the next attempt and scanned in 3 s | **Run it again.** Worth knowing before T12, which stands up instances for twenty rows: a run that dies this way costs the deadline and nothing else, and `--rm` has already taken the container, so the exit code is what a watcher outside the run sees rather than the log |
+| **The container starts and then dies before it answers** | The readiness deadline of §6.5, after 180 s of connection refusals | Report the timeout. Measured 2026-09-02 while T11 was re-taking the reading: **two of five runs on one machine** ended with the container exiting `132` — `SIGILL` — seconds after *"Core startup complete"*, on the pinned image, natively (an `arm64` image on an `arm64` host, no emulation), with nothing of the run's own having happened yet. It is not the tree and not the configuration: the same tree and the same mounts came up on the next attempt and scanned in 3 s | **Run it again.** Worth knowing before T12, which stands up instances for twenty rows: a run that dies this way costs the deadline and nothing else, and `--rm` has already taken the container, so the exit code is what a watcher outside the run sees rather than the log. **T12 caught that exit code and widened the row.** A `docker events --filter event=die` watch beside the run names it: **exit 132, four times in eight starts** on the same machine on 2026-09-02, and **not only at startup** — one died in the middle of a sweep and one during the two transcodes a burn-in comparison produces, so the run's answers came back as `Connection refused` rather than as a readiness timeout. The remedy is the one ADR-0007 already describes: stand an instance up by hand with `tools/reference_instance.py`, point the run at it with `--reference-url`, and re-run the rows the death took |
 
 ## 8. Testing strategy
 

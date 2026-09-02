@@ -198,6 +198,18 @@ outstanding, and three of them because no fixture instance was available"* rathe
 outstanding"* — and what stops a row that was never askable from being quietly dropped instead of
 counted as a miss.
 
+**Since 2026-09-02 every row also names its `runner`** — the callable in `tools/differential.py`
+that makes the comparison, in the six shapes [010 plan §6.4](../../specs/010-conformance-harness/plan.md)
+describes. **Naming one is not running one.** A row whose `needs` this run cannot meet is
+outstanding with the reason; a runner that raises leaves its row outstanding with the exception and
+the run carries on to the other nineteen; and a row that *ran* and measured something the entry it
+cites does not predict is an untriaged difference, which keeps the run from being called clean
+exactly as a sweep finding does. Two rows are **not** runnable as comparisons at all today and say
+so every run: *the library changed underneath a rescan* needs a second scan on both servers, and
+Atrium has no library-refresh route — `POST /Library/Refresh` is the reference's and is not in
+[surface.yaml](surface.yaml), because Principle VI keeps an endpoint out until a client is measured
+calling it. Their runners take the **reference** half and report outstanding carrying it.
+
 **What the sweep sends is checked in too**, as [request-cases.yaml](request-cases.yaml): per
 endpoint, a name, a query, a body, a content type, the **anchors** that fill its path parameters
 and the identities it is meaningful for. AC-3's floor is one case per endpoint — 59 — and 010's own
