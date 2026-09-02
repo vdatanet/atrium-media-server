@@ -411,15 +411,50 @@ can find what a killed run left. **A machine with no runtime loses nothing it ha
 against a reachable server still runs, and every case and named row that needed an instance is
 reported *outstanding with the reason* rather than skipped.
 
+### Moving the pinned version
+
+`bump_reference_version.py` runs
+[conformance.md's four steps](../docs/compatibility/conformance.md#when-the-reference-version-moves)
+in order and **refuses to continue past a failure**: fetch the new document and validate the
+surface, run the differential and the twenty named comparisons, re-run every probe and re-date the
+documents they support, and only then write the pin. It is a sequencer, not a new mechanism — every
+step is a program already in this directory — and the sequence is the product: *"a bump that skips
+step 2 has not been done, it has been declared."*
+
+```bash
+python3 tools/bump_reference_version.py --to 10.11.12 --jellyfin http://the-new-reference:8096 \
+    --atrium http://localhost:8096 --image jellyfin/jellyfin@sha256:<the new digest> --dry-run
+```
+
+**Whether step 2 runs is measured and never declared.** The reference is asked its own version and
+compared with the behavioural row of
+[reference-target §1](../docs/compatibility/reference-target.md#1-the-pinned-version): the same
+version means only the *contract* row is moving, so step 2 has no input and is skipped with that
+reason; a different one means the running reference changed, and then no flag skips it. A version
+that cannot be read at all stops the command before step 1 — an unreadable server is not a
+document-only move, and treating it as one is the single path that ends in a new pin over readings
+nobody took. A `--jellyfin` that answers `Server: Atrium/…` is refused for the same reason.
+
+**A changed reference and a dead container are different answers.** A probe's `1` is a
+contradiction to triage, its `2` is *it could not look*, and its `3` is a leak (above); the pinned
+image dies with `SIGILL` on some starts, which reaches the command as `2` and stops it saying
+**nothing was measured** rather than *the reference changed*. What it does not distinguish is a
+reference that died mid-run from one that was never there: both are re-run.
+
+**Nothing is written until every step has passed**, and then the pin moves in all nine places it
+lives — five files — or in none of them. `--dry-run` classifies the move, prints the plan and
+writes nothing anywhere.
+
 ### Planned
 
 | Script | Purpose | Arrives with |
 |---|---|---|
 | `probe_wire_format.py`, `probe_sort_vocabulary.py`, … | The **three** remaining prior-measurement debts in [reference-target.md](../docs/compatibility/reference-target.md). The two that needed a server this project may configure were paid on 2026-09-02 by `probe_public_users.py` and `probe_local_address.py`; of what is left, two need ten lines of `urllib` against any reachable server and one needs a library scanned **twice**, which is the instance's | Their owning features |
 
-A runner that executes every probe and summarises is deliberately **not** here yet: it is part of
-the harness feature 010 specifies, and building it before that spec is accepted would be
-short-circuiting the method (Principle III).
+A runner that executes every probe and summarises **arrived on 2026-09-02**, as step 3 of
+`bump_reference_version.py` below rather than as a program of its own: running every probe is one
+step of a procedure and not an activity, and the sentence that used to stand here — *"deliberately
+not here yet, it is part of the harness feature 010 specifies"* — was true until 010 T14.
 
 ## Conventions
 

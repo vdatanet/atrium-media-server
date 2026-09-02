@@ -1831,7 +1831,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T14 — `tools/bump_reference_version.py`: four steps in order, and no way past a failure
 
-- [ ] **Changes:** new `tools/bump_reference_version.py` running
+- [x] **Changes:** new `tools/bump_reference_version.py` running
   [conformance.md's four steps](../../docs/compatibility/conformance.md#when-the-reference-version-moves)
   in order and refusing to continue past a failure (AC-12): fetch and validate the document, run the
   differential **and** the named comparisons, re-run every probe and update each supported document's
@@ -1849,6 +1849,101 @@ written against twenty, and the `outstanding:` section they described is gone ra
   been done, it has been declared"* becomes prose again. Plus
   `python3.9 tools/bump_reference_version.py --help`.
 - **Spec reference:** §3.8, AC-12; plan §6.9
+
+> **Done (2026-09-02).** *Step 1 cannot pass. Not on this machine, not on any machine: the
+> procedure's first step, run the way conformance.md words it, fails on every real bump — and it
+> was measured rather than reasoned.*
+>
+> **`tools/extract_v1_surface.py` compares the document's own `info.version` with `surface.yaml`'s
+> pin and errors when they differ**, before anything it reports is worth reading. Measured on
+> 2026-09-02 against the `10.11.11` document with its version rewritten to `10.11.12`: exit 1,
+> *"version mismatch: surface pins 10.11.11, document is 10.11.12"* as the **only** error, all 59
+> path, method and operation checks having passed. So *"fetch the new document; run the surface
+> validator"* is a step that answers `1` for a reason that has nothing to do with the surface, and
+> a sequencer obeying its own rule would stop the procedure there, every time, before reporting the
+> disappeared paths step 1 exists to report. The fix keeps step 4 the only writer: the surface is
+> **copied** into the git-ignored output directory with the pin moved and the copy is validated —
+> 59 endpoints consistent, and a deleted path then reported as *"GET /System/Info/Public: path not
+> present in the pinned document"*, which is what a breaking change looks like from here.
+>
+> **The pin is in five files and nine places, and no document listed them.** `surface.yaml` holds
+> the document version and the source tag; `property-names.json` records the document it was
+> extracted from; `src/atrium/__init__.py`'s `REFERENCE_VERSION` is what the server *reports* to
+> clients, which Principle I makes load-bearing; `tools/_reference.py` pins `IMAGE_VERSION` and
+> `IMAGE_DIGEST`; reference-target §1 is the table all of them are supposed to agree with. Two
+> tests already fail when a pair of them drift — which catches a half-done bump *after* it has been
+> committed. So step 4 locates every one of the nine **before writing any**, reads each back
+> afterwards, and refuses the set if one anchor matches zero lines or two: *"a scripted edit that
+> cannot fail is a scripted edit that will silently not happen."* `--image` is required, because
+> ADR-0007 pins by digest and a version this repository cannot stand up is one it cannot measure.
+>
+> **The move is measured, and an unreadable version is the false-bump path.** Which of
+> reference-target §1's two rows is moving is decided by asking the reference its own version and
+> comparing it with the **behavioural** row — so there is no flag to spell the answer with, which
+> is what makes *"no flag skips step 2"* a property and not a promise. The dangerous case is the
+> third one: a server that does not answer. Called contract-only, that is a bump that skips the
+> differential and writes the pin having measured nothing, with every step green — so it is
+> `UNDECIDED`, and the command stops **before step 1**. The same guard reads the `Server` header
+> and refuses a `--jellyfin` answering `Atrium/…`: `ProductName` cannot make that distinction
+> because Atrium answers `"Jellyfin Server"` there on purpose (behaviours §4.1), and a bump
+> measured against Atrium confirms the pin against itself.
+>
+> ***A changed reference and a dead container arrive as the same non-zero exit, and separating them
+> is the exit codes the children already promise.*** A probe's `1` is a contradiction, `2` is *it
+> could not look*, `3` is T13's leak — a failure of the bump and emphatically not a success because
+> it is not `1`. `differential.py`'s `1` covers **two** things and its own summary line separates
+> them: zero differences with forty-one cases not asked is not a reference that changed, it is a
+> reference that stopped answering, which is exactly what plan §7's mid-sweep `SIGILL` produces.
+> The `SIGILL` itself reaches the command as `2` — because all three probes that stand up their own
+> instance convert an `InstanceError` into a `ProbeError`, which `tests/unit/test_version_bump.py`
+> now asserts on each of them: without that conversion the exception escapes `_probe.main`, the
+> traceback exits `1`, and a container's death would be triaged as a difference nobody observed.
+> **What is not distinguished, deliberately and in writing**: a reference that died mid-run from
+> one that was never reachable. Both are `COULD_NOT_LOOK`, both mean nothing was measured, both are
+> re-run — and the container's own exit code is not visible from here, because `--rm` has already
+> taken it.
+>
+> *Proven the way this repository proves a guard.* Four were deleted in turn and the suite re-run:
+> the `break` that stops the procedure (three parametrisations fail), the fail-closed `UNDECIDED`
+> (two), the locate-before-write pass in `apply_all` (two), and one probe's `InstanceError`
+> conversion (one). The four steps are each made to fail in turn and each asserts twice — that the
+> command stopped, **and** that no later step's tool appears in the runner's record. Nothing in the
+> suite opens a socket or starts a process: the child runner and the version reader are the two
+> seams `Context` holds, and the nine pin edits are located against the real repository under
+> `--dry-run`, which writes nothing.
+>
+> *Routine calls taken.* **Step 3 runs every probe and fails as a step, not at the first
+> contradiction** — the probes are independent and nothing downstream consumes one's output, so
+> stopping early would cost a day per finding and buy nothing; what stops is the *procedure*, and
+> step 4 does not run. **The command line it builds is per probe**, read with `ast` rather than by
+> importing: the three that refuse a server argument are handed none, and `--allow-writes` goes to
+> the ones that accept it — cross-checked against every probe's own `--help`, **56 probes, 31
+> accepting the flag, zero mismatches**. **Step 3 re-dates only the `Last verified` header of what
+> a probe *said* it confirmed, read from the probe's own report**, and touches no citation: a
+> `[probe: …, Jellyfin 10.11.11, 2026-08-27]` records what was measured and when, and rewriting the
+> version inside it would turn a measurement into a claim (Principle II). A `spec.md` named by a
+> probe has no such line and is reported as left alone. **`--dry-run` executes nothing and writes
+> nothing**, and is also what lets the suite drive step 4 against the real repository. Verified
+> under **3.9.25**: `--help`, and all five refusal paths end to end against a local stub that is
+> not a Jellyfin. Nothing was written to any server, and no container was started. The spec needs
+> no amendment — §3.8 is a WHAT and every one of these is a HOW — so [plan §6.9](plan.md#69-the-version-bump-command)
+> carries all five, `tools/README.md` gains the command and loses the paragraph saying a runner
+> over every probe was *"deliberately not here yet"*, and
+> [conformance.md](../../docs/compatibility/conformance.md#when-the-reference-version-moves) says
+> its four steps are now a program.
+>
+> *What T15 must know.* **This feature now has a tool that writes into `src/`**, which nothing else
+> under `tools/` does — the acceptance map should not mistake `bump_reference_version.py` for a
+> probe, and `test_probe_convention.py`'s sweeps are over `probe_*.py` and do not see it. **AC-12
+> is a test and not a command**: `tests/unit/test_version_bump.py` holds it, with
+> `test_a_failed_step_stops_the_procedure_and_the_later_steps_do_not_run` as the four-way
+> parametrisation and `test_no_flag_skips_step_two_when_the_running_reference_changed` as the
+> exhaustive sweep over the parser's own options — both resolvable as `module:function` by the map,
+> since this file is under `tests/` and imports nothing from `tools/` as a package. **The count of
+> probes is 56 and not the 53 the plan says**, which matters to §6.10's prose more than to
+> anything else. And **the pin's nine places are now written down** in plan §6.9: if T15 moves any
+> of them, `test_every_pin_this_step_writes_is_locatable_in_the_files_that_ship_today` fails, which
+> is the intended way to find out.
 
 ## T15 — The ignored-parameter report, the acceptance map, the levels, and 010 is Implemented
 
