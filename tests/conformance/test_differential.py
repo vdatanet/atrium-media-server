@@ -420,29 +420,231 @@ def test_the_server_header_differs_on_every_response_and_spec_33_has_no_row_for_
 
 
 # --------------------------------------------------------------------------------------------
-# What T4 inherits, asserted so it cannot be missed
+# The excused arrays — `drawn` (AC-17)
 # --------------------------------------------------------------------------------------------
 
 
-def test_the_cascade_guard_suppresses_the_row_walk_on_the_only_measured_drawn_array() -> None:
-    """**The finding T2 owes T4.** Plan §6.2 orders the length check first and says the rows are
+def test_a_drawn_arrays_length_is_reported_and_the_shape_walk_still_runs() -> None:
+    """**T2's finding, answered.** Plan §6.2 orders the length check first and says the rows are
     then *"not compared at all"*; step 4 says a `drawn` array still compares *"the row count, and
     every row's key set and types"*. On `/Items/{itemId}/Similar` — the only `drawn` array the
     project has measured — the two lengths **always** differ: the reference answers `limit + 4` on
     a movie seed where Atrium answers exactly `limit`, measured at 1, 5 and 20 on two seeds
-    (behaviours §3.24). So the guard, applied in the order the plan writes it, deletes AC-17's
-    *"a key removed from a row of a `drawn` array is still reported"* on the one endpoint AC-17 was
-    written for.
+    (behaviours §3.24). Applied in the plan's order the guard would delete AC-17 on the one
+    endpoint AC-17 was written for.
 
-    Today the engine reports the length and stops, which is right for a plain array and is what
-    this asserts. **T4 must split the two**: the length difference suppresses the *positional*
-    comparison, which is what cascades, and never the shape walk a `drawn` array still owes.
+    **The split T4 lands: the length difference suppresses the positional comparison and nothing
+    else.** The count is still reported, because it is the only quantity of a drawn array L3 can
+    still check and the divergence behind it is a known one (behaviours §3.24) rather than noise;
+    the shape walk runs anyway, which is the next test.
     """
     ours, theirs, rules = _pair("drawn_array")
     assert len(ours.body["Items"]) + 4 == len(theirs.body["Items"]), "the measured N + 4"
+    assert rules.drawn("/Items"), "the pair declares the array drawn"
     found = engine.compare(ours, theirs, rules)
     assert [(one.klass, one.pointer) for one in found] == [(engine.Class.LENGTH, "/Items")]
-    assert rules.drawn("/Items"), "the pair declares the array drawn; T4 is what honours it"
+    assert (found[0].atrium, found[0].reference) == (2, 6)
+    assert "shape only" in found[0].note
+
+
+def test_a_key_removed_from_a_drawn_array_is_reported_and_a_changed_value_is_not() -> None:
+    """AC-17's mutation row, on the pair whose lengths differ on every real run.
+
+    Delete the shape walk and the first assertion fails: the `LENGTH` finding alone comes back,
+    and a `Similar` row that had stopped carrying `ProductionYear` would be invisible for ever.
+    Delete the *value* suppression instead and the second fails, because every row of a draw
+    carries a different film.
+    """
+    ours, theirs, rules = _pair("drawn_array")
+    body = copy.deepcopy(ours.body)
+    for row in body["Items"]:
+        del row["ProductionYear"]
+    body["Items"][0]["Name"] = "a title neither server sent"
+    found = engine.compare(engine.Response(200, {}, body), theirs, rules)
+    assert [(one.klass, one.pointer) for one in found] == [
+        (engine.Class.LENGTH, "/Items"),
+        (engine.Class.MISSING_KEY, "/Items/-/ProductionYear"),
+    ]
+    assert engine.counts(found)[engine.Class.VALUE] == 0
+
+
+def test_a_drawn_arrays_shape_walk_is_position_free_because_a_draw_holds_other_items() -> None:
+    """The correction inside the correction: the shape walk cannot pair row 0 with row 0.
+
+    A null property is absent everywhere, on both servers, by one setting (behaviours §1.7
+    `[source: src/Jellyfin.Extensions/Json/JsonDefaults.cs:33 @ v10.11.11]`), so a row's key set
+    depends on **which item it holds** — `ProductionYear` is simply absent from an item that has
+    none — and a draw guarantees the two sides hold different items (behaviours §3.23: four
+    identical requests shared none).
+    Pair by index and this case reports one `MISSING_KEY` and one `EXTRA_KEY` about nothing at
+    all, on an array where every row is legitimately a different film. Reduced across the rows
+    instead, the two shapes are the same and nothing is reported.
+    """
+    rules = engine.Rules(drawn_arrays={"/Items": "behaviours §3.23"})
+    ours = {"Items": [{"Name": "a", "ProductionYear": 1967}, {"Name": "b"}]}
+    theirs = {"Items": [{"Name": "c"}, {"Name": "d", "ProductionYear": 1958}]}
+    assert (
+        engine.compare(engine.Response(200, {}, ours), engine.Response(200, {}, theirs), rules)
+        == ()
+    )
+
+
+def test_a_drawn_array_excuses_its_rows_and_never_the_envelope_around_them() -> None:
+    """AC-17's *"the envelope's own properties"*: excusing an array excuses no part of the
+    response around it."""
+    ours, theirs, rules = _pair("drawn_array")
+    body = copy.deepcopy(ours.body)
+    body["TotalRecordCount"] = 41
+    del body["StartIndex"]
+    found = engine.compare(engine.Response(200, {}, body), theirs, rules)
+    assert [(one.klass, one.pointer) for one in found] == [
+        (engine.Class.MISSING_KEY, "/StartIndex"),
+        (engine.Class.LENGTH, "/Items"),
+        (engine.Class.VALUE, "/TotalRecordCount"),
+    ]
+
+
+def test_a_drawn_array_still_reports_a_type_difference_inside_a_row() -> None:
+    """*"Same key, different JSON type"* is the pass that breaks decoders (spec §3.2), and a draw
+    excuses no part of it: `"1967"` against `1967` is a finding on any endpoint."""
+    rules = engine.Rules(drawn_arrays={"/Items": "behaviours §3.23"})
+    ours = {"Items": [{"Name": "a", "ProductionYear": "1967"}]}
+    theirs = {"Items": [{"Name": "b", "ProductionYear": 1958}]}
+    found = engine.compare(engine.Response(200, {}, ours), engine.Response(200, {}, theirs), rules)
+    assert [(one.klass, one.pointer) for one in found] == [
+        (engine.Class.TYPE, "/Items/-/ProductionYear")
+    ]
+    assert found[0].note == "string against integer"
+
+
+def test_a_drawn_row_compares_the_type_of_a_nested_element_and_not_its_presence() -> None:
+    """An empty `Genres` on one side and three genres on the other is *content* under a draw: the
+    element pointer exists only because some row held a non-empty array. Its **type** is still
+    compared, which is what catches a list of genre objects against a list of strings."""
+    rules = engine.Rules(drawn_arrays={"/Items": "behaviours §3.23"})
+    ours = {"Items": [{"Name": "a", "Genres": []}]}
+    theirs = {"Items": [{"Name": "b", "Genres": ["Film Noir", "Crime"]}]}
+    assert (
+        engine.compare(engine.Response(200, {}, ours), engine.Response(200, {}, theirs), rules)
+        == ()
+    )
+    typed = {"Items": [{"Name": "a", "Genres": [{"Name": "Film Noir"}]}]}
+    found = engine.compare(engine.Response(200, {}, typed), engine.Response(200, {}, theirs), rules)
+    assert [(one.klass, one.pointer) for one in found] == [(engine.Class.TYPE, "/Items/-/Genres/-")]
+
+
+# --------------------------------------------------------------------------------------------
+# The excused arrays — `unordered` (AC-18)
+# --------------------------------------------------------------------------------------------
+
+
+def test_a_reordered_unordered_array_reports_nothing_at_all() -> None:
+    """AC-18, and not even an `ORDER` finding.
+
+    The ordering being compared is one the reference does not have: it appends no further key
+    after most orderings, so its ties are engine-resolved (behaviours §3.6). Reporting the
+    difference would be reporting Atrium doing what §3.6 says it does.
+    """
+    rules = engine.Rules(
+        excused_fields={PAGE_RULES_POINTER: "derived-identifier"},
+        unordered_arrays={"/Items": "behaviours §3.6"},
+    )
+    theirs = _page(200, "reference")
+    ours = _page(200, "atrium")
+    ours["Items"] = ours["Items"][100:] + ours["Items"][:100]
+    assert (
+        engine.compare(engine.Response(200, {}, ours), engine.Response(200, {}, theirs), rules)
+        == ()
+    )
+
+
+def test_an_unordered_array_reordered_and_changed_reports_exactly_the_change() -> None:
+    """The other half of the mutation row: excusing the order excuses nothing else."""
+    rules = engine.Rules(
+        excused_fields={PAGE_RULES_POINTER: "derived-identifier"},
+        unordered_arrays={"/Items": "behaviours §3.6"},
+    )
+    theirs = _page(200, "reference")
+    ours = _page(200, "atrium")
+    ours["Items"] = ours["Items"][100:] + ours["Items"][:100]
+    ours["Items"][0]["Name"] = "Film 0100 (renamed)"
+    found = engine.compare(engine.Response(200, {}, ours), engine.Response(200, {}, theirs), rules)
+    assert [(one.klass, one.pointer) for one in found] == [(engine.Class.VALUE, "/Items/0/Name")]
+
+
+def test_an_unordered_page_that_lost_a_row_and_repeated_another_is_the_residue_only() -> None:
+    """**The question plan §6.2 leaves open, and T4's answer to it.**
+
+    Plan §9's risk row names *"the `LENGTH` cascade guard and the `ORDER` class"* as the mitigation
+    for a positional comparison drowning the report, and neither fires on a page whose length is
+    unchanged and whose rows are not a permutation. That page is measured rather than
+    hypothetical: paging the reference's artist sorts *"loses and duplicates rows"* (behaviours
+    §3.6), so one row arrives twice and another not at all, **at the same length**.
+
+    The rows that match are removed and only the residue is compared, which is what makes this
+    exactly two findings. Delete that and the positional fallback reports **ten** — every row of a
+    rotated page differing in `Name` and `IndexNumber` — which is the noise the report cannot
+    survive and the reason the assertion is a count.
+    """
+    rules = engine.Rules(
+        excused_fields={PAGE_RULES_POINTER: "derived-identifier"},
+        unordered_arrays={"/Items": "behaviours §3.6"},
+    )
+    theirs = _page(5, "reference")
+    ours = _page(5, "atrium")
+    ours["Items"] = [*ours["Items"][1:], copy.deepcopy(ours["Items"][1])]
+    assert len(ours["Items"]) == len(theirs["Items"]), "the same length, which is the whole point"
+    found = engine.compare(engine.Response(200, {}, ours), engine.Response(200, {}, theirs), rules)
+    assert [(one.klass, one.pointer) for one in found] == [
+        (engine.Class.VALUE, "/Items/4/IndexNumber"),
+        (engine.Class.VALUE, "/Items/4/Name"),
+    ]
+
+
+def test_an_unordered_array_of_another_length_is_one_length_and_the_rows_that_matched_nothing() -> (
+    None
+):
+    """A lost row is a real difference and a `LENGTH` says so — and it suppresses no comparison,
+    because a multiset needs no alignment to be compared."""
+    rules = engine.Rules(
+        excused_fields={PAGE_RULES_POINTER: "derived-identifier"},
+        unordered_arrays={"/Items": "behaviours §3.6"},
+    )
+    theirs = _page(5, "reference")
+    ours = _page(5, "atrium")
+    del ours["Items"][2]
+    ours["TotalRecordCount"] = 5
+    found = engine.compare(engine.Response(200, {}, ours), engine.Response(200, {}, theirs), rules)
+    assert [(one.klass, one.pointer) for one in found] == [(engine.Class.LENGTH, "/Items")]
+    assert (found[0].atrium, found[0].reference) == (4, 5)
+    assert found[0].note.endswith("against 1 the other way")
+
+
+def test_a_drawn_entry_outranks_an_unordered_one_on_the_same_array() -> None:
+    """A draw has no comparable values, which is strictly more than having no comparable order —
+    so where both cover an array, the rows are not value-compared."""
+    rules = engine.Rules(
+        drawn_arrays={"/Items": "behaviours §3.23"},
+        unordered_arrays={"/Items": "behaviours §3.6"},
+    )
+    ours = {"Items": [{"Name": "a"}, {"Name": "b"}]}
+    theirs = {"Items": [{"Name": "c"}, {"Name": "d"}]}
+    assert (
+        engine.compare(engine.Response(200, {}, ours), engine.Response(200, {}, theirs), rules)
+        == ()
+    )
+
+
+def test_an_excused_array_is_excused_where_it_is_and_nowhere_else() -> None:
+    """The scoping rule of plan §6.3, on an array rather than on a field: `/Items` excused here is
+    not `/MediaSources` excused there, and an entry on one endpoint's array is not an entry on
+    another's. `resolve` is what keys them by endpoint; this is what the engine does with the
+    mapping it is handed."""
+    rules = engine.Rules(unordered_arrays={"/Items": "behaviours §3.6"})
+    ours = {"Items": [{"N": 2}, {"N": 1}], "MediaSources": [{"N": 2}, {"N": 1}]}
+    theirs = {"Items": [{"N": 1}, {"N": 2}], "MediaSources": [{"N": 1}, {"N": 2}]}
+    found = engine.compare(engine.Response(200, {}, ours), engine.Response(200, {}, theirs), rules)
+    assert [(one.klass, one.pointer) for one in found] == [(engine.Class.ORDER, "/MediaSources")]
 
 
 def test_an_array_entry_names_the_array_and_never_a_row_inside_it() -> None:

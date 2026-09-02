@@ -97,8 +97,7 @@ class Difference:
 class Rules:
     """Everything the comparison consults, resolved for one (endpoint, case, identity).
 
-    Three kinds, as 010 plan §6.3 sets them out. This task lands the first; `drawn` and
-    `unordered` are declared here because the contract declares them and are honoured by T4.
+    Three kinds, as 010 plan §6.3 sets them out. T2 landed the first and T4 the other two.
 
     | Kind | Not compared | Still compared |
     |---|---|---|
@@ -388,6 +387,25 @@ def _walk_array(
     rules: Rules,
     out: list[Difference],
 ) -> None:
+    """Three array kinds, and the length difference means something different in each.
+
+    **A length difference never suppresses what the array's own kind still owes.** It suppresses
+    the *positional* comparison, which is the thing that cascades - one inserted row at the top of
+    a thousand-row page is a thousand value findings - and nothing else. Applied in the order
+    010 plan §6.2 writes it, the guard would delete AC-17 on the only endpoint AC-17 exists for:
+    `/Items/{itemId}/Similar` answers `limit + 4` rows on a movie seed where Atrium answers
+    exactly `limit` (behaviours §3.24), so a `drawn` array whose length difference stopped the
+    walk would never have its rows walked at all. T2's finding; this split is T4's answer to it.
+
+    `drawn` outranks `unordered` where an entry of each covers the same array: a draw's rows have
+    no comparable values, which is strictly more than having no comparable order.
+    """
+    if rules.drawn(pointer) is not None:
+        _walk_drawn(pointer, ours, theirs, rules, out)
+        return
+    if rules.unordered(pointer) is not None:
+        _walk_unordered(pointer, ours, theirs, rules, out)
+        return
     if len(ours) != len(theirs):
         # The cascade guard. One inserted row at the top of a thousand-row page is a thousand
         # findings without it, and a report with a thousand findings is a report nobody reads.
@@ -419,6 +437,200 @@ def _walk_array(
         return
     for index, our_row in enumerate(ours):
         _walk(_join(pointer, str(index)), our_row, theirs[index], rules, out)
+
+
+def _walk_drawn(
+    pointer: str,
+    ours: Sequence[Any],
+    theirs: Sequence[Any],
+    rules: Rules,
+    out: list[Difference],
+) -> None:
+    """A `drawn` array: the envelope, the row count and every row's key set and types (AC-17).
+
+    No row's value is compared, because there is nothing to compare it with - four identical
+    requests to `/Items/{itemId}/Similar` returned 48 distinct items with **none** in common
+    `[probe: tools/probe_similar_ranking.py, Jellyfin 10.11.11, 2026-09-01]`, so the two servers'
+    row 0 is not the same item and never will be.
+
+    **The shape walk is therefore position-free, and that is a correction rather than a
+    convenience.** Rows are reduced to one map of *generalised pointer -> the JSON types seen
+    there across every row*, and the two maps are compared. Walking row 0 against row 0 instead
+    would report content as shape: a null property is absent everywhere by one setting on both
+    servers (behaviours §1.7), so a row's key set depends on which item it holds - `ProductionYear`
+    is simply absent from an item that has none - and a draw guarantees the two sides hold
+    different items.
+
+    **The row count is still a finding, and it is a known divergence rather than noise.** It
+    differs on every run of that endpoint, permanently, and reporting it is the point: the count
+    is the only quantity of a drawn array that L3 can still check, so excusing it would leave the
+    endpoint with nothing measurable at all (T4's decision; behaviours §3.24, AC-17).
+    """
+    if len(ours) != len(theirs):
+        out.append(
+            Difference(
+                Class.LENGTH,
+                pointer,
+                len(ours),
+                len(theirs),
+                note=(
+                    f"rows compared for shape only, never by position: "
+                    f"{len(ours)} against {len(theirs)}"
+                ),
+            )
+        )
+    if not ours or not theirs:
+        # An empty array has no shape. Comparing one against a full one would report every key of
+        # every row as missing, on an endpoint whose emptiness is a draw's outcome and not a shape.
+        return
+    row_pointer = _join(_generalise(pointer), INDEX_WILDCARD)
+    our_shape = _shape(ours, rules, row_pointer)
+    their_shape = _shape(theirs, rules, row_pointer)
+    # One pass over both shapes, so that a difference at a node **prunes its own subtree**. That
+    # is what `_walk` does with a `TYPE` and what `_walk_object` does with a missing key, and
+    # without it a row that lost a whole `UserData` object would report one finding per property
+    # inside it - the second cascade, arriving through the door the first one was shut on.
+    reported: list[str] = []
+    for at in sorted(set(our_shape) | set(their_shape)):
+        if any(_covers(already, at) for already in reported):
+            continue
+        ours_types, theirs_types = our_shape.get(at), their_shape.get(at)
+        if ours_types is None or theirs_types is None:
+            if _is_element(at):
+                # Presence is not comparable here, and neither is anything under it.
+                reported.append(at)
+                continue
+            if ours_types is None:
+                note = "no row of Atrium's carries it; the reference's carry " + _types(
+                    theirs_types or frozenset()
+                )
+                out.append(Difference(Class.MISSING_KEY, at, None, None, note=note))
+            else:
+                note = "no row of the reference's carries it; Atrium's carry " + _types(ours_types)
+                out.append(Difference(Class.EXTRA_KEY, at, None, None, note=note))
+            reported.append(at)
+        elif ours_types != theirs_types:
+            note = _types(ours_types) + " against " + _types(theirs_types)
+            out.append(Difference(Class.TYPE, at, None, None, note=note))
+            reported.append(at)
+
+
+def _covers(ancestor: str, pointer: str) -> bool:
+    """True when `pointer` sits inside the subtree of `ancestor`, segment by segment."""
+    return pointer.startswith(ancestor + "/")
+
+
+def _is_element(pointer: str) -> bool:
+    """True for a pointer addressing *an element of* a nested array, `…/-`.
+
+    Presence is not comparable there: the pointer exists on a side only because some row held a
+    non-empty array, and one item having three genres where another has none is content. Types
+    under it are still compared, on the sides that have any element at all.
+    """
+    return pointer.endswith("/" + INDEX_WILDCARD)
+
+
+def _types(names: frozenset[str]) -> str:
+    return "|".join(sorted(names))
+
+
+def _shape(rows: Sequence[Any], rules: Rules, row_pointer: str) -> dict[str, frozenset[str]]:
+    """Every row reduced to *generalised pointer -> the set of JSON types seen there*."""
+    seen: dict[str, set[str]] = {}
+    for row in rows:
+        _record(row_pointer, row, rules, seen)
+    return {pointer: frozenset(names) for pointer, names in seen.items()}
+
+
+def _record(pointer: str, value: Any, rules: Rules, seen: dict[str, set[str]]) -> None:
+    seen.setdefault(pointer, set()).add(json_type(value))
+    if rules.excuse(pointer) is not None:
+        # An excused field's own type is compared and its subtree is not, which is exactly what
+        # `_walk` does with one: `ImageTags` is a map of content hashes, and its keys are as
+        # derived as its values.
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _record(_join(pointer, key), item, rules, seen)
+    elif isinstance(value, (list, tuple)):
+        child = _join(pointer, INDEX_WILDCARD)
+        for item in value:
+            _record(child, item, rules, seen)
+
+
+def _walk_unordered(
+    pointer: str,
+    ours: Sequence[Any],
+    theirs: Sequence[Any],
+    rules: Rules,
+    out: list[Difference],
+) -> None:
+    """An `unordered` array: everything, as a multiset of rows (AC-18).
+
+    Equal multisets say **nothing at all** - not even an `ORDER` finding - because the ordering
+    under comparison is one the reference does not have: it appends no further key after most
+    orderings, so its ties are engine-resolved and paging its artist sorts loses and duplicates
+    rows (behaviours §3.6). Reporting that as Atrium's difference would report Atrium doing what
+    §3.6 says it does.
+
+    **What plan §6.2 does not say is what happens when the multisets genuinely differ, and this
+    is T4's answer: the rows that match are removed, and only the residue is compared.** The gap
+    is not hypothetical - §3.6's paging *duplicates* rows as well as losing them, so a page can
+    hold one row twice and another not at all **at the same length**, which is the one shape
+    neither the `LENGTH` guard nor the `ORDER` class catches (plan §9's risk row claims they do,
+    and T2 measured that they do not). Aligning the residue instead of the whole array turns that
+    page from `2n` value findings into the one row that really differs. Which reference row a
+    residue row is paired with is arbitrary, and it is *allowed* to be arbitrary here precisely
+    because this array has no ordering to lose.
+    """
+    row_pointer = _join(_generalise(pointer), INDEX_WILDCARD)
+    ours_printed = [fingerprint(row, rules, row_pointer) for row in ours]
+    theirs_printed = [fingerprint(row, rules, row_pointer) for row in theirs]
+    if sorted(ours_printed) == sorted(theirs_printed):
+        return
+    our_residue, their_residue = _residue(ours_printed, theirs_printed)
+    if len(ours) != len(theirs):
+        out.append(
+            Difference(
+                Class.LENGTH,
+                pointer,
+                len(ours),
+                len(theirs),
+                note=(
+                    f"compared as a multiset: {len(our_residue)} of Atrium's rows matched none of "
+                    f"the reference's, against {len(their_residue)} the other way"
+                ),
+            )
+        )
+    # No `zip`: its `strict=` is 3.10, and tools/ runs on the 3.9 floor (D-2). The pairs beyond
+    # the shorter residue are the rows the LENGTH finding above has already counted.
+    for position in range(min(len(our_residue), len(their_residue))):
+        ours_at, theirs_at = our_residue[position], their_residue[position]
+        _walk(_join(pointer, str(ours_at)), ours[ours_at], theirs[theirs_at], rules, out)
+
+
+def _residue(
+    ours_printed: Sequence[str], theirs_printed: Sequence[str]
+) -> tuple[list[int], list[int]]:
+    """The indices on each side that no row on the other side matches, multiplicities honoured.
+
+    Honoured rather than collapsed for §3.6's reason: a page that lost one row and repeated
+    another is not a page where both sides hold the same rows, and a set-based answer would say
+    it was.
+    """
+    pool: dict[str, list[int]] = {}
+    for index, printed in enumerate(theirs_printed):
+        pool.setdefault(printed, []).append(index)
+    matched: set[int] = set()
+    ours_left: list[int] = []
+    for index, printed in enumerate(ours_printed):
+        bucket = pool.get(printed)
+        if bucket:
+            matched.add(bucket.pop(0))
+        else:
+            ours_left.append(index)
+    theirs_left = [index for index in range(len(theirs_printed)) if index not in matched]
+    return ours_left, theirs_left
 
 
 def _permutation(ours: Sequence[str], theirs: Sequence[str]) -> str:
