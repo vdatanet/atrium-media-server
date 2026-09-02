@@ -1059,6 +1059,18 @@ anything that would notice a 54th probe printing its own output. So the work is 
 ledger: every `tools/probe_*.py` reaches `_probe.main`, names a document and a section, and — where
 it declares `needs_writes` — removes what it created. Twenty-five of the 53 declare it.
 
+> **Done by T13 on 2026-09-02, and the counts moved before the sweep was written.** There are 56
+> probes now, not 53 — T10 added one and T13 added the two below — and the entry-point and
+> document/section halves did hold on every one of them. **The `needs_writes` half did not**, and
+> the rule needed two shapes rather than one: `probe_playback_info.py` and
+> `probe_subtitle_negotiation.py` create a user account and pass no `needs_writes`, because for
+> them `--allow-writes` **adds a battery** rather than gating the run — they declare the option
+> themselves and branch on it, which makes the operator say the same words. Passing
+> `needs_writes=True` as well is what the first fix did, and argparse refused the duplicate option:
+> CI's own 3.9 `--help` sweep caught it. The exemption list is `(method, route)` pairs and not
+> routes, because `probe_routing.py` sends a `PUT` at a route serving `POST` and `DELETE` to read
+> its `405`'s `Allow` header, and exempting the route would have exempted the `POST` that writes.
+
 **The cleanup contract is a requirement the server disproved.** Spec §3.5 records 28 playlists left
 behind by 009's runs on 2026-09-01, where `tools/README.md` says of every writing probe that it
 deletes what it made including on failure. A concurrent change is fixing the leak; what this
@@ -1068,6 +1080,16 @@ twenty-five scripts implements separately. **This plan does not edit `tools/_pro
 that does will land after the leak fix, and its first job is to check that the fix did not already
 do it.
 
+> **Checked on 2026-09-02, and the leak fix had not landed**: `main` was at the T12 merge with no
+> concurrent change to `tools/` in it, so T13 built the register on what was there. **It is not
+> where this section put it.** A register a probe has to *call* is the same promise twenty-eight
+> scripts already make separately, so `Server` records the creation **as the request happens** —
+> `POST /Playlists` and `POST /Users/New` are the two routes that make something outliving the
+> request — a removal the probe issues itself de-registers what it removed, and `main` tears down
+> whatever is left in a `finally`. The contract then holds for the probes nobody has edited, which
+> is the half that was missing: every one of the 28 leaked playlists came from a script that had
+> already written its own teardown.
+
 **The prior-measurement register is the input to AC-9, and it is stale in four rows** (§6.12). AC-9
 is therefore a reconciliation before it is eight new probes: for each of the eight open rows, find
 whether a script under a different name already answers it and has been run, upgrade the citations
@@ -1076,6 +1098,17 @@ cannot be answered against an operator's server at all and are the instance's to
 returning `[]` needs every user hidden, and the `LocalAddress` HTTPS override needs a server
 configured for HTTPS. Both are writes to a configuration, which is exactly what a disposable
 instance is for.
+
+> **Both paid on 2026-09-02 by T13**, and the second needed one thing this section did not price.
+> `tools/probe_public_users.py` found the claim understated: `IsHidden` is **true by default** on
+> the account the wizard creates and on every account `POST /Users/New` creates, so a reference
+> nobody has configured already answers `200 []` — and Atrium's default is the opposite, which is a
+> difference for 002 to decide (behaviours §2.2). `tools/probe_local_address.py` reproduced the
+> override exactly — `http://<address>:8096` before a certificate, `https://<address>:8920` after
+> one, on a plain-HTTP request — but the certificate is read at **startup**, so the run has to
+> restart the instance it configured. `_reference.py` gains a `restart()` and an `auto_remove` flag
+> for it: a container marked `--rm` does not survive the stop half of a restart, measured here
+> first as a readiness timeout over a container that no longer existed.
 
 ### 6.11 What runs where, and why none of it runs in CI
 

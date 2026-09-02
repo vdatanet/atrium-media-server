@@ -290,19 +290,55 @@ reader in either analysed client; the pair is a dialect marker, present to be pr
 ### 2.2 `/Users/Public` can legitimately be empty
 
 **Jellyfin does:** honours each user's "hidden from login screens" policy flag and returns `200` with
-`[]` when every user is hidden. `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`
+`[]` when every user is hidden. `[probe: tools/probe_public_users.py, Jellyfin 10.11.11, 2026-09-02]`
+
+**And `[]` is what a server answers before anybody has configured anything.** Measured on
+2026-09-02, when the claim was finally reproduced against an instance this project could hide
+accounts on: `IsHidden` is **true** on the administrator the setup wizard creates and on every
+account `POST /Users/New` creates — the permission is added set
+`[source: Jellyfin.Data/UserEntityExtensions.cs:174 @ v10.11.11]` — so a freshly installed
+reference answers `200 []` with two accounts on it. Un-hidden, the same two accounts are two rows;
+hidden again, one row and then none. The flag drives the route in both directions, which is the
+half this entry always claimed; what is new is that the empty answer is the **default state** and
+not a hardened one. The route is read with **no credential**, which is who calls it: two of its
+four filters read the caller — the device comes from the token and the network from the remote
+address `[source: Jellyfin.Api/Controllers/UserController.cs:635-651 @ v10.11.11]` — so an
+administrator's token turns the question into one about that administrator's device.
 
 **Depends on it:** clients must fall back to a username field. This is client behaviour, not server
-behaviour, but a server that "helpfully" returned hidden users would leak them.
+behaviour, but a server that "helpfully" returned hidden users would leak them. The 2026-09-02
+reading raises the stakes: a client that treats `[]` as *"this server has no users"* breaks against
+**every** reference nobody has configured, not against a rare hardened one.
 
 **Atrium does:** the same, including the policy flag.
+
+> **The default differs, and it is 002's to decide.** Atrium's user record defaults
+> `is_hidden` to `false` (`src/atrium/domain/user.py`, and the `0` server default of the
+> `is_hidden` column), where the reference adds the permission set. So a first account on each
+> server answers a different `/Users/Public` — one row here, none there — which is a difference a
+> login screen can see. 010 triages and does not decide (
+> [010 §2](../../specs/010-conformance-harness/spec.md#2-scope)); the endpoint is
+> [002 §3.4](../../specs/002-authentication-users-and-sessions/spec.md)'s, and this is the
+> procedure of §3.0 waiting for it. Nothing about the flag's *effect* differs: both servers
+> exclude a hidden user and answer `200` with `[]` when every account is hidden.
 
 ### 2.3 `LocalAddress` is one string, and may be HTTPS
 
 **Jellyfin does:** returns a single `LocalAddress` string (Emby returns `LocalAddresses[]`), chosen
 by matching the requester's network — so over a VPN it returns the VPN-side address. When a
 certificate is configured it advertises the **HTTPS scheme and port**, regardless of the scheme the
-request came in on. `[prior-probe: Jellyfin 10.11.11, 2026-08-14]`
+request came in on. `[probe: tools/probe_local_address.py, Jellyfin 10.11.11, 2026-09-02]`
+
+**Reproduced exactly on 2026-09-02**, on an instance this project stood up, gave a self-signed
+certificate and restarted: the same route over the same plain-HTTP request answers
+`http://<address>:8096` before the certificate and `https://<address>:8920` after it — the scheme
+**and** the port, on `/System/Info/Public` and on `/System/Info` alike. The condition is
+`EnableHttps` **and** a certificate that actually loaded
+`[source: Emby.Server.Implementations/ApplicationHost.cs:267 @ v10.11.11]`, and it is read while
+the host is being built `[source: Emby.Server.Implementations/ApplicationHost.cs:457-458 @
+v10.11.11]` — a configuration change validates the new path and asks for a restart
+`[source: Emby.Server.Implementations/ApplicationHost.cs:761-764, 779-797 @ v10.11.11]`, so a
+server configured in place goes on advertising the scheme it started with until it comes back.
 
 **Depends on it:** clients that hand this address to a device without a TLS stack (a DLNA renderer)
 break when it is HTTPS. This is a genuine footgun that has cost real debugging time.
@@ -2679,9 +2715,10 @@ See §2.3. Jellyfin's behaviour here is not a contract clients rely on; it is a 
 they work around. Atrium reports the scheme it is actually reachable on.
 
 The argument that no client can observe the difference: the override fires only **when a
-certificate is configured** (§2.3's measured condition), and v1 terminates no TLS and has no
-certificate configuration — the state in which the reference rewrites the scheme cannot be
-configured on Atrium at all. A v1 deployment is reachable over HTTPS only through something else's
+certificate is configured** (§2.3's measured condition — reproduced on 2026-09-02, where the
+override needed a certificate that loaded *and* a restart before it fired), and v1 terminates no
+TLS and has no certificate configuration — the state in which the reference rewrites the scheme
+cannot be configured on Atrium at all. A v1 deployment is reachable over HTTPS only through something else's
 TLS, and a reference server in that same position holds no certificate of its own either, so its
 override does not fire and the two answers coincide. A client could only see the divergence on a
 configuration v1 does not have.

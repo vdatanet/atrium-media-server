@@ -176,7 +176,7 @@ def run(server: Server) -> Probe:
         time.sleep(2)
         info = None
         for session in server.get("/Sessions"):
-            if session.get("DeviceId") == "atrium-probe-0000" and session.get("TranscodingInfo"):
+            if session.get("DeviceId") == server.device_id and session.get("TranscodingInfo"):
                 info = session["TranscodingInfo"]
         if info is None:
             raise ProbeError("no TranscodingInfo appeared for the probe's device")

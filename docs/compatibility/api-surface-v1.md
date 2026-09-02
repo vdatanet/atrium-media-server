@@ -53,7 +53,7 @@ the `music-client`/`video-client` tags in [surface.yaml](surface.yaml) are uncha
 | GET | `/System/Info` | `GetSystemInfo` | M | Authenticated; superset of the public payload |
 | GET | `/System/Ping` | `GetPingSystem` | D | Trivial liveness probe; several clients and reverse-proxy health checks use it |
 | POST | `/System/Ping` | `PostPingSystem` | D | Same, POST form |
-| GET | `/Users/Public` | `GetPublicUsers` | V | **May legitimately return `[]`** — users hidden from login screens are excluded, and that is a 200, not an error `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` |
+| GET | `/Users/Public` | `GetPublicUsers` | V | **May legitimately return `[]`** — users hidden from login screens are excluded, and that is a 200, not an error — and `IsHidden` is **true by default**, so a server nobody has configured answers `[]` `[probe: tools/probe_public_users.py, Jellyfin 10.11.11, 2026-09-02]` |
 | GET | `/Localization/Cultures` | `GetCultures` | V | Language list for audio/subtitle track labelling |
 
 ## 3. Authentication, users and sessions
