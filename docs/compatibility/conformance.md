@@ -98,6 +98,32 @@ python3 tools/differential.py \
     --report   reference/differential-report.md
 ```
 
+Four more flags sit beside those: `--identity` (repeatable; the default is the administrator and a
+restricted non-administrator, which is [010 §3.9](../../specs/010-conformance-harness/spec.md)'s
+minimum), `--fixture` (ask the half that needs a reference instance over this repository's own
+fixture), `--named` (attempt only these named comparisons, by id — the rest are still *reported*,
+outstanding) and `--reference-url` (an instance somebody else stood up). Credentials come from the
+same git-ignored `.env` the probes read: `JELLYFIN_URL`, `JELLYFIN_USERNAME`, `JELLYFIN_PASSWORD`
+or `JELLYFIN_TOKEN` for the reference, and `ATRIUM_USERNAME`, `ATRIUM_PASSWORD` or `ATRIUM_TOKEN`
+for the server under test.
+
+**The two servers are told apart by the `Server` header and never by `ProductName`.** Atrium
+answers `ProductName: "Jellyfin Server"` on purpose
+([§4.1](behaviours.md#41-atrium-identifies-as-jellyfin-on-the-fields-clients-parse)), so the
+obvious check admits a run pointed at two Atriums — a comparison of this project with itself,
+reporting parity it never measured. `Server` is `Atrium/<version>` here against the reference's
+`Kestrel` `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]`, and a pair that fails
+that test is refused before anything is compared.
+
+**Exit codes: `0` clean, `1` not clean, `2` the run could not start.** *Not clean* is the ordinary
+answer and not a failure: it means the run has an untriaged difference, a declared case it could
+not issue, or a named comparison it did not run. The report is the deliverable
+([010 §3.4](../../specs/010-conformance-harness/spec.md#34-the-report)), and it opens with what a
+reader may and may not conclude from it — the seats it authenticated as, the cases it did not
+issue with the reason for each, and the named comparisons still outstanding. **Outstanding is not
+green**: a run that swept every endpoint and skipped nine named comparisons has proved that the
+questions it asked have the same answers, which is a smaller claim than it sounds.
+
 **What it compares:** the set of keys at every level, the type of every value, and the value itself
 for everything not on the allowlist.
 
@@ -217,9 +243,16 @@ the known divergence is still exactly the known divergence is what notices the d
 **Adding to the allowlist is a contract decision**, not a way to make a red test green. It happens
 in review, with the reason written in the table.
 
-The differential harness is **opt-in**: it needs a second server, so it is skipped when
-`ATRIUM_JELLYFIN_URL` is unset, and it never runs in the default CI job. It runs on demand, and
-after every bump of the pinned reference version — which is the moment its findings are worth most.
+The differential harness is **opt-in**: it needs a second server, so it is a program run by hand
+and never a test, and no CI job runs it. It runs on demand, and after every bump of the pinned
+reference version — which is the moment its findings are worth most.
+
+*This paragraph named an `ATRIUM_`-prefixed environment variable as the switch until 2026-09-02,
+and no code read it and no test skipped on it.* The mechanism was real — the differential is
+opt-in and nothing in the default job touches the network — but the name was a claim about an
+implementation that did not exist. The harness reads `JELLYFIN_URL` from `.env`, which is what
+`tools/_probe.py` and all 53 probes have used since 002, and the sentence is corrected here rather
+than a second name introduced.
 
 ## When the reference version moves
 
