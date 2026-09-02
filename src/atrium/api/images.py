@@ -47,8 +47,9 @@ from fastapi import APIRouter, Query, Request, Response
 from pydantic import BeforeValidator
 
 from atrium.api.deps import get_paths, get_sessions
+from atrium.compat.auth import client_name
 from atrium.compat.guids import WireGuid
-from atrium.compat.query_params import IgnoredParameters, known_tokens
+from atrium.compat.query_params import IgnoredParameters, Recorder, known_tokens
 from atrium.db.engine import session_scope
 from atrium.db.repositories import ImageRepository
 from atrium.images.cache import DIRECTORY, ImageCache
@@ -134,12 +135,13 @@ def _cache(request: Request) -> ImageCache:
     return existing
 
 
-def _recorder(request: Request) -> IgnoredParameters:
+def _recorder(request: Request) -> Recorder:
+    """The tally, bound to whoever is asking, so a dropped token carries AC-10's fourth column."""
     ignored: IgnoredParameters = request.app.state.ignored_parameters
-    return ignored
+    return ignored.for_client(client_name(request.headers))
 
 
-def _format_of(value: str | None, route: str, ignored: IgnoredParameters) -> RequestedFormat | None:
+def _format_of(value: str | None, route: str, ignored: Recorder) -> RequestedFormat | None:
     """`format`, parsed leniently: a token outside the vocabulary is dropped and counted.
 
     Measured: `format=Banana` answers `200` with the value ignored, which is behaviours section

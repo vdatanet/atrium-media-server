@@ -46,6 +46,7 @@ See specs/002-authentication-users-and-sessions/plan.md sections 5, 6.1 and 6.3.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from starlette.requests import Request
@@ -145,11 +146,32 @@ def require_client_authorization(value: str | None) -> ClientInfo:
 
 def client_info(request: Request) -> ClientInfo | None:
     """Whichever of the two headers carries a readable client identification, in order."""
+    return client_info_from(request.headers)
+
+
+def client_info_from(headers: Mapping[str, str]) -> ClientInfo | None:
+    """The same, from any case-insensitive header mapping.
+
+    Split out for the raw-ASGI middleware that records ignored parameters: it runs before routing
+    and has a scope rather than a `Request`, and building one to read two headers would give every
+    request a body reader it never uses.
+    """
     for header in AUTHORIZATION_HEADERS:
-        info = parse_client_authorization(request.headers.get(header))
+        info = parse_client_authorization(headers.get(header))
         if info is not None:
             return info
     return None
+
+
+def client_name(headers: Mapping[str, str]) -> str:
+    """What this caller calls itself, or the empty string when it says nothing readable.
+
+    The fourth column of 010 section 3.6's ignored-parameter report. Empty rather than a
+    placeholder here, because *which* placeholder a reader sees is the report's decision and not
+    the parser's - an unauthenticated media player really does send nothing.
+    """
+    info = client_info_from(headers)
+    return info.client if info is not None else ""
 
 
 def extract_token(request: Request) -> str | None:
@@ -185,6 +207,8 @@ __all__ = [
     "TOKEN_COMPONENT",
     "ClientInfo",
     "client_info",
+    "client_info_from",
+    "client_name",
     "extract_token",
     "parse_client_authorization",
     "parse_components",

@@ -371,6 +371,27 @@ The tree is built through `tests/fixtures/reference_tree.py` into `reference/fix
 `--fixture-root` names another, and the instance is given the **six typed libraries** that module
 declares.
 
+**The Atrium half of that is yours to arrange, and there is no command for it.** A running Atrium
+cannot be given a library: `atrium.library.config.create` and `atrium.library.scan.scan` have no
+caller outside the test suite, and `config.toml` has no libraries section — the roadmap files
+library administration under [v2's CLI](../docs/roadmap.md#v2--the-management-cli) and names direct
+database access as v1's way. So a `--fixture` run stands the tree up on the reference and compares
+it against whatever library the Atrium you point at happens to hold, and the `needs: fixture`
+request cases resolve their anchors on each server separately. **AC-2 is checked without a live
+Atrium for exactly this reason**: `tools/probe_reference_scan.py` records the reference's reading
+into `docs/compatibility/reference-fixture-reading.json` and
+`tests/library/test_reference_reading.py` compares Atrium's own scan of the same tree against it, in
+the default job, with no Jellyfin anywhere.
+
+**`--ignored-parameters` writes the second report.** Pointed at Atrium's data directory, or at the
+`ignored-parameters.json` in it, the run also writes
+`reference/ignored-parameters-<date>.md` — [010 §3.6](../specs/010-conformance-harness/spec.md)'s
+parameter, endpoint, count and client. **It is the tally that server wrote when it last stopped**,
+never this run's own sweep: the count is complete only after the last request a route could have
+answered, which is the same sentence as *"it is a file and not an endpoint"*. An endpoint serving it
+would be one Jellyfin does not have, and an extension a client can discover is still a delta
+(Principle I).
+
 **Exit codes:** `0` the run is clean, `1` the run is **not** clean — an untriaged difference, a
 declared case it could not issue, a named comparison it did not run, or a named comparison that
 ran and measured something its own citation does not predict — and `2` it could not start. `1` is

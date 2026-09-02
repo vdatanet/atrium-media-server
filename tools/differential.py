@@ -1451,6 +1451,30 @@ class RunReport:
             sorted({comparison.endpoint for comparison in self.comparisons if comparison.ran})
         )
 
+    def endpoints_compared_by(self) -> Dict[str, Tuple[str, ...]]:
+        """Endpoint -> the seats that actually compared it, in the roster\'s own order.
+
+        **Found at 010 T15, and it is the level table\'s version of AC-14.** The table printed
+        `Compared: yes` from a flat set, so an endpoint reached by the administrator alone read
+        exactly like one reached by both seats - on a surface where **12 of 23 reads answer
+        differently to a restricted non-administrator** (spec section 3.9), two of them as shorter
+        lists rather than as refusals. A conformance level claimed from the one seat that can be
+        refused nothing is claimed from half the table, which is the overstatement this whole
+        feature exists to catch, arriving in its own report.
+        """
+        reached: Dict[str, List[str]] = {}
+        for comparison in self.comparisons:
+            if not comparison.ran:
+                continue
+            seats = reached.setdefault(comparison.endpoint, [])
+            if comparison.identity not in seats:
+                seats.append(comparison.identity)
+        order = {identity: position for position, identity in enumerate(self.identities)}
+        return {
+            endpoint: tuple(sorted(seats, key=lambda seat: order.get(seat, len(order))))
+            for endpoint, seats in reached.items()
+        }
+
     def coverage(self) -> Tuple[Tuple[str, int, int], ...]:
         """Per identity: cases issued, and cases that were not (AC-14).
 
@@ -3129,8 +3153,82 @@ def _value(value: Any) -> str:
     return text if len(text) <= 80 else text[:77] + "..."
 
 
+#: What the server writes its tally into, relative to its own data directory. Named here so that
+#: `--ignored-parameters` can be pointed at a data *directory* as well as at the file itself,
+#: which is what an operator has to hand.
+IGNORED_PARAMETERS_FILE = "ignored-parameters.json"
+
+
+def read_ignored_parameters(location: Path) -> Dict[str, Any]:
+    """The tally Atrium wrote when it last stopped, from a file or from a data directory.
+
+    **It is never this run\'s own sweep**, and the report says so rather than implying otherwise.
+    The tally is complete only at shutdown - which is the whole reason 010 plan section 6.8 puts
+    it there and not on a route - so a differential against a server that is still answering reads
+    the tally of that server\'s *previous* run. Making it fresher would mean asking the server for
+    it, and an endpoint serving it is the delta Principle I forbids.
+    """
+    path = location / IGNORED_PARAMETERS_FILE if location.is_dir() else location
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict) or not isinstance(payload.get("rows"), list):
+        raise WireError(
+            f"{path} is not an ignored-parameter tally: it has no `rows`. Atrium writes one into "
+            f"its data directory when it stops (010 section 3.6)"
+        )
+    payload["source"] = str(path)
+    return payload
+
+
+def render_ignored_parameters(tally: Dict[str, Any]) -> str:
+    """Spec section 3.6\'s report: parameter, endpoint, count and client (AC-10).
+
+    005 section 3.3 accepts a bounded delta - a Tier 3 parameter is ignored rather than refused,
+    and counted - and this is the closing mechanism it was accepted with. A parameter that appears
+    here is promoted to Tier 2 or declined in writing; one that never appears is a delta nobody is
+    paying for. The **client** column is what makes either decision possible, and it is the column
+    D-5 added: a count with no name says how loud a parameter is and not who would notice it going
+    away.
+    """
+    rows = list(tally.get("rows", []))
+    lines = [
+        "# Ignored parameters",
+        "",
+        f"    tally written        {tally.get('generated', 'unknown')}",
+        f"    read from            {tally.get('source', 'unknown')}",
+        f"    distinct rows        {len(rows)}",
+        f"    requests counted     {tally.get('total', 0)}",
+        "",
+        "**This is the tally the server wrote when it last stopped, and never this run's own "
+        "sweep.** The count is complete only after the last request a route could have answered, "
+        "which is why it is a file in the data directory and not an endpoint: an endpoint serving "
+        "it would be one Jellyfin does not have (Principle I).",
+        "",
+        "Every row is 005 section 3.3's accepted delta, still open. Promote the parameter to "
+        "Tier 2, or decline it in writing.",
+        "",
+    ]
+    if not rows:
+        lines.append(
+            "No client sent a parameter this server does not implement. That is a finding and "
+            "not an empty report: the bounded delta cost nothing over the life of that process."
+        )
+        return "\n".join(lines) + "\n"
+    lines.append("| Parameter | Endpoint | Count | Client |")
+    lines.append("|---|---|---:|---|")
+    for row in rows:
+        lines.append(
+            "| `{parameter}` | `{endpoint}` | {count} | {client} |".format(
+                parameter=row.get("parameter", ""),
+                endpoint=row.get("endpoint", ""),
+                count=row.get("count", 0),
+                client=row.get("client", "unknown"),
+            )
+        )
+    return "\n".join(lines) + "\n"
+
+
 def render(report: RunReport) -> str:
-    """Spec section 3.4's report, and the sections that keep it from reading like a clean one."""
+    """Spec section 3.4\'s report, and the sections that keep it from reading like a clean one."""
     counts: Dict[Any, int] = dict.fromkeys(engine().Class, 0)
     for _comparison, finding in report.differences:
         counts[finding.klass] = counts.get(finding.klass, 0) + 1
@@ -3256,12 +3354,26 @@ def _coverage_section(report: RunReport) -> List[str]:
     for identity, issued, skipped in report.coverage():
         lines.append(f"| {identity} | {issued} | {skipped} |")
     lines.append("")
-    compared = set(report.endpoints_compared)
-    lines.append("| Endpoint | Declared level | Compared |")
-    lines.append("|---|---|---|")
+    by_seat = report.endpoints_compared_by()
+    lines.append("| Endpoint | Declared level | Compared | By which seats |")
+    lines.append("|---|---|---|---|")
     for endpoint in report.endpoints:
-        reached = "yes" if endpoint.key in compared else "**no**"
-        lines.append(f"| `{endpoint.key}` | {endpoint.level} | {reached} |")
+        seats = by_seat.get(endpoint.key, ())
+        if not seats:
+            reached, who = "**no**", "-"
+        elif len(seats) == len(report.identities):
+            reached, who = "yes", ", ".join(seats)
+        else:
+            reached, who = "**partly**", ", ".join(seats)
+        lines.append(f"| `{endpoint.key}` | {endpoint.level} | {reached} | {who} |")
+    lines.append("")
+    lines.append(
+        "**`partly` is not `yes`.** Twelve of twenty-three reads of this surface answer "
+        "differently to a restricted non-administrator (spec section 3.9), two of them as shorter "
+        "lists rather than as refusals - so an endpoint compared from the administrator's seat "
+        "alone has been compared from the one seat that can be refused nothing, and its declared "
+        "level is a claim this run did not pay for."
+    )
     lines.append("")
     return lines
 
@@ -3519,6 +3631,15 @@ def build_parser() -> argparse.ArgumentParser:
         "there. Which world that is, and in how many libraries, is D-4 - measured by "
         "tools/probe_reference_scan.py and composed by 010 T11 into six typed libraries",
     )
+    parser.add_argument(
+        "--ignored-parameters",
+        type=Path,
+        default=None,
+        help="Atrium's data directory, or the ignored-parameters.json in it. Given one, the run "
+        "also writes reference/ignored-parameters-<date>.md - spec section 3.6's report, with "
+        "parameter, endpoint, count and client. The tally is the one that server wrote when it "
+        "last stopped, which is the only moment it is complete",
+    )
     parser.add_argument("--timeout", type=int, default=30)
     return parser
 
@@ -3686,6 +3807,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(render(report), encoding="utf-8")
     print(f"differential.py: report written to {destination}")
+    if args.ignored_parameters is not None:
+        try:
+            tally = read_ignored_parameters(Path(args.ignored_parameters))
+        except (OSError, ValueError, WireError) as unread:
+            print(f"differential.py: no ignored-parameter report: {unread}", file=sys.stderr)
+        else:
+            beside = destination.parent / (
+                f"ignored-parameters-{datetime.now(timezone.utc).date().isoformat()}.md"
+            )
+            beside.write_text(render_ignored_parameters(tally), encoding="utf-8")
+            print(f"differential.py: ignored-parameter report written to {beside}")
     print(
         f"differential.py: {len(report.differences)} differences, {len(report.unasked)} cases not "
         f"asked, {len(report.named_outstanding)} named comparisons outstanding."

@@ -169,6 +169,83 @@ def test_009_serves_exactly_its_seven_routes_and_no_eighth(app: FastAPI) -> None
     }
 
 
+# --------------------------------------------------------------------------------------------
+# The conformance level a row declares (010, and the first reader of the column)
+# --------------------------------------------------------------------------------------------
+
+#: The eight rows of `surface.yaml` that declare `level: L3`, written out rather than counted.
+#:
+#: **Nothing had ever read this column.** `tools/extract_v1_surface.py` validates that the value
+#: is one of `L0..L3` - the vocabulary and not the claim - and this module read `feature` and
+#: `consumers` and never `level`. Meanwhile every feature's definition of done ticks *"every
+#: endpoint reaches the conformance level declared in spec section 6"* with the differential half
+#: deferred to 010, in as many words: 009's says *"**The differential half is 010's**, as it is
+#: for every feature before this one."*
+#:
+#: L3 is defined in `docs/compatibility/conformance.md` as *"the response is byte-comparable to a
+#: real Jellyfin's, modulo a documented allowlist"*, which only `tools/differential.py` can pay
+#: for. So the eight are named here: a row promoted to L3 has to arrive with the request cases
+#: that make the claim payable (`tests/unit/test_allowlist.py`), and a row demoted out of it has
+#: to say so here.
+L3_ENDPOINTS = frozenset(
+    {
+        ("GET", "/System/Info/Public"),
+        ("POST", "/Users/AuthenticateByName"),
+        ("GET", "/Items"),
+        ("GET", "/Items/{itemId}"),
+        ("POST", "/Items/{itemId}/PlaybackInfo"),
+        ("GET", "/Audio/{itemId}/stream"),
+        ("GET", "/Audio/{itemId}/universal"),
+        ("GET", "/Videos/{itemId}/stream"),
+    }
+)
+
+#: How many rows declare each level. A count in a docstring goes stale; a count in an assertion
+#: fails on the row that moved.
+LEVELS_DECLARED = {"L0": 0, "L1": 1, "L2": 50, "L3": 8}
+
+
+def test_every_endpoint_declares_a_level_and_the_distribution_is_the_one_recorded() -> None:
+    """The column read at last, and read against a number rather than against a vocabulary."""
+    levels: dict[str, int] = {}
+    for entry in surface_endpoints():
+        level = entry.get("level", "")
+        assert level in LEVELS_DECLARED, f"{entry['method']} {entry['path']} declares {level!r}"
+        levels[level] = levels.get(level, 0) + 1
+    assert {name: levels.get(name, 0) for name in LEVELS_DECLARED} == LEVELS_DECLARED
+
+
+def test_the_l3_rows_are_the_eight_the_differential_pays_for() -> None:
+    """A row cannot claim the level whose only payer is a program that has never been asked for it.
+
+    Promoting a row to L3 is a claim that its response is byte-comparable to a real Jellyfin's,
+    which nothing but `tools/differential.py` can establish - and which is only established for the
+    seats a run actually asked from. `tests/unit/test_allowlist.py` is where the request cases are
+    checked; this is where the surface's own column is.
+    """
+    declared = frozenset(
+        (entry["method"], entry["path"])
+        for entry in surface_endpoints()
+        if entry.get("level") == "L3"
+    )
+    assert declared == L3_ENDPOINTS, (
+        f"added: {sorted(declared - L3_ENDPOINTS)}; removed: {sorted(L3_ENDPOINTS - declared)}. "
+        f"An L3 row arrives with the request cases that pay for it, per identity, or it is not L3."
+    )
+
+
+def test_every_l3_row_belongs_to_an_implemented_feature(app: FastAPI) -> None:
+    """L3 is the top of a ladder: a response cannot be byte-comparable if it is not served."""
+    served = documented_paths(app)
+    assert served >= L3_ENDPOINTS, sorted(L3_ENDPOINTS - served)
+    owners = {
+        entry.get("feature")
+        for entry in surface_endpoints()
+        if (entry["method"], entry["path"]) in L3_ENDPOINTS
+    }
+    assert owners <= set(IMPLEMENTED_FEATURES), sorted(owners - set(IMPLEMENTED_FEATURES))
+
+
 def test_an_unlisted_route_fails_the_check(app: FastAPI) -> None:
     """The check has to be able to fail, and this is the failure it exists for."""
 

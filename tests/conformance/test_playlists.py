@@ -371,7 +371,7 @@ async def test_an_unrecognised_media_type_in_the_query_is_dropped_and_recorded(
     )
 
     assert (await item(client, made))["MediaType"] == "Audio"
-    assert ("/Playlists", "mediaType=Nonsense") in app.state.ignored_parameters.counts
+    assert ("/Playlists", "mediaType=Nonsense", "") in app.state.ignored_parameters.counts
 
 
 async def test_a_request_naming_no_name_anywhere_is_refused_rather_than_crashed(

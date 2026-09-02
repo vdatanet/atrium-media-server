@@ -38,6 +38,7 @@ from fastapi.exceptions import RequestValidationError
 from atrium.api.deps import get_sessions, get_state, require_administrator, require_user
 from atrium.api.item_dto import GATED, BuildContext, LibraryContext, Width, build_dto, build_dtos
 from atrium.api.item_models import BaseItemDto, BaseItemDtoQueryResult
+from atrium.compat.auth import client_name
 from atrium.compat.errors import (
     DeletionNotPermittedError,
     EmptyIdentifierError,
@@ -49,7 +50,7 @@ from atrium.compat.errors import (
 )
 from atrium.compat.guids import EMPTY, WireGuid, normalise, require_canonical
 from atrium.compat.model import AtriumModel
-from atrium.compat.query_params import IgnoredParameters, known_tokens
+from atrium.compat.query_params import IgnoredParameters, Recorder, known_tokens
 from atrium.db.engine import session_scope
 from atrium.db.item_queries import (
     ContainerAggregates,
@@ -174,7 +175,7 @@ def parse_int_list(raw: str | None, parameter: str) -> tuple[int, ...] | None:
 
 
 def parse_kinds(
-    raw: str | None, parameter: str, ignored: IgnoredParameters, route: str
+    raw: str | None, parameter: str, ignored: Recorder, route: str
 ) -> frozenset[ItemType] | None:
     """`includeItemTypes`/`excludeItemTypes`: three answers per token, not two.
 
@@ -202,7 +203,7 @@ def parse_kinds(
 
 
 def parse_sort(
-    sort_by: str | None, sort_order: str | None, ignored: IgnoredParameters, route: str
+    sort_by: str | None, sort_order: str | None, ignored: Recorder, route: str
 ) -> tuple[tuple[SortBy, SortOrder], ...]:
     """The comma list zipped with its orders; a missing order is `Ascending` (plan section 6.3)."""
     keys = known_tokens(
@@ -217,7 +218,7 @@ def parse_sort(
     )
 
 
-def parse_fields(raw: str | None, ignored: IgnoredParameters, route: str) -> frozenset[str]:
+def parse_fields(raw: str | None, ignored: Recorder, route: str) -> frozenset[str]:
     """The `ItemFields` tokens v1 resolves; anything else - a token of the reference's enum this
     version does not emit included - is dropped and recorded, which is the same measurable trail
     the tier 3 parameters leave (spec section 3.3)."""
@@ -231,9 +232,10 @@ def parse_fields(raw: str | None, ignored: IgnoredParameters, route: str) -> fro
     return frozenset(kept)
 
 
-def recorder(request: Request) -> IgnoredParameters:
+def recorder(request: Request) -> Recorder:
+    """The tally, bound to whoever is asking, so a dropped token carries AC-10's fourth column."""
     ignored: IgnoredParameters = request.app.state.ignored_parameters
-    return ignored
+    return ignored.for_client(client_name(request.headers))
 
 
 # ------------------------------------------------------------------------------------------------
