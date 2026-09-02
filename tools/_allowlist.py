@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The differential allowlist: `docs/compatibility/allowlist.yaml` in, `Rules` mappings out.
+"""The two registers a differential run is measured against, read from the files that hold them.
+
+The first is the allowlist — `docs/compatibility/allowlist.yaml` in, `Rules` mappings out. The
+second is the named-comparison register, `docs/compatibility/named-comparisons.yaml`, which is the
+twenty rows of 010 spec §3.10: the differences a sweep cannot raise, each with what a run must have
+before the row is even askable. Both live here because 010 plan §3 puts them here, and because a
+register nothing parses is prose — which is the 2026-09-01 audit's M1 finding, *"nothing reads it,
+so nothing fails when it drifts"*.
 
 Pure, like the engine it feeds. It reads one file and consults no socket and no clock, so the
 AC-6 proofs run in the default CI job where there is no Jellyfin and must not be one.
@@ -37,6 +44,7 @@ from pathlib import Path
 from typing import Dict, Iterable, Mapping, Sequence, Tuple
 
 DEFAULT_ALLOWLIST = Path("docs/compatibility/allowlist.yaml")
+DEFAULT_NAMED_COMPARISONS = Path("docs/compatibility/named-comparisons.yaml")
 
 #: The three kinds of entry, and what each stops comparing (010 plan §6.3):
 #:
@@ -78,10 +86,59 @@ _STATUS_POINTER = "status"
 
 #: The same hand-written YAML subset `docs/compatibility/surface.yaml` uses, parsed with two
 #: regexes so that `tools/` keeps its no-dependency rule.
-_ENTRY_START = re.compile(r"^\s*-\s+kind:\s*(\S+)\s*$")
 _FIELD = re.compile(r"^\s{2,}(\w+):\s*(.+?)\s*$")
 
 _REQUIRED = ("kind", "endpoint", "pointer", "case", "reason", "because", "since")
+
+#: A row identifier in the named-comparison register: lowercase words joined by hyphens, the same
+#: shape as a request-case id, because both are printed in a report and read by a human.
+_ID = _CASE
+
+#: What a named comparison may need before it is askable (010 plan §4.2). Two `identity:` values
+#: rather than one, because the two seats are different accounts: the restricted reader of spec
+#: §3.9, and one with a playback-processing permission denied (behaviours §2.21).
+NEEDS = (
+    "identity:restricted",
+    "identity:playback-denied",
+    "fixture",
+    "rescan",
+    "wait",
+    "latency",
+    "bytes",
+    "twice",
+)
+
+#: The value both `behaviours` and `runner` take when there is nothing to name. On `behaviours` it
+#: is a measurement: five of the twenty differences have no behaviours.md entry at all, because an
+#: entry there records what the reference *does* and nobody has watched it do these. On `runner` it
+#: is a state: the row is outstanding until the task that writes the callable lands.
+NONE = "none"
+
+#: A flow sequence in the hand-written subset: `[]`, or `[a, b]`. `surface.yaml`'s `consumers:`
+#: is the same spelling, which is why it is the one used.
+_LIST = re.compile(r"^\[(.*)\]$")
+
+_NAMED_REQUIRED = (
+    "id",
+    "what",
+    "why_the_sweep_misses_it",
+    "needs",
+    "behaviours",
+    "written_at",
+    "runner",
+)
+
+#: The register's half of the same field, and it is deliberately wider by one shape: a row may
+#: cite a whole chapter, because four of the twenty are answered by a row of behaviours §5's
+#: table and those rows have no anchors of their own. The allowlist's `because` stays narrow -
+#: an entry that excused a difference by citing a whole chapter would be citing nothing.
+_BEHAVIOURS_SECTION = re.compile(r"^behaviours §\d+(?:\.\d+)*$")
+
+#: `written_at` names a document in *this* repository — one of the six "what this feature owes the
+#: next ones" lists §3.10 collects, or the compatibility document that carries the question where
+#: no list does. Never a path outside it (AGENTS.md: provenance names a version and a date, or a
+#: file inside Jellyfin's own tree, and a local path is neither verifiable nor ours to publish).
+_WRITTEN_AT = re.compile(r"^(?:specs|docs)/[\w./-]+\.md$")
 
 
 class AllowlistError(Exception):
@@ -141,8 +198,51 @@ class Resolution:
         }
 
 
-def parse(text: str) -> Tuple[Dict[str, str], ...]:
-    """The hand-written YAML subset, as raw string mappings. Validation is `check`'s job."""
+@dataclass(frozen=True)
+class NamedComparison:
+    """One row of 010 spec §3.10: a difference the sweep cannot raise, and what it needs.
+
+    **`needs` is the field that earns the register** (010 plan §4.2). It is what lets a report say
+    *"four outstanding, and three of them because no fixture instance was available"* rather than
+    *"four outstanding"*, and it is what a run consults to decide whether a row is even askable
+    before it counts it as a miss. Two rows carry an **empty** `needs`, and that is a real value:
+    the last two of §3.10 are ordinary request cases, listed so a run counts them rather than
+    triaging them twice.
+
+    `behaviours` is `none` on **five** rows: five of the twenty differences have no behaviours.md
+    entry at all — an entry there records what the reference *does*, and nobody has watched it do
+    these. **Four more cite a whole chapter**, `behaviours §5`, because their answer is a row of
+    that section's table, which has no anchor of its own, so `what` says which row.
+    """
+
+    id: str
+    what: str
+    why_the_sweep_misses_it: str
+    needs: Tuple[str, ...]
+    behaviours: str
+    written_at: str
+    runner: str
+
+    @property
+    def is_outstanding(self) -> bool:
+        """True while no runner has been written for it. Every row is outstanding until T12."""
+        return self.runner == NONE
+
+    @property
+    def behaviours_section(self) -> str:
+        """The behaviours.md section this row cites, or `""` where none carries it."""
+        if self.behaviours == NONE:
+            return ""
+        return self.behaviours.split("§", 1)[1]
+
+
+def _parse_block(text: str, block: str, first: str) -> Tuple[Dict[str, str], ...]:
+    """The hand-written YAML subset, as raw string mappings. Validation is a `check`'s job.
+
+    One parser for both registers, keyed on the block name and on the field a row starts with, so
+    the two files cannot end up read by two subsets of one format.
+    """
+    start = re.compile(r"^\s*-\s+" + re.escape(first) + r":\s*(.+?)\s*$")
     rows: list[Dict[str, str]] = []
     current: Dict[str, str] | None = None
     started = False
@@ -152,12 +252,12 @@ def parse(text: str) -> Tuple[Dict[str, str], ...]:
             continue
         if not raw.strip():
             continue
-        if raw.startswith("entries:"):
+        if raw.startswith(block + ":"):
             started = True
             continue
-        start = _ENTRY_START.match(raw)
-        if start:
-            current = {"kind": start.group(1).strip().strip('"')}
+        opening = start.match(raw)
+        if opening:
+            current = {first: opening.group(1).strip().strip('"')}
             rows.append(current)
             continue
         field = _FIELD.match(raw)
@@ -166,10 +266,18 @@ def parse(text: str) -> Tuple[Dict[str, str], ...]:
         current[field.group(1)] = field.group(2).strip().strip('"')
 
     if not started:
-        raise AllowlistError(
-            "the allowlist has no `entries:` block; the parser and the file disagree"
-        )
+        raise AllowlistError(f"the file has no `{block}:` block; the parser and the file disagree")
     return tuple(rows)
+
+
+def parse(text: str) -> Tuple[Dict[str, str], ...]:
+    """The allowlist's rows, as raw string mappings. Validation is `check`'s job."""
+    return _parse_block(text, "entries", "kind")
+
+
+def parse_named(text: str) -> Tuple[Dict[str, str], ...]:
+    """The named-comparison register's rows. Validation is `check_named`'s job."""
+    return _parse_block(text, "comparisons", "id")
 
 
 def check(rows: Sequence[Mapping[str, str]]) -> Tuple[Entry, ...]:
@@ -260,6 +368,95 @@ def load(path: Path = DEFAULT_ALLOWLIST) -> Tuple[Entry, ...]:
     return check(parse(Path(path).read_text(encoding="utf-8")))
 
 
+def check_named(rows: Sequence[Mapping[str, str]]) -> Tuple[NamedComparison, ...]:
+    """Validate the named-comparison register, or raise on the first thing that is wrong.
+
+    It raises for the reason `check` does. A run's coverage line is *"n of the §3.10 list run, n
+    outstanding"* (spec §3.4), and a register that half-loaded would make both numbers a guess —
+    while the whole point of AC-16 is that an unrun comparison is visible rather than absent.
+    """
+    if not rows:
+        raise AllowlistError("the register has no rows; the parser and the file disagree")
+
+    seen: set[str] = set()
+    comparisons: list[NamedComparison] = []
+    for index, row in enumerate(rows, start=1):
+        where = f"row {index} ({row.get('id', '?')})"
+
+        missing = [name for name in _NAMED_REQUIRED if name not in row or not row[name].strip()]
+        if missing:
+            raise AllowlistError(f"{where}: missing {', '.join(missing)}")
+        extra = sorted(set(row) - set(_NAMED_REQUIRED))
+        if extra:
+            raise AllowlistError(f"{where}: unknown field(s) {', '.join(extra)}")
+
+        identifier = row["id"]
+        if not _ID.match(identifier):
+            raise AllowlistError(f"{where}: id {identifier!r} is not a lowercase hyphenated name")
+        if identifier in seen:
+            raise AllowlistError(f"{where}: a second row with this id")
+        seen.add(identifier)
+
+        needs = _needs(where, row["needs"])
+
+        behaviours = row["behaviours"]
+        if behaviours != NONE and not _BEHAVIOURS_SECTION.match(behaviours):
+            raise AllowlistError(
+                f"{where}: behaviours {behaviours!r} is neither a behaviours.md section "
+                f"('behaviours §3.16') nor {NONE!r}. A row whose answer is not written in "
+                f"behaviours.md says so, and `written_at` is where it is written instead"
+            )
+
+        written_at = row["written_at"]
+        if not _WRITTEN_AT.match(written_at):
+            raise AllowlistError(
+                f"{where}: written_at {written_at!r} is not a document of this repository. "
+                f"A citation never names a path outside it (AGENTS.md)"
+            )
+
+        comparisons.append(
+            NamedComparison(
+                identifier,
+                row["what"],
+                row["why_the_sweep_misses_it"],
+                needs,
+                behaviours,
+                written_at,
+                row["runner"],
+            )
+        )
+
+    return tuple(comparisons)
+
+
+def _needs(where: str, raw: str) -> Tuple[str, ...]:
+    """`[]`, or `[a, b]` whose members are all declared.
+
+    An empty list is a **value** and not an absence: the last two rows of §3.10 need nothing at all
+    and are still counted.
+    """
+    match = _LIST.match(raw)
+    if not match:
+        raise AllowlistError(f"{where}: needs {raw!r} is not a list; an empty one is written []")
+    body = match.group(1).strip()
+    needs = tuple(part.strip() for part in body.split(",")) if body else ()
+    for need in needs:
+        if need not in NEEDS:
+            raise AllowlistError(
+                f"{where}: needs {need!r} is not one of {', '.join(NEEDS)}. A run reads this to "
+                f"decide whether a row is askable, so a value it does not know would silently "
+                f"never be met"
+            )
+    if len(set(needs)) != len(needs):
+        raise AllowlistError(f"{where}: needs {raw!r} repeats a value")
+    return needs
+
+
+def load_named(path: Path = DEFAULT_NAMED_COMPARISONS) -> Tuple[NamedComparison, ...]:
+    """Read, parse and validate the named-comparison register."""
+    return check_named(parse_named(Path(path).read_text(encoding="utf-8")))
+
+
 def resolve(
     entries: Iterable[Entry],
     endpoint: str,
@@ -295,13 +492,20 @@ def resolve(
 
 __all__ = [
     "DEFAULT_ALLOWLIST",
+    "DEFAULT_NAMED_COMPARISONS",
     "DERIVATION_CLASSES",
     "KINDS",
+    "NEEDS",
+    "NONE",
     "AllowlistError",
     "Entry",
+    "NamedComparison",
     "Resolution",
     "check",
+    "check_named",
     "load",
+    "load_named",
     "parse",
+    "parse_named",
     "resolve",
 ]

@@ -38,7 +38,10 @@ docs/
 │   ├── client-atrium-tvos.md    The video client's requirements, traced against v1
 │   ├── client-embeat-mobile.md  The music client's, likewise — and it never negotiates
 │   ├── behaviours.md            Measured Jellyfin behaviours, quirks and defects to replicate
-│   └── conformance.md           How parity is proven, including differential testing
+│   ├── conformance.md           How parity is proven, including differential testing
+│   ├── allowlist.yaml           What may differ between the two servers, and why (010 §3.3)
+│   └── named-comparisons.yaml   The differences a sweep cannot raise, and what each needs
+│                                before it can be asked at all (010 §3.10)
 └── decisions/
     ├── README.md                Index of architecture decision records
     └── NNNN-*.md                One decision each, immutable once accepted

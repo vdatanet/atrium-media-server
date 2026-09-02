@@ -564,7 +564,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T5 — `docs/compatibility/named-comparisons.yaml`: twenty rows, and what each needs
 
-- [ ] **Changes:** new `docs/compatibility/named-comparisons.yaml` — one row per row of spec §3.10,
+- [x] **Changes:** new `docs/compatibility/named-comparisons.yaml` — one row per row of spec §3.10,
   **twenty of them since D-6**, each with `id`, `what`, `why_the_sweep_misses_it`, `needs`
   (`identity:restricted`, `identity:playback-denied`, `fixture`, `rescan`, `wait`, `latency`,
   `bytes`, `twice`), `behaviours` and `runner`,
@@ -585,6 +585,90 @@ written against twenty, and the `outstanding:` section they described is gone ra
   **twenty** and that each of D-6's four rows is present by id, so a register that quietly dropped
   one of them back out of the count fails.
 - **Spec reference:** §3.10, §4, AC-16; plan §4.2, §6.4
+
+> **Done (2026-09-02).** *Writing spec §3.10's table into a file cost the register a field, because
+> the field the plan named cannot be filled on a quarter of the rows.* [Plan §4.2](plan.md#42-docscompatibilitynamed-comparisonsyaml)
+> gives every row a `behaviours` — *"the section that is the answer"* — and **five of the twenty
+> have no behaviours.md entry at all**: the image track's latency, the media source with no runtime
+> and the zero-length cue beside it, EXIF orientation on resize, 005's OQ-7, and the paused-session
+> ticker. That is not an oversight in `behaviours.md`; it is what that document is. An entry there
+> records **what the reference does**, and nobody has watched the reference do any of these — which
+> is the same sentence as *"a sweep cannot raise it"*, seen from the other document. Four more are
+> answered by a **row of behaviours §5's table** rather than by a numbered subsection, and those
+> rows carry no anchor of their own, so they cite the chapter and let `what` say which row. So
+> `behaviours` takes `none`, and the routine call taken is a **seventh field, `written_at`** — the
+> document this row was collected from — which is T3's `case` in a different shape: the six columns
+> could not state something true of every row, and the file would otherwise have carried five rows
+> pointing nowhere. It is the checked half, too: `test_every_row_names_a_document_of_this_repository_that_exists`
+> resolves all twenty and fails on a path that is not a file, which is the AGENTS.md rule that a
+> citation never names a path outside this repository, made unable to rot.
+>
+> *And `written_at` measured something the task statement did not ask.* **Nineteen of the twenty
+> came from one of the six inherited lists, and behaviours §5.2 came from none of them** — it is
+> the one row collected from the compatibility documents alone, which is exactly what *"What the
+> gate changed"* §3 meant by *"the six lists **and** the compatibility documents"* and is why D-6
+> existed at all. The test asserts both halves: every one of the six lists is cited by at least one
+> row, and the only other document cited is `behaviours.md`.
+>
+> *The second finding is that `needs` has no value for two of the twenty, and an empty list is a
+> value rather than an absence.* Plan §4.2's eight tokens describe eighteen rows. The last two of
+> §3.10 — the `"$"` message and the four unmeasured content-type refusals — are *"here to be
+> recognised, not discovered"*: [plan §6.4](plan.md#64-the-named-comparisons) makes them ordinary
+> request cases with a register row pointing at them, so they need no seat, no fixture, no wait and
+> no second run. They are still inside AC-16's count, so a loader that read `[]` as a missing field
+> would have dropped two rows out of the twenty on the day the register was first read.
+> `check_named` therefore refuses a **missing** `needs` and accepts an **empty** one, and
+> `test_an_empty_needs_is_a_value_and_a_missing_one_is_not` names the two rows.
+>
+> *The third is that a row's runner shape and a row's `needs` do not partition the same way, and
+> only one of them is what a run reads.* Plan §6.4 files **the entries a reader cannot reach**
+> under *a second seat*, with the named reader and the delivery-time refusal. It needs the seat and
+> it also needs the **fixture**: what the reference hides there is hidden by a parental-rating
+> check and never by library access ([behaviours §3.17](../../docs/compatibility/behaviours.md)),
+> so the comparison only says anything against *a playlist holding items from two libraries* — which
+> is one of the five entries [spec §3.1](spec.md) already owes the fixture, for this row. It is the
+> only row of the twenty whose `needs` crosses its shape, and the two seat rows beside it are
+> asserted by name in `test_the_two_rows_the_second_seat_is_the_whole_signal_for_declare_it`,
+> because they are the reason this register exists: both are invisible to a run that authenticates
+> the way every probe in this repository did before 2026-09-01.
+>
+> *Checked against what was measured rather than against the prose that collected it, which is what
+> T3 found the hard way.* All twenty `what` cells reproduce spec §3.10 row for row **and in its
+> order**, asserted as an ordered list; every behaviours section cited resolves against a heading of
+> `behaviours.md`; and the two sharpest rows say what their entries say — §3.16's divergence is
+> visible only to a restricted non-administrator because an administrator lacks no permission, and
+> §3.17's is invisible to two servers whose test user can open everything. Nothing moved: unlike
+> §3.3's two tables, §3.10's twenty survived being written into a file unchanged. What did not
+> survive was the *shape* the plan gave them.
+>
+> *Routine calls taken, none of which touches an accepted document.* **The reader is in
+> `tools/_allowlist.py` and not in a module of its own**, because [plan §3](plan.md#3-modules) puts
+> it there — *"reads `docs/compatibility/allowlist.yaml` **and the named-comparison register**"* —
+> and the two-regex parser was generalised into one `_parse_block(text, block, first_field)` so the
+> two registers cannot end up read by two subsets of one format. **A second `because`-shaped regex,
+> wider by one shape:** a register row may cite a whole chapter and an allowlist entry may not,
+> because `behaviours §5` is a real answer here and would be an excuse that cites nothing there.
+> **`test_both_registers_are_valid_yaml`**, over both files: the tools read them with two regexes
+> and no dependency, which cannot tell a quoting mistake from a value, and a hand-written subset
+> nothing else ever parses would keep one for ever. And **the L3 section of
+> [conformance.md](../../docs/compatibility/conformance.md) now names the file** beside the
+> allowlist it already named, with what `needs` buys a report.
+>
+> *Nothing was written to any server, and nothing here opens a socket or reads a clock.* Every one
+> of the twenty rows came from spec §3.10, the six inherited lists and the behaviours entries they
+> cite. The three gates were proven by breaking them: delete a row and the register stops being
+> §3.10's table; point a `behaviours` at §5.99 and the section test fails; point a `written_at` at
+> a file that is not there and the twenty stop resolving. The loader runs on the 3.9 floor, checked
+> under `python3.9` and not inferred.
+>
+> *What T6 must know.* **T4's inheritance is unchanged and is now beside a second file that also
+> waits on it**: `listing-ordered-at-random`, `listing-ordered-by-a-key-with-ties` and
+> `by-name-without-limit` are still undeclared, so two of the three array entries excuse nothing on
+> the wire. **A register id is not a request-case id**, and the two vocabularies must not be
+> confused — but the last two rows of this register *are* request cases T6 owes: a malformed body,
+> and a body with no content type on the **four** of the five routes nobody has asked (009 T13
+> measured the fifth). And the eight `needs` tokens are what a case's `identities` must be able to
+> satisfy: two seats, not one.
 
 ## T6 — `docs/compatibility/request-cases.yaml`: the eight L3 rows first, then the surface
 
