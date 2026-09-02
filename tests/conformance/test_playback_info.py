@@ -42,6 +42,7 @@ from tests.conformance.test_golden import STATE
 from tests.fixtures.media import (
     BOTH_SUBTITLE_KINDS,
     DIRECT_PLAY,
+    HIGH_RATE_AUDIO,
     REJECTED_AUDIO,
     REJECTED_CONTAINER,
     REJECTED_VIDEO,
@@ -550,6 +551,66 @@ async def test_ac31_all_three_denied_is_flags_down_and_no_error_code(
     assert flags(document) == (False, False, False)
     assert "TranscodingUrl" not in document["MediaSources"][0]
     assert "ErrorCode" not in document
+
+
+# The profile-absent half of AC-31, and it is the opposite rule. The two rows above hold against
+# a `DeviceProfile`; a negotiation carrying none reaches no ladder answer to gate, so the flags
+# stay the ones the account's own permissions put on the source - one permission per media kind
+# `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. Found by
+# `tools/differential.py --named delivery-time-policy-refusal` on 2026-09-02, which negotiates
+# with an empty body: Atrium answered `SupportsTranscoding: true` where the reference answered
+# `false`, on a seat with all three denied. Delete either gate and one of these fails.
+
+_UNNEGOTIATED: list[tuple[str, dict[str, bool], tuple[bool, bool, bool]]] = [
+    ("every permission granted", {}, (True, True, True)),
+    ("video transcoding denied alone", {VIDEO_TRANSCODING: False}, (True, True, False)),
+    ("audio transcoding denied alone", {AUDIO_TRANSCODING: False}, (True, True, True)),
+    ("remuxing denied alone", {REMUXING: False}, (True, False, True)),
+    (
+        "all three denied",
+        {VIDEO_TRANSCODING: False, AUDIO_TRANSCODING: False, REMUXING: False},
+        (True, False, False),
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "policy,expected",
+    [row[1:] for row in _UNNEGOTIATED],
+    ids=[row[0] for row in _UNNEGOTIATED],
+)
+async def test_ac31_a_video_negotiated_against_no_profile_reads_one_permission_per_flag(
+    client: httpx.AsyncClient,
+    served: tuple[FastAPI, ScannedMediaWorld],
+    policy: dict[str, bool],
+    expected: tuple[bool, bool, bool],
+) -> None:
+    """A single denial **is** observable here, which is what the all-three gate hides one profile
+    away: `SupportsTranscoding` follows `EnableVideoPlaybackTranscoding` and
+    `SupportsDirectStream` follows `EnablePlaybackRemuxing`."""
+    app, world = served
+    app.dependency_overrides[require_user] = _as_viewer(policy)
+    item_id = world.of(REJECTED_VIDEO).id
+
+    assert flags(await negotiate(client, item_id)) == expected
+    answered = await client.get(f"/Items/{item_id}/PlaybackInfo", headers=HEADERS)
+    assert answered.status_code == 200
+    assert flags(dict(answered.json())) == expected, "the GET carries no profile either"
+
+
+async def test_ac31_a_denied_video_permission_moves_nothing_on_an_audio_item(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The per-kind half. An audio item reads the audio permission and no other, and its
+    `SupportsDirectStream` is untouched by any of the three - measured on the same run."""
+    app, world = served
+    item_id = world.of(HIGH_RATE_AUDIO).id
+
+    app.dependency_overrides[require_user] = _as_viewer({VIDEO_TRANSCODING: False, REMUXING: False})
+    assert flags(await negotiate(client, item_id)) == (True, True, True)
+
+    app.dependency_overrides[require_user] = _as_viewer({AUDIO_TRANSCODING: False})
+    assert flags(await negotiate(client, item_id)) == (True, True, False)
 
 
 # ------------------------------------------------------------------------------------------

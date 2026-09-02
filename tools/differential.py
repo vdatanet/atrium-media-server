@@ -1986,6 +1986,19 @@ def named_delivery_time_policy_refusal(
     server and creating an account is a write - and T9 measured the three denials *reading back*
     denied. What neither could ask is whether they are **observable**, which is a negotiation and
     a delivery rather than a policy object, and that is this row.
+
+    **The delivery half of what this row predicted was never reachable through the request it
+    makes, and 2026-09-02's run is what showed it.** `/Videos/{id}/stream.mp4` is one of the four
+    `stream` routes, and those take **no user at all** on either server's contract as this project
+    records it (behaviours 2.10) - Atrium reads no policy there, so the refusal it substitutes for
+    the reference's force-copy (behaviours 2.21's *"one edge not replicated"*) lives on the HLS
+    segment route and nowhere else. Both servers therefore answer this request `200`, with
+    different bytes behind it, and a predicate demanding two different statuses was asserting
+    something the entry it cites does not claim. What is asserted now is what the entry does
+    claim and what this request can reach: the negotiation gate, on both servers, and a delivery
+    neither of them refuses. The force-copy edge itself is still uncompared - reaching it needs a
+    segment request built by hand, because a denied seat's own negotiation hands over no address
+    to follow.
     """
     denied = seat_of(identities, Role.PLAYBACK_DENIED.value)
     answers: Dict[str, Tuple[Any, int, str]] = {}
@@ -2011,13 +2024,17 @@ def named_delivery_time_policy_refusal(
         finding=(
             "with all three processing permissions denied, the negotiation answers "
             f"SupportsTranscoding={ours[0]!r} here and {theirs[0]!r} there, and a delivery that "
-            f"would have to re-encode answers {ours[1]} here and {theirs[1]} there"
+            f"would have to re-encode answers {ours[1]} here and {theirs[1]} there - a route with "
+            "no user on either contract, so neither server refuses it"
         ),
         atrium=f"SupportsTranscoding={ours[0]!r}; delivery {ours[2]}",
         reference=f"SupportsTranscoding={theirs[0]!r}; delivery {theirs[2]}",
-        # behaviours 2.21: the three are one gate at negotiation - both servers say `false` - and
-        # at delivery the reference force-copies where Atrium refuses the step it cannot produce.
-        as_documented=ours[0] is False and theirs[0] is False and ours[1] != theirs[1],
+        # behaviours 2.21: the negotiation gates to `false` on both servers, and this delivery
+        # route reads no policy on either - see the docstring for why the force-copy edge is not
+        # what these two statuses can measure.
+        as_documented=(
+            ours[0] is False and theirs[0] is False and ours[1] == 200 and theirs[1] == 200
+        ),
     )
 
 

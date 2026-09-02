@@ -134,6 +134,44 @@ def _policy_battery(server: Server, probe: Probe, source, reject_vcodec) -> list
             and data.get("ErrorCode") is None
         )
 
+        # **The same six policies asked with no DeviceProfile at all, which is a different rule.**
+        # Added 2026-09-02, after tools/differential.py's `delivery-time-policy-refusal` row
+        # negotiated with an empty body and Atrium answered `SupportsTranscoding: true` where the
+        # reference answered `false`. The all-three gate above is applied by the per-device step,
+        # and a controller reaching no profile skips that step outright [source:
+        # Jellyfin.Api/Controllers/MediaInfoController.cs:189 @ v10.11.11] - so what a client sees
+        # is what the account's permissions put on the *source*, one permission per media kind
+        # [source: Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11].
+        # A single denial is therefore observable here and invisible one line up.
+        unnegotiated = (
+            ("all three permitted", (True, True, True), True, True),
+            ("video transcoding denied alone", (False, True, True), False, True),
+            ("audio transcoding denied alone", (True, False, True), True, True),
+            ("remuxing denied alone", (True, True, False), True, False),
+            ("all three denied", (False, False, False), False, False),
+        )
+        for label, (video, audio, remux), transcoding, direct_stream in unnegotiated:
+            set_policy(
+                EnableVideoPlaybackTranscoding=video,
+                EnableAudioPlaybackTranscoding=audio,
+                EnablePlaybackRemuxing=remux,
+            )
+            status, data = negotiate(as_user, source.item_id, None)
+            probe.observe(f"no DeviceProfile, {label}", f"{status}: {_flags(data)}")
+            one = data["MediaSources"][0]
+            checks.append(
+                status == 200
+                and one.get("SupportsDirectPlay") is True
+                and one.get("SupportsTranscoding") is transcoding
+                and one.get("SupportsDirectStream") is direct_stream
+                and not one.get("TranscodingUrl")
+            )
+            status, data = negotiate(as_user, source.item_id, reject_vcodec)
+            probe.observe(f"the same policy with a profile, {label}", f"{status}: {_flags(data)}")
+            one = data["MediaSources"][0]
+            # The contrast is the finding: only the all-denied row moves against a profile.
+            checks.append(one.get("SupportsTranscoding") is (video or audio or remux))
+
         set_policy(EnableAllFolders=False, EnabledFolders=[])
         status, headers, body = as_user.post_raw(
             f"/Items/{source.item_id}/PlaybackInfo", body={"UserId": as_user.user_id}
@@ -472,8 +510,13 @@ def run(server: Server, args) -> Probe:
         probe.conclude(
             "as now documented: per-request annotation, an ignored EnableTranscoding switch, "
             "policy denials that move nothing until every step is denied (and then only the "
-            "flags), and no ErrorCode anywhere a source exists. The refusals: an empty 401 for "
-            "a request with no token, problem details for an unknown item and for an invisible "
+            "flags) - but only against a DeviceProfile: a negotiation carrying none reaches no "
+            "stream builder, and there a single permission decides per media kind, so a seat "
+            "denied video transcoding alone is answered SupportsTranscoding=false with no "
+            "profile and true with one, and one denied remuxing alone loses "
+            "SupportsDirectStream. And no ErrorCode anywhere a source exists. The refusals: an "
+            "empty 401 for a request with no token, problem details for an unknown item and for "
+            "an invisible "
             "one, and the ErrorCode only where the source list is empty - which also drops the "
             "PlaySessionId. And a POST carrying no DeviceProfile is not a POST with no profile: "
             "the device's stored capabilities supply one, and only the GET is profile-less. And "

@@ -878,6 +878,14 @@ FEATURE_008: dict[int, tuple[str, ...]] = {
         "tests.unit.test_media_decision:test_ac31_an_audio_item_turns_on_the_audio_permission_alone",
         "tests.conformance.test_playback_info:test_ac31_one_denied_permission_negotiates_exactly_as_a_permitted_user",
         "tests.conformance.test_playback_info:test_ac31_all_three_denied_is_flags_down_and_no_error_code",
+        # The profile-absent half, added 2026-09-02 with the fix for the difference
+        # `tools/differential.py --named delivery-time-policy-refusal` found: the three rows
+        # above are all against a profile, and the criterion's other branch reads **one**
+        # permission per media kind (behaviours section 2.21).
+        "tests.unit.test_media_decision:test_ac31_with_no_profile_a_single_denial_is_the_whole_gate",
+        "tests.unit.test_media_decision:test_ac31_an_unnegotiated_audio_item_reads_the_audio_permission_alone",
+        "tests.conformance.test_playback_info:test_ac31_a_video_negotiated_against_no_profile_reads_one_permission_per_flag",
+        "tests.conformance.test_playback_info:test_ac31_a_denied_video_permission_moves_nothing_on_an_audio_item",
         # The delivery half, which T13 measured as per stream and video-only: the rule table is
         # the unit file's and the two wire shapes are the segment route's.
         "tests.unit.test_transcode_throttle:test_ac31_the_delivery_gate_is_per_stream",

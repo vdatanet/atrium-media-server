@@ -476,6 +476,73 @@ def test_ac31_an_audio_item_turns_on_the_audio_permission_alone() -> None:
     assert decide(TRACK, profile, Switches(), kept, is_video=False).outcome is Outcome.TRANSCODE
 
 
+#: The same six policies with **no profile at all**, where the rule inverts: no stream builder is
+#: reached, so the flags are the ones the account's permissions put on the source, one permission
+#: per media kind `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`.
+UNNEGOTIATED: list[tuple[str, PlaybackPolicy, bool, bool]] = [
+    ("every permission granted", PlaybackPolicy(), True, True),
+    (
+        "video transcoding alone denied is visible here",
+        PlaybackPolicy(enable_video_transcoding=False),
+        False,
+        True,
+    ),
+    (
+        "audio transcoding alone denied moves nothing on a video item",
+        PlaybackPolicy(enable_audio_transcoding=False),
+        True,
+        True,
+    ),
+    (
+        "remuxing alone denied takes the direct-stream flag",
+        PlaybackPolicy(enable_remuxing=False),
+        True,
+        False,
+    ),
+    (
+        "all three denied takes both",
+        PlaybackPolicy(
+            enable_video_transcoding=False,
+            enable_audio_transcoding=False,
+            enable_remuxing=False,
+        ),
+        False,
+        False,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "policy,transcoding,direct_stream",
+    [row[1:] for row in UNNEGOTIATED],
+    ids=[row[0] for row in UNNEGOTIATED],
+)
+def test_ac31_with_no_profile_a_single_denial_is_the_whole_gate(
+    policy: PlaybackPolicy, transcoding: bool, direct_stream: bool
+) -> None:
+    """The opposite of the table above, on the same permissions, decided by whether a profile
+    arrived. Direct play is unconditional: no permission touches it on either server."""
+    decision = decide(FILM, None, Switches(), policy, is_video=True)
+
+    assert decision.outcome is Outcome.DIRECT_PLAY
+    assert decision.supports_direct_play is True
+    assert decision.supports_transcoding is transcoding
+    assert decision.supports_direct_stream is direct_stream
+
+
+def test_ac31_an_unnegotiated_audio_item_reads_the_audio_permission_alone() -> None:
+    """And nothing takes its direct-stream flag: `EnablePlaybackRemuxing` is read for a video
+    item only, measured on the same run."""
+    denied_elsewhere = PlaybackPolicy(enable_video_transcoding=False, enable_remuxing=False)
+    kept = decide(TRACK, None, Switches(), denied_elsewhere, is_video=False)
+    assert (kept.supports_transcoding, kept.supports_direct_stream) == (True, True)
+
+    denied = decide(
+        TRACK, None, Switches(), PlaybackPolicy(enable_audio_transcoding=False), is_video=False
+    )
+    assert (denied.supports_transcoding, denied.supports_direct_stream) == (False, True)
+
+
 def test_no_policy_shape_produces_an_error() -> None:
     """AC-31's last clause: every answer is a `Decision`. There is no error shape to produce."""
     for _, policy, _, _ in POLICIES:

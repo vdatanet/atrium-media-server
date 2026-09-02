@@ -45,11 +45,15 @@ module to it.
 the reference does not read it either, and a field that is absent invites a later reader to add
 the branch.
 
-**The user's policy barely gates anything.** A single denied permission changes nothing; a video
-item loses `SupportsTranscoding` only when video transcoding, audio transcoding **and** remuxing
-are all denied at once, and an audio item turns on the audio permission alone
-`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28; source:
-Jellyfin.Api/Helpers/MediaInfoHelper.cs:278-293 @ v10.11.11]`. Even the all-denied answer is
+**The user's policy gates two different things, and which one depends on whether a profile
+arrived.** Against a profile - the answer a stream builder produced - it barely gates anything: a
+single denied permission changes nothing, a video item loses `SupportsTranscoding` only when video
+transcoding, audio transcoding **and** remuxing are all denied at once, and an audio item turns on
+the audio permission alone `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28;
+source: Jellyfin.Api/Helpers/MediaInfoHelper.cs:278-293 @ v10.11.11]`. With **no** profile the
+builder is never reached, and then a **single** permission decides, per media kind, on the source
+itself: see `unnegotiated_transcoding` and `Decision.remuxing_denied`
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. Either way the answer is
 flags, never an error.
 
 **The subtitle half arrived at 011 T9**, and it is not a second ladder beside this one - it hangs
@@ -394,6 +398,18 @@ class Decision:
     subtitle mode and language preference 011 section 2 excludes, and a `SubtitleMode: None` user
     is answered no default at all (011 spec section 3.3, OQ-12)."""
 
+    remuxing_denied: bool = False
+    """**Rule 1 alone sets it**, and it is the one place `SupportsDirectStream` stops mirroring
+    `SupportsDirectPlay` (behaviours section 2.22).
+
+    A negotiation carrying no device profile never reaches a stream builder, so the mirror has
+    nothing to mirror and the flags stay the ones the account's permissions put on the source: for
+    a **video** item `SupportsDirectStream` is `EnablePlaybackRemuxing` `[source:
+    Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`, `[probe:
+    tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. An audio item's is untouched by
+    any permission, measured on the same run, which is why this reads `is_video and ...` at its
+    one caller rather than the permission alone."""
+
     target: TranscodingProfile | None = None
     """The client's own entry this answer was built from, `None` when nothing is produced.
 
@@ -419,8 +435,12 @@ class Decision:
         `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28]`. A client that
         branches on it is branching on direct play, and resurrecting a distinction no reference
         answer draws would be the delta.
+
+        `remuxing_denied` is the single exception and it is not a resurrection: a negotiation with
+        no profile reaches no builder at all, so there is no play method to mirror and the source
+        keeps the flag the account's own `EnablePlaybackRemuxing` put on it.
         """
-        return self.outcome is Outcome.DIRECT_PLAY
+        return self.outcome is Outcome.DIRECT_PLAY and not self.remuxing_denied
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1391,6 +1411,25 @@ def _producible(
     return not (audio is not None and not target.audio_codec)
 
 
+def unnegotiated_transcoding(policy: PlaybackPolicy, *, is_video: bool) -> bool:
+    """`SupportsTranscoding` on a source **no profile was ever applied to**, which is not the gate.
+
+    The all-three gate belongs to the answer a stream builder produced. A negotiation carrying no
+    device profile never reaches one - the reference's controller skips the whole per-device step
+    when the body carries no profile and the device stored none `[source:
+    Jellyfin.Api/Controllers/MediaInfoController.cs:189 @ v10.11.11]` - so the flags a client sees
+    are the ones the account's permissions put on the *source*, read **one permission per media
+    kind**: video transcoding for a video item, audio transcoding for an audio one `[source:
+    Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`, `[probe:
+    tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`.
+
+    So a single denial **is** observable, on exactly the request that negotiates nothing - which is
+    the opposite of what happens one branch down, and the reason the two rules live in two
+    functions rather than in one with a flag.
+    """
+    return policy.enable_video_transcoding if is_video else policy.enable_audio_transcoding
+
+
 def _may_process(policy: PlaybackPolicy, *, is_video: bool) -> bool:
     """The measured policy gate, and it is deliberately weak.
 
@@ -1469,9 +1508,10 @@ def decide(
 
     if profile is None:
         # Rule 1, and only this half of it: a client that has not described itself is not a
-        # client that permits nothing. Every flag true, no URL, nothing to explain - and no
-        # delivery method on any subtitle stream, which is measured and is why `subtitles` is
-        # empty here rather than a list of fallbacks.
+        # client that permits nothing. No URL, nothing to explain - and no delivery method on any
+        # subtitle stream, which is measured and is why `subtitles` is empty here rather than a
+        # list of fallbacks. The flags are the account's own (`_unnegotiated`) rather than three
+        # `True`s: nothing is negotiated here, so what comes back is what the source carries.
         return Decision(
             outcome=Outcome.DIRECT_PLAY,
             reasons=(),
@@ -1479,7 +1519,8 @@ def decide(
             sub_protocol=None,
             video=None,
             audio=None,
-            supports_transcoding=True,
+            supports_transcoding=unnegotiated_transcoding(policy, is_video=is_video),
+            remuxing_denied=is_video and not policy.enable_remuxing,
         )
 
     max_bitrate = switches.max_streaming_bitrate or profile.max_streaming_bitrate
@@ -1649,4 +1690,5 @@ __all__ = [
     "method_named",
     "refused_by_policy",
     "subtitle_answers",
+    "unnegotiated_transcoding",
 ]

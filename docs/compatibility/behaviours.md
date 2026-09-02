@@ -606,14 +606,33 @@ said a mismatch would be an error, and the measurement replaced it.
 the item DTO's `PlayAccess` property and the remote-control `Play` command `[source:
 MediaBrowser.Controller/Entities/BaseItem.cs:1057,
 Emby.Server.Implementations/Session/SessionManager.cs:1321 @ v10.11.11]` — and treat the three
-processing permissions as one gate: for a video item, `SupportsTranscoding` drops to `false`
-only when `EnableVideoPlaybackTranscoding`, `EnableAudioPlaybackTranscoding` **and**
+processing permissions as one gate **on a negotiation the client sent a profile to**, which is the
+half of this entry the heading is named after: for a video item, `SupportsTranscoding` drops to
+`false` only when `EnableVideoPlaybackTranscoding`, `EnableAudioPlaybackTranscoding` **and**
 `EnablePlaybackRemuxing` are all denied; any single denial changes nothing at negotiation
 `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-28; source:
-Jellyfin.Api/Helpers/MediaInfoHelper.cs:278-293 @ v10.11.11]`. At delivery it reads two of the
-three, **per stream**: a user denied video transcoding has the video stream force-copied
-"regardless of whether it will be compatible or not", and one denied audio transcoding has the
-audio stream force-copied the same way `[source:
+Jellyfin.Api/Helpers/MediaInfoHelper.cs:278-293 @ v10.11.11]`.
+
+**That gate belongs to the answer a profile produced, and a negotiation carrying no profile never
+reaches it.** The controller runs its whole per-device step only when the body carried a
+`DeviceProfile` or the device had stored one `[source:
+Jellyfin.Api/Controllers/MediaInfoController.cs:189 @ v10.11.11]`, and what a client sees
+otherwise is what the account's permissions put on the **source**, read **one permission per media
+kind**: a video item's `SupportsTranscoding` is `EnableVideoPlaybackTranscoding` and its
+`SupportsDirectStream` is `EnablePlaybackRemuxing`; an audio item's `SupportsTranscoding` is
+`EnableAudioPlaybackTranscoding` and nothing touches its `SupportsDirectStream`. `SupportsDirectPlay`
+is untouched by all three `[source:
+Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`, `[probe:
+tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. So *"any single denial changes
+nothing"* is true of a negotiation against a profile and **false** of `GET
+/Items/{itemId}/PlaybackInfo` and of a `POST` with an empty body, where a single denial is the
+whole rule. The same function serves an item body's `MediaSources`, so a listing that asks for
+them carries the same flags — measured on the same run, and **not** reproduced here
+([§5](#5-accepted-gaps-in-v1)).
+
+At delivery it reads two of the three, **per stream**: a user denied video transcoding has the
+video stream force-copied "regardless of whether it will be compatible or not", and one denied
+audio transcoding has the audio stream force-copied the same way `[source:
 MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs:7136-7166 @ v10.11.11]`.
 
 Two limits on that, both of which decide what a faithful reimplementation may do (008 T13). The
@@ -629,22 +648,41 @@ two calls earlier. The refusal is unreachable code; the force-copy is the behavi
 **Depends on it:** an operator who denies one permission and observes that clients still play; a
 client that never learned to handle a policy `403` from these routes, because none exists.
 
-**Atrium does:** the same negotiation semantics — the all-three gate, flags rather than errors,
-no invented `403`.
+**Atrium does:** both negotiation rules, flags rather than errors, no invented `403` — the
+all-three gate against a device profile (`media/decision.py`'s `_may_process` and `_can_produce`)
+and the per-kind single permission when no profile arrived (`unnegotiated_transcoding` and
+`Decision.remuxing_denied`), on the `POST` and the `GET` alike. The second half arrived on
+2026-09-02 and the note below is why.
 
-> **Measured on 2026-09-02, and the first half of that sentence is false on the wire.** A seat with
+> **Measured on 2026-09-02, and the first half of that sentence was false on the wire. Fixed the
+> same day, and the fix found a rule this entry did not have.** A seat with
 > `EnableVideoPlaybackTranscoding`, `EnableAudioPlaybackTranscoding` and `EnablePlaybackRemuxing`
-> all denied — read back denied on both servers — negotiates a video item the profile cannot direct
-> play and is answered **`SupportsTranscoding: true` here and `false` there**
+> all denied — read back denied on both servers — negotiated a video item and was answered
+> **`SupportsTranscoding: true` here and `false` there**
 > `[probe: tools/differential.py --named delivery-time-policy-refusal, Jellyfin 10.11.11,
-> 2026-09-02]`. The all-three gate is described in this entry and is not applied by the
-> negotiation, so the flag Atrium sends is the model's default rather than the answer this entry
-> claims. It is the first difference 010's harness has found in **Atrium** rather than in a
-> document, and it is **008's** to decide: the harness triages and the feature that owns the
-> endpoint answers ([010 §2](../../specs/010-conformance-harness/spec.md#2-scope)). The delivery
-> half of the row is untouched by it — both servers answered the same `200` for a request that
-> would have to re-encode, so the force-copy edge this entry describes was not reached by the
-> fixture film either.
+> 2026-09-02]`. It was the first difference 010's harness found in **Atrium** rather than in a
+> document, and it was **008's** to answer: the harness triages and the feature that owns the
+> endpoint decides ([010 §2](../../specs/010-conformance-harness/spec.md#2-scope)).
+>
+> **The gate this entry described was not the one missing.** That comparison negotiates with an
+> **empty body**, so no profile reaches the ladder on either server — and the all-three rule this
+> entry stated as *"the negotiation"* belongs to the profile path alone, which Atrium had right
+> from 008 T5. What was missing was the paragraph above: with no profile the reference reads
+> **one** permission per media kind off the source, so a single denial is observable there and
+> invisible one branch away. Implementing the all-three gate on that branch would have made this
+> row agree and answered `true` for a seat denied video transcoding alone, where the reference
+> answers `false`. Measured across all six policy shapes, with and without a profile, before
+> anything was written `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`.
+>
+> **The delivery half of the row was never reachable through the request it makes**, and that is
+> recorded here rather than in the harness because the claim is this entry's. Both servers answer
+> the same `200` to `/Videos/{itemId}/stream.mp4`: it is one of the four `stream` routes, which
+> take no user on Atrium at all ([§2.10](#210-the-image-and-delivery-routes-accept-a-token-and-require-none)), so
+> the refusal Atrium substitutes for the force-copy lives on the HLS segment route and nowhere
+> else. The named comparison now asserts what this request can reach — the gate on both servers,
+> and a delivery neither refuses — and **the force-copy edge itself is still uncompared**: reaching
+> it needs a segment request built by hand, because a denied seat's own negotiation hands over no
+> address to follow.
 
 **The one edge not replicated** is delivery-time force-copy into an output that
 violates the negotiated profile: Atrium refuses the step instead, and no client can depend on
@@ -668,7 +706,11 @@ Jellyfin.Api/Helpers/MediaInfoHelper.cs:251-268 @ v10.11.11]`. A remux answer is
 **Depends on it:** a client that branches on `SupportsDirectStream` is, on this version,
 branching on direct play; one that expected an independent remux flag would never see it.
 
-**Atrium does:** the same mirror. Resurrecting the distinction would be a flag no reference
+**Atrium does:** the same mirror, and the reference's own single exception to it: a negotiation
+carrying **no** profile reaches no builder and no play method, so a video source's
+`SupportsDirectStream` is that account's `EnablePlaybackRemuxing` on both servers
+([§2.21](#221-playback-policy-permissions-are-negotiation-inert)). Everywhere a profile arrives the
+flag is direct play's. Resurrecting the distinction anywhere else would be a flag no reference
 answer sets, which is a delta a differential would flag on the first negotiation.
 
 ### 2.23 A negotiation opens the file; a listing does not, and what it learns is kept
@@ -2837,6 +2879,7 @@ undocumented bug.
 | **The rename applies `Name` and nothing else, and refuses every item that is not a playlist** ([009 §3.8](../../specs/009-playlists/spec.md)) | A client that edits a playlist's overview, rating, year, genres or tags through `POST /Items/{itemId}` finds them unchanged, and the same request against a film, an episode, a track or a by-name row is `403` where the reference applies the body. Measured: a whole posted body changes `Overview`, `ForcedSortName`, `OfficialRating`, `CustomRating`, `ProductionYear`, `Genres` and `Tags` on the reference, while `Path` and `IsFolder` are computed and ignored on both `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. Neither analysed client posts anything but a changed `Name` | Item metadata editing entering the surface with a named consumer — which is more than a route: 004 T10 measured the scan and the refresh already fighting over `Item.name`, so an edited field needs somewhere to live that the next scan does not overwrite. Until then a refusal is the honest answer and a partial apply would be Principle VI's plausible-looking stub |
 | **A required body that is missing entirely is `400` and not `415`** ([§1.11](#111-there-are-four-error-shapes-not-one)) | A request carrying no body and no `Content-Type` on one of the five routes whose body is required — 007's three reporting routes, 008's `PlaybackInfo` and 009's rename — answers the validation `400` where the reference answers `415 Unsupported Media Type` in the problem-details shape `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. No analysed client sends a body-less request to a route that requires one | A content-type gate in `compat/`, ahead of the body binding, and one measurement per required-body route rather than an extrapolation from this one: the shape is measured on the rename alone, and the four older routes were never asked. **[010](../../specs/010-conformance-harness/spec.md) is the owner of the measuring half** — a differential replaying a body-less request against both servers is what asks the other four, and it is the only thing that can — and the gate itself belongs to whoever owns `compat/model.py`, which every request model in the project inherits, rather than to any one feature. 009 T14 decided that rather than closing it inside a task about the acceptance map |
 | **A multi-part film answers one media source per part** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Two sources on one item, where the reference answers one source, a `PartCount` and a separate route for the rest | Not a gap to close on its own: it follows from 003 §3.3 modelling the parts as one item's sources, and closing it means changing that model or adding `GET /Videos/{id}/AdditionalParts` to the surface |
+| **A listing's `MediaSources` carry no playback permissions** ([§2.21](#221-playback-policy-permissions-are-negotiation-inert)) | An item body asked for with `fields=MediaSources`, read by an account denied a playback-processing permission, answers `SupportsTranscoding: true` and `SupportsDirectStream: true` where the reference answers the account's own flags — one permission per media kind, the same rule its profile-less negotiation follows, because the reference builds both from one function `[source: Emby.Server.Implementations/Dto/DtoService.cs:261, Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`, `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. Invisible to every permitted account, which is every account either analysed client has been observed signing in as | The caller's policy reaching the item builder, which is a **shared context** and not one route: `api/item_dto.py`'s `BuildContext` is filled by every route that emits an item, so the field has to arrive with a change that fills it everywhere at once rather than on the route that noticed. The negotiation half was fixed on 2026-09-02 by 008 and this half deliberately was not, because 008 owns `PlaybackInfo` and the listing shape belongs to [005](../../specs/005-item-query-api/spec.md) |
 
 The difference between this section and §4 is intent. §4 says *we thought about it and chose
 differently*. This section says *we have not done it yet, and here is how we will know when it
