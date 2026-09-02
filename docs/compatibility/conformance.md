@@ -98,11 +98,13 @@ python3 tools/differential.py \
     --report   reference/differential-report.md
 ```
 
-Four more flags sit beside those: `--identity` (repeatable; the default is the administrator and a
+Five more flags sit beside those: `--identity` (repeatable; the default is the administrator and a
 restricted non-administrator, which is [010 §3.9](../../specs/010-conformance-harness/spec.md)'s
 minimum), `--fixture` (ask the half that needs a reference instance over this repository's own
-fixture), `--named` (attempt only these named comparisons, by id — the rest are still *reported*,
-outstanding) and `--reference-url` (an instance somebody else stood up). Credentials come from the
+fixture), `--fixture-root` (the tree that instance is given as its only library), `--named`
+(attempt only these named comparisons, by id — the rest are still *reported*, outstanding) and
+`--reference-url` (an instance somebody else stood up, instead of one this run makes). Credentials
+come from the
 same git-ignored `.env` the probes read: `JELLYFIN_URL`, `JELLYFIN_USERNAME`, `JELLYFIN_PASSWORD`
 or `JELLYFIN_TOKEN` for the reference, and `ATRIUM_USERNAME`, `ATRIUM_PASSWORD` or `ATRIUM_TOKEN`
 for the server under test.
@@ -114,6 +116,20 @@ obvious check admits a run pointed at two Atriums — a comparison of this proje
 reporting parity it never measured. `Server` is `Atrium/<version>` here against the reference's
 `Kestrel` `[probe: tools/probe_routing.py, Jellyfin 10.11.11, 2026-08-28]`, and a pair that fails
 that test is refused before anything is compared.
+
+**With `--fixture`, the run stands up its own reference and destroys it.** One container of the
+pinned Jellyfin image — pinned by **digest**, [reference-target §1](reference-target.md#1-the-pinned-version)
+— over the fixture tree mounted read-only, configured through the reference's own first-time-setup
+operations with no human, waited on until its library scan reports itself finished, and destroyed
+with everything it wrote on the success path and the exception path alike
+([ADR-0007](../decisions/0007-a-container-runtime-for-the-reference-instance.md)). It needs a
+container runtime, and **no CI job has one, because no CI job may contact or start a Jellyfin**. A
+machine without one loses nothing it had: the sweep still runs, and every case and named row that
+needed an instance is reported *outstanding with the reason* rather than skipped. The report header
+carries the instance's address and the image digest beside the Atrium sha, so a difference that
+reproduces on one machine only can be told from a difference that is real.
+`tools/reference_instance.py` stands the same instance up and **leaves it running**, for looking at
+a difference by hand.
 
 **Exit codes: `0` clean, `1` not clean, `2` the run could not start.** *Not clean* is the ordinary
 answer and not a failure: it means the run has an untriaged difference, a declared case it could

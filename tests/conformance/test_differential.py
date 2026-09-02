@@ -1406,7 +1406,16 @@ def test_a_case_that_needs_a_fixture_instance_is_outstanding_with_that_reason() 
     )
     assert log == []
     assert "reference instance" in comparisons[0].unreachable
-    assert "010 T9" in comparisons[0].unreachable
+    # T8 wrote this reason as *"the single-use instance is 010 T9"*; T9 landed it, so the reason
+    # is now what this run could not do rather than what nobody had written yet.
+    assert "--fixture-root" in comparisons[0].unreachable
+
+    told = differential.Inputs(
+        roles=("administrator",),
+        fixture_asked=True,
+        instance_reason="the image could not be pulled",
+    )
+    assert "the image could not be pulled" in differential.unmet_need("fixture", told)
 
 
 def test_an_anchor_names_a_row_of_each_servers_own_listing_and_never_one_identifier() -> None:
@@ -1715,3 +1724,416 @@ def test_every_endpoint_of_the_surface_is_reachable_by_at_least_one_declared_cas
     cases = allowlist.load_cases(entries=allowlist.load())
     for endpoint in endpoints:
         assert allowlist.cases_for(cases, endpoint.key), endpoint.key
+
+
+# --------------------------------------------------------------------------------------------
+# The single-use reference instance — 010 T9, spec §3.1, AC-2; plan §6.5, §7; ADR-0007
+# --------------------------------------------------------------------------------------------
+#
+# **The destruction is the invariant, so it is the thing asserted.** 009's probe runs left 28
+# playlists on an operator's server under a cleanup each of them had written in its own docstring;
+# the difference between that and this is a test that fails when the guard is deleted. Every guard
+# below was deleted in turn and the suite re-run.
+#
+# Nothing here starts a container and nothing opens a socket. The runtime is a command line and the
+# instance's own client is injected, which is what lets a whole lifecycle be asserted inside a
+# suite that has no Jellyfin and must not have one (plan §6.11).
+
+reference = _load_module("_reference.py", "atrium_reference_module")
+
+
+def _completed(*args: str, returncode: int = 0, stdout: str = "", stderr: str = "") -> Any:
+    return reference.Completed(
+        args=("/usr/bin/docker", *args), returncode=returncode, stdout=stdout, stderr=stderr
+    )
+
+
+class FakeRuntime:
+    """The container runtime, recorded rather than run. Answers 0 unless told otherwise.
+
+    Scripted on the first two words of the command, which is what separates `volume rm` from
+    `volume ls`, and either from `rm --force`.
+    """
+
+    binary = "/usr/bin/docker"
+    name = "docker"
+
+    def __init__(self, answers: dict[str, Any] | None = None) -> None:
+        self.calls: list[tuple[str, ...]] = []
+        self.answers = answers or {}
+
+    def __call__(self, *args: str, timeout: float = 300.0) -> Any:
+        self.calls.append(args)
+        scripted = self.answers.get(" ".join(args[:2]))
+        if scripted is None:
+            return _completed(*args)
+        return reference.Completed(
+            args=(self.binary, *args),
+            returncode=scripted.returncode,
+            stdout=scripted.stdout,
+            stderr=scripted.stderr,
+        )
+
+    def commands(self, *prefix: str) -> list[tuple[str, ...]]:
+        return [call for call in self.calls if call[: len(prefix)] == prefix]
+
+
+def _task(state: str, ended: str = "") -> dict[str, Any]:
+    """One row of `GET /ScheduledTasks` for the library scan `[spec: GetTasks, TaskResult]`."""
+    return {
+        "Key": reference.SCAN_TASK_KEY,
+        "Id": "scan-task",
+        "State": state,
+        "LastExecutionResult": {"EndTimeUtc": ended, "Status": "Completed"} if ended else None,
+    }
+
+
+class FakeApi:
+    """The instance's own client, scripted. It answers a wizard; it opens nothing."""
+
+    def __init__(
+        self,
+        url: str = "http://127.0.0.1:8099",
+        product: str = "Jellyfin Server",
+        refuse: dict[tuple[str, str], int] | None = None,
+        tasks: list[dict[str, Any]] | None = None,
+    ) -> None:
+        self.url = url
+        self.token = ""
+        self.calls: list[tuple[str, str]] = []
+        self.sent: list[dict[str, Any]] = []
+        self.product = product
+        self.refuse = refuse or {}
+        self.tasks = tasks if tasks is not None else [_task("Running"), _task("Idle", "2026-09-02")]
+
+    def request(self, method: str, path: str, body: Any = None, query: Any = None) -> Any:
+        self.calls.append((method, path))
+        self.sent.append({"path": path, "body": body, "query": dict(query or {})})
+        refused = self.refuse.get((method, path))
+        if refused is not None:
+            return reference.Answer(status=refused, headers={}, raw=b'{"title":"Not Found"}')
+        if path == "/System/Info/Public":
+            return self._json({"ProductName": self.product, "Version": "10.11.11"})
+        if path == "/Users/AuthenticateByName":
+            return self._json({"AccessToken": "wizard-token", "User": {"Id": "admin-id"}})
+        if path == "/ScheduledTasks":
+            state = self.tasks[0] if len(self.tasks) == 1 else self.tasks.pop(0)
+            return self._json([state])
+        return reference.Answer(status=204, headers={}, raw=b"")
+
+    @staticmethod
+    def _json(body: Any) -> Any:
+        return reference.Answer(
+            status=200,
+            headers={"Content-Type": "application/json"},
+            raw=json.dumps(body).encode("utf-8"),
+        )
+
+
+def _instance(
+    tree: Path, runtime: Any = None, api: Any = None, **spec: Any
+) -> tuple[Any, FakeRuntime, FakeApi]:
+    """One instance whose runtime and client are stubs, and whose clock never sleeps."""
+    engine_runtime = runtime if runtime is not None else FakeRuntime()
+    client = api if api is not None else FakeApi()
+    ticks = iter(range(0, 100_000))
+    made = reference.ReferenceInstance(
+        reference.InstanceSpec(fixture_root=tree, **spec),
+        runtime=engine_runtime,
+        api_factory=lambda url: client,
+        port=8099,
+        announce=lambda message: None,
+        make_password=lambda: "throwaway",
+        now=lambda: next(ticks),
+        pause=lambda seconds: None,
+    )
+    return made, engine_runtime, client
+
+
+# -- the destruction, which is the whole point ------------------------------------------------
+
+
+def test_the_teardown_runs_on_the_exception_path(tmp_path: Path) -> None:
+    """Plan §6.5: `__exit__` destroys on both paths, and the exception path is the one that leaks.
+
+    Delete the call in `__exit__` and the container and both its volumes survive a failed run —
+    which is the 28-playlist lesson wearing a container's clothes.
+    """
+    made, runtime, _api = _instance(tmp_path)
+    with pytest.raises(RuntimeError, match="the comparison blew up"), made:
+        raise RuntimeError("the comparison blew up")
+
+    assert [call[-1] for call in runtime.commands("rm", "--force")] == [made.container]
+    assert [call[-1] for call in runtime.commands("volume", "rm")] == list(made.volumes)
+
+
+def test_the_teardown_removes_the_volumes_and_not_only_the_container(tmp_path: Path) -> None:
+    """A removed container beside two surviving volumes is a leak the next sweep has to find.
+
+    It is also why the instance's data lives in **labelled volumes** and not in a directory under
+    a scratch root, which is what plan §6.5 describes: the image runs as root, so a bind-mounted
+    host directory comes back owned by root and an unprivileged removal cannot take it — a leak
+    the harness would report as cleaned.
+    """
+    made, runtime, _api = _instance(tmp_path)
+    with made:
+        pass
+    assert len(runtime.commands("volume", "rm")) == 2
+    assert len(runtime.commands("rm", "--force")) == 1
+
+
+def test_a_leak_on_the_success_path_is_raised(tmp_path: Path) -> None:
+    """A teardown that could not finish is an error, not a note: the next run's sweep is a backstop
+    and never a plan."""
+    stuck = FakeRuntime({"volume rm": _completed("volume", "rm", returncode=1, stderr="in use")})
+    made, _runtime, _api = _instance(tmp_path, runtime=stuck)
+    with pytest.raises(reference.InstanceError, match="could not remove it"), made:
+        pass
+
+
+def test_an_instance_leak_on_the_exception_path_never_masks_the_failure_that_caused_it(
+    tmp_path: Path,
+) -> None:
+    """`Roster._destroy`'s rule, and the same one: the caller learns why the run stopped."""
+    stuck = FakeRuntime({"volume rm": _completed("volume", "rm", returncode=1, stderr="in use")})
+    made, _runtime, _api = _instance(tmp_path, runtime=stuck)
+    with pytest.raises(ValueError, match="the real reason"), made:
+        raise ValueError("the real reason")
+
+
+def test_a_run_destroys_the_wreckage_of_a_killed_one_before_it_starts_its_own(
+    tmp_path: Path,
+) -> None:
+    """Plan §6.5 step 1: the only cleanup that survives a kill is the one the next run performs.
+
+    The count is returned and printed on purpose — a run that sweeps something every time has a
+    teardown that is not working, and silence would hide it.
+    """
+    runtime = FakeRuntime(
+        {
+            "ps --all": _completed("ps", stdout="dead1\ndead2\n"),
+            "volume ls": _completed("volume", "ls", stdout="dead-vol\n"),
+        }
+    )
+    made, _runtime, _api = _instance(tmp_path, runtime=runtime)
+    with made:
+        pass
+
+    swept = [call for call in runtime.calls if call[-1] in {"dead1", "dead2", "dead-vol"}]
+    assert len(swept) == 3
+    assert made.swept == 3
+    started = next(index for index, call in enumerate(runtime.calls) if call[0] == "run")
+    assert all(runtime.calls.index(call) < started for call in swept)
+
+
+def test_a_machine_with_no_container_runtime_says_so_and_starts_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR-0007's degradation. A machine with none has no wreckage, so the sweep answers zero."""
+    monkeypatch.setattr(reference.shutil, "which", lambda binary: None)
+    with pytest.raises(reference.RuntimeAbsentError, match="no container runtime"):
+        reference.Runtime.discover()
+    assert reference.sweep(announce=lambda message: None) == 0
+
+
+# -- what the container is actually asked for -------------------------------------------------
+
+
+def test_the_fixture_tree_is_mounted_read_only_and_the_image_is_pinned_by_digest(
+    tmp_path: Path,
+) -> None:
+    """ADR-0007, twice: neither server may change what both are measured against, and a tag moves.
+
+    Drop the `:ro` and a scan writes sidecars and artwork into the tree the *other* server reads —
+    the invisible false positive plan §9 names. Drop the digest for a tag and two machines measure
+    two servers while believing they measured one.
+    """
+    made, runtime, _api = _instance(tmp_path)
+    with made:
+        pass
+    command = runtime.commands("run")[0]
+    mounts = [command[index + 1] for index, word in enumerate(command) if word == "--volume"]
+
+    assert any(mount.endswith(":/fixture:ro") for mount in mounts)
+    assert not any(mount.endswith(":/fixture") for mount in mounts)
+    assert made.image.startswith(reference.IMAGE_REPOSITORY + "@sha256:")
+    assert made.digest == reference.IMAGE_DIGEST
+    assert command[-1] == made.image
+    assert "--rm" in command
+    address = command[command.index("--publish") + 1]
+    assert address == f"{reference.LOOPBACK}:8099:{reference.CONTAINER_PORT}"
+
+
+def test_the_pinned_digest_is_the_one_reference_target_records() -> None:
+    """ADR-0007: the digest is recorded beside the two version rows and printed by every run.
+
+    Two copies of one fact drift, and this one is the value a report prints to tell a difference
+    that reproduces on one machine only from a difference that is real.
+    """
+    recorded = (REPO_ROOT / "docs" / "compatibility" / "reference-target.md").read_text("utf-8")
+    assert reference.IMAGE_DIGEST in recorded
+    assert reference.IMAGE_REPOSITORY in recorded
+    assert reference.IMAGE_VERSION in recorded
+
+
+# -- the wizard, whose one assumption was read from a document --------------------------------
+
+
+def test_the_wizard_reads_the_first_user_before_it_renames_one(tmp_path: Path) -> None:
+    """Plan §6.5 step 4's one assumption, checked rather than discovered — and it needed a step.
+
+    `POST /Startup/User` answers **404** while no user exists: it fetches the first user and
+    returns `NotFound()` when there is none
+    `[source: Jellyfin.Api/Controllers/StartupController.cs:130-137 @ v10.11.11]`. What makes one
+    is the `GET` beside it, which runs the user manager's own initialisation before reading
+    `[source: Jellyfin.Api/Controllers/StartupController.cs:107-114 @ v10.11.11]`. So the wizard's
+    user operation is a **rename of the account the read created**, and a sequence that skips the
+    read stops there — measured on a real instance before it was read
+    `[probe: tools/reference_instance.py --check, Jellyfin 10.11.11, 2026-09-02]`.
+    """
+    made, _runtime, api = _instance(tmp_path)
+    with made:
+        pass
+
+    startup = [call for call in api.calls if call[1].startswith("/Startup")]
+    assert startup == [
+        ("POST", "/Startup/Configuration"),
+        ("GET", "/Startup/User"),
+        ("POST", "/Startup/User"),
+        ("POST", "/Startup/Complete"),
+    ]
+
+
+def test_a_wizard_that_refuses_destroys_the_instance_and_names_what_it_answered(
+    tmp_path: Path,
+) -> None:
+    """Plan §7: a wizard that refuses is a version difference, and the body is the finding."""
+    made, runtime, _api = _instance(tmp_path, api=FakeApi(refuse={("POST", "/Startup/User"): 404}))
+    with pytest.raises(reference.WizardRefusedError) as refusal:
+        made.__enter__()
+
+    assert "/Startup/User" in str(refusal.value)
+    assert "404" in str(refusal.value)
+    assert runtime.commands("rm", "--force"), "a refused wizard must not leave the container up"
+
+
+def test_the_library_is_added_over_the_mount_and_asks_for_the_refresh(tmp_path: Path) -> None:
+    """`[spec: AddVirtualFolder]`, and `refreshLibrary=true` is what starts the scan to wait on."""
+    made, _runtime, api = _instance(
+        tmp_path,
+        libraries=(reference.Library(name="Movies", collection_type="movies", subpath="Movies"),),
+    )
+    with made:
+        pass
+
+    added = next(sent for sent in api.sent if sent["path"] == "/Library/VirtualFolders")
+    assert added["query"] == {
+        "name": "Movies",
+        "refreshLibrary": "true",
+        "collectionType": "movies",
+    }
+    assert added["body"] == {"LibraryOptions": {"PathInfos": [{"Path": "/fixture/Movies"}]}}
+
+
+# -- the scan, waited for on the server's own answer ------------------------------------------
+
+
+def test_the_scan_wait_is_not_satisfied_by_a_state_that_was_already_true(tmp_path: Path) -> None:
+    """Plan §6.5 step 5, one step nearer than the plan puts it.
+
+    *"A count that has stopped changing is indistinguishable from a scan that has not started"* —
+    and so is a task that reports `Idle`, because it is `Idle` before it starts too. What is waited
+    for is a completion that did not exist a moment ago, read from the task's own
+    `LastExecutionResult` `[spec: GetTasks, TaskResult]`. Delete that clause and the wait returns
+    on the first poll, before the library has been read at all.
+    """
+    made, _runtime, api = _instance(
+        tmp_path, api=FakeApi(tasks=[_task("Idle"), _task("Idle"), _task("Idle", "2026-09-02")])
+    )
+    with made:
+        pass
+
+    assert ("POST", "/ScheduledTasks/Running/scan-task") in api.calls
+
+
+def test_a_scan_that_never_finishes_destroys_the_instance_and_says_how_long_it_waited(
+    tmp_path: Path,
+) -> None:
+    """Plan §7: destroy, and report outstanding with the elapsed time. Never a silent success."""
+    made, runtime, _api = _instance(
+        tmp_path, api=FakeApi(tasks=[_task("Running")]), scan_timeout=5.0
+    )
+    with pytest.raises(reference.ScanTimeoutError, match="did not finish within 5s"):
+        made.__enter__()
+
+    assert runtime.commands("rm", "--force"), "a timed-out scan must not leave the container up"
+
+
+# -- and what a run without one reports --------------------------------------------------------
+
+
+def test_a_fixture_run_with_no_runtime_reports_every_fixture_row_outstanding_and_is_not_clean(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR-0007: *"the dependency buys coverage; its absence costs coverage and says so"*.
+
+    The whole degradation, end to end over the **real** registers: no runtime, so no instance, so
+    each of the 12 request cases and 10 named rows that declared `needs: fixture`, `rescan` or
+    `wait` is named with that reason, and `is_clean()` is false. Delete the degradation branch —
+    let a run with no instance simply not ask — and the report comes back clean having compared
+    nothing, which is the CI job that reported green because it ran nothing (008 T18) with a
+    container in front of it.
+    """
+    monkeypatch.setattr(reference.shutil, "which", lambda binary: None)
+    try:
+        reference.Runtime.discover()
+        raise AssertionError("a machine with no runtime must say so")
+    except reference.RuntimeAbsentError as failure:
+        absent = str(failure)
+
+    inputs = differential.Inputs(
+        roles=("administrator",), fixture_asked=True, instance_reason=absent
+    )
+    for token in differential.NEEDS_THE_INSTANCE:
+        assert absent in differential.unmet_need(token, inputs)
+
+    cases = allowlist.load_cases(entries=allowlist.load())
+    needing = [case for case in cases if set(case.needs) & set(differential.NEEDS_THE_INSTANCE)]
+    assert len(needing) == 12
+    for case in needing:
+        assert differential.unmet_needs(case.needs, inputs), case.id
+
+    _ran_ids, outstanding = differential.named_outcomes(allowlist.load_named(), inputs)
+    assert len([row for row, why in outstanding if absent in why]) == 10
+
+    report = _report(named_outstanding=outstanding, comparisons=(_ran(),))
+    assert not report.is_clean()
+    assert absent in differential.render(report)
+
+
+def test_a_stood_up_instance_fills_the_two_header_lines_that_were_waiting_for_it() -> None:
+    """T8 left `reference instance` and `reference image digest` saying no instance was stood up.
+
+    They are why ADR-0007 pins by digest at all: a difference reproducing on one machine only has
+    to be tellable from a difference that is real, and the report header is where a reader looks.
+    """
+    rendered = differential.render(
+        _report(
+            provenance=(
+                ("reference instance", "http://127.0.0.1:8099"),
+                ("reference image digest", reference.IMAGE_DIGEST),
+            )
+        )
+    )
+    assert reference.IMAGE_DIGEST in rendered
+    assert "http://127.0.0.1:8099" in rendered
+
+
+def test_the_instance_command_line_starts_nothing_when_it_is_asked_for_help() -> None:
+    """CI runs `--help` on every tool here at both ends of 3.9 to 3.14, and no job may start a
+    Jellyfin (ADR-0007, plan §6.11): the runtime is looked for in the action, never at import."""
+    command = _load_module("reference_instance.py", "atrium_reference_instance_cli")
+    with pytest.raises(SystemExit) as leaving:
+        command.main(["--help"])
+    assert leaving.value.code == 0
+    assert command.build_parser().prog == "reference_instance.py"

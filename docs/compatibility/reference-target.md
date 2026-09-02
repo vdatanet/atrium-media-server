@@ -14,7 +14,7 @@ compatible with what, exactly?*
 | API contract | Jellyfin `10.11.11` OpenAPI document |
 | Behavioural reference | Jellyfin `10.11.11` source and a running instance |
 | Version Atrium reports | `10.11.11` — see §4 |
-| Reference instance image | The published Jellyfin `10.11.11` image, **pinned by digest** — [ADR-0007](../decisions/0007-a-container-runtime-for-the-reference-instance.md). The digest is written into this row by the task that lands the single-use instance; until then no run has one to print |
+| Reference instance image | `jellyfin/jellyfin@sha256:aefb67e6a7ff1debdd154a78a7bbb780fd0c873d8639210a7f6a2016ad2b35db` — the published Jellyfin `10.11.11` image, **pinned by digest** and never by tag ([ADR-0007](../decisions/0007-a-container-runtime-for-the-reference-instance.md)). Written into this row on 2026-09-02 by the task that landed the single-use instance, which is the first run that had one to print. It is the **multi-architecture index** digest rather than one platform's, so a contributor on arm64 and a maintainer on amd64 pin the same line. `tools/_reference.py` holds the same value and `tests/conformance/test_differential.py` fails when the two drift apart |
 
 The reasoning for pinning, and for pinning to this particular line rather than `master`, is in
 [ADR-0004](../decisions/0004-pin-to-jellyfin-10-11.md).

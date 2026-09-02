@@ -5,7 +5,7 @@ status: Accepted
 accepted: 2026-09-01
 created: 2026-09-01
 updated: 2026-09-02
-amended: 2026-09-02 at the tasks gate — reviewing the list against the code this plan names found two things it got wrong about this repository, and both are corrected above rather than left to a task's Done note. **§8's AC-2 row could not be written:** it maps the criterion to a probe run "by hand", and `tests/conformance/test_acceptance.py` resolves every entry as `module:function` through `importlib` while §2 of this plan inherits the rule that a `tools/` module is reached by path and never as a package — so the row would fail on import the day 010 flips to `Implemented`, which is 009 T14's *"a criterion with no test at all"* arriving one feature early. The probe now **records** the reference's reading of the fixture and the test compares Atrium's scan against that record, so AC-2 is checkable in the default job with no Jellyfin anywhere. **And §4.3's floor was the right floor for the surface and the wrong one for eight rows:** `surface.yaml` declares eight endpoints at `level: L3` and nothing in the repository has ever checked that a declared level is reached, while every feature's definition of done has been deferring exactly that half here — those eight are seeded first, per identity, and the report prints the declared level beside the coverage. A third finding is recorded in the task list rather than here, because it is a scope call on an accepted spec and is reserved for its owner as D-6: §3.10's sixteen named comparisons do not carry four debts that need precisely what D-1's instance provides, including the only surviving `⚠️ UNVERIFIED` in the compatibility documents (behaviours §5.2), whose own text names a disposable library as the remedy. **Amended again on 2026-09-02, hours later, by D-6 being taken:** the recommendation was accepted, so **§3.10 is twenty named comparisons and not sixteen**, and every place this plan counted them moves with it — §3's file tree, §3's argument for machine-readable registers, §4.2's register, §6.4's runner shapes and §8's row 16. §4.2's `needs` vocabulary gains `rescan` and `wait`, and §6.4 grows from four shapes to six: **the library changed underneath a rescan** (behaviours §5.2 and §5.6, where the signal is the difference between two scans) and **a reading after a deliberate wait** (007's paused-session ticker). The clause above recording D-6 as reserved is what this supersedes; 009's plan §8 went stale in exactly this way and the audit of 2026-09-01 caught it **Amended again on 2026-09-02 by T3, which wrote §4.1's file.** The allowlist has a **seventh field, `case`**: two rows of spec §3.3 are conditioned on the request and not on the route — `TotalRecordCount` on a by-name call carrying no limit, and the rows of a listing ordered at random — and with six columns each would have been strictly wider than the prose it came from, the second excusing the rows of every listing on every request. §6.3's `resolve(endpoint, case, identity)` already took the dimension; only the column was missing. It never widens: `*` is what an entry with no condition says, and an id no request case declares matches nothing, so the failure direction is under-excusing. §4.1's table carries the field. **Amended again on 2026-09-02 by T4, which landed the two array kinds.** §6.2's steps 1, 3 and 4 each said less than the code needs. **Step 1's cascade guard suppresses the *positional* comparison and never the comparison an array's own kind still owes**, or it deletes step 4 on the only endpoint step 4 exists for: `Similar` answers `limit + 4` rows on a movie seed (behaviours §3.24), so that array's two lengths differ on every run. **Step 3 did not say what an `unordered` array does when the multisets genuinely differ**, and the shape that asks is measured — the reference's artist paging duplicates rows as well as losing them, so a page holds one row twice and another not at all at an unchanged length, which neither the `LENGTH` guard nor the `ORDER` class catches; the rows that match are removed and only the residue is compared, and §9's risk row is corrected to say so. **Step 4's row walk is position-free**: the reference suppresses nulls globally, so a row's key set depends on which item it holds and a draw guarantees the two sides hold different items — pairing row 0 with row 0 would report content as shape. No acceptance criterion moves: AC-17 keeps the row count compared, which makes `Similar`'s `limit + 4` a difference the report states on every run rather than one the allowlist excuses. **Amended again on 2026-09-02 by T5, which wrote §4.2's register.** The named-comparison rows have a **seventh field, `written_at`**, because `behaviours` — *"the section that is the answer"* — cannot be filled on a quarter of them: **five of the twenty have no `behaviours.md` entry at all**, which is what that document is (an entry records what the reference *does*, and nobody has watched it do these — the same sentence as *"a sweep cannot raise it"*), and four more are answered by a row of §5's table, which carries no anchor of its own. `behaviours` therefore takes `none` and `written_at` names the document the row was collected from. It measured something the field was not asked for: **nineteen of the twenty came from one of the six inherited lists and behaviours §5.2 came from none of them**, which is precisely what the task list meant by *"the six lists **and** the compatibility documents"*. §4.2 also records that an **empty `needs` is a value**: the last two rows of §3.10 are ordinary request cases and need nothing at all, and a reader treating `[]` as an absence would drop two rows out of AC-16's twenty. No acceptance criterion moves. **Amended again on 2026-09-02 by T8, which landed the program §6.12 finding 1 says this repository had published and not written.** Three declarations move and one flag list grows. **An identity is an account and the two servers share none**, so a run holds **two rosters** — the restricted reader is created on each side, narrowed to that side's own library, and destroyed by that side's own roster — and §5's `(Case, Identity, Difference)` triple becomes a `Comparison`, which carries the case, the role, the endpoint and the level `surface.yaml` declares. **`is_clean()` gains a third condition**: a declared request case the run could not issue, which is spec §3.4's own sentence wearing the sweep's clothes — and it is a quarter of what a run declares, since 12 of the 84 request cases and 10 of the 20 named rows need an instance that does not exist until T9; every one is named in the report with its reason. **Headers are compared wholly only where the body is not JSON**, because comparing them everywhere reports a `Content-Length` difference on every JSON answer — the cascade the `LENGTH` class exists to prevent, arriving through another door — with the content type still compared everywhere, for 008 T16's reason. And §6.12's finding 2 is discharged: `conformance.md` names `JELLYFIN_URL`, the flags it publishes are the ones the program has, and `.env.example` gains the three `ATRIUM_` credentials, because no tool in this repository had ever authenticated against **this** server. No acceptance criterion moves.
+amended: 2026-09-02 at the tasks gate — reviewing the list against the code this plan names found two things it got wrong about this repository, and both are corrected above rather than left to a task's Done note. **§8's AC-2 row could not be written:** it maps the criterion to a probe run "by hand", and `tests/conformance/test_acceptance.py` resolves every entry as `module:function` through `importlib` while §2 of this plan inherits the rule that a `tools/` module is reached by path and never as a package — so the row would fail on import the day 010 flips to `Implemented`, which is 009 T14's *"a criterion with no test at all"* arriving one feature early. The probe now **records** the reference's reading of the fixture and the test compares Atrium's scan against that record, so AC-2 is checkable in the default job with no Jellyfin anywhere. **And §4.3's floor was the right floor for the surface and the wrong one for eight rows:** `surface.yaml` declares eight endpoints at `level: L3` and nothing in the repository has ever checked that a declared level is reached, while every feature's definition of done has been deferring exactly that half here — those eight are seeded first, per identity, and the report prints the declared level beside the coverage. A third finding is recorded in the task list rather than here, because it is a scope call on an accepted spec and is reserved for its owner as D-6: §3.10's sixteen named comparisons do not carry four debts that need precisely what D-1's instance provides, including the only surviving `⚠️ UNVERIFIED` in the compatibility documents (behaviours §5.2), whose own text names a disposable library as the remedy. **Amended again on 2026-09-02, hours later, by D-6 being taken:** the recommendation was accepted, so **§3.10 is twenty named comparisons and not sixteen**, and every place this plan counted them moves with it — §3's file tree, §3's argument for machine-readable registers, §4.2's register, §6.4's runner shapes and §8's row 16. §4.2's `needs` vocabulary gains `rescan` and `wait`, and §6.4 grows from four shapes to six: **the library changed underneath a rescan** (behaviours §5.2 and §5.6, where the signal is the difference between two scans) and **a reading after a deliberate wait** (007's paused-session ticker). The clause above recording D-6 as reserved is what this supersedes; 009's plan §8 went stale in exactly this way and the audit of 2026-09-01 caught it **Amended again on 2026-09-02 by T3, which wrote §4.1's file.** The allowlist has a **seventh field, `case`**: two rows of spec §3.3 are conditioned on the request and not on the route — `TotalRecordCount` on a by-name call carrying no limit, and the rows of a listing ordered at random — and with six columns each would have been strictly wider than the prose it came from, the second excusing the rows of every listing on every request. §6.3's `resolve(endpoint, case, identity)` already took the dimension; only the column was missing. It never widens: `*` is what an entry with no condition says, and an id no request case declares matches nothing, so the failure direction is under-excusing. §4.1's table carries the field. **Amended again on 2026-09-02 by T4, which landed the two array kinds.** §6.2's steps 1, 3 and 4 each said less than the code needs. **Step 1's cascade guard suppresses the *positional* comparison and never the comparison an array's own kind still owes**, or it deletes step 4 on the only endpoint step 4 exists for: `Similar` answers `limit + 4` rows on a movie seed (behaviours §3.24), so that array's two lengths differ on every run. **Step 3 did not say what an `unordered` array does when the multisets genuinely differ**, and the shape that asks is measured — the reference's artist paging duplicates rows as well as losing them, so a page holds one row twice and another not at all at an unchanged length, which neither the `LENGTH` guard nor the `ORDER` class catches; the rows that match are removed and only the residue is compared, and §9's risk row is corrected to say so. **Step 4's row walk is position-free**: the reference suppresses nulls globally, so a row's key set depends on which item it holds and a draw guarantees the two sides hold different items — pairing row 0 with row 0 would report content as shape. No acceptance criterion moves: AC-17 keeps the row count compared, which makes `Similar`'s `limit + 4` a difference the report states on every run rather than one the allowlist excuses. **Amended again on 2026-09-02 by T5, which wrote §4.2's register.** The named-comparison rows have a **seventh field, `written_at`**, because `behaviours` — *"the section that is the answer"* — cannot be filled on a quarter of them: **five of the twenty have no `behaviours.md` entry at all**, which is what that document is (an entry records what the reference *does*, and nobody has watched it do these — the same sentence as *"a sweep cannot raise it"*), and four more are answered by a row of §5's table, which carries no anchor of its own. `behaviours` therefore takes `none` and `written_at` names the document the row was collected from. It measured something the field was not asked for: **nineteen of the twenty came from one of the six inherited lists and behaviours §5.2 came from none of them**, which is precisely what the task list meant by *"the six lists **and** the compatibility documents"*. §4.2 also records that an **empty `needs` is a value**: the last two rows of §3.10 are ordinary request cases and need nothing at all, and a reader treating `[]` as an absence would drop two rows out of AC-16's twenty. No acceptance criterion moves. **Amended again on 2026-09-02 by T8, which landed the program §6.12 finding 1 says this repository had published and not written.** Three declarations move and one flag list grows. **An identity is an account and the two servers share none**, so a run holds **two rosters** — the restricted reader is created on each side, narrowed to that side's own library, and destroyed by that side's own roster — and §5's `(Case, Identity, Difference)` triple becomes a `Comparison`, which carries the case, the role, the endpoint and the level `surface.yaml` declares. **`is_clean()` gains a third condition**: a declared request case the run could not issue, which is spec §3.4's own sentence wearing the sweep's clothes — and it is a quarter of what a run declares, since 12 of the 84 request cases and 10 of the 20 named rows need an instance that does not exist until T9; every one is named in the report with its reason. **Headers are compared wholly only where the body is not JSON**, because comparing them everywhere reports a `Content-Length` difference on every JSON answer — the cascade the `LENGTH` class exists to prevent, arriving through another door — with the content type still compared everywhere, for 008 T16's reason. And §6.12's finding 2 is discharged: `conformance.md` names `JELLYFIN_URL`, the flags it publishes are the ones the program has, and `.env.example` gains the three `ATRIUM_` credentials, because no tool in this repository had ever authenticated against **this** server. No acceptance criterion moves. **Amended again on 2026-09-02 by T9, which stood the first instance up.** Four things in §5 and §6.5 were written before any server had answered, and the first run moved all four. **The unattended sequence gains a step, and it is the one §6.5 step 4 priced**: `POST /Startup/User` answers `404` while no user exists, and the `GET` beside it is what creates the account the `POST` renames — so the sequence reads before it writes. **The scan wait's trap is one step nearer than §6.5 step 5 puts it**: the scan task is `Idle` before it starts too, so what is waited for is a completion that did not exist a moment ago. **The data directory is a pair of labelled volumes and not a directory under a scratch root**, because the published image runs as root and a bind-mounted host directory comes back root-owned — a leak the sweep could not remove and would report as a cleanup. And **`create_identity` leaves §5's contract**: T8 established that a seat is an account and that the two servers share none, so the roster makes the seats on each side and the instance hands back a URL and the administrator's credentials. The pinned digest is written into reference-target §1, and the report's two waiting header lines are filled. No acceptance criterion moves.
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -334,9 +334,10 @@ read against either body.
 
 @dataclass(frozen=True)
 class InstanceSpec:
-    image: str              # the pinned reference version, by digest
     fixture_root: Path      # bind-mounted read-only
+    image: str              # the pinned reference version, by digest
     label: str              # the sweep's handle on it, fixed across runs
+    libraries: tuple[Library, ...]   # added by T9: which world, in how many libraries, is D-4
 
 class ReferenceInstance:
     """A Jellyfin that this project owns, uses once, and destroys.
@@ -345,13 +346,25 @@ class ReferenceInstance:
     path and on the success path, and the sweep in __enter__ removes whatever a killed run left.
     """
     def __enter__(self) -> "ReferenceInstance"   # start, wizard, library, scan, ready
-    def __exit__(self, *exc: object) -> None     # destroy the container and its data directory
+    def __exit__(self, *exc: object) -> None     # destroy the container and its volumes
     url: str
-    administrator: "Identity"
-    def create_identity(self, role: Role) -> Identity   # §6.7; removed by __exit__
-    @staticmethod
-    def sweep() -> int      # containers and directories from earlier runs; returns how many
+    administrator: Credentials  # corrected by T9: a username and a password, not an Identity
+
+def sweep(runtime=None) -> int  # containers and volumes from earlier runs; returns how many
 ```
+
+**Three corrections T9 made to the declaration above, and one of them is the same sentence T8
+wrote about seats.** `create_identity` is **gone**: T8 established that a seat is an account and
+that the two servers share none, so the run holds a `Roster` per side and creates the restricted
+reader on **each** — an instance that also made seats would make one of the two, on one server,
+and the loop would then have two ways to obtain the same thing. The instance therefore hands back
+a URL and the **credentials** of the administrator its wizard created, and `differential.py`'s own
+`authenticate` turns those into the `Identity` the roster is built on; the roster is entered
+inside the instance's context, so the seats still die first. `sweep` is a module function rather
+than a static method for the same reason it exists at all — the degradation path calls it on a
+machine that may have no runtime, and a method on a class nobody could construct is a worse place
+for it. And `InstanceSpec` gained `libraries`, because *how many* libraries the tree becomes is
+**D-4** and this module must be able to express either answer without changing.
 
 ```python
 # tools/differential.py
@@ -635,14 +648,23 @@ because it ran nothing (008 T18's finding, and `pyproject.toml`'s own comment ab
 Nothing about this exists yet, and it is the largest thing in the feature. The lifecycle, in the
 order `ReferenceInstance.__enter__` performs it:
 
-1. **Sweep.** Anything labelled from an earlier run — a container by label, a data directory under
-   the harness's own scratch root — is destroyed first. 008 §6.7 does exactly this to the transcode
+1. **Sweep.** Anything labelled from an earlier run — a container and its volumes, by label — is
+   destroyed first. 008 §6.7 does exactly this to the transcode
    scratch root at startup, for the same reason: the only cleanup that survives a killed process is
    the one the *next* run performs.
 2. **Start.** One container of the pinned version from a pinned digest, no published port beyond a
-   loopback one the run picks, an **ephemeral** data directory created under the scratch root, and
-   the fixture tree bind-mounted **read-only**. `--rm` so that even a lost `finally` leaves nothing
-   but the directory the sweep takes.
+   loopback one the run picks, an **ephemeral** data directory, and the fixture tree bind-mounted
+   **read-only**. `--rm` so that even a lost `finally` leaves nothing but what the sweep takes.
+
+   **T9 corrected where that data directory lives, and the reason is the promise this whole
+   section makes.** This step said *"created under the scratch root"*, and a host directory
+   bind-mounted at the reference's data path comes back owned by **root**, because the published
+   image runs as root — so on Linux the sweep would find wreckage it has no permission to remove,
+   which is a leak reported as a cleanup. The data directory is therefore a pair of **labelled
+   volumes**, removed by the runtime that made them, and the label is what both the teardown and
+   the next run's sweep match on. Nothing else changes: the label is still fixed across runs, the
+   count is still printed, and the fixture is still a **bind** mount — the one ADR-0007 argues
+   for, and for a different reason, the fixed modification time.
 3. **Wait for the API, not the process.** Readiness is `GET /System/Info/Public` answering with a
    `ProductName` naming Jellyfin — the same check `tools/_probe.py`'s `connect` already makes, and
    the reason it is that check rather than a port probe is that a listening socket is not a
@@ -654,19 +676,42 @@ order `ReferenceInstance.__enter__` performs it:
    policy where `POST /Users/New` declares elevation `[spec: the security requirement declared on
    those operations]`, which is what makes an unattended sequence plausible at all.
 
-   **What that policy admits before a wizard completes is read from a document and not measured**,
-   and it is the one assumption in this section that a server can refuse. The task that writes
-   `_reference.py` verifies it against the instance in its first run and, if a credential is
-   required earlier than this reads, the sequence gains nothing worse than an extra step — the
-   wizard creates the administrator either way. It is named here so that it is checked rather than
-   discovered.
+   **What that policy admits before a wizard completes was read from a document and not
+   measured**, and it was the one assumption in this section that a server can refuse. It was named
+   here so that it would be checked rather than discovered, and **T9 checked it on 2026-09-02: the
+   policy holds and the sequence gained a step** — which is exactly the outcome this paragraph
+   priced.
+
+   **The step is a read, and it is what creates the account the next call renames.** `POST
+   /Startup/User` answers **404** while no user exists: it fetches the first user and returns
+   `NotFound()` when there is none
+   `[source: Jellyfin.Api/Controllers/StartupController.cs:130-137 @ v10.11.11]`. The thing that
+   makes one is the **`GET`** beside it, which runs the user manager's own initialisation before
+   reading `[source: Jellyfin.Api/Controllers/StartupController.cs:107-114 @ v10.11.11]`. So the
+   wizard's user operation is a *rename of the account the read created*, never a creation, and an
+   unattended sequence that goes straight to the `POST` stops there — measured on a real instance
+   before it was read `[probe: tools/reference_instance.py --check, Jellyfin 10.11.11,
+   2026-09-02]`. The sequence is `POST /Startup/Configuration`, **`GET /Startup/User`**, `POST
+   /Startup/User`, `POST /Startup/Complete`, then `POST /Library/VirtualFolders`
+   `[spec: GetFirstUser]`. `POST /Startup/RemoteAccess` is **not** in it: the wizard's own client
+   sends it, and nothing in the sequence above needs it — measured by three complete lifecycles
+   that never called it.
 5. **Wait for the scan, on the server's own answer.** `GET /ScheduledTasks` until the library scan
    reports itself idle `[spec: GetTasks]`, with a deadline. Not a sleep, and not an item count that
    has stopped changing: a count that has stopped changing is indistinguishable from a scan that has
    not started.
+
+   **T9 found the same trap one step nearer than this sentence puts it, and it is the trap and not
+   a variant of it: the task is `Idle` before it starts, too.** *"Until the library scan reports
+   itself idle"*, taken literally, returns on the first poll — before the library has been read at
+   all. What is waited for is therefore a **completion that did not exist a moment ago**, read from
+   the task's own `LastExecutionResult` `[spec: GetTasks, TaskResult]`; and when the task is idle
+   and has never run, the scan is asked for by name `[spec: StartTask]` rather than waited on
+   again. `refreshLibrary=true` does drive that task — three lifecycles saw it running without
+   being asked — so the second path is a backstop and not the ordinary one.
 6. **Hand back the administrator identity**, and create the other seats §6.7 asks for.
 
-`__exit__` destroys the container and removes the data directory, on the exception path and on the
+`__exit__` destroys the container and its volumes, on the exception path and on the
 success path, and it does **not** first delete the accounts, playlists or libraries the run created:
 they die with the instance, which is precisely the property spec §3.1 wanted — *"the difference
 between a cleanup that must be perfect and one that only has to be tidy"*.
@@ -932,7 +977,7 @@ therefore the only place a tool may look.
 | The image cannot be pulled | Non-zero exit from the runtime | The same, naming the image and the digest | — |
 | The instance starts and the wizard refuses | A non-2xx from a startup operation | Abort the fixture half, print the status and the body, destroy the instance | The body is the finding: a wizard that refuses is a version difference |
 | The scan does not finish inside the deadline | `GET /ScheduledTasks` still busy | Destroy, report outstanding with the elapsed time | Raise the deadline; a fixture that cannot be scanned in minutes is a fixture problem |
-| The run is killed between start and teardown | Nothing at the time | The **next** run's sweep removes the container and the data directory, and says how many it removed | Automatic, and the count is printed so a leak is visible |
+| The run is killed between start and teardown | Nothing at the time | The **next** run's sweep removes the container and its volumes, and says how many it removed | Automatic, and the count is printed so a leak is visible |
 | A seat the run wants already exists | The pre-flight user list | **Refuse to start** (AC-15), naming the seat | Delete it, or wait for the other run |
 | The reference answers `5xx` where Atrium answers a body | Status comparison | A `VALUE` difference on the status, triaged like any other — several are already known divergences (behaviours §3.9, §3.19) | — |
 | One server is slow and the two responses are minutes apart | Per-case pairing (§6.1) | Cannot happen by construction; the pairing is per case, not per sweep | — |
