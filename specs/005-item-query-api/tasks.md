@@ -931,7 +931,9 @@ spec §3.2's table waiting for its emitter.
 
 **010** collects the flags this feature raised for the differential: the `userId` guard's `403`
 and the administrator's `404` for an unknown user (both unmeasured, `api/items.py`), the
-specials half of NextUp's chain (⚠️ spec §3.7), the `GenreItems`/`LockedFields` pinned-document
+specials half of NextUp's chain (⚠️ spec §3.7 — **OQ-7, and since 2026-09-02 a named comparison of
+[010 §3.10](../010-conformance-harness/spec.md) rather than a debt with no owner**), the
+`GenreItems`/`LockedFields` pinned-document
 gap (reference-target §1 — the alias sweep's measured exception empties if the pin moves), and
 OQ-1/OQ-2, whose answers are the ignored-parameter record and the field-by-field diff this
 feature built the events for.

@@ -2820,6 +2820,14 @@ directory out of a real library, which no read-only probe can do and which nobod
 somebody else's media to settle a documentation question. What would answer it is a disposable
 library on a server somebody owns — scanned, emptied of one series' episodes, scanned again.
 
+**That library now has an owner, and this reading is scheduled.** It is a **named comparison** of
+[010 §3.10](../../specs/010-conformance-harness/spec.md), added there on 2026-09-02 by the decision
+010's task list reserved as D-6, and it runs against the **single-use reference instance** 010 §3.1
+stands up over this repository's own fixture and destroys — which is the disposable library the
+paragraph above asks for. **The marker stays until the comparison has run**: a §3.10 row is an owner
+and a method, not a measurement, and this document does not mark a claim verified because somebody
+has undertaken to verify it.
+
 The unmeasured half does not change the decision below. Atrium's reason for keeping the row is an
 argument about **its own** guards, and it would stand whichever way the reference goes.
 
@@ -2941,7 +2949,10 @@ without writing into a real one (007 spec section 3.5, OQ-7).
 ### 5.6 A default rescan does not notice a replaced poster
 
 **Jellyfin does:** unmeasured from here — deciding it would mean writing into somebody's library
-and rescanning it, which the probes deliberately never do.
+and rescanning it, which the probes deliberately never do. **It is owned as of 2026-09-02**: a
+**named comparison** of [010 §3.10](../../specs/010-conformance-harness/spec.md), added by D-6, run
+against the single-use reference instance of 010 §3.1 rather than against anybody's library — scan,
+replace the artwork beside an untouched film, rescan at default depth, compare.
 
 **Atrium does:** re-derive an item's artwork from its directory on every refresh that *reads* the
 directory — and a default scan reads it only when the item's **media file** changed, because

@@ -662,7 +662,10 @@ prevent.
   will report a difference that is only the item talking.
 * **The paused-session ticker freeze** is cited from the reference's source and not measured on the
   wire: it costs another ten minutes of deliberate silence against a paused session
-  ([plan §6.8](plan.md#68-measured-at-the-gate-and-what-stays-owed)).
+  ([plan §6.8](plan.md#68-measured-at-the-gate-and-what-stays-owed)). **Owned since 2026-09-02**: a
+  named comparison of [010 §3.10](../010-conformance-harness/spec.md), added by that list's D-6, and
+  taken against the single-use reference instance 010 §3.1 stands up — ten minutes of silence held
+  open against somebody's production server is exactly what that instance exists to avoid.
 
 **The starting inventory this feature leaves behind:** every user-data transition is a pure
 function in `domain/playstate.py` with no clock and no I/O, and the table that proves them is

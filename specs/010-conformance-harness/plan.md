@@ -4,7 +4,8 @@ title: Conformance harness — implementation plan
 status: Accepted
 accepted: 2026-09-01
 created: 2026-09-01
-updated: 2026-09-01
+updated: 2026-09-02
+amended: 2026-09-02 at the tasks gate — reviewing the list against the code this plan names found two things it got wrong about this repository, and both are corrected above rather than left to a task's Done note. **§8's AC-2 row could not be written:** it maps the criterion to a probe run "by hand", and `tests/conformance/test_acceptance.py` resolves every entry as `module:function` through `importlib` while §2 of this plan inherits the rule that a `tools/` module is reached by path and never as a package — so the row would fail on import the day 010 flips to `Implemented`, which is 009 T14's *"a criterion with no test at all"* arriving one feature early. The probe now **records** the reference's reading of the fixture and the test compares Atrium's scan against that record, so AC-2 is checkable in the default job with no Jellyfin anywhere. **And §4.3's floor was the right floor for the surface and the wrong one for eight rows:** `surface.yaml` declares eight endpoints at `level: L3` and nothing in the repository has ever checked that a declared level is reached, while every feature's definition of done has been deferring exactly that half here — those eight are seeded first, per identity, and the report prints the declared level beside the coverage. A third finding is recorded in the task list rather than here, because it is a scope call on an accepted spec and is reserved for its owner as D-6: §3.10's sixteen named comparisons do not carry four debts that need precisely what D-1's instance provides, including the only surviving `⚠️ UNVERIFIED` in the compatibility documents (behaviours §5.2), whose own text names a disposable library as the remedy. **Amended again on 2026-09-02, hours later, by D-6 being taken:** the recommendation was accepted, so **§3.10 is twenty named comparisons and not sixteen**, and every place this plan counted them moves with it — §3's file tree, §3's argument for machine-readable registers, §4.2's register, §6.4's runner shapes and §8's row 16. §4.2's `needs` vocabulary gains `rescan` and `wait`, and §6.4 grows from four shapes to six: **the library changed underneath a rescan** (behaviours §5.2 and §5.6, where the signal is the difference between two scans) and **a reading after a deliberate wait** (007's paused-session ticker). The clause above recording D-6 as reserved is what this supersedes; 009's plan §8 went stale in exactly this way and the audit of 2026-09-01 caught it
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
@@ -142,7 +143,7 @@ tools/
 docs/compatibility/
 ├── allowlist.yaml         new: the allowlist, both kinds, scoped. The single source; the prose
 │                          tables in conformance.md and spec §3.3 are checked against it
-├── named-comparisons.yaml new: the sixteen rows of spec §3.10, each with what it needs and the
+├── named-comparisons.yaml new: the twenty rows of spec §3.10, each with what it needs and the
 │                          behaviours section that is its answer
 └── request-cases.yaml     new: the request cases per endpoint (AC-3), seeded from what the two
                            analysed clients send
@@ -163,7 +164,7 @@ manual exercise.
 **Why the registers are files and not tables in a document.** The audit of 2026-09-01 found 009's
 plan §8 stale in four places and named the reason: *"a table of tests is the section most prone to
 this: nothing reads it, so nothing fails when it drifts"* (M1). This feature would otherwise ship
-three such tables — the allowlist in two documents, the sixteen named comparisons in one — each
+three such tables — the allowlist in two documents, the twenty named comparisons in one — each
 being the thing a run is measured against. So each is one machine-readable file that the tool
 reads, with a test asserting the prose says what the file says. The prose stays, because the
 *reasons* are the part worth reading; what it stops being is the source.
@@ -200,8 +201,10 @@ same information, and it is the version that excuses the aggregate this server c
 
 ### 4.2 `docs/compatibility/named-comparisons.yaml`
 
-Sixteen rows, one per row of spec §3.10, each with `id`, `what`, `why_the_sweep_misses_it`,
-`needs` (one or more of `identity:restricted`, `identity:playback-denied`, `fixture`, `latency`,
+Twenty rows, one per row of spec §3.10 — sixteen when this plan was written, twenty since D-6 —
+each with `id`, `what`, `why_the_sweep_misses_it`,
+`needs` (one or more of `identity:restricted`, `identity:playback-denied`, `fixture`, `rescan`,
+`wait`, `latency`,
 `bytes`, `twice`), `behaviours` (the section that is the answer) and `runner` (the callable in
 `tools/differential.py` that runs it, or `none` while it is outstanding).
 
@@ -219,6 +222,17 @@ differences the spec's own gate found on `/Items/{itemId}/Similar` are both invi
 request. So the file starts at the floor plus the cases the two analysed clients actually send, and
 it grows by measurement rather than by combinatorics — 764 declared query parameters across those
 59 operations is the number that makes "one case per parameter" not a plan.
+
+**And the eight `level: L3` rows are seeded first.** *(Found at the tasks gate on 2026-09-02.)* That
+column is a **required** conformance level and nothing has ever checked that one is reached:
+`tools/extract_v1_surface.py` validates only that the value is one of `L0..L3`, and
+`tests/conformance/test_routes.py` reads `feature` and `consumers` and never `level`. Meanwhile
+every feature's definition of done ticks *"every endpoint reaches the conformance level declared in
+spec §6"* with the differential half deferred to this feature — [009's](../009-playlists/tasks.md)
+says so in as many words. So those eight are the only rows in the repository whose declared level
+this feature is the only thing that can pay for: they get their cases before the other 51, one per
+identity they are meaningful for, and §3.4's coverage line prints the declared level beside what a
+run actually compared.
 
 ### 4.4 The outputs
 
@@ -463,15 +477,17 @@ list.
 ### 6.4 The named comparisons
 
 Each row of `named-comparisons.yaml` names a `runner` — a function in `tools/differential.py` with
-one signature, `(instances, identities) -> NamedResult` — so the sixteen are *code beside the
-sweep*, not prose beside the report. Four shapes cover all sixteen:
+one signature, `(instances, identities) -> NamedResult` — so the twenty are *code beside the
+sweep*, not prose beside the report. Six shapes cover all twenty:
 
 | Shape | Rows | What it does |
 |---|---|---|
 | **A second seat** | the named reader, the unreachable entries, the delivery-time policy refusal | Issues one request as a created identity and compares the two answers, where the whole signal is a status or a row count |
 | **The same request twice** | the de-duplication that misses | Runs it twice against each server and reports the *reference's* disagreement with itself as the finding (behaviours §3.18), never as a flake to retry |
 | **Something that is not in a body** | the progressive header frame, burn-in, the image track's latency, the subtitle playlist's bytes, the manifest's `NAME` | Parses or times rather than compares: first frames, cue pixels, elapsed milliseconds, raw bytes with one attribute masked |
-| **A library the reference has to be given** | the multi-part film, the legacy-encoded subtitle, EXIF orientation, the empty library, the media source with no runtime | Needs `fixture`, and is reported outstanding by name when no instance was available |
+| **A library the reference has to be given** | the multi-part film, the legacy-encoded subtitle, EXIF orientation, the empty library, the media source with no runtime, the pristine specials season (005 OQ-7) | Needs `fixture`, and is reported outstanding by name when no instance was available |
+| **The library changed underneath a rescan** | the container that has lost every file (behaviours §5.2), the replaced poster (behaviours §5.6) | Needs `fixture` and `rescan`: scan, change the tree, rescan, and compare the second reading rather than the first. Added by D-6 |
+| **A reading after a deliberate wait** | the paused-session ticker freeze | Needs `wait`: report a paused session to both, stay silent past the reap threshold, compare the position each committed. Added by D-6 |
 
 The last two rows of §3.10 — the `"$"` message and the four unmeasured content-type refusals — are
 ordinary cases in `request-cases.yaml` with a `named-comparisons.yaml` row pointing at them, which
@@ -758,7 +774,7 @@ not a server.
 | AC | Where | Shape |
 |---|---|---|
 | 1 | `tests/unit/test_media_fixtures.py` (extended) | Two builds byte-identical — the assertion `tests/fixtures/media.py` already carries, extended to the tree the instance is given |
-| 2 | `tools/probe_reference_scan.py`, by hand | The one criterion that cannot be a test: it needs both servers. The probe is what runs it, and the acceptance map names the probe and says so |
+| 2 | `tools/probe_reference_scan.py`, **and a test over what it wrote down** | *This row said "by hand — the one criterion that cannot be a test", and the acceptance map cannot express that.* `tests/conformance/test_acceptance.py` resolves every entry as `module:function` through `importlib`, and §2 above inherits the rule that a `tools/` module is reached by path and never as a package — so the row would fail on import the day `"010"` joins `IMPLEMENTED_FEATURES`, for the right reason: a criterion whose only proof is a command somebody remembers to run is a criterion with no proof. **The probe therefore records the reference's reading of the fixture** — item count per collection type, and the structure, with its own citation in the file — and the test compares Atrium's scan of the same tree against that record. Both servers are still needed to *make* the reading; only one is needed to check it, so it runs in the default job. Found at the tasks gate on 2026-09-02 |
 | 3 | `tests/unit/test_allowlist.py` | Every endpoint of `surface.yaml` has at least one case in `request-cases.yaml`, and the coverage line counts what it ran |
 | 4 | `tests/conformance/test_differential.py` | The mutation table: a removed field → `MISSING_KEY`; an integer as a string → `TYPE`; a changed title → `VALUE`; a reordered array → `ORDER` and **not** N values; a shorter array → one `LENGTH` and no children |
 | 5 | `tests/conformance/test_differential.py` | The report's own ordering, asserted on a report built from a mixed finding set |
@@ -770,7 +786,7 @@ not a server.
 | 12 | `tests/unit/test_version_bump.py` | Each step made to fail in turn; the command stops and the later steps did not run |
 | 13 | `tests/unit/test_media_fixtures.py` (extended) | Every fixture file is generated by a declared entry — the existing rule, restated for the entries §3.1 owes |
 | 14, 15 | `tests/conformance/test_differential.py` | A report built from one identity says one identity; a run whose pre-flight finds the seat refuses, and the refusal names it |
-| 16 | `tests/unit/test_allowlist.py` + `test_differential.py` | The register has sixteen rows and they are spec §3.10's; a run with one outstanding is not clean |
+| 16 | `tests/unit/test_allowlist.py` + `test_differential.py` | The register has **twenty** rows and they are spec §3.10's — sixteen until D-6 widened both, 2026-09-02; a run with one outstanding is not clean |
 | 17 | `tests/conformance/test_differential.py` | A key removed from a row of a `drawn` array is still reported; a value changed in the same row is not |
 | 18 | `tests/conformance/test_differential.py` | A reordered `unordered` array produces nothing; the same array reordered *and* changed produces the change |
 
@@ -940,3 +956,24 @@ diagnostic output about itself: it leaves the process as a file in the data dire
 `config/` already owns and no client can see, or it does not leave the process at all. The file is
 also the only form that can carry the *complete* count, since it is written at shutdown, which is
 after the last request a route could have answered.
+
+### D-6, reserved by the task list rather than by this plan, and taken on 2026-09-02
+
+The sixth decision is not one of the five above: this plan raised it in its own frontmatter and left
+it to the [task list](tasks.md) to state, because it is a scope call on an **accepted** spec and the
+list is where it was found. It is recorded here so that no reader of this document has to reach the
+task list to learn that it is settled.
+
+**Taken 2026-09-02, the recommendation accepted.** The four readings that §3.10 did not carry —
+[behaviours §5.2](../../docs/compatibility/behaviours.md) (the container that has lost every file,
+and the only surviving `⚠️ UNVERIFIED` in the compatibility documents),
+[behaviours §5.6](../../docs/compatibility/behaviours.md) (the replaced poster a default rescan does
+not notice), [005 §7 OQ-7](../005-item-query-api/spec.md) (Next Up and a pristine specials season)
+and [007's paused-session ticker freeze](../007-user-data-and-playstate/tasks.md#what-this-feature-owes-the-next-ones)
+— are **§3.10 rows**, so the register is twenty and AC-16 counts twenty. Every one of them needs
+precisely what D-1's instance provides: three want the library changed between two scans, and the
+fourth wants ten minutes of deliberate silence against a paused session — none of which may be
+asked of an operator's server. [010 spec §7](spec.md#7-open-questions) records the decision and its
+frontmatter carries the amendment, dated, exactly as D-3's did. **Behaviours §5.2 keeps its
+`⚠️ UNVERIFIED` marker**: `behaviours.md` is not a specification and may carry one, and a §3.10 row
+is an owner and a method rather than the reading that discharges it.

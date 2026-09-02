@@ -120,10 +120,14 @@ run is reported as covering one identity.
 `[probe: tools/probe_restricted_surface.py, Jellyfin 10.11.11, 2026-09-01]`
 
 **And a sweep is not the whole method.** The differences a sweep cannot raise — because they need a
-caller the run does not have, a library the reference cannot be given, or a comparison of something
-that is not in a body — are enumerated as **named comparisons** in
+caller the run does not have, a library the reference cannot be given, a library **changed between
+two scans**, a deliberate **wait**, or a comparison of something that is not in a body — are
+enumerated as **named comparisons** in
 [010 §3.10](../../specs/010-conformance-harness/spec.md), and an unrun one keeps a run from being
-called clean.
+called clean. There are **twenty** of them: sixteen when 010's spec was accepted, and four more on
+2026-09-02, when the four readings the compatibility documents and the inherited lists owed —
+[behaviours §5.2](behaviours.md) and [§5.6](behaviours.md), 005's OQ-7 and 007's paused-session
+ticker — were given this table as their owner rather than left as debts nobody was measuring.
 
 **The allowlist** — fields that legitimately differ and are therefore compared by *shape* rather
 than by value — is checked in beside the tool, and **every entry declares one of exactly two kinds

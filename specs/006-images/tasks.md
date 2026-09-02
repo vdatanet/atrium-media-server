@@ -754,7 +754,9 @@ writes one, and that failure is the signal to serve chapter images rather than a
   parser and visible in `Content-Length`.
 * **[behaviours §5.6](../../docs/compatibility/behaviours.md)** — a default rescan does not notice
   a replaced poster. Whether the reference does is unmeasured, and measuring it means writing into
-  a library.
+  a library. **Owned since 2026-09-02**: a named comparison of
+  [010 §3.10](../010-conformance-harness/spec.md), added by that list's D-6, and the library written
+  into is the single-use reference instance 010 §3.1 stands up and destroys.
 * **The empty-GUID edge** — `/Items/000…0/Images/Primary` is `Guid.Empty` on the reference and
   answers the controller's `400`; Atrium answers the `404` (spec §3.2).
 

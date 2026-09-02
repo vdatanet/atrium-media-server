@@ -121,7 +121,7 @@ say how it will be proven is not finished.
 | [007](007-user-data-and-playstate/) | User data and playstate | **Implemented** | **Implemented** | **Implemented** |
 | [008](008-playback-negotiation-and-delivery/) | Playback negotiation and delivery | **Implemented** | **Implemented** | **Implemented** |
 | [009](009-playlists/) | Playlists | **Implemented** | **Implemented** | **Implemented** |
-| [010](010-conformance-harness/) | Conformance harness | **Accepted** | **Accepted** | — |
+| [010](010-conformance-harness/) | Conformance harness | **Accepted** | **Accepted** | **Accepted** |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
 
@@ -176,9 +176,9 @@ script's name — and AC-6, applied literally, failed the very allowlist the spe
 own measurement gate, its plan and task list on 2026-08-30, and the twelve tasks ran from
 2026-08-30 to 2026-08-31; **012 was opened on 2026-08-29 and accepted at its own gate the same
 day**. The lowest-numbered feature that is not implemented is
-**010**, whose spec is accepted and whose plan is drafted, so what is next is that plan's **gate** —
-the first unticked step of the lowest-numbered feature, which is where this table always points.
-Tasks do not start until it is `Accepted` (Principle III). Both
+**010**, whose spec and plan were both accepted on 2026-09-01, so what is next is its **task
+list's gate** — the first unticked step of the lowest-numbered feature, which is where this table
+always points. Code does not start until that list is `Accepted` (Principle III). Both
 those lists were inputs to the plan. Each of 009's own two gates found something, which
 is the rate this project expects: the plan gate found §8 budgeting a fixture task for a second
 non-administrator restricted to one library, which `tests/fixtures/query.py` has seeded since 005 —
