@@ -315,15 +315,46 @@ declared case it could not issue, or a named comparison it did not run — and `
 start. `1` is the ordinary answer while the twenty named comparisons have no runners
 (010 T12): outstanding is not green, and the report says which of the three it was.
 
-Three supporting modules sit beside it, underscore-prefixed so CI does not try to start them:
+Four supporting modules sit beside it, underscore-prefixed so CI does not try to start them:
 `_differential.py` (the pure comparison engine), `_allowlist.py` (the allowlist, the named
-comparisons and the request cases) and `_probe.py` (the `.env` reader it borrows).
+comparisons and the request cases), `_reference.py` (the single-use reference instance below) and
+`_probe.py` (the `.env` reader it borrows).
+
+### The single-use reference instance
+
+`_reference.py` stands up a Jellyfin **this project owns**, gives it this repository's own fixture
+tree as its only library, waits for the scan on the server's own answer, and destroys it with
+everything it wrote — on the success path and the exception path alike, and a run that finds the
+wreckage of a killed one destroys that first. It exists because the fixture comparison needs a
+library on the *other* server, adding a library is a write, and the only reachable Jellyfin was an
+operator's own ([ADR-0007](../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md)).
+
+**It needs a container runtime — Docker or Podman — and it is the only thing here that does.** The
+image is pinned by **digest** and never by tag, recorded in
+[reference-target §1](../docs/compatibility/reference-target.md#1-the-pinned-version) and printed
+in every report beside the Atrium sha. The runtime is invoked as a subprocess through its command
+line, never as a library, so this directory keeps its standard-library-only rule.
+
+`reference_instance.py` is the same lifecycle for a human: it stands one up and **leaves it
+running**, so a difference the harness reported can be looked at by hand.
+
+```bash
+python3 tools/reference_instance.py --fixture-root /path/to/tree --library Movies:movies:Movies
+python3 tools/reference_instance.py --fixture-root /path/to/tree --check   # and destroy it again
+python3 tools/reference_instance.py --sweep                                # destroy the leftovers
+```
+
+Everything a run creates carries the label `net.atrium.reference=single-use` — the container and
+both of its volumes — so `--sweep`, and the sweep every instance performs before starting its own,
+can find what a killed run left. **A machine with no runtime loses nothing it had**: the sweep
+against a reachable server still runs, and every case and named row that needed an instance is
+reported *outstanding with the reason* rather than skipped.
 
 ### Planned
 
 | Script | Purpose | Arrives with |
 |---|---|---|
-| `probe_wire_format.py`, `probe_sort_vocabulary.py`, … | The **five** remaining prior-measurement debts in [reference-target.md](../docs/compatibility/reference-target.md) — three of which need a server this project may write to, and so wait on feature 010's single-use instance | Their owning features |
+| `probe_wire_format.py`, `probe_sort_vocabulary.py`, … | The **five** remaining prior-measurement debts in [reference-target.md](../docs/compatibility/reference-target.md) — three of which need a server this project may write to, which the single-use instance above now provides | Their owning features |
 
 A runner that executes every probe and summarises is deliberately **not** here yet: it is part of
 the harness feature 010 specifies, and building it before that spec is accepted would be

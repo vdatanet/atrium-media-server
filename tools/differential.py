@@ -860,6 +860,11 @@ class Inputs:
     instance_url: str = ""
     fixture_asked: bool = False
     named_selected: Optional[Tuple[str, ...]] = None
+    #: Why this run has no instance, in the words of the thing that could not make one - the
+    #: runtime is absent, the image would not pull, the wizard refused, the scan timed out. T9
+    #: added it because *"outstanding"* with a generic reason is a skip wearing a longer word,
+    #: and the four failures of plan section 7 are four different things to do next.
+    instance_reason: str = ""
 
 
 #: What each `needs` token of the two registers asks of a run, and what answers it. The tokens are
@@ -890,9 +895,12 @@ def unmet_need(need: str, inputs: Inputs) -> str:
                 "it needs a reference instance over this repository's own fixture, and --fixture "
                 "was not asked for"
             )
+        head = "it needs a reference instance over this repository's own fixture, and none was "
+        if inputs.instance_reason:
+            return head + "available: " + inputs.instance_reason
         return (
-            "it needs a reference instance over this repository's own fixture, and none was "
-            "available: the single-use instance is 010 T9, and --reference-url named none"
+            head + "stood up: --reference-url named none, and --fixture-root named no tree for "
+            "this run to stand one up over"
         )
     return ""
 
@@ -1781,15 +1789,13 @@ ENV_ATRIUM_USERNAME = "ATRIUM_USERNAME"
 ENV_ATRIUM_PASSWORD = "ATRIUM_PASSWORD"  # noqa: S105
 ENV_ATRIUM_TOKEN = "ATRIUM_TOKEN"  # noqa: S105
 
-#: What the report header says where an instance goes, until one can be stood up.
+#: What the report header says where an instance goes, when this run has none.
 _NO_INSTANCE = "none was stood up, so every row that needs one is outstanding"
 
 #: And the line beside the Atrium sha that names **which** reference was measured. The image is
 #: pinned by digest and the run prints it, so that a difference reproducing on one machine and not
-#: on another has somewhere to be looked up (plan section 9's risk row). T9 stands the instance up
-#: and writes the digest into reference-target section 1, which is the first run that has one;
-#: until then the line says what is true rather than nothing at all.
-_NO_DIGEST = "no instance was stood up by this run (010 T9)"
+#: on another has somewhere to be looked up (plan section 9's risk row).
+_NO_DIGEST = "no instance was stood up by this run"
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_SURFACE = REPOSITORY_ROOT / "docs" / "compatibility" / "surface.yaml"
@@ -1852,11 +1858,72 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--reference-url",
         default="",
-        help="A reference instance somebody else stood up, for the --fixture half. The single-use "
-        "instance this run stands up for itself is 010 T9",
+        help="A reference instance somebody else stood up, for the --fixture half. Given one, "
+        "this run does not stand up its own",
+    )
+    parser.add_argument(
+        "--fixture-root",
+        type=Path,
+        default=None,
+        help="The fixture tree the single-use reference instance is given as its only library, "
+        "mounted read-only. Which world that is, and in how many libraries, is D-4 - measured by "
+        "tools/probe_reference_scan.py and built by 010 T11",
     )
     parser.add_argument("--timeout", type=int, default=30)
     return parser
+
+
+class FixtureInstance:
+    """The single-use reference instance a run stands up around its own sweep, or the reason not.
+
+    **It never fails the run**, which is ADR-0007's degradation and not politeness: a machine with
+    no runtime still sweeps a reachable server and runs everything in the default CI job, and what
+    it loses is reported outstanding with the reason rather than skipped. So `__enter__` catches
+    what `tools/_reference.py` raises and turns it into `reason`, which `unmet_need` prints
+    against every `needs: fixture`, `rescan` and `wait` row.
+
+    A context manager wrapping the sweep and nothing else (plan section 6.5): the seats die with
+    the roster inside it, and the instance dies after them.
+    """
+
+    def __init__(self, args: argparse.Namespace) -> None:
+        self.args = args
+        self.url = args.reference_url or ""
+        self.digest = ""
+        self.reason = ""
+        self._instance: Any = None
+
+    def __enter__(self) -> FixtureInstance:
+        if self.url or not self.args.fixture:
+            return self
+        if self.args.fixture_root is None:
+            self.reason = (
+                "--fixture-root named no tree to mount, and an instance with nothing mounted "
+                "would scan an empty library and compare two of them"
+            )
+            return self
+        module = _sibling("_reference")
+        spec = module.InstanceSpec(fixture_root=Path(self.args.fixture_root))
+        instance = module.ReferenceInstance(spec)
+        try:
+            instance.__enter__()
+        except module.InstanceError as failure:
+            self.reason = str(failure)
+            return self
+        self._instance = instance
+        self.url = instance.url
+        self.digest = instance.digest
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[type],
+        exc: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> None:
+        if self._instance is not None:
+            self._instance.__exit__(exc_type, exc, traceback)
+            self._instance = None
 
 
 def run(
@@ -1983,12 +2050,6 @@ def _execute(args: argparse.Namespace) -> Tuple[RunReport, Path]:
     named = registers().load_named()
     cases = registers().load_cases(entries=entries)
     endpoints = load_endpoints(args.surface)
-    inputs = Inputs(
-        roles=tuple(role.value for role in roles),
-        instance_url=args.reference_url,
-        fixture_asked=bool(args.fixture),
-        named_selected=tuple(args.named) if args.named else None,
-    )
 
     directories = {
         "atrium": WireDirectory(atrium),
@@ -2013,37 +2074,51 @@ def _execute(args: argparse.Namespace) -> Tuple[RunReport, Path]:
     version = public.body.get("Version", "unknown") if isinstance(public.body, dict) else "unknown"
     ours_says = header_value(atrium.request("GET", "/System/Ping").headers, SERVER_HEADER)
     theirs_says = header_value(public.headers, SERVER_HEADER)
-    provenance = [
-        ("date", datetime.now(timezone.utc).date().isoformat()),
-        ("atrium sha", repository_sha(REPOSITORY_ROOT)),
-        ("atrium", atrium_url + "  " + ours_says),
-        ("reference", reference_url + "  " + theirs_says),
-        ("reference version", str(version)),
-        ("reference instance", args.reference_url or _NO_INSTANCE),
-        ("reference image digest", _NO_DIGEST),
-        ("surface", str(args.surface)),
-    ]
 
-    with rosters["atrium"] as ours, rosters["reference"] as theirs:
-        seats = [
-            Seat(
-                role=role.value,
-                atrium=ours[role],
-                reference=theirs[role],
-                atrium_credentials=(
-                    credentials["atrium"]
-                    if role is Role.ADMINISTRATOR
-                    else ours.credentials_for(role)
-                ),
-                reference_credentials=(
-                    credentials["reference"]
-                    if role is Role.ADMINISTRATOR
-                    else theirs.credentials_for(role)
-                ),
-            )
-            for role in roles
+    # **The instance wraps the sweep and nothing else** (010 T8's note, plan section 6.5): the two
+    # rosters are entered inside it, so the seats die before the server that holds them, and the
+    # instance dies after them on both paths. An instance that could not be stood up is not a
+    # failure here - `FixtureInstance` carries the reason, and every row that needed one says it.
+    with FixtureInstance(args) as instance:
+        inputs = Inputs(
+            roles=tuple(role.value for role in roles),
+            instance_url=instance.url,
+            fixture_asked=bool(args.fixture),
+            named_selected=tuple(args.named) if args.named else None,
+            instance_reason=instance.reason,
+        )
+        provenance = [
+            ("date", datetime.now(timezone.utc).date().isoformat()),
+            ("atrium sha", repository_sha(REPOSITORY_ROOT)),
+            ("atrium", atrium_url + "  " + ours_says),
+            ("reference", reference_url + "  " + theirs_says),
+            ("reference version", str(version)),
+            ("reference instance", instance.url or _NO_INSTANCE),
+            ("reference image digest", instance.digest or _NO_DIGEST),
+            ("surface", str(args.surface)),
         ]
-        report = run(atrium, reference, endpoints, cases, entries, named, seats, inputs, provenance)
+        with rosters["atrium"] as ours, rosters["reference"] as theirs:
+            seats = [
+                Seat(
+                    role=role.value,
+                    atrium=ours[role],
+                    reference=theirs[role],
+                    atrium_credentials=(
+                        credentials["atrium"]
+                        if role is Role.ADMINISTRATOR
+                        else ours.credentials_for(role)
+                    ),
+                    reference_credentials=(
+                        credentials["reference"]
+                        if role is Role.ADMINISTRATOR
+                        else theirs.credentials_for(role)
+                    ),
+                )
+                for role in roles
+            ]
+            report = run(
+                atrium, reference, endpoints, cases, entries, named, seats, inputs, provenance
+            )
 
     today = datetime.now(timezone.utc).date().isoformat()
     default = (

@@ -1080,7 +1080,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T9 — `tools/_reference.py`: a Jellyfin this project owns, uses once, and destroys
 
-- [ ] **Changes:** new `tools/_reference.py` — `InstanceSpec` and `ReferenceInstance`, a context
+- [x] **Changes:** new `tools/_reference.py` — `InstanceSpec` and `ReferenceInstance`, a context
   manager because the destruction is the invariant. `__enter__` performs
   [plan §6.5](plan.md#65-the-single-use-reference-instance) in order: **sweep** whatever a killed run
   left, by label and by scratch directory, and print how many; **start** one container of the pinned
@@ -1120,6 +1120,121 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 > **The physical dependency starts here.** Everything above runs against a server somebody already
 > has, or against no server at all. Everything below needs this one.
+
+> **Done (2026-09-02).** *The instance starts, scans and dies — three full lifecycles, nothing left
+> behind — and the finding is that the unattended sequence this plan wrote is one request short, in
+> exactly the place plan §6.5 said to check rather than discover.*
+>
+> **`POST /Startup/User` answers `404` while no user exists.** It fetches the first user and
+> returns `NotFound()` when there is none
+> `[source: Jellyfin.Api/Controllers/StartupController.cs:130-137 @ v10.11.11]`; what makes one is
+> the **`GET`** beside it, which runs the user manager's own initialisation before reading
+> `[source: Jellyfin.Api/Controllers/StartupController.cs:107-114 @ v10.11.11]`. So the wizard's
+> user operation is a **rename of the account the read created**, never a creation, and the
+> sequence reads before it writes: `POST /Startup/Configuration`, **`GET /Startup/User`**, `POST
+> /Startup/User`, `POST /Startup/Complete`, `POST /Library/VirtualFolders`. It was measured before
+> it was read — the first real run stopped on that `404` — which is what
+> [plan §6.5](plan.md#65-the-single-use-reference-instance) step 4 asked for in as many words, and
+> the step it priced is the step it cost. `POST /Startup/RemoteAccess` is **not** needed: the
+> wizard's own client sends it and three complete lifecycles never did. The first-time-setup
+> authorization policy itself holds exactly as the document declares it — no credential is required
+> before `CompleteWizard`.
+>
+> *The second is the same trap as the item count, one step nearer than the plan puts it.* §6.5 step
+> 5 says to wait *"until the library scan reports itself idle"* because *"a count that has stopped
+> changing is indistinguishable from a scan that has not started"* — and **the scan task is `Idle`
+> before it starts, too**, so the literal reading returns on the first poll, before the library has
+> been read at all. What is waited for is a **completion that did not exist a moment ago**, read
+> from the task's own `LastExecutionResult` `[spec: GetTasks, TaskResult]`, with the scan asked for
+> by name `[spec: StartTask]` when the task is idle and has never run.
+> `refreshLibrary=true` does drive that task — every lifecycle saw it running without being asked —
+> so that second path is a backstop and never the ordinary one. Measured: the Movies fixture
+> library scans in 31–33 s.
+>
+> *The third is where the instance's own data lives, and it is the difference between a cleanup and
+> a claim.* §6.5 step 2 asks for *"an ephemeral data directory created under the scratch root"* and
+> the sweep for *"a data directory under the harness's own scratch root"*. The published image runs
+> as **root**, so a host directory bind-mounted at the reference's data path comes back root-owned
+> — and on Linux the sweep would then find wreckage it has no permission to remove, which is a leak
+> reported as a cleanup, in the one task written to stop leaks being reported as cleanups. The data
+> is therefore a pair of **labelled volumes** removed by the runtime that made them. The
+> **fixture** stays a bind mount, read-only, because ADR-0007 wants it for a different reason
+> entirely: the fixed modification time a copy would not preserve.
+>
+> *And the fourth is a contract line T8 had already made unnecessary.* [Plan §5](plan.md#5-contracts)
+> gives `ReferenceInstance` a `create_identity(role)` and an `administrator: Identity`. T8
+> established that **a seat is an account and the two servers share none**, so a run holds a roster
+> per side; an instance that also made seats would make one of the two, on one server, and the loop
+> would have two ways to obtain the same thing. The instance hands back a URL and the
+> **credentials** its wizard created, `differential.py`'s own `authenticate` turns those into the
+> `Identity`, and the roster is still entered **inside** the instance's context so the seats die
+> first. §5 and §6.5 carry all four corrections.
+>
+> **T7's six unmeasured claims are settled, and every one held.** T7 wrote the seat lifecycle
+> without a Jellyfin it was allowed to write to and listed what it could therefore not know;
+> `tools/reference_instance.py --check --seats` drives T7's own `Roster` against a real instance and
+> prints what each step answered
+> `[probe: tools/reference_instance.py --check --seats, Jellyfin 10.11.11, 2026-09-02]`:
+> `POST /Users/New` answers **200** with an `Id` in a nine-property body; `POST /Users/{userId}/Policy`
+> answers **204**, the narrowing takes (`EnableAllFolders` false, `EnabledFolders` the one library)
+> and a property nobody touched survives — which is T7's read-then-mutate rule measured rather than
+> argued; a **bare** `GET /Users` does list an account an earlier run disabled instead of deleting,
+> which is why the pre-flight sends no filter; a freshly created seat authenticates immediately
+> under the same id; the wizard's first user **is** the administrator the roster is handed
+> (`IsAdministrator` true, and its id is the one `POST /Users/AuthenticateByName` returned); and the
+> three playback-processing permissions read back denied with `EnableMediaPlayback` untouched. The
+> full roster then created two seats and left **only** the administrator behind. **What is still
+> unmeasured is the sixth claim's other half** — that the three denials are *observable* at
+> negotiation and delivery in the shape [behaviours §2.21](../../docs/compatibility/behaviours.md)
+> predicts. That is the named comparison T12 runs, and it needs a runner rather than an instance.
+>
+> *The destruction is proven the way this repository proves a guard.* Nine guards were deleted in
+> turn and the suite re-run, and each has exactly one failing test: `__exit__`'s teardown, the
+> volume removal beside the container's, the raise on a success-path leak, the sweep in `__enter__`,
+> the fixture mount's `:ro`, the wizard's read-before-rename, the scan's *did it actually run*
+> clause, the destruction on `__enter__`'s own failure path, and the degradation branch that turns
+> an absent runtime into a reason. Nothing in the suite starts a container or opens a socket: the
+> runtime is a command line and the instance's client is injected, which is what lets a whole
+> lifecycle be asserted where there is no Jellyfin and must not be one.
+>
+> *Routine calls taken, none of which touches an accepted document's criteria.* **The image is
+> `jellyfin/jellyfin@sha256:aefb67e6…`, the multi-architecture *index* digest rather than one
+> platform's**, so a contributor on arm64 and a maintainer on amd64 pin the same line — a
+> per-platform digest would have introduced silently the very machine-to-machine difference the pin
+> exists to rule out. It is in
+> [reference-target §1](../../docs/compatibility/reference-target.md#1-the-pinned-version) and a test
+> fails when the two copies drift. **Everything a run creates carries one label,
+> `net.atrium.reference=single-use`** — container and volumes — and the sweep matches on the label
+> and never on the name, because a name is a convenience and a label is a contract. **The published
+> port is loopback-only and chosen by the kernel**; the fixture mounts at `/fixture`, deliberately
+> outside the image's own two declared volumes. **`differential.py` gains `--fixture-root`**, since
+> *which* world an instance is given is D-4 and T9 must not pre-empt it: a run that asks for
+> `--fixture` without one reports the fixture rows outstanding with that reason, which is the same
+> honest sentence as an absent runtime. **`Inputs` gains `instance_reason`** so the four failures of
+> [plan §7](plan.md#7-failure-handling) reach the report as four different things to do next, and
+> T8's *"the single-use instance is 010 T9"* is replaced by what this run could not do. Verified
+> under **3.9.6**: both modules compile and `--help` reaches no server, starts nothing and does not
+> even look for a runtime.
+>
+> *What T10 must know.* **`InstanceSpec.libraries` is how D-4 is asked either way** — a tuple of
+> `Library(name, collection_type, subpath)`, defaulting to one mixed-content library over the whole
+> tree, so *"one library"* and *"both worlds as two libraries"* are the same call with a different
+> argument and no change to this module. **Nothing here has read what the reference makes of the
+> fixture tree**, deliberately: the lifecycle was exercised over the 003 tree's `Movies` directory
+> and the item count was not looked at, because that reading is D-4's and recording it here would
+> file a measurement under the wrong task. **`tools/_reference.py` builds no tree** — the caller
+> hands it a root — so T10 needs the entry point [plan §6.6](plan.md#66-the-fixture-on-the-other-server)
+> names, and `tests/fixtures/library/generate.py`'s `build(destination)` is importable from a Python
+> that has the repository root on its path. **A scan of the 003 movies tree takes about half a
+> minute**, so the 900 s default deadline is generous rather than tight. **And a library's own
+> identifier is reproducible across instances**: two separate containers, over the same mount path,
+> gave the fixture library the identical id `f137a2dd21bbc1b99aa5c0f6bf02a805`
+> `[probe: tools/reference_instance.py --check --seats, Jellyfin 10.11.11, 2026-09-02]` — 003 T19's
+> *"ids derive from the absolute path"* holding for the virtual folder as well as for the items in
+> it, which is worth knowing before AC-2 tries to join anything. And **the instance is the
+> only writable Jellyfin this project has ever had**: three prior-measurement debts in
+> reference-target and the two configuration debts ADR-0007 names (behaviours §2.2 and §2.3) are
+> answerable from it now, and none of them is T10's.
 
 ## T10 — `tools/probe_reference_scan.py`: D-4's measurement, and the reading AC-2 is checked against
 
