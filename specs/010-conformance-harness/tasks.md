@@ -1518,7 +1518,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T12 — The named comparisons: six runner shapes over twenty rows
 
-- [ ] **Changes:** `tools/differential.py` gains a `runner` per row of `named-comparisons.yaml`, one
+- [x] **Changes:** `tools/differential.py` gains a `runner` per row of `named-comparisons.yaml`, one
   signature, `(instances, identities) -> NamedResult`, so the twenty are code beside the sweep and
   not prose beside the report (plan §6.4). Six shapes cover all of them: **a second seat** — the
   named reader, the entries a reader cannot reach, the delivery-time policy refusal — where the whole
@@ -1545,6 +1545,158 @@ written against twenty, and the `outstanding:` section they described is gone ra
   instance: `python3 tools/differential.py --named --fixture`, whose report must name **twenty** run
   or outstanding, with no separate list beside them.
 - **Spec reference:** §3.10, AC-16; plan §6.4
+
+> **Done (2026-09-02).** *Fourteen of the twenty ran against a real pair of servers, and the first
+> thing they found was that a `--fixture` run had been comparing the wrong server.*
+>
+> **`--fixture` stood the instance up beside the reference instead of as it.** [Plan §6.5](plan.md#65-the-single-use-reference-instance)
+> wraps it round the sweep, which is the right lifetime and the wrong *place*: every `needs:
+> fixture` request case resolves its anchor against the reference **under comparison**, and every
+> fixture-dependent runner asks that same reference for a film by name — so with an instance
+> standing beside a `--jellyfin` pointing elsewhere, all of them would have been asked of a server
+> that has never seen this repository's tree and answered `404` rather than reporting a difference.
+> `--fixture` now *means* the fixture on both servers (AC-2): the instance is stood up before the
+> reference is authenticated, it **is** the reference, the run takes its wizard's administrator
+> rather than `.env`'s, and a `--jellyfin` naming anything else is refused. **And it was being
+> given the wrong world**: `_reference.DEFAULT_LIBRARIES` is *one mixed-content library over the
+> whole tree*, where D-4 chose six typed ones and T11 composed them — a mixed library has no
+> `CollectionType`, so the run could not find a movies view to narrow the restricted seat to and
+> stopped before comparing anything. `differential.py` imports `tests/fixtures/reference_tree.py`
+> for the library list the way `probe_reference_scan.py` already does.
+>
+> ***And then the first run against a real Atrium stopped at `GET /Users -> 404`.*** **None of the
+> three routes a seat is made with is in [surface.yaml](../../docs/compatibility/surface.yaml)** —
+> `GET /Users`, `POST /Users/New`, `POST /Users/{userId}/Policy` are the reference's, and
+> Principle VI keeps an endpoint out until a client is measured calling it. So a **two-identity run
+> was impossible against the very server this harness exists to measure**, and nothing had noticed:
+> T7 built the roster with no Atrium it was allowed to write to, T9 proved it against the
+> reference, and T8 drove it end to end over stubs. `Roster` therefore takes a seat **handed in** —
+> a username and a password per role, signed in as, used, and left exactly where it was, with
+> `created_by_the_run` false so the teardown cannot touch it — which is what the administrator has
+> always been. The pre-flight runs over the roles the roster actually creates, so it neither
+> refuses the operator's own account nor asks a server for a listing it does not serve, and its
+> refusal now names the four environment variables rather than the `404`. AC-15 is satisfied where
+> the routes exist and is **unsatisfiable on Atrium by design**; [plan §6.7](plan.md#67-identities)
+> says so.
+>
+> *Three more the stub wire could not have found, each one fatal to a real run.* **A space is not a
+> request line**: `request-cases.yaml` writes what a client sends — `searchTerm=The Planted
+> Poster` — and `http.client` refuses that target outright, so every case with one was unissuable
+> and the run stopped before it compared anything; the query is percent-encoded now, and a test
+> asserts every declared case is issuable. **The reference binds a token to a device**: two
+> accounts under one `DeviceId` are one session, so signing the second seat in revoked the first's
+> token and the teardown answered `401` on every account it had created — each account has a device
+> of its own now, at sign-in and in use, and the sign-in goes through this module's own `Wire`
+> rather than `_probe.py`'s one fixed device. **And a login is the one case whose effect is on the
+> caller**: sweeping `POST /Users/AuthenticateByName` as a seat, on that seat's device, logged the
+> seat out mid-run, so that case is issued on a device of its own.
+>
+> **What the thirteen found.** The two the register exists for both reproduce exactly:
+> **behaviours §3.16** — a restricted reader naming the owner of a private playlist is answered
+> `200` with its two entries by the reference and `403` here, where both answer `404` without the
+> parameter; and **behaviours §3.17** — a playlist of three entries spanning two libraries, read by
+> a seat that can open one of them, is **1 row here against 3 there**, `TotalRecordCount` 1 against
+> 3, which is the row count being the whole signal. Beside them: the reference's progressive mp3
+> re-encode carries a `Xing`/`Info` header frame and Atrium's does not (behaviours §3.3, 008 T14's
+> fourth divergence, measured on the wire at last); a `cp1251` sidecar comes back
+> `Çäðàâñòâóéòå` here and `Здравствуйте` there (§5.11); the two-part film answers two media sources
+> and no `PartCount` here against one source and `PartCount: 2` there; and four are **parity** —
+> the subtitle playlist's window lines are identical and both write a decimal **point** (§3.12
+> holds: the defect is the reference *host's* locale), an empty library reads `Played: false` on
+> both (§5.7, where the source reading said *vacuously played*), neither server honours an EXIF
+> orientation on resize, and `Next Up` offers nothing on either when only season 0 is unplayed —
+> which **closes [005 §7 OQ-7](../005-item-query-api/spec.md)**.
+> `[probe: tools/differential.py --named, Jellyfin 10.11.11, 2026-09-02]`
+>
+> **The eleven-minute row ran and its answer is a smaller one than the question.** A session
+> reported playing and then paused at 10 000 000 ticks, left silent for 660 s — past Atrium's
+> five-minute reap and past the ten minutes 007's list prices the reference's at — commits
+> `PlaybackPositionTicks: 0` on **both** servers. So the two agree, and what they agree on is that
+> **neither commits the paused position at all**; the ticker freeze cited from
+> `[source: MediaBrowser.Controller/Session/SessionInfo.cs:23, 373-451 @ v10.11.11]` cannot be
+> read off a position nobody wrote. The row is reported **not as documented** for exactly that
+> reason rather than passed: what it needs next is a reading that first proves the paused report
+> was stored, which is one request more than this runner makes.
+>
+> **Three rows measured a claim and killed it, and one of them is Atrium's.** A seat with all three
+> playback-processing permissions denied — read back denied on both — negotiates
+> **`SupportsTranscoding: true` here and `false` there**, so
+> [behaviours §2.21](../../docs/compatibility/behaviours.md)'s *"the same negotiation semantics —
+> the all-three gate"* is false of this server: **the first difference this harness has found in
+> Atrium rather than in a document**, and 008's to decide (spec §2). And the image track's `400`
+> arrives in **10 ms** on the reference where 011 recorded twenty seconds, so that row is reported
+> **not as documented**: the claim does not reproduce against a four-second fixture film, and what
+> it needs is a source whose extraction is expensive. The paused-session row above is the third.
+>
+> **behaviours §5.2's `⚠️ UNVERIFIED` is discharged, and the belief was wrong.** A series emptied of
+> every file and rescanned is **still fetchable** on the reference, with zero episodes under it and
+> one row in a `Series` listing — the same thing Atrium does, so the *"accepted gap"* that entry
+> recorded is a **measured parity**. **§5.6's *"unmeasured from here"* is discharged the other
+> way**: replacing the artwork beside an untouched film and rescanning at default depth **changed**
+> the reference's image tag and the bytes it identifies, where Atrium's signal is the media file's
+> own size and time. Both entries carry the reading. **Both rows are still outstanding as
+> comparisons**, and that is the fifth runner shape's finding: *the library changed underneath a
+> rescan* needs a second scan on **both** servers and Atrium has no library-refresh route —
+> `POST /Library/Refresh` is the reference's and is not in the surface — so the instance was
+> necessary and is **not sufficient**. They take the reference half and report outstanding carrying
+> it, which is the only honest shape: a one-server reading is not a differential.
+>
+> *One sentence in three documents is now historical rather than current, and it is left alone
+> deliberately.* Spec §3.10's second column, this list's *"What the gate changed"* §3 and the
+> register's `why_the_sweep_misses_it` all say behaviours §5.2 *"carries the only surviving
+> `⚠️ UNVERIFIED` in the compatibility documents"*. That was true when D-6 was taken and is the
+> reason the row exists; it stopped being true the moment the row ran. Rewriting it would mean
+> amending an **accepted** spec to restate a justification rather than a criterion, so it stays as
+> the record of why the row was added — and [behaviours §5.2](../../docs/compatibility/behaviours.md)
+> itself carries the reading, which is where a reader looking for the claim goes. **T15 is where it
+> is worth a line**, beside the acceptance map.
+>
+> *`is_clean()` gained a fourth condition, and it is the first three read the other way round.*
+> Every one of these rows exists because two servers are **expected** to differ, so a row that ran
+> and measured something its own citation does not predict is an untriaged difference arriving
+> through a runner rather than through `compare`. Without it all twenty could run, every one
+> contradict its entry, and the report still say *"20 run, 0 outstanding"*.
+>
+> *Routine calls taken, none of which touches an accepted document's criteria.* **`--only-named`**,
+> which attempts the named comparisons and not the sweep — every declared case is then reported
+> **not asked** with that reason and the run is not clean, so it is a way to re-run one comparison
+> without re-issuing 250 and never a smaller kind of run. **`movies_library_id` now requires the
+> library to hold something**: the composed fixture has three `movies` libraries and one of them is
+> deliberately empty, so taking the first narrowed the reader to a library with nothing in it —
+> the *"refusal for the wrong reason"* that function's own docstring was written against.
+> **The series a rescan empties and a Next Up question needs is found by shape and not by name**,
+> because the two servers disagree about that name — `The Series` there, `tvshow` here — and a
+> comparison keyed on it would have been outstanding for a difference the AC-2 record already
+> declares. And **`--fixture-root` defaults**: the tree is built through
+> `tests/fixtures/reference_tree.py` into the git-ignored `reference/fixture-tree` when the caller
+> names none.
+>
+> *What could not be run, and why, stated rather than skipped.* Six of the twenty: the two
+> `rescan` rows above; **burn-in**, whose two transcodes per side killed the instance before it
+> answered; the **manifest's announced track name**, where the reference answers `400` to the
+> master playlist of the fixture film that has an `ass` track, so there are no announced entries to
+> compare; and the last two of §3.10, which are ordinary request cases and need a **sweep** — under
+> `--only-named` they report that they were not asked, which is true. Every one is named in the
+> report with its reason and every one keeps the run from being clean.
+>
+> **The instance dies with `SIGILL`, and this task caught the exit code T11 could not.** `--rm` had
+> always removed the container before anyone could ask, so T11 could only record *"two of five
+> starts died"*; a `docker events` watch beside the run names it: **exit 132**, four times in eight
+> starts on this machine, at startup and under the sweep alike, on the pinned image natively. Plan
+> §7's row carries it. It is the reason the twenty were run in batches against an instance stood up
+> by hand with `tools/reference_instance.py` and `--reference-url`, which is the degradation
+> ADR-0007 already describes, working.
+>
+> *What T13 must know.* **`tools/_probe.py`'s `Server` has one fixed `DeviceId` for every probe
+> there is**, and this task measured what that costs: two accounts on one device are one session on
+> the reference, and the second sign-in revokes the first's token. Every writing probe that signs
+> in as a throwaway user while holding an administrator's token is exposed to it, which is worth
+> knowing before the shared created-and-owned register is built. **The teardown contract T13 is
+> collecting already has a second failure mode measured**: a `DELETE` that answers `401` because
+> the token was revoked, and one that answers `Connection refused` because the instance died — both
+> reported as *"the run created seats it could not destroy"*, and neither is the probe forgetting
+> to clean up. And **the two configuration debts T1 left for T13 are still the instance's**: it is
+> the only writable Jellyfin this project has, and it stays that way.
 
 ## T13 — The probe convention enforced, the cleanup contract shared, and the last two debts paid
 

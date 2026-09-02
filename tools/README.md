@@ -306,16 +306,38 @@ python3 tools/differential.py --atrium http://localhost:8096 --jellyfin http://y
 ```
 
 **It writes to the reference, and what it writes is a seat.** A run creates a restricted
-non-administrator on **each** server — a seat is an account and the two do not share one — and
-destroys both, on the success path and on the exception path alike. It refuses to start when a
-seat under its own fixed name is already there, because such a seat is either another run in
-flight or the wreckage of one (AC-15). The request cases that change user data name that created
-seat and never the administrator's, whose account is the operator's own.
+non-administrator on **each** server that can make one — a seat is an account and the two do not
+share one — and destroys both, on the success path and on the exception path alike. It refuses to
+start when a seat under its own fixed name is already there, because such a seat is either another
+run in flight or the wreckage of one (AC-15). The request cases that change user data name that
+created seat and never the administrator's, whose account is the operator's own.
+
+**Atrium cannot make one, so on that side the seat is handed in.** The three routes a seat is made
+with — `GET /Users`, `POST /Users/New`, `POST /Users/{userId}/Policy` — are the reference's, and
+none of them is in [surface.yaml](../docs/compatibility/surface.yaml): Principle VI keeps an
+endpoint out until a client is measured calling it, and neither analysed client administers
+accounts. Provision the seats yourself, narrow the reader to one library, and name them:
+
+```bash
+export ATRIUM_RESTRICTED_USERNAME=… ATRIUM_RESTRICTED_PASSWORD=…
+export ATRIUM_PLAYBACK_DENIED_USERNAME=… ATRIUM_PLAYBACK_DENIED_PASSWORD=…
+```
+
+A handed seat is signed in as, used, and **left exactly where it was** — `created_by_the_run` is
+false for it, which is what keeps the teardown away from somebody's account. The same pair exists
+under `JELLYFIN_` for a reference somebody else is running.
+
+**A `--fixture` run stands the instance up first and compares against it.** `--fixture` means the
+fixture on *both* servers, so the instance **is** the reference for that run: its wizard's
+administrator is the account the run holds, and a `--jellyfin` naming anything else is refused.
+The tree is built through `tests/fixtures/reference_tree.py` into `reference/fixture-tree` unless
+`--fixture-root` names another, and the instance is given the **six typed libraries** that module
+declares.
 
 **Exit codes:** `0` the run is clean, `1` the run is **not** clean — an untriaged difference, a
-declared case it could not issue, or a named comparison it did not run — and `2` it could not
-start. `1` is the ordinary answer while the twenty named comparisons have no runners
-(010 T12): outstanding is not green, and the report says which of the three it was.
+declared case it could not issue, a named comparison it did not run, or a named comparison that
+ran and measured something its own citation does not predict — and `2` it could not start. `1` is
+the ordinary answer: outstanding is not green, and the report says which of the four it was.
 
 Four supporting modules sit beside it, underscore-prefixed so CI does not try to start them:
 `_differential.py` (the pure comparison engine), `_allowlist.py` (the allowlist, the named

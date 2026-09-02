@@ -594,7 +594,23 @@ two calls earlier. The refusal is unreachable code; the force-copy is the behavi
 client that never learned to handle a policy `403` from these routes, because none exists.
 
 **Atrium does:** the same negotiation semantics — the all-three gate, flags rather than errors,
-no invented `403`. The one edge not replicated is delivery-time force-copy into an output that
+no invented `403`.
+
+> **Measured on 2026-09-02, and the first half of that sentence is false on the wire.** A seat with
+> `EnableVideoPlaybackTranscoding`, `EnableAudioPlaybackTranscoding` and `EnablePlaybackRemuxing`
+> all denied — read back denied on both servers — negotiates a video item the profile cannot direct
+> play and is answered **`SupportsTranscoding: true` here and `false` there**
+> `[probe: tools/differential.py --named delivery-time-policy-refusal, Jellyfin 10.11.11,
+> 2026-09-02]`. The all-three gate is described in this entry and is not applied by the
+> negotiation, so the flag Atrium sends is the model's default rather than the answer this entry
+> claims. It is the first difference 010's harness has found in **Atrium** rather than in a
+> document, and it is **008's** to decide: the harness triages and the feature that owns the
+> endpoint answers ([010 §2](../../specs/010-conformance-harness/spec.md#2-scope)). The delivery
+> half of the row is untouched by it — both servers answered the same `200` for a request that
+> would have to re-encode, so the force-copy edge this entry describes was not reached by the
+> fixture film either.
+
+**The one edge not replicated** is delivery-time force-copy into an output that
 violates the negotiated profile: Atrium refuses the step instead, and no client can depend on
 receiving a broken stream ([008 §3.3](../../specs/008-playback-negotiation-and-delivery/spec.md#33-the-decision)).
 The refusal is scoped to where the reference would have copied — the two streams of a video
@@ -2773,10 +2789,10 @@ undocumented bug.
 | **A media source with no stored inspection is skipped** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | On a **listing**, nothing: the source keeps `Id`, a `Container` inferred from its path and `Size` and carries `RunTimeTicks: null`, `Bitrate: null` and `MediaStreams: []` — and so does the reference's `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-08-29]`. On `PlaybackInfo` the whole annotation is skipped, so it answers the model's default `SupportsDirectPlay: true` **with no `TranscodingUrl`**, where the reference opens the file and answers it annotated — or, when the file cannot be read, answers the same empty source with the flags *decided* and an address. It happens whenever a file is in the library and nothing has opened it: a scan from before 008, a file added since, a probe that failed | Not a rescan, and not a decision about what to advertise — **the negotiation itself**, which is what the reference does and what [012 §3.2](../../specs/012-negotiation-inputs/spec.md) specifies: open the file inside the request and write down what it says. *This row read "the real mechanism is a decision about what an un-inspected source should advertise" until 012's measurement gate measured the reference resolving the state rather than describing it. It also read as though the listing were part of the shortfall; it is parity, and the music client's four losses with it* |
 | **No per-user subtitle preference, so no default subtitle track is proposed** ([011 §2, §3.3](../../specs/011-subtitle-delivery/spec.md)) | A negotiation that names no subtitle index answers `DefaultSubtitleStreamIndex` absent, where a stock reference proposes a track. It is the reference's own answer for a user whose subtitle mode is `None` — but a *new* reference user's mode is `Default`, not `None` `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]` | The two user settings the choice is a function of: a subtitle mode with five values and a language preference list. Both are a per-user feature, which is what 011 §2 excludes; a client that names the track it wants is unaffected, and both analysed clients name it |
 | **`Path`-derived identifiers differ from the reference's** ([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters)) | Nothing — ids are opaque | Not a gap to close; a deliberate design choice |
-| **A container that has lost every file is still returned** ([003 §3.8](../../specs/003-library-configuration-and-scanning/spec.md#38-scanning-and-change-detection)) | An empty series or album in a library, with nothing under it | A query-time filter in 005: a container with no visible children is not offered. See §5.2 |
+| **A container that has lost every file is still returned** ([003 §3.8](../../specs/003-library-configuration-and-scanning/spec.md#38-scanning-and-change-detection)) | An empty series or album in a library, with nothing under it — **and a stock reference returns one too**, measured on 2026-09-02 `[probe: tools/differential.py --named container-that-lost-every-file, Jellyfin 10.11.11, 2026-09-02]`, which is what this row had assumed the other way round since it was written | A query-time filter in 005: a container with no visible children is not offered. See §5.2 — which is now a **measured parity** rather than a gap, and whether the filter is still worth its predicate is 005's call |
 | **No loudness scan** ([004 §3.3](../../specs/004-metadata-resolution/spec.md#33-embedded-tags)) | On a server whose operator enabled the reference's opt-in scan, `NormalizationGain` absent where it would have a computed value. Tag-carried gains are unaffected | 008, which brings the decoder the scan needs. See §5.4 |
 | **A stream carries no `DisplayTitle` and no `Localized*` names** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A track picker with nothing to label its rows: the reference sends one localised string per stream — `Español - MP3 - Stereo - Predeterminado` on a Spanish server — and Atrium sends none. **[011 §3.4](../../specs/011-subtitle-delivery/spec.md) is where this stops being only a label**: a manifest entry's `NAME` is required, and the reference fills it from exactly this string | The localisation the strings are assembled from — which is two sources, not one: the flag words come from the server's own translation table and the language name from the platform's culture data, in the server's configured interface culture `[probe: tools/probe_subtitle_manifest.py, Jellyfin 10.11.11, 2026-08-29]`. An English-only approximation would differ from the reference on **every** track rather than be absent on it, which is the worse of the two. **011 T10 makes that asymmetric on purpose, and this row is where it is recorded**: the property stays absent — a JSON property can be — while a manifest's `NAME`, which cannot be, is written in the invariant form. The four flag words are the reference's English ones exactly; the fifth localised string, the marker for a stream with no language, is `Undefined`, the translation table's row, and **not** the `Und` the assembly falls back to when that string is empty, which no served stream ever is — all five arrive filled on 910 of 910 subtitle streams `[probe: tools/probe_stream_display_title.py, Jellyfin 10.11.11, 2026-08-30]`. The language name is the one piece that stays divergent, and closing this row makes `NAME` exact in the same change |
-| **A subtitle file's encoding is decided by a rule, not by a detector** ([011 §3.5, §3.6](../../specs/011-subtitle-delivery/spec.md)) | On a file that is UTF-8 or carries a byte order mark — the overwhelming majority — nothing. On a subtitle file in a legacy single-byte encoding outside `cp1252`, **different cue text**: the words a player draws are not the words in the file, and where a byte is one `cp1252` does not define, the fetch answers the `500` a failed extraction does | A detector behind the one function that makes the choice, with its runtime dependency argued in an ADR on the day a real library needs it. See §5.11 |
+| **A subtitle file's encoding is decided by a rule, not by a detector** ([011 §3.5, §3.6](../../specs/011-subtitle-delivery/spec.md)) | On a file that is UTF-8 or carries a byte order mark — the overwhelming majority — nothing. On a subtitle file in a legacy single-byte encoding outside `cp1252`, **different cue text**: the words a player draws are not the words in the file, and where a byte is one `cp1252` does not define, the fetch answers the `500` a failed extraction does | A detector behind the one function that makes the choice, with its runtime dependency argued in an ADR on the day a real library needs it. See §5.11. **Measured on the wire on 2026-09-02**: a `cp1251` sidecar served as WebVTT comes back `Çäðàâñòâóéòå` here and `Здравствуйте` there — same status, same route, different letters `[probe: tools/differential.py --named legacy-encoded-subtitle-file, Jellyfin 10.11.11, 2026-09-02]` |
 | **A stream carries no `IsAVC`, `TimeBase` or `NalLengthSize`** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Three properties absent on every stream | Columns migration 0006 does not have; they arrive with the migration that adds them, and nothing in v1 reads them |
 | **Dolby Vision and HDR10+ are not classified** ([008 §3.1, §3.7](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | A Dolby Vision or HDR10+ film's master playlist carries no `SUPPLEMENTAL-CODECS`, and its copied segments are tagged `hvc1` where the reference tags `dvh1` — because the file is inspected here as the HDR10 file its colour metadata claims `[probe: tools/probe_transcode_decision.py, Jellyfin 10.11.11, 2026-08-29]` | Reading the Dolby Vision configuration record and the HDR10+ marker out of a stream's side data, which is where that signal lives. See §5.10 |
 | **A playlist item carries no `Path`** ([009 §4](../../specs/009-playlists/spec.md)) | A `Playlist` item fetched with `fields=Path` has none, and its two date fields are its store's rather than a directory's. The reference builds a playlist as a directory under its data path and reports it `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]` | Nothing to close: v1's playlists are not files, and reporting a path no file backs would be the worse answer. Visible only to a client that asks for `Path` by name, and neither analysed client does |
@@ -2813,23 +2829,30 @@ could be harmed.
 
 ### 5.2 A container that has lost every file is not removed
 
-**Jellyfin does:** ⚠️ **UNVERIFIED — not measured, and no citation is offered for it.** It is
-*believed* to remove a series, season or album whose files have all gone, on the next scan. Nobody
-here has watched it do so, and this entry does not pretend otherwise: measuring it means deleting a
-directory out of a real library, which no read-only probe can do and which nobody should do to
-somebody else's media to settle a documentation question. What would answer it is a disposable
-library on a server somebody owns — scanned, emptied of one series' episodes, scanned again.
+**Jellyfin does: keep the row, exactly as Atrium does — measured on 2026-09-02, and the belief
+this entry carried was wrong.** A series of six episodes emptied of every file and rescanned is
+**still fetchable**, with zero episodes under it and **one row in a `Series` listing**
+`[probe: tools/differential.py --named container-that-lost-every-file, Jellyfin 10.11.11,
+2026-09-02]`. The reading was taken against the **single-use reference instance**
+[010 §3.1](../../specs/010-conformance-harness/spec.md) stands up over this repository's own
+fixture and destroys — the *"disposable library on a server somebody owns"* this entry had been
+asking for since it was written — with the episodes deleted underneath it, the library rescanned on
+the server's own answer, and the files put back.
 
-**That library now has an owner, and this reading is scheduled.** It is a **named comparison** of
-[010 §3.10](../../specs/010-conformance-harness/spec.md), added there on 2026-09-02 by the decision
-010's task list reserved as D-6, and it runs against the **single-use reference instance** 010 §3.1
-stands up over this repository's own fixture and destroys — which is the disposable library the
-paragraph above asks for. **The marker stays until the comparison has run**: a §3.10 row is an owner
-and a method, not a measurement, and this document does not mark a claim verified because somebody
-has undertaken to verify it.
+*This entry read* ⚠️ **UNVERIFIED** *until that run.* It said the reference was **believed** to
+remove such a container on the next scan; it does not. The marker is gone because the reading was
+taken, and what it removes is not a doubt about Atrium but a difference nobody had: **the two
+servers agree here.**
 
-The unmeasured half does not change the decision below. Atrium's reason for keeping the row is an
-argument about **its own** guards, and it would stand whichever way the reference goes.
+**The comparison is still outstanding as a comparison**, and that is a separate sentence.
+`POST /Library/Refresh` is the reference's route and is not in
+[surface.yaml](api-surface-v1.md) — Principle VI keeps an endpoint out until a client is measured
+calling it — so Atrium cannot be asked for a second scan over the wire at all, and 010's report
+names the row outstanding with that reason on every run. What is measured above is the half that
+was unmeasurable before, and it is the half this entry was about.
+
+The reading does not change the decision below. Atrium's reason for keeping the row is an argument
+about **its own** guards, and it would have stood whichever way the reference went.
 
 **Depends on it:** a user sees an empty series in their library instead of not seeing it. Visible,
 and mildly annoying; nothing breaks and no state is lost.
@@ -2927,9 +2950,14 @@ turns it on.
 
 **Jellyfin does:** decide a folder's played state by asking whether anything beneath it is
 unplayed, which for a folder with no children at all is vacuously **true** - zero unplayed of zero
-`[source: MediaBrowser.Controller/Entities/Folder.cs:1798-1840 @ v10.11.11]`. Unmeasured on the
-wire: the measured library has no empty library in it, and creating one means writing into
-somebody's server, which the probes deliberately never do.
+`[source: MediaBrowser.Controller/Entities/Folder.cs:1798-1840 @ v10.11.11]`. **On the wire it
+answers `Played: false`, and the source reading does not reach the view at all** - measured on
+2026-09-02 against a library with nothing in it, which no reachable server had:
+`GET /UserViews` gives the empty library `Played: false` on both servers, and the one difference is
+beside it - **`UnplayedItemCount` is `0` here and absent there**
+`[probe: tools/differential.py --named empty-library-played-state, Jellyfin 10.11.11, 2026-09-02]`.
+It was unmeasured until then because creating an empty library means writing into somebody's
+server, which the probes deliberately never do.
 
 **Atrium does:** answer `Played: false` with `UnplayedItemCount: 0`. The rollup reads
 `total > 0 and played >= total`, so nothing under it means nothing watched.
@@ -2937,6 +2965,9 @@ somebody's server, which the probes deliberately never do.
 **Depends on it:** no client branches on it, and a *user* sees it as a tick on an empty section -
 which is the argument for the divergence rather than against it. A library that reads "watched"
 before anything has been added to it is a poster with a tick on it and nothing behind the tick.
+**The measurement makes the flag itself parity** and leaves `UnplayedItemCount` as the only
+observable difference on an empty view; what to do about that number belongs to 007, which owns
+the rollup, and not to the harness that found it ([010 §2](../../specs/010-conformance-harness/spec.md#2-scope)).
 
 **Why the question is this narrow:** it can only be asked of a library. A `Series`, `Season`,
 `MusicArtist` or `MusicAlbum` with nothing visible beneath it is not offered at all
@@ -2948,11 +2979,18 @@ without writing into a real one (007 spec section 3.5, OQ-7).
 
 ### 5.6 A default rescan does not notice a replaced poster
 
-**Jellyfin does:** unmeasured from here — deciding it would mean writing into somebody's library
-and rescanning it, which the probes deliberately never do. **It is owned as of 2026-09-02**: a
-**named comparison** of [010 §3.10](../../specs/010-conformance-harness/spec.md), added by D-6, run
-against the single-use reference instance of 010 §3.1 rather than against anybody's library — scan,
-replace the artwork beside an untouched film, rescan at default depth, compare.
+**Jellyfin does: notice it, at default depth — measured on 2026-09-02.** Replacing `poster.jpg`
+beside a film whose own media file was not touched and rescanning the library **changed the item's
+`Primary` image tag and the bytes it identifies**, on a stock reference at its default scan depth
+`[probe: tools/differential.py --named replaced-poster-default-rescan, Jellyfin 10.11.11,
+2026-09-02]`. It was *"unmeasured from here"* until then — deciding it meant writing into
+somebody's library and rescanning it, which the probes deliberately never do — and the reading was
+taken against the single-use reference instance of
+[010 §3.1](../../specs/010-conformance-harness/spec.md) rather than against anybody's library, as
+the **named comparison** D-6 added to §3.10.
+
+So the gap below is real and is now measured on both halves rather than on one: the reference
+re-reads the directory on a scan that finds no changed media file, and Atrium does not.
 
 **Atrium does:** re-derive an item's artwork from its directory on every refresh that *reads* the
 directory — and a default scan reads it only when the item's **media file** changed, because
