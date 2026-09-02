@@ -314,10 +314,11 @@ was written to do, and each of them had written it separately.
 `POST /Users/New` are the two routes that make something outliving the request — a removal the
 probe issues itself de-registers what it removed, and `main` tears down whatever is left **in a
 `finally`**, so a probe that fails on any path out still removes what the run made. A probe no
-longer has to remember, which is the difference between the contract and the claim: the twenty-six
-scripts with a teardown of their own keep it and the register sees nothing to do, and the
-twenty-seventh is covered without being edited. `tests/unit/test_probe_convention.py` drives it
-with a run that raises and fails if that `finally` is deleted.
+longer has to remember, which is the difference between the contract and the claim: the
+twenty-eight scripts that already wrote keep the teardowns they have and the register sees nothing
+to do, and the twenty-ninth is covered without being edited.
+`tests/unit/test_probe_convention.py` drives it with a run that raises and fails if that `finally`
+is deleted.
 
 **Three teardown failures are not leaks, and the run says which it was.** A `401` means the token
 was revoked out from under the run — the reference binds a token to a device, so two accounts on

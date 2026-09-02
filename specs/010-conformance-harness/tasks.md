@@ -1723,7 +1723,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 - **Spec reference:** §3.5, AC-7, AC-8, AC-9; plan §6.10
 
 > **Done (2026-09-02).** *The cleanup contract is not where this task put it, and putting it there
-> would have left the twenty-six probes that leaked exactly as they were.*
+> would have left the twenty-eight probes that write exactly as they were.*
 >
 > **A register a probe has to call is the promise those probes already made.** Every one of the 28
 > playlists 009 left behind came from a script that had *already written its own teardown*; what
@@ -1731,8 +1731,9 @@ written against twenty, and the `outstanding:` section they described is gone ra
 > records the creation **as the request happens** — `POST /Playlists` and `POST /Users/New` are the
 > two routes in this repository that make something outliving the request — a removal the probe
 > issues itself **de-registers** what it removed, and `main` tears down whatever is left in a
-> `finally`. Nothing in the twenty-six had to be edited and the contract now holds for all of them,
-> including the twenty-seventh nobody has written. Proven the way this repository proves a guard:
+> `finally`. Nothing in the twenty-eight that already wrote had to be edited and the contract now
+> holds for all of them, including the twenty-ninth nobody has written. Proven the way this
+> repository proves a guard:
 > `test_a_writing_probe_that_leaks_fails_the_sweep` registers an object, raises, and asserts the
 > object was removed — **delete the `finally` and it fails**, checked by deleting it. And proven on
 > a live server rather than only in the suite: `probe_public_users.py`'s first run printed

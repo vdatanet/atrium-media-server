@@ -722,7 +722,7 @@ def test_a_probe_that_removes_its_own_creation_leaves_nothing_to_tear_down() -> 
 
 
 def test_a_creation_is_registered_without_the_probe_being_changed() -> None:
-    """Why the register is in `Server` and not in twenty-six scripts.
+    """Why the register is in `Server` and not in twenty-eight scripts.
 
     The 28 playlists were left by probes that each had a teardown; what none of them had was a
     teardown that ran when the path out was not the one it was written for. Recording the creation

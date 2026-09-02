@@ -1082,7 +1082,7 @@ do it.
 
 > **Checked on 2026-09-02, and the leak fix had not landed**: `main` was at the T12 merge with no
 > concurrent change to `tools/` in it, so T13 built the register on what was there. **It is not
-> where this section put it.** A register a probe has to *call* is the same promise twenty-six
+> where this section put it.** A register a probe has to *call* is the same promise twenty-eight
 > scripts already make separately, so `Server` records the creation **as the request happens** —
 > `POST /Playlists` and `POST /Users/New` are the two routes that make something outliving the
 > request — a removal the probe issues itself de-registers what it removed, and `main` tears down
