@@ -137,7 +137,7 @@ written against twenty, and the `outstanding:` section they described is gone ra
 
 ## T1 — Reconcile the prior-measurement register before anything trusts it
 
-- [ ] **Changes:** `docs/compatibility/reference-target.md` §3. The register holds **fifteen** rows
+- [x] **Changes:** `docs/compatibility/reference-target.md` §3. The register holds **fifteen** rows
   of which **seven** are struck and **eight** open, and its prose says *"Six down, nine to go"* —
   counted, not inferred. **Three of the eight open rows are debts that were paid under another
   script's name and never struck:** the four authentication mechanisms are measured by
@@ -168,6 +168,62 @@ written against twenty, and the `outstanding:` section they described is gone ra
 > it cannot have one"*, and until the register says what is actually owed, AC-9's real size is
 > unknown. The plan measured it as smaller than the register claims; this task is where that stops
 > being a paragraph in a plan.
+
+> **Done (2026-09-02).** *Three rows are struck and five stay open, exactly as this task said — and
+> one of the three is not the row it named.* Two of the eight open rows were read against the
+> probes themselves rather than against the plan's summary of them, and both moved:
+>
+> - **`UserData` is returned without `Fields` was already paid, and nobody had noticed.**
+>   `tools/probe_item_shapes.py` measured it at 005 T1: `UserData` present on the bare list row of
+>   all nine content types and of `/UserViews`, 12 of 12 items each, with no `Fields` and no
+>   `EnableUserData`, and its keys carrying `Key` and `ItemId`
+>   `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`. It also **narrowed** the
+>   claim, which no register row said either: a by-name row from `/Genres` carries no `UserData` at
+>   all, where the same genre through `/Items?ids=` does. Struck, and 005 §3.2's cell upgraded from
+>   `prior-probe` to the probe.
+> - **The item-identity row is half paid, and the half that is missing is a write.**
+>   `tools/probe_item_identity.py` reproduces 448 of 448 live ids from the item's own `Path`, so the
+>   derivation is measured and *32 lowercase hex* follows from it by construction — but the probe
+>   reads **one moment** and never sees a second scan, and *"stable across rescans"* needs a library
+>   scanned twice. It stays open, named to the instance beside T10's scan, and
+>   [behaviours §1.4](../../docs/compatibility/behaviours.md) keeps its `prior-probe` for that half
+>   alone. **T13 therefore inherits two rows from this task and not three**: the two configuration
+>   writes it already names. This one is not a configuration write and does not belong with them.
+>
+> *The `SortBy` row is not merely unmeasured — it is doubted, by a citation this repository already
+> carries.* All eight members order rows and are honoured, `Random` included
+> `[probe: tools/probe_sort_stability.py, Jellyfin 10.11.11, 2026-08-27]`, so what is open is the
+> **closure** of the set; the reference's own enumeration names **thirty**
+> `[source: Jellyfin.Data/Enums/ItemSortBy.cs @ v10.11.11]`, an unrecognised token is ignored rather
+> than refused, and a shipping music client sends three tokens that are not among the eight. The row
+> says so, and says the probe that settles it needs no writes — which makes it the cheapest of the
+> five and the only one with a client waiting on it.
+>
+> *The register is not §3.* It is an unnumbered subsection of **§2**, *"Prior measurements, and the
+> debt they carry"*; §3 is the four conformance levels. The test locates it by heading, so a
+> renumbering breaks nothing and a moved heading fails `test_the_register_was_found_and_has_rows`
+> rather than silently iterating over zero rows.
+>
+> *Struck is not the same as reproduced, and two of the three struck rows say so in their own cell.*
+> The authentication row's claim was **four** mechanisms and the answer is five; the `Container`
+> row's claim was *"a demuxer list"* and the answer is a list for the mp4 family and a single word
+> for everything else. Both are kept with what changed, the way the PCM/WAV row already was.
+>
+> *A fourth test, not asked for, because the register can be wrong in the other direction too.*
+> `test_every_prior_probe_citation_belongs_to_a_row_of_the_register` collects every dated
+> `prior-probe` citation in the repository's Markdown — 22 of them across 14 documents, in five
+> distinct dates — and fails on one whose date matches no row. That is the 2026-08-28 audit's M8
+> finding, where three claims were carrying a prior measurement the register had never recorded,
+> turned into something that cannot recur silently. It passes today: every date is a row.
+>
+> *Routine calls taken.* The four `prior-probe` cells in `api-surface-v1.md`'s mechanism table and
+> the one in 005 §3.2 became `[probe:]` citations, because the register defines a discharge as *the
+> citation becoming a plain `probe:`* — leaving them would have made the register's own definition
+> false on the day it was reconciled. `tools/README.md`'s *"Planned"* row named `probe_item_ids.py`,
+> a script this task has just established nobody needs; it names the two that are still unwritten
+> and answerable, and says three of the five wait on the instance. Neither touches behaviour, and
+> nothing was written to any server: every finding here came from reading the probes in this
+> repository and the notes they produced.
 
 ## T2 — `tools/_differential.py`: the comparison engine, pure, in five classes
 

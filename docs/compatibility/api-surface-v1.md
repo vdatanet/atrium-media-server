@@ -72,11 +72,11 @@ headers versus for URLs embedded in media players:
 
 | Mechanism | Form | Measured |
 |---|---|---|
-| Header | `Authorization: MediaBrowser Token="{token}"` | `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` |
+| Header | `Authorization: MediaBrowser Token="{token}"` | `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` |
 | Header | `X-Emby-Authorization: MediaBrowser Token="{token}"` | `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` |
-| Header | `X-Emby-Token: {token}` | `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` |
-| Query | `?ApiKey={token}` | `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` |
-| Query | `?api_key={token}` | `[prior-probe: Jellyfin 10.11.11, 2026-06-13]` |
+| Header | `X-Emby-Token: {token}` | `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` |
+| Query | `?ApiKey={token}` | `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` |
+| Query | `?api_key={token}` | `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` |
 
 **The rows are in precedence order, and that order is measured, not chosen** — pair by pair, in
 both directions

@@ -297,7 +297,7 @@ nothing.
 | Script | Purpose | Arrives with |
 |---|---|---|
 | `differential.py` | Issue the same request to Atrium and a real Jellyfin and compare field by field (L3) | Feature 010 |
-| `probe_item_ids.py`, `probe_wire_format.py`, … | The remaining prior-measurement debts in [reference-target.md](../docs/compatibility/reference-target.md) | Their owning features |
+| `probe_wire_format.py`, `probe_sort_vocabulary.py`, … | The **five** remaining prior-measurement debts in [reference-target.md](../docs/compatibility/reference-target.md) — three of which need a server this project may write to, and so wait on feature 010's single-use instance | Their owning features |
 
 A runner that executes every probe and summarises is deliberately **not** here yet: it is part of
 the harness feature 010 specifies, and building it before that spec is accepted would be
