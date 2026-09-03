@@ -2253,11 +2253,22 @@ derivation against the reference's whole-filename and whole-directory rules — 
 container rows**, each written down with its reason; the forty-seventh is the zero-byte film that is
 an item there and not here, which is 003 §3.2 meeting a server with no such rule.
 
-**To 004.** **A two-disc album still borrows `CD1`**, so it never reads its own `album.nfo`, where
-the reference names the album after its directory — T10 fixed the *ordering* of
-`metadata/refresh.py`'s `_first_file_backed` (relative path, not identifier, so a container borrows
-the same directory wherever the library is mounted) and deliberately did not fix that the borrowing
-is a guess at all. Two rows of the declared-difference table are that guess.
+**To 004 — answered on 2026-09-03, and the rule this row implied is not the one that holds.** **A
+two-disc album still borrows `CD1`**, so it never reads its own `album.nfo`, where the reference
+names the album after its directory — T10 fixed the *ordering* of `metadata/refresh.py`'s descendant
+choice (relative path, not identifier, so a container borrows the same directory wherever the
+library is mounted) and deliberately did not fix that the borrowing is a guess at all. 004 answered
+it by measuring the container **paths** in this task's own recorded reading: of its 26 container
+rows, the 18 carrying a directory and a kind Atrium's item tree also has sit at exactly that kind's
+depth below the library root, so the rule is counted **down from the root** and not up from a file
+([behaviours §2.27](../../docs/compatibility/behaviours.md#227-a-containers-directory-is-its-own-depth-below-the-library-root),
+004 §3.2, AC-19). The common-ancestor rule the handover proposed was measured on the same tree and
+scores **12 of 17** against the standing rule's 15 and the new one's 17 — it moves a series with one
+season onto that season's directory. The defect was also wider than this row: the **artist** above
+that album was borrowing the album's own directory, and a track sitting directly in an artist's
+directory gave that artist the parent of the library root, which a refresh then read. **The
+declared-difference table did not move**: the fixture has no `album.nfo` beside its two-disc album,
+so the two rows this paragraph named are the *other* album's and they are still there.
 
 **To 008 — answered on 2026-09-02, and the answer was not the one the row named.** A seat with all
 three playback-processing permissions denied negotiated `SupportsTranscoding: true` here and

@@ -306,12 +306,17 @@ FEATURE_003: dict[int, tuple[str, ...]] = {
 
 #: Feature directory -> its map. Adding 003 was one entry here and one dictionary above, which is
 #: the whole reason this file changed shape at 002 T18 rather than being copied.
-#: 004's sixteen. **Nine of them are asserted twice on purpose** - once at engine level, where the
+#: 004's nineteen. **Nine of them are asserted twice on purpose** - once at engine level, where the
 #: rule is proved, and once end to end, where the rule is proved to be the one a scan uses. The
 #: gap between those two claims is where a correct merge sitting behind a caller that never asks
 #: it lives, and 004's own task list says so out loud for AC-1: T10's zero network requests was
 #: vacuous in a world with no remote code, so T14 holds it again with a provider that would have
 #: answered.
+#:
+#: AC-19 is the exception to the pairing and says why: **where a container's metadata lives has no
+#: engine level**. `metadata/nfo.py` and `metadata/artwork.py` are handed a directory and never
+#: choose one, so the only place the choice is observable is a scan - which is why it was wrong for
+#: two of the shapes this project's own fixture already had (2026-09-03).
 FEATURE_004: dict[int, tuple[str, ...]] = {
     1: (
         "tests.metadata.test_local_refresh:test_a_film_with_a_full_sidecar_resolves_from_it",
@@ -398,6 +403,12 @@ FEATURE_004: dict[int, tuple[str, ...]] = {
     18: (
         "tests.metadata.test_nfo:test_the_cast_keeps_its_billing_order_and_its_roles",
         "tests.metadata.test_write_path:test_a_cast_keeps_its_order_and_its_roles",
+    ),
+    19: (
+        "tests.metadata.test_local_refresh:test_a_two_disc_album_reads_the_sidecar_beside_its_discs",
+        "tests.metadata.test_local_refresh:test_an_artist_whose_tracks_have_no_album_directory_reads_their_own_sidecar",
+        "tests.metadata.test_local_refresh:test_a_season_missing_one_episode_keeps_its_own_directory",
+        "tests.metadata.test_local_refresh:test_a_container_never_borrows_a_directory_above_the_library_root",
     ),
 }
 

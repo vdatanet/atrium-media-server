@@ -538,15 +538,22 @@ def test_a_container_borrows_the_same_directory_wherever_the_library_is_mounted(
     """A container has no directory of its own and borrows a descendant's, and **which** one it
     borrows used to be a hash of the absolute path.
 
-    `_first_file_backed` walked the children in identifier order, and an identifier is derived from
-    the absolute path (003 spec section 3.6), so the choice moved with the mount point. That is not
-    the harmless tie the genre spelling above is: the descendants of one container sit at different
+    The choice walked the children in identifier order, and an identifier is derived from the
+    absolute path (003 spec section 3.6), so it moved with the mount point. That is not the
+    harmless tie the genre spelling above is: the descendants of one container sit at different
     depths — a series whose second season has no season directory has an episode one level below it
-    and the rest two — and the caller walks up a **fixed** number of levels from whichever it is
+    and the rest two — and the caller walked up a **fixed** number of levels from whichever it was
     handed. Land on the wrong one and the series looks for its `tvshow.nfo` in the library root,
     finds none, and keeps the path-derived name. Measured while writing 010 T10's comparison
     against a real reference, which reads that sidecar every time: about one run in ten
     `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`.
+
+    **The fixed walk is gone** — a container is now given the directory its own depth below the
+    library root (`refresh._borrowed`), so both of this series' episodes name the same one and the
+    order cannot decide it. Ordering still decides a container whose files span two directories at
+    its own depth, and this test still asserts the property the ordering exists for; what it can no
+    longer do is fail for the reason it was written for, which is what a fix looks like from a
+    test's side.
 
     The series here is that shape deliberately, and the assertion is on the **name**, because the
     borrowed directory is only visible through what was read from it.
@@ -568,3 +575,111 @@ def test_a_container_borrows_the_same_directory_wherever_the_library_is_mounted(
         "the series took its name from `tvshow.nfo` under one mount point and not under the "
         "other, so the directory a container borrows still depends on where the library sits"
     )
+
+
+# ----------------------------------------------------------------------------------------------
+# Where a container's metadata lives: its own depth below the library root
+# ----------------------------------------------------------------------------------------------
+
+
+def test_a_two_disc_album_reads_the_sidecar_beside_its_discs(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The shape T10 handed 004, and it is two containers wrong rather than one.
+
+    `Artist/Album/CD1/…` and `Artist/Album/CD2/…` is one album (003 AC-8), and the directory that
+    holds it is `Artist/Album` - which is where spec section 3.2's `album.nfo` sits, and where the
+    reference resolves the album from `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11,
+    2026-09-02]`. Counting levels up from a track's own directory put the album on a **disc**
+    directory and the artist on the album's, so neither sidecar in this tree was reachable.
+    """
+    root = tmp_path / "music"
+    for disc, title in ((1, "First Disc"), (2, "Second Disc")):
+        a_track(
+            root,
+            f"The Artist/Double Album/CD{disc}/01 - {title}.flac",
+            album="Double Album",
+            albumartist="The Artist",
+            disc=disc,
+        )
+    shutil.copy(NFO / "album.nfo", root / "The Artist" / "Double Album" / "album.nfo")
+    shutil.copy(NFO / "artist.nfo", root / "The Artist" / "artist.nfo")
+    scanned(engine, a_library(engine, root, "music"))
+
+    assert one(engine, ItemType.MUSIC_ALBUM).name == "The Fixture Album"
+    assert one(engine, ItemType.MUSIC_ARTIST).name == "The Fixture Ensemble"
+
+
+def test_an_artist_whose_tracks_have_no_album_directory_reads_their_own_sidecar(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """`Artist/01 - Track.flac` is an artist with no album at all - 003's `parse_audio` reads a
+    lone directory as the artist - and counting up from the track put that artist on the library
+    root, a level nothing in this tree owns.
+
+    The decoy is the same sidecar name sitting there, because the failure is not that the right
+    file was missed but that a wrong one was read.
+    """
+    root = tmp_path / "music"
+    a_track(root, "The Artist/01 - Alone.flac", albumartist="The Artist", title="Alone")
+    shutil.copy(NFO / "artist.nfo", root / "The Artist" / "artist.nfo")
+    (root / "artist.nfo").write_text(
+        "<artist><name>The Library Root</name></artist>", encoding="utf-8"
+    )
+    scanned(engine, a_library(engine, root, "music"))
+
+    assert one(engine, ItemType.MUSIC_ARTIST).name == "The Fixture Ensemble"
+
+
+def test_a_container_never_borrows_a_directory_above_the_library_root(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A track **at** the library root, named as somebody's by its tags, and the old arithmetic
+    walked one level up from the root to find that artist a directory.
+
+    Reading outside the root is worse than reading nothing: AC-15 promises this feature never
+    writes into a library, and a refresh that resolves an item from a directory the operator never
+    configured is the read-side version of the same surprise. The trap is a sidecar and a poster
+    in the root's parent, and the artist takes neither.
+    """
+    root = tmp_path / "outside" / "music"
+    a_track(root, "01 - Alone.flac", albumartist="The Artist", title="Alone")
+    (root.parent / "artist.nfo").write_text(
+        "<artist><name>Outside The Library</name></artist>", encoding="utf-8"
+    )
+    shutil.copy(ART / "names-first" / "poster.jpg", root.parent / "folder.jpg")
+    scanned(engine, a_library(engine, root, "music"))
+
+    artist = one(engine, ItemType.MUSIC_ARTIST)
+    assert artist.name == "The Artist"
+    factory = session_factory(engine)
+    with session_scope(factory) as db:
+        images = list(db.execute(select(models.ItemImage)).scalars())
+    assert [image.relative_path for image in images if image.item_id == artist.id] == []
+
+
+def test_a_season_missing_one_episode_keeps_its_own_directory(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The season half of the same question, and the case that decides the rule.
+
+    One episode of season one sits in `Season 01` and another sits loose in the series directory,
+    which is 003's own fixture shape. The season's directory is still `Season 01` - the reference
+    resolves it from that directory and files the loose episode into it all the same - so a rule
+    built on the **common ancestor** of a container's files would put this season on the series
+    directory and read `tvshow.nfo`'s neighbours for it. Measured over the fixture tree, that rule
+    scores 12 of 17 against this one's 17, because a series with one season and an artist with one
+    album are the same shape.
+    """
+    root = tmp_path / "shows"
+    nested = root / "The Series" / "Season 01"
+    nested.mkdir(parents=True)
+    (nested / "The Series - S01E01 - Pilot.mkv").write_bytes(b"atrium fixture\n" + b"\0" * 600)
+    loose = root / "The Series" / "The Series - S01E02 - Elsewhere.mkv"
+    loose.write_bytes(b"atrium fixture\n" + b"\0" * 600)
+    shutil.copy(NFO / "season.nfo", nested / "season.nfo")
+    shutil.copy(NFO / "tvshow.nfo", root / "The Series" / "tvshow.nfo")
+    scanned(engine, a_library(engine, root, "tvshows"))
+
+    assert one(engine, ItemType.SEASON).name == "The First Season"
+    assert one(engine, ItemType.SERIES).name == "The Fixture Series"

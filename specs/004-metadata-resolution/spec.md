@@ -3,10 +3,11 @@ feature: 004-metadata-resolution
 title: Metadata resolution
 status: Implemented
 created: 2026-08-26
-updated: 2026-08-27
+updated: 2026-09-03
 implemented: 2026-08-27
 accepted: 2026-08-27
-amended: 2026-08-27 by T1 - section 3.3, OQ-4 and OQ-5; by T8 - section 3.4
+amended: 2026-08-27 by T1 - section 3.3, OQ-4 and OQ-5; by T8 - section 3.4;
+  2026-09-03 by the container-directory fix - section 3.2 and AC-19
 depends_on: [003]
 ---
 
@@ -97,6 +98,27 @@ rule removes most wrong-match complaints.
 
 **A malformed sidecar is a warning, not a failure.** The item still resolves from the remaining
 providers, and the parse error is reported with the file path so the user can fix it.
+
+**A container's sidecar is in the container's own directory, and that directory is the one the
+library's shape gives it.** A series, a season, an album and an artist are not files, so none of
+them has a directory to be read from the way a film has; each takes the place its position in the
+library implies, counted from the library root **down**. An album's directory is the album's, not a
+disc directory inside it, so a record split across `CD1` and `CD2` reads the `album.nfo` beside
+those discs; an artist's is the artist's, not one of their albums'. The same directory is where
+§3.4's artwork is looked for.
+
+Counted the other way — up from a track — an extra directory the library's shape has no place for
+moves every container above it, which is how a two-disc album came to look for its sidecar inside
+one of its discs and its artist inside the album. Measured on a reference server over this
+project's own fixture tree: of its 26 container rows, the 18 that carry a directory and a kind this
+model has all sit exactly that deep below the library root — disc directories included, since the
+reference lists a disc as a plain folder of its own and still resolves the album from the directory
+above it `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`.
+
+Where the library holds no directory that deep — a season whose only episode sits loose in the
+series folder, which the reference answers with a season carrying no directory at all — the deepest
+one beneath the root that the container's own files offer is used instead. **Nothing above a
+library root is ever read**, whatever the shape.
 
 ### 3.3 Embedded tags
 
@@ -267,6 +289,12 @@ Static data. Authenticated, `200`, no parameters.
 18. A cast keeps its billing order and its roles from source to storage: the first rows are what
     a client shows as "starring", so the order is part of the metadata, not an accident of
     insertion (§3.7 rule 2). *(Added at the same audit — M34.)*
+19. A container reads its sidecar and its artwork from its own directory: a two-disc album from
+    the directory holding its discs rather than from one of them, an artist from theirs rather
+    than from an album's, a season from its own rather than from the series folder — and no
+    container ever reads a directory above the library root (§3.2). *(Added 2026-09-03 by the
+    container-directory fix, which found the borrowing wrong for two shapes the project's own
+    fixture already has and reaching outside the library for a third.)*
 
 ## 6. Conformance
 

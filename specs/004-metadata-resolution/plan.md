@@ -3,9 +3,9 @@ feature: 004-metadata-resolution
 title: Metadata resolution — implementation plan
 status: Implemented
 created: 2026-08-27
-updated: 2026-08-27
+updated: 2026-09-03
 implemented: 2026-08-27
-amended: 2026-08-28 by 006 T12 - section 6.1's list rules gain a fifth, for `IMAGES`; and 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7; by T10 - sections 4, 6.1 and 6.8; by T14 - section 6.8; by T15 - section 6.9
+amended: 2026-08-28 by 006 T12 - section 6.1's list rules gain a fifth, for `IMAGES`; and 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7; by T10 - sections 4, 6.1 and 6.8; by T14 - section 6.8; by T15 - section 6.9; and 2026-09-03 by the container-directory fix - section 6.2
 spec_status_required: Accepted
 spec_status_actual: Implemented
 accepted: 2026-08-27
@@ -344,7 +344,21 @@ table says it.
 
 ### 6.2 Sidecars
 
-Discovery per the spec §3.2 table, tried in order beside the item's part-zero file. Parsing is
+Discovery per the spec §3.2 table, tried in order beside the item's part-zero file.
+
+**A container has no file, so `refresh._directories` gives it one directory and `nfo.py` never
+chooses.** The rule is spec §3.2's, expressed as arithmetic over `domain.items.PARENT_OF`: a
+container is given the directory `_depth(its type)` components below the library root, taken from
+its file-backed descendants in relative-path order, clamped to the deepest one they offer when none
+reaches that depth. Counting **down from the root** is the correction of 2026-09-03; it used to
+count `_depth(descendant) - _depth(container) - 1` levels **up from a descendant's file**, which is
+the same number for `Artist/Album/01.flac` and a different one for every layout carrying a
+directory the item tree has no level for — `Artist/Album/CD1/01.flac` put the album on `CD1` and
+the artist on `Artist/Album`, and `Artist/01.flac` put the artist on the library root's *parent*.
+The same directory is `find_artwork`'s (§6.4), and `artwork.associate` already refused a file
+outside the root; a sidecar had no such guard, which is how the second shape was reached at all.
+
+Parsing is
 stdlib, and **the parser has to be built rather than called**, because the sentence this plan
 first carried here — that `ElementTree` "refuses DTDs and entity definitions outright" — is not
 true. Measured against the three fixtures T2 checked in for it (Python 3.14.6, expat 1.3.0):
