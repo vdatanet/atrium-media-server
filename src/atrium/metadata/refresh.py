@@ -525,9 +525,7 @@ def _directories(items: Mapping[str, Item], roots: Sequence[Path]) -> dict[str, 
 
     A file-backed item's is its file's own. **A container has no path of its own** - a `Series`
     has no file and a tag-derived `MusicAlbum` may not correspond to any directory at all - so it
-    borrows its first descendant's, walked up by the difference in depth. That is a best guess
-    rather than a fact, and it is the right one for the ordinary layout: `Artist/Album/01.flac`
-    puts the album at `Artist/Album` and the artist at `Artist`.
+    borrows one from the files beneath it, and `_borrowed` decides which.
 
     The library's own item is excluded, or it would borrow its first film's directory.
     """
@@ -553,43 +551,92 @@ def _directories(items: Mapping[str, Item], roots: Sequence[Path]) -> dict[str, 
     for item in items.values():
         if item.id in located or item.type not in PARENT_OF or item.type is _THE_LIBRARY:
             continue
-        descendant = _first_file_backed(item.id, items, children)
-        if descendant is None or descendant.id not in located:
-            continue
-        steps = _depth(descendant.type) - _depth(item.type) - 1
-        directory = located[descendant.id].directory
-        for _ in range(max(steps, 0)):
-            directory = directory.parent
-        located[item.id] = _Located(
-            root=located[descendant.id].root,
-            directory=directory,
-            stem=None,
-            relative_file=None,
-        )
+        borrowed = _borrowed(item, _file_backed_under(item.id, items, children), located)
+        if borrowed is not None:
+            located[item.id] = borrowed
     return located
 
 
-def _first_file_backed(
+def _borrowed(
+    item: Item, descendants: Sequence[Item], located: Mapping[str, _Located]
+) -> _Located | None:
+    """The directory a container borrows: the one **its own depth below the library root**.
+
+    A container's place in the item tree *is* a directory depth. `PARENT_OF` says a `MusicArtist`
+    sits one level under the library and a `MusicAlbum` two, and 003 resolves both of them from
+    exactly those path components - `parse_audio` reads the album out of the last directory and
+    the artist out of the one before it, after discarding a `CD2`. So the answer is counted
+    **down from the root** and not up from a file: take any descendant's directory and keep its
+    first `_depth(item.type)` components.
+
+    **It used to be counted up from the file, and that is what this fixes.** The old arithmetic
+    walked `_depth(descendant) - _depth(item) - 1` levels up from one descendant's directory,
+    which is the same number for the ordinary layout and a different one for every layout that
+    puts a directory where the item tree has no level:
+
+    * `Artist/Album/CD1/01.flac` gave the album `Artist/Album/CD1`, so a two-disc album never saw
+      the `album.nfo` beside its discs, and gave the artist `Artist/Album` - a level that is not
+      theirs at all, so an `artist.nfo` and an artist's own artwork were unreachable for **every**
+      artist with a disc-split album anywhere under them.
+    * `Artist/01.flac` - a track directly in an artist's directory, which `parse_audio` resolves
+      as an artist with no album - gave the artist the **parent of the library root**, so a
+      refresh read a directory outside the library it was scanning.
+
+    Measured against the reference's own reading of this repository's fixture tree: of its 26
+    container rows, **18 carry a directory and a type this item tree has, and all 18 sit exactly
+    their own type's depth below the library root** - disc directories included, since it makes a
+    plain `Folder` of `CD1` and still resolves the album from `Artist/Album`
+    `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`. Of the other eight,
+    five are library roots, two are those disc `Folder` rows - a level this tree has no type for -
+    and one is a *virtual* season with no directory at all, which is the shape this rule cannot
+    have: a container none of whose files reach its depth.
+
+    That shape is the fallback below - the deepest directory any descendant offers. A `Season`
+    whose only episode sits in the series directory has nowhere else to look, and it looks there
+    rather than one level further up.
+
+    **The common ancestor of every descendant's directory is not the rule**, although it answers
+    the two-disc album correctly. It was measured on the same tree and is worse than what it would
+    replace, 12 of 17 against 15: a series with one season borrows that season's directory, and an
+    artist with one album borrows that album's - because a container whose children all sit in one
+    subdirectory has that subdirectory as its common ancestor, which is the ordinary shape and not
+    an edge.
+    """
+    deepest: _Located | None = None
+    want = _depth(item.type)
+    for descendant in descendants:
+        one = located.get(descendant.id)
+        if one is None:
+            continue
+        directory, depth = one.directory, len(one.directory.relative_to(one.root).parts)
+        if depth >= want:
+            for _ in range(depth - want):
+                directory = directory.parent
+            return _Located(root=one.root, directory=directory, stem=None, relative_file=None)
+        if deepest is None or depth > len(deepest.directory.relative_to(deepest.root).parts):
+            deepest = _Located(root=one.root, directory=directory, stem=None, relative_file=None)
+    return deepest
+
+
+def _file_backed_under(
     item_id: str, items: Mapping[str, Item], children: Mapping[str, list[str]]
-) -> Item | None:
-    """Depth-first, in **path** order, so the answer does not depend on row order or on the mount.
+) -> list[Item]:
+    """Every file beneath a container, in **relative-path** order.
+
+    Ordered, because the caller has to break a tie somewhere: two descendants that reach the
+    container's depth by different routes are a container whose files span two directories, and
+    the first one in path order is the answer. Relative-path order is a property of the tree and
+    of nothing else.
 
     It sorted by identifier until 2026-09-02, and identifier order is a hash of the **absolute**
-    path (003 spec section 3.6), so which descendant a container borrowed a directory from moved
-    with the mount point. That is not a tie between two equal answers, which this project already
-    tolerates for a genre's spelling: the descendants of one container sit at different depths in
-    the tree, the caller walks up a fixed number of levels from whichever it is given, and only
-    some of them land on the container's own directory. Measured on the fixture library, a series
-    whose second season has no season directory borrowed that episode's directory about one run in
-    ten and then looked for its `tvshow.nfo` one level too high - so the same tree, mounted
-    somewhere else, gave the series a different **name**
-    `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`, where the reference
-    reads the sidecar every time.
-
-    Relative-path order is a property of the tree and of nothing else, and for the ordinary layout
-    it picks the deepest-nested branch first, which is the one the caller's arithmetic is written
-    for. It does not make the borrowing *correct* - a two-disc album still borrows a disc
-    directory - and that is 004's to decide, not this ordering's.
+    path (003 spec section 3.6), so which descendant a container borrowed from moved with the
+    mount point - and back then the caller walked a fixed number of levels up from whichever it
+    was handed, so a series whose second season has no season directory borrowed that episode's
+    directory about one run in ten and then looked for its `tvshow.nfo` one level too high
+    `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`. Counting down from
+    the root has since made every descendant that reaches the depth give the **same** answer, so
+    the order decides much less than it did; it is still ordered, because "much less" is not
+    "nothing".
     """
     backed: list[Item] = []
     seen: set[str] = set()
@@ -606,11 +653,9 @@ def _first_file_backed(
                 backed.append(child)
             else:
                 pending.append(child_id)
-    if not backed:
-        return None
     # Every descendant is gathered before one is chosen, so the answer does not depend on which
     # branch was walked first either - which the recursion it replaced did.
-    return min(backed, key=lambda child: (child.relative_path, child.id))
+    return sorted(backed, key=lambda child: (child.relative_path, child.id))
 
 
 def _depth(kind: ItemType) -> int:

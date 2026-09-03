@@ -883,6 +883,41 @@ measurement gate (012 OQ-7) because the route is
 [002 §3.8](../../specs/002-authentication-users-and-sessions/spec.md#38-sessions)'s and the `403`
 is a sentence about who may see whose device, which is 002's to specify.
 
+### 2.27 A container's directory is its own depth below the library root
+
+**Jellyfin does:** resolve every container from a directory at exactly the depth its *kind* sits at
+under the library root — a series and a music artist one down, a season and a music album two — and
+an extra directory in between does not move it. Measured over this repository's own fixture tree:
+of the 26 container rows the reference makes of it, **18 carry a directory and a kind this project's
+item tree also has, and all 18 sit at exactly that depth**
+`[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`. The sharp case is the
+two-disc album: the reference lists `Artist/Album/CD1` and `Artist/Album/CD2` as plain folders of
+their own, folds their tracks into one album (003 AC-8), and gives that album `Artist/Album` — the
+directory holding the discs, which is where an `album.nfo` sits.
+
+Of the other eight, five are library roots, two are those disc folders, and one is a **virtual**
+season invented for an episode whose season nothing names, which carries no directory at all. So
+the reference's own answer for a container with no directory at its depth is not a directory one
+level up; it is nothing.
+
+**Depends on it:** no client reads a container's directory — this project does not even put `Path`
+on a container (010 T10's comparison joins containers without one). What depends on it is what a
+user sees: the directory is where an `album.nfo`, an `artist.nfo`, a `season.nfo`, a `tvshow.nfo`
+and a `folder.jpg` are read from, so a server that picks the wrong one shows a name and a poster
+the reference does not.
+
+**Atrium does:** the same, from 2026-09-03
+([004 §3.2](../../specs/004-metadata-resolution/spec.md#32-nfo-sidecars), AC-19). It has no
+directory of its own to read either — a container here is made by the resolver and never by a
+directory walk — so it counts the same depth down from the root over its file-backed descendants.
+Until that date it counted **up** from a descendant's file by the difference in kind depth, which
+is the same number for `Artist/Album/01.flac` and wrong for both shapes above: a two-disc album was
+given one of its discs, its artist was given the album, and a track sitting directly in an artist's
+directory gave that artist the **parent of the library root**. Where no descendant reaches the
+depth, Atrium uses the deepest directory they do offer rather than nothing, which is a difference
+no response carries: the container exists on both servers either way, and this decides only which
+directory was read for it.
+
 ### 2.13 `DeviceId` is mandatory on one route, not on the header
 
 **Jellyfin does:** answer `200` on an ordinary authenticated route for a client header carrying no

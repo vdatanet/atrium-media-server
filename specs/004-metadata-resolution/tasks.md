@@ -3,7 +3,7 @@ feature: 004-metadata-resolution
 title: Metadata resolution — tasks
 status: Implemented
 created: 2026-08-27
-updated: 2026-08-27
+updated: 2026-09-03
 implemented: 2026-08-27
 accepted: 2026-08-27
 plan_status_required: Accepted
@@ -685,6 +685,53 @@ neither was foreseeable from the plan: 0004 made `item_artists.artist_item_id` n
 a track's performers are frequently not anybody's album artist), and 0005 added `items.tags` and
 `items.forced_sort_name` (T10 — a column the write path stores and never reads back is rewritten
 on every refresh, for ever).
+
+## What 010 T10 left this feature, and what answering it found
+
+010 T10 fixed the **ordering** half of a container's borrowed directory on 2026-09-02 — the
+descendant is chosen in relative-path order rather than in identifier order, because an identifier
+is a hash of the absolute path and the choice therefore moved with the mount point — and recorded
+the rest as 004's: *"it does not make the borrowing correct - a two-disc album still borrows a disc
+directory"*. Answered on 2026-09-03, and the answer is three findings rather than one.
+
+**The proposed rule was wrong, and worse than what it would have replaced.** The handover named the
+common ancestor of a container's file-backed descendants as the likely fix. It does answer the
+two-disc album, and it was measured over the fixture tree against the recorded reference reading:
+**12 of 17 containers against the standing rule's 15, and this rule's 17**. A series with one season
+borrows that season's directory under it, an artist with one album borrows that album's, and a
+season whose episodes are split between its own directory and the series folder borrows the series
+folder — because a container whose files all sit in one subdirectory has that subdirectory as its
+common ancestor, which is the ordinary shape and not an edge. It is
+`test_a_season_missing_one_episode_keeps_its_own_directory` that rejects it.
+
+**What the reference actually does is count down from the root, not up from a file.** Of the 26
+container rows it makes of this repository's fixture tree, the 18 that carry a directory and a kind
+this item tree also has sit at exactly their own kind's depth below the library root — 18 of 18,
+disc directories included `[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]`.
+So a container is given the directory `_depth(its type)` components below the root, and an extra
+directory the item tree has no level for stops moving anything. Recorded in
+[behaviours §2.27](../../docs/compatibility/behaviours.md#227-a-containers-directory-is-its-own-depth-below-the-library-root),
+stated in [spec §3.2](spec.md#32-nfo-sidecars) and asserted by **AC-19**, which is new.
+
+**The defect was two containers wide, not one, and a third shape read outside the library.** The
+album borrowing `Artist/Album/CD1` was the reported half; the artist above it was borrowing
+`Artist/Album` — a level that is not theirs at all — so `artist.nfo` and an artist's own artwork
+were unreachable for *every* artist with a disc-split album anywhere beneath them. And
+`Artist/01.flac`, a track directly in an artist's directory, which 003's `parse_audio` resolves as
+an artist with no album, gave that artist the **parent of the library root**: measured, a refresh
+took an artist's name from an `artist.nfo` outside the library it was scanning.
+`metadata/artwork.py`'s `associate` already refused a file outside the root and warned, so the
+poster beside that sidecar was declined; `find_sidecar` had no such guard, and that asymmetry is
+why the escape was invisible.
+
+**Nothing on the wire moved, and that is what made it invisible.** The fixture tree has no
+`album.nfo` beside its two-disc album and no `artist.nfo` at all, so the reference-reading
+comparison saw the same names before and after and the recorded reading did not need re-running.
+The two container rows that comparison declares are the *other* album's — `First Album (2001)`
+against `album`, the sidecar the reference does not read — and they are unchanged. **AC-19 has no
+engine-level half** for the same reason the defect survived four features: `nfo.py` and
+`artwork.py` are handed a directory and never choose one, so the choice is only observable in a
+scan.
 
 ## What this feature owes the next ones
 
