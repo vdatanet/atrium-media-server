@@ -1284,6 +1284,160 @@ def test_a_case_that_could_not_be_issued_is_not_a_case_that_agreed() -> None:
     assert "did not agree; it was not asked" in text
 
 
+# -- a run that dies still writes its report ---------------------------------------------------
+#
+# **The failure these four are written from happened**, on the first complete sweep, 2026-09-03.
+# The sweep ran, 64 comparisons were measured, the reference then died, and the roster teardown
+# raised on a `DELETE /Users` it could not answer — out of a context manager `main()` was standing
+# outside of. `main()` writes the report only after `_execute` returns, so `_execute` returning
+# nothing meant a run of 154 comparisons produced no document at all. A report is this feature's
+# deliverable (spec §3.4); the one failure it must not have is losing one it had already made.
+
+
+def test_a_run_with_an_incident_can_never_be_clean() -> None:
+    """The fifth condition of `is_clean`: a run that did not finish cannot report that it did.
+
+    Everything else here is perfect — one comparison, issued, identical, nothing outstanding — so
+    the assertion is about the incident and about nothing else being wrong.
+    """
+    assert _report(comparisons=(_ran(),)).is_clean()
+
+    report = _report(
+        comparisons=(_ran(),),
+        incidents=("the teardown did not finish: the run created seats it could not destroy",),
+    )
+    assert not report.is_clean()
+
+    text = differential.render(report)
+    assert "THIS RUN IS NOT CLEAN." in text
+    assert "INCIDENTS" in text
+    assert "## This run did not finish" in text
+    assert "could not destroy" in text
+    # And it is said before the tables, where a reader meets it rather than deduces it.
+    assert text.index("## This run did not finish") < text.index("## Coverage")
+
+
+def test_a_teardown_that_raises_after_the_sweep_still_writes_the_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`main()` writes what the run had measured, and exits 1 rather than 2.
+
+    The measured failure, reproduced at the seam it happened at: `_execute` hands the report out
+    through `salvage` the moment `run()` returns, and then raises the way a roster teardown does.
+    Delete the salvage list and this test gets an empty directory and exit 2, which is what the
+    first full sweep got.
+    """
+    destination = tmp_path / "differential.md"
+    measured = _report(comparisons=(_ran(), _ran(identity="restricted")))
+
+    def dies_after_measuring(args: Any, salvage: Any = None) -> Any:
+        assert salvage is not None, "main() must offer somewhere for the findings to leave by"
+        salvage.append((measured, destination))
+        raise differential.SeatError(
+            "the run created seats it could not destroy, and they are still on the server"
+        )
+
+    monkeypatch.setattr(differential, "_execute", dies_after_measuring)
+    code = differential.main(["--atrium", "http://a", "--jellyfin", "http://b"])
+
+    assert code == 1, "a run that measured 2 comparisons did not fail to start"
+    assert destination.exists()
+    written = destination.read_text("utf-8")
+    assert "## This run did not finish" in written
+    assert "could not destroy" in written
+    assert "| administrator | 1 | 0 |" in written, "the findings survived the teardown"
+    assert "the run could not start" not in capsys.readouterr().err
+
+
+def test_a_run_that_measured_nothing_at_all_is_still_exit_two(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The salvage path never turns a failure to start into a report of nothing.
+
+    A run that could not seat its identities has no findings, and writing an empty document for it
+    would be the same overstatement in the other direction.
+    """
+
+    def dies_before_measuring(args: Any, salvage: Any = None) -> Any:
+        raise differential.SeatError("a seat this run creates is already on the server")
+
+    monkeypatch.setattr(differential, "_execute", dies_before_measuring)
+    assert differential.main(["--atrium", "http://a", "--jellyfin", "http://b"]) == 2
+
+
+def test_a_sweep_that_cannot_finish_reports_every_declared_comparison_as_unreached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sweep that aborts leaves rows, not an empty table a reader would misread as a small run.
+
+    `compare_case` catches per case, so this is the loop's own scaffolding failing. The rows it
+    produces are the ones the run declared — the same three loops, in the same order, with no
+    request — because a report whose coverage table is empty says *"nothing to compare"* where the
+    truth is *"nothing was compared"*.
+    """
+    cases = [_case("default", identities=("administrator", "restricted"))]
+    seats = [_seat("administrator"), _seat("restricted")]
+
+    def cannot_finish(*args: Any, **kwargs: Any) -> Any:
+        raise OSError("the reference stopped answering")
+
+    class Seated:
+        """A wire the run only ever seats; the sweep it would be handed to never runs."""
+
+        def as_seat(self, token: str, device: str = "") -> Any:
+            return self
+
+    monkeypatch.setattr(differential, "sweep", cannot_finish)
+    report = differential.run(
+        atrium=Seated(),
+        reference=Seated(),
+        endpoints=[ENDPOINT],
+        cases=cases,
+        entries=[],
+        named=[],
+        seats=seats,
+        inputs=differential.Inputs(roles=("administrator", "restricted")),
+    )
+
+    assert len(report.comparisons) == 2, "one per declared (endpoint, case, seat)"
+    assert not any(comparison.ran for comparison in report.comparisons)
+    assert all("stopped answering" in c.unreachable for c in report.comparisons)
+    assert report.incidents and "the sweep did not finish" in report.incidents[0]
+    assert not report.is_clean()
+
+
+def test_one_case_that_raises_something_unexpected_does_not_take_the_sweep_with_it() -> None:
+    """The per-case catch, widened on 2026-09-03 from the two classes a request fails with.
+
+    A socket module raising its own class, or a decoder tripping over a body a dying server
+    half-wrote, used to take the loop out and every case after it with no row to show for any of
+    them. One unreached comparison is one row.
+    """
+    cases = [_case("default"), _case("second", query="limit=1")]
+    log: list[tuple[str, str, str]] = []
+    issuers, _wires = _issuers(cases, log)
+
+    class Explodes:
+        def issue(self, case: Any, seat: Any, depth: int = 0) -> Any:
+            if case.id == "default":
+                raise OSError("connection reset by peer")
+            return issuers["atrium"].issue(case, seat)
+
+    comparisons = differential.sweep(
+        [ENDPOINT],
+        cases,
+        [],
+        [_seat()],
+        {"atrium": Explodes(), "reference": issuers["reference"]},
+        differential.Inputs(roles=("administrator",)),
+        set(),
+    )
+    by_case = {comparison.case: comparison for comparison in comparisons}
+    assert not by_case["default"].ran
+    assert "OSError: connection reset by peer" in by_case["default"].unreachable
+    assert by_case["second"].ran, "the case after the failure was still asked"
+
+
 def test_the_report_ranks_missing_keys_first_in_its_own_table() -> None:
     """AC-5, at the report rather than at the engine: the order of the rows, and the label."""
     kinds = engine.Class
@@ -2323,7 +2477,13 @@ def test_a_fixture_run_with_no_runtime_reports_every_fixture_row_outstanding_and
     # body and a query can spell, so those six ask on any reachable server; two listings that name
     # a fixture film by name joined in their place. The number is asserted rather than derived so
     # that a case quietly losing its `fixture` has to come here and say why.
-    assert len(needing) == 8
+    #
+    # **Nine since 2026-09-03**, and the ninth is the anchor fix: the three subtitle cases took
+    # their `{mediaSourceId}` from a negotiation of a DIFFERENT film, which killed the reference
+    # on the first request of the first full sweep. They take it from
+    # `POST /Items/{itemId}/PlaybackInfo#no-body-on-the-subtitled-film` now, and a case that
+    # negotiates the fixture's subtitled film needs the fixture.
+    assert len(needing) == 9
     for case in needing:
         assert differential.unmet_needs(case.needs, inputs), case.id
 

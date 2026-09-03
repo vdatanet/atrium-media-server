@@ -712,7 +712,18 @@ row has been shown to reach L3, and both are on the owes list at the end of this
 
 > **Done (2026-09-02).** *The register is 84 cases over all 59 endpoints, 23 of them on the eight
 > `level: L3` rows, and the first finding is that the file cannot be seeded the way the plan says
-> it is.* [Plan §4.3](plan.md#43-docscompatibilityrequest-casesyaml) says the file starts at the
+> it is.*
+>
+> **84 was true on the day and is not a count of the file any more, which the owes list repeating
+> it did not notice** (reconciled 2026-09-03, on the first complete sweep, which found the two
+> numbers disagreeing): T11 added `the-planted-film` and `the-subtitled-film` — the two listings
+> that name a fixture film by name, without which five anchors named the wrong film — taking it to
+> **86**, and the anchor fix of 2026-09-03 added `no-body-on-the-subtitled-film`, taking it to
+> **87**. Nothing was lost and nothing is missing; the count in this note is T6's file and every
+> later count is a later file. `git log --follow docs/compatibility/request-cases.yaml` is the
+> whole of the reconciliation.
+>
+> [Plan §4.3](plan.md#43-docscompatibilityrequest-casesyaml) says the file starts at the
 > floor *"plus the cases the two analysed clients actually send"*. **Neither client document
 > carries a request inventory, by policy and in the same words**: `client-atrium-tvos.md` §7 and
 > `client-embeat-mobile.md` §8 each say the document *"does not become a second endpoint table"*,
