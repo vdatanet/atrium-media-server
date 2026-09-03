@@ -87,12 +87,13 @@ nothing to gain by tidying it"*. This plan therefore does not reserve it as a qu
 it (§6.5), and the price is that one wire field and one internal value are `str | int` rather than
 a member.
 
-**The negotiation writes to a table a request has never written to, and one sentence in an
+**The negotiation writes to two tables no request has ever written to, and one sentence in an
 implemented plan says it must not.** [008 plan §6.1](../008-playback-negotiation-and-delivery/plan.md#61-inspection-and-the-cache)
 reads *"a stale row triggers re-inspection at the next scan, not at request time"*, and
 `MediaProbeRepository`'s own docstring repeats it. That was a correct statement of 008's design and
 is the exact invariant this feature exists to retire; §2 records it as a deviation and names the
-document that moves with the code.
+three places it is written. The second table is the file's change signal beside the inspection —
+D-1, taken at this plan's gate, and priced at a new repository method rather than at a line.
 
 ## 2. Inherited decisions
 
@@ -113,7 +114,7 @@ document that moves with the code.
 
 | Deviation | What it was | What it becomes |
 |---|---|---|
-| [008 plan §6.1](../008-playback-negotiation-and-delivery/plan.md#61-inspection-and-the-cache): *"a stale row triggers re-inspection at the next scan, not at request time"* — said again in that plan's §7 (*"re-inspect at next scan — **never inline**"*) and a third time in `MediaProbeRepository`'s own docstring | True of every read path in the project, and the reason that repository has two readers and no request-time writer | **One route may open one file**: `POST`/`GET /Items/{itemId}/PlaybackInfo`, under the reference's own trigger, writing through the scan's own repository. Every other read path keeps the rule |
+| [008 plan §6.1](../008-playback-negotiation-and-delivery/plan.md#61-inspection-and-the-cache): *"a stale row triggers re-inspection at the next scan, not at request time"* — said again in that plan's §7 (*"re-inspect at next scan — **never inline**"*) and a third time in `MediaProbeRepository`'s own docstring | True of every read path in the project, and the reason that repository has two readers and no request-time writer | **One route may open one file**: `POST`/`GET /Items/{itemId}/PlaybackInfo`, under the reference's own trigger, writing the inspection through the scan's own repository and, since D-1, the file's change signal beside it. Every other read path keeps the rule |
 
 **No ADR.** [specs/README](../README.md) requires an ADR for a deviation from a
 *project-level* choice — `architecture.md` or an ADR — and this is neither: `architecture.md` says
@@ -134,6 +135,7 @@ accident.
 | `compat/errors.py` | Changed | A body refusal inside a nested property is keyed by its **JSON path** rather than by `$`; and `NegotiationRefusedError`, a twenty-fifth row in `EXCEPTION_HANDLERS`, answering `controller_error(400)` |
 | `media/decision.py` | Changed, narrowly | `StreamProtocol` and its ordinal table, beside `SubtitleMethod` and its own — the second vocabulary read from two sides. `TranscodingProfile.protocol` takes that type. No ladder logic moves |
 | `media/urls.py` | Changed, one line | `HLS` becomes `StreamProtocol.HLS.value` rather than a second literal `"hls"` |
+| `db/repositories.py` | Changed | `ItemRepository` gains **one narrow method**: the `(size, mtime_ns)` of one part, updated in place (D-1). Its existing writer deletes and rewrites every part of the item from a whole `Item`, which is not what a negotiation has or may do |
 | `api/media_info.py` (models) | Changed | `_bound_subtitle_method` is **deleted**: 011 T9's narrow binder is what §6.7 generalises, and leaving both would be two answers to one question |
 
 **Why the resolution lives in `library/` and not in `media/`.** It writes, and writing means a
@@ -160,17 +162,30 @@ What changes is **when** a row is written, and by whom:
 | Row | Written today by | Written after this feature by |
 |---|---|---|
 | `media_probes` / `media_streams` for one file | `library/scan.py`, during a scan | The same repository, additionally from one route, for one file, when the reference's trigger fires and the file opens |
-| `item_sources.(size, mtime_ns)` | `library/scan.py` | **Unchanged — see below** |
+| `item_sources.(size, mtime_ns)` for one part | `library/scan.py`, through a whole-item rewrite | The same route, in place, for the file it just opened (**D-1**) |
 | Anything else | — | Nothing |
 
-**`item_sources` is not touched, and the consequence is one wire field.** `MediaSourceInfo.ETag` is
-derived from `item_sources.mtime_ns` (`media/info.py:media_etag`), while `Size`, `RunTimeTicks`,
-`Bitrate` and `MediaStreams` come from the inspection. A file whose bytes changed after the scan is
-therefore healed in four fields and keeps the tag of the bytes the scan saw, until the next scan.
-The reference's on-demand path is a **full metadata refresh**, which updates its own change signal
-too. Two ways to close it, and this plan takes neither without the owner: writing `(size,
-mtime_ns)` from the same `stat()` the inspection already read — the honest option, and a second
-003-owned table written from a request — or leaving it and recording the difference. **D-1.**
+**`item_sources` is touched too, and that is D-1.** `MediaSourceInfo.ETag` is derived from
+`item_sources.mtime_ns` (`media/info.py:media_etag`), while `Size`, `RunTimeTicks`, `Bitrate` and
+`MediaStreams` come from the inspection. Left alone, a file whose bytes changed after the scan
+would be healed in four fields and keep the tag of the bytes the scan saw; the reference's
+on-demand path is a **full metadata refresh** and updates its own change signal with everything
+else. **D-1, taken on 2026-09-03: write it**, from the same `stat()` the inspection already read —
+`media/probe.py:inspect` reads that stat *"in the same breath as its contents"*, which is the
+reason it reads one at all.
+
+**Its price is a repository method, not a line**, which is the one thing recording this decision
+corrected: `item_sources` is written today only by `ItemRepository.update`, which deletes every
+part of the item and rewrites them from a whole `Item` — a shape a negotiation neither has nor
+should build. So the write is a new, narrowly-scoped method that updates two columns of one part
+and can reach nothing else, in the class whose own docstring exists to say that changing what an
+item *is* and changing whether it is *there* are different powers.
+
+**And it is conditional on one measurement**, which is where D-1 met D-4: §6.8's item 6 — whether
+the reference's own refresh moves its change signal — has not been taken. If it does, this is
+parity. If it does not, this write is an *improvement*, and an improvement needs
+[behaviours §6](../../docs/compatibility/behaviours.md)'s argument rather than a plan's paragraph;
+the decision returns to its owner at that point rather than being carried by this sentence.
 
 **The write is idempotent and the transaction is the request's.** `put` deletes and rewrites the
 file's streams inside the caller's session, and `session_scope` commits at the end of the request
@@ -219,9 +234,18 @@ def opened(path: Path, prober: MediaProber = inspect) -> MediaInspection | None:
     """
 
 
-def store(session: Session, library_id: str, relative_path: str, found: MediaInspection) -> None:
-    """Write one inspection through the scan's own repository. `MediaProbeRepository.put`, and
-    nothing else: the streams are replaced, not merged."""
+def store(
+    session: Session, item_id: str, part_index: int, library_id: str,
+    relative_path: str, found: MediaInspection,
+) -> None:
+    """Write one inspection through the scan's own repository, and the file's change signal with
+    it.
+
+    `MediaProbeRepository.put` - the streams are replaced, not merged - and then the `(size,
+    mtime_ns)` of that one part, in place (D-1). The two come from one `stat()`, taken inside the
+    inspection, so writing one without the other would put a tag and a size on the wire that
+    describe different bytes.
+    """
 
 
 def unopened(part: MediaSource) -> MediaInspection:
@@ -337,8 +361,9 @@ through the request's own session, where every other write in this route already
 inspection at 60 s; the reference bounds its probe only by the request's cancellation token
 (`MediaEncoder.GetMediaInfoInternal` takes one and sets no timer). A file that takes longer than a
 minute is answered here as un-inspectable where the reference would still be reading. Keeping one
-timeout for both callers is the recommendation — a second, shorter, request-only deadline is a knob
-whose only justification is a file nobody has measured. **D-3.**
+timeout for both callers is what **D-3 took on 2026-09-03**: a second, shorter, request-only
+deadline would be a knob whose only justification is a file nobody has measured, and a refusal the
+reference has not got.
 
 **No lock.** Two negotiations of the same file at the same time run two `ffprobe`s and write the
 same row twice, the second replacing the first. 011's extraction takes a lock because its artefact
@@ -565,15 +590,19 @@ where the next feature's first task started.
    reference's refresh re-probes a second part whose first sibling was already annotated — and
    whether it probes parts at all beyond the one the trigger read — needs a two-file item in the
    gate's fixture. It is the one place this plan's "open every part with no inspection" could be
-   wrong in the direction of doing more than the reference.
+   wrong in the direction of doing more than the reference. **D-4 puts it in T1 with the other
+   four**: it is a fixture line rather than a new probe, and it is an input to §6.1's rule rather
+   than a check on it.
 4. **The `GET` route's probe is read, not measured.** The controller calls the same helper
    `[source: Jellyfin.Api/Controllers/MediaInfoController.cs:87 @ v10.11.11]`; the gate exercised
    the `POST` only. It matters because it decides whether a profile-less negotiation heals a
    listing.
 5. **Concurrency is not measured on either server.** Two simultaneous negotiations of one
    unreadable file: this plan says two probes, no lock, and nothing has watched the reference do it.
-6. **`item_sources.(size, mtime_ns)` after the reference's refresh is unmeasured**, which is half
-   of D-1: the `ETag` of a healed item was not compared before and after.
+6. **`item_sources.(size, mtime_ns)` after the reference's refresh is unmeasured**, and D-1 now
+   rests on it: the `ETag` of a healed item was not compared before and after. It is the one owed
+   measurement that can send a decision back to its owner (§4), which is why it is T1's and not a
+   later task's.
 
 ## 7. Failure handling
 
@@ -704,11 +733,14 @@ times would put one question about the reference's binder in five places, which 
 **Put the resolution in `media/`.** It writes, and `media/` imports no `db`. The alternative is
 handing `media/` a repository, which makes the one pure module in the project take a session.
 
-## 11. The decisions this plan reserves, and the one already taken
+## 11. The five decisions this plan reserved, taken on 2026-09-03
 
-Reserved rather than taken, because each changes something outside this feature's own files.
-**Two were taken on 2026-09-03** — D-2 at this plan's drafting and D-5 at its gate — and both are
-recorded below with the rest.
+Each was reserved rather than taken because each changes something outside this feature's own
+files: two 003-owned tables, a shared timeout, the order the measurements run in, and an accepted
+criterion. **All five were taken on 2026-09-03** — D-2 at this plan's drafting, the other four at
+its gate — and every recommendation was accepted. Two of them moved something while being taken,
+which is recorded here rather than tidied away: D-1's price is a repository method and not a line
+(§4), and D-4's recommendation left one of the six measurements unassigned.
 
 ### D-1 — the healed item's `ETag`
 
@@ -724,6 +756,14 @@ more line, a second 003-owned table written from a request, and the `ETag` match
 *Recommendation:* (a), with §6.8's item 6 measured first — the `ETag` before and after a healed
 negotiation on the reference is one probe run, and it decides whether (a) is parity or an
 improvement.
+
+**Taken on 2026-09-03: (a), with its condition kept.** The write happens, from the stat the
+inspection already read, and T1's probe run (D-4) is what says whether it is parity — if the
+reference leaves its own signal alone, this becomes an improvement and comes back to its owner for
+a [behaviours §6](../../docs/compatibility/behaviours.md) argument rather than shipping on this
+paragraph. **Taking it corrected its own price**: `item_sources` is written today only by a
+whole-item rewrite that deletes and re-adds every part, so (a) is a new narrowly-scoped repository
+method rather than "one more line" — §3 and §4 say so now.
 
 ### D-2 — the item-level `RunTimeTicks`, which is not this feature's
 
@@ -758,6 +798,10 @@ refusal the reference has not got and a knob nobody has measured a need for.
 
 *Recommendation:* (a).
 
+**Taken on 2026-09-03: (a).** One timeout, and the 60-second divergence is stated in §6.2 rather
+than closed — a file that takes longer than a minute to open is answered as un-inspectable here and
+still being read there, which is a difference in the direction that costs a client nothing.
+
 ### D-4 — whether §6.8's six owed measurements are this feature's or its first task's
 
 Four of the six are one run of an extended `tools/probe_uninspected_source.py` — the audio
@@ -770,6 +814,16 @@ sidecar fixture; (b) let each task measure what it needs, as 008 did.
 
 *Recommendation:* (a) for the four, because three of them are inputs to code written in T2 and T4
 rather than checks on it; (b) for concurrency, which is a property of the finished thing.
+
+**Taken on 2026-09-03: (a) for five and (b) for concurrency alone.** The recommendation named four
+and six exist, and the sixth — the multi-part refresh — was left unplaced by it: it goes with the
+five, because what it settles is §6.1's *"open every part with no inspection"*, a rule T2 writes
+rather than a property T2 could check, and because what it needs from the probe is a fixture line
+and not a battery. So **T1 extends `tools/probe_uninspected_source.py`** with a two-part item and
+prints five answers — the audio refusal's body, the nested refusal's message, the `GET` route's
+probe, the `ETag` across a heal (which D-1 rests on), and what a refresh does to a second part —
+before any behaviour in this feature is written. Concurrency is measured against the finished
+server, by whichever task owns it.
 
 ### D-5 — AC-10's second clause, which its own subject has outrun
 

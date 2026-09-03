@@ -391,8 +391,11 @@ decide two of the three, on both servers, measured — **amended at the gate on 
 the prohibition kept and the clause naming the values handed to the feature that states them, with
 no code changing beside it.
 
-It reserves **three decisions** and records two as taken. **D-2 was taken on 2026-09-03 — out of
-012**: after a real scan, `items.runtime_ticks` is `NULL` on every file-backed item, measured in
+**All five decisions it reserved were taken on 2026-09-03, every recommendation accepted**, and two
+of them moved something on the way: D-1's price is a new repository method and not a line, because
+`item_sources` is written today only by a whole-item rewrite; and D-4's recommendation had left one
+of the six owed measurements unplaced, so the multi-part refresh joins the four in T1 — it settles a
+rule the code writes rather than a property it could check. **D-2 was taken out of 012**: after a real scan, `items.runtime_ticks` is `NULL` on every file-backed item, measured in
 this repository that day, because the metadata merge refuses a runtime for exactly those types on
 the grounds that it comes from probing the file and nothing writes it from a probe. Every film,
 episode and track a real Atrium serves answers `RunTimeTicks: null` at item level while its media

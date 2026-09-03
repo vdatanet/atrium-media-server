@@ -34,10 +34,13 @@ withdrew one of the two client findings it was built on. **Its plan was drafted 
 (Principle III). The plan is two changes that do not touch each other — a new
 `library/inspection.py` the negotiation calls before it reads the profile, and the enum binder
 every request model inherits — with no migration, because what moves is *when* a probe row is
-written. It reserves **three decisions** and records two as taken on 2026-09-03: **D-2, out of
-012** — after a real scan `items.runtime_ticks` is `NULL` on every file-backed item, measured in
-this repository that day, and it is a scan-time defect its owning feature fixes — and **D-5**, the
-amendment of AC-10 in an accepted spec, made in the same change as the plan. **[009](specs/009-playlists/) landed on 2026-09-01 across fourteen tasks**, its spec accepted at a
+written. **The five decisions it reserved were all taken on 2026-09-03**, every recommendation
+accepted: the healed item's change signal is written and its price turned out to be a repository
+method rather than a line, the inspection timeout stays one number for both callers, five of the
+six owed measurements move into T1 ahead of any behaviour, **AC-10 is amended in an accepted spec**
+because what made its second clause wrong landed nine days after the spec was accepted, and
+**D-2 goes out of 012** — after a real scan `items.runtime_ticks` is `NULL` on every file-backed
+item, measured in this repository that day, and it is a scan-time defect its owning feature fixes. **[009](specs/009-playlists/) landed on 2026-09-01 across fourteen tasks**, its spec accepted at a
 gate whose five probes answered its six open questions and killed thirteen claims — including the
 one the feature was built on, that a playlist entry has an identifier of its own — and every one of
 the fourteen tasks then finding something further, which is why its spec carries twelve amendments
