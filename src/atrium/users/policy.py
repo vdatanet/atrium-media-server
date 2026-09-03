@@ -165,6 +165,10 @@ VIDEO_TRANSCODING = "EnableVideoPlaybackTranscoding"
 AUDIO_TRANSCODING = "EnableAudioPlaybackTranscoding"
 REMUXING = "EnablePlaybackRemuxing"
 
+#: What an item's `CanDownload` asks of an account, in the reference's own spelling. Read out of
+#: the blob for the same reason the three above are, and read by `api/item_dto.py` alone.
+CONTENT_DOWNLOADING = "EnableContentDownloading"
+
 #: Honoured, and carried in the blob rather than promoted to columns. **The third category**, and
 #: it is deliberate: 002 section 3.5 moved these into the enforced set on 2026-08-27, when
 #: transcoding entered v1, and 008 is the feature that enforces them. They stay in
@@ -207,6 +211,7 @@ def playback_permissions(user: User) -> PlaybackPermissions:
 __all__ = [
     "AUDIO_TRANSCODING",
     "BOOLEAN_COLUMNS",
+    "CONTENT_DOWNLOADING",
     "DELETION_FOLDERS",
     "ENABLED_FOLDERS",
     "HONOURED",

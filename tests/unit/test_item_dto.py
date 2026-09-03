@@ -32,7 +32,9 @@ from atrium.api.item_dto import (
     PLAYLIST_EXTRA,
     UNPROBED,
     USER_VIEW_EXTRAS,
+    WIDE_ONLY,
     BuildContext,
+    ItemAccess,
     LibraryContext,
     Width,
     build_dto,
@@ -99,6 +101,7 @@ def hydrated(repository: ItemQueryRepository, world: QueryWorld) -> dict[str, Hy
 
 def ctx(**overrides: Any) -> BuildContext:
     overrides.setdefault("policy", EVERY_PERMISSION)
+    overrides.setdefault("access", ItemAccess())
     return BuildContext(server_id=SERVER_ID, **overrides)
 
 
@@ -147,6 +150,7 @@ SPEC_PER_TYPE: dict[str, set[str]] = {
     "SeriesId": {"Season", "Episode"},
     "SeriesName": {"Season", "Episode"},
     "SeasonId": {"Episode"},
+    "SeasonName": {"Episode"},
     "SeriesPrimaryImageTag": {"Season", "Episode"},
     "SeriesThumbImageTag": {"Episode"},
     "ParentThumbItemId": {"Season", "Episode"},
@@ -213,7 +217,7 @@ def test_the_gated_list_is_the_specs() -> None:
 
 
 def test_every_registry_name_has_an_emitter_and_no_emitter_is_unreachable() -> None:
-    assert set(EMITTERS) == set(ALWAYS) | set(PER_TYPE) | set(GATED) | PLAYLIST_EXTRA
+    assert set(EMITTERS) == set(ALWAYS) | set(PER_TYPE) | set(GATED) | PLAYLIST_EXTRA | WIDE_ONLY
 
 
 def test_every_emitted_name_is_a_field_the_model_declares() -> None:

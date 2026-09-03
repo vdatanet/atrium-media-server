@@ -61,7 +61,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response
 
-from atrium.api.delivery import policy_of
+from atrium.api.delivery import access_of, policy_of
 from atrium.api.deps import (
     get_playing,
     get_registry,
@@ -149,7 +149,12 @@ def _mark(
         ).items[0]
         answered = user_data_dto(
             refreshed,
-            BuildContext(server_id=state.server_id, policy=policy_of(target), width=Width.FULL),
+            BuildContext(
+                server_id=state.server_id,
+                policy=policy_of(target),
+                access=access_of(target),
+                width=Width.FULL,
+            ),
         )
     assert answered is not None  # noqa: S101 - enable_user_data is not settable on this path
     return answered

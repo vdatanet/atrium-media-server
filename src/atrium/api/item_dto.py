@@ -68,6 +68,29 @@ class LibraryContext:
 
 
 @dataclass(frozen=True, slots=True)
+class ItemAccess:
+    """What the effective user may do with an item, as two properties of the wide widths.
+
+    Separate from `PlaybackPolicy`, which is 008's negotiation input: these two are read by
+    nothing but the emitters below, and folding them into the decision engine's structure would
+    put an item-representation concern inside a transcoding one.
+
+    **Both are the account's policy AND a property of the item.** Measured on a reference
+    instance over this repository's own fixture: a library root answers `CanDownload: false` to
+    an administrator whose policy permits downloading, a film answers `true`, and an account with
+    `EnableContentDownloading` off answers `false` on both; `PlayAccess` is `Full` under
+    `EnableMediaPlayback` and `None` without it
+    `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-03]`.
+    """
+
+    #: The account's `EnableContentDownloading`. Absent from a policy means permitted, which is
+    #: the reference's own default and what `users/policy.py` reads for the playback three.
+    downloading: bool = True
+    #: The account's `EnableMediaPlayback`, which has a column of its own.
+    playback: bool = True
+
+
+@dataclass(frozen=True, slots=True)
 class BuildContext:
     """Everything the batch shares. Routes fill it; the builder only reads it."""
 
@@ -89,6 +112,10 @@ class BuildContext:
     #: `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. Which is
     #: `effective_user`, already resolved by every route here.
     policy: PlaybackPolicy
+    #: The effective user's two item-access permissions, for the same reason `policy` has no
+    #: default: a route that emits an item has to decide whose access it emits under, and a
+    #: default lets the next one forget in silence.
+    access: ItemAccess
     width: Width = Width.LIST_ROW
     #: The resolved `fields` tokens, wire spellings, unknown ones already dropped and recorded
     #: by `compat.query_params` (behaviours section 1.12).
@@ -187,6 +214,10 @@ PER_TYPE: Mapping[str, frozenset[ItemType]] = {
     "SeriesId": frozenset({ItemType.SEASON, ItemType.EPISODE}),
     "SeriesName": frozenset({ItemType.SEASON, ItemType.EPISODE}),
     "SeasonId": frozenset({ItemType.EPISODE}),
+    #: The season's own name, beside the id that already travels: measured on every joined
+    #: episode row and every joined episode body, list row and full body alike
+    #: `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-03]`.
+    "SeasonName": frozenset({ItemType.EPISODE}),
     "SeriesPrimaryImageTag": frozenset({ItemType.SEASON, ItemType.EPISODE}),
     # Unconfirmed: never observed, and a null is indistinguishable from a gate from outside.
     # It stays where the spec keeps it rather than being deleted on one library's evidence.
@@ -217,6 +248,10 @@ PER_TYPE: Mapping[str, frozenset[ItemType]] = {
     "HasSubtitles": frozenset({ItemType.MOVIE, ItemType.EPISODE}),
     "VideoType": frozenset({ItemType.MOVIE, ItemType.EPISODE}),
 }
+
+#: The two members of the reference's `PlayAccess` enum `[spec: BaseItemDto]`.
+PLAY_ACCESS_FULL = "Full"
+PLAY_ACCESS_NONE = "None"
 
 #: The types whose media properties describe video rather than only sound. `VideoType` says
 #: `VideoFile` for exactly these, and `Width`, `Height` and `IsHD` can only be answered for them.
@@ -253,6 +288,38 @@ GATED: Mapping[str, str] = {
     "Height": "Height",
     "IsHD": "IsHD",
 }
+
+#: What the two **wide** widths carry that a list row never does, unasked and ungated.
+#:
+#: The differential's key-set pass is what found these, which is the closing mechanism
+#: [behaviours section 5](../../../docs/compatibility/behaviours.md)'s *"item fields outside the
+#: observed union omitted"* row named for itself. Joined 1:1 by `(Type, Name)` rather than by
+#: position - a list ordered by a key the two servers disagree about is a list whose rows do not
+#: line up, and an absence measured across misaligned rows is not a measurement - every one of
+#: these was present on **every** reference full body and **every** `/UserViews` row, and on no
+#: joined list row at all `[probe: tools/differential.py --fixture, Jellyfin 10.11.11,
+#: 2026-09-03]`. That last half is the whole reason this is a tier of its own: 005 T1 measured
+#: three widths, and supplying a full-body property on a list row would trade one difference for
+#: another.
+#:
+#: **Two of the twelve are deliberately not here.** `CanDelete` would advertise a deletion this
+#: server refuses by design ([behaviours section 4.3](../../../docs/compatibility/behaviours.md)),
+#: which is a decision about that exception rather than a field to fill; and
+#: `DisplayPreferencesId` is a digest of the reference's own display-preferences key - the same
+#: value for every `Movie`, another for every `Season`, and on a `CollectionFolder` the row's own
+#: identifier - so reproducing it is a derivation and not a value this server holds.
+WIDE_ONLY: frozenset[str] = frozenset(
+    {
+        "CanDownload",
+        "EnableMediaSourceDisplay",
+        "LocalTrailerCount",
+        "LockData",
+        "LockedFields",
+        "PlayAccess",
+        "RemoteTrailers",
+        "SpecialFeatureCount",
+    }
+)
 
 #: What `/UserViews` adds on top of a list row, unasked - measured, all sixteen on all six rows
 #: `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`. T11's route passes
@@ -640,6 +707,9 @@ EMITTERS: Mapping[str, Callable[[HydratedItem, BuildContext], Any]] = {
     "SeasonId": lambda one, ctx: (
         one.parent.id if one.item.type is ItemType.EPISODE and one.parent else None
     ),
+    "SeasonName": lambda one, ctx: (
+        one.parent.name if one.item.type is ItemType.EPISODE and one.parent else None
+    ),
     "SeriesPrimaryImageTag": lambda one, ctx: (
         _tag_of(_series_of(one), ImageKind.PRIMARY) if ctx.enable_images else None
     ),
@@ -674,6 +744,26 @@ EMITTERS: Mapping[str, Callable[[HydratedItem, BuildContext], Any]] = {
     #: `true` or absent, never `false` - the reference sets the property only when it holds.
     "HasSubtitles": lambda one, ctx: media_info.has_subtitles(one.probes) or None,
     "VideoType": lambda one, ctx: media_info.VIDEO_FILE,
+    # -- the wide widths only ---------------------------------------------------------------------
+    #: A file to fetch and an account permitted to fetch it. A folder is not downloadable on
+    #: either server, whatever the policy says.
+    "CanDownload": lambda one, ctx: ctx.access.downloading and one.item.type in FILE_BACKED,
+    #: A server-wide display switch this server has no knob for, at the reference's default.
+    "EnableMediaSourceDisplay": lambda one, ctx: True,
+    #: Zero, and it is a count of what this server holds rather than a stand-in for one it does
+    #: not: 003 discovers no local trailer and 004 stores no remote one, so both are exact.
+    "LocalTrailerCount": lambda one, ctx: 0,
+    "RemoteTrailers": lambda one, ctx: [],
+    #: Nothing in v1 locks a field against the next rescan - 004 T10 measured the scan and the
+    #: refresh already fighting over one column, and neither of them consults a lock - so there
+    #: is no locked field to name and nothing is locked.
+    "LockData": lambda one, ctx: False,
+    "LockedFields": lambda one, ctx: [],
+    #: `Full` or `None`. The reference answers the enum from the account's `EnableMediaPlayback`
+    #: alone; it does not consult the item.
+    "PlayAccess": lambda one, ctx: PLAY_ACCESS_FULL if ctx.access.playback else PLAY_ACCESS_NONE,
+    #: Zero, for `LocalTrailerCount`'s reason: v1 models no extras at all.
+    "SpecialFeatureCount": lambda one, ctx: 0,
     # -- gated -----------------------------------------------------------------------------------
     "MediaSources": _media_sources,
     "MediaStreams": _media_streams,
@@ -740,10 +830,10 @@ def _considered(item_type: ItemType, ctx: BuildContext) -> frozenset[str]:
     if ctx.playlist_row:
         named = named | PLAYLIST_EXTRA
     if ctx.width is Width.FULL:
-        return named | frozenset(GATED)
+        return named | frozenset(GATED) | WIDE_ONLY
     gated = frozenset(name for name, token in GATED.items() if token in ctx.fields)
     if ctx.width is Width.USER_VIEW:
-        return named | gated | USER_VIEW_EXTRAS
+        return named | gated | USER_VIEW_EXTRAS | WIDE_ONLY
     return named | gated
 
 
@@ -777,10 +867,14 @@ __all__ = [
     "GATED",
     "PER_TYPE",
     "PLAYLIST_EXTRA",
+    "PLAY_ACCESS_FULL",
+    "PLAY_ACCESS_NONE",
     "UNPROBED",
     "USER_VIEW_EXTRAS",
     "VIDEO_TYPES",
+    "WIDE_ONLY",
     "BuildContext",
+    "ItemAccess",
     "LibraryContext",
     "Width",
     "build_dto",

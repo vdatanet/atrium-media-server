@@ -66,6 +66,7 @@ from fastapi import Query, Request
 from starlette.responses import Response, StreamingResponse
 
 from atrium.api.deps import get_paths, get_sessions
+from atrium.api.item_dto import ItemAccess
 from atrium.compat.errors import (
     DeliveryNotFoundError,
     DeliveryProductionError,
@@ -96,7 +97,7 @@ from atrium.media.decision import (
 )
 from atrium.media.info import source_id
 from atrium.media.labels import label_for
-from atrium.users.policy import playback_permissions
+from atrium.users.policy import CONTENT_DOWNLOADING, playback_permissions
 
 #: How much is read from disk at a time. Large enough that a film is not a million syscalls, small
 #: enough that a cancelled response stops promptly - a client that seeks abandons the body it was
@@ -640,6 +641,25 @@ def policy_of(user: User) -> PlaybackPolicy:
         enable_video_transcoding=permitted.video_transcoding,
         enable_audio_transcoding=permitted.audio_transcoding,
         enable_remuxing=permitted.remuxing,
+    )
+
+
+def access_of(user: User) -> ItemAccess:
+    """The two item-access permissions the wide item widths carry, for this account.
+
+    Beside `policy_of` because they are read off the same object at the same moment and a second
+    place to read a policy from is a second place for the two to disagree - but a separate
+    structure, because these two reach the item emitters and nothing else, where the three above
+    reach the decision engine and nothing else.
+
+    `EnableMediaPlayback` has a column; `EnableContentDownloading` does not, and an absent
+    property means permitted - the reference's own default, and the rule `playback_permissions`
+    already applies to the three it reads out of the same blob.
+    """
+    downloading = user.policy_extra.get(CONTENT_DOWNLOADING)
+    return ItemAccess(
+        downloading=downloading if isinstance(downloading, bool) else True,
+        playback=user.enable_media_playback,
     )
 
 
