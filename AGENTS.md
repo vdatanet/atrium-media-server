@@ -29,9 +29,11 @@ container's own streams, and served. Not burned in, which is
 [behaviours §5](docs/compatibility/behaviours.md#5-accepted-gaps-in-v1).
 **[012's spec was accepted on 2026-08-29](specs/012-negotiation-inputs/spec.md)**,
 at a gate that answered its nine open questions with two new probes and two extended ones and
-withdrew one of the two client findings it was built on. **Its plan was drafted and accepted on 2026-09-03**, so
-**its task list is what is next** and no code starts before that list is `Accepted`
-(Principle III). The plan is two changes that do not touch each other — a new
+withdrew one of the two client findings it was built on. **Its plan was drafted and accepted on 2026-09-03, and its
+task list drafted the same day**, so **that list's gate is what is next** and no code starts
+before it is `Accepted` (Principle III). Eleven tasks, opening with a measurement rather than with
+code: five of the six readings the plan could not check are inputs to what T4, T6 and T7 write,
+and one of them can send an accepted decision back to its owner. The plan is two changes that do not touch each other — a new
 `library/inspection.py` the negotiation calls before it reads the profile, and the enum binder
 every request model inherits — with no migration, because what moves is *when* a probe row is
 written. **The five decisions it reserved were all taken on 2026-09-03**, every recommendation
