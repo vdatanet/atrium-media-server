@@ -44,6 +44,7 @@ from atrium.db.engine import create_database_engine, session_factory
 from atrium.db.item_queries import HydratedItem, ItemQueryRepository
 from atrium.domain.items import ItemType
 from atrium.domain.queries import ItemQuery
+from atrium.media.decision import EVERY_PERMISSION
 from tests.conftest import data_dir
 from tests.fixtures.query import (
     ALBUM_ARTIST,
@@ -97,6 +98,7 @@ def hydrated(repository: ItemQueryRepository, world: QueryWorld) -> dict[str, Hy
 
 
 def ctx(**overrides: Any) -> BuildContext:
+    overrides.setdefault("policy", EVERY_PERMISSION)
     return BuildContext(server_id=SERVER_ID, **overrides)
 
 

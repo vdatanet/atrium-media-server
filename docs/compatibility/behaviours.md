@@ -626,9 +626,17 @@ Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`,
 tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. So *"any single denial changes
 nothing"* is true of a negotiation against a profile and **false** of `GET
 /Items/{itemId}/PlaybackInfo` and of a `POST` with an empty body, where a single denial is the
-whole rule. The same function serves an item body's `MediaSources`, so a listing that asks for
-them carries the same flags — measured on the same run, and **not** reproduced here
-([§5](#5-accepted-gaps-in-v1)).
+whole rule.
+
+**The same function serves an item body's `MediaSources`, and that half is measured now rather
+than asserted.** A listing carries the account's own flags by the same per-kind rule, on `GET
+/Items/{itemId}`, `GET /Items` and `GET /Items/Latest` alike, across all six policy shapes — and
+so does a source **nothing has ever inspected**, which carries no runtime, no bitrate and no
+streams and is not exempt. The policy applied is the **effective** account's, not the caller's:
+an administrator naming a denied user in `userId` is answered that user's flags and naming
+themselves is answered their own, and a request naming nobody is answered the **token holder's**
+— there is no *"no user, no policy"* case on this path
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`.
 
 At delivery it reads two of the three, **per stream**: a user denied video transcoding has the
 video stream force-copied "regardless of whether it will be compatible or not", and one denied
@@ -648,11 +656,14 @@ two calls earlier. The refusal is unreachable code; the force-copy is the behavi
 **Depends on it:** an operator who denies one permission and observes that clients still play; a
 client that never learned to handle a policy `403` from these routes, because none exists.
 
-**Atrium does:** both negotiation rules, flags rather than errors, no invented `403` — the
-all-three gate against a device profile (`media/decision.py`'s `_may_process` and `_can_produce`)
-and the per-kind single permission when no profile arrived (`unnegotiated_transcoding` and
-`Decision.remuxing_denied`), on the `POST` and the `GET` alike. The second half arrived on
-2026-09-02 and the note below is why.
+**Atrium does:** all three rules, flags rather than errors, no invented `403` — the all-three gate
+against a device profile (`media/decision.py`'s `_may_process` and `_can_produce`), the per-kind
+single permission when no profile arrived (`unnegotiated_transcoding` and
+`unnegotiated_direct_stream`) on the `POST` and the `GET` alike, and **the same two functions on
+every route that emits an item**, through `api/item_dto.py`'s `BuildContext.policy`. The
+last of those arrived on 2026-09-02, hours after the negotiation half and in a change of its own,
+and the two notes below are why — the second is where this row's [§5](#5-accepted-gaps-in-v1)
+entry went.
 
 > **Measured on 2026-09-02, and the first half of that sentence was false on the wire. Fixed the
 > same day, and the fix found a rule this entry did not have.** A seat with
@@ -683,6 +694,31 @@ and the per-kind single permission when no profile arrived (`unnegotiated_transc
 > and a delivery neither refuses — and **the force-copy edge itself is still uncompared**: reaching
 > it needs a segment request built by hand, because a denied seat's own negotiation hands over no
 > address to follow.
+
+> **The listing half, measured on 2026-09-02 and closed the same day.** It was left as an accepted
+> gap when the negotiation half was fixed, because 008 owns `PlaybackInfo` and the listing shape is
+> [005](../../specs/005-item-query-api/spec.md)'s — and because the closing mechanism is a
+> **shared context** rather than a route: the caller's policy has to reach `api/item_dto.py`'s
+> `BuildContext`, which every route that emits an item fills, so it is one change across all of
+> them or none. It is one change across all of them: `BuildContext.policy` has **no default**, so a
+> route cannot be written without deciding whose permissions it emits under.
+>
+> **The sentence this entry carried was right and its scope was not, which is why it was measured
+> before it was implemented.** Three things the negotiation run could not have said. A source
+> **nothing has ever inspected** is not exempt — it carries the account's flags exactly as an
+> annotated one does, which is worth stating because
+> [§2.23](#223-a-negotiation-opens-the-file-a-listing-does-not-and-what-it-learns-is-kept)
+> describes that listing shape as *"the three capability flags all `true`"*, and three flags
+> `true` is the *permitted* account's answer rather than the shape's.
+> Whose policy is the **effective** user's and not the caller's, so `userId` decides. And a request
+> naming nobody is the token holder's policy rather than none, which is the one reading that would
+> have made an administrator's own answer wrong. Fifteen places in Atrium build that context and
+> every one of them now fills the field; **nine** of them answer a route whose shape can carry
+> `MediaSources`, and all nine are asserted at the HTTP boundary across the six policy shapes.
+> The rest cannot carry the property at all — the by-name envelope, `/Shows/{seriesId}/Seasons`,
+> `/UserViews`, `/Sessions`, which omits it outright, and the two user-data writers — and are
+> covered by the field having no default
+> `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`.
 
 **The one edge not replicated** is delivery-time force-copy into an output that
 violates the negotiated profile: Atrium refuses the step instead, and no client can depend on
@@ -720,7 +756,11 @@ asked. A listing reads the stored sources and stops there
 `[source: Emby.Server.Implementations/Dto/DtoService.cs:261 @ v10.11.11]`, so an item whose
 inspection never succeeded is answered with a `Container` inferred from its path, a `Size`, no
 `RunTimeTicks`, no `Bitrate`, `MediaStreams: []` and the three capability flags all `true` — the
-same shape on `/Items`, `/Items/{itemId}` and `/Items/Latest`. A **negotiation** for the same item
+same shape on `/Items`, `/Items/{itemId}` and `/Items/Latest`. *(Those three flags are all `true`
+for a **permitted** account and are the account's own for any other: an un-inspected source is
+not exempt from the per-kind permission rule of
+[§2.21](#221-playback-policy-permissions-are-negotiation-inert), measured on 2026-09-02 when that
+rule's listing half was closed. Everything else in this sentence is a property of the shape.)* A **negotiation** for the same item
 refreshes it with probing enabled before any profile is applied, whenever the first source carries
 no stream of the item's own kind
 `[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:170-189 @ v10.11.11]`, and that
@@ -2879,7 +2919,6 @@ undocumented bug.
 | **The rename applies `Name` and nothing else, and refuses every item that is not a playlist** ([009 §3.8](../../specs/009-playlists/spec.md)) | A client that edits a playlist's overview, rating, year, genres or tags through `POST /Items/{itemId}` finds them unchanged, and the same request against a film, an episode, a track or a by-name row is `403` where the reference applies the body. Measured: a whole posted body changes `Overview`, `ForcedSortName`, `OfficialRating`, `CustomRating`, `ProductionYear`, `Genres` and `Tags` on the reference, while `Path` and `IsFolder` are computed and ignored on both `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. Neither analysed client posts anything but a changed `Name` | Item metadata editing entering the surface with a named consumer — which is more than a route: 004 T10 measured the scan and the refresh already fighting over `Item.name`, so an edited field needs somewhere to live that the next scan does not overwrite. Until then a refusal is the honest answer and a partial apply would be Principle VI's plausible-looking stub |
 | **A required body that is missing entirely is `400` and not `415`** ([§1.11](#111-there-are-four-error-shapes-not-one)) | A request carrying no body and no `Content-Type` on one of the five routes whose body is required — 007's three reporting routes, 008's `PlaybackInfo` and 009's rename — answers the validation `400` where the reference answers `415 Unsupported Media Type` in the problem-details shape `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. No analysed client sends a body-less request to a route that requires one | A content-type gate in `compat/`, ahead of the body binding, and one measurement per required-body route rather than an extrapolation from this one: the shape is measured on the rename alone, and the four older routes were never asked. **[010](../../specs/010-conformance-harness/spec.md) is the owner of the measuring half** — a differential replaying a body-less request against both servers is what asks the other four, and it is the only thing that can — and the gate itself belongs to whoever owns `compat/model.py`, which every request model in the project inherits, rather than to any one feature. 009 T14 decided that rather than closing it inside a task about the acceptance map |
 | **A multi-part film answers one media source per part** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Two sources on one item, where the reference answers one source, a `PartCount` and a separate route for the rest | Not a gap to close on its own: it follows from 003 §3.3 modelling the parts as one item's sources, and closing it means changing that model or adding `GET /Videos/{id}/AdditionalParts` to the surface |
-| **A listing's `MediaSources` carry no playback permissions** ([§2.21](#221-playback-policy-permissions-are-negotiation-inert)) | An item body asked for with `fields=MediaSources`, read by an account denied a playback-processing permission, answers `SupportsTranscoding: true` and `SupportsDirectStream: true` where the reference answers the account's own flags — one permission per media kind, the same rule its profile-less negotiation follows, because the reference builds both from one function `[source: Emby.Server.Implementations/Dto/DtoService.cs:261, Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`, `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`. Invisible to every permitted account, which is every account either analysed client has been observed signing in as | The caller's policy reaching the item builder, which is a **shared context** and not one route: `api/item_dto.py`'s `BuildContext` is filled by every route that emits an item, so the field has to arrive with a change that fills it everywhere at once rather than on the route that noticed. The negotiation half was fixed on 2026-09-02 by 008 and this half deliberately was not, because 008 owns `PlaybackInfo` and the listing shape belongs to [005](../../specs/005-item-query-api/spec.md) |
 
 The difference between this section and §4 is intent. §4 says *we thought about it and chose
 differently*. This section says *we have not done it yet, and here is how we will know when it

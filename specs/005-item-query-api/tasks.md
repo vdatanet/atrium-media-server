@@ -551,6 +551,67 @@ and no existing test asserts a `422`, so T4's global replacement breaks nothing 
   album carries the artist lists. §3.2 now holds the measured matrix, and the registry test
   compares against it verbatim, so the next drift fails by name.
 
+### Amended — 2026-09-02: the context carries the reader, and one emitter reads it
+
+**`BuildContext` was written as everything the batch shares about the *request*, and one emitter
+turned out to need something about the *account*.** `MediaSources` carries three flags that answer
+for the reading account rather than for the file: the reference writes the account's playback
+permissions onto every static media source it builds, **one permission per media kind** — a video
+item's `SupportsTranscoding` is `EnableVideoPlaybackTranscoding` and its `SupportsDirectStream` is
+`EnablePlaybackRemuxing`; an audio item's `SupportsTranscoding` is
+`EnableAudioPlaybackTranscoding` and its `SupportsDirectStream` is untouched; `SupportsDirectPlay`
+is untouched by all three `[source: Emby.Server.Implementations/Dto/DtoService.cs:261,
+Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`. Atrium answered
+every account the permitted values, which was recorded on 2026-09-02 as an accepted gap in
+[behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) when
+[008](../008-playback-negotiation-and-delivery/tasks.md) fixed the same rule's negotiation half and
+left the listing shape here.
+
+**Measured before implementing, and three things the negotiation run could not have said.** The
+008 fix's own probe asked `PlaybackInfo` and asserted the listing half in prose; a listing battery
+was added to the same probe and run against the single-use reference instance over this
+repository's fixture, across the six policy shapes, on `GET /Items/{itemId}`, `GET /Items` and
+`GET /Items/Latest`. The rule holds. What it added: a source **nothing has ever inspected** is not
+exempt, which matters because [behaviours §2.23](../../docs/compatibility/behaviours.md) describes
+that listing shape as *"the three capability flags all `true`"* and three flags `true` is the
+permitted account's answer rather than the shape's; the policy is the **effective** user's, so an
+administrator naming a denied account in `userId` is answered that account's flags; and a request
+naming nobody is the **token holder's** policy rather than none, which is the reading that would
+have made an administrator's own answer wrong
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`.
+
+**The fix is one field and no new rule.** `BuildContext` gains `policy`, filled from the
+`effective_user` every route already resolves; `_media_sources` calls `unnegotiated_transcoding`
+and `unnegotiated_direct_stream` in `media/decision.py` rather than restating them, so the listing
+and the profile-less negotiation cannot drift apart. `unnegotiated_direct_stream` is new only as a
+*name*: the expression existed twice, inline in `api/media_info.py` and inside
+`Decision.remuxing_denied`, and both now read it from the one function.
+
+**The field has no default, and that is the mechanism rather than a style choice.** Behaviours §5
+named the closing mechanism as *"the caller's policy reaching the item builder, which is a shared
+context and not one route"* — fifteen places in `api/` build this context, so a fix proven on the
+route that noticed is a fix fourteen do not have. A required field means a route cannot be written without
+deciding whose permissions it emits under; a default of *"every permission granted"* is precisely
+the wrong answer a forgotten route would ship in silence. `/Sessions` also stopped sharing one
+context across playing users, which was invisible while nothing in it read the account.
+
+**Proven by deleting it.** `tests/conformance/test_item_media_source_policy.py` asks the **nine**
+routes whose shape can carry `MediaSources` — `/Items/{itemId}`, `/Items`, `/Items/Latest`,
+`/UserItems/Resume`, `/Shows/{seriesId}/Episodes`, `/Shows/NextUp`, `/Items/{itemId}/Similar`,
+`/Items/{itemId}/InstantMix` and `/Playlists/{playlistId}/Items` — across the six shapes, and a
+route that stops filling the context fails by name: verified by filling one route's context with
+a permitted policy and watching that route's rows fail while every other route stayed green. The
+six constructions whose answer carries no media source — the by-name envelope,
+`/Shows/{seriesId}/Seasons`, `/UserViews`, `/Sessions` (which omits the property outright) and the
+two user-data writers — are covered by the field having no default, asserted from the source:
+`test_every_item_building_route_fills_the_policy` parses `src/atrium/api/` and fails on a
+`BuildContext(...)` that names no `policy`, so the enumeration is read rather than remembered.
+
+**How the enumeration was made.** `BuildContext` is constructed in exactly fifteen places, found
+by walking the syntax of every module in `src/atrium/api/` rather than by grepping route
+decorators — a route module can hold three of them, and one construction (the by-name envelope)
+serves five routes.
+
 ## T10 — `GET /Items` and `GET /Items/{itemId}`
 
 - [x] **Changes:** `api/items.py` — parameter binding with the pinned document's spellings;

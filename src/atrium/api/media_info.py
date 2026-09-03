@@ -640,7 +640,9 @@ def _negotiation(
             # `[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @
             # v10.11.11]`. Same rule as the ladder's rule 1, because it is the same moment.
             wire.supports_transcoding = ladder.unnegotiated_transcoding(policy, is_video=is_video)
-            wire.supports_direct_stream = not is_video or policy.enable_remuxing
+            wire.supports_direct_stream = ladder.unnegotiated_direct_stream(
+                policy, is_video=is_video
+            )
             continue
         switches = _switches(
             body, names_this_source=(body.media_source_id or "").lower() == wire.id.lower()

@@ -39,6 +39,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import Field
 
+from atrium.api.delivery import policy_of
 from atrium.api.deps import get_playing, get_registry, get_sessions, get_state, require_user
 from atrium.api.dynamic_hls import transcode_manager
 from atrium.api.item_dto import BuildContext, Width, build_dto
@@ -357,17 +358,24 @@ def _now_playing_items(
         wanted.setdefault(owner, set()).add(snapshot.item_id)
 
     built: dict[str, dict[str, BaseItemDto]] = {}
-    context = BuildContext(
-        server_id=server_id,
-        width=Width.FULL,
-        # The measured shape, expressed as what it is missing (`NOT_IN_NOW_PLAYING`) rather than
-        # as a bespoke list of what it has - so a property added to the full body is in a session
-        # entry only if the reference puts it there.
-        enable_user_data=False,
-        libraries=libraries,
-        omit=NOT_IN_NOW_PLAYING,
-    )
     for user_id, item_ids in wanted.items():
+        # **One context per playing user, not one for the batch**, because `policy` is that
+        # user's: the entries here are built through each session's own account, and a context
+        # hoisted out of this loop would answer the first watcher's permissions on everybody
+        # else's row. `MediaSources` is omitted from this shape, so nothing on the wire reads it
+        # today - which is exactly the kind of silence the field's own absence of a default
+        # exists to stop growing into a difference later.
+        context = BuildContext(
+            server_id=server_id,
+            policy=policy_of(people[user_id]),
+            width=Width.FULL,
+            # The measured shape, expressed as what it is missing (`NOT_IN_NOW_PLAYING`) rather
+            # than as a bespoke list of what it has - so a property added to the full body is in
+            # a session entry only if the reference puts it there.
+            enable_user_data=False,
+            libraries=libraries,
+            omit=NOT_IN_NOW_PLAYING,
+        )
         page = repository.run(
             ItemQuery(user=people[user_id], ids=tuple(sorted(item_ids)), count=False)
         )

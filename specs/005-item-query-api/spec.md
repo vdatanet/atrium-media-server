@@ -3,10 +3,10 @@ feature: 005-item-query-api
 title: Item query API
 status: Implemented
 created: 2026-08-26
-updated: 2026-09-01
+updated: 2026-09-02
 accepted: 2026-08-27
 implemented: 2026-08-28
-amended: 2026-08-29 by 008 T3 — §3.2 gains `Container`, `HasSubtitles` and `VideoType` per type and `IsHD` gated, four properties T1 measured and declined under Principle VI and that 007's owed list and 008 AC-28 have since given readers; and 2026-08-28 by 006 T2 - section 3.2 gains `ParentBackdropItemId`, the pair 005 measured and emitted only half of; by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated); and 2026-09-01 at 010's measurement gate, by the two decisions that gate left to this feature - section 3.7's `Similar` hedge becomes a measurement and two recorded divergences (behaviours section 3.23 and section 3.24), AC-12 gains the exact-`limit` clause and names both, and OQ-5's `Similar` half moves to Resolved with both decisions made rather than owed
+amended: 2026-08-29 by 008 T3 — §3.2 gains `Container`, `HasSubtitles` and `VideoType` per type and `IsHD` gated, four properties T1 measured and declined under Principle VI and that 007's owed list and 008 AC-28 have since given readers; and 2026-08-28 by 006 T2 - section 3.2 gains `ParentBackdropItemId`, the pair 005 measured and emitted only half of; by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated); and 2026-09-01 at 010's measurement gate, by the two decisions that gate left to this feature - section 3.7's `Similar` hedge becomes a measurement and two recorded divergences (behaviours section 3.23 and section 3.24), AC-12 gains the exact-`limit` clause and names both, and OQ-5's `Similar` half moves to Resolved with both decisions made rather than owed; and 2026-09-02 by the listing media-source policy fix — section 3.2's `MediaSources` is the one property in that table whose value depends on the reading account, by one playback permission per media kind, which closes the accepted gap behaviours section 5 carried and section 3.5's full body answers the same way
 depends_on: [002, 004]
 ---
 
@@ -142,6 +142,22 @@ registry holds.* `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08
 > `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`: three per-type, one gated,
 > and the two conditional ones (`HasSubtitles`, `IsHD`) emitted only where they are true, which is
 > the reference's own shape `[source: Emby.Server.Implementations/Dto/DtoService.cs:1107-1110,1316-1323 @ v10.11.11]`.
+
+> **Amended 2026-09-02: `MediaSources` is the one property in this table whose *value* depends on
+> who is reading.** Every other entry is a fact about the item; a media source also carries what
+> the reading account is permitted to have done to it. Three of its flags answer for the account
+> rather than for the file, by one permission per media kind: on a video item
+> `SupportsTranscoding` is that account's video-transcoding permission and `SupportsDirectStream`
+> is its remuxing permission; on an audio item `SupportsTranscoding` is its audio-transcoding
+> permission and `SupportsDirectStream` is untouched; `SupportsDirectPlay` is untouched on both.
+> The account is the **effective** one — the user the request names, or the caller when it names
+> nobody — and a source nothing has ever inspected is not exempt. It is the same rule a
+> negotiation carrying no client description follows, because the reference answers both from one
+> place, and it holds on **every** endpoint here that can emit the property
+> `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`,
+> [behaviours §2.21](../../docs/compatibility/behaviours.md#221-playback-policy-permissions-are-negotiation-inert).
+> Recorded as an accepted gap when the negotiation half was fixed on 2026-09-02 and closed the
+> same day; until then this feature answered every account the permitted values.
 
 > **`SeriesThumbImageTag` was not observed at all** — not bare, not asked for, not in a full body,
 > across twelve episodes. Whether it is gated, or simply absent because none of those episodes'

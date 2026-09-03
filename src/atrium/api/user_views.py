@@ -19,6 +19,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 
+from atrium.api.delivery import policy_of
 from atrium.api.deps import get_sessions, get_state, require_user
 from atrium.api.item_dto import BuildContext, Width, dto_values
 from atrium.api.item_models import UserViewDto, UserViewQueryResult
@@ -54,6 +55,7 @@ async def user_views(
         )
         context = BuildContext(
             server_id=state.server_id,
+            policy=policy_of(target),
             width=Width.USER_VIEW,
             libraries=library_context(LibraryRepository(opened)),
             aggregates=repository.aggregates_for([one.id for one in page.items], target),
