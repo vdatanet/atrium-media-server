@@ -3,8 +3,8 @@ feature: 012-negotiation-inputs
 title: Negotiation inputs
 status: Accepted
 created: 2026-08-29
-updated: 2026-08-30
-amended: 2026-08-30 by **011 T9** — unusually, an amendment made from another feature's task, and recorded as such because the measurement was taken there and the answer belongs here. OQ-4 answered the case-insensitive binding for the **protocol** value alone; measuring the same question for a delivery method's vocabulary showed the leniency is the *binder's* and not that enumeration's, because a direct-play entry typed `video` rather than `Video` binds and is answered a direct play. OQ-4 is therefore widened rather than corrected — the original answer was narrow, not wrong — and now names the four further enumerated values this body carries, each of them refused here with `400` where the reference answers `200`. Nothing else in this document moves, and no code changes with it: 011 T9 fixed only the vocabulary 011 added, and the general fix stays 012's to make
+updated: 2026-09-03
+amended: 2026-08-30 by **011 T9** — unusually, an amendment made from another feature's task, and recorded as such because the measurement was taken there and the answer belongs here. OQ-4 answered the case-insensitive binding for the **protocol** value alone; measuring the same question for a delivery method's vocabulary showed the leniency is the *binder's* and not that enumeration's, because a direct-play entry typed `video` rather than `Video` binds and is answered a direct play. OQ-4 is therefore widened rather than corrected — the original answer was narrow, not wrong — and now names the four further enumerated values this body carries, each of them refused here with `400` where the reference answers `200`. Nothing else in this document moves, and no code changes with it: 011 T9 fixed only the vocabulary 011 added, and the general fix stays 012's to make; and 2026-09-03 at the **plan gate** — AC-10's second clause is withdrawn, and what made it wrong landed nine days after this document was accepted. It said a listed source's capability flags *"stay `true`: they are not a negotiation and nothing decides them"*; the negotiation's policy gate was then measured to be two rules rather than one, and its profile-less half — one permission per media kind — is what a **listing** answers as well, on both servers, because the reference builds an item body's media sources and a profile-less negotiation's from one function `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`, `[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`. The criterion's prohibition — *nothing this feature does changes what a listing answers* — is untouched and is the whole of what it was written for; the clause naming the values goes to 008, which states them. Nothing else in this document moves, and no code changes with it: 008's own fix had already implemented the rule. The three `true`s §3.1 and §3.2 record are an **administrator's**, this gate having measured from one seat
 depends_on: [003, 008]
 ---
 
@@ -442,14 +442,32 @@ softened.
    opened, for any profile: the ladder, the reasons, the addresses and the flags of
    [008 §3.3](../008-playback-negotiation-and-delivery/spec.md#33-the-decision) are unchanged, and
    the existing conformance suite is the proof.
-10. Nothing in this feature changes what a **listing** answers for any item, opened or not. The
-    listing's answer for a never-opened source is already the reference's answer, and the flags it
-    carries there stay `true`: they are not a negotiation and nothing decides them.
+10. Nothing in this feature changes what a **listing** answers for any item, opened or not — no
+    value on that path moves, and nothing on it opens a file. The listing's answer for a
+    never-opened source is already the reference's answer; **which values its capability flags
+    carry is not this feature's to state**, and is stated by
+    [008 §3.3](../008-playback-negotiation-and-delivery/spec.md#33-the-decision) and
+    [behaviours §2.21](../../docs/compatibility/behaviours.md).
 
 **AC-10 is the criterion this gate added, and it is a prohibition rather than a requirement.** The
 draft's eighth criterion asked the listing and the negotiation to *agree*; measured, they do not
 agree on the reference either, and making them agree here would be a delta invented to satisfy a
 symmetry nobody has.
+
+**Its second clause was withdrawn on 2026-09-03, at the plan gate, because its subject moved after
+this document was accepted.** The clause read *"the flags it carries there stay `true`: they are
+not a negotiation and nothing decides them"*. Something does: on 2026-09-02 the negotiation's
+policy gate was measured to be **two** rules rather than one, and the profile-less half of it —
+one permission per media kind — is what a *listing* answers too, on both servers, because the
+reference builds an item body's media sources and a profile-less negotiation's from one function
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-02]`,
+`[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`. So the
+flags stay `true` for an unrestricted account and not for every account. The prohibition is
+untouched and is the whole point of the criterion; only the claim about which values those flags
+hold is gone, to the feature that owns it. **The three `true`s recorded in §3.1 and §3.2 are an
+administrator's**, which is the seat every measurement at this gate was taken from — the same
+observation [010's gate](../010-conformance-harness/spec.md) made about every measurement this
+repository had taken before it.
 
 ## 6. Conformance
 

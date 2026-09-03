@@ -364,8 +364,9 @@ ever inspected `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09
 `[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @ v10.11.11]`. So on
 both servers the flags are `true` for an unrestricted seat and not for every seat, and 008's fix
 already implements it (`api/item_dto.py`, `media/decision.py:unnegotiated_transcoding`). What AC-10
-is *for* is untouched — this feature must not change what a listing answers — and its wording is
-one clause too strong. **D-5.**
+is *for* is untouched — this feature must not change what a listing answers — and its wording was
+one clause too strong. **D-5, taken on 2026-09-03: the accepted spec is amended**, in this same
+change, and AC-10 now prohibits without also claiming which values the flags hold.
 
 ### 6.3 What an un-inspectable source answers
 
@@ -626,7 +627,7 @@ the empty shape against a file that answers a full annotation.
 | AC-7 any case answers the same address, echoing the enumeration's spelling | table over `hls`/`Hls`/`HLS`/`hLs` and the three `http` spellings: one address shape per pair, `TranscodingSubProtocol` always the member's value | conformance |
 | AC-8 by class, not by rule | the four classes of §6.5, including `2` → `TranscodingSubProtocol: 2`, and `dash`/`" "`/`true` → `400` keyed on the JSON path | conformance + `tests/unit/test_compat_errors.py` |
 | AC-9 nothing else in a negotiation moves | the existing 008 and 011 suites, unchanged and passing | whole suite |
-| AC-10 no listing changes | `unreadable.mkv` on `/Items`, `/Items/{itemId}` and `/Items/Latest` before and **after a negotiation of a different item**, byte for byte — and the flags asserted as the account's own rather than as `true`, on two seats, which is what 008's policy-gate fix made them (D-5) | conformance |
+| AC-10 no listing changes | `unreadable.mkv` on `/Items`, `/Items/{itemId}` and `/Items/Latest` before and **after a negotiation of a different item**, byte for byte — and the flags asserted as the account's own rather than as `true`, on two seats, which is what 008's policy-gate fix made them and what the amended AC-10 no longer contradicts (D-5) | conformance |
 
 **AC-5 is the criterion most likely to be proved by a test that proves less than its name**, which
 is what 008 T14, 009 T14, 010 T15 and 011 T12 each found in their closing task. Asked against
@@ -705,8 +706,9 @@ handing `media/` a repository, which makes the one pure module in the project ta
 
 ## 11. The decisions this plan reserves, and the one already taken
 
-Reserved rather than taken, because each changes something outside this feature's own files. **D-2
-was taken on 2026-09-03**, at this plan's own drafting, and is recorded below with the rest.
+Reserved rather than taken, because each changes something outside this feature's own files.
+**Two were taken on 2026-09-03** — D-2 at this plan's drafting and D-5 at its gate — and both are
+recorded below with the rest.
 
 ### D-1 — the healed item's `ETag`
 
@@ -785,6 +787,13 @@ criterion comes to mean whatever passes.
 [010 took at D-6 and D-7](../010-conformance-harness/plan.md), where an accepted criterion was
 amended rather than reinterpreted.
 
+**Taken on 2026-09-03: (a), and taken here rather than at the test.** The spec moves in this same
+change — earlier than the recommendation asked, because a criterion nobody can write a test for is
+a criterion the task list would have to work around, and the task list is the next artefact. AC-10
+keeps its prohibition and loses the clause naming the values; the front matter records why, and
+that the three `true`s §3.1 and §3.2 report are an administrator's. **No code changes with it**:
+008's policy-gate fix had already implemented the rule the clause denied.
+
 ## 12. What moves with the code
 
 Documentation moves in the commit that changes the behaviour, not after it (Principle III).
@@ -799,5 +808,5 @@ Documentation moves in the commit that changes the behaviour, not after it (Prin
 | [surface.yaml](../../docs/compatibility/surface.yaml) | **Nothing.** No route enters or leaves v1 (spec §7.2) | — |
 | [request-cases.yaml](../../docs/compatibility/request-cases.yaml), [named-comparisons.yaml](../../docs/compatibility/named-comparisons.yaml) | Four cases, two comparisons (§8) | The task that lands the L3 half |
 | [008 plan §7](../008-playback-negotiation-and-delivery/plan.md), the *"never inline"* failure row | The same exception as §6.1's | The same |
-| [012 §5 AC-10](spec.md#5-acceptance-criteria) | Amended if D-5 goes that way, in the change that lands its test | The task that lands the AC-10 test |
+| [012 §5 AC-10](spec.md#5-acceptance-criteria) | **Amended, D-5, in this same change**: the prohibition stands, the clause naming the flags' values goes to 008 | Done |
 | [specs/README](../README.md) status table, [roadmap](../../docs/roadmap.md) | 012's plan row, and then its task row | This plan's acceptance, and the list's |

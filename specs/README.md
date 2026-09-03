@@ -385,12 +385,13 @@ properties where the reference answers `400`. **One sentence in an implemented p
 invariant this feature retires**, and it is written three times: 008 plan §6.1's *"a stale row
 triggers re-inspection at the next scan, not at request time"*, that plan's §7 failure row, and
 `MediaProbeRepository`'s own docstring — the only deviation the plan declares. And **AC-10's second
-clause has been outrun by its own subject**: it says a listed source's flags *"stay `true` …
+clause had been outrun by its own subject**: it said a listed source's flags *"stay `true` …
 nothing decides them"*, and since 008's policy-gate fix of 2026-09-02 the account's permissions
-decide two of the three, on both servers, measured — so the plan reserves the amendment rather than
-letting a test assert whatever passes.
+decide two of the three, on both servers, measured — **amended at the gate on 2026-09-03** (D-5),
+the prohibition kept and the clause naming the values handed to the feature that states them, with
+no code changing beside it.
 
-It reserves **four decisions** and records a fifth as taken. **D-2 was taken on 2026-09-03 — out of
+It reserves **three decisions** and records two as taken. **D-2 was taken on 2026-09-03 — out of
 012**: after a real scan, `items.runtime_ticks` is `NULL` on every file-backed item, measured in
 this repository that day, because the metadata merge refuses a runtime for exactly those types on
 the grounds that it comes from probing the file and nothing writes it from a probe. Every film,
