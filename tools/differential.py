@@ -76,7 +76,7 @@ import subprocess
 import sys
 import time
 import urllib.parse
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -1411,6 +1411,14 @@ class RunReport:
     endpoints: Tuple[Endpoint, ...] = ()
     provenance: Tuple[Tuple[str, str], ...] = ()
     unused_entries: Tuple[Tuple[str, str, str], ...] = ()
+    #: What went wrong with the RUN rather than with a comparison: a sweep that could not finish,
+    #: a seat the teardown could not delete, a reference that stopped answering. **Added on
+    #: 2026-09-03, after the first full sweep produced no report at all.** The sweep had completed
+    #: and `run()` had returned, and then the roster teardown raised on a `DELETE /Users` the dead
+    #: reference could not answer - and because `main()` writes the report only after `_execute`
+    #: returns, 154 comparisons went in the bin to report one failed delete. A run that dies still
+    #: has findings, so the failure is carried here and the report is written anyway.
+    incidents: Tuple[str, ...] = ()
 
     # -- what the summary counts -------------------------------------------------------------
 
@@ -1508,12 +1516,16 @@ class RunReport:
         untriaged difference too - the sweep's own class, arriving through a runner rather than
         through `compare`. Without it the twenty could all run, every one of them contradict its
         own citation, and the report say `20 run, 0 outstanding` (spec section 3.4's *Fix* row).
+
+        **The fifth is 2026-09-03's**: a run with an incident is a run that did not finish, and a
+        report written out of the wreckage must not be able to say it is clean.
         """
         return (
             not self.differences
             and not self.named_outstanding
             and not self.unasked
             and not self.named_undocumented
+            and not self.incidents
         )
 
 
@@ -1612,6 +1624,19 @@ def compare_case(
             case=case.id,
             identity=seat.role,
             unreachable=str(failure),
+        )
+    except Exception as failure:
+        # **Anything else is still one case and not the run** (2026-09-03). The two declared
+        # classes above are the ones a request is expected to fail with; a socket module raising
+        # its own, or a decoder tripping over a body a dying server half-wrote, used to take the
+        # loop out and every case after it with no row to show for any of them. One unreached
+        # comparison is a row here; the run carries on and the report says so.
+        return Comparison(
+            endpoint=endpoint.key,
+            level=endpoint.level,
+            case=case.id,
+            identity=seat.role,
+            unreachable=f"{type(failure).__name__}: {failure}",
         )
 
     # The rules come from `_allowlist.resolve`, which is the one reader of that file. `in_force`
@@ -3322,11 +3347,15 @@ def render(report: RunReport) -> str:
         f"  {'Named comparisons':<20}({len(report.named_run)} of the section 3.10 list run, "
         f"{len(report.named_outstanding)} outstanding)"
     )
+    if report.incidents:
+        lines.append("")
+        lines.append(f"  {'INCIDENTS':<24}{len(report.incidents)} - THIS RUN DID NOT FINISH")
     lines.append("")
     lines.append("  " + ("THIS RUN IS CLEAN." if report.is_clean() else "THIS RUN IS NOT CLEAN."))
     lines.append("```")
     lines.append("")
 
+    lines.extend(_incidents_section(report))
     lines.extend(_conclusions(report))
     lines.extend(_coverage_section(report))
     lines.extend(_unasked_section(report))
@@ -3335,6 +3364,28 @@ def render(report: RunReport) -> str:
     lines.extend(_known_section(report))
     lines.extend(_entries_section(report))
     return "\n".join(lines) + "\n"
+
+
+def _incidents_section(report: RunReport) -> List[str]:
+    """What went wrong with the run itself, at the top, before any table of zeros.
+
+    A report that exists because the run was salvaged has to say so in its first paragraph. The
+    numbers below it are real - they were measured before whatever this section names - and every
+    comparison the incident cost is in *Cases this run did not ask* with its own reason.
+    """
+    if not report.incidents:
+        return []
+    lines = ["## This run did not finish", ""]
+    lines.append(
+        "**The report below is what the run had measured when it stopped, and not a complete "
+        "sweep.** It is written rather than discarded because a run that dies still found what "
+        "it found; every case it never reached is listed as not asked, with the reason."
+    )
+    lines.append("")
+    for incident in report.incidents:
+        lines.append(f"- {incident}")
+    lines.append("")
+    return lines
 
 
 def _conclusions(report: RunReport) -> List[str]:
@@ -3356,6 +3407,12 @@ def _conclusions(report: RunReport) -> List[str]:
     else:
         lines.append("**This run is not clean, and these are the reasons.**")
         lines.append("")
+    if report.incidents:
+        lines.append(
+            f"- {len(report.incidents)} **incidents**: the run did not finish. Nothing below is "
+            "evidence about a case the run never reached, and the coverage table is a table of "
+            "what this run managed rather than of what the register declares."
+        )
     if report.differences:
         lines.append(
             f"- {len(report.differences)} differences are untriaged. Each belongs to the feature "
@@ -3813,19 +3870,31 @@ def run(
     # Filled by the sweep as it goes: an entry that suppressed a finding on any comparison is one
     # this run can say excused something, and the rest are reported (plan section 7).
     used: set = set()
-    comparisons = sweep(endpoints, cases, entries, seats, issuers, inputs, used)
-    ran, outstanding = named_outcomes(
-        named,
-        inputs,
-        Instances(
-            atrium=atrium,
-            reference=reference,
-            inputs=inputs,
-            swept=comparisons,
-            fixture_root=fixture_root,
-        ),
-        seats,
-    )
+    incidents: List[str] = []
+    try:
+        comparisons = sweep(endpoints, cases, entries, seats, issuers, inputs, used)
+    except Exception as failure:
+        # `compare_case` catches per case, so reaching here is the loop's own scaffolding failing
+        # and not a request. Every comparison the run declared becomes an unreached row with this
+        # reason, which is the difference between a report that is short and a report that lies.
+        incidents.append(f"the sweep did not finish: {type(failure).__name__}: {failure}")
+        comparisons = unreached(endpoints, cases, seats, f"the sweep did not finish: {failure}")
+    try:
+        ran, outstanding = named_outcomes(
+            named,
+            inputs,
+            Instances(
+                atrium=atrium,
+                reference=reference,
+                inputs=inputs,
+                swept=comparisons,
+                fixture_root=fixture_root,
+            ),
+            seats,
+        )
+    except Exception as failure:
+        incidents.append(f"the named comparisons did not run: {type(failure).__name__}: {failure}")
+        ran, outstanding = (), tuple((row.id, str(failure)) for row in named)
     return RunReport(
         identities=tuple(seat.role for seat in seats),
         cases=len(cases),
@@ -3835,6 +3904,36 @@ def run(
         endpoints=tuple(endpoints),
         provenance=tuple(provenance),
         unused_entries=unused_entries(entries, used),
+        incidents=tuple(incidents),
+    )
+
+
+def unreached(
+    endpoints: Sequence[Endpoint],
+    cases: Sequence[Any],
+    seats: Sequence[Seat],
+    why: str,
+) -> Tuple[Comparison, ...]:
+    """Every comparison this run declared, as a row saying it did not happen and why.
+
+    The salvage path's version of the sweep: same three loops, same order, no request. It exists
+    so that a run which died still reports the shape of what it was going to ask, rather than an
+    empty table a reader would mistake for a small surface.
+    """
+    roster_names = tuple(seat.role for seat in seats)
+    cases_for = registers().cases_for
+    return tuple(
+        Comparison(
+            endpoint=endpoint.key,
+            level=endpoint.level,
+            case=case.id,
+            identity=seat.role,
+            unreachable=why,
+        )
+        for seat in seats
+        for endpoint in endpoints
+        for case in cases_for(cases, endpoint.key)
+        if seat.role in case.identities_for(roster_names)
     )
 
 
@@ -3850,14 +3949,26 @@ def unused_entries(entries: Sequence[Any], used: Sequence[Any]) -> Tuple[Tuple[s
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
+    # **What the run had measured when it stopped, if it stopped after measuring anything.**
+    # Filled the moment `run()` returns, so that everything after it - the roster teardown, the
+    # instance teardown - can fail without taking the findings with it. The first full sweep
+    # (2026-09-03) completed 64 comparisons, met a reference that had died, and wrote no report at
+    # all, because a failed `DELETE /Users` came out of a context manager `main()` was standing
+    # outside of. A report is the deliverable (spec section 3.4); losing it to a teardown is the
+    # one failure this program must not have.
+    salvage: List[Tuple[RunReport, Path]] = []
     try:
-        report, destination = _execute(args)
+        report, destination = _execute(args, salvage)
     except (GuardError, SeatError, WireError, UnreachableError) as failure:
         print(f"differential.py: {failure}", file=sys.stderr)
-        return 2
+        if not salvage:
+            return 2
+        report, destination = _salvaged(salvage, failure)
     except Exception as failure:  # a harness that dies silently is worse than one that says so
         print(f"differential.py: the run could not start: {failure}", file=sys.stderr)
-        return 2
+        if not salvage:
+            return 2
+        report, destination = _salvaged(salvage, failure)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(render(report), encoding="utf-8")
     print(f"differential.py: report written to {destination}")
@@ -3879,6 +3990,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     return 0 if report.is_clean() else 1
 
 
+def _salvaged(
+    salvage: Sequence[Tuple[RunReport, Path]], failure: BaseException
+) -> Tuple[RunReport, Path]:
+    """The report the run had produced, with what killed the run recorded on it.
+
+    Exit code 1 and not 2: a run that measured 64 comparisons and then lost its reference did
+    *not* fail to start, and calling it that would file a report full of findings under the code
+    that means there is nothing to read. `incidents` is what keeps it from ever reading clean.
+    """
+    report, destination = salvage[-1]
+    return (
+        replace(
+            report,
+            incidents=(
+                *report.incidents,
+                f"the run stopped after the sweep: {type(failure).__name__}: {failure}",
+            ),
+        ),
+        destination,
+    )
+
+
 def reference_credentials(instance: FixtureInstance) -> Tuple[str, str, str]:
     """Whose account this run holds on the reference: the environment's, or the instance's own.
 
@@ -3896,15 +4029,26 @@ def reference_credentials(instance: FixtureInstance) -> Tuple[str, str, str]:
     )
 
 
-def _execute(args: argparse.Namespace) -> Tuple[RunReport, Path]:
-    """Everything a real run does, from the environment to the seated servers."""
+def _execute(
+    args: argparse.Namespace, salvage: Optional[List[Tuple[RunReport, Path]]] = None
+) -> Tuple[RunReport, Path]:
+    """Everything a real run does, from the environment to the seated servers.
+
+    `salvage` is the caller's out-parameter and not a return value, because the failures it exists
+    for happen on the way *out* of this function - a roster teardown, an instance teardown - where
+    a return value no longer has anywhere to go.
+    """
     probe = _sibling("_probe")
     probe.load_env_file()
     with FixtureInstance(args) as instance:
-        return _run_against(args, instance)
+        return _run_against(args, instance, salvage)
 
 
-def _run_against(args: argparse.Namespace, instance: FixtureInstance) -> Tuple[RunReport, Path]:
+def _run_against(
+    args: argparse.Namespace,
+    instance: FixtureInstance,
+    salvage: Optional[List[Tuple[RunReport, Path]]] = None,
+) -> Tuple[RunReport, Path]:
     """One run, inside the instance\'s own context so the instance outlives everything it holds.
 
     **The instance is stood up before the reference is authenticated, not around the sweep**, and
@@ -4030,44 +4174,69 @@ def _run_against(args: argparse.Namespace, instance: FixtureInstance) -> Tuple[R
         ("reference image digest", instance.digest or _NO_DIGEST),
         ("surface", str(args.surface)),
     ]
-    with rosters["atrium"] as ours, rosters["reference"] as theirs:
-        seats = [
-            Seat(
-                role=role.value,
-                atrium=ours[role],
-                reference=theirs[role],
-                atrium_credentials=(
-                    credentials["atrium"]
-                    if role is Role.ADMINISTRATOR
-                    else ours.credentials_for(role)
-                ),
-                reference_credentials=(
-                    credentials["reference"]
-                    if role is Role.ADMINISTRATOR
-                    else theirs.credentials_for(role)
-                ),
-            )
-            for role in roles
-        ]
-        report = run(
-            atrium,
-            reference,
-            endpoints,
-            cases,
-            entries,
-            named,
-            seats,
-            inputs,
-            provenance,
-            fixture_root=Path(args.fixture_root) if args.fixture_root else None,
-        )
-
     today = datetime.now(timezone.utc).date().isoformat()
     default = (
         DEFAULT_REPORT_DIRECTORY / f"differential-{today}-{repository_sha(REPOSITORY_ROOT)}.md"
     )
-    destination = args.report or default
-    return report, Path(destination)
+    destination = Path(args.report or default)
+
+    # **The report is handed to the caller the instant it exists, and again at the end.** Where
+    # the two teardowns below can raise - and the roster's does, by design, on a seat it could not
+    # delete - a `return` has nowhere to go, so the findings leave through `salvage` first.
+    report: Optional[RunReport] = None
+    try:
+        with rosters["atrium"] as ours, rosters["reference"] as theirs:
+            seats = [
+                Seat(
+                    role=role.value,
+                    atrium=ours[role],
+                    reference=theirs[role],
+                    atrium_credentials=(
+                        credentials["atrium"]
+                        if role is Role.ADMINISTRATOR
+                        else ours.credentials_for(role)
+                    ),
+                    reference_credentials=(
+                        credentials["reference"]
+                        if role is Role.ADMINISTRATOR
+                        else theirs.credentials_for(role)
+                    ),
+                )
+                for role in roles
+            ]
+            report = run(
+                atrium,
+                reference,
+                endpoints,
+                cases,
+                entries,
+                named,
+                seats,
+                inputs,
+                provenance,
+                fixture_root=Path(args.fixture_root) if args.fixture_root else None,
+            )
+            if salvage is not None:
+                salvage.append((report, destination))
+    except (SeatError, WireError) as failure:
+        # A teardown that could not finish is an incident and not the end of the report. It stays
+        # loud - it is printed, it is in the report, and `is_clean()` is false for it - because
+        # the seats it names are still on the server and the next run's pre-flight will refuse.
+        if report is None:
+            # Nothing was measured, so there is nothing to salvage: a run that could not seat its
+            # identities is the "could not start" this program has always exited 2 for.
+            raise
+        print(f"differential.py: {failure}", file=sys.stderr)
+        report = replace(
+            report, incidents=(*report.incidents, f"the teardown did not finish: {failure}")
+        )
+
+    if salvage is not None:
+        if salvage:
+            salvage[-1] = (report, destination)
+        else:
+            salvage.append((report, destination))
+    return report, destination
 
 
 if __name__ == "__main__":

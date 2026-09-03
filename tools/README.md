@@ -383,6 +383,31 @@ into `docs/compatibility/reference-fixture-reading.json` and
 `tests/library/test_reference_reading.py` compares Atrium's own scan of the same tree against it, in
 the default job, with no Jellyfin anywhere.
 
+**What arranging it actually costs, measured on the first complete sweep (2026-09-03), because
+"yours to arrange" was true and unhelpful.** Four things, all through `atrium.*` in a throwaway
+script and none of them through a route:
+
+1. **The six libraries of `tests/fixtures/reference_tree.py`, over the same tree, by the same
+   names.** `library.config.create` then `library.scan.scan`, one per library. Give them different
+   names and the two `/UserViews` no longer line up.
+2. **An administrator**, through `UserRepository.add` with a hash from `users.passwords.build`.
+3. **A restricted seat, handed in under `ATRIUM_RESTRICTED_*`** — Atrium cannot make one, which is
+   the paragraph above. It must be narrowed to **the same library the reference narrows its own
+   created seat to**, which is `movies_library_id`'s choice: the first `movies` view *with
+   something in it*, so `Films` and not `Movies` on this fixture. Narrowed to the other one, 21 of
+   the restricted seat's cases cannot resolve an anchor and are reported not asked — correctly, and
+   about a seat nobody meant to build.
+4. **A policy and a configuration on both accounts, seeded from the reference's own documents.**
+   This is the one that is not tidiness. Atrium has **no route that gives an account a policy** —
+   `POST /Users/{userId}/Policy` is not in the surface — so an account made by direct database
+   access answers **11 of the reference's 42 policy properties and an empty `Configuration`**, and
+   every `GET /Users/Me` in the report then carries 15 `MISSING_KEY` findings about *how the
+   account was made* rather than about this server. Seed both through `atrium.users.policy.split`,
+   which is the reader that route would use, and the report measures the server again.
+
+None of the four is a defect and none is in scope for 010 (spec §2); they are what the missing
+management surface costs a run, written down so the next one does not rediscover them.
+
 **`--ignored-parameters` writes the second report.** Pointed at Atrium's data directory, or at the
 `ignored-parameters.json` in it, the run also writes
 `reference/ignored-parameters-<date>.md` — [010 §3.6](../specs/010-conformance-harness/spec.md)'s
@@ -392,10 +417,22 @@ answered, which is the same sentence as *"it is a file and not an endpoint"*. An
 would be one Jellyfin does not have, and an extension a client can discover is still a delta
 (Principle I).
 
+**A run that dies still writes its report.** The report is the deliverable, so losing one already
+made is the failure this program must not have — and on the first complete sweep, 2026-09-03, it
+had it: 64 comparisons were measured, the reference then died, and the roster teardown raised on a
+`DELETE /Users` it could not answer, out of a context manager `main()` was standing outside of.
+Nothing was written. A run now hands its findings out the moment they exist, and a failure after
+that point becomes an **incident** on the report rather than the end of it: the document says
+`THIS RUN DID NOT FINISH` before any table, every case the run never reached is listed with its
+reason, and `is_clean()` is false for it. A failure *before* anything was measured — a seat that
+could not be made, a server that could not be reached — is still `2` and still writes nothing,
+because a report of nothing is the same overstatement pointing the other way.
+
 **Exit codes:** `0` the run is clean, `1` the run is **not** clean — an untriaged difference, a
-declared case it could not issue, a named comparison it did not run, or a named comparison that
-ran and measured something its own citation does not predict — and `2` it could not start. `1` is
-the ordinary answer: outstanding is not green, and the report says which of the four it was.
+declared case it could not issue, a named comparison it did not run, a named comparison that
+ran and measured something its own citation does not predict, or an incident — and `2` it could
+not start. `1` is the ordinary answer: outstanding is not green, and the report says which of the
+five it was.
 
 Four supporting modules sit beside it, underscore-prefixed so CI does not try to start them:
 `_differential.py` (the pure comparison engine), `_allowlist.py` (the allowlist, the named

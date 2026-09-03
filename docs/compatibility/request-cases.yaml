@@ -326,6 +326,32 @@ cases:
     needs: []
     what_it_is_for: "The fourth of the five routes where a body with no Content-Type is 400 here and 415 there; 009 T13 measured the rename and named 010 as the feature that asks the other four"
 
+  # A SECOND NEGOTIATION, ON THE SUBTITLED FILM, AND IT IS THE ANCHOR FIX OF 2026-09-03.
+  #
+  # Three of the 011 cases below anchor `itemId` on `the-subtitled-film@0` and anchored
+  # `mediaSourceId` on `no-body` above - whose OWN anchor is `movies-by-sort-name@0`, a different
+  # film. A response anchor re-issues the case it names exactly as that case is declared, so the
+  # pair resolved to a subtitle stream of one item addressed by the media source id of another,
+  # and the first such request KILLED THE REFERENCE: a fresh idle instance of the pinned image
+  # exited 132 (`SIGILL`) on the first one, 6 of 6, and answered `200` and survived 4 of 4 when
+  # the two halves named the same film [010 sweep, Jellyfin 10.11.11, 2026-09-03]. The first full
+  # sweep lost 88 of 154 comparisons to it.
+  #
+  # The fix is that a case anchoring two parameters on one item must interrogate one item, so the
+  # negotiation the subtitle cases read is the negotiation OF THEIR OWN FILM. It costs one case
+  # rather than a fourth anchor kind, and it is also a comparison worth having: a film with an
+  # embedded `ass` track and a subtitle file beside it negotiates a media source with streams the
+  # filler file has none of.
+  - id: no-body-on-the-subtitled-film
+    endpoint: "POST /Items/{itemId}/PlaybackInfo"
+    query: ""
+    body: none
+    content_type: none
+    anchors: ["itemId=listing:GET /Items#the-subtitled-film@0"]
+    identities: [administrator, restricted]
+    needs: [fixture]
+    what_it_is_for: "The same negotiation as `no-body`, on the film the three subtitle cases interrogate, and the media source id those cases now take. Anchoring a {mediaSourceId} on a negotiation of a DIFFERENT item is what made the reference exit 132 on the first request of the first full sweep, 6 of 6"
+
   # ------------------------------------------------------------------------------------------
   # GET /Audio/{itemId}/stream - 008, L3. Both clients hand-build this URL, and neither sends a
   # token on it: the four stream routes require none, which 008 T6 measured after the task list
@@ -918,7 +944,7 @@ cases:
     anchors: ["itemId=listing:GET /Items#the-planted-film@0", "segmentId=literal:0", "container=literal:ts"]
     identities: [administrator, restricted]
     needs: [fixture]
-    what_it_is_for: "The one route whose remaining path parameter is carried by a body that is NOT JSON: playlistId comes out of the variant playlist above, which is m3u8, and a response anchor addresses a JSON Pointer. T8 did not write that reader and T11 did not either - filling it needs a fourth anchor kind that addresses a text body, which is a mechanism and not a fixture. THIS IS THE ONE ANCHOR OF THIS FILE STILL UNFILLED, and it is recorded here rather than dressed up: the itemId anchor now names a film a prober can open, so the case is one reader away from running"
+    what_it_is_for: "The one route whose remaining path parameter is carried by a body that is NOT JSON: playlistId comes out of the variant playlist above, which is m3u8, and a response anchor addresses a JSON Pointer. T8 did not write that reader and T11 did not either - filling it needs a fourth anchor kind that addresses a text body, which is a mechanism and not a fixture. THIS IS THE ONE ANCHOR OF THIS FILE STILL UNFILLED, and it is recorded here rather than dressed up: the itemId anchor now names a film a prober can open, so the case is one reader away from running. Re-examined on 2026-09-03 beside the {mediaSourceId} fix above and it is NOT the same class: that one was an anchor pointing at the wrong declared case, which is an error in this file; this one is a parameter no declared case can carry, because no anchor kind reads an m3u8 body. It stays outstanding-with-reason on both seats, which is 2 of the run's not-asked comparisons"
 
   - id: stop-one-session
     endpoint: "DELETE /Videos/ActiveEncodings"
@@ -937,17 +963,17 @@ cases:
     query: "segmentLength=10"
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#the-subtitled-film@0", "mediaSourceId=response:POST /Items/{itemId}/PlaybackInfo#no-body@/MediaSources/0/Id", "index=literal:0"]
+    anchors: ["itemId=listing:GET /Items#the-subtitled-film@0", "mediaSourceId=response:POST /Items/{itemId}/PlaybackInfo#no-body-on-the-subtitled-film@/MediaSources/0/Id", "index=literal:0"]
     identities: [administrator, restricted]
     needs: [fixture]
-    what_it_is_for: "segmentLength is required and has no default. index names a subtitle stream of a film the fixture owes (spec 3.1), so the case waits on T11 for a film that HAS one; the decimal point in its window durations is a named comparison because a parser normalises it away"
+    what_it_is_for: "segmentLength is required and has no default. index names a subtitle stream of a film the fixture owes (spec 3.1), so the case waits on T11 for a film that HAS one; the decimal point in its window durations is a named comparison because a parser normalises it away. Both anchors name ONE film: the pair that did not is what killed the reference on the first full sweep"
 
   - id: stream-vtt
     endpoint: "GET /Videos/{routeItemId}/{routeMediaSourceId}/Subtitles/{routeIndex}/Stream.{routeFormat}"
     query: ""
     body: none
     content_type: none
-    anchors: ["routeItemId=listing:GET /Items#the-subtitled-film@0", "routeMediaSourceId=response:POST /Items/{itemId}/PlaybackInfo#no-body@/MediaSources/0/Id", "routeIndex=literal:0", "routeFormat=literal:vtt"]
+    anchors: ["routeItemId=listing:GET /Items#the-subtitled-film@0", "routeMediaSourceId=response:POST /Items/{itemId}/PlaybackInfo#no-body-on-the-subtitled-film@/MediaSources/0/Id", "routeIndex=literal:0", "routeFormat=literal:vtt"]
     identities: [administrator, restricted]
     needs: [fixture]
     what_it_is_for: "The fetch the video client builds, in the lower-case stream.vtt spelling it uses inside a playlist. routeFormat is a format and routeIndex a stream number, so both are literals; the fixture is the film with a subtitle file beside it, without which index 0 is a refusal on both servers"
@@ -957,7 +983,7 @@ cases:
     query: ""
     body: none
     content_type: none
-    anchors: ["routeItemId=listing:GET /Items#the-subtitled-film@0", "routeMediaSourceId=response:POST /Items/{itemId}/PlaybackInfo#no-body@/MediaSources/0/Id", "routeIndex=literal:0", "routeStartPositionTicks=literal:0", "routeFormat=literal:vtt"]
+    anchors: ["routeItemId=listing:GET /Items#the-subtitled-film@0", "routeMediaSourceId=response:POST /Items/{itemId}/PlaybackInfo#no-body-on-the-subtitled-film@/MediaSources/0/Id", "routeIndex=literal:0", "routeStartPositionTicks=literal:0", "routeFormat=literal:vtt"]
     identities: [administrator, restricted]
     needs: [fixture]
     what_it_is_for: "The same fetch from a start position, which is the route a subtitle playlist's window entries address"
