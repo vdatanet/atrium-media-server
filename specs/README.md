@@ -123,7 +123,7 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | **Implemented** | **Implemented** | **Implemented** |
 | [010](010-conformance-harness/) | Conformance harness | **Implemented** | **Implemented** | **Implemented** — fifteen of fifteen tasks, [D-7 taken 2026-09-02](010-conformance-harness/tasks.md) |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
-| [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
+| [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | Draft | — |
 
 **001 through 011 are implemented** — 008 on 2026-08-29 across fourteen tasks,
 011 on 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, and 010 on 2026-09-02 across
@@ -364,6 +364,39 @@ ordinals bind, an empty string takes the default, and only a word that binds to 
 And the initialisation-segment restart is guarded by a file check the same session has already
 satisfied, so it costs nothing in either order a client uses — decided *replicate* under behaviours
 §3.0, at §3.14.
+
+**Its plan was drafted on 2026-09-03** and is what the next gate reads. It is two changes that do
+not touch each other — a new `library/inspection.py` the negotiation calls before it looks at the
+profile, and the enum binder every request model in the project inherits — and **no migration at
+all**: what this feature changes is *when* a probe row is written, not what one holds. Writing it
+against the files rather than against the documents moved five things. **The reference's trigger is
+not "this source has no stored inspection"**: it is a property of source zero and of the item's own
+kind, so an inspected file that holds no stream of its item's kind is re-probed on *every*
+negotiation there and a second part with no inspection is never probed at all — two cases the
+gate's fixture cannot tell apart from the naive reading. **The audio `400` is the platform's
+generic refusal**, `ArgumentException` through the exception middleware, whose body outside a
+development environment is the 25 bytes `compat/errors.py` has shipped since 002 — and whose
+condition is the missing *audio stream*, not the unreadable file. **OQ-4's "one change rather than
+five" is right about three classes of four**: case-insensitive names and ordinals are the global
+converter's and reach every enumerated value in the body, but the empty string and the null take a
+default only for an enumeration that declares one, which of the six this body binds is
+`MediaStreamProtocol` alone — a binder that generalised all four would answer `200` on five
+properties where the reference answers `400`. **One sentence in an implemented plan is the
+invariant this feature retires**, and it is written three times: 008 plan §6.1's *"a stale row
+triggers re-inspection at the next scan, not at request time"*, that plan's §7 failure row, and
+`MediaProbeRepository`'s own docstring — the only deviation the plan declares. And **AC-10's second
+clause has been outrun by its own subject**: it says a listed source's flags *"stay `true` …
+nothing decides them"*, and since 008's policy-gate fix of 2026-09-02 the account's permissions
+decide two of the three, on both servers, measured — so the plan reserves the amendment rather than
+letting a test assert whatever passes.
+
+It reserves **four decisions** and records a fifth as taken. **D-2 was taken on 2026-09-03 — out of
+012**: after a real scan, `items.runtime_ticks` is `NULL` on every file-backed item, measured in
+this repository that day, because the metadata merge refuses a runtime for exactly those types on
+the grounds that it comes from probing the file and nothing writes it from a probe. Every film,
+episode and track a real Atrium serves answers `RunTimeTicks: null` at item level while its media
+source carries the value. It is a scan-time defect that predates this feature, so it is specified
+and fixed in the feature that owns it.
 
 **007's thirteen tasks found something in seven of them, and two were features that did not
 exist.** The sharpest is T11's: **the container `PlayedPercentage` had never been implemented.**
