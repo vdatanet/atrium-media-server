@@ -790,12 +790,12 @@ times would put one question about the reference's binder in five places, which 
 **Put the resolution in `media/`.** It writes, and `media/` imports no `db`. The alternative is
 handing `media/` a repository, which makes the one pure module in the project take a session.
 
-## 11. The five decisions this plan reserved, taken on 2026-09-03 — and a sixth T1 opened
+## 11. The five decisions this plan reserved and the sixth T1 opened, all taken
 
 Each was reserved rather than taken because each changes something outside this feature's own
 files: two 003-owned tables, a shared timeout, the order the measurements run in, and an accepted
 criterion. **All five were taken on 2026-09-03** — D-2 at this plan's drafting, the other four at
-its gate — and every recommendation was accepted. Two of them moved something while being taken,
+its gate — and **D-6 on 2026-09-04**, every recommendation accepted. Two of them moved something while being taken,
 which is recorded here rather than tidied away: D-1's price is a repository method and not a line
 (§4), and D-4's recommendation left one of the six measurements unassigned.
 
@@ -925,6 +925,15 @@ of the raw body cheaply, which T8 is the right place to find out. What decides i
 "nothing can act on it" survives contact with a client author, which is the same test
 [behaviours §3.0](../../docs/compatibility/behaviours.md#30-how-the-decision-is-made) applies to
 every reproduced defect.
+
+**Taken on 2026-09-04: the recommendation, both halves.** T8 reproduces the **key** and the
+**path** — those are what a client's error display shows and what a bug report quotes — and tries
+the offset against `exc.body`; if it comes out of the raw body cleanly it ships, and if it does
+not, the integer is a recorded divergence under
+[behaviours §3](../../docs/compatibility/behaviours.md) with the argument that no client can branch
+on a number inside a sentence it did not parse. **The order matters and is part of the decision**:
+T8 attempts (a) first and falls back, rather than writing (b) and calling the attempt optional —
+a fallback nobody tries is a divergence nobody measured.
 
 ## 12. What moves with the code
 
