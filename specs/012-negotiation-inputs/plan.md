@@ -182,11 +182,13 @@ should build. So the write is a new, narrowly-scoped method that updates two col
 and can reach nothing else, in the class whose own docstring exists to say that changing what an
 item *is* and changing whether it is *there* are different powers.
 
-**And it is conditional on one measurement**, which is where D-1 met D-4: §6.8's item 6 — whether
-the reference's own refresh moves its change signal — has not been taken. If it does, this is
-parity. If it does not, this write is an *improvement*, and an improvement needs
-[behaviours §6](../../docs/compatibility/behaviours.md)'s argument rather than a plan's paragraph;
-the decision returns to its owner at that point rather than being carried by this sentence.
+**Its condition is discharged, and the answer is parity.** D-1 was taken conditionally on §6.8's
+item 6 — whether the reference's own refresh moves the file's change signal or only the
+inspection — and T1 measured it on 2026-09-03: across a heal the same source's `ETag` moves from
+`d430f79a…` to `58271a54…` and its `Size` from 4 096 to 148 301
+`[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`. So writing it here is
+reproduction, the `behaviours §6` argument the other answer would have needed is not needed, and
+the write ships with the inspection.
 
 **The write is idempotent and the transaction is the request's.** `put` deletes and rewrites the
 file's streams inside the caller's session, and `session_scope` commits at the end of the request
@@ -323,13 +325,17 @@ is a video file, a video item that is an audio file — satisfies it too, and pa
 **every** negotiation for ever, exactly as an unreadable file does. Atrium reproduces that: the
 trigger is re-evaluated per request and the answer for such a file never changes.
 
-**It reads source zero, and the refresh it triggers re-reads all of them.** The reference asks
-`mediaSources[0].MediaStreams` and then refreshes *the item*. A two-part film whose first part is
-annotated and whose second is not is therefore **not** probed there, and one whose first part is
-not annotated has both re-read. This plan reproduces the trigger exactly and opens **every part
-whose stored inspection is absent** once it fires — which is the same answer for every fixture in
-this repository and is a *reading* of what a full refresh does to a multi-part item rather than a
-measurement of it. Named as owed in §6.8.
+**It reads source zero, and the refresh it triggers re-reads all of them — and there is no second
+part to re-read.** The reference asks `mediaSources[0].MediaStreams` and then refreshes *the item*,
+so a plan for a multi-part item has to say what happens to part two. T1 measured it and the answer
+retires the question: a two-part film whose `- part2` cannot be probed is **one item with one
+media source** there, the unreadable part being neither a source of the grouped item nor an item of
+its own — where the same bytes alone in their own folder are an item with an empty source
+`[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`. So this plan's *"open
+every part whose stored inspection is absent"* has nothing to be unfaithful to on the reference,
+and what it must not do is invent a difference **here**: whether Atrium's own resolver keeps such a
+part as a source with no probe row is 003's behaviour and T3's table asks it rather than assuming
+it.
 
 **A zero-length file never reaches this trigger**, which the task gate measured rather than
 assumed: 003's walk skips a file of no length before it becomes a candidate
@@ -461,9 +467,9 @@ Three properties of that line, each measured or read:
 builder `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:104 @ v10.11.11]`, the middleware maps
 `ArgumentException` to `400`, sets `text/plain`, and — outside Development — writes the fixed
 sentence `[source: Jellyfin.Api/Middleware/ExceptionMiddleware.cs:93, 98, 127 @ v10.11.11]`. The
-probe measured `400 text/plain` and the first 60 bytes of the body; the sentence is read rather
-than measured, and it is the same 25 bytes `compat/errors.py:CONTROLLER_ERROR_BODY` already sends
-on the delivery routes. §6.8 names the confirmation that is owed.
+**measured** at T1 and not merely read: `400`, `text/plain`, **25 bytes**,
+`Error processing request.` — byte for byte the `CONTROLLER_ERROR_BODY` this project has sent since
+002 `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`.
 
 **Its condition is the audio stream, not the file.** `GetDefaultAudioStream(null)` returning null
 is the whole of it, so a readable audio file with no audio track is refused identically. Writing
@@ -527,10 +533,29 @@ changing anything that already passes:
 * the path is built from **aliases**, per level, through the nested model's own `model_fields`,
   which is `_wire_name` applied at each step rather than only at the last.
 
-**The message is owed.** The gate's probe recorded the key alone (`sorted(document["errors"])`).
-Whether the sentence is `VOCABULARY_MESSAGE` with `Path: $.DeviceProfile…` in it, and what
-`BytePositionInLine` counts for a nested token, is one request away and is not answerable from the
-files. §6.8, and T-level work in §8.
+**The message is measured now, and it is not the message this project sends.** T1 recorded it on
+2026-09-03 `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`:
+
+```
+The JSON value could not be converted to Jellyfin.Data.Enums.MediaStreamProtocol.
+Path: $.DeviceProfile.TranscodingProfiles[0].Protocol | LineNumber: 0 | BytePositionInLine: 398.
+```
+
+The type name is the fully qualified one `WIRE_ENUM_TYPES` already holds, so that half carries
+across. The other two do not, and the same run measured **why** by asking the route 009 measured:
+
+| | `POST /Playlists`, `MediaType` | `POST …/PlaybackInfo`, a profile's enum |
+|---|---|---|
+| `errors` key | `$` | the property's full JSON path |
+| `Path:` | `$` | the same full path |
+| `BytePositionInLine:` | **`len(token) + 2`**, wherever the property sits — `3` for `"x"` and `10` for `"abcdefgh"`, unchanged by a 62-byte body | the **byte offset of the end of the offending token in the document** — `398` for `"dash"`, `395` for `" "`, `396` for `true`, `153` for a `DirectPlayProfiles[0].Type` earlier in the same body |
+
+So the reference reports one failure two ways, `compat/errors.py`'s single `VOCABULARY_MESSAGE`
+is right for the route it was measured on, and reproducing this one needs a second shape: the
+property's path in `Path:` and an offset into the **raw body**, which is reachable — a validation
+handler has `exc.body` — and is not derivable from the framework's error alone. **That resizes T8
+from "build a key" to "build a key and a message", and the integer inside it is a Principle I
+question rather than an implementation detail: D-6.**
 
 ### 6.7 The general enum binder
 
@@ -575,6 +600,13 @@ and `CodecKind` are matched case-sensitively today and are each a `400` where th
 fixed by inheritance, and `_bound_subtitle_method` is deleted in the same change rather than left
 beside its own generalisation.
 
+**The default clause's gate is measured, not read.** T1 posted an empty string to two
+enumerations that declare no default and to the one that does: a codec profile's `Type` and a
+direct-play entry's `Type` are each **`400`**, and the protocol's is a `200` taking `http`
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`. So a binder that
+generalised the fourth class would answer `200` on five properties the reference refuses, which is
+the whole reason this validator's default clause is registered per enumeration.
+
 **What it must not make right.** Nothing outside a request body. A query parameter that names no
 member is a `200` that ignores the value, not a `400`
 ([behaviours §1.12](../../docs/compatibility/behaviours.md), `media/decision.py:method_named`), and
@@ -582,34 +614,52 @@ that asymmetry is measured on both sides. `AtriumModel` is the base of response 
 validator runs on construction from a client's mapping and costs a well-formed body nothing,
 because — like `_accept_any_casing` — it only does work when a value does not already fit.
 
-### 6.8 What this plan read and did not measure
+### 6.8 What this plan read, and what T1 measured
 
 Written as a section rather than as footnotes, because [011 plan §6.8](../011-subtitle-delivery/plan.md)
 and [008 plan §6.8](../008-playback-negotiation-and-delivery/plan.md) both exist and both were
-where the next feature's first task started.
+where the next feature's first task started. **All six were measured on 2026-09-03**, by T1,
+against a single-use instance of the pinned version — which is what
+[D-4](#d-4--whether-68s-six-owed-measurements-are-this-features-or-its-first-tasks) asked for.
+Four confirmed the reading; two did not, and one of those two moves a task.
 
-1. **The audio refusal's body is read, not measured.** `Error processing request.` is the
-   middleware's non-Development string; the probe stored 60 bytes of the answer and asserted only
-   the status. A run that prints the body settles it, and it is one line in
-   `tools/probe_uninspected_source.py`.
-2. **The nested refusal's *message* is unmeasured.** §6.6 has the key and not the sentence.
-3. **The multi-part case is read from what a full refresh means, not measured.** Whether the
-   reference's refresh re-probes a second part whose first sibling was already annotated — and
-   whether it probes parts at all beyond the one the trigger read — needs a two-file item in the
-   gate's fixture. It is the one place this plan's "open every part with no inspection" could be
-   wrong in the direction of doing more than the reference. **D-4 puts it in T1 with the other
-   four**: it is a fixture line rather than a new probe, and it is an input to §6.1's rule rather
-   than a check on it.
-4. **The `GET` route's probe is read, not measured.** The controller calls the same helper
-   `[source: Jellyfin.Api/Controllers/MediaInfoController.cs:87 @ v10.11.11]`; the gate exercised
-   the `POST` only. It matters because it decides whether a profile-less negotiation heals a
-   listing.
-5. **Concurrency is not measured on either server.** Two simultaneous negotiations of one
-   unreadable file: this plan says two probes, no lock, and nothing has watched the reference do it.
-6. **`item_sources.(size, mtime_ns)` after the reference's refresh is unmeasured**, and D-1 now
-   rests on it: the `ETag` of a healed item was not compared before and after. It is the one owed
-   measurement that can send a decision back to its owner (§4), which is why it is T1's and not a
-   later task's.
+1. **The audio refusal's body is the middleware's fixed sentence.** Measured: `400`,
+   `Content-Type: text/plain`, **25 bytes**, `Error processing request.` — byte for byte what
+   `compat/errors.py` has shipped as `CONTROLLER_ERROR_BODY` since 002, so §6.4's golden is a
+   constant this project already holds `[probe: tools/probe_uninspected_source.py, Jellyfin
+   10.11.11, 2026-09-03]`.
+2. **The nested refusal's message is measured, and it is not the message this project sends.**
+   §6.6 has it, and it is the finding that resizes T8.
+3. **The multi-part case does not exist to be faithful to.** A two-part film whose `- part2` is
+   4 KiB of noise is **one item with one media source** on the reference: the unreadable part is
+   not a source of the grouped item, and it gets no item of its own either — where the *same
+   bytes* standing alone in their own folder do become an item with an empty source. So there is
+   no *"part zero annotated, part one not"* state there, this plan's *"open every part whose
+   stored inspection is absent"* has nothing to be unfaithful to, and §6.1 says so now. Whether
+   **Atrium's** own resolver keeps such a part as a source with no probe row is 003's question and
+   is asked in T3's table rather than assumed `[probe: tools/probe_uninspected_source.py, Jellyfin
+   10.11.11, 2026-09-03]`.
+4. **The `GET` route probes on demand too, and heals the listing.** Measured: a profile-less
+   `GET /Items/{itemId}/PlaybackInfo` over a file that became readable answers it fully annotated
+   in **0.23 s** — flags all `true` and no address, because nothing was negotiated — and the next
+   listing carries the streams, the runtime and the corrected size. So the resolution belongs
+   before the profile branch, on both routes, which is where §6.2 puts it and where §5's third
+   invariant says it must be `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11,
+   2026-09-03]`.
+5. **Concurrency is still not measured on either server**, and stays with the finished thing
+   (D-4). This plan says two probes and no lock.
+6. **The change signal moves, so D-1 is parity.** Measured across a heal: `ETag`
+   `d430f79a…` → `58271a54…` and `Size` 4 096 → 148 301, on the same source in the same listing
+   route. The reference's on-demand refresh rewrites the file's own signal along with the
+   inspection, so writing `item_sources.(size, mtime_ns)` from the same `stat` is reproduction and
+   not an improvement — the condition [D-1](#d-1--the-healed-items-etag) was held on, discharged
+   `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`.
+
+**And one nobody asked for, from the same run.** A **zero-length** file is an item on the
+reference — `Size: 0`, a listing with the three flags `true`, and a negotiation answering
+`false`/`false`/`true` with an address — where 003's walk skips it before it can become one. That
+is the difference [the task gate](tasks.md#what-the-gate-changed) found by scanning one here, now
+measured on both sides in one day, and it is 003's.
 
 ## 7. Failure handling
 
@@ -740,7 +790,7 @@ times would put one question about the reference's binder in five places, which 
 **Put the resolution in `media/`.** It writes, and `media/` imports no `db`. The alternative is
 handing `media/` a repository, which makes the one pure module in the project take a session.
 
-## 11. The five decisions this plan reserved, taken on 2026-09-03
+## 11. The five decisions this plan reserved, taken on 2026-09-03 — and a sixth T1 opened
 
 Each was reserved rather than taken because each changes something outside this feature's own
 files: two 003-owned tables, a shared timeout, the order the measurements run in, and an accepted
@@ -764,11 +814,11 @@ more line, a second 003-owned table written from a request, and the `ETag` match
 negotiation on the reference is one probe run, and it decides whether (a) is parity or an
 improvement.
 
-**Taken on 2026-09-03: (a), with its condition kept.** The write happens, from the stat the
-inspection already read, and T1's probe run (D-4) is what says whether it is parity — if the
-reference leaves its own signal alone, this becomes an improvement and comes back to its owner for
-a [behaviours §6](../../docs/compatibility/behaviours.md) argument rather than shipping on this
-paragraph. **Taking it corrected its own price**: `item_sources` is written today only by a
+**Taken on 2026-09-03: (a), and its condition is discharged the same day.** The write happens,
+from the stat the inspection already read; T1 then measured that the reference's own refresh moves
+the signal too — `ETag` and `Size` both change across a heal — so it is **parity**, and the
+`behaviours §6` argument the other answer would have needed is not needed
+`[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`. **Taking it corrected its own price**: `item_sources` is written today only by a
 whole-item rewrite that deletes and re-adds every part, so (a) is a new narrowly-scoped repository
 method rather than "one more line" — §3 and §4 say so now.
 
@@ -854,6 +904,27 @@ a criterion the task list would have to work around, and the task list is the ne
 keeps its prohibition and loses the clause naming the values; the front matter records why, and
 that the three `true`s §3.1 and §3.2 report are an administrator's. **No code changes with it**:
 008's policy-gate fix had already implemented the rule the clause denied.
+
+### D-6 — the integer inside a refusal nobody reads
+
+**Reserved by T1 rather than by this plan**, because it took a measurement to see it (§6.6). The
+reference reports one vocabulary failure two ways: on `POST /Playlists` the `errors` key and
+`Path:` are `$` and `BytePositionInLine` is `len(token) + 2` wherever the property sits, and on
+this feature's route both are the property's full JSON path and the position is the byte offset of
+the end of the offending token **in the request body as sent**. `compat/errors.py` ships the first
+shape as one constant.
+
+*Options:* (a) reproduce both — the path is derivable from the framework's error and the offset
+from `exc.body`, which a validation handler holds, at the cost of finding a token's byte position
+in a document nobody parsed twice; (b) reproduce the key and the path, and let the integer be
+whatever the first shape's rule produces — one wrong number inside an error message no client
+branches on, recorded as a divergence with the argument that nothing can act on it.
+
+*Recommendation:* (b), with the divergence recorded — and (a) if the offset turns out to fall out
+of the raw body cheaply, which T8 is the right place to find out. What decides it is whether
+"nothing can act on it" survives contact with a client author, which is the same test
+[behaviours §3.0](../../docs/compatibility/behaviours.md#30-how-the-decision-is-made) applies to
+every reproduced defect.
 
 ## 12. What moves with the code
 

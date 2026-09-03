@@ -465,6 +465,70 @@ PROTOCOL_SPELLINGS: tuple[Any, ...] = (
 )
 
 
+def _defaultless_enum_battery(server: Server, probe: Probe, source) -> list[bool]:
+    """Does an **empty string** take a default on an enumeration that declares none?
+
+    012 plan section 6.7's argument for *not* generalising the binder's fourth class rests on one
+    reading: the converter that turns an empty string into a default is created by a factory whose
+    `CanConvert` requires the type to carry `[DefaultValue]` `[source:
+    src/Jellyfin.Extensions/Json/Converters/JsonDefaultStringEnumConverterFactory.cs:20 @
+    v10.11.11]`, and of the six enumerations this body binds only `MediaStreamProtocol` carries
+    one. If that is wrong - if an empty string is a default everywhere - then a binder that
+    generalised all four classes is parity and the plan's shape is wrong; if it is right, an empty
+    string is a `400` on the other five and generalising would answer `200` where the reference
+    refuses. **012's task gate added this**, because the whole argument was a source reading.
+
+    Asked on a codec profile's `Type`, which is `CodecType` and declares no default, with the
+    protocol's own empty string beside it as the control that is known to take one.
+    """
+    checks: list[bool] = []
+    for label, profile in (
+        (
+            "CodecProfiles[0].Type is an empty string",
+            base_profile(
+                [{"Container": "mp4", "Type": "Video", "VideoCodec": "h264", "AudioCodec": "aac"}],
+                codec_profiles=[{"Type": "", "Codec": "h264", "Conditions": []}],
+            ),
+        ),
+        (
+            "TranscodingProfiles[0].Protocol is an empty string (control)",
+            base_profile(
+                [{"Container": "mp4", "Type": "Video", "VideoCodec": "h264", "AudioCodec": "aac"}],
+                transcoding=[
+                    {
+                        "Container": "ts",
+                        "Type": "Video",
+                        "VideoCodec": "h264",
+                        "AudioCodec": "aac",
+                        "Context": "Streaming",
+                        "Protocol": "",
+                    }
+                ],
+            ),
+        ),
+        (
+            "DirectPlayProfiles[0].Type is an empty string",
+            base_profile(
+                [{"Container": "mp4", "Type": "", "VideoCodec": "h264", "AudioCodec": "aac"}]
+            ),
+        ),
+    ):
+        status, headers, payload = server.post_raw(
+            f"/Items/{source.item_id}/PlaybackInfo",
+            body={"UserId": server.user_id, "DeviceProfile": profile},
+        )
+        detail = ""
+        if status == 400:
+            try:
+                errors = json.loads(payload).get("errors", {})
+                detail = f", errors {errors}"
+            except ValueError:
+                detail = f", {payload[:120]!r}"
+        probe.observe(label, f"{status} {headers.get('Content-Type')}{detail}")
+        checks.append(status in (200, 400))
+    return checks
+
+
 def _protocol_battery(server: Server, probe: Probe, source) -> list[bool]:
     """What does the profile's delivery protocol bind to, and what does the answer echo back?
 
@@ -506,9 +570,14 @@ def _protocol_battery(server: Server, probe: Probe, source) -> list[bool]:
         if status != 200:
             document = json.loads(payload) if b"{" in payload[:1] else {}
             named = sorted(document.get("errors", {}))
+            #: **The message beside the key, which no run had recorded** (012 plan section 6.8
+            #: item 2). The key alone is what 012's gate measured; a server reproducing this
+            #: refusal has to write the sentence too, and `compat/errors.py` keys a vocabulary
+            #: mismatch under `$` with a sentence measured on a **top-level** property.
             probe.observe(
                 f"Protocol={value!r}",
-                f"{status} {headers.get('Content-Type')}, errors name {named or 'nothing'}",
+                f"{status} {headers.get('Content-Type')}, errors name {named or 'nothing'}: "
+                f"{ {key: document['errors'][key] for key in named} }",
             )
             refused.append(value)
             checks.append(
@@ -629,6 +698,7 @@ def run(server: Server, args) -> Probe:
 
     checks.extend(_refusal_battery(server, probe, source.item_id))
     checks.extend(_protocol_battery(server, probe, source))
+    checks.extend(_defaultless_enum_battery(server, probe, source))
 
     if args.allow_writes:
         checks.extend(_policy_battery(server, probe, source, reject_vcodec))

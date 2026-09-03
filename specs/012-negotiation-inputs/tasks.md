@@ -87,7 +87,7 @@ And one the review confirmed rather than changed, because a task would otherwise
 
 ## T1 — Measure the five things the plan read and could not check
 
-- [ ] **Changes:** `tools/probe_uninspected_source.py` gains a two-part film in its fixture (one
+- [x] **Changes:** `tools/probe_uninspected_source.py` gains a two-part film in its fixture (one
   readable part, one that ffprobe refuses) and five observations, each answering a numbered item
   of [plan §6.8](plan.md#68-what-this-plan-read-and-did-not-measure): **(1)** the whole body of the
   audio item's `400`, printed rather than truncated at 60 bytes, against the plan's reading that it
@@ -113,13 +113,52 @@ And one the review confirmed rather than changed, because a task would otherwise
   **in this same change**, whether it confirms the reading or contradicts it.
 - **Spec reference:** §7 (the gate's four probes); plan §6.8, §11 D-4
 
-**Two of the five can move a decision, and this task is where that is allowed to happen.** If the
-reference leaves `item_sources`' own change signal alone, D-1's write is an *improvement* rather
-than parity and goes back to its owner for a
-[behaviours §6](../../docs/compatibility/behaviours.md) argument before T4 writes it. If a refresh
-does **not** reach a second part, §6.1's *"open every part whose stored inspection is absent"* is
-one part too many and T3's rule narrows to source zero. Neither is a defect in this list; both are
-the reason the list starts here.
+**Two of the five could move a decision, and both did something.** D-1's condition is
+**discharged**: the change signal moves across a heal, so writing it is parity and T4 keeps it. And
+the multi-part question was retired rather than answered: there is no *"part zero annotated, part
+one not"* on the reference to be faithful to.
+
+**Done, 2026-09-03** — one run of each probe against a single-use instance of the pinned version,
+six answers, four confirming the reading and two not.
+
+* **The audio body is the middleware's sentence, exactly**: `400`, `text/plain`, **25 bytes**,
+  `Error processing request.` — the `CONTROLLER_ERROR_BODY` this project has sent since 002, so
+  T6's golden is a constant it already holds.
+* **The `GET` route probes on demand and heals the listing**, in 0.23 s, answering flags all
+  `true` and no address because nothing was negotiated. T5's *"both routes, before the profile
+  branch"* is measured rather than read.
+* **The change signal moves**: `ETag` `d430f79a…` → `58271a54…` and `Size` 4 096 → 148 301 across
+  one heal. D-1 is parity.
+* **There is no second part to re-read.** A two-part film whose `- part2` is 4 KiB of noise is
+  **one item with one media source**: the unreadable part is neither a source of the grouped item
+  nor an item of its own — where the *same bytes* alone in their own folder are an item with an
+  empty source. The probe's own check had assumed two sources and failed, which is what a check is
+  for; it now asserts the measured shape. T3 asks the same question of **Atrium's** resolver
+  instead of assuming the answer.
+* **The empty string is a `400` on an enumeration that declares no default** — a codec profile's
+  `Type` and a direct-play entry's `Type`, both refused, against the protocol's own `200` as the
+  control. §6.7's default clause stays registered per enumeration; generalising it would answer
+  `200` on five properties the reference refuses.
+* **The nested refusal's message is not the message this project sends**, and this is the finding
+  that resizes a later task. It names the enumeration by its fully qualified name, repeats the
+  property's JSON path in `Path:`, and its `BytePositionInLine` is the byte offset of the end of
+  the offending token **in the body as sent** — 398, 395, 396 for three tokens in one body, and
+  153 for a property earlier in it. The same failure on `POST /Playlists`, asked in the same run,
+  is keyed `$`, says `Path: $`, and counts `len(token) + 2` wherever the property sits. One
+  failure, two shapes, two routes: `compat/errors.py` ships the first as a single constant, T8 has
+  to produce the second, and the integer inside it is **D-6**, reserved.
+
+Plus one nobody asked for: a **zero-length** file is an item on the reference — `Size: 0`, a
+listing with three `true` flags, a negotiation answering `false`/`false`/`true` with an address —
+which is the other half of what [the task gate](#what-the-gate-changed) measured here. Both sides
+of that difference are now measured, on the same day, and it is 003's.
+
+**Two deviations from this task as written, both recorded rather than tidied.** The refusal's
+message and the empty-string class were measured by `tools/probe_playback_info.py` and not by
+`tools/probe_uninspected_source.py`, because that is where the protocol battery and its eighteen
+spellings already live — a second copy of them would be a second answer to one question. And the
+`GET` route needed a **second** latent file: once a negotiation has healed the first, the question
+of which route did the healing cannot be asked again.
 
 ## T2 — The world gets files nothing can open
 
@@ -172,7 +211,10 @@ make the invariant test assert a codec against a file that has none.
   trigger with the two cases that separate it from the naive reading: a **video** item whose only
   file was inspected successfully and holds no video stream fires it (and fires it again on the
   next call, for ever), and a two-part item whose part zero is annotated and whose part one is not
-  does **not**. Plus: `unopened()`'s result put through `media/info.py:source_of` answers byte for
+  does **not**. **That second row also asks a question of 003 that T1 could not ask of the
+  reference**, because the reference has no such item: whether Atrium's own resolver keeps an
+  unreadable second part as a source with no probe row, where the reference keeps it as nothing at
+  all. Whatever it answers is recorded — as a difference if it is one — and not designed around. Plus: `unopened()`'s result put through `media/info.py:source_of` answers byte for
   byte what a `None` inspection answers today, which is what keeps AC-10 true.
 - **Spec reference:** §3.2, AC-1; plan §5, §6.1
 
@@ -280,7 +322,11 @@ reference answers `400`.
   `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29]`. A failure **one level
   deep** keeps the key it has today, which is what 007 and 009 measured on the routes that have
   one. The message is whatever T1 recorded.
-- **Depends on:** T1, T7
+- **Depends on:** T1, T7 — and T1 **resized it**: the message is a second shape and not a
+  constant. `Path:` carries the property's own path and `BytePositionInLine` is a byte offset into
+  the raw body, reachable through the validation handler's `exc.body` and derivable from nothing
+  the framework's error carries. The integer is **D-6**, reserved for its owner: reproduce it, or
+  record one wrong number inside a message no client branches on.
 - **Verified by:** `uv run pytest tests/unit/test_compat_errors.py tests/conformance/test_playlists.py
   tests/conformance/test_user_data_identity.py -q` — the nested key exactly, the one-level keys
   (`"$"`, the property's own name, `""`) unchanged byte for byte, and every measured body refusal
