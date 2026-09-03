@@ -39,7 +39,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import Field
 
-from atrium.api.delivery import policy_of
+from atrium.api.delivery import access_of, policy_of
 from atrium.api.deps import get_playing, get_registry, get_sessions, get_state, require_user
 from atrium.api.dynamic_hls import transcode_manager
 from atrium.api.item_dto import BuildContext, Width, build_dto
@@ -368,6 +368,7 @@ def _now_playing_items(
         context = BuildContext(
             server_id=server_id,
             policy=policy_of(people[user_id]),
+            access=access_of(people[user_id]),
             width=Width.FULL,
             # The measured shape, expressed as what it is missing (`NOT_IN_NOW_PLAYING`) rather
             # than as a bespoke list of what it has - so a property added to the full body is in

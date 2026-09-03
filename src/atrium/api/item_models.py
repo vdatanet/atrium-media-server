@@ -68,6 +68,18 @@ class NameGuidPair(AtriumModel):
     id: str | None = None
 
 
+class MediaUrl(AtriumModel):
+    """A trailer address and its label - `RemoteTrailers`' element type `[spec: BaseItemDto]`.
+
+    Declared rather than approximated because the property is a list and a list has an element
+    type even when it is always empty here: 004 stores no remote trailer, so nothing ever fills
+    one, and a `list[str]` would be a different shape the day something does.
+    """
+
+    url: str
+    name: str | None = None
+
+
 class BaseItemPerson(AtriumModel):
     """One person on one item: who, playing whom, in what capacity."""
 
@@ -110,6 +122,12 @@ class BaseItemDto(AtriumModel):
     etag: str | None = None
     date_created: WireDateTime | None = None
     date_last_media_added: WireDateTime | None = None
+    #: Whether the effective user may delete this item and download its file. Both are the
+    #: account's policy **and** a property of the item: a library root answers `false` to both to
+    #: an administrator who may do either, and a film answers the policy
+    #: `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-03]`. `CanDelete` is
+    #: not emitted here - see the note in `api/item_dto.py`.
+    can_download: bool | None = None
     #: Emitted only when true, which is the reference's own shape - a video with no subtitle
     #: stream carries no property rather than `false`
     #: `[source: Emby.Server.Implementations/Dto/DtoService.cs:1107-1110 @ v10.11.11]`.
@@ -124,6 +142,10 @@ class BaseItemDto(AtriumModel):
     external_urls: list[ExternalUrl] | None = None
     media_sources: list[MediaSourceInfo] | None = None
     path: str | None = None
+    #: Position 29 of the pinned document, between `Path` and `OfficialRating`. Always `true`
+    #: here: it is a server-wide display switch the reference defaults on and Atrium has no knob
+    #: for `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-03]`.
+    enable_media_source_display: bool | None = None
     official_rating: str | None = None
     channel_id: str | None = None
     overview: str | None = None
@@ -132,9 +154,14 @@ class BaseItemDto(AtriumModel):
     community_rating: float | None = None
     cumulative_run_time_ticks: WireTicks | None = None
     run_time_ticks: WireTicks | None = None
+    #: `Full` or `None`, following the account's `EnableMediaPlayback` - measured both ways
+    #: `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-03]`.
+    play_access: str | None = None
     production_year: int | None = None
     index_number: int | None = None
     parent_index_number: int | None = None
+    #: Always empty: 004 stores no remote trailer, so there is none to name.
+    remote_trailers: list[MediaUrl] | None = None
     provider_ids: dict[str, str] | None = None
     #: Emitted only when true, like `HasSubtitles`: the reference sets it on nothing shorter than
     #: 720 lines and leaves the property absent otherwise
@@ -151,12 +178,17 @@ class BaseItemDto(AtriumModel):
     #: 3.1). `ParentLogoItemId` sits between them upstream and stays out here (Principle VI).
     parent_backdrop_item_id: str | None = None
     parent_backdrop_image_tags: list[str] | None = None
+    #: Always `0`: 003 discovers no local trailer, so the count of what this server holds is
+    #: exactly zero rather than a stand-in.
+    local_trailer_count: int | None = None
     user_data: UserItemDataDto | None = None
     recursive_item_count: int | None = None
     child_count: int | None = None
     series_name: str | None = None
     series_id: str | None = None
     season_id: str | None = None
+    #: Always `0`, for `LocalTrailerCount`'s reason: v1 models no extras at all.
+    special_feature_count: int | None = None
     tags: list[str] | None = None
     primary_image_aspect_ratio: float | None = None
     artists: list[str] | None = None
@@ -168,6 +200,7 @@ class BaseItemDto(AtriumModel):
     series_primary_image_tag: str | None = None
     album_artist: str | None = None
     album_artists: list[NameGuidPair] | None = None
+    season_name: str | None = None
     #: The **first** source's streams, which is the reference's own rule: the item-level list is
     #: the streams of the source whose id is the item's
     #: `[source: Emby.Server.Implementations/Dto/DtoService.cs:1151-1170 @ v10.11.11]`.
@@ -181,8 +214,13 @@ class BaseItemDto(AtriumModel):
     parent_thumb_image_tag: str | None = None
     location_type: str | None = None
     media_type: str
-    #: Last, because the pinned document puts them last - after `LockData`, which nothing here
-    #: emits. Both are the primary video stream's, and both are absent rather than zero when the
+    #: Always empty, and `LockData` always `false`: nothing in v1 locks a field against a
+    #: rescan, so there is no locked field to name. Positions 109 and 119 of the pinned document,
+    #: which is why they sit either side of nothing and immediately before `Width`.
+    locked_fields: list[str] | None = None
+    lock_data: bool | None = None
+    #: Last, because the pinned document puts them last - after `LockData`. Both are the primary
+    #: video stream's, and both are absent rather than zero when the
     #: item has no video `[source: Emby.Server.Implementations/Dto/DtoService.cs:1298-1314 @
     #: v10.11.11]`.
     width: int | None = None
@@ -289,6 +327,7 @@ __all__ = [
     "BaseItemDtoQueryResult",
     "BaseItemPerson",
     "ExternalUrl",
+    "MediaUrl",
     "NameGuidPair",
     "QueryFiltersLegacy",
     "SearchHint",

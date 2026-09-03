@@ -3,10 +3,10 @@ feature: 005-item-query-api
 title: Item query API
 status: Implemented
 created: 2026-08-26
-updated: 2026-09-02
+updated: 2026-09-03
 accepted: 2026-08-27
 implemented: 2026-08-28
-amended: 2026-08-29 by 008 T3 — §3.2 gains `Container`, `HasSubtitles` and `VideoType` per type and `IsHD` gated, four properties T1 measured and declined under Principle VI and that 007's owed list and 008 AC-28 have since given readers; and 2026-08-28 by 006 T2 - section 3.2 gains `ParentBackdropItemId`, the pair 005 measured and emitted only half of; by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated); and 2026-09-01 at 010's measurement gate, by the two decisions that gate left to this feature - section 3.7's `Similar` hedge becomes a measurement and two recorded divergences (behaviours section 3.23 and section 3.24), AC-12 gains the exact-`limit` clause and names both, and OQ-5's `Similar` half moves to Resolved with both decisions made rather than owed; and 2026-09-02 by the listing media-source policy fix — section 3.2's `MediaSources` is the one property in that table whose value depends on the reading account, by one playback permission per media kind, which closes the accepted gap behaviours section 5 carried and section 3.5's full body answers the same way
+amended: 2026-08-29 by 008 T3 — §3.2 gains `Container`, `HasSubtitles` and `VideoType` per type and `IsHD` gated, four properties T1 measured and declined under Principle VI and that 007's owed list and 008 AC-28 have since given readers; and 2026-08-28 by 006 T2 - section 3.2 gains `ParentBackdropItemId`, the pair 005 measured and emitted only half of; by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated); and 2026-09-01 at 010's measurement gate, by the two decisions that gate left to this feature - section 3.7's `Similar` hedge becomes a measurement and two recorded divergences (behaviours section 3.23 and section 3.24), AC-12 gains the exact-`limit` clause and names both, and OQ-5's `Similar` half moves to Resolved with both decisions made rather than owed; and 2026-09-02 by the listing media-source policy fix — section 3.2's `MediaSources` is the one property in that table whose value depends on the reading account, by one playback permission per media kind, which closes the accepted gap behaviours section 5 carried and section 3.5's full body answers the same way; and 2026-09-03 by the item-shape difference triage — section 3.2 gains `SeasonName` per type and an eight-row table for what the **two wide widths** carry and a list row does not, the first tranche of what 010's first complete sweep found against this feature, together with the two properties on those same bodies that are deliberately not sent and stay in behaviours section 5
 depends_on: [002, 004]
 ---
 
@@ -114,7 +114,7 @@ registry holds.* `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08
 | `IndexNumber` | `Season`, `Episode`, `Audio` (track) |
 | `ParentIndexNumber` | `Episode`, `Audio` (disc) |
 | `SeriesId`, `SeriesName`, `SeriesPrimaryImageTag` | `Season`, `Episode` |
-| `SeasonId` | `Episode` |
+| `SeasonId`, `SeasonName` | `Episode` |
 | `SeriesThumbImageTag` | `Episode` — unconfirmed, see below |
 | `ParentThumbItemId`, `ParentThumbImageTag` | `Season`, `Episode` |
 | `ParentBackdropItemId`, `ParentBackdropImageTags` | `Season`, `Episode`, `MusicAlbum`, `Audio` |
@@ -170,6 +170,31 @@ registry holds.* `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08
 > asks. `PrimaryImageAspectRatio` is the one with a dependency behind it: 004 supplies the width
 > and height it is computed from, and a list row still does not carry it.
 > `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`
+
+**The two wide widths carry eight more, unasked and ungated**, and a list row carries none of
+them. Measured against a reference over this repository's own fixture on 2026-09-03, joined item
+by item rather than row position by row position — a listing ordered by a key the two servers
+disagree about is a listing whose rows do not line up, and a key set read across misaligned rows
+is not a measurement. Every one of these was on **every** joined full body and **every** view row,
+and on **no** joined list row:
+
+| Field | What it says |
+|---|---|
+| `CanDownload` | The account may download **and** the item has a file. A library root answers `false` to an administrator whose policy permits downloading; a film beneath it answers `true` |
+| `PlayAccess` | `Full` or `None`, from the account's playback permission alone — the item is not consulted |
+| `EnableMediaSourceDisplay` | Always `true`: a server-wide display switch v1 has no setting for, at the reference's own default |
+| `LocalTrailerCount`, `SpecialFeatureCount` | Always `0`, and `RemoteTrailers` always empty: v1 models no extras at all, so these are counts of what this server holds rather than stand-ins for what it does not |
+| `RemoteTrailers` | Always empty, for the same reason |
+| `LockData`, `LockedFields` | Always `false` and empty: nothing here locks a field against the next scan, so nothing is locked |
+
+> **Two more sit on every one of those bodies and are deliberately not sent.** `CanDelete` would
+> advertise a deletion this server refuses by design
+> ([behaviours §4.3](../../docs/compatibility/behaviours.md)), which is a decision about that
+> exception and not a field to fill; and `DisplayPreferencesId` is a digest of the reference's own
+> display-preferences key — one value for every `Movie`, another for every `Season`, and on a
+> library root the row's own identifier — so reproducing it is a derivation rather than a value
+> this server holds. Both stay in [behaviours §5](../../docs/compatibility/behaviours.md)'s
+> field-union row with the rest.
 
 **Where this field set comes from.** It is the union of what the two analysed clients actually read
 from a response, not the reference's full representation, which has over 150 properties. A field no

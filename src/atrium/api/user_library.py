@@ -49,7 +49,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 
-from atrium.api.delivery import policy_of
+from atrium.api.delivery import access_of, policy_of
 from atrium.api.deps import get_sessions, get_state, require_user
 from atrium.api.item_dto import BuildContext, Width, build_dtos, user_data_dto
 from atrium.api.item_models import BaseItemDto, UserItemDataDto
@@ -195,6 +195,7 @@ async def latest_media(
         context = BuildContext(
             server_id=state.server_id,
             policy=policy_of(target),
+            access=access_of(target),
             width=Width.LIST_ROW,
             fields=asked_fields,
             enable_user_data=enableUserData,
@@ -243,7 +244,12 @@ def _set_favourite(
         ).items[0]
         answered = user_data_dto(
             refreshed,
-            BuildContext(server_id=state.server_id, policy=policy_of(target), width=Width.FULL),
+            BuildContext(
+                server_id=state.server_id,
+                policy=policy_of(target),
+                access=access_of(target),
+                width=Width.FULL,
+            ),
         )
     assert answered is not None  # noqa: S101 - enable_user_data is not settable on this path
     return answered

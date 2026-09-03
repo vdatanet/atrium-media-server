@@ -35,7 +35,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.exceptions import RequestValidationError
 
-from atrium.api.delivery import policy_of
+from atrium.api.delivery import access_of, policy_of
 from atrium.api.deps import get_sessions, get_state, require_administrator, require_user
 from atrium.api.item_dto import GATED, BuildContext, LibraryContext, Width, build_dto, build_dtos
 from atrium.api.item_models import BaseItemDto, BaseItemDtoQueryResult
@@ -395,6 +395,7 @@ async def items(
         context = BuildContext(
             server_id=state.server_id,
             policy=policy_of(target),
+            access=access_of(target),
             width=Width.LIST_ROW,
             fields=asked_fields,
             enable_user_data=enableUserData,
@@ -435,6 +436,7 @@ async def item(
         context = BuildContext(
             server_id=state.server_id,
             policy=policy_of(target),
+            access=access_of(target),
             width=Width.FULL,
             libraries=library_context(LibraryRepository(opened)),
             aggregates=repository.aggregates_for([found.id], target),
@@ -649,6 +651,7 @@ def by_name_envelope(
         context = BuildContext(
             server_id=state.server_id,
             policy=policy_of(target),
+            access=access_of(target),
             width=Width.LIST_ROW,
             omit=omit,
             libraries=library_context(LibraryRepository(opened)),

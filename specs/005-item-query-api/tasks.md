@@ -3,7 +3,7 @@ feature: 005-item-query-api
 title: Item query API — tasks
 status: Implemented
 created: 2026-08-27
-updated: 2026-08-28
+updated: 2026-09-03
 accepted: 2026-08-27
 implemented: 2026-08-28
 plan_status_required: Accepted
@@ -965,6 +965,33 @@ Closed line by line at T17, on 2026-08-28.
       One thing could not be measured and says so ⚠️ in spec §3.7: whether a played special
       drives the NextUp chain — no pristine specials existed to play.
 - [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+
+## What 010's first complete sweep left this feature, and in what order
+
+010's first complete sweep ran on 2026-09-03 against a single-use reference instance over this
+repository's own fixture — 140 cases, two seats, 53 of 59 endpoints — and **695 of its 1007
+differences are on endpoints this feature owns**. They are not 695 repairs. Grouped by cause,
+and each classified through
+[behaviours §3.0](../../docs/compatibility/behaviours.md#30-how-the-decision-is-made):
+
+| # | Cause | Class | Where it stands |
+|---|---|---|---|
+| 1 | Twelve properties the two **wide** widths carry and this server did not | C — supply it | **Done 2026-09-03.** Eight travel now (§3.2's wide-width table); `CanDelete` and `DisplayPreferencesId` are below |
+| 2 | `SeasonName` on an episode, both widths | C | **Done 2026-09-03** |
+| 3 | Full-body properties still absent: `Trickplay`, `ProductionLocations`, `AirDays`, the eight by-name counts on a `MusicArtist`, `SeriesStudio`, `CumulativeRunTimeTicks` and a rolled-up `RunTimeTicks` on a music container | C | **Next tranche.** The counts and the rollups are the same aggregate machinery `ChildCount` already uses, and the three constants are one more registry row each |
+| 4 | `HasLyrics` on a track | C, and a judgement | The reference answers `false` bare and `true` beside an `.lrc`, so a constant `false` would be wrong on a real library rather than absent. It needs lyric discovery, which is a feature and not a field |
+| 5 | `CanDelete` on every wide body | A decision, not a measurement | Emitting it advertises a deletion [behaviours §4.3](../../docs/compatibility/behaviours.md) refuses by design |
+| 6 | `DisplayPreferencesId` on every wide body | A derivation | A digest of the reference's own display-preferences key: one value per type, and on a library root the row's own id |
+| 7 | `/UserViews` sends `"ParentId": null` where the reference sends the id of its views root — the sweep's only `TYPE` difference, and the decoder-breaking one | Needs a decision | The measured claim behind `UserViewDto.NULL_KEPT` was *"a view row that hangs off nothing"*; a reference over this fixture has a root for its views to hang off and Atrium has no such item. Inventing one is machinery, and keeping the null is a type a client's decoder can reject |
+| 8 | `UserData.UnplayedItemCount` on a `MusicAlbum`, a `MusicArtist` and every view row, where the reference sends none | I — a delta | **007's**, not this feature's: the rollup is `db/item_queries._rolled` and the reference rolls up video containers and not music ones |
+| 9 | `Container` on a movie or an episode nothing could inspect | I — a delta | **008's**: this server infers a container from the path extension where the reference reports only what it read |
+| 10 | `ProductionYear`, `RunTimeTicks` and `AlbumArtist` absent on rows that have them there, and every `Name` difference under it | **003's and 004's**, already declared under AC-2 | It is also what makes a listing's rows misalign, and therefore what most of the sweep's `/Items` and `/Items/Latest` differences are downstream of |
+
+**Cause 10 is why a grouped count is not a measurement.** Read by row position, the sweep reports
+`Album`, `IndexNumber`, `ParentIndexNumber`, `Artists`, `ArtistItems` and `AlbumArtists` as
+properties this server sends and the reference does not. Joined item by item, every one of them
+disappears: the rows were not the same rows. Nothing in tranche 1 was repaired on a positional
+reading.
 
 ## What this feature owes the next ones
 
