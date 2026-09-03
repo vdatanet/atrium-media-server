@@ -123,7 +123,7 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | **Implemented** | **Implemented** | **Implemented** |
 | [010](010-conformance-harness/) | Conformance harness | **Implemented** | **Implemented** | **Implemented** — fifteen of fifteen tasks, [D-7 taken 2026-09-02](010-conformance-harness/tasks.md) |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
-| [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | Draft | — |
+| [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | **Accepted** | — |
 
 **001 through 011 are implemented** — 008 on 2026-08-29 across fourteen tasks,
 011 on 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, and 010 on 2026-09-02 across
@@ -365,7 +365,7 @@ And the initialisation-segment restart is guarded by a file check the same sessi
 satisfied, so it costs nothing in either order a client uses — decided *replicate* under behaviours
 §3.0, at §3.14.
 
-**Its plan was drafted on 2026-09-03** and is what the next gate reads. It is two changes that do
+**Its plan was drafted and accepted on 2026-09-03**, so its task list is the next gate. It is two changes that do
 not touch each other — a new `library/inspection.py` the negotiation calls before it looks at the
 profile, and the enum binder every request model in the project inherits — and **no migration at
 all**: what this feature changes is *when* a probe row is written, not what one holds. Writing it

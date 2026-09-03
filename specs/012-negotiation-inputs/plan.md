@@ -1,9 +1,10 @@
 ---
 feature: 012-negotiation-inputs
 title: Negotiation inputs — implementation plan
-status: Draft
+status: Accepted
 created: 2026-09-03
 updated: 2026-09-03
+accepted: 2026-09-03
 spec_status_required: Accepted
 spec_status_actual: Accepted
 ---
