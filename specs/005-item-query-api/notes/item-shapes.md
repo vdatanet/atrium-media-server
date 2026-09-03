@@ -110,6 +110,27 @@ this repository had no `reference/` checkout when this was written on 2026-08-27
 unmeasured and the
 entry now records the exception with its measurement instead of a mechanism.
 
+> **Established on 2026-09-03, and the premise was wrong: nothing overrides the setting.** Both
+> properties are `Guid?` assigned from a non-nullable `Guid`, so neither is ever CLR-null and
+> `WhenWritingNull` has nothing to omit; the registered converter writes the JSON `null` on
+> `Guid.Empty` and only on it
+> `[source: src/Jellyfin.Extensions/Json/Converters/JsonNullableGuidConverter.cs:19-26 @
+> v10.11.11]`. `docs/compatibility/behaviours.md` §1.7 carries the full citation.
+>
+> **And the `2 of the 6` above is per-row, which the sentence beside it half-recorded.** The line
+> `UserViews rows report Type: CollectionFolder, UserView` in the run's own output is the
+> condition: a library's `CollectionFolder` row carries the identifier of the `UserRootFolder` it
+> hangs off, and only a synthesised `UserView` row carries the `null` — grouped libraries, the
+> server-wide `Folders` view, `Playlists`, or a `presetViews` request. Both kinds arrive in one
+> response, `ParentId` is omitted on neither, and a fresh instance with none of those configured
+> answers an **identifier on every row**. Measured over seven readings and 30 rows: 24
+> identifiers, 6 nulls, 0 omissions
+> `[probe: tools/probe_user_views_parent.py, Jellyfin 10.11.11, 2026-09-03]`.
+>
+> This matters to §3.2 only as provenance; what it changes is `UserViewDto`, whose docstring read
+> the `2 of 6` as *"the reference sends `ParentId: null` on a view row"* and generalised it to
+> every row.
+
 It matters well beyond 005. §1.7 says Atrium omits nulls *in the base model, rather than per
 route*, precisely so nobody has to remember. If `ChannelId` must be `null` on every item, that is
 a per-property exception on the single highest-traffic response in the API, and a client
