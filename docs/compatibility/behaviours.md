@@ -193,11 +193,40 @@ parent. `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`
 "CommunityRating": 6.7,
 ```
 
-**What overrides the setting has not been established here.** The configuration cited above is not
-in dispute; something defeats it for these two properties, and identifying it needs a reading of
-the reference's source that had not been taken as of 2026-08-28 — the machine that ran the probe
-had no reference checkout. The exception is therefore recorded as a measurement
-with no mechanism, which is weaker than the rest of this entry and is marked as such.
+**Nothing overrides the setting. It never applies.** Both properties are `Guid?` on the wire model
+`[source: MediaBrowser.Model/Dto/BaseItemDto.cs:155, :273 @ v10.11.11]` and both are assigned from
+a **non-nullable** `Guid` on the item — `dto.ChannelId = item.ChannelId` and
+`dto.ParentId = item.DisplayParentId`
+`[source: Emby.Server.Implementations/Dto/DtoService.cs:942-945, :1331 @ v10.11.11]` — so the
+property is never CLR-null and `WhenWritingNull` has nothing to omit. What writes the JSON `null`
+is the registered converter, on `Guid.Empty` and only on it
+`[source: src/Jellyfin.Extensions/Json/Converters/JsonNullableGuidConverter.cs:19-26,
+src/Jellyfin.Extensions/Json/JsonDefaults.cs:38 @ v10.11.11]`. That is the whole exception, and it
+predicts its own shape: an identifier-valued property is `null` exactly where the item's `Guid` is
+empty, and every other property still obeys the setting.
+`[probe: tools/probe_user_views_parent.py, Jellyfin 10.11.11, 2026-09-03]`
+
+> **This paragraph read "what overrides the setting has not been established here" until
+> 2026-09-03**, and recorded the exception as a measurement with no mechanism because the machine
+> that ran the 2026-08-27 probe had no reference checkout. It had one on 2026-09-03, and the answer
+> was that the premise was wrong: the setting is not overridden.
+
+**And `ParentId` is a property of the row, not of the route.** `/UserViews` answers two kinds of
+row, and the null belongs to one of them. A library's own **`CollectionFolder`** row — the default
+for every library — carries the **identifier** of the one `UserRootFolder` every library hangs off,
+a fetchable item named `Media Folders`; a synthesised **`UserView`** row carries the explicit
+`null`. Both kinds arrive in the same response. Four things make a `UserView` row and none of them
+is on by default: two or more libraries of one eligible type grouped into a single view (one alone
+collapses back to its own folder), the server-wide `Folders` view, a `Playlists` view once a
+playlist exists, and a `presetViews` parameter on the request. The property itself is **never
+omitted** on this route, which asks for every field. Measured across seven readings, 30 rows, on a
+single-use instance of the pinned version: 24 identifiers, 6 nulls, 0 omissions, and every null a
+`UserView`. `[probe: tools/probe_user_views_parent.py, Jellyfin 10.11.11, 2026-09-03]`
+
+The 2026-08-27 reading is the same behaviour on a server that had two such rows: 2 nulls of 6, on
+rows its own record notes reported *two* types, `CollectionFolder` and `UserView`
+(005 [notes/item-shapes.md §6](../../specs/005-item-query-api/notes/item-shapes.md)). Neither
+reading was wrong; neither saw the other's rows.
 
 **Depends on it:** decoders differ. A generated Swift client distinguishes "absent" from "null"
 only when the schema is nullable; a hand-written Kotlin one usually does not — and the exception
@@ -209,6 +238,15 @@ explicitly as `null` on every item, and `ParentId` likewise where it has no pare
 `response_model_exclude_none` flag on every route is one someone eventually forgets, and the one
 they forget is the one a client sees a stray `null` on; the two exceptions are named in one place
 for the same reason.
+
+**On `/UserViews` that rule sends a `null` where the reference sends an identifier, and the
+divergence is open.** Atrium has no user root folder item, so every view row of its is parentless
+and every row carries the `null`; the reference's default row is a `CollectionFolder` whose parent
+exists. It is a difference of **type**, not of value, and a decoder that reads `ParentId` as a
+non-optional string breaks on it. What Atrium should send — the same `null`, a synthetic root
+identifier, or the property omitted — is an owner's decision recorded against
+`UserViewDto` in `src/atrium/api/item_models.py` and **not yet taken**; nothing about the emission
+changed when this entry was corrected.
 
 > **This entry previously read "per-property and not consistent", marked ⚠️ UNVERIFIED**, and
 > planned to let the differential harness enumerate it. It is one line of configuration. The

@@ -230,11 +230,27 @@ class BaseItemDto(AtriumModel):
 class UserViewDto(BaseItemDto):
     """A `/UserViews` row: the same item surface, one more explicit null.
 
-    The reference sends `"ParentId": null` on a view row that hangs off nothing - measured on the
-    rows whose parent is absent, where every other route simply omits the property
-    `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`. Atrium's views all hang
-    off nothing (there is no user root folder item), so the null travels on every row - the same
-    mechanism as `ChannelId`, scoped to the one route whose shape carries it.
+    Atrium's views all hang off nothing - there is no user root folder item - so `ParentId` is
+    `null` on every row, and it travels rather than being omitted: the same mechanism as
+    `ChannelId`, scoped to the one route whose shape carries it.
+
+    **The reference does not do this on a default row, and the divergence is open.** This class
+    was written on 2026-08-27 reading *"the reference sends `ParentId: null` on a view row that
+    hangs off nothing"* and generalising it to every row. The generalisation is false. `ParentId`
+    is `DisplayParentId` serialised by a converter that writes `null` for `Guid.Empty` and an
+    identifier otherwise, so the reference answers **per row**: a library's own `CollectionFolder`
+    row - the default for every library - names the `UserRootFolder` it hangs off, and only a
+    *synthesised* `UserView` row is null (grouped libraries, the server-wide `Folders` view,
+    `Playlists`, a `presetViews` request). The 2026-08-27 server had two rows of the second kind
+    out of six; a fresh instance has none, and answers an identifier on every row
+    `[probe: tools/probe_user_views_parent.py, Jellyfin 10.11.11, 2026-09-03]`.
+    [behaviours section 1.7](../../../docs/compatibility/behaviours.md) carries the mechanism.
+
+    **What Atrium emits is unchanged and the decision is the owner's.** A `null` where the
+    reference sends a string is a difference of *type*, which is what breaks a decoder that reads
+    `ParentId` as non-optional - so this is not a cosmetic gap. The three answers are: keep the
+    null and declare the divergence, mint a root identifier for views to hang off, or omit the
+    property here. None is taken, and this docstring is the record of that rather than a plan.
     """
 
     NULL_KEPT: ClassVar[frozenset[str]] = frozenset({"ChannelId", "ParentId"})

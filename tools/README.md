@@ -89,6 +89,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_reference_scan.py`](probe_reference_scan.py) | Given this repository's fixture tree, what does a reference server's library contain — and how much of that reading came from a metadata provider rather than from the tree? | 010 §3.1, AC-2, AC-7, AC-8; plan §6.6, §11 D-4 | yes, and **only to an instance it creates and destroys** |
 | [`probe_public_users.py`](probe_public_users.py) | Does `/Users/Public` answer an empty list when every account is hidden from the login screen? | 010 §3.5, AC-9; reference-target §2; behaviours §2.2 | yes, and **only to an instance it creates and destroys** |
 | [`probe_local_address.py`](probe_local_address.py) | Does `LocalAddress` advertise the HTTPS scheme and port once a certificate is configured, on a request that came in over HTTP? | 010 §3.5, AC-9; reference-target §2; behaviours §2.3, §4.2; 001 §3.4 | yes, and **only to an instance it creates and destroys** |
+| [`probe_user_views_parent.py`](probe_user_views_parent.py) | What does a `/UserViews` row carry in `ParentId`, and on which rows? | behaviours §1.7; 005 §3.2 and notes/item-shapes.md §6 | yes, and **only to an instance it creates and destroys** |
 
 ### Running them
 
@@ -144,15 +145,16 @@ python3 tools/probe_progressive_production.py --allow-writes
 python3 tools/probe_session_filters.py --allow-writes
 ```
 
-**Three probes are not in the list above because they take no server at all**, and each refuses one
-that is offered: `probe_reference_scan.py`, `probe_public_users.py` and `probe_local_address.py`
-stand up a single-use instance of the pinned version, ask it their question and destroy it. Each
-needs a container runtime and nothing else:
+**Four probes are not in the list above because they take no server at all**, and each refuses one
+that is offered: `probe_reference_scan.py`, `probe_public_users.py`, `probe_local_address.py` and
+`probe_user_views_parent.py` stand up a single-use instance of the pinned version, ask it their
+question and destroy it. Each needs a container runtime and nothing else:
 
 ```bash
-python3 tools/probe_reference_scan.py  --allow-writes
-python3 tools/probe_public_users.py    --allow-writes
-python3 tools/probe_local_address.py   --allow-writes   # also needs openssl on the PATH
+python3 tools/probe_reference_scan.py     --allow-writes
+python3 tools/probe_public_users.py       --allow-writes
+python3 tools/probe_local_address.py      --allow-writes   # also needs openssl on the PATH
+python3 tools/probe_user_views_parent.py  --allow-writes
 ```
 
 `probe_uninspected_source.py` is the exception to the list above, and it says so in its own
@@ -299,7 +301,8 @@ been creating user accounts without asking.
 | `probe_next_up.py` | Played marks on a handful of episodes | Chooses series whose episodes carry no user data, deletes every mark including on failure, and verifies the episodes pristine afterwards |
 | `probe_public_users.py` | A whole server: a single-use instance, plus one throwaway account on it, and every account's `IsHidden` flipped in both directions | Destroys the container, its volumes and everything inside them. Refuses a server argument outright: hiding every account changes what an operator's login screen shows |
 | `probe_local_address.py` | A whole server: a single-use instance given a throwaway self-signed certificate, HTTPS turned on, and restarted so the certificate is read | The same, and the certificate is generated into a git-ignored directory that goes with the run. Refuses a server argument outright |
-| `probe_reference_scan.py` | Two whole servers: a single-use reference instance each for its two readings, three libraries scanned into each | Destroys the container, its volumes and everything written inside them, on both paths — and refuses a server argument outright, because its question cannot be asked without writing a library into the server being asked. **One of the three writing probes that can never touch an operator's data** — the two above it are the others — which is the argument [ADR-0007](../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md) makes in one line |
+| `probe_reference_scan.py` | Two whole servers: a single-use reference instance each for its two readings, three libraries scanned into each | Destroys the container, its volumes and everything written inside them, on both paths — and refuses a server argument outright, because its question cannot be asked without writing a library into the server being asked. **One of the four writing probes that can never touch an operator's data** — the two above it and the one below it are the others — which is the argument [ADR-0007](../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md) makes in one line |
+| `probe_user_views_parent.py` | A whole server: a single-use instance over four empty libraries, plus a throwaway seat, one playlist, the administrator's grouping preference and the server-wide `Folders` view | The same, and it deletes the seat and the playlist itself rather than leaving them to the shared register. Refuses a server argument outright: its six readings need libraries added, grouped and a server-wide view switched, which is not something to do to somebody's installation |
 
 `probe_playstate.py` refuses to run at all if it cannot find a long item with no existing user
 data. It will not overwrite a real resume position, because it could not put one back exactly.

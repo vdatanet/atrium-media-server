@@ -35,6 +35,14 @@ every item of every type, and `ParentId`, null on the parentless `/UserViews` ro
 survivor, a `ParentId` null outside `/UserViews`, or a `ChannelId` arriving with a value are all
 contradictions.
 
+**"Parentless" is the load-bearing word, and this probe cannot vary it.** Which `/UserViews` rows
+have no parent is a property of the server's configuration, not of the route, and the count this
+probe reports - 2 of 6 on 2026-08-27 - is a reading of one library layout. `ParentId` is null
+exactly where the item's `DisplayParentId` is `Guid.Empty`, which on this route means a synthesised
+`UserView` row rather than a library's own `CollectionFolder`; `tools/probe_user_views_parent.py`
+is the probe that varies the condition, and it owns the claim. A run of this probe that reports a
+different count is therefore a different **library**, and not necessarily a changed behaviour.
+
 Two item-family claims hand-measured on 2026-08-27 are folded in as well (the L2 pattern of
 docs/audits/2026-08-28.md): **`MediaType` is a property of the item type** - the table
 `domain/items.py` holds as `MEDIA_TYPE_OF`, every container `Unknown` including `MusicAlbum`,
