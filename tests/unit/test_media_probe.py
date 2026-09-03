@@ -89,6 +89,11 @@ def test_a_fixture_inspects_to_what_it_declares(entry: MediaFile, media_files: B
     )
 
     audio = found.audio
+    if not entry.has_audio:
+        #: 012 T2's `soundless`: an entry that declares no audio stream has to come back with
+        #: none, which is the condition the reference refuses a whole request over.
+        assert audio is None
+        return
     assert audio is not None
     assert audio.codec == entry.audio_codec
     assert audio.sample_rate == entry.sample_rate

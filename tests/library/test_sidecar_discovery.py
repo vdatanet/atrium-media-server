@@ -137,7 +137,10 @@ def test_a_sidecar_appears_and_disappears_and_the_indices_follow_it(
     # ---- the file arrives, and a **default** scan notices ------------------------------------
     sidecar.write_bytes(kept)
     report = scan(library, session)
-    assert report.uninspected == ()
+    #: 012 T2 put files no prober will accept into this world, and they are re-attempted on every
+    #: scan because there is no stored inspection to compare a signal against. What this line is
+    #: about is the **sidecar's** film, so it asserts that and not an empty tuple.
+    assert FILM.path not in {one.relative_path for one in report.uninspected}
 
     after = indices_of(session, library)
     assert after == [("subtitle", 0), ("video", 1), ("audio", 2), ("subtitle", 3)], (

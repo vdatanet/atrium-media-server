@@ -16,7 +16,10 @@ is no longer needed to *check* it is a second server. Nothing here opens a socke
 exists anywhere near the job that runs it.
 
 **The comparison is not an equality, and saying so is the point.** The two servers disagree over
-this tree in forty-seven places, every one of them written down below with the reason it is there.
+this tree in fifty places, every one of them written down below with the reason it is there. *It
+was forty-seven when 010 recorded the reading on 2026-09-02; 012 T2 added five files to the
+fixture and three of the differences they produce are new — a film named after its folder, and an
+artist the reference reads off the path where Atrium reads it off the tags.*
 A difference that is not in the table fails the test, which is what makes this a measurement of
 Atrium's scan rather than a restatement of it: change a name derivation and a row moves; refresh
 the record against a new reference and a row moves. Deciding what Atrium *does* about any of them
@@ -128,6 +131,15 @@ NAMED_DIFFERENTLY = (
         "part",
     ),
     Renaming("Movies", "S.W.A.T. (2003).mkv", "S.W.A.T.", "S W A T", _YEAR_AND_PUNCTUATION),
+    Renaming(
+        "Films",
+        "The Missing Half (2011)/The Missing Half (2011) - part1.mkv",
+        "The Missing Half (2011)",
+        "The Missing Half",
+        "012 T2's two-part film, whose second part no prober will accept. The same shape as the "
+        "row below - the reference names a film after its folder, year and all - and it is here "
+        "because the entry is new, not because the rule moved",
+    ),
     Renaming(
         "Movies",
         "The Long Film (1998)/The Long Film (1998) - part1.mkv",
@@ -299,6 +311,12 @@ NAMED_DIFFERENTLY = (
 #: none. Comparing them on a value only one side has would report every container as a difference.
 CONTAINERS_ONLY_THE_REFERENCE_HAS = {
     (
+        "Tunes",
+        "MusicArtist",
+        "Quiet Corner",
+    ): "The reference names this artist after the **directory**, having read no tags out of a "
+    "file with no audio stream. The other half of the `Soundless Artist` row in the table below",
+    (
         "Movies",
         "Folder",
         "Movies",
@@ -378,6 +396,16 @@ CONTAINERS_ONLY_ATRIUM_HAS = {
     "the half that carries the library's own name",
     ("Tunes", "CollectionFolder", "Tunes"): "The other half of the library-root row above",
     ("Tunes", "MusicArtist", "The Artist"): "The other half of the music-artist row above",
+    (
+        "Tunes",
+        "MusicArtist",
+        "Soundless Artist",
+    ): "**The two servers read a different thing about the same file**, and this is the one row "
+    "here that is neither a name nor a container shape. 012 T2's `soundless` is a readable mp4 "
+    "with no audio stream and full artist and album tags: Atrium reads the tags and hangs it "
+    "under `Soundless Artist`, and the reference hangs it under its folder, `Quiet Corner`. A "
+    "file with no audio stream is one the reference has no audio metadata reader for, so it falls "
+    "back to the path. 003's and 004's to decide, measured here first",
     (
         "Empty",
         "CollectionFolder",
@@ -579,16 +607,22 @@ def test_the_reading_states_the_item_count_of_every_library(
         "Movies": 18,
         "Shows": 20,
         "Music": 20,
-        "Films": 12,
-        "Tunes": 4,
+        # Films 12 -> 16 and Tunes 4 -> 7 at 012 T2: four films a prober cannot open or that
+        # carry no video stream, and a track with no audio stream under an artist and an album
+        # the reference names after their directories.
+        "Films": 16,
+        "Tunes": 7,
         "Empty": 0,
     }
     assert {name: len(rows) for name, rows in atrium.items()} == {
         "Movies": 17,
         "Shows": 18,
         "Music": 18,
-        "Films": 12,
-        "Tunes": 4,
+        # The same four and three 012 T2 added, and the counts agreeing on both sides is the
+        # finding rather than the arithmetic: a film a prober cannot open is an item to both
+        # servers, and so is a track with no audio stream.
+        "Films": 16,
+        "Tunes": 7,
         "Empty": 1,
     }
 
@@ -636,7 +670,7 @@ def test_the_reading_says_which_libraries_hold_media_a_prober_can_open(
 
 
 def test_the_declared_differences_are_the_number_this_module_claims() -> None:
-    """The docstring says forty-seven, and a number in prose that nothing counts goes stale.
+    """The docstring says fifty, and a number in prose that nothing counts goes stale.
 
     Counted rather than restated: the comparison above already fails on an undeclared difference
     and on a declared one that has gone away, so this is not a second gate on the servers - it is
@@ -649,8 +683,8 @@ def test_the_declared_differences_are_the_number_this_module_claims() -> None:
         + len(CONTAINERS_ONLY_THE_REFERENCE_HAS)
         + len(CONTAINERS_ONLY_ATRIUM_HAS)
     )
-    assert declared == 47
-    assert "forty-seven places" in str(__doc__)
+    assert declared == 50
+    assert "fifty places" in str(__doc__)
 
 
 def test_the_record_carries_its_own_citation(recorded: dict[str, object]) -> None:

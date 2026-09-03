@@ -20,9 +20,10 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session as OrmSession
 
-from atrium.db.repositories import ItemRepository, LibraryRepository
+from atrium.db.repositories import ItemRepository, LibraryRepository, MediaProbeRepository
 from atrium.domain.items import CollectionType, Item, ItemType
 from atrium.domain.library import Library
+from atrium.domain.media import MediaInspection
 from atrium.library.config import normalise_root
 from atrium.library.scan import scan
 from tests.fixtures.media import (
@@ -30,6 +31,7 @@ from tests.fixtures.media import (
     MUSIC_LIBRARY_ID,
     BuiltMedia,
     MediaFile,
+    UninspectableFile,
 )
 
 
@@ -47,7 +49,25 @@ class ScannedMediaWorld:
     items: Mapping[str, Item]
     """Every item both scans produced, keyed by identifier."""
 
-    def of(self, one: MediaFile) -> Item:
+    session: OrmSession
+    """The session the scans ran in, kept so a test can ask what was **stored** rather than only
+    what was resolved.
+
+    Added by 012 T2, which needs the question no other world has had to ask: whether a file the
+    prober refused has an item and a source row and *no probe row*. That is three tables agreeing,
+    and `items` alone answers one of them."""
+
+    def inspection_of(self, one: MediaFile | UninspectableFile) -> MediaInspection | None:
+        """What inspection stored for this declaration's file, or `None` where nothing did.
+
+        Read through the repository the scan writes with, keyed the way that repository keys a
+        file - its library and its path relative to the root - so a test cannot pass by asking a
+        different question from the one the wire assembly asks.
+        """
+        library = self.movies if one.root == self.files.movies_root.name else self.music
+        return MediaProbeRepository(self.session).get(library.id, one.path)
+
+    def of(self, one: MediaFile | UninspectableFile) -> Item:
         """The item this file backs - found through its sources, never assumed from its name."""
         wanted = one.path
         for candidate in self.items.values():
@@ -95,6 +115,7 @@ def build_scanned_media_world(session: OrmSession, files: BuiltMedia) -> Scanned
         movies=movies,
         music=music,
         items={**items.by_library(movies.id), **items.by_library(music.id)},
+        session=session,
     )
 
 
