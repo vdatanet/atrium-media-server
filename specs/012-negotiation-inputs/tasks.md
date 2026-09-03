@@ -1,9 +1,11 @@
 ---
 feature: 012-negotiation-inputs
 title: Negotiation inputs — tasks
-status: Draft
+status: Accepted
 created: 2026-09-03
 updated: 2026-09-03
+accepted: 2026-09-03
+amended: 2026-09-03 at the gate — a zero-length file is not one of the two ways to reach this feature's subject on **this** server, because 003's walk skips it before it becomes an item; `SubtitleMethod` is the one vocabulary of five that already binds both ways, so T7's rows for it are a regression check and not a fix; the empty-string half of *"the default clause does not generalise"* is a reading of a converter and T1 measures it; `IMPLEMENTED_FEATURES` gains nothing, because 012 owns no row of `surface.yaml`; and the differential is run with the command `conformance.md` publishes. See "What the gate changed"
 plan_status_required: Accepted
 plan_status_actual: Accepted
 ---
@@ -41,12 +43,41 @@ between two commits. So T7 generalises the binder (and deletes 011 T9's narrow o
 nested refusal the key the reference gives it, and only then does T9 make the protocol an
 enumeration. Each of the three is measurable on its own.
 
-**Nothing here adds a route, so there is no interim list.** [Spec §7.2](spec.md#72-the-dependencies-outside-this-document)
-is explicit that no row of [`surface.yaml`](../../docs/compatibility/surface.yaml) changes, and
-`grep -c 'feature: "012"'` over that file answers `0`. `IMPLEMENTED_FEATURES` in
-`tests/conformance/test_routes.py` gains `"012"` at T11 for the acceptance map's sake and for
-nothing else — the exact-set route check is green throughout, which is the first time since 002
-that has been true of a feature.
+**Nothing here adds a route, so there is no interim list — and no entry in `IMPLEMENTED_FEATURES`
+either.** [Spec §7.2](spec.md#72-the-dependencies-outside-this-document) is explicit that no row of
+[`surface.yaml`](../../docs/compatibility/surface.yaml) changes, and `grep -c 'feature: "012"'`
+over that file answers `0`. The exact-set route check is therefore green throughout, which is the
+first time since 002 that has been true of a feature — and **012 is the first feature whose
+closing task adds itself to no set any test reads**, which puts the whole weight of "every
+criterion has a passing test" on the acceptance map (see T11).
+
+## What the gate changed
+
+This list was reviewed against [`spec.md`](spec.md), [`plan.md`](plan.md) and the files they name
+on 2026-09-03 before being accepted. **The first row was measured rather than read, and it takes
+half of a sentence the accepted spec had said twice.**
+
+| The draft said | It was |
+|---|---|
+| The state this feature is about is reached by *"a zero-length file, and bytes that are not the container the extension claims"* ([spec §3.2](spec.md#32-a-media-source-the-server-has-never-opened) and [§6](spec.md#6-conformance)) | **One of those two, here.** A real scan of a library holding a zero-length `.mkv` produces **no item at all** — not an item with an empty source, and not even an `Uninspected` report: `library/walker.py` skips a file of no length with `Skip.EMPTY` before it is ever a candidate. Measured in this repository on 2026-09-03 beside the case that does work: a 4 KiB junk `.mkv` in the same tree scans into a `Movie` with a source row of 4 095 bytes and **no probe row**, which is the state this feature exists for, reached. The reference admits the zero-length file and answers both a listing and a negotiation for it `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-08-29]`, so this is a **difference in an implemented feature and it is 003's** — handed on with its measurement rather than absorbed here, the way [D-2](plan.md#d-2--the-item-level-runtimeticks-which-is-not-this-features) was. Spec §3.2, spec §6 and plan §6.1 and §7 are corrected in this same change, and T2 declares no zero-length entry |
+| T7 fixes five vocabularies that are each a `400` today where the reference answers `200` ([plan §6.7](plan.md#67-the-general-enum-binder)) | **Four.** `SubtitleMethod` is the fifth and it already binds in any case and by ordinal — that is exactly what 011 T9's `_bound_subtitle_method` does, and T7 **deletes** it. So its rows are a regression check: every `Method` assertion 011 shipped has to answer what it answers today, through the general binder instead of the private one. A task list that called it a fix would have counted a deletion as a feature |
+| An empty string is still a `400` on all five, *"because none of those five enumerations declares a default"* (T7) | **True by reading and measured nowhere.** It is the load-bearing half of the plan's *"the default clause does not generalise"* — the argument that a binder generalising all four measured classes would answer `200` on five properties the reference refuses — and it rests on `JsonDefaultStringEnumConverterFactory.CanConvert` requiring `[DefaultValue]`. One request settles it, so T1 gains a sixth observation and T7 cites it |
+| T11 adds `"012"` to `IMPLEMENTED_FEATURES` *"for the acceptance map's sake"* | **Neither half holds.** That set is read by `surface_paths()`, which filters `surface.yaml` by `feature`, and 012 owns **no** row there, so adding it changes nothing; and `test_every_implemented_feature_has_a_map` reads the **status table** in `specs/README.md`, not that set. 012 is therefore the first feature whose closing task adds itself to no set any test reads, which puts the whole weight of *"every criterion has a passing test"* on the map — said in T11 rather than discovered by whoever writes it |
+| The differential is run as `python3 tools/differential.py` (T10) | **The command has four required flags and a fifth this feature needs.** [conformance.md's L3 section](../../docs/compatibility/conformance.md) publishes `--atrium`, `--jellyfin`, `--surface` and `--report`, and `--fixture` is what asks for the half that needs a single-use reference instance over this repository's own fixture — which is the only way either of 012's L3 rows can be compared, because the source they are about exists in no library but ours |
+
+And one the review confirmed rather than changed, because a task would otherwise re-derive it:
+
+* **Removing T5's `if inspection is None: continue` loses neither of the two flags it writes.**
+  Since 008's policy-gate fix that branch sets `SupportsTranscoding` and `SupportsDirectStream`
+  from the account's permissions. Traced through: `decide()`'s rule 1 calls the same two functions,
+  `_annotate` writes all three flags off the answer, and a profile-less negotiation returns at the
+  `supports_direct_play` guard before it can add an address. The answer for a never-opened source
+  with no profile is identical before and after, field for field.
+
+* **`_annotate`'s `decided.sub_protocol or wire.transcoding_sub_protocol` is a truthiness test on a
+  field T9 makes able to hold an integer.** `0` is unreachable today because it binds to a member,
+  which is exactly what makes it the kind of trap that survives review; T9 changes it to
+  `is not None` in the same edit.
 
 ## Legend
 
@@ -66,7 +97,12 @@ that has been true of a feature.
   to confirm the profile-less route probes on demand and heals the listing as the `POST` does;
   **(6)** the `ETag` of a healed source before and after, which is what
   [D-1](plan.md#d-1--the-healed-items-etag) rests on; and **(3)** what a refresh does to the
-  **second** part of a multi-part item whose first part is annotated and whose second is not.
+  **second** part of a multi-part item whose first part is annotated and whose second is not. Plus
+  a sixth the gate added, on `tools/probe_playback_info.py` rather than here: **an empty string
+  against an enumeration that declares no default** — a codec profile's `Type`, say — which
+  [plan §6.7](plan.md#67-the-general-enum-binder) predicts is a `400` there and which is the
+  load-bearing half of *"the default clause does not generalise"*. It is read off a converter and
+  measured nowhere, and T7 asserts it.
 - **Depends on:** —
 - **Verified by:** `python3 tools/probe_uninspected_source.py http://127.0.0.1:8097 -u admin
   --allow-writes --fixture-root "$PWD/fixture" --server-root /media` against a Jellyfin 10.11.11
@@ -88,9 +124,10 @@ the reason the list starts here.
 ## T2 — The world gets files nothing can open
 
 - [ ] **Changes:** `tests/fixtures/media.py` gains a declaration kind it has not got: an entry
-  whose bytes are **written directly** and whose invariant is that the prober *refuses* it. Four
-  entries and one addition follow — `unreadable.mkv`, four kibibytes that are not a container, in
-  the films root; `latent.mkv`, the same bytes, which a test replaces with a real file after the
+  whose bytes are **written directly** and whose invariant is that the prober *refuses* it — and
+  never a **zero-length** one, which 003's walk skips before it can become an item (see "What the
+  gate changed"). Four entries and one addition follow — `unreadable.mkv`, four kibibytes that are
+  not a container, in the films root; `latent.mkv`, the same bytes, which a test replaces with a real file after the
   scan; `soundless` (an audio item in the music root whose file carries **no audio stream**), for
   which `MediaFile`'s audio fields become optional — every entry declares one today; `videoless`
   (a film whose file carries no video stream), which the declaration already expresses; and a
@@ -102,12 +139,18 @@ the reason the list starts here.
 - **Verified by:** `uv run pytest tests/unit/test_media_fixtures.py -q` — the four unreadable
   entries make `media/probe.py:inspect` raise `UnreadableMediaError` and the two readable ones
   probe back to exactly what they declare, which is the module's own invariant read from both
-  ends. Then a new assertion in the same module, which is the only place `scanned_media_world` is exercised: after a real scan **each of these
+  ends. **And a zero-length file in the same tree produces no item at all**, asserted as the
+  boundary of what this feature can be tested against rather than left to be rediscovered. Then a new assertion in the same module, which is the only place `scanned_media_world` is exercised: after a real scan **each of these
   files is an item with a source row and no probe row** — the state this whole feature is about,
   asserted rather than assumed, because `library/scan.py` records an uninspectable file and carries
   on and nothing has ever checked that an item survives it. And `uv run pytest tests/ -q -m "not
   ffmpeg"` staying green.
 - **Spec reference:** §6 (the fixture, which is *"a subtraction"*); plan §8
+
+**Two of the three assertions above were run at the gate rather than left to this task**, because
+the whole fixture premise rests on them: a 4 KiB junk `.mkv` scans into a `Movie` with a source row
+of 4 095 bytes and **no probe row** — the state this feature is about, reached — and a zero-length
+`.mkv` beside it produces nothing at all, not even an `Uninspected` report.
 
 **The invariant test's premise is inverted here, which is why this is a declaration kind and not
 four rows.** Every existing entry means *"ffmpeg wrote this and ffprobe agrees"*; these mean
@@ -212,12 +255,16 @@ make the invariant test assert a codec against a file that has none.
 - **Depends on:** —
 - **Verified by:** `uv run pytest tests/unit/test_compat_model.py tests/conformance/test_playback_info.py
   tests/conformance/test_subtitle_manifest.py -q` — `ProfileType`, `ConditionType`,
-  `ConditionProperty`, `CodecKind` and `SubtitleMethod` each bind in an altered case and by
-  ordinal, where each is a `400` today and a `200` on the reference
-  `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`; a word no member
-  has is still a `400` on all five; and — the row that proves the default clause is **not**
-  general — an empty string is still a `400` on all five, because none of those five enumerations
-  declares a default. 011's subtitle suite must stay green with its own binder gone.
+  `ConditionProperty` and `CodecKind` each bind in an altered case and by ordinal, where **each of
+  those four** is a `400` today and a `200` on the reference
+  `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`. **`SubtitleMethod`
+  is the fifth and it is not one of them**: 011 T9 already binds it both ways through the private
+  binder this task deletes, so its rows are a **regression** check and not a fix — every one of
+  011's `Method` assertions has to answer what it answers today, through the general binder. A word
+  no member has stays a `400` on all five; and — the row that proves the default clause is **not**
+  general — an empty string stays a `400` on all five, because none of those five enumerations
+  declares a default. That last row is a *reading* of the reference's converter factory until T1's
+  sixth observation lands, and it is cited as one.
 - **Spec reference:** §3.3, AC-8; plan §6.7, spec OQ-4
 
 **This task makes no `400` into a `200` that the reference refuses, and the empty-string row is how
@@ -247,7 +294,10 @@ reference answers `400`.
   binders read it. `TranscodingProfile.protocol` takes `StreamProtocol | int`,
   `TranscodingProfileDto.protocol` with it, and `Decision.sub_protocol` and
   `MediaSourceInfo.TranscodingSubProtocol` become `str | int` so the out-of-range ordinal survives
-  to the wire as a number — which [behaviours §2.24](../../docs/compatibility/behaviours.md) has
+  to the wire as a number — and `api/media_info.py:_annotate`'s
+  `decided.sub_protocol or wire.transcoding_sub_protocol` becomes an `is not None` test in the same
+  edit, because a truthiness fallback on a field that can now hold an integer is one ordinal away
+  from answering `"http"` to a client that asked for `0` — which [behaviours §2.24](../../docs/compatibility/behaviours.md) has
   already decided this server reproduces. `media/urls.py`'s `HLS = "hls"` becomes
   `StreamProtocol.HLS.value`, so the string a comparison is made against and the string an answer
   echoes cannot come apart.
@@ -277,23 +327,31 @@ reference answers `400`.
 - **Verified by:** `uv run pytest tests/unit/test_allowlist.py tests/conformance/test_differential.py -q`
   — the registers parse, every case names an endpoint in `surface.yaml` and an anchor that
   resolves, and each named comparison carries its reason and its owner. Then
-  `python3 tools/differential.py` against a single-use reference instance over the fixture: the two
-  L3 rows are compared for both identities, and any difference is declared or the run is not clean.
+  the command [conformance.md §L3](../../docs/compatibility/conformance.md) publishes —
+  `python3 tools/differential.py --atrium … --jellyfin … --surface docs/compatibility/surface.yaml
+  --report reference/differential-report.md --fixture`, the last flag being what asks for the half
+  that needs a single-use reference instance over this repository's own fixture: the two L3 rows
+  are compared for both identities, and any difference is declared or the run is not clean.
 - **Spec reference:** §6 (conformance); plan §8
 
 ## T11 — The acceptance map, the levels, and three status lines
 
 - [ ] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_012` — every criterion of
-  [spec §5](spec.md#5-acceptance-criteria) on one line with the test that proves it —
-  `IMPLEMENTED_FEATURES` in `tests/conformance/test_routes.py` gains `"012"`, and `spec.md`,
+  [spec §5](spec.md#5-acceptance-criteria) on one line with the test that proves it — and `spec.md`,
   `plan.md` and this file are marked `Implemented` with the status table moving in the same change.
+  **`IMPLEMENTED_FEATURES` does not gain `"012"`**, and the gate checked why rather than copying
+  the previous nine features' closing task: that set is read by `surface_paths()`, which filters
+  `surface.yaml` by `feature`, and 012 owns no row there — adding it would change nothing. The
+  acceptance map's own guard reads the **status table** in `specs/README.md` and not that set.
   [Behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)'s
   never-opened-source row is **struck** — the gap closes — and §2.23's and §2.24's *"Atrium does"*
   halves stop being promises.
 - **Depends on:** T1–T10
 - **Verified by:** `uv run pytest tests/ -q` whole and green, and `uv run pytest
   tests/conformance/test_acceptance.py -q` in particular: the map's guard reads the criteria out of
-  `spec.md` itself, so a criterion this list forgot fails here rather than passing silently.
+  `spec.md` itself, so a criterion this list forgot fails here rather than passing silently — and
+  the row that flips this feature to `Implemented` in `specs/README.md` is what makes that guard
+  demand a map at all.
 - **Spec reference:** §5, §6; plan §8
 
 **This is the task that has found something in every feature since 008, and it is always the same

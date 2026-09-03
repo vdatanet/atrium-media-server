@@ -331,6 +331,12 @@ whose stored inspection is absent** once it fires — which is the same answer f
 this repository and is a *reading* of what a full refresh does to a multi-part item rather than a
 measurement of it. Named as owed in §6.8.
 
+**A zero-length file never reaches this trigger**, which the task gate measured rather than
+assumed: 003's walk skips a file of no length before it becomes a candidate
+(`library/walker.py`'s `Skip.EMPTY`), so it has no item, no source row and nothing to negotiate —
+where the reference admits one and answers both a listing and a negotiation for it. Spec §3.2 and
+§6 are corrected, the fixture builds the state the one way it can, and the difference is 003's.
+
 **`.strm` is in the condition and out of v1.** No library extension configured by 003 admits one,
 so the clause is written, unreachable, and cited — rather than silently dropped, which is how a
 later reader learns the condition was three and not two.
@@ -609,7 +615,7 @@ where the next feature's first task started.
 
 | Failure | Detection | Response | Recovery |
 |---|---|---|---|
-| The file cannot be opened (absent, zero-length, not the container its extension claims) | `opened()` returns `None` | The ladder decides against a transient inspection: flags decided, an address, `200` (AC-1, AC-4) | None stored, so the next negotiation tries again — the reference's own cost model |
+| The file cannot be opened (absent since the scan, or not the container its extension claims — a zero-length one never reaches here, §6.1) | `opened()` returns `None` | The ladder decides against a transient inspection: flags decided, an address, `200` (AC-1, AC-4) | None stored, so the next negotiation tries again — the reference's own cost model |
 | `ffprobe` is not installed | `ProberUnavailableError`, caught in `opened()` | Identical to the row above | An operator's problem; `library/scan.py` keeps the distinction where it decides something |
 | The inspection exceeds 60 s | `subprocess.TimeoutExpired` → `UnreadableMediaError` | Identical to the row above | The next negotiation tries again |
 | An audio item has no audio stream and a profile is in play | The selected audio stream is `None` after resolution | `400`, `text/plain`, `Error processing request.` (AC-6) | None. It is the answer |
