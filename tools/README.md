@@ -90,6 +90,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_public_users.py`](probe_public_users.py) | Does `/Users/Public` answer an empty list when every account is hidden from the login screen? | 010 §3.5, AC-9; reference-target §2; behaviours §2.2 | yes, and **only to an instance it creates and destroys** |
 | [`probe_local_address.py`](probe_local_address.py) | Does `LocalAddress` advertise the HTTPS scheme and port once a certificate is configured, on a request that came in over HTTP? | 010 §3.5, AC-9; reference-target §2; behaviours §2.3, §4.2; 001 §3.4 | yes, and **only to an instance it creates and destroys** |
 | [`probe_user_views_parent.py`](probe_user_views_parent.py) | What does a `/UserViews` row carry in `ParentId`, and on which rows? | behaviours §1.7; 005 §3.2 and notes/item-shapes.md §6 | yes, and **only to an instance it creates and destroys** |
+| [`probe_system_info_permission.py`](probe_system_info_permission.py) | Does the reference refuse `/System/Info` to a valid token without the permission its policy reads — which permission is it, and is the refusal this route's at all? | 001 §3.2 and the 2026-09-04 audit's H1; 002 §3.5; behaviours §5 | yes, and **only to an instance it creates and destroys** |
 
 ### Running them
 
@@ -145,16 +146,18 @@ python3 tools/probe_progressive_production.py --allow-writes
 python3 tools/probe_session_filters.py --allow-writes
 ```
 
-**Four probes are not in the list above because they take no server at all**, and each refuses one
-that is offered: `probe_reference_scan.py`, `probe_public_users.py`, `probe_local_address.py` and
-`probe_user_views_parent.py` stand up a single-use instance of the pinned version, ask it their
-question and destroy it. Each needs a container runtime and nothing else:
+**Five probes are not in the list above because they take no server at all**, and each refuses one
+that is offered: `probe_reference_scan.py`, `probe_public_users.py`, `probe_local_address.py`,
+`probe_user_views_parent.py` and `probe_system_info_permission.py` stand up a single-use instance
+of the pinned version, ask it their question and destroy it. Each needs a container runtime and
+nothing else:
 
 ```bash
-python3 tools/probe_reference_scan.py     --allow-writes
-python3 tools/probe_public_users.py       --allow-writes
-python3 tools/probe_local_address.py      --allow-writes   # also needs openssl on the PATH
-python3 tools/probe_user_views_parent.py  --allow-writes
+python3 tools/probe_reference_scan.py         --allow-writes
+python3 tools/probe_public_users.py           --allow-writes
+python3 tools/probe_local_address.py          --allow-writes   # also needs openssl on the PATH
+python3 tools/probe_user_views_parent.py      --allow-writes
+python3 tools/probe_system_info_permission.py --allow-writes
 ```
 
 `probe_uninspected_source.py` is the exception to the list above, and it says so in its own
@@ -303,6 +306,7 @@ been creating user accounts without asking.
 | `probe_local_address.py` | A whole server: a single-use instance given a throwaway self-signed certificate, HTTPS turned on, and restarted so the certificate is read | The same, and the certificate is generated into a git-ignored directory that goes with the run. Refuses a server argument outright |
 | `probe_reference_scan.py` | Two whole servers: a single-use reference instance each for its two readings, three libraries scanned into each | Destroys the container, its volumes and everything written inside them, on both paths — and refuses a server argument outright, because its question cannot be asked without writing a library into the server being asked. **One of the four writing probes that can never touch an operator's data** — the two above it and the one below it are the others — which is the argument [ADR-0007](../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md) makes in one line |
 | `probe_user_views_parent.py` | A whole server: a single-use instance over four empty libraries, plus a throwaway seat, one playlist, the administrator's grouping preference and the server-wide `Folders` view | The same, and it deletes the seat and the playlist itself rather than leaving them to the shared register. Refuses a server argument outright: its six readings need libraries added, grouped and a server-wide view switched, which is not something to do to somebody's installation |
+| `probe_system_info_permission.py` | A whole server: a single-use instance, two throwaway accounts on it — one of them raised to administrator — every `Enable*` flag on the first switched off, and the instance's own definition of its LAN narrowed to a documentation subnet and put back | The same, and it deletes both accounts and restores `LocalNetworkSubnets` itself rather than leaving either to the teardown. Refuses a server argument outright: redefining what a server counts as its local network changes who may reach it at all |
 
 `probe_playstate.py` refuses to run at all if it cannot find a long item with no existing user
 data. It will not overwrite a real resume position, because it could not put one back exactly.

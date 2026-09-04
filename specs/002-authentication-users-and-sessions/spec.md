@@ -3,7 +3,7 @@ feature: 002-authentication-users-and-sessions
 title: Authentication, users and sessions
 status: Implemented
 created: 2026-08-26
-updated: 2026-09-01
+updated: 2026-09-04
 accepted: 2026-08-26
 amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6; by T12 - section 3.8; by T18 - AC-3 and AC-10. 2026-08-28 by the L2 probe fold - section 3.8: an unknown capabilities property is dropped from the session's echo, not kept. 2026-09-01 by tools/probe_user_read.py - section 3.7, AC-7 and the section 6 matrix: GET /Users/{userId} refuses no authenticated caller, the 403 it stated with no provenance is withdrawn, and the two identifiers that name nobody are a 404 and a 400 rather than that same refusal; and 2026-09-01 at the closing audit - OQ-5 is narrowed to the three refusals still unmeasurable without costing somebody's account a lockout counter. It also held the `403` for insufficient permission and the shape of both `403`s, on the premise that the only account available to measure with is an administrator; three probes now create throwaway non-administrators, and 009 T2 measured both shapes, so that half was a debt the table was still reporting after it had been paid
 depends_on: [001]
@@ -271,6 +271,20 @@ flag returned but unenforced is a delta a client could observe by testing the re
 accepted for v1 because the unenforced flags all gate features v1 does not have (Live TV, sync,
 remote control) — enforcing "you may not sync" on a server that never syncs is not observable. Any
 flag whose feature arrives must be enforced in the same change.
+
+> **One of the 28 does not fit that ground, measured 2026-09-04.** `EnableRemoteAccess` gates no
+> absent feature: the reference refuses **every** route that takes a token — measured on
+> `/System/Info` and on `/Users/Me` — with an empty `403` when the account lacks the flag and the
+> request arrives from outside the server's own local network, and it refuses an **administrator**
+> the same way, because the check runs ahead of the administrator bypass. From the local network
+> an account holding no permission at all is answered `200`, with or without the flag.
+> `[probe: tools/probe_system_info_permission.py, Jellyfin 10.11.11, 2026-09-04]` So the delta here
+> is observable rather than not, and the rule above — *enforced in the change that adds its
+> feature* — has no feature to attach to. What enforcing it would take is a server-wide gate ahead
+> of every authenticated route and a definition of "this server's own network" that v1 does not
+> have; that is a scope decision and not this paragraph's to take. Recorded at
+> [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) and left open as
+> the 2026-09-04 audit's H1.
 
 **The three transcoding flags moved into the enforced set on 2026-08-27**, when transcoding entered
 v1 ([roadmap](../../docs/roadmap.md#in-scope)). That is this rule working as written rather than an

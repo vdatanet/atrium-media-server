@@ -3,7 +3,7 @@ feature: 001-server-identity-and-discovery
 title: Server identity and discovery
 status: Implemented
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-09-04
 accepted: 2026-08-26
 depends_on: []
 ---
@@ -160,7 +160,25 @@ Atrium returns the superset with these values:
 | Condition | Status |
 |---|---|
 | No or invalid token, and setup already complete | `401` |
-| Valid token without permission | `403` |
+| A valid token whose account holds no `EnableRemoteAccess`, on a request arriving from outside the server's own local network | `403`, empty body and no content type |
+
+**The second row carried no citation from the day this specification was written until 2026-09-04,
+and the measurement it finally got narrowed it.** There is no permission on this route: its policy
+admits every role the reference issues a token, and the one role it would refuse is a role no token
+is ever given. The refusal comes from the authorization underneath that policy, it is
+`EnableRemoteAccess`, and it only bites from an address the server does not count as local — an
+account holding **no permission at all** is answered `200` from the local network, with or without
+that flag. It is not this route's refusal either: the same seat is refused `/Users/Me` in the same
+breath, and an **administrator** without the flag is refused too, because the check runs ahead of
+the administrator bypass. `[probe: tools/probe_system_info_permission.py, Jellyfin 10.11.11, 2026-09-04]`
+
+**Atrium implements none of it, here or anywhere**, which is a live delta recorded at
+[behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1). **No acceptance
+criterion is added with this measurement, deliberately**: a criterion for this row could only
+assert a refusal no route performs, and whether Atrium grows the server-wide gate that would
+perform it is the open scope decision of the 2026-09-04 audit's H1 — which stays open, and which
+this row is the reason for. AC-5's *"`200` with a valid one"* is exact for every caller on the
+server's own network, which is every caller the goldens and the differential have.
 
 ### 3.3 `GET /System/Ping`, `POST /System/Ping` — `GetPingSystem`, `PostPingSystem`
 
