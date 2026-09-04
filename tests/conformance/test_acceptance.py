@@ -1385,6 +1385,12 @@ FEATURE_010: dict[int, tuple[str, ...]] = {
 #: trigger *and* by `api/media_info.py:_opened` skipping a part that already carries a probe, and
 #: either alone lets it through.
 #:
+#: **That is a fact about that row, and it was written here as a fact about the two lines** - audit
+#: 2026-09-04's M17 deleted the guard alone and watched the whole suite pass, so nothing held it.
+#: AC-9 below names the test that holds it now, and the lesson is the one this file exists for: a
+#: mutation proves the row it reddens, and "both were needed together" never implied "each is
+#: caught somewhere".
+#:
 #: **And AC-9 said something two of its neighbours contradict**, which is 010 T15's AC-2 again:
 #: *"nothing in this feature changes what a negotiation answers for an item that has been opened,
 #: for any profile"* is a prohibition AC-7 and AC-8 break on purpose, so no test could have passed
@@ -1466,6 +1472,10 @@ FEATURE_012: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_playback_info:test_ac15_a_direct_played_file_answers_what_it_answered_before",
         "tests.conformance.test_playback_info:test_a_file_gone_from_disk_since_the_scan_is_answered_from_what_the_scan_stored",
         "tests.unit.test_library_inspection:test_a_scanned_source_that_was_opened_does_not_fire_it",
+        # The other half of that mechanism, and the one nothing held until audit 2026-09-04's M17:
+        # where the trigger *does* fire on an item the scan opened, the file side still does
+        # nothing - the prober is invoked zero times for a part that already carries an inspection.
+        "tests.conformance.test_playback_info:test_a_part_the_scan_already_opened_is_not_re_opened_when_the_trigger_fires",
     ),
     # The prohibition, asserted on the response **bytes** of three routes rather than on the fields
     # a test remembered to name - and on the guard underneath, which is six functions and not one.

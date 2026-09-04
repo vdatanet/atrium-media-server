@@ -26,6 +26,8 @@ from tests.conftest import data_dir
 from tests.fixtures.query import (
     ALBUM_ARTIST,
     ALBUM_PRIMARY_TAG,
+    DATED_PREMIERE,
+    FIRST_YEAR,
     GENRE_SPELLINGS,
     RATED,
     SERIES_BACKDROP_TAGS,
@@ -83,13 +85,28 @@ def as_user(harness: Harness, user: User) -> None:
 async def test_the_summary_always_answers_all_four_keys_sorted(
     client: httpx.AsyncClient, world: QueryWorld
 ) -> None:
+    """All four keys, each list sorted, and `Years` asserted as the list the fixture really makes.
+
+    **`Years` is the items' `ProductionYear` and nothing else**, which is what the one film
+    carrying a premiere date proves here: `DATED_PREMIERE` is June 1989 on the film whose
+    production year is `FIRST_YEAR + DATED_OFFSET`, so a summary built from premiere dates would
+    carry 1989 and drop 1991. The reference reads the same column - `i.ProductionYear ?? -1`,
+    positives only, distinct, ordered `[source: Jellyfin.Api/Controllers/FilterController.cs:94 @
+    v10.11.11]`.
+
+    Asserted as one exact list after audit 2026-09-04's M18: this line read
+    `assert years == sorted(years) == <a list> or (years == sorted(years))`, which is
+    `assert years == sorted(years)` and passes for any ascending list. The exact list it named -
+    `[1989, 1991, ..., 1999]` - was **wrong**, written as though `DATED_OFFSET` were 0 and as
+    though a premiere date displaced a production year; measured, the answer is `FIRST_YEAR`
+    onwards with nothing displaced. That is why the disjunct is not simply deleted.
+    """
     answered = await client.get("/Items/Filters")
     body = answered.json()
     assert set(body) == {"Genres", "Tags", "OfficialRatings", "Years"}
     assert body["Genres"] == sorted(body["Genres"])
-    assert body["Years"] == sorted(body["Years"]) == [1900 + 89, *range(1991, 1990 + RATED)] or (
-        body["Years"] == sorted(body["Years"])
-    )
+    assert body["Years"] == [FIRST_YEAR + offset for offset in range(RATED)]
+    assert DATED_PREMIERE.year not in body["Years"], "the column is the production year"
     assert body["OfficialRatings"] == ["PG"]
     assert body["Tags"] == ["blue"]
 
