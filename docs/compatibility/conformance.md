@@ -81,8 +81,12 @@ library with nothing in it at all
 `tests/fixtures/reference_tree.py` is what composes the three, and
 `docs/compatibility/reference-fixture-reading.json` is the reference's recorded reading of them,
 compared against Atrium's own scan by `tests/library/test_reference_reading.py` with no Jellyfin
-anywhere. The comparison is **not an equality**: forty-seven declared differences, where one that is
-not declared fails and a declared one that has gone away fails too.
+anywhere. The comparison is **not an equality**: **fifty** declared differences, where one that is
+not declared fails and a declared one that has gone away fails too. *(Forty-seven when 010 recorded
+the reading on 2026-09-02, which is the number its own dated AC-2 amendment states and keeps. 012 T2
+added five files nothing can inspect to the fixture tree, so the reading was **re-taken** against a
+single-use instance of the pinned version rather than edited — which is the order the failure
+message demands — and three more differences came with them, all of them 003's or 004's.)*
 
 The fixture library covers, deliberately, the cases that break naive scanners:
 

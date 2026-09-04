@@ -49,6 +49,13 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 #: so that no route can ship ahead of the feature that specifies it - and, just as importantly, so
 #: that a feature marked `Implemented` whose route is not registered fails here rather than in
 #: somebody's client. 004 joined at T15, which is the line this file's own comment promised.
+#:
+#: **Three implemented features are not here and cannot be**, which is a property of the set rather
+#: than an omission: it is read by `surface_paths()`, which filters `surface.yaml` by `feature`, and
+#: 003, 010 and 012 own no row of that file. 012 is the sharpest of the three — the first feature to
+#: change what an **already-listed** route answers without adding one — so its closing task added it
+#: to nothing any test reads, and the whole of its definition of done rests on
+#: `test_acceptance.py`'s map instead.
 IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007", "008", "009", "011"})
 
 

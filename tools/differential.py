@@ -2583,9 +2583,10 @@ def named_media_source_no_runtime_and_zero_length_cue(
         reference=(
             f"{theirs[0]}: RunTimeTicks={theirs[1]!r}, Bitrate={theirs[2]!r}, {theirs[3]} streams"
         ),
-        # behaviours 5's un-inspected-source row: on a listing the two agree, which is what this
-        # asserts. A zero-length cue has no reachable state on either server and is the miss the
-        # finding names.
+        # behaviours 2.23: on a *listing* the two agree, which is what this asserts - it was
+        # behaviours 5's un-inspected-source row until 012 closed that gap and the row went. A
+        # zero-length cue has no reachable state on either server and is the miss the finding
+        # names.
         as_documented=ours[1] == theirs[1] and ours[3] == theirs[3],
     )
 

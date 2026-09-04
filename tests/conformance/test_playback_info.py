@@ -2107,6 +2107,43 @@ async def test_a_part_the_trigger_never_fires_for_is_still_decided_rather_than_a
         assert "TranscodingUrl" in source, "every advertised capability carries an address (AC-4)"
 
 
+async def test_a_file_gone_from_disk_since_the_scan_is_answered_from_what_the_scan_stored(
+    healable_client: httpx.AsyncClient,
+    healable: tuple[FastAPI, ScannedMediaWorld],
+    writable_files: BuiltMedia,
+) -> None:
+    """[Spec section 3.4](../../specs/012-negotiation-inputs/spec.md)'s fourth row, which had no
+    test at any level until T11 read that table against the map.
+
+    A file **deleted** after the scan is not an un-inspected source and must not be answered as
+    one. The stored streams are still there, so the trigger never fires, nothing opens the file,
+    and the answer is a normal fully annotated `200` with an address - which is what the reference
+    answers too, and for the same reason `[probe: tools/probe_uninspected_source.py, Jellyfin
+    10.11.11, 2026-08-29]` (behaviours section 2.23's second consequence).
+
+    **It is the row that discriminates the trigger this feature implements from the one it is
+    easily mistaken for.** Written as *"the file cannot be read"* rather than as the reference's
+    *"source zero carries no stream of the item's own kind"*, the trigger fires here, the
+    inspection fails on bytes that are gone, and a client is handed the empty annotation for an
+    item the scan had fully described - every other test in this section still passing. Asserted
+    as the **whole body** either side of the deletion, because what the row claims is that nothing
+    moves and not that one field survives.
+    """
+    item = healable[1].of(REJECTED_CONTAINER)
+    body = {"DeviceProfile": PLAYS_NEITHER}
+    before = await negotiate(healable_client, item.id, body)
+
+    writable_files.path_of(REJECTED_CONTAINER).unlink()
+    after = await negotiate(healable_client, item.id, body)
+
+    assert not writable_files.path_of(REJECTED_CONTAINER).exists(), "the deletion is the test"
+    source = after["MediaSources"][0]
+    assert [one["Type"] for one in source["MediaStreams"]] == ["Video", "Audio"]
+    assert source["RunTimeTicks"] > 0 and source["Bitrate"] > 0
+    assert "TranscodingUrl" in source, "an address for bytes that are not there: nothing looked"
+    assert _comparable(after) == _comparable(before), "the answer is the scan's, deletion or not"
+
+
 @pytest.mark.parametrize(
     "policy,expected",
     [row[1:] for row in _UNNEGOTIATED],

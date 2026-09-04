@@ -1,13 +1,14 @@
 ---
 feature: 012-negotiation-inputs
 title: Negotiation inputs — tasks
-status: Accepted
+status: Implemented
 created: 2026-09-03
 updated: 2026-09-04
 accepted: 2026-09-03
+implemented: 2026-09-04
 amended: 2026-09-03 at the gate — a zero-length file is not one of the two ways to reach this feature's subject on **this** server, because 003's walk skips it before it becomes an item; `SubtitleMethod` is the one vocabulary of five that already binds both ways, so T7's rows for it are a regression check and not a fix; the empty-string half of *"the default clause does not generalise"* is a reading of a converter and T1 measures it; `IMPLEMENTED_FEATURES` gains nothing, because 012 owns no row of `surface.yaml`; and the differential is run with the command `conformance.md` publishes. See "What the gate changed"
 plan_status_required: Accepted
-plan_status_actual: Accepted
+plan_status_actual: Implemented
 ---
 
 # 012 — Tasks
@@ -871,7 +872,7 @@ measurement the way [D-2](plan.md) was.
 
 ## T11 — The acceptance map, the levels, and three status lines
 
-- [ ] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_012` — every criterion of
+- [x] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_012` — every criterion of
   [spec §5](spec.md#5-acceptance-criteria) on one line with the test that proves it — and `spec.md`,
   `plan.md` and this file are marked `Implemented` with the status table moving in the same change.
   **`IMPLEMENTED_FEATURES` does not gain `"012"`**, and the gate checked why rather than copying
@@ -898,23 +899,218 @@ direct-play (T5), and AC-4, which is about the negotiation answering *with* an a
 about the address answering — a test that follows the address would be asserting
 [behaviours §3.13](../../docs/compatibility/behaviours.md)'s reference defect.
 
+**Done, 2026-09-04** — the map, three status lines, the two behaviours halves that stop being
+promises and the gap row that goes. **The two named as at risk were both fine, and the class turned
+up twice somewhere else**: in a criterion, and in a row of the specification's own error table.
+
+* **AC-9 says something two of its neighbours contradict, and no test could ever have passed
+  both.** As accepted it read *"nothing in this feature changes what a negotiation answers for an
+  item that **has** been opened, for any profile"* — and AC-7 and AC-8 change exactly that, on
+  purpose, for a profile spelling the delivery protocol `Hls`, or `2`, or `dash`, on an item the
+  scan opened. That is [010 T15's AC-2](../010-conformance-harness/tasks.md) again and it was found
+  the same way: by asking which test *fails* when the behaviour goes, rather than which test
+  mentions it. A criterion whose only honest test would fail the two beside it has no test. The
+  missing word is which of the negotiation's **two inputs** the prohibition is about — it is the
+  file side, the resolution this feature adds — and [spec §5](spec.md#5-acceptance-criteria) says
+  so now, recorded as the ninth amendment. Nothing observable moves and no test is weakened.
+* **[Spec §3.4](spec.md#34-error-paths)'s fourth row had no test at any level, and it is the row
+  that tells this feature's trigger from the one it is easily mistaken for.** A file **deleted**
+  after the scan is not an un-inspected source: the stored streams are still there, nothing opens
+  the file, and the answer is a normal fully annotated `200` with an address. Written as *"the file
+  cannot be read"* the trigger fires there, the inspection fails on bytes that are gone, and a
+  client is handed the empty annotation for an item the scan had fully described — with every other
+  test in the section still green. It is asserted now as two whole bodies either side of the
+  deletion, which also gives AC-9 the one row that is about an opened item and this feature at
+  once. The `Error paths` row of [§6](spec.md#6-conformance) claims *"table-driven over §3.4, per
+  case"*, and it was seven cases of eight.
+* **That row is held by two independent guards, and one mutation was not enough to make it fail.**
+  Forcing `wanted()` to fire changed nothing: `api/media_info.py:_opened` skips a part that already
+  carries a probe, so the stored inspection survives a trigger that fires wrongly. The red run
+  needed both — the trigger *and* that guard — which is worth writing down, because a later change
+  that removes either one alone will still pass this test and the one after it will not.
+* **`IMPLEMENTED_FEATURES` gains nothing, exactly as the gate said, and the consequence is real
+  rather than a formality.** `grep -c 'feature: "012"' docs/compatibility/surface.yaml` answers
+  `0`, so the exact-set route check was green throughout and no route test would have noticed a
+  criterion left unasserted. The acceptance map's own guard reads the status table in
+  [`specs/README.md`](../README.md), which is why the row that flips this feature to `Implemented`
+  is what makes the map compulsory — and the map is the only thing carrying the claim.
+
+* **Four claims elsewhere went stale as this feature landed, and none of them is a status word.**
+  [conformance.md's L2 section](../../docs/compatibility/conformance.md) states the fixture
+  comparison's declared differences as *"forty-seven"* in the present tense, where
+  [T2](#t2--the-world-gets-files-nothing-can-open) moved it to fifty by adding five files nothing
+  can inspect — that task left **010's dated records** alone, correctly, and this sentence is not
+  one. `tools/differential.py` cites *"behaviours 5's un-inspected-source row"* in the runner for
+  the listing comparison, and that row is what this task deletes; the claim survives at
+  [§2.23](../../docs/compatibility/behaviours.md) and the citation now says so. And the two client
+  traces still carried the 🔴 this feature was opened to clear —
+  [tvOS §1](../../docs/compatibility/client-atrium-tvos.md)'s *"`SupportsDirectPlay` reflects
+  reality: only where a stored inspection exists"* and its protocol row, and
+  [the music client's](../../docs/compatibility/client-embeat-mobile.md) two `§5.1` rows — which is
+  the same in-place update 011 made to those tables when it closed §4.2. The music client's
+  `RunTimeTicks` row is the one that does **not** become a plain ✅: the source's is answered and
+  the **item's** is still `null`, which is D-2 and 003's.
+
+**One deviation from this task as written.** *"Three status lines"* is five documents and not
+three: [`specs/README.md`](../README.md)'s status table and its prose, the top-level
+[README](../../README.md)'s *"eleven of twelve features are implemented … 012 is the only feature
+not built"*, and [AGENTS.md](../../AGENTS.md)'s *"Where the project is"*, which opened with the same
+sentence — and whose *"what is next is the first unticked task in the lowest-numbered feature"* is
+a question this repository no longer has an answer to. A status word changed in three files and left
+standing in two others is the kind of staleness this project puts in files rather than in prose
+precisely to avoid.
+
 ---
 
 ## Definition of done
 
 The feature is done when **all** of these hold:
 
-- [ ] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing
-      test, named in `FEATURE_012`.
-- [ ] Both `POST`/`GET /Items/{itemId}/PlaybackInfo` rows reach the **L3** declared in
-      [`spec.md` §6](spec.md#6-conformance), and the three L2 rows their level.
-- [ ] [`surface.yaml`](../../docs/compatibility/surface.yaml) is **unchanged**: no route enters or
-      leaves v1 here, and the exact-set check has been green throughout.
-- [ ] Anything learned during implementation is back in `spec.md` and `plan.md`, in the same
-      change as the code.
-- [ ] Every reading [plan §6.8](plan.md#68-what-this-plan-read-and-did-not-measure) records as
-      *read* is either measured and cited, or restated as still owed with its owner.
-- [ ] [Behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)'s
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing
+      test, named in `FEATURE_012`. **Ten of ten**, and two of them cost something: AC-9 was a
+      prohibition its own AC-7 and AC-8 break on purpose and is amended to the input it was written
+      about, and [§3.4](spec.md#34-error-paths)'s deleted-file row had no test at any level and has
+      one now (T11).
+- [x] Both `POST`/`GET /Items/{itemId}/PlaybackInfo` rows reach the **L3** declared in
+      [`spec.md` §6](spec.md#6-conformance), and the three L2 rows their level. **Read as written
+      this item names a level neither document gives the `GET` route**: §6's two L3 rows are both
+      `POST /Items/{itemId}/PlaybackInfo` — the never-opened source and the profile's delivery
+      protocol — and [`surface.yaml`](../../docs/compatibility/surface.yaml) declares the `GET`
+      variant `level: L2`, which is 008's row and unchanged here. Both readings hold. The `POST`
+      row is `Compared: yes` from **both** seats in T10's full sweep against a single-use instance
+      of the pinned version, with the four new request cases and both new named comparisons
+      `as_documented` `[probe: tools/differential.py, Jellyfin 10.11.11, 2026-09-04]`; the `GET`
+      route is swept by the `profile-less` case beside them and is asserted at L2 by
+      `test_the_get_variant_negotiates_nothing_and_still_issues_a_session` and
+      `test_a_never_opened_source_with_no_profile_answers_what_it_answered_before`. The three L2
+      rows are the fixture read on three listing routes before and after a negotiation, the same
+      fixture read twice across a heal, and §3.4's table — which was seven cases of eight until
+      T11.
+- [x] [`surface.yaml`](../../docs/compatibility/surface.yaml) is **unchanged**: no route enters or
+      leaves v1 here, and the exact-set check has been green throughout. `git diff` over the eleven
+      tasks touches that file not at all, and `grep -c 'feature: "012"'` answers `0` — which is why
+      `IMPLEMENTED_FEATURES` gains nothing and why the acceptance map is the only thing carrying
+      the claim above it.
+- [x] Anything learned during implementation is back in `spec.md` and `plan.md`, in the same
+      change as the code. **Nine amendments to an accepted spec** — one from another feature's
+      task, one at each of two gates, and six from tasks — and the plan corrected at §4, §5, §6.1,
+      §6.2, §6.4, §6.5, §6.7 and §8 by the tasks that found it wrong.
+- [x] Every reading [plan §6.8](plan.md#68-what-this-plan-read-and-did-not-measure) records as
+      *read* is either measured and cited, or restated as still owed with its owner. **Five of the
+      six were measured by T1** on 2026-09-03 against a single-use instance, four confirming the
+      reading and two not; the sixth is **concurrency**, which D-4 placed with the finished thing
+      and which nobody has measured on either server. It is on the owes list below rather than
+      inside this box.
+- [x] [Behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)'s
       never-opened-source row is gone, and §2.23 and §2.24 describe what this server does rather
-      than what it will do.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+      than what it will do. All three moved in this change; §2.28's *"Atrium does"* was already
+      written in the past tense by T7.
+- [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`, with
+      [`specs/README.md`](../README.md)'s status table moving in the same change — and the two
+      other places a status word had been written out in prose, the top-level
+      [README](../../README.md) and [AGENTS.md](../../AGENTS.md).
+
+---
+
+## What this feature owes the next ones
+
+**Written here rather than inside the status word**, the way
+[008](../008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones),
+[009](../009-playlists/tasks.md#what-this-feature-owes-the-next-ones),
+[010](../010-conformance-harness/tasks.md#what-this-feature-owes-the-next-ones) and
+[011](../011-subtitle-delivery/tasks.md#what-this-feature-owes-the-next-ones) each did. `Implemented`
+here means **eleven of eleven tasks and ten of ten criteria and nothing wider**. Everything below is
+either outside this feature's own §2 or a decision this feature measured and did not take.
+
+### One decision, measured whole and left to its owner
+
+**An ordinal no member has is answered three ways by the reference and one way here, and the one way
+is the shape the procedure forbids** ([behaviours §3.26](../../docs/compatibility/behaviours.md)).
+The reference ignores the entry on two vocabularies, treats the condition as **satisfied** on a
+third, and answers **`500`** on the fourth; this server answers `400` to all four, which
+[§3.0.2](../../docs/compatibility/behaviours.md#302-what-is-never-acceptable) names as *"a tidy
+`400`… worse than both"*. **It predates 012** — a field typed as an enumeration has refused a number
+since 008 — and T7's binder does not move it: the binder keeps the number and the field refuses it.
+Both candidates are written down with their prices, and the measurement is complete, so whoever
+decides is not paying for a probe run. **Reproducing it is four more `Vocabulary | int` unions plus
+a rule about what an uninterpretable profile entry *does*, which is
+[008 §3.3](../008-playback-negotiation-and-delivery/spec.md#33-the-decision)'s ladder and not this
+feature's binder.** The protocol's own out-of-range ordinal is not part of this: it is `200` and a
+number on the wire on both servers, and 012 reproduces it (AC-8).
+
+### One measurement nobody has taken, on either server
+
+**Two negotiations of one file at once.** [Plan §6.8](plan.md#68-what-this-plan-read-and-did-not-measure)'s
+fifth reading, placed with the finished thing by [D-4](plan.md#d-4--whether-68s-six-owed-measurements-are-this-features-or-its-first-tasks)
+and still owed. This server takes **no lock**: two requests run two probes and write the same row
+twice, the second replacing the first, which [plan §7](plan.md#7-failure-handling) calls idempotent
+by construction and which nothing has confirmed the reference does. What *is* asserted is that the
+route yields while a file is open (`test_the_route_yields_while_a_file_is_being_opened`, written
+without a clock), which is a different claim. The probe that would settle it needs two concurrent
+requests against one reference item and belongs beside the others in
+`tools/probe_uninspected_source.py`.
+
+### Three differences its own differential raised, none of them this feature's
+
+Measured at [T10](#t10--the-two-l3-rows-get-their-cases-and-the-two-comparisons-a-sweep-cannot-raise)
+on 2026-09-04, on both servers, over this repository's own fixture — reported rather than excused,
+because a difference explained away by the feature that found it is a difference nobody owns:
+
+| What differs | Whose it is |
+|---|---|
+| `TranscodingUrl` is not on the allowlist and is a `derived-identifier` on its face, so every negotiation that transcodes reports one field | **008's** field and **010's** register. Excusing it by value would also excuse the address *shape* that `uninspectable-source-address` exists to watch |
+| The healed source's **item-level** `RunTimeTicks` stays `null` here and arrives there | **003's** — [D-2](plan.md#d-2--the-item-level-runtimeticks-which-is-not-this-features) exactly, decided out of this feature on 2026-09-03: after a real scan `items.runtime_ticks` is `NULL` on every file-backed item, which is a scan-time defect |
+| The un-inspectable film's **item-level** `Container` is `mkv` here and `null` there | **005's**, the feature that owns the item body: `media/info.py:item_container` falls back to the extension citing `BaseItem.cs:1200-1207`, and the reference measurably sends nothing on a list row for a file it never opened. A source reading contradicted by a measurement |
+
+### Three differences in 003's and 004's territory, found by building the world
+
+All three are declared in `tests/library/test_reference_reading.py` with their reasons and moved that
+module's declared count from forty-seven to fifty, re-taken against a single-use instance rather than
+edited ([T2](#t2--the-world-gets-files-nothing-can-open)):
+
+* **A zero-length file is an item on the reference and nothing here.** `library/walker.py` skips it
+  with `Skip.EMPTY` before it can become a candidate; the reference admits it, answers a listing
+  with three `true` flags and negotiates `false`/`false`/`true` with an address. Both sides measured
+  on 2026-09-03. **003's** — and it is why [spec §3.2](spec.md#32-a-media-source-the-server-has-never-opened)
+  gives *one* way to reach this feature's subject on this server where the reference has two.
+* **An unreadable second part is a source here and nothing there.** `The Missing Half - part2` is a
+  second media source of the grouped item here and is neither a source nor an item of its own on the
+  reference. **003's**, and the shape [plan §6.1](plan.md#61-the-trigger)'s trigger has no reference
+  to be faithful to — which is why what that part is *answered* is decided by §2.2's rule and stated
+  in [spec §3.2](spec.md#32-a-media-source-the-server-has-never-opened) rather than measured.
+* **The reference names an artist off the path where Atrium reads it off the tags**, for a file with
+  no audio stream — one it has no audio metadata reader for. **003's and 004's.**
+
+### One shape deferred to a feature that does not exist yet
+
+[Behaviours §3.13](../../docs/compatibility/behaviours.md)'s **middle row**: both servers hand over
+`master.m3u8` for an un-inspectable source and both end at the same `500`, and what differs is the
+hop that carries it — the reference's master playlist answers `200` and names a `live.m3u8` variant
+that refuses, where this server refuses at the master itself. AC-4 is about the negotiation answering
+*with* an address and is satisfied; the playlist's shape needs a live path v1 has not got and no
+measured client asks for, so it is owed to **the feature that gives v1 one**, under
+[§3.0.1](../../docs/compatibility/behaviours.md#301-the-tie-breaks) tie-break 3.
+
+### Two things about the harness, both 010's
+
+* **A `--fixture` run whose instance was asked for and failed sweeps whatever `$JELLYFIN_URL`
+  names.** Found at T10 when an instance missed its 180-second readiness deadline and the run
+  carried straight on to an operator's own server, stopping only on a certificate it could not
+  verify — with nothing written and nothing about the failure in a report, the run having exited `2`
+  before writing one. [ADR-0007](../../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md)'s
+  degradation is *"a machine with no runtime still sweeps a reachable server"*; an instance that was
+  **asked for and failed** is a different sentence and the fallback does not distinguish them.
+  Recorded in [conformance.md's L3 section](../../docs/compatibility/conformance.md) and
+  outstanding.
+* **Five of the twenty-two named comparisons are still outstanding**, unchanged by this feature
+  except in the denominator: 012 added two and both are `as_documented`. The rest are on
+  [010's list](../010-conformance-harness/tasks.md#what-this-feature-owes-the-next-ones) with their
+  owners.
+
+### One testing debt, from T4
+
+`tests/unit/test_repositories.py`'s boundary sweep calls itself a walk over *"every public method of
+the module"* and covers seven of the eleven repository classes — `ItemRepository` having been
+admitted at T4, with `atrium.domain.items`, when 012's narrow write was added to it. The remaining
+four each need their own domain module admitted, and admitting one without reading it is how a sweep
+starts passing for the wrong reason. Listed in that module rather than fixed blind.

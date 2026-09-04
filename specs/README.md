@@ -123,11 +123,20 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | **Implemented** | **Implemented** | **Implemented** |
 | [010](010-conformance-harness/) | Conformance harness | **Implemented** | **Implemented** | **Implemented** — fifteen of fifteen tasks, [D-7 taken 2026-09-02](010-conformance-harness/tasks.md) |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
-| [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | **Accepted** | **Accepted** |
+| [012](012-negotiation-inputs/) | Negotiation inputs | **Implemented** | **Implemented** | **Implemented** — eleven of eleven tasks, ten of ten criteria, [AC-9 amended 2026-09-04](012-negotiation-inputs/spec.md#5-acceptance-criteria) |
 
-**001 through 011 are implemented** — 008 on 2026-08-29 across fourteen tasks,
-011 on 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, and 010 on 2026-09-02 across
-fifteen, which leaves **012 the only feature that is `Accepted` and not built**. **008's** spec and
+**All twelve features are implemented** — 008 on 2026-08-29 across fourteen tasks,
+011 on 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, 010 on 2026-09-02 across
+fifteen, and **012 on 2026-09-04 across eleven**, which leaves no feature `Accepted` and
+unbuilt and no draft anywhere in this directory. **What `Implemented` means for 012 is eleven
+of eleven tasks and ten of ten criteria and nothing wider**: what it hands on — an ordinal no
+member has, still the one shape the defect procedure forbids ([behaviours
+§3.26](../docs/compatibility/behaviours.md)), the two-request concurrency nobody has measured
+on either server, three differences its own differential raised that belong to 003, 005 and 008,
+three more its fixture raised that belong to 003 and 004, and a harness fallback that is 010's — is
+on
+[012's owes list](012-negotiation-inputs/tasks.md#what-this-feature-owes-the-next-ones) rather
+than inside the status word. **008's** spec and
 plan were accepted the same day, at a review that wrote and ran the five probes its open questions had
 been citing prospectively — all twelve OQs answered, five claims overturned (the policy story, the
 body's `EnableTranscoding` switch, `static=true` as an error, `enableRedirection`'s `302`, and the
@@ -194,8 +203,7 @@ Atrium's scan compared against it in the default job, every difference declared 
 its owning feature, an undeclared difference failing and a declared one that has gone away failing
 too. **`Implemented` there means fifteen of fifteen tasks and eighteen of eighteen criteria, and
 nothing wider**: six of the twenty named comparisons are outstanding with their owners and no
-`level: L3` row has yet been shown to reach L3, both on 010's own owes list. The lowest-numbered
-feature that is not implemented is **012**. Code does not start until a list is `Accepted`
+`level: L3` row has yet been shown to reach L3, both on 010's own owes list. Code does not start until a list is `Accepted`
 (Principle III). Both
 those lists were inputs to the plan. Each of 009's own two gates found something, which
 is the rate this project expects: the plan gate found §8 budgeting a fixture task for a second
