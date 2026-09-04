@@ -25,29 +25,42 @@ feature starts handing the ladder a transient inspection.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from sqlalchemy import Engine
+from sqlalchemy.orm import Session as OrmSession
 
-from atrium.domain.items import Item, ItemType, MediaSource
+from atrium.config.paths import DataPaths
+from atrium.db import schema
+from atrium.db.engine import create_database_engine, session_factory
+from atrium.db.repositories import ItemRepository, LibraryRepository, MediaProbeRepository
+from atrium.domain.items import CollectionType, Item, ItemType, MediaSource
+from atrium.domain.library import Library
 from atrium.domain.media import InspectedStream, MediaInspection, StreamKind
 from atrium.library import inspection
+from atrium.library.scan import scan
 from atrium.media.info import (
     has_subtitles,
     is_hd,
     item_container,
     item_streams,
+    media_etag,
     primary_video_stream,
     source_of,
     sources_for,
 )
 from atrium.media.probe import ProberUnavailableError, UnreadableMediaError, inspect
+from tests.conftest import data_dir
 from tests.fixtures.media import (
     DIRECT_PLAY,
+    LATENT,
     MISSING_HALF_FIRST,
     MISSING_HALF_SECOND,
+    MOVIES_LIBRARY_ID,
     SOUNDLESS,
     UNREADABLE,
     VIDEOLESS,
@@ -455,3 +468,217 @@ def test_the_unreadable_source_serialises_the_same_way_either_way(
     transient = source_of(item, 0, part, inspection.unopened(part), root, is_video=True)
 
     assert transient.model_dump_json() == absent.model_dump_json()
+
+
+# ------------------------------------------------------------------------------------------
+# The write
+# ------------------------------------------------------------------------------------------
+#
+# A writable copy of the tree, because every question here is about a file whose bytes moved
+# after the scan read them - which is the only way an on-demand inspection has anything to heal.
+# `scanned_media_world` shares one session-scoped tree between tests and cannot be written to.
+
+
+@pytest.fixture
+def engine(tmp_path: Path) -> Iterator[Engine]:
+    paths: DataPaths = data_dir(tmp_path / "atrium")
+    built = create_database_engine(paths)
+    schema.ensure_current(built, paths)
+    yield built
+    built.dispose()
+
+
+@pytest.fixture
+def session(engine: Engine) -> Iterator[OrmSession]:
+    opened = session_factory(engine)()
+    yield opened
+    opened.rollback()
+    opened.close()
+
+
+@pytest.fixture
+def films(session: OrmSession, media_files: BuiltMedia, tmp_path: Path) -> Library:
+    """The movies root of a writable copy of the generated tree, declared and scanned once."""
+    tree = media_files.copy_into(tmp_path / "tree")
+    library = LibraryRepository(session).add(
+        Library(
+            id=MOVIES_LIBRARY_ID,
+            name="Films",
+            collection_type=CollectionType.MOVIES,
+            roots=(str(tree.movies_root),),
+        )
+    )
+    scan(library, session)
+    return library
+
+
+def part_of(
+    session: OrmSession, library: Library, one: MediaFile | UninspectableFile
+) -> tuple[Item, int]:
+    """The item this declaration backs and which part of it the file is, read back from storage."""
+    for item in ItemRepository(session).by_library(library.id).values():
+        for index, source in enumerate(item.sources):
+            if source.relative_path == one.path:
+                return item, index
+    raise KeyError(f"nothing scanned from {one.path!r}")
+
+
+def real_bytes_over(target: Path, source: Path) -> None:
+    """Replace a file that would not open with one that will, keeping its name.
+
+    This is `latent.mkv`'s whole purpose: after the scan, the only thing that will ever have read
+    these bytes successfully is the negotiation (012 AC-2, AC-3).
+    """
+    target.write_bytes(source.read_bytes())
+
+
+@pytest.mark.ffmpeg
+def test_the_probe_row_and_the_source_row_describe_the_same_bytes(
+    session: OrmSession, films: Library, media_files: BuiltMedia, tmp_path: Path
+) -> None:
+    """D-1, made observable: `Size` comes from the inspection and `ETag` from the source row.
+
+    The file the scan saw is four kibibytes of noise; the file the negotiation opens is a real
+    one. A `store` that wrote only the inspection would answer the new size beside the tag of the
+    bytes nobody can play any more - a media source describing two different files, which is
+    exactly what the reference's own refresh does not do `[probe:
+    tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`.
+    """
+    item, index = part_of(session, films, LATENT)
+    before = item.sources[index]
+    latent = tmp_path / "tree" / LATENT.root / LATENT.path
+    real_bytes_over(latent, media_files.path_of(DIRECT_PLAY))
+
+    found = inspection.opened(latent)
+    assert found is not None, "the replacement is a real film: this is the healing half"
+    inspection.store(session, item.id, index, films.id, LATENT.path, found)
+
+    stored = MediaProbeRepository(session).get(films.id, LATENT.path)
+    healed, _ = part_of(session, films, LATENT)
+    after = healed.sources[index]
+
+    assert stored is not None
+    assert (after.size, after.mtime_ns) == (found.size, found.mtime_ns)
+    assert (stored.size, stored.mtime_ns) == (found.size, found.mtime_ns)
+    assert after.mtime_ns != before.mtime_ns, "the fixture did not move: nothing below is a test"
+
+    wire = source_of(healed, index, after, stored, str(latent.parent), is_video=True)
+    assert wire.size == found.size
+    assert wire.e_tag == media_etag(found.mtime_ns)
+    assert wire.e_tag != media_etag(before.mtime_ns)
+
+
+@pytest.mark.ffmpeg
+def test_storing_twice_replaces_the_streams_rather_than_duplicating_them(
+    session: OrmSession, films: Library, media_files: BuiltMedia, tmp_path: Path
+) -> None:
+    """Two negotiations of one file at once both probe and both write (012 plan section 6.2).
+
+    There is no lock, deliberately, so the second write has to be a replacement rather than an
+    addition - a duplicated stream list is a track that exists twice on the wire, at indexes a
+    client then addresses.
+    """
+    item, index = part_of(session, films, LATENT)
+    latent = tmp_path / "tree" / LATENT.root / LATENT.path
+    real_bytes_over(latent, media_files.path_of(DIRECT_PLAY))
+    found = inspection.opened(latent)
+    assert found is not None
+
+    inspection.store(session, item.id, index, films.id, LATENT.path, found)
+    once = MediaProbeRepository(session).get(films.id, LATENT.path)
+    inspection.store(session, item.id, index, films.id, LATENT.path, found)
+    twice = MediaProbeRepository(session).get(films.id, LATENT.path)
+
+    assert once is not None and twice is not None
+    assert len(twice.streams) == len(once.streams) == len(found.streams)
+    assert twice == once
+
+
+@pytest.mark.ffmpeg
+def test_a_healed_file_is_neither_reopened_nor_rewritten_by_the_next_scan(
+    session: OrmSession, films: Library, media_files: BuiltMedia, tmp_path: Path
+) -> None:
+    """The second half of what the change signal buys, which D-1 did not name.
+
+    `library/scan.py:_differs` compares `before.sources != after.sources`, and a `MediaSource`
+    carries its `(size, mtime_ns)`. So the write does two things rather than one: it keeps the tag
+    and the size describing the same bytes, **and** it leaves the next scan with nothing to do -
+    where writing only the probe row would have the scan skip the inspection and rewrite the item
+    anyway, reporting work it did not do on every healed file.
+    """
+    item, index = part_of(session, films, LATENT)
+    latent = tmp_path / "tree" / LATENT.root / LATENT.path
+    real_bytes_over(latent, media_files.path_of(DIRECT_PLAY))
+    found = inspection.opened(latent)
+    assert found is not None
+    inspection.store(session, item.id, index, films.id, LATENT.path, found)
+
+    again = scan(films, session)
+
+    assert again.inspected == 0, "the negotiation already stored what this file says"
+    assert LATENT.path not in {one.relative_path for one in again.uninspected}
+    assert again.updated == 0
+
+
+@pytest.mark.ffmpeg
+def test_only_the_probe_row_leaves_the_next_scan_rewriting_the_item(
+    session: OrmSession, films: Library, media_files: BuiltMedia, tmp_path: Path
+) -> None:
+    """The control for the test above: the same heal with D-1's half left out.
+
+    Written against the repository rather than against `store`, because `store` cannot do this -
+    which is the point. Without it the scan still skips the inspection and still rewrites the
+    item, for ever after every heal.
+    """
+    latent = tmp_path / "tree" / LATENT.root / LATENT.path
+    real_bytes_over(latent, media_files.path_of(DIRECT_PLAY))
+    found = inspection.opened(latent)
+    assert found is not None
+    MediaProbeRepository(session).put(films.id, LATENT.path, found)
+
+    again = scan(films, session)
+
+    assert again.inspected == 0
+    assert again.updated == 1
+
+
+def test_store_refuses_the_inspection_unopened_produced(session: OrmSession) -> None:
+    """Invariant 1, made a check the code performs rather than a rule a reviewer keeps.
+
+    It refuses before it writes anything, so a caller that got this wrong and swallowed the error
+    leaves neither row behind.
+    """
+    part = a_source("Unreadable (2012).mkv")
+
+    with pytest.raises(ValueError, match="transient"):
+        inspection.store(
+            session, "a" * 32, 0, "1" * 32, part.relative_path, inspection.unopened(part)
+        )
+
+
+@pytest.mark.ffmpeg
+def test_what_storing_it_would_have_cost_is_the_file_never_being_opened_again(
+    session: OrmSession, films: Library
+) -> None:
+    """The harm the invariant names, measured rather than argued.
+
+    The transient inspection carries the *source row's* change signal, which is the live file's
+    for anything a scan wrote - so a stored one satisfies `MediaProbeRepository.current()` and the
+    scan skips the file. Not once: for ever, and with the refusal gone from the report too, so the
+    library's own record of what it could not read is empty while nothing in it plays. A deep scan
+    is the only cure, which is what makes this worth a check rather than a docstring.
+    """
+    item, index = part_of(session, films, UNREADABLE)
+    transient = inspection.unopened(item.sources[index])
+
+    before = scan(films, session)
+    assert UNREADABLE.path in {one.relative_path for one in before.uninspected}
+
+    MediaProbeRepository(session).put(films.id, UNREADABLE.path, transient)
+    after = scan(films, session)
+
+    assert UNREADABLE.path not in {one.relative_path for one in after.uninspected}
+    assert after.inspected == 0
+    assert UNREADABLE.path in {
+        one.relative_path for one in scan(films, session, deep=True).uninspected
+    }

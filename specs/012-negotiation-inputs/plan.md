@@ -3,7 +3,7 @@ feature: 012-negotiation-inputs
 title: Negotiation inputs — implementation plan
 status: Accepted
 created: 2026-09-03
-updated: 2026-09-03
+updated: 2026-09-04
 accepted: 2026-09-03
 spec_status_required: Accepted
 spec_status_actual: Accepted
@@ -182,6 +182,19 @@ should build. So the write is a new, narrowly-scoped method that updates two col
 and can reach nothing else, in the class whose own docstring exists to say that changing what an
 item *is* and changing whether it is *there* are different powers.
 
+**And it takes three arguments to write two columns, which T4 found by writing it.** The
+inspection is stored under `(library_id, relative_path)` and the change signal under `(item_id,
+part_index)`, and **nothing in those two keys says they name the same file**. A `store` given a
+part index one out — a two-part film is the shape that produces one — would put the probe row on
+the file it opened and that file's change signal on its *sibling*, and every assertion about
+either row on its own would pass: the probe row is correct, the source row is a well-formed
+`(size, mtime_ns)`, and the wire answers a tag for the wrong bytes on two sources instead of one.
+So `record_change_signal` is given the part's `relative_path` as well and **checks** it, and a
+part that is not there is a `LookupError` rather than a silent no-op. The two writes are then
+provably about one file, which is the whole claim the pair is making. `store` makes the checking
+call **first**, so a refusal leaves neither row written rather than a healed probe row whose
+signal was never updated — the exact half-healed state D-1 exists to prevent.
+
 **Its condition is discharged, and the answer is parity.** D-1 was taken conditionally on §6.8's
 item 6 — whether the reference's own refresh moves the file's change signal or only the
 inspection — and T1 measured it on 2026-09-03: across a heal the same source's `ETag` moves from
@@ -244,10 +257,14 @@ def store(
     """Write one inspection through the scan's own repository, and the file's change signal with
     it.
 
-    `MediaProbeRepository.put` - the streams are replaced, not merged - and then the `(size,
-    mtime_ns)` of that one part, in place (D-1). The two come from one `stat()`, taken inside the
-    inspection, so writing one without the other would put a tag and a size on the wire that
-    describe different bytes.
+    `ItemRepository.record_change_signal` - the `(size, mtime_ns)` of that one part, in place,
+    with `relative_path` checked against the row rather than written (D-1, section 4) - and then
+    `MediaProbeRepository.put`, whose streams are replaced and not merged. The two come from one
+    `stat()`, taken inside the inspection, so writing one without the other would put a tag and a
+    size on the wire that describe different bytes. The checking call goes first, so a refusal
+    leaves neither row.
+
+    Refuses what `unopened` produced, by its empty container (invariant 1 below).
     """
 
 
@@ -391,6 +408,19 @@ which is keyed `(item_id, part_index)`. Written as it stood, T4 could satisfy th
 either dropping the change signal — the thing D-1 was taken to write — or reaching for
 `ItemRepository.update`, which rewrites every part of the item from a whole `Item` and is exactly
 the power §4 says a negotiation must not have.
+
+**And the sources have to be built *after* the resolution, which this pseudocode still does not
+show — found at T4, by reading the route the next task edits.** `api/media_info.py:_negotiation`
+builds its wire sources with `media_info.sources_for(found.item, found.probes, …)` before the
+per-source loop, and `found.item` is a **frozen** domain object read before any of this ran.
+`store` writes `item_sources`; it does not and must not mutate the caller's `Item`. So a T5 that
+inserts the resolution above the existing `sources_for` line and changes nothing else answers, in
+the healed body itself, a `Size` taken from the inspection beside an `ETag` derived from the part
+the scan recorded — `media/info.py:source_of` takes those two from different places on purpose —
+which is D-1's own failure, one line inside the request that fixed it. **T5 rebuilds the part**
+from what `store` wrote (`dataclasses.replace` on the `MediaSource`, or a re-read of the item)
+before assembling the sources, and the negotiation's own answer is then asserted against the
+listing that follows it rather than only against the listing.
 
 **Off the event loop.** `media/probe.py:inspect` is `subprocess.run`, and a negotiation is served by
 an `async def`; 0.2 s of blocked loop on the measured happy path and up to `TIMEOUT_SECONDS` on a
@@ -861,6 +891,15 @@ more line, a second 003-owned table written from a request, and the `ETag` match
 negotiation on the reference is one probe run, and it decides whether (a) is parity or an
 improvement.
 
+**And it buys a second thing, measured at T4 and named by nobody.** `library/scan.py:_differs`
+compares `before.sources != after.sources`, and a `MediaSource` carries its own `(size,
+mtime_ns)` — so the change signal is what the *scan* compares an item against too. With the write,
+a rescan after a heal reports the item `unchanged`; with only the probe row written, the same
+rescan skips the inspection (the probe row is current) and **rewrites the item anyway**, reporting
+one update per healed file for ever. Measured both ways on a real scan of the generated tree on
+2026-09-04, `updated == 0` against `updated == 1`. So (b) was not "the same behaviour with a
+stale tag": it was a stale tag *and* a scan report that claims work it did not do.
+
 **Taken on 2026-09-03: (a), and its condition is discharged the same day.** The write happens,
 from the stat the inspection already read; T1 then measured that the reference's own refresh moves
 the signal too — `ETag` and `Size` both change across a heal — so it is **parity**, and the
@@ -991,10 +1030,11 @@ Documentation moves in the commit that changes the behaviour, not after it (Prin
 | [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1), the never-opened-source row | Struck: the gap closes. Its "Atrium does" half becomes the behaviour, and its closing mechanism was already corrected at 012's gate | The task that lands §6.2 |
 | [behaviours §2.23](../../docs/compatibility/behaviours.md) | "Atrium does" stops saying *"until it lands"* | The same |
 | [behaviours §2.24](../../docs/compatibility/behaviours.md) | "Atrium does" stops being a promise | The task that lands §6.5 and §6.7 |
-| [008 plan §6.1](../008-playback-negotiation-and-delivery/plan.md#61-inspection-and-the-cache) | The "not at request time" sentence gains this feature's exception | The task that lands §6.2 |
-| `MediaProbeRepository`'s docstring | "Two readers rather than one" gains the writer | The same |
+| [008 plan §6.1](../008-playback-negotiation-and-delivery/plan.md#61-inspection-and-the-cache) | The "not at request time" sentence gains this feature's exception | **Done at T4**, with the write itself rather than with the route that calls it |
+| `MediaProbeRepository`'s docstring | "Two readers rather than one" gains the writer | **Done at T4** |
 | [surface.yaml](../../docs/compatibility/surface.yaml) | **Nothing.** No route enters or leaves v1 (spec §7.2) | — |
 | [request-cases.yaml](../../docs/compatibility/request-cases.yaml), [named-comparisons.yaml](../../docs/compatibility/named-comparisons.yaml) | Four cases, two comparisons (§8) | The task that lands the L3 half |
-| [008 plan §7](../008-playback-negotiation-and-delivery/plan.md), the *"never inline"* failure row | The same exception as §6.1's | The same |
+| [008 plan §7](../008-playback-negotiation-and-delivery/plan.md), the *"never inline"* failure row | The same exception as §6.1's, and D-1's write beside it | **Done at T4** |
+| [012 §4](spec.md#4-data-the-feature-owns) | **Amended at T4**: a third row, the opened file's change signal, which D-1 writes and §4 did not name | Done |
 | [012 §5 AC-10](spec.md#5-acceptance-criteria) | **Amended, D-5, in this same change**: the prohibition stands, the clause naming the flags' values goes to 008 | Done |
 | [specs/README](../README.md) status table, [roadmap](../../docs/roadmap.md) | 012's plan row, and then its task row | This plan's acceptance, and the list's |

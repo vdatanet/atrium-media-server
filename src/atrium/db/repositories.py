@@ -718,6 +718,41 @@ class ItemRepository:
         self._session.execute(delete(models.ItemSource).where(models.ItemSource.item_id == item.id))
         self._write_sources(item)
 
+    def record_change_signal(
+        self, item_id: str, part_index: int, relative_path: str, *, size: int, mtime_ns: int
+    ) -> None:
+        """One part's `(size, mtime_ns)`, updated in place. Two columns, and nothing else.
+
+        **The narrow write 012 needs, and the reason it is a method rather than a line** (012 plan
+        section 4, D-1). A negotiation that opens a file the scan could not read heals four fields
+        of the media source from the inspection, while `ETag` is derived from *this* row - so
+        without this the wire would carry a size and a tag describing different bytes. The only
+        writer of `item_sources` before this was `update`, which deletes every part of the item
+        and rewrites them from a whole `Item`: a shape a negotiation neither has nor should build,
+        and one that would let the healing of one file rename the item it belongs to.
+
+        **`relative_path` is checked rather than written**, which is what makes the pair of writes
+        012 makes provably about one file. The inspection is stored under `(library_id,
+        relative_path)` and the signal under `(item_id, part_index)`, and nothing in those two
+        keys says they name the same bytes: a caller that got the part index wrong would put a
+        probe row on one file and its change signal on another, and every assertion about either
+        row on its own would pass.
+
+        A part that is not there is a `LookupError` and not a silent no-op, for the same reason:
+        the whole value of the write is that the two rows agree afterwards.
+        """
+        row = self._session.get(models.ItemSource, (item_id, part_index))
+        if row is None:
+            raise LookupError(f"no part {part_index} of item {item_id}")
+        if row.relative_path != relative_path:
+            raise LookupError(
+                f"part {part_index} of item {item_id} is {row.relative_path!r}, "
+                f"not {relative_path!r}"
+            )
+        row.size = size
+        row.mtime_ns = mtime_ns
+        self._session.flush()
+
     def _write_sources(self, item: Item) -> None:
         for part_index, source in enumerate(item.sources):
             self._session.add(
@@ -1778,8 +1813,15 @@ class MediaProbeRepository:
     Two readers rather than one, because the two callers ask different questions. A scan asks
     "does what I stored still describe this file", hands over the `stat` it already has, and gets
     nothing back when the answer is no. Everything else asks "what is in this file" and must not
-    touch the filesystem to find out: a stale row is re-inspected by the next scan, not by a
-    request (plan section 6.1).
+    touch the filesystem to find out: a stale row is re-inspected by the next scan and by nothing
+    a route does (008 plan section 6.1).
+
+    **One route is the exception, and it is one file** (012). A negotiation whose source zero
+    carries no stream of the item's own kind opens that file inside the request and writes what it
+    found here, through `library/inspection.py:store` - the reference's own behaviour, and the
+    only cure for a library scanned before its files were readable. It is still not a *read* that
+    probes: every listing and every query answers from these rows alone, which is what keeps a
+    page of a thousand items one query rather than a thousand `ffprobe`s.
     """
 
     def __init__(self, session: OrmSession) -> None:

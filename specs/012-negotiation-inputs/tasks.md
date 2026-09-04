@@ -3,7 +3,7 @@ feature: 012-negotiation-inputs
 title: Negotiation inputs — tasks
 status: Accepted
 created: 2026-09-03
-updated: 2026-09-03
+updated: 2026-09-04
 accepted: 2026-09-03
 amended: 2026-09-03 at the gate — a zero-length file is not one of the two ways to reach this feature's subject on **this** server, because 003's walk skips it before it becomes an item; `SubtitleMethod` is the one vocabulary of five that already binds both ways, so T7's rows for it are a regression check and not a fix; the empty-string half of *"the default clause does not generalise"* is a reading of a converter and T1 measures it; `IMPLEMENTED_FEATURES` gains nothing, because 012 owns no row of `surface.yaml`; and the differential is run with the command `conformance.md` publishes. See "What the gate changed"
 plan_status_required: Accepted
@@ -313,7 +313,7 @@ second is true of any function of its arguments and asserts nothing about this o
 
 ## T4 — The write: an inspection and a change signal, from a request
 
-- [ ] **Changes:** `library/inspection.py:store` writes the inspection through
+- [x] **Changes:** `library/inspection.py:store` writes the inspection through
   `MediaProbeRepository.put` — the scan's own repository, unchanged — and the file's `(size,
   mtime_ns)` beside it ([D-1](plan.md#d-1--the-healed-items-etag)), through a **new narrowly-scoped
   method** on `ItemRepository`: two columns of one part, updated in place. The existing writer
@@ -332,6 +332,69 @@ second is true of any function of its arguments and asserts nothing about this o
   a docstring — a stored transient inspection would satisfy `MediaProbeRepository.current()`
   against the file's real stat and the **next scan would skip the file for ever**.
 - **Spec reference:** §4 (data the feature owns); plan §4, §5, §11 D-1
+
+**Done, 2026-09-04** — the write, the narrow method, and four things the documents had incomplete
+rather than wrong; one of them is a trap set for the next task and one amends the accepted spec.
+
+* **The method that writes two columns takes three arguments, and the third one is a check.** The
+  inspection is stored under `(library_id, relative_path)` and the change signal under `(item_id,
+  part_index)`, and **nothing in those two keys says they name the same file** — which is exactly
+  the pair [T3](#t3--libraryinspectionpy-the-trigger-and-the-inspection-that-is-never-stored)
+  corrected [plan §6.2](plan.md#62-resolving-inside-the-request) to hand over. A `store` given a
+  part index one out — a two-part film being the shape that produces one, and this feature ships
+  one — writes the probe row for the file it opened and that file's change signal onto its
+  **sibling**, and every assertion about either row on its own still passes: the probe row is
+  right, the source row is a well-formed `(size, mtime_ns)`, and the wire answers a tag for the
+  wrong bytes on two sources instead of one. `record_change_signal` therefore takes the part's
+  `relative_path` and refuses when the row names another file, and refuses a part that is not
+  there rather than doing nothing quietly. `store` makes that call **first**, so a refusal leaves
+  neither row written instead of a healed probe row whose signal was never updated — the exact
+  half-healed state D-1 exists to prevent. Plan §4 and §5 say so now.
+* **D-1 buys a second thing, and it is the scan rather than the wire.** The decision was argued
+  entirely on the entity tag. But `library/scan.py:_differs` compares `before.sources !=
+  after.sources` and a `MediaSource` carries its own `(size, mtime_ns)`, so the change signal is
+  what the **scan** compares an item against too. Measured both ways on a real scan of the
+  generated tree: with the write, the rescan after a heal reports `updated == 0`; with only the
+  probe row, it skips the inspection — the probe row is current — and **rewrites the item anyway**,
+  one claimed update per healed file, for ever. Option (b) was never "the same behaviour with a
+  stale tag". [D-1](plan.md#d-1--the-healed-items-etag) records it.
+* **The trap this task found is in the task after it.** `api/media_info.py:_negotiation` builds
+  its wire sources from `sources_for(found.item, …)` **before** the per-source loop, and
+  `found.item` is a frozen object read before any of this ran; `store` writes `item_sources` and
+  must not mutate it. So a T5 that inserts the resolution above that line and changes nothing else
+  answers, **in the healed body itself**, a `Size` from the inspection beside an `ETag` from the
+  part the scan recorded — `media/info.py:source_of` takes the two from different places on
+  purpose — which is D-1's own failure occurring one line inside the request that fixed it. Plan
+  §6.2 now says T5 rebuilds the part from what `store` wrote and asserts the negotiation's own
+  answer and not only the listing after it.
+* **The harm the invariant names is one line longer than the invariant says, and it is measured
+  now rather than argued.** A stored transient inspection does make the next scan skip the file —
+  confirmed on a real scan, and a deep scan is the only cure — but it also takes the file out of
+  the scan's `uninspected` report, so the library's own record of what it could not read goes
+  **empty** while nothing in it plays. That is the symptom an operator would have to debug, and it
+  is the one the report exists to prevent.
+
+* **003 has an exact-set guard on this class and it fired, which is the review this task wanted.**
+  `test_the_repository_still_has_no_way_to_delete_a_row` asserts `ItemRepository`'s public surface
+  as a **set**, not a subset — written at 003 T17 so that the scanner's inability to destroy a
+  library is a shape rather than a discipline. Adding the narrow method turned the suite red until
+  a human read what was being added to the one class whose whole argument is what it cannot do,
+  which is exactly the gate 012's write should have to pass. The set now names it and says why.
+
+**And the accepted spec gains a row.** [§4](spec.md#4-data-the-feature-owns) listed two pieces of
+state and D-1 writes three: the opened file's **change signal** is observable as the healed
+source's entity tag on the next listing, and the document promised only the streams, the runtime,
+the bitrate and the size. The reference moves both across one heal
+`[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`, so it is parity, no
+criterion moves, and the amendment is recorded in the front matter with the others.
+
+**One deviation from this task as written.** `tests/unit/test_repositories.py`'s boundary sweep
+opens by calling itself a walk over *"every public method of the module"* and names six of the
+eleven repository classes there; `ItemRepository` — the class this task gives a new writing method
+— was one of the five outside it. It is in the sweep now, with `atrium.domain.items` admitted to
+the allowed set, and the remaining four are noted in the list itself rather than swept blind: each
+needs its own domain module admitted, and admitting one without reading it is how a sweep starts
+passing for the wrong reason.
 
 ## T5 — The negotiation resolves before it reads the profile
 

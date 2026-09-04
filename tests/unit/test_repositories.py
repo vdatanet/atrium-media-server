@@ -26,6 +26,7 @@ from atrium.config.paths import DataPaths
 from atrium.db import models, repositories, schema
 from atrium.db.engine import create_database_engine, session_factory
 from atrium.db.repositories import (
+    ItemRepository,
     LibraryRepository,
     MediaFileRepository,
     MediaProbeRepository,
@@ -36,7 +37,7 @@ from atrium.db.repositories import (
     normalise_name,
     token_digest,
 )
-from atrium.domain.items import CollectionType
+from atrium.domain.items import CollectionType, Item, ItemType, MediaSource
 from atrium.domain.library import Library
 from atrium.domain.media import InspectedStream, MediaInspection, StreamKind
 from atrium.domain.playstate import UserItemData
@@ -54,13 +55,21 @@ ALLOWED_MODULES = {
     "atrium.domain.session",
     "atrium.domain.playstate",
     "atrium.domain.media",
+    "atrium.domain.items",
 }
 
+#: **Not every repository in the module**, and the gap is worth knowing about: five of the eleven
+#: classes there are outside this list, so the sweep below is a sweep of what it names rather than
+#: of the module. `ItemRepository` was added by 012 T4, which gave it a new writing method, and it
+#: brought `atrium.domain.items` into the allowed set with it - which is why the others are still
+#: out: each needs its own domain module admitted, and admitting one blind is how a sweep starts
+#: passing for the wrong reason.
 REPOSITORIES = (
     UserRepository,
     TokenRepository,
     SessionRepository,
     UserDataRepository,
+    ItemRepository,
     MediaProbeRepository,
     MediaFileRepository,
 )
@@ -548,3 +557,92 @@ def test_an_inspection_comes_back_as_a_domain_object(
     assert isinstance(read, MediaInspection)
     assert all(isinstance(one, InspectedStream) for one in read.streams)
     assert isinstance(probes.current(films.id, "A Film (2026).mkv", 10, 20), MediaInspection)
+
+
+# ------------------------------------------------------------------------------------------
+# One part's change signal, in place (012 T4)
+# ------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def items(session: OrmSession) -> ItemRepository:
+    return ItemRepository(session)
+
+
+@pytest.fixture
+def two_parter(items: ItemRepository, films: Library) -> Item:
+    """One item, two files, so that "one part" is a claim the world can contradict."""
+    film = Item(
+        id=new_id(),
+        type=ItemType.MOVIE,
+        name="The Missing Half",
+        sort_name="Missing Half, The",
+        library_id=films.id,
+        sources=(
+            MediaSource(relative_path="Half - part1.mkv", size=10, mtime_ns=20),
+            MediaSource(relative_path="Half - part2.mkv", size=30, mtime_ns=40),
+        ),
+    )
+    items.add(film)
+    return film
+
+
+def item_columns(session: OrmSession, item_id: str) -> dict[str, object]:
+    """Every column of the `items` row, so "cannot reach" is asserted over all of them.
+
+    Naming the three the task named - a name, a parent, `removed_at` - would pass just as well
+    while a fourth moved, and the whole reason this method exists rather than `update` is that a
+    negotiation must not be able to change what an item *is*.
+    """
+    row = session.get(models.Item, item_id)
+    assert row is not None
+    return {column.name: getattr(row, column.name) for column in models.Item.__table__.columns}
+
+
+def test_the_narrow_write_moves_two_columns_of_one_part(
+    session: OrmSession, items: ItemRepository, films: Library, two_parter: Item
+) -> None:
+    """012 D-1's write: the change signal of the file a negotiation just opened, and nothing else.
+
+    The `items` row is compared whole, before and after. `ItemRepository.update` - the only other
+    writer of `item_sources` - deletes every part of the item and rewrites them from a whole
+    `Item`, which a negotiation neither has nor should build.
+    """
+    before = item_columns(session, two_parter.id)
+
+    items.record_change_signal(
+        two_parter.id, 0, "Half - part1.mkv", size=148_301, mtime_ns=1_767_225_600_000_000_000
+    )
+
+    healed = items.by_library(films.id)[two_parter.id]
+    assert [(one.size, one.mtime_ns) for one in healed.sources] == [
+        (148_301, 1_767_225_600_000_000_000),
+        (30, 40),
+    ]
+    assert [one.relative_path for one in healed.sources] == [
+        "Half - part1.mkv",
+        "Half - part2.mkv",
+    ]
+    assert item_columns(session, two_parter.id) == before
+
+
+def test_the_narrow_write_refuses_a_part_that_is_not_there(
+    items: ItemRepository, two_parter: Item
+) -> None:
+    """A silent no-op would leave the probe row healed and the tag describing the old bytes."""
+    with pytest.raises(LookupError):
+        items.record_change_signal(two_parter.id, 7, "Half - part8.mkv", size=1, mtime_ns=2)
+
+
+def test_the_narrow_write_refuses_a_part_naming_another_file(
+    items: ItemRepository, two_parter: Item
+) -> None:
+    """The check that makes 012's two writes provably about one file.
+
+    The inspection is stored under `(library_id, relative_path)` and the signal under `(item_id,
+    part_index)`; nothing in those two keys says they name the same bytes. Without this, a caller
+    that had the part index wrong would put a probe row on one file and its change signal on
+    another, and every assertion about either row alone would pass.
+    """
+    with pytest.raises(LookupError, match="part1"):
+        items.record_change_signal(two_parter.id, 0, "Half - part2.mkv", size=1, mtime_ns=2)

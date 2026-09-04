@@ -33,6 +33,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session as OrmSession
 
 from atrium.compat.dates import utc_now
+from atrium.db.repositories import ItemRepository, MediaProbeRepository
 from atrium.domain.items import MediaSource
 from atrium.domain.media import MediaInspection, StreamKind
 from atrium.library.scan import MediaProber
@@ -121,20 +122,38 @@ def store(
 ) -> None:
     """Write one inspection through the scan's own repository, and the file's change signal.
 
-    **Not landed here.** 012 T4 writes it, because it is the one thing in this feature that
-    touches two tables 003 owns and it is reviewable on its own: `MediaProbeRepository.put` for the
-    streams, and then the `(size, mtime_ns)` of that one part in place, through a narrowly-scoped
-    method on `ItemRepository` (012 plan section 4, D-1). The two come from one `stat()`, taken
-    inside the inspection, so writing one without the other would put a tag and a size on the wire
-    that describe different bytes.
+    Two rows: the `(size, mtime_ns)` of that one part, in place, through a narrowly-scoped method
+    on `ItemRepository` (012 plan section 4, D-1), and the inspection itself through
+    `MediaProbeRepository.put`, whose streams are deleted and rewritten rather than merged. The
+    two come from one `stat()`, taken inside the inspection, so writing one without the other
+    would put a tag and a size on the wire that describe different bytes:
+    `media/info.py:source_of` takes `Size` from the inspection and `ETag` from the source row.
 
-    The signature is declared here because it is the whole of what the resolution needs and it is
-    what tells T4 apart from a one-line call: **an item, a part and a library**, where the write
-    that exists today takes a whole `Item` and rewrites every part of it. The transient inspection
-    `unopened` returns is never one of these - `found.container` is empty on exactly those, and no
-    inspection `media/probe.py:inspect` returns can be.
+    **The change signal goes first, and the order is the argument for the check inside it.**
+    `record_change_signal` is the call that can refuse - a part that is not there, or one naming
+    another file - and a refusal before `put` leaves *neither* row written rather than a probe row
+    whose signal was never updated, which is the exact half-healed state D-1 exists to prevent.
+    Both writes are the request's transaction either way (`db/engine.py:session_scope`), so a
+    caller that swallowed the exception is the only case the order decides - and that is the case
+    worth deciding.
+
+    **It refuses what `unopened` produced, and the check is the container** (012 plan section 5,
+    invariant 1). The transient record carries the *source row's* own change signal, so storing
+    one would satisfy `MediaProbeRepository.current()` against the file's real stat and the next
+    scan would skip the file for ever - a library nothing can play, curable only by a deep scan.
+    `media/probe.py:inspect` refuses a file whose container has no name, so an empty container
+    tells the two apart with no flag to carry and no reviewer to remember.
     """
-    raise NotImplementedError("012 T4 writes this; T3 lands the trigger and the transient answer")
+    if found.container == UNOPENED_CONTAINER:
+        raise ValueError(
+            f"{relative_path!r}: this is the transient inspection `unopened` builds, not one any "
+            f"file produced. Storing it would satisfy the next scan's change comparison and the "
+            f"file would never be opened again (012 plan section 5, invariant 1)."
+        )
+    ItemRepository(session).record_change_signal(
+        item_id, part_index, relative_path, size=found.size, mtime_ns=found.mtime_ns
+    )
+    MediaProbeRepository(session).put(library_id, relative_path, found)
 
 
 def unopened(part: MediaSource) -> MediaInspection:
