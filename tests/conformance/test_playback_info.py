@@ -2107,6 +2107,55 @@ async def test_a_part_the_trigger_never_fires_for_is_still_decided_rather_than_a
         assert "TranscodingUrl" in source, "every advertised capability carries an address (AC-4)"
 
 
+async def test_a_part_the_scan_already_opened_is_not_re_opened_when_the_trigger_fires(
+    client: httpx.AsyncClient,
+    served: tuple[FastAPI, ScannedMediaWorld],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The guard inside `api/media_info.py:_opened`, held on its own - audit 2026-09-04's M17.
+
+    **The trigger and the guard are two conditions, and only one of them was ever asserted.** The
+    trigger asks whether *source zero* carries a stream of the item's own kind; the guard asks,
+    per part, whether that part already carries an inspection. `videoless.mkv` is the file where
+    they disagree: the scan opened it and stored what it holds, so the guard says "nothing to
+    open" - and it holds no video stream, so the trigger fires anyway, on this request and on
+    every one after it for ever (012 spec section 3.2). Every other test in this section runs on
+    an item where the two agree, which is why deleting the guard left ~5250 tests green.
+
+    Asserted as **zero invocations of the prober**, because the damage is invisible in the body:
+    without the guard this negotiation re-runs `ffprobe` over an already-inspected file and
+    rewrites its two rows, answering exactly what it answers now. `wanted` is watched rather than
+    assumed so the assertion below cannot pass vacuously - a trigger that stopped firing would
+    make "the prober was not called" true for the wrong reason, and this test would go green on a
+    world where the guard is unreachable.
+    """
+    fired: list[bool] = []
+    probed: list[Path] = []
+    trigger = inspection.wanted
+
+    def watched(*args: Any, **keywords: Any) -> bool:
+        answer = trigger(*args, **keywords)
+        fired.append(answer)
+        return answer
+
+    def counted(path: Path, prober: Any = None) -> None:
+        probed.append(path)
+        return None
+
+    monkeypatch.setattr(inspection, "wanted", watched)
+    monkeypatch.setattr(inspection, "opened", counted)
+
+    item = served[1].of(VIDEOLESS)
+    document = await negotiate(client, item.id, {"DeviceProfile": PLAYS_NEITHER})
+    source = document["MediaSources"][0]
+
+    assert fired == [True], "the trigger must fire, or the guard beneath it is never reached"
+    assert probed == [], "an already-inspected part is not re-opened by a trigger about the item"
+    assert [one["Type"] for one in source["MediaStreams"]] == ["Audio"], (
+        "and the stored inspection is what the answer is built from"
+    )
+
+
 async def test_a_file_gone_from_disk_since_the_scan_is_answered_from_what_the_scan_stored(
     healable_client: httpx.AsyncClient,
     healable: tuple[FastAPI, ScannedMediaWorld],

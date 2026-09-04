@@ -926,8 +926,25 @@ up twice somewhere else**: in a criterion, and in a row of the specification's o
 * **That row is held by two independent guards, and one mutation was not enough to make it fail.**
   Forcing `wanted()` to fire changed nothing: `api/media_info.py:_opened` skips a part that already
   carries a probe, so the stored inspection survives a trigger that fires wrongly. The red run
-  needed both — the trigger *and* that guard — which is worth writing down, because a later change
-  that removes either one alone will still pass this test and the one after it will not.
+  needed both — the trigger *and* that guard — which is worth writing down.
+
+  > **Corrected 2026-09-04 by [audit 2026-09-04](../../docs/audits/2026-09-04.md)'s M17, and the
+  > half that was wrong is the half about the future.** This bullet ended *"because a later change
+  > that removes either one alone will still pass this test and the one after it will not"*. The
+  > first clause is true and was measured; the second was neither. Deleting the guard alone — those
+  > two lines and nothing else — left the **whole** suite green, ~5250 tests, so nothing in this
+  > repository held it, and this note is what said otherwise. **A mutation that reddens a row
+  > proves the row, not each line the red run needed**: "two mutations were required together" and
+  > "each is caught by something" are different claims, and only the first was run.
+  >
+  > The guard is held on its own now, by
+  > `tests/conformance/test_playback_info.py:test_a_part_the_scan_already_opened_is_not_re_opened_when_the_trigger_fires`,
+  > on `videoless.mkv` — the one item shape that reaches the guard at all, where the trigger fires
+  > *and* the part already carries an inspection. It asserts the prober is invoked **zero** times
+  > and watches `wanted()` return `True` in the same run, so it cannot go green on a world where
+  > the trigger stopped firing. Its red run is one mutation: delete the two lines and the prober is
+  > invoked once. Mapped to AC-9, whose subject is exactly this — the file side changing nothing
+  > for an item that has been opened.
 * **`IMPLEMENTED_FEATURES` gains nothing, exactly as the gate said, and the consequence is real
   rather than a formality.** `grep -c 'feature: "012"' docs/compatibility/surface.yaml` answers
   `0`, so the exact-set route check was green throughout and no route test would have noticed a
