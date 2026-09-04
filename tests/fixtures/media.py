@@ -77,7 +77,11 @@ BINARIES = ("ffmpeg", "ffprobe")
 #:
 #: 3: 010 T11. A sidecar is written in the encoding it declares rather than always in UTF-8, and
 #: an entry may plant an image carrying an EXIF orientation beside its film.
-GENERATOR_VERSION = 3
+#:
+#: 4: 012 T2. An entry may declare **no audio stream at all**, and a second kind of declaration
+#: writes bytes no prober will accept. Both change what is on disk in ways the `MediaFile` rows
+#: alone do not express.
+GENERATOR_VERSION = 4
 
 #: Where a cached tree lands, unless the environment names somewhere else. A digest directory
 #: under it holds one build.
@@ -292,11 +296,18 @@ class MediaFile:
     resolved container, and a fixture that recorded only one of them could not tell the two
     apart."""
 
-    audio_codec: str
-    audio_encoder: str
-    sample_rate: int
-    channels: int
     duration_seconds: float
+
+    audio_codec: str | None = None
+    audio_encoder: str | None = None
+    sample_rate: int | None = None
+    channels: int | None = None
+    """**All four together, or none of them.** Every entry declared one until 012 T2, and the
+    entry that declares none is the one this project could not otherwise build: a file whose
+    stream of the *item's own kind* is missing is what makes the reference re-probe an item on
+    every negotiation for ever (012 plan section 6.1), and for an audio item that means a file
+    with no audio track. `has_audio` is the question, asked rather than inferred from
+    `audio_codec` alone so that a half-declared entry fails loudly in `generate`."""
 
     video_codec: str | None = None
     video_encoder: str | None = None
@@ -356,9 +367,68 @@ class MediaFile:
         return self.video_codec is not None
 
     @property
+    def has_audio(self) -> bool:
+        """Whether this entry declares an audio stream, and the four fields agree or it raises.
+
+        A declaration that names a codec and no sample rate would encode something nobody
+        described, and the invariant test would then compare ffprobe's answer against a blank.
+        """
+        declared = [
+            self.audio_codec,
+            self.audio_encoder,
+            self.sample_rate,
+            self.channels,
+        ]
+        if any(one is not None for one in declared) and not all(
+            one is not None for one in declared
+        ):
+            raise ValueError(f"{self.key} declares some of its audio fields and not others")
+        return self.audio_codec is not None
+
+    @property
     def stem(self) -> str:
         """The file's name without its extension - what a sidecar's name has to begin with for
         the reference to claim it at all (spec section 3.6)."""
+        return Path(self.path).stem
+
+
+@dataclass(frozen=True)
+class UninspectableFile:
+    """Bytes on disk that **no prober will accept**, declared the way a generated file is.
+
+    Every other entry in this module means *ffmpeg wrote this and ffprobe agrees*; this one means
+    the opposite, and it is the only way to reach the state 012 exists to close: a file in a
+    library that nothing has ever successfully opened. It cannot be generated, because the scan
+    that creates an item is the scan that probes it - so the state exists only where the probe
+    **failed** (012 spec section 6).
+
+    **Deterministic content, never random.** The build cache is keyed on a digest over these
+    declarations, so bytes that differed per build would publish a tree under a name that
+    describes a different one. `filler` is repeated to `size` and truncated, which also keeps the
+    declaration readable: the reason a file is unreadable is visible in the file.
+
+    **Never zero-length**, and that is measured rather than stylistic: 003's walk skips a file of
+    no length before it can become a candidate (`library/walker.py`'s `Skip.EMPTY`), so a
+    zero-length entry would produce no item at all and test nothing. The reference admits one and
+    answers both a listing and a negotiation for it, which is a difference of 003's
+    `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`.
+    """
+
+    key: str
+    root: str
+    path: str
+    reason: str
+    size: int = 4096
+    filler: bytes = b"these bytes are not a container, which is the whole point. "
+
+    def content(self) -> bytes:
+        if self.size <= 0:
+            raise ValueError(f"{self.key} declares no length, which 003's walk would skip")
+        repeated = self.filler * (self.size // len(self.filler) + 1)
+        return repeated[: self.size]
+
+    @property
+    def stem(self) -> str:
         return Path(self.path).stem
 
 
@@ -774,6 +844,104 @@ HIGH_RATE_AUDIO = MediaFile(
 )
 
 #: Everything under the movies root, in declaration order.
+VIDEOLESS = MediaFile(
+    key="videoless",
+    root=MOVIES_ROOT,
+    path="Videoless (2010).mkv",
+    reason="012 section 3.2: a **film** whose file carries no video stream. The reference's "
+    "negotiation re-probes an item whose source zero holds no stream of the item's own kind, on "
+    "every request and for ever, and this is the readable half of that condition - the half a "
+    "trigger written as 'this source has no stored inspection' would never fire on",
+    muxer="matroska",
+    demuxers="matroska,webm",
+    duration_seconds=4.0,
+    audio_codec="aac",
+    audio_encoder="aac",
+    sample_rate=48000,
+    channels=2,
+    audio_bitrate="96k",
+)
+
+SOUNDLESS = MediaFile(
+    key="soundless",
+    root=MUSIC_ROOT,
+    path="Quiet Corner/Unnamed Folder/01 Soundless.m4a",
+    reason="012 AC-6: an **audio** item whose file carries no audio stream, which is the whole "
+    "of the reference's condition for refusing the request with 400 - not the file being "
+    "unreadable, which is the other fixture and a different reason. Readable on purpose: a test "
+    "written against the unreadable one would pass while asserting the wrong condition. Its "
+    "folders are deliberately not its tags, like the track beside it: a world where they matched "
+    "could not tell a scan that opened the file from one that read the path",
+    muxer="mp4",
+    demuxers="mov,mp4,m4a,3gp,3g2,mj2",
+    duration_seconds=4.0,
+    video_codec="h264",
+    video_encoder="libx264",
+    width=320,
+    height=240,
+    frame_rate="25",
+    tags={
+        "artist": "Soundless Artist",
+        "album_artist": "Soundless Artist",
+        "album": "Soundless Album",
+        "title": "Soundless",
+    },
+)
+
+MISSING_HALF_FIRST = MediaFile(
+    key="missing_half_first",
+    root=MOVIES_ROOT,
+    path="The Missing Half (2011)/The Missing Half (2011) - part1.mkv",
+    reason="012 plan section 6.1: the readable half of a two-part film whose second part no "
+    "prober will accept. New rather than a track added to `two_parter`, for 011 T1's reason - a "
+    "file whose siblings other features assert about must not change underneath them",
+    muxer="matroska",
+    demuxers="matroska,webm",
+    duration_seconds=4.0,
+    video_codec="h264",
+    video_encoder="libx264",
+    width=320,
+    height=240,
+    frame_rate="25",
+    audio_codec="aac",
+    audio_encoder="aac",
+    sample_rate=48000,
+    channels=2,
+    audio_bitrate="96k",
+)
+
+UNREADABLE = UninspectableFile(
+    key="unreadable",
+    root=MOVIES_ROOT,
+    path="Unreadable (2012).mkv",
+    reason="012 AC-1 and AC-4: the source nothing has ever opened. Four kibibytes that are not a "
+    "container, in a film's own directory, so the scan makes an item for it and inspection fails",
+)
+
+LATENT = UninspectableFile(
+    key="latent",
+    root=MOVIES_ROOT,
+    path="Latent (2013).mkv",
+    reason="012 AC-2 and AC-3: the same bytes, for a test that replaces them with a real film "
+    "**after** the scan. What answers the negotiation is then the only thing that has ever read "
+    "those bytes successfully, which is what makes the on-demand inspection observable at all",
+)
+
+MISSING_HALF_SECOND = UninspectableFile(
+    key="missing_half_second",
+    root=MOVIES_ROOT,
+    path="The Missing Half (2011)/The Missing Half (2011) - part2.mkv",
+    reason="012 plan section 6.1, the negative case: part one is annotated and part two is not. "
+    "The reference has no such item to be faithful to - it keeps the unreadable part as neither "
+    "a source nor an item `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, "
+    "2026-09-03]` - so what this asks is what **this** server's resolver does with it",
+)
+
+#: Bytes on disk no prober will accept. Built like the matrix and declared apart from it, because
+#: every invariant the matrix has - it probes back to what it says - is false of these by design.
+UNINSPECTABLE: tuple[UninspectableFile, ...] = (UNREADABLE, LATENT, MISSING_HALF_SECOND)
+
+
 FILMS: tuple[MediaFile, ...] = (
     DIRECT_PLAY,
     REJECTED_CONTAINER,
@@ -787,12 +955,19 @@ FILMS: tuple[MediaFile, ...] = (
     UNCONVERTIBLE_SUBTITLE,
     LEGACY_SUBTITLE,
     PLANTED_POSTER,
+    VIDEOLESS,
+    MISSING_HALF_FIRST,
 )
 
 #: Everything under the music root.
-TRACKS: tuple[MediaFile, ...] = (HIGH_RATE_AUDIO,)
+TRACKS: tuple[MediaFile, ...] = (HIGH_RATE_AUDIO, SOUNDLESS)
 
 MATRIX: tuple[MediaFile, ...] = FILMS + TRACKS
+
+#: Everything this module writes, of either kind. What the builder walks and what the cache digest
+#: is taken over - a tree built before an uninspectable entry existed must not be read by code
+#: that expects one.
+DECLARED: tuple[MediaFile | UninspectableFile, ...] = MATRIX + UNINSPECTABLE
 
 
 # ------------------------------------------------------------------------------------------
@@ -1061,14 +1236,17 @@ def _encode_command(one: MediaFile, destination: Path, sources: Sequence[Path]) 
             f"smptebars=size={one.width}x{one.height}"
             f":rate={one.frame_rate}:duration={one.duration_seconds}",
         ]
-    audio_input = inputs
-    inputs += 1
-    command += [
-        "-f",
-        "lavfi",
-        "-i",
-        f"sine=frequency={TONE_HZ}:sample_rate={one.sample_rate}:duration={one.duration_seconds}",
-    ]
+    audio_input = None
+    if one.has_audio:
+        audio_input = inputs
+        inputs += 1
+        command += [
+            "-f",
+            "lavfi",
+            "-i",
+            f"sine=frequency={TONE_HZ}:sample_rate={one.sample_rate}"
+            f":duration={one.duration_seconds}",
+        ]
     first_subtitle_input = inputs
     for source in sources:
         command += ["-i", str(source)]
@@ -1080,7 +1258,8 @@ def _encode_command(one: MediaFile, destination: Path, sources: Sequence[Path]) 
         # their bytes are the bytes 008 measured.
         if video_input is not None:
             command += ["-map", f"{video_input}:v"]
-        command += ["-map", f"{audio_input}:a"]
+        if audio_input is not None:
+            command += ["-map", f"{audio_input}:a"]
         for offset in range(len(sources)):
             command += ["-map", f"{first_subtitle_input + offset}:s"]
 
@@ -1124,11 +1303,20 @@ def _encode_command(one: MediaFile, destination: Path, sources: Sequence[Path]) 
             # the entries that have it and is simply wrong on the entries that do not.
             command += ["-shortest"]
 
-    command += ["-c:a", one.audio_encoder, "-ac", str(one.channels), "-ar", str(one.sample_rate)]
-    if one.audio_bitrate is not None:
-        command += ["-b:a", one.audio_bitrate]
-    if one.sample_format is not None:
-        command += ["-sample_fmt", one.sample_format]
+    if one.has_audio:
+        assert one.audio_encoder is not None
+        command += [
+            "-c:a",
+            one.audio_encoder,
+            "-ac",
+            str(one.channels),
+            "-ar",
+            str(one.sample_rate),
+        ]
+        if one.audio_bitrate is not None:
+            command += ["-b:a", one.audio_bitrate]
+        if one.sample_format is not None:
+            command += ["-sample_fmt", one.sample_format]
     for index, track in enumerate(one.subtitles):
         command += [f"-c:s:{index}", track.encoder]
         command += [f"-metadata:s:s:{index}", f"language={track.language}"]
@@ -1169,6 +1357,21 @@ def generate(one: MediaFile, into: Path) -> Path:
         beside = destination.with_name(planted.name)
         beside.write_bytes(planted_image(planted))
         os.utime(beside, ns=(FIXED_MTIME_NS, FIXED_MTIME_NS))
+    return destination
+
+
+def write_uninspectable(one: UninspectableFile, into: Path) -> Path:
+    """Write one refused entry under `into`, stamped like everything else in the tree.
+
+    No encoder, no scratch directory and no subtitle sources: the whole content is the
+    declaration's. The fixed modification time matters here for the same reason it matters for a
+    generated file - 003 makes `(size, mtime_ns)` the change signal, and a tree stamped with the
+    clock would make "the same tree scanned twice" untestable.
+    """
+    destination = into.joinpath(one.root, *one.path.split("/"))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(one.content())
+    os.utime(destination, ns=(FIXED_MTIME_NS, FIXED_MTIME_NS))
     return destination
 
 
@@ -1224,7 +1427,9 @@ class BuiltMedia:
     def music_root(self) -> Path:
         return self.base / MUSIC_ROOT
 
-    def path_of(self, one: MediaFile) -> Path:
+    def path_of(self, one: MediaFile | UninspectableFile) -> Path:
+        """Where a declaration landed, of either kind: the two agree about `root` and `path`
+        and about nothing else."""
         return self.base.joinpath(one.root, *one.path.split("/"))
 
     def sidecar_path_of(self, one: MediaFile, sidecar: SidecarFile) -> Path:
@@ -1248,7 +1453,7 @@ def digest_of(version: str) -> str:
     Change any of the three and the digest moves, so a cached tree from before the change is never
     read - which is the only reason caching between runs is safe at all.
     """
-    material = "\n".join([str(GENERATOR_VERSION), version, *(repr(one) for one in MATRIX)])
+    material = "\n".join([str(GENERATOR_VERSION), version, *(repr(one) for one in DECLARED)])
     return hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
 
 
@@ -1275,6 +1480,8 @@ def build_media_files(cache: Path | None = None) -> BuiltMedia:
     try:
         for one in MATRIX:
             generate(one, staging)
+        for refused in UNINSPECTABLE:
+            write_uninspectable(refused, staging)
         try:
             staging.replace(base)
         except OSError:
@@ -1432,6 +1639,7 @@ __all__ = [
     "BINARIES",
     "BOTH_SUBTITLE_KINDS",
     "CUES",
+    "DECLARED",
     "DIRECT_PLAY",
     "EXIF_ORIENTATION_NORMAL",
     "EXIF_ORIENTATION_ROTATE_90",
@@ -1440,11 +1648,14 @@ __all__ = [
     "HIGH_RANGE",
     "HIGH_RATE_AUDIO",
     "IMAGE_SUBTITLE_CODEC",
+    "LATENT",
     "LEGACY_CUES",
     "LEGACY_ENCODING",
     "LEGACY_SUBTITLE",
     "LONG_TAKE",
     "MATRIX",
+    "MISSING_HALF_FIRST",
+    "MISSING_HALF_SECOND",
     "MOVIES_LIBRARY_ID",
     "MUSIC_LIBRARY_ID",
     "PLANTED_POSTER",
@@ -1452,10 +1663,14 @@ __all__ = [
     "REJECTED_CONTAINER",
     "REJECTED_VIDEO",
     "SIDECAR_CUES",
+    "SOUNDLESS",
     "TRACKS",
     "TWO_PARTER_FIRST",
     "TWO_PARTER_SECOND",
     "UNCONVERTIBLE_SUBTITLE",
+    "UNINSPECTABLE",
+    "UNREADABLE",
+    "VIDEOLESS",
     "BuiltMedia",
     "Cue",
     "FfmpegFailedError",
@@ -1464,6 +1679,7 @@ __all__ = [
     "PlantedImage",
     "SidecarFile",
     "SubtitleTrack",
+    "UninspectableFile",
     "binary",
     "build_media_files",
     "exif_orientation_segment",
@@ -1481,4 +1697,5 @@ __all__ = [
     "subtitle_packet_seconds",
     "subtitle_sources",
     "with_exif_orientation",
+    "write_uninspectable",
 ]

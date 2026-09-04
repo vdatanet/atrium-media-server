@@ -655,6 +655,13 @@ Four confirmed the reading; two did not, and one of those two moves a task.
    not an improvement — the condition [D-1](#d-1--the-healed-items-etag) was held on, discharged
    `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`.
 
+**And one more from T2, which nobody was looking for either.** For a file with **no audio
+stream**, the reference names the artist and the album after the **directories** where Atrium
+reads the container's tags — measured over the same fixture on 2026-09-04, and declared in
+`tests/library/test_reference_reading.py` with its reason. A file with no audio stream is one the
+reference has no audio metadata reader for, so it falls back to the path. It is 003's and 004's,
+like the two beside it.
+
 **And one nobody asked for, from the same run.** A **zero-length** file is an item on the
 reference — `Size: 0`, a listing with the three flags `true`, and a negotiation answering
 `false`/`false`/`true` with an address — where 003's walk skips it before it can become one. That
@@ -690,9 +697,9 @@ at all.**
 |---|---|---|
 | `unreadable.mkv` | Four kibibytes that are not a container, in the movies tree, scanned | The state the whole feature is about. `tools/probe_uninspected_source.py` builds the same thing the same way — the scan that creates an item is the scan that probes it, so the state exists only where the probe *failed* |
 | `latent.mkv` | The same, replaced with real bytes **after** the scan, in the test | AC-2 and AC-3: the only thing that has ever read those bytes successfully is the negotiation |
-| `soundless.m4a` | A readable audio item whose file holds **no audio stream** | AC-6's real condition. The gate's fixture conflates "unreadable" with "no audio stream" and this one separates them |
+| `soundless` | A readable `.m4a` whose file holds **no audio stream**, under folders named after neither its artist nor its album | AC-6's real condition. The gate's fixture conflates "unreadable" with "no audio stream" and this one separates them. Its folders disagree with its tags on purpose: a world where they matched could not tell a scan that opened the file from one that read the path — which is also what the **reference** does with it, naming the artist off the directory (T2) |
 | `videoless.mkv` | A readable **video** item whose file holds no video stream | §6.1's trigger, in the case where "no inspection" and "no stream of the item's kind" disagree. Nothing else in the suite tells the naive trigger from the right one |
-| A two-part film with part zero annotated and part one not | Built from the existing multi-part film | The negative case for §6.1: the trigger must not fire |
+| A two-part film with part zero annotated and part one not | A **new** entry, `The Missing Half`, not a track added to the existing two-parter — 011 T1's rule: a file whose siblings other features assert about must not change underneath them | The negative case for §6.1: the trigger must not fire. **The reference has no such item** — it keeps the unreadable part as neither a source nor an item (T1) — so this asks *this* server, and the difference is declared in the reference-reading comparison |
 
 All of them are `tests/fixtures/media.py`'s to declare and `media_world.py`'s to scan, which puts
 them in front of the real 003 pipeline and the real prober — the only world in this repository

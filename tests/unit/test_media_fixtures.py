@@ -19,6 +19,7 @@ machine that has the binaries is what proves the fence is complete.
 
 from __future__ import annotations
 
+import shutil
 import struct
 from collections.abc import Mapping
 from fractions import Fraction
@@ -28,10 +29,13 @@ from pathlib import Path
 import pytest
 
 from atrium.domain.items import ItemType
+from atrium.library.scan import scan
+from atrium.media.probe import UnreadableMediaError, inspect
 from tests.fixtures.library.generate import FIXED_MTIME_NS
 from tests.fixtures.media import (
     BOTH_SUBTITLE_KINDS,
     CUES,
+    DECLARED,
     DIRECT_PLAY,
     EXIF_ORIENTATION_TAG,
     FILMS,
@@ -41,6 +45,9 @@ from tests.fixtures.media import (
     LEGACY_SUBTITLE,
     LONG_TAKE,
     MATRIX,
+    MISSING_HALF_FIRST,
+    MISSING_HALF_SECOND,
+    MOVIES_ROOT,
     PLANTED_POSTER,
     REJECTED_AUDIO,
     REJECTED_CONTAINER,
@@ -49,9 +56,11 @@ from tests.fixtures.media import (
     TWO_PARTER_FIRST,
     TWO_PARTER_SECOND,
     UNCONVERTIBLE_SUBTITLE,
+    UNINSPECTABLE,
     BuiltMedia,
     Cue,
     MediaFile,
+    UninspectableFile,
     generate,
     keyframe_seconds,
     pgs_bitstream,
@@ -107,10 +116,15 @@ def test_a_generated_file_probes_to_its_declaration(
         entry.subtitles
     )
 
-    audio = stream_of(probed, "audio")
-    assert audio["codec_name"] == entry.audio_codec
-    assert int(audio["sample_rate"]) == entry.sample_rate  # type: ignore[arg-type]
-    assert audio["channels"] == entry.channels
+    # Both directions again, and 012 T2 is why the second half exists: an entry that declares no
+    # audio has to come back with none, or `soundless` is a file whose whole reason is untrue.
+    if entry.has_audio:
+        audio = stream_of(probed, "audio")
+        assert audio["codec_name"] == entry.audio_codec
+        assert int(audio["sample_rate"]) == entry.sample_rate  # type: ignore[arg-type]
+        assert audio["channels"] == entry.channels
+    else:
+        assert not [one for one in probed["streams"] if one["codec_type"] == "audio"]  # type: ignore[attr-defined]
 
     if not entry.has_video:
         assert not [one for one in probed["streams"] if one["codec_type"] == "video"]  # type: ignore[attr-defined]
@@ -291,8 +305,11 @@ def test_the_matrix_is_a_matrix() -> None:
         "AC-7 needs an accepted video beside a rejected audio, in an accepted container"
     )
 
+    assert HIGH_RATE_AUDIO.sample_rate is not None
     assert HIGH_RATE_AUDIO.sample_rate > max(
-        one.sample_rate for one in MATRIX if one is not HIGH_RATE_AUDIO
+        one.sample_rate
+        for one in MATRIX
+        if one is not HIGH_RATE_AUDIO and one.sample_rate is not None
     ), "AC-19 needs a source above every ceiling the rest of the world sits at"
 
     assert TWO_PARTER_FIRST.duration_seconds != TWO_PARTER_SECOND.duration_seconds, (
@@ -405,9 +422,19 @@ def test_two_builds_of_one_entry_are_byte_identical(matroska: MediaFile, tmp_pat
 def test_every_film_scans_to_one_item_of_the_right_type(
     scanned_media_world: ScannedMediaWorld,
 ) -> None:
-    """One item per fixture film, and the two parts are one of them - not seven items."""
+    """One item per fixture film, and the two parts are one of them - not seven items.
+
+    **The refused entries are films too**, which is 012's whole subject: a file the prober cannot
+    open still resolves to an item, and only its *inspection* is missing. Counted here rather than
+    assumed, because if the scan dropped them there would be nothing for that feature to answer
+    about.
+    """
     films = scanned_media_world.by_type(ItemType.MOVIE)
-    expected = {one.path for one in FILMS} - {TWO_PARTER_SECOND.path}
+    refused = {one.path for one in UNINSPECTABLE if one.root == MOVIES_ROOT}
+    expected = ({one.path for one in FILMS} | refused) - {
+        TWO_PARTER_SECOND.path,
+        MISSING_HALF_SECOND.path,
+    }
     assert len(films) == len(expected)
 
     for one in FILMS:
@@ -430,6 +457,98 @@ def test_the_two_parter_carries_both_parts_in_order(
     assert all(source.size and source.mtime_ns for source in item.sources)
 
 
+@pytest.mark.parametrize("entry", UNINSPECTABLE, ids=lambda one: one.key)
+def test_a_refused_entry_is_bytes_no_prober_will_accept(
+    entry: UninspectableFile, media_files: BuiltMedia
+) -> None:
+    """The invariant of the second declaration kind, and it is the inverse of the first one's.
+
+    `media/probe.py` rather than this module's own `probe()`, because what the feature turns on is
+    what *this server's* inspection does with the file - and the two agree only as long as this
+    assertion holds.
+    """
+    path = media_files.path_of(entry)
+    assert path.is_file(), f"{entry.key} was not written"
+    #: **Never zero**, which is the boundary the whole fixture sits inside: 003's walk skips a
+    #: file of no length before it can become a candidate, so an entry of no length would be an
+    #: entry with no item and nothing to negotiate about.
+    assert path.stat().st_size == entry.size > 0
+
+    with pytest.raises(UnreadableMediaError):
+        inspect(path)
+
+
+def test_the_refused_entries_scan_to_items_with_no_inspection(
+    scanned_media_world: ScannedMediaWorld,
+) -> None:
+    """The state 012 exists to close, asserted rather than assumed.
+
+    An item, a source row that names the file, and **no probe row** - which is what makes
+    `media/info.py` answer a `Container` from the path, no runtime, no bitrate and no streams.
+    Nothing had ever checked that a scan gets this far over a file it could not open: it records
+    the failure and carries on (003 section 3.7), and if it did not, every criterion of this
+    feature would have nothing to run against.
+    """
+    for entry in UNINSPECTABLE:
+        if entry is MISSING_HALF_SECOND:
+            continue
+        item = scanned_media_world.of(entry)
+        assert [source.relative_path for source in item.sources] == [entry.path], entry.key
+        assert scanned_media_world.inspection_of(entry) is None, entry.key
+
+    #: The control, on the same world: an entry that *was* inspected has one.
+    assert scanned_media_world.inspection_of(DIRECT_PLAY) is not None
+
+
+def test_the_half_that_could_not_be_read_is_still_a_part_of_its_film(
+    scanned_media_world: ScannedMediaWorld,
+) -> None:
+    """What **this** server does with a two-part film whose second part no prober will accept.
+
+    The reference does something else, measured at T1: it keeps that part as neither a source of
+    the grouped item nor an item of its own, so the item answers **one** media source
+    `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`. Here the grouping
+    is a naming decision (003) and the inspection is a separate step, so the part survives as a
+    source with no probe row - which is a difference between the two servers, in 003's territory,
+    recorded by this assertion rather than designed around by 012.
+    """
+    item = scanned_media_world.of(MISSING_HALF_FIRST)
+    assert [source.relative_path for source in item.sources] == [
+        MISSING_HALF_FIRST.path,
+        MISSING_HALF_SECOND.path,
+    ]
+    assert scanned_media_world.inspection_of(MISSING_HALF_FIRST) is not None
+    assert scanned_media_world.inspection_of(MISSING_HALF_SECOND) is None
+
+
+def test_a_file_of_no_length_is_not_an_item_at_all(
+    scanned_media_world: ScannedMediaWorld, tmp_path: Path
+) -> None:
+    """The other way 012's spec named for reaching this state, which reaches nothing here.
+
+    `library/walker.py` skips a file of no length with `Skip.EMPTY` before it is ever a candidate,
+    so there is no item, no source row and not even an unexamined-file report - where the
+    reference admits one and answers both a listing and a negotiation for it
+    `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`. Asserted here so
+    that the boundary of what this fixture can express is a test rather than a paragraph, and so
+    that the difference is 003's to close rather than 012's to discover twice.
+    """
+    empty = scanned_media_world.files.movies_root / "Nothing At All (2014)"
+    empty.mkdir(parents=True, exist_ok=True)
+    (empty / "Nothing At All (2014).mkv").write_bytes(b"")
+    try:
+        report = scan(scanned_media_world.movies, scanned_media_world.session)
+    finally:
+        shutil.rmtree(empty, ignore_errors=True)
+
+    assert not [one for one in report.uninspected if "Nothing At All" in one.relative_path]
+    assert not [
+        item
+        for item in scanned_media_world.by_type(ItemType.MOVIE)
+        if any("Nothing At All" in source.relative_path for source in item.sources)
+    ]
+
+
 def test_the_high_rate_track_scans_from_its_tags_and_not_its_folders(
     scanned_media_world: ScannedMediaWorld,
 ) -> None:
@@ -444,9 +563,19 @@ def test_the_high_rate_track_scans_from_its_tags_and_not_its_folders(
     assert track.name == HIGH_RATE_AUDIO.tags["title"]
 
     albums = scanned_media_world.by_type(ItemType.MUSIC_ALBUM)
-    assert [album.name for album in albums] == [HIGH_RATE_AUDIO.tags["album"]]
+    #: **Every album in this world comes from a tag**, which is the property being asserted -
+    #: stated over the declarations rather than as one name, so that adding a track (012 T2 added
+    #: `soundless`) extends it instead of breaking it. A scan resolving from the path would name
+    #: an album after a directory, and no directory here is named after its album.
+    assert {album.name for album in albums} == {
+        one.tags["album"] for one in TRACKS if "album" in one.tags
+    }
+    assert HIGH_RATE_AUDIO.tags["album"] in {album.name for album in albums}
     artists = scanned_media_world.by_type(ItemType.MUSIC_ARTIST)
-    assert [artist.name for artist in artists] == [HIGH_RATE_AUDIO.tags["album_artist"]]
+    assert {artist.name for artist in artists} == {
+        one.tags["album_artist"] for one in TRACKS if "album_artist" in one.tags
+    }
+    assert HIGH_RATE_AUDIO.tags["album_artist"] in {artist.name for artist in artists}
 
     folders = {part for one in TRACKS for part in Path(one.path).parts[:-1]}
     assert folders.isdisjoint(
@@ -474,7 +603,9 @@ def test_every_scanned_source_points_at_a_file_that_exists(
             assert resolved.is_file(), f"{item.name}: {resolved}"
             assert resolved.stat().st_size == source.size
             seen += 1
-    assert seen == len(MATRIX)
+    #: Every declared file of **either** kind: a source row exists for a file the prober refused
+    #: too, which is the state 012 is about and is asserted in its own test above.
+    assert seen == len(DECLARED)
 
 
 def test_a_sidecar_is_in_the_tree_and_is_nobody_s_source(
@@ -625,7 +756,7 @@ def test_every_file_in_the_media_tree_is_generated_by_a_declared_entry(
     itself to and the reason neither module checks a binary in.
     """
     declared = (
-        {media_files.path_of(entry) for entry in MATRIX}
+        {media_files.path_of(entry) for entry in DECLARED}
         | {
             media_files.sidecar_path_of(entry, sidecar)
             for entry in MATRIX
@@ -652,7 +783,7 @@ def test_the_mount_preserves_the_fixed_time(tmp_path: Path) -> None:
     """
     root = build_reference_tree(tmp_path / "tree")
     files = [path for path in root.rglob("*") if path.is_file()]
-    assert len(files) > len(MATRIX), "the composed tree is both worlds, not one"
+    assert len(files) > len(DECLARED), "the composed tree is both worlds, not one"
 
     moved = sorted(
         str(path.relative_to(root)) for path in files if path.stat().st_mtime_ns != FIXED_MTIME_NS

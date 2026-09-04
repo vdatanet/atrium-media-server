@@ -31,7 +31,16 @@ from atrium.library.scan import scan
 from atrium.media.probe import ProberUnavailableError, UnreadableMediaError
 from tests.conftest import data_dir, not_media
 from tests.fixtures.library import BuiltFixture
-from tests.fixtures.media import MOVIES_LIBRARY_ID, BuiltMedia
+from tests.fixtures.media import MOVIES_LIBRARY_ID, MOVIES_ROOT, UNINSPECTABLE, BuiltMedia
+
+
+def refused_films() -> set[str]:
+    """The paths under the movies root that no prober will accept, read from the declarations.
+
+    A set rather than a count, and read rather than written down, so that an entry added to
+    `tests/fixtures/media.py` extends every assertion below instead of breaking one.
+    """
+    return {one.path for one in UNINSPECTABLE if one.root == MOVIES_ROOT}
 
 
 @pytest.fixture
@@ -82,11 +91,19 @@ def test_a_first_scan_inspects_every_file_and_a_second_inspects_none(
 
     first = scan(library, session)
     assert first.inspected > 0
-    assert first.uninspected == ()
+    #: **Not empty, and the count is declared rather than tolerated.** The world holds files no
+    #: prober will accept since 012 T2 - the state that feature exists to close - so what this
+    #: asserts is that every *other* file was opened and that a refusal is recorded rather than
+    #: swallowed. `refused_films()` reads the declarations, so adding one extends this instead of
+    #: breaking it.
+    assert {one.relative_path for one in first.uninspected} == refused_films()
 
     again = scan(library, session)
     assert again.inspected == 0, "a scan that changed nothing re-opened files anyway"
-    assert again.uninspected == ()
+    #: **A file that cannot be opened is re-attempted on every scan**, because there is no stored
+    #: inspection for the change signal to compare against. Measured here rather than assumed: it
+    #: is what makes a rescan the closing mechanism for a file that becomes readable.
+    assert {one.relative_path for one in again.uninspected} == refused_films()
 
     deep = scan(library, session, deep=True)
     assert deep.inspected == first.inspected, "deep is what ignores the signal, here as elsewhere"
@@ -127,8 +144,16 @@ def test_every_scanned_file_has_an_inspection_keyed_the_way_its_source_is(
         source for item in items.values() if item.type is ItemType.MOVIE for source in item.sources
     ]
     assert files, "no film was scanned, so nothing below means anything"
+    refused = refused_films()
+    assert refused, "the world has no refused entry, so the exclusion below hides nothing"
     for source in files:
         stored = probes.get(library.id, source.relative_path)
+        if source.relative_path in refused:
+            #: 012 T2's entries, and the one assertion that matters about them here: **no probe
+            #: row at all**, rather than an empty one. `tests/unit/test_media_fixtures.py` owns
+            #: the rest of what that state looks like.
+            assert stored is None, f"{source.relative_path} was inspected and should not have been"
+            continue
         assert stored is not None, f"{source.relative_path} has no inspection"
         assert stored.container, f"{source.relative_path} was inspected and said nothing"
         assert stored.unchanged_since(source.size or 0, source.mtime_ns or 0), (

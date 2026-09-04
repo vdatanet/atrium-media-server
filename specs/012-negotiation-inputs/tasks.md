@@ -162,7 +162,7 @@ of which route did the healing cannot be asked again.
 
 ## T2 — The world gets files nothing can open
 
-- [ ] **Changes:** `tests/fixtures/media.py` gains a declaration kind it has not got: an entry
+- [x] **Changes:** `tests/fixtures/media.py` gains a declaration kind it has not got: an entry
   whose bytes are **written directly** and whose invariant is that the prober *refuses* it — and
   never a **zero-length** one, which 003's walk skips before it can become an item (see "What the
   gate changed"). Four entries and one addition follow — `unreadable.mkv`, four kibibytes that are
@@ -173,8 +173,8 @@ of which route did the healing cannot be asked again.
   **two-part** film whose first part is readable and whose second is not. `GENERATOR_VERSION` is
   bumped, because what the module generates has changed in a way the existing declarations do not
   express.
-- **Depends on:** T1 (which decides whether the two-part entry is a negative case or a positive
-  one)
+- **Depends on:** T1 (which decided what the two-part entry can be compared against: on the
+  reference, nothing — so the entry exists to ask **this** server the question)
 - **Verified by:** `uv run pytest tests/unit/test_media_fixtures.py -q` — the four unreadable
   entries make `media/probe.py:inspect` raise `UnreadableMediaError` and the two readable ones
   probe back to exactly what they declare, which is the module's own invariant read from both
@@ -195,6 +195,48 @@ of 4 095 bytes and **no probe row** — the state this feature is about, reached
 four rows.** Every existing entry means *"ffmpeg wrote this and ffprobe agrees"*; these mean
 *"these bytes are on disk and ffprobe will not have them"*. Writing them as `MediaFile` rows would
 make the invariant test assert a codec against a file that has none.
+
+**Done, 2026-09-04** — five entries, a second declaration kind, and **two differences nobody was
+looking for**, both of them 003's.
+
+* **The premise holds, and it is asserted now rather than assumed.** A 4 KiB junk `.mkv` scans
+  into a `Movie` with a source row and **no probe row**; the scan records the refusal and carries
+  on. Nothing had ever checked that an item survives a file the scan could not open, and every
+  criterion of this feature runs on it.
+* **Atrium keeps the unreadable second part of a film; the reference keeps it as nothing.** T1
+  measured that side: there, `The Missing Half - part2` is neither a source of the grouped item
+  nor an item of its own, and the item answers **one** media source. Here the grouping is a naming
+  decision and the inspection is a separate step, so the item answers **two** sources and the
+  second has no probe row — which is exactly the state [plan §6.1](plan.md#61-the-trigger) needs
+  and the state the reference cannot show us. **It is a difference between the two servers**, in
+  003's territory, and it is declared in the reference-reading comparison rather than designed
+  around.
+* **The reference names an artist off the path where Atrium reads it off the tags.** `soundless`
+  is a readable mp4 with no audio stream and full artist and album tags. Atrium reads them and
+  hangs the track under `Soundless Artist`; the reference hangs it under its **folder**,
+  `Quiet Corner` — a file with no audio stream is one it has no audio metadata reader for, so it
+  falls back to the path. Nobody was looking for this, it is 003's and 004's to decide, and it is
+  declared with its reason.
+* **Adding to the fixture costs a re-recording, which this task had not priced.** The fixture tree
+  is what 010's AC-2 compares two servers over, so five new files invalidated
+  `docs/compatibility/reference-fixture-reading.json`. It was **re-taken against a single-use
+  instance of the pinned version** rather than edited — which is the order the failure message
+  demands — and the declared differences moved from **forty-seven to fifty**: the two above plus a
+  film named after its folder, year and all, which is a shape that table already had four of. The
+  dated records of the 2026-09-02 measurement in 010's own documents are left as they are; what
+  moved is the module that counts.
+* **The suite defended its own invariant against this change.** `soundless` was first written
+  under folders named after its tags, and
+  `test_the_high_rate_track_scans_from_its_tags_and_not_its_folders` failed — a world where the
+  two agree cannot tell a scan that opened the file from one that read the path. The fixture moved
+  to `Quiet Corner/Unnamed Folder`, not the test.
+
+**The task said "one module" and it was five.** `MediaFile`'s audio fields becoming optional
+reaches `tests/unit/test_media_probe.py`; a world containing files nothing can open reaches
+`tests/library/test_media_inspection.py` (a scan's refusals are no longer empty, and are
+re-attempted on **every** scan because there is no stored inspection for a signal to compare
+against) and `tests/library/test_sidecar_discovery.py`; and the fixture tree changing reaches
+`tests/library/test_reference_reading.py`. Each was taught what is true rather than loosened.
 
 ## T3 — `library/inspection.py`: the trigger, and the inspection that is never stored
 

@@ -1,8 +1,8 @@
 {
   "_": "The reference's own reading of this repository's fixture tree, written by the probe named below and compared against Atrium's scan by tests/library/test_reference_reading.py. Generated: edit it by re-running the probe against a reference instance, never by hand.",
-  "citation": "[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]",
+  "citation": "[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-03]",
   "question": "Given the fixture tree, what does a reference server's library contain? (010 plan section 11, D-4)",
-  "finding": "the reference makes 74 items out of the fixture tree, 48 of them backed by a file and 36 of those over a file none of its probers can open - so a tree of paths and filler bytes is a library to it, and D-4's second branch is the measured one: both worlds go across as libraries of their own",
+  "finding": "the reference makes 81 items out of the fixture tree, 53 of them backed by a file and 36 of those over a file none of its probers can open - so a tree of paths and filler bytes is a library to it, and D-4's second branch is the measured one: both worlds go across as libraries of their own",
   "jellyfin_version": "10.11.11",
   "image": "jellyfin/jellyfin@sha256:aefb67e6a7ff1debdd154a78a7bbb780fd0c873d8639210a7f6a2016ad2b35db",
   "fixture": {
@@ -67,14 +67,20 @@
         "path": "The Series/The Series - S02E01 - No Season Directory.mkv",
         "from_the_tree": "The Series - S02E01 - No Season Directory",
         "from_a_fetcher": "The Watchers"
+      },
+      {
+        "library": "Films",
+        "path": "Latent (2013).mkv",
+        "from_the_tree": "Latent",
+        "from_a_fetcher": "Image Latent"
       }
     ],
-    "compared": false,
-    "carried_forward_from": "[probe: tools/probe_reference_scan.py, Jellyfin 10.11.11, 2026-09-02]"
+    "compared": true,
+    "carried_forward_from": ""
   },
   "totals": {
     "libraries": 6,
-    "items": 74
+    "items": 81
   },
   "libraries": [
     {
@@ -469,10 +475,10 @@
       "name": "Films",
       "collection_type": "movies",
       "decodable": true,
-      "item_count": 12,
+      "item_count": 16,
       "counts_by_type": {
         "Folder": 1,
-        "Movie": 11
+        "Movie": 15
       },
       "items": [
         {
@@ -492,6 +498,12 @@
           "name": "Direct Play",
           "file": "Direct Play (2001).mp4",
           "path": "Direct Play (2001).mp4"
+        },
+        {
+          "type": "Movie",
+          "name": "Latent",
+          "file": "Latent (2013).mkv",
+          "path": "Latent (2013).mkv"
         },
         {
           "type": "Movie",
@@ -531,6 +543,12 @@
         },
         {
           "type": "Movie",
+          "name": "The Missing Half (2011)",
+          "file": "The Missing Half (2011)/The Missing Half (2011) - part1.mkv",
+          "path": "The Missing Half (2011)/The Missing Half (2011) - part1.mkv"
+        },
+        {
+          "type": "Movie",
           "name": "The Planted Poster (2011)",
           "file": "The Planted Poster (2011)/The Planted Poster (2011).mp4",
           "path": "The Planted Poster (2011)/The Planted Poster (2011).mp4"
@@ -546,6 +564,18 @@
           "name": "The Unconvertible (2009)",
           "file": "The Unconvertible (2009)/The Unconvertible (2009).mkv",
           "path": "The Unconvertible (2009)/The Unconvertible (2009).mkv"
+        },
+        {
+          "type": "Movie",
+          "name": "Unreadable",
+          "file": "Unreadable (2012).mkv",
+          "path": "Unreadable (2012).mkv"
+        },
+        {
+          "type": "Movie",
+          "name": "Videoless",
+          "file": "Videoless (2010).mkv",
+          "path": "Videoless (2010).mkv"
         }
       ]
     },
@@ -553,12 +583,12 @@
       "name": "Tunes",
       "collection_type": "music",
       "decodable": true,
-      "item_count": 4,
+      "item_count": 7,
       "counts_by_type": {
-        "Audio": 1,
+        "Audio": 2,
         "Folder": 1,
-        "MusicAlbum": 1,
-        "MusicArtist": 1
+        "MusicAlbum": 2,
+        "MusicArtist": 2
       },
       "items": [
         {
@@ -568,6 +598,12 @@
           "path": "Sounds/Untitled Folder/01 Ninety Six Kilohertz.flac"
         },
         {
+          "type": "Audio",
+          "name": "Soundless",
+          "file": "Quiet Corner/Unnamed Folder/01 Soundless.m4a",
+          "path": "Quiet Corner/Unnamed Folder/01 Soundless.m4a"
+        },
+        {
           "type": "Folder",
           "name": "Music",
           "file": null,
@@ -575,9 +611,21 @@
         },
         {
           "type": "MusicAlbum",
+          "name": "Soundless Album",
+          "file": null,
+          "path": "Quiet Corner/Unnamed Folder"
+        },
+        {
+          "type": "MusicAlbum",
           "name": "The Album",
           "file": null,
           "path": "Sounds/Untitled Folder"
+        },
+        {
+          "type": "MusicArtist",
+          "name": "Quiet Corner",
+          "file": null,
+          "path": "Quiet Corner"
         },
         {
           "type": "MusicArtist",
