@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""One read door, six writes, and the three properties a route cannot check for itself.
+"""Two filtered reads, one that filters nothing, six writes, and the three properties a route
+cannot check for itself.
 
 009 T7. What is asserted here is what a conformance test at the HTTP boundary would see only by
 accident:
@@ -10,8 +11,9 @@ accident:
 * **An entry is filtered by the reader, in one place.** The repository asks
   `ItemQueryRepository` the same question `/Items` asks rather than carrying a second predicate,
   so a change to library access cannot move one and leave the other.
-* **Every read takes a `User`** - plan section 9's second risk, asserted by reflection so that a
-  method added later has to be classified before the suite is green.
+* **Every read takes a `User`, except the one that is classified as taking none** - plan section
+  9's second risk, asserted by reflection so that a method added later has to be classified before
+  the suite is green, and so that the exception cannot grow a reader either.
 """
 
 from __future__ import annotations
