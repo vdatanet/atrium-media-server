@@ -536,7 +536,7 @@ finding and the reason the literal is written out. The value is T1's, printed of
 
 ## T7 — One binder for every vocabulary a body carries
 
-- [ ] **Changes:** `compat/model.py` gains a validator beside `_accept_any_casing`, per field whose
+- [x] **Changes:** `compat/model.py` gains a validator beside `_accept_any_casing`, per field whose
   annotation is an `Enum`: a member unchanged; a **bool** unchanged (`isinstance(True, int)` is the
   trap — `true` is a measured `400` and the ordinal `1` a measured HLS); an integer or a digit
   string as the ordinal, keeping the raw number when no member has it; a name matched case-folded;
@@ -564,6 +564,59 @@ finding and the reason the literal is written out. The value is T1's, printed of
 you know.** Generalising all four measured classes would answer `200` on five properties where the
 reference answers `400`.
 
+**Done, 2026-09-04** — the binder, the two registrations, the deletion, and **three things the
+documents had incomplete rather than wrong**; one of them would have shipped the wrong member on a
+correct request, and one is a decision this task does not take.
+
+* **The ordinal is not a property of the enumeration this project declares, and two of the five
+  vocabularies say so on the wire.** [Plan §6.7](plan.md#67-the-general-enum-binder)'s clause read
+  *"the ordinal's member"*, which reads as `list(vocabulary).index(member)`; measured, `CodecType`
+  declares `Video = 0, VideoAudio = 1, Audio = 2` — audio **last**, where `media/decision.py`
+  declares it first — and `ProfileConditionValue` **skips 15**, so `NumStreams` is 25 where
+  counting gives 24. A counted binder answers a codec profile typed `0` with `Audio`, leaves the
+  video condition unapplied and **direct-plays a source the reference refuses direct play to**, on
+  a request that carried nothing wrong. So the ordinals are a registration beside the default's —
+  `@wire_ordinals({...})`, refused at import when it does not name every member — and
+  `SUBTITLE_METHOD_ORDINALS` is now `ordinals_of(SubtitleMethod)`, one table for the body binder
+  and the query reader. The test was run against the counted order to watch it fail
+  `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-04]`.
+* **The claim this task inherited was measured on one of the four and stated of all four**, and
+  the ordinal half of it was stated of none: 011 T9 measured a *direct-play entry* typed `video`
+  and the plan generalised it to `ProfileType`, `ConditionType`, `ConditionProperty` and
+  `CodecKind`. All four are now measured one property at a time, every row read off
+  `SupportsDirectPlay` because the answer echoes none of these values back — and a digit string
+  binds in three forms, `1`, `+1` and ` 1 `, which is what the *query* reader already accepted and
+  nothing had asked of a body. [Behaviours §2.28](../../docs/compatibility/behaviours.md) is the
+  general rule, recorded where §2.24 recorded the protocol's.
+* **A fifth class nobody asked about, and this server's answer to it is the one shape the defect
+  procedure forbids.** An ordinal **no member has** is not one answer on the reference but three:
+  the entry is ignored on `DlnaProfileType` and `CodecType`, the condition is *satisfied* on
+  `ProfileConditionValue` (its switch's `default` returns true), and `ProfileConditionType` is a
+  **`500`** in the middleware's 25 bytes, because an unexpected comparison throws
+  `InvalidOperationException` past the `ArgumentException` mapping. Atrium answers `400` to all
+  four, which [behaviours §3.0.2](../../docs/compatibility/behaviours.md#302-what-is-never-acceptable)
+  names as *"a tidy `400`… worse than both"*. **It predates 012 and this task does not move it** —
+  a field typed as an enumeration has refused a number since 008, and the binder keeps the number
+  while the field refuses it — so it is recorded at
+  [behaviours §3.26](../../docs/compatibility/behaviours.md) with both candidates and **left to its
+  owner**: reproducing it is four more unions plus a rule about what an uninterpretable profile
+  entry *does*, which is 008's ladder. A test names the boundary so it is not rediscovered as a
+  surprise.
+* **`SubtitleMethod`'s rows are a regression check and they earned it.** Running the suite with
+  the binder disabled fails 011 T9's own
+  `test_a_declared_method_binds_in_any_case_and_by_ordinal` alongside the three new ones, which is
+  what says the deletion is covered by the general binder rather than by nothing.
+
+**Two deviations from this task as written.** The empty-string and unbindable-word rows are
+asserted on the **five enumerations** this body binds, the subtitle entry's `Method` among them —
+but not on the delivery protocol, whose property is still a plain string until T9, so the `200`
+its declared default answers is T9's control and not this task's. And the sweep in
+`tests/conformance/test_aliases.py` gained a second question: every enumeration a model binds must
+carry a declared ordinal table, so the next vocabulary somebody adds fails there rather than on a
+client. The OpenAPI document was diffed either side of the change (001 T19's lesson: the framework
+*inspects* what a model declares) — only docstrings moved, and the shapes that would have moved had
+the binder been written per field are pinned in `tests/unit/test_server.py`.
+
 ## T8 — A nested refusal is keyed by its JSON path
 
 - [ ] **Changes:** `compat/errors.py:_body_error` builds the property's path from pydantic's
@@ -588,7 +641,11 @@ reference answers `400`.
 
 - [ ] **Changes:** `media/decision.py` gains `StreamProtocol` (`http`, `hls` — lower-case by
   declaration) and its ordinal table, beside `SubtitleMethod`'s and for the same reason: both
-  binders read it. `TranscodingProfile.protocol` takes `StreamProtocol | int`,
+  binders read it. **T7 made both of those a registration**: `@wire_ordinals({0: "http", 1: "hls"})`
+  and `@wire_default("http")` on the class, with
+  `STREAM_PROTOCOL_ORDINALS = ordinals_of(StreamProtocol)` if anything outside the binder needs the
+  table — and `wire_default` has no other user, so this is where its own test stops being a
+  synthetic one. `TranscodingProfile.protocol` takes `StreamProtocol | int`,
   `TranscodingProfileDto.protocol` with it, and `Decision.sub_protocol` and
   `MediaSourceInfo.TranscodingSubProtocol` become `str | int` so the out-of-range ordinal survives
   to the wire as a number — and `api/media_info.py:_annotate`'s

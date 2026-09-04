@@ -858,6 +858,227 @@ async def test_a_photo_entry_in_a_profile_is_dropped_rather_than_refused(
 
 
 # ------------------------------------------------------------------------------------------
+# The vocabularies this body carries - 012 AC-8, spec section 3.3, behaviours section 2.28
+# ------------------------------------------------------------------------------------------
+#
+# One binder on `compat/model.py` reads all five, because the reference reads them through one
+# converter registered for its whole pipeline (012 T7). Every row below was measured on the
+# reference one property at a time, and every one of them is read off `SupportsDirectPlay`
+# alone - the answer echoes none of these values back, so what a value bound to is only visible
+# in what it *did* `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-04]`.
+
+
+def _narrow_video(one: MediaFile, **overrides: Any) -> dict[str, Any]:
+    """A profile that direct-plays this file, with a codec profile whose condition cannot hold.
+
+    Width at most one pixel: false of anything a camera or an encoder ever produced. So the
+    control answers direct play and this answers none, and every row between them says whether
+    the value it carried bound.
+    """
+    stated: dict[str, Any] = {
+        "Condition": "LessThanEqual",
+        "Property": "Width",
+        "Value": "1",
+        "IsRequired": True,
+    }
+    stated.update(overrides)
+    document = accepting(one)
+    document["CodecProfiles"] = [
+        {"Type": "Video", "Codec": one.video_codec, "Conditions": [stated]}
+    ]
+    return document
+
+
+async def _direct_plays(client: httpx.AsyncClient, item_id: str, profile: dict[str, Any]) -> bool:
+    document = await negotiate(client, item_id, {"DeviceProfile": profile})
+    return bool(flags(document)[0])
+
+
+async def _refused(client: httpx.AsyncClient, item_id: str, profile: dict[str, Any]) -> int:
+    answered = await client.post(
+        f"/Items/{item_id}/PlaybackInfo", json={"DeviceProfile": profile}, headers=HEADERS
+    )
+    return answered.status_code
+
+
+async def test_the_two_controls_the_vocabulary_rows_are_read_against(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """Written first because every row below is one of these two answers, or it proves nothing."""
+    item = served[1].of(DIRECT_PLAY)
+    assert await _direct_plays(client, item.id, accepting(DIRECT_PLAY)) is True
+    assert await _direct_plays(client, item.id, _narrow_video(DIRECT_PLAY)) is False
+
+
+async def test_a_direct_play_entry_binds_its_type_in_any_case_and_by_ordinal(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """`DlnaProfileType`, one of the four OQ-4 widened the leniency to.
+
+    `video` was measured binding on 2026-08-30 and the ordinals on 2026-09-04: `1` is `Video`
+    and direct-plays, `0` is `Audio` and does not - which is what says the number selected a
+    member rather than being ignored.
+    """
+    item = served[1].of(DIRECT_PLAY)
+
+    async def with_type(value: Any) -> bool:
+        document = accepting(DIRECT_PLAY)
+        document["DirectPlayProfiles"][0]["Type"] = value
+        return await _direct_plays(client, item.id, document)
+
+    for bound in ("video", "VIDEO", 1, "1", "+1", " 1 "):
+        assert await with_type(bound) is True, f"{bound!r} names the profile's video entry"
+    assert await with_type(0) is False, "the ordinal zero is Audio, and this item is a film"
+
+
+async def test_a_codec_profile_binds_its_type_by_the_number_the_reference_declares(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The row that would have gone wrong silently, and the reason ordinals are declared here.
+
+    `CodecType` declares `Video = 0, VideoAudio = 1, Audio = 2` - audio **last** - where this
+    project's own enumeration declares it first `[source: MediaBrowser.Model/Dlna/CodecType.cs @
+    v10.11.11]`. A binder counting members would answer `0` with `Audio`, leaving the video
+    condition unapplied and the source direct-playing: the opposite of the measured answer, on a
+    request that carried nothing wrong.
+    """
+    item = served[1].of(DIRECT_PLAY)
+
+    async def with_type(value: Any) -> bool:
+        document = _narrow_video(DIRECT_PLAY)
+        document["CodecProfiles"][0]["Type"] = value
+        return await _direct_plays(client, item.id, document)
+
+    assert await with_type("video") is False, "an altered case applies the profile"
+    assert await with_type(0) is False, "zero is Video there, so the condition is applied"
+    assert await with_type(2) is True, "two is Audio there, so nothing constrains the video"
+
+
+async def test_a_condition_binds_its_comparison_and_its_subject_by_ordinal(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """`ProfileConditionType` and `ProfileConditionValue`, the other two of the four.
+
+    `NumStreams` is the discriminating subject: the reference's enumeration **skips 15**, so it
+    declares 25 where counting its members gives 24 `[source:
+    MediaBrowser.Model/Dlna/ProfileConditionValue.cs @ v10.11.11]`. Measured, `25` constrains and
+    `15` binds to nothing at all.
+    """
+    item = served[1].of(DIRECT_PLAY)
+
+    async def with_condition(**overrides: Any) -> bool:
+        return await _direct_plays(client, item.id, _narrow_video(DIRECT_PLAY, **overrides))
+
+    assert await with_condition(Condition="lessthanequal") is False
+    assert await with_condition(Condition=2) is False, "two is LessThanEqual"
+    assert await with_condition(Condition=1) is True, "one is NotEquals, which this width is"
+    assert await with_condition(Property="width") is False
+    assert await with_condition(Property=3) is False, "three is Width"
+    assert await with_condition(Property=25, Value="0") is False, "twenty-five is NumStreams"
+
+
+async def test_a_word_no_member_has_refuses_on_every_vocabulary_this_body_carries(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The leniency is names and numbers, not values: an unbindable word is still the `400`.
+
+    All five vocabularies this body binds, the subtitle entry's `Method` included - it is the one
+    the private binder used to answer, and asking it here is what says the deletion did not take
+    the refusal with it. The opposite of what an unknown **query** token does (behaviours
+    section 1.12).
+    """
+    item = served[1].of(DIRECT_PLAY)
+    entry_typed = accepting(DIRECT_PLAY)
+    entry_typed["DirectPlayProfiles"][0]["Type"] = "dash"
+    codec_typed = _narrow_video(DIRECT_PLAY)
+    codec_typed["CodecProfiles"][0]["Type"] = "dash"
+
+    subtitled = accepting(DIRECT_PLAY)
+    subtitled["SubtitleProfiles"] = [{"Format": "vtt", "Method": "dash"}]
+
+    for document in (
+        entry_typed,
+        codec_typed,
+        _narrow_video(DIRECT_PLAY, Condition="dash"),
+        _narrow_video(DIRECT_PLAY, Property="dash"),
+        subtitled,
+    ):
+        assert await _refused(client, item.id, document) == 400
+
+
+async def test_an_empty_string_refuses_on_every_vocabulary_that_declares_no_default(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The row that proves the binder's fourth class is **not** general.
+
+    Measured at T1 on the two the plan named - a codec profile's `Type` and a direct-play entry's
+    `Type` are each a `400` where the delivery protocol's empty string is a `200` taking `http`,
+    because only `MediaStreamProtocol` carries `[DefaultValue]`
+    `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`. A binder that
+    generalised the default clause would answer `200` here on five properties the reference
+    refuses.
+    """
+    item = served[1].of(DIRECT_PLAY)
+    entry_typed = accepting(DIRECT_PLAY)
+    entry_typed["DirectPlayProfiles"][0]["Type"] = ""
+    codec_typed = _narrow_video(DIRECT_PLAY)
+    codec_typed["CodecProfiles"][0]["Type"] = ""
+    subtitled = accepting(DIRECT_PLAY)
+    subtitled["SubtitleProfiles"] = [{"Format": "vtt", "Method": ""}]
+
+    for document in (
+        entry_typed,
+        codec_typed,
+        _narrow_video(DIRECT_PLAY, Condition=""),
+        _narrow_video(DIRECT_PLAY, Property=""),
+        subtitled,
+    ):
+        assert await _refused(client, item.id, document) == 400
+
+
+async def test_a_boolean_is_not_the_ordinal_one(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """`isinstance(True, int)` at the HTTP boundary: `true` is a measured `400` and `1` is a
+    measured member, and a binder that folded the two would direct-play a body the reference
+    refuses `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29]`."""
+    item = served[1].of(DIRECT_PLAY)
+    document = accepting(DIRECT_PLAY)
+    document["DirectPlayProfiles"][0]["Type"] = True
+
+    assert await _refused(client, item.id, document) == 400
+
+
+async def test_an_ordinal_no_member_has_is_the_400_behaviours_326_records(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """**Not a criterion: a boundary, named so it cannot be rediscovered as a surprise.**
+
+    The reference answers a number no member carries three ways - the entry is ignored on
+    `DlnaProfileType` and `CodecType`, the condition is *satisfied* on `ProfileConditionValue`,
+    and `ProfileConditionType` is a **`500`** `[probe: tools/probe_playback_info.py, Jellyfin
+    10.11.11, 2026-09-04]`. This server answers `400` to all four, which
+    [behaviours section 3.26](../../docs/compatibility/behaviours.md) records as a third
+    behaviour rather than a decision: it predates 012 (a field typed as an enumeration has always
+    refused a number no member has) and T7's binder does not move it, because the binder keeps the
+    raw number and the field is what refuses.
+    """
+    item = served[1].of(DIRECT_PLAY)
+    entry_typed = accepting(DIRECT_PLAY)
+    entry_typed["DirectPlayProfiles"][0]["Type"] = 9
+    codec_typed = _narrow_video(DIRECT_PLAY)
+    codec_typed["CodecProfiles"][0]["Type"] = 9
+
+    for document in (
+        entry_typed,
+        codec_typed,
+        _narrow_video(DIRECT_PLAY, Condition=9),
+        _narrow_video(DIRECT_PLAY, Property=15),
+    ):
+        assert await _refused(client, item.id, document) == 400
+
+
+# ------------------------------------------------------------------------------------------
 # The subtitle half - 011 AC-1, AC-2, AC-3, AC-15
 # ------------------------------------------------------------------------------------------
 #
@@ -1247,6 +1468,12 @@ async def test_a_declared_method_binds_in_any_case_and_by_ordinal(
     same four classes 012's gate found for an enum-typed query parameter. A strictly-cased enum
     here would refuse a body the reference accepts `[probe:
     tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
+
+    **What answers it changed at 012 T7, and this test is what says the answer did not.** 011
+    bound this one property through a private validator; that validator is deleted and the
+    general binder on `compat/model.py` carries it, along with the four vocabularies beside it.
+    Run with the binder removed, this fails with the three rows above - which is what makes it a
+    regression check rather than a description.
     """
     item = served[1].of(BOTH_SUBTITLE_KINDS)
 

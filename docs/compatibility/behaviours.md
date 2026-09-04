@@ -929,6 +929,50 @@ depth, Atrium uses the deepest directory they do offer rather than nothing, whic
 no response carries: the container exists on both servers either way, and this decides only which
 directory was read for it.
 
+### 2.28 Every vocabulary a request body carries binds by name in any case and by its declared ordinal
+
+**Jellyfin does:** read every enumerated property of a body through **one** converter registered
+for its whole JSON pipeline — `JsonStringEnumConverter` with
+`NumberHandling = AllowReadingFromString`
+`[source: src/Jellyfin.Extensions/Json/JsonDefaults.cs:34, 42 @ v10.11.11]` — so the leniency
+§2.24 records for the delivery protocol is a property of the **binder** and not of that
+enumeration. Measured on the four further vocabularies a device profile carries, one property at a
+time, each row read off `SupportsDirectPlay` alone
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-04]`:
+
+| Property | Its enumeration | Altered case | Ordinal |
+|---|---|---|---|
+| `DirectPlayProfiles[].Type` | `DlnaProfileType` | `video` direct-plays a video source | `1` direct-plays, `0` (its `Audio`) does not |
+| `CodecProfiles[].Type` | `CodecType` | `video` applies the profile | `0` applies it, `2` (its `Audio`) does not |
+| `CodecProfiles[].Conditions[].Condition` | `ProfileConditionType` | `lessthanequal` compares | `2` compares, `1` (`NotEquals`) answers the other way |
+| `CodecProfiles[].Conditions[].Property` | `ProfileConditionValue` | `width` constrains | `3` constrains, and `25` is `NumStreams` |
+
+**The number is the one the reference declares, not the member's position**, and two of the four
+say so on the wire rather than only in a header file: `CodecType` declares
+`Video = 0, VideoAudio = 1, Audio = 2` — audio **last** — and `ProfileConditionValue` **skips 15**,
+so `NumStreams` is 25 where counting members makes it 24
+`[source: MediaBrowser.Model/Dlna/CodecType.cs,
+MediaBrowser.Model/Dlna/ProfileConditionValue.cs @ v10.11.11]`. A digit string binds the same way
+in three forms — `1`, `+1` and ` 1 ` — and a `true` does not bind at all, which is §2.24's measured
+`400` for a boolean.
+
+An empty string is **not** part of this: it takes a declared default only where the enumeration
+carries `[DefaultValue]`, which of the six a negotiation binds is `MediaStreamProtocol` alone
+`[source: src/Jellyfin.Extensions/Json/Converters/JsonDefaultStringEnumConverterFactory.cs:20 @
+v10.11.11]`, and an empty string on a codec profile's `Type` or a direct-play entry's `Type` is a
+`400` `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`.
+
+**Depends on it:** every client whose profile spells a vocabulary the way its own language does —
+the same dependency §2.24 records, five properties wider. A client sending `"video"`, or a
+generated client sending its enumerations as numbers, is *correct* against this reference; a server
+that matched case-sensitively would answer it `400` on every request it makes.
+
+**Atrium does:** the same, from 2026-09-04 — one binder on the base every request model inherits
+(012 T7), with the ordinals **declared** per enumeration rather than counted, because counting
+would answer a codec profile typed `0` with the opposite member. The refusal for a word no member
+has is unchanged and is still the validation `400`, which is the opposite of §1.12's rule for a
+**query** value and is measured on both sides.
+
 ### 2.13 `DeviceId` is mandatory on one route, not on the header
 
 **Jellyfin does:** answer `200` on an ordinary authenticated route for a client header carrying no
@@ -2855,6 +2899,45 @@ the season, the two-disc album — which is precisely the value L2 exists to che
 ([010 §3.3](../../specs/010-conformance-harness/spec.md#33-the-allowlist), and its plan's §6.3).
 
 ---
+
+### 3.26 An ordinal no member has is answered three ways, one of them a `500` — class A, not decided here
+
+**Jellyfin does:** accept a number no member of the enumeration carries, because a .NET enumeration
+is a number and the converter does not range-check it — and then answer it differently depending on
+which vocabulary it was, measured on one item in one run
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-04]`:
+
+| Where the number was | What came back |
+|---|---|
+| A direct-play entry's `Type` (`DlnaProfileType`) | `200`; the entry matches nothing, so the source does not direct-play |
+| A codec profile's `Type` (`CodecType`) | `200`; the profile applies to nothing, so its condition never fires |
+| A condition's `Property` (`ProfileConditionValue`) | `200`, and the condition is **satisfied** — the switch's `default` returns true `[source: MediaBrowser.Model/Dlna/ConditionProcessor.cs:96-97 @ v10.11.11]` |
+| A condition's `Condition` (`ProfileConditionType`) | **`500`**, `text/plain`, the 25 bytes `Error processing request.` — the comparison switch throws `InvalidOperationException`, which the exception middleware does not map to `400` the way it maps an `ArgumentException` `[source: MediaBrowser.Model/Dlna/ConditionProcessor.cs:222, Jellyfin.Api/Middleware/ExceptionMiddleware.cs:127, 134 @ v10.11.11]` |
+| A transcoding entry's `Protocol` (`MediaStreamProtocol`) | `200`, a progressive address, and the number echoed back — §2.24, already decided: reproduce |
+
+**Depends on it:** nothing anybody has written. A client sending an ordinal its own enumeration
+does not define is sending a bug, and the one out-of-range ordinal a real client could plausibly
+send is the protocol's `2`, which §2.24 already reproduces because it comes back **on the wire**.
+
+**Atrium does: `400` today, and that is a third behaviour rather than a decision.**
+[§3.0.2](#302-what-is-never-acceptable) forbids exactly this shape — *"where the reference 500s and
+correctness says 200, the choice is those two; a tidy `400` is worse than both"* — and it is what
+this server has answered since 008 typed the profile's vocabularies, because a field typed as an
+enumeration refuses a number no member has. 012 T7's binder does not change it: the binder keeps
+the raw number, and the field is what refuses. **Recorded at 012 T7 on 2026-09-04 and left to its
+owner**, with two candidates and neither of them free:
+
+* **Reproduce** — every one of these fields becomes `Vocabulary | int`, as
+  [012 T9](../../specs/012-negotiation-inputs/tasks.md) already makes
+  `TranscodingProfile.protocol`, and the ladder ignores an entry whose member it cannot read. That
+  is four more unions and a rule about what an uninterpretable profile entry *does*, which is
+  [008 §3.3](../../specs/008-playback-negotiation-and-delivery/spec.md#33-the-decision)'s ladder
+  rather than 012's binder — and the `500` row would still not be reproduced, class A being a
+  divergence by default.
+* **Keep the `400`** — cheap, and it needs the argument §3.0.2 says it does not have.
+
+The measurement is complete either way, which is what this entry is for: whoever decides is not
+paying for a probe run.
 
 ## 4. Deliberate exceptions
 

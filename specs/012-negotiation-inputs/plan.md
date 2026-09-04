@@ -285,13 +285,15 @@ def unopened(part: MediaSource) -> MediaInspection:
 ```python
 # media/decision.py — one more vocabulary, beside SubtitleMethod's.
 
+@wire_ordinals({0: "http", 1: "hls"})   # T7's registration, not a table beside the class
+@wire_default("http")                  # the only enumeration in v1 that declares one
 class StreamProtocol(Enum):
     """How a produced stream is delivered. Two members, lower-case by declaration
     `[source: Jellyfin.Data/Enums/MediaStreamProtocol.cs @ v10.11.11]`."""
     HTTP = "http"
     HLS = "hls"
 
-STREAM_PROTOCOL_ORDINALS: Final[dict[int, StreamProtocol]] = {0: HTTP, 1: HLS}
+STREAM_PROTOCOL_ORDINALS: Final[Mapping[int, StreamProtocol]] = ordinals_of(StreamProtocol)
 
 @dataclass(frozen=True, slots=True)
 class TranscodingProfile:
@@ -678,11 +680,45 @@ whose annotation is an `Enum` subclass:
 ```
 value is an Enum member                     → unchanged
 value is a bool                             → unchanged  (a bool is an int in Python and is a 400 there)
-value is an int, or a str of ASCII digits   → the ordinal's member, else the raw int
+value is an int, or a str of ASCII digits   → the declared ordinal's member, else the raw int
 value is a str matching a member's value    → that member, folded
 value is None or ""                         → the declared default, when the enumeration declares one
 anything else                               → unchanged, and the model's validation answers 400
 ```
+
+**The ordinal is a registration too, which T7 measured rather than assumed.** The line above said
+*"the ordinal's member"* as though a member's ordinal were a property of the Python enumeration;
+it is not, and taking it from declaration order is wrong on two of the five vocabularies. `CodecType`
+declares `Video = 0, VideoAudio = 1, Audio = 2` where `media/decision.py` declares its audio member
+first, and `ProfileConditionValue` **skips 15**, so `NumStreams` is 25 where counting gives 24
+`[source: MediaBrowser.Model/Dlna/CodecType.cs,
+MediaBrowser.Model/Dlna/ProfileConditionValue.cs @ v10.11.11]`. Both are measured on the wire, not
+only read: a codec profile typed `0` takes a video source's direct play away and one typed `2`
+does not, and `Property: 25` constrains where `15` binds to nothing
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-04]`. So `compat/model.py`
+exposes `@wire_ordinals({...})` beside `@wire_default(...)` — the same shape, for the same reason —
+and it refuses at import time a vocabulary whose table does not name every member, because a
+vocabulary that gained a member and not an ordinal rebinds every number after it in silence.
+`SUBTITLE_METHOD_ORDINALS` becomes `ordinals_of(SubtitleMethod)`, so the query-string reader (011
+T11) and this binder stay on one table rather than two.
+
+**And the digit string has three forms, all measured on this body**: `1`, `+1` and ` 1 ` each bind
+to the member ordinal one names, which is what `media/decision.py:_ordinal_of` already accepts on
+the *query* side `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-04]`.
+
+**What "the raw int" then reaches is a `400`, and it is a third behaviour.** Only
+`TranscodingProfile.protocol` is typed to carry a number (§6.5), so on the other four an ordinal no
+member has is refused — where the reference ignores the entry on two of them, treats the condition
+as satisfied on a third `[source: MediaBrowser.Model/Dlna/ConditionProcessor.cs:96-97 @ v10.11.11]`
+and answers **`500`** on the fourth, an unexpected comparison throwing `InvalidOperationException`
+past the middleware's `ArgumentException` mapping `[source:
+MediaBrowser.Model/Dlna/ConditionProcessor.cs:222, Jellyfin.Api/Middleware/ExceptionMiddleware.cs:127,
+134 @ v10.11.11]`. That is [behaviours §3.0.2](../../docs/compatibility/behaviours.md#302-what-is-never-acceptable)'s
+forbidden shape, it predates this feature — a field typed as an enumeration has refused a number
+since 008 — and T7 does not move it: the binder keeps the number and the field refuses it.
+Recorded at [behaviours §3.26](../../docs/compatibility/behaviours.md) with its two candidates and
+**left to its owner**, since reproducing it is four more unions and a rule about what an
+uninterpretable profile entry *does*, which is 008's ladder rather than this binder.
 
 **"Declares one" is a registration, and it is declared where the enumeration is.** What the
 reference reads is `[DefaultValue]` on the *enum type*, so the Python equivalent is a property of
@@ -704,7 +740,9 @@ five enumerations' three, and it is why this validator is general and its defaul
 **A bool must stay a bool on the way in.** Python's `isinstance(True, int)` is the trap: `true` is
 a measured `400` and the ordinal `1` is a measured HLS, and a binder that folded the two would
 answer HLS to a client that sent a boolean. The same trap is already avoided by
-`_bound_subtitle_method`'s first line, which is the code this replaces.
+`_bound_subtitle_method`'s first line, which is the code this replaces — and it is asserted at the
+HTTP boundary as well as in the binder's own table, a `true` in a direct-play entry's `Type` being
+the measured `400` it is for the protocol.
 
 **What it makes right beyond the protocol.** `ProfileType`, `ConditionType`, `ConditionProperty`
 and `CodecKind` are matched case-sensitively today and are each a `400` where the reference answers
@@ -712,6 +750,14 @@ and `CodecKind` are matched case-sensitively today and are each a `400` where th
 `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`, spec OQ-4. They are
 fixed by inheritance, and `_bound_subtitle_method` is deleted in the same change rather than left
 beside its own generalisation.
+
+*Corrected at T7: that sentence was measured on **one** of the four — a direct-play entry typed
+`video` — and stated of all four, and the ordinal half of it was stated of none. All four were
+measured one property at a time on 2026-09-04, each row read off `SupportsDirectPlay` because the
+answer echoes none of these values back: each binds in an altered case, each binds by its declared
+number, and the two whose declaration order this project does not share are what turned the ordinal
+table into a registration `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-04]`,
+[behaviours §2.28](../../docs/compatibility/behaviours.md).*
 
 **The default clause's gate is measured, not read.** T1 posted an empty string to two
 enumerations that declare no default and to the one that does: a codec profile's `Type` and a

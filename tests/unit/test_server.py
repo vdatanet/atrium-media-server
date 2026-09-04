@@ -127,6 +127,31 @@ def test_the_document_is_still_generated(unstarted: FastAPI) -> None:
     assert "PublicSystemInfo" in document["components"]["schemas"]
 
 
+def test_a_vocabulary_still_generates_the_schema_it_generated_before_the_binder(
+    unstarted: FastAPI,
+) -> None:
+    """001 T19's lesson, applied to 012 T7: the framework **inspects** what a model declares.
+
+    T7 replaced a per-field `BeforeValidator` on a subtitle entry's `Method` with one validator on
+    the base model, which is the kind of change that silently rewrites a generated document - a
+    field annotated with a validator can render as `anyOf` or lose its default, and nothing in the
+    suite would notice, because this document is generated and never served. The whole document
+    was diffed either side of the change and only docstrings moved; this pins the shape that would
+    have moved if the binder had been written per field.
+    """
+    schemas = unstarted.openapi()["components"]["schemas"]
+
+    assert schemas["SubtitleProfileDto"]["properties"]["Method"] == {
+        "$ref": "#/components/schemas/SubtitleMethod",
+        "default": "Encode",
+    }
+    assert schemas["ProfileType"]["enum"] == ["Audio", "Video", "Photo", "Subtitle", "Lyric"]
+    assert schemas["ProfileConditionDto"]["properties"]["Condition"] == {
+        "$ref": "#/components/schemas/ConditionType"
+    }
+    assert schemas["ProfileConditionDto"]["required"] == ["Condition", "Property"]
+
+
 # --------------------------------------------------------------------------------------------
 # The entry point
 # --------------------------------------------------------------------------------------------

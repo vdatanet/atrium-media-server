@@ -16,6 +16,10 @@ A fourth was added at 012's measurement gate: the **delivery-protocol battery**,
 the profile's `Protocol` binds to (012 OQ-4, OQ-5, OQ-6). It is read-only, and it is one battery
 rather than two because the two candidates it separates are opposites - a spelling that binds and a
 value that cannot - and a battery testing only one of them reports the wrong finding for both.
+A fifth and a sixth followed it: the **defaultless-enum battery** (012 T1, whether an empty string
+takes a default on an enumeration that declares none) and the **vocabulary battery** (012 T7, the
+four further enumerations a device profile carries - whether they bind in an altered case, by
+which number, and what an ordinal no member has does).
 
 Three batteries were added at 008 T5, when the routes were implemented. The **refusal battery**
 measures the two rows of §3.2's error table that had never been measured at all - an unknown item,
@@ -529,6 +533,162 @@ def _defaultless_enum_battery(server: Server, probe: Probe, source) -> list[bool
     return checks
 
 
+def _direct_plays(status: int, headers: dict, payload: bytes) -> tuple[str, bool | None]:
+    """One negotiation reduced to the only thing these vocabulary rows turn on.
+
+    The body is read as bytes and not as JSON, because one of these rows does not answer JSON at
+    all - which is the shape a helper that parses first would hide behind a stack trace.
+    """
+    kind = (headers.get("Content-Type") or "").split(";")[0]
+    if kind != "application/json":
+        shape = f"{status}, {kind or 'no Content-Type'}, {len(payload)} bytes: {payload[:80]!r}"
+        return shape, None
+    data = json.loads(payload) if payload else {}
+    one = (data.get("MediaSources") or [{}])[0]
+    if status != 200:
+        return f"{status}, {json.loads(payload).get('errors', payload[:120])}", None
+    return f"{status}, SupportsDirectPlay={one.get('SupportsDirectPlay')}", one.get(
+        "SupportsDirectPlay"
+    )
+
+
+def _vocabulary_battery(server: Server, probe: Probe, source) -> list[bool]:
+    """The four enumerations 012 T7 generalises the binder for, asked one property at a time.
+
+    **Only one of the four had ever been measured, and only for case**: a direct-play entry typed
+    `video` `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`. The
+    other three were a generalisation of that one row, and the *ordinal* class was a
+    generalisation for all four - 012 plan section 6.7 gives the binder a clause for it with
+    nothing measured behind it on any enumeration but the delivery protocol's and the subtitle
+    method's.
+
+    Every row is observable through **`SupportsDirectPlay`** and nothing else: the profile
+    direct-plays the source exactly, and a codec profile whose one condition cannot hold is what
+    takes it away. So a value that bound is a `false` and a value that named nothing is a `true`,
+    and no field of the answer echoes the value back - which is what makes an ordinal's
+    *identity* measurable here at all.
+
+    **Two rows ask what no reading can settle: whether an ordinal is the declared number or the
+    member's position.** `CodecType` declares `Video = 0, VideoAudio = 1, Audio = 2` where this
+    project declares its own audio member first, and `ProfileConditionValue` **skips 15**, so
+    every member from `NumAudioStreams` on sits one above its position `[source:
+    MediaBrowser.Model/Dlna/CodecType.cs, MediaBrowser.Model/Dlna/ProfileConditionValue.cs @
+    v10.11.11]`. Asking `0` and `2` of the first, and `25` (`NumStreams` declared, nothing by
+    position) of the second, separates them on the wire.
+
+    The `Value` each condition carries is chosen so the condition is **false** of any real source:
+    a width of at most one pixel, and a stream count of at most zero.
+    """
+    plays = [
+        {
+            "Container": source.container,
+            "Type": "Video",
+            "VideoCodec": source.video_codec,
+            "AudioCodec": ",".join(source.audio_codecs),
+        }
+    ]
+    checks: list[bool] = []
+
+    def ask(label: str, profile: dict[str, Any], expected: Any) -> None:
+        """One negotiation, and the check is what this run measured rather than a status class."""
+        status, headers, payload = server.post_raw(
+            f"/Items/{source.item_id}/PlaybackInfo",
+            body={"UserId": server.user_id, "AutoOpenLiveStream": False, "DeviceProfile": profile},
+        )
+        rendered, plays_it = _direct_plays(status, headers, payload)
+        probe.observe(label, rendered)
+        # `isinstance(True, int)` is the trap 012 plan section 6.7 names, and it is one this
+        # battery walked into first: a bool must be read as a flag and never as a status code.
+        expects_status = isinstance(expected, int) and not isinstance(expected, bool)
+        checks.append(status == expected if expects_status else plays_it is expected)
+
+    def condition(**overrides: Any) -> dict[str, Any]:
+        """A codec profile whose one condition is false of this source: width at most one."""
+        stated: dict[str, Any] = {
+            "Condition": "LessThanEqual",
+            "Property": "Width",
+            "Value": "1",
+            "IsRequired": True,
+        }
+        stated.update(overrides)
+        return base_profile(
+            plays,
+            codec_profiles=[{"Type": "Video", "Codec": source.video_codec, "Conditions": [stated]}],
+        )
+
+    def typed(where: str, value: Any) -> dict[str, Any]:
+        """The same profile with one enumerated property replaced by the value being asked."""
+        if where == "direct play":
+            entry = dict(plays[0])
+            entry["Type"] = value
+            return base_profile([entry])
+        profile = condition()
+        profile["CodecProfiles"][0]["Type"] = value
+        return profile
+
+    # The two controls, and they are what every row below is read against.
+    ask("control: the profile as a client would write it", base_profile(plays), True)
+    ask("control: a video codec profile whose Width condition is false", condition(), False)
+
+    # DlnaProfileType, on a direct-play entry's own Type. `Video = 1`, `Audio = 0`.
+    for label, value, expected in (
+        ("altered case 'video'", "video", True),
+        ("the ordinal 1, which is Video", 1, True),
+        ("the ordinal as the string '1'", "1", True),
+        ("the ordinal signed, as the string '+1'", "+1", True),
+        ("the ordinal padded, as the string ' 1 '", " 1 ", True),
+        ("the ordinal 0, which is Audio", 0, False),
+        ("the ordinal 9, which no member has", 9, False),
+    ):
+        ask(f"DirectPlayProfiles[0].Type: {label}", typed("direct play", value), expected)
+
+    # CodecType, on a codec profile's Type. `Video = 0` and `Audio = 2` - the opposite end from
+    # this project's own declaration order, which is why both numbers are asked.
+    for label, value, expected in (
+        ("altered case 'video'", "video", False),
+        ("the ordinal 0, which is Video by declaration", 0, False),
+        ("the ordinal 2, which is Audio by declaration", 2, True),
+        ("the ordinal 9, which no member has", 9, True),
+    ):
+        ask(f"CodecProfiles[0].Type: {label}", typed("codec", value), expected)
+
+    # ProfileConditionType, on the comparison itself. `NotEquals = 1` holds of this source where
+    # `LessThanEqual = 2` does not, so the two ordinals answer opposite ways - and the number no
+    # member has is the row nobody predicted.
+    for label, stated, expected in (
+        ("altered case 'lessthanequal'", {"Condition": "lessthanequal"}, False),
+        ("the ordinal 2, which is LessThanEqual", {"Condition": 2}, False),
+        ("the ordinal 1, which is NotEquals", {"Condition": 1}, True),
+        ("the ordinal 9, which no member has", {"Condition": 9}, 500),
+    ):
+        ask(f"Conditions[0].Condition: {label}", condition(**stated), expected)
+
+    # ProfileConditionValue, on the condition's subject. `NumStreams = 25` is the discriminator:
+    # the enumeration has twenty-five members, so 25 is a position no member occupies.
+    counted = {"Condition": "LessThanEqual", "Value": "0"}
+    for label, stated, expected in (
+        ("altered case 'width'", {"Property": "width"}, False),
+        ("the ordinal 3, which is Width", {"Property": 3}, False),
+        ("the name NumStreams, which is the control", {"Property": "NumStreams", **counted}, False),
+        ("the ordinal 25, which is NumStreams by declaration", {"Property": 25, **counted}, False),
+        ("the ordinal 15, which the enumeration skips", {"Property": 15, **counted}, True),
+    ):
+        ask(f"Conditions[0].Property: {label}", condition(**stated), expected)
+
+    probe.note(
+        "the four enumerations 012 T7 generalises the binder for all bind case-insensitively and "
+        "by ordinal, and the ordinal is the number the reference **declares** rather than the "
+        "member's position: CodecType's 0 is Video (this project declares Audio first) and "
+        "ProfileConditionValue's 25 is NumStreams (a position no member occupies, the "
+        "enumeration skipping 15). A number no member has is not one answer but two: the entry "
+        "is ignored on DlnaProfileType and CodecType, and on ProfileConditionType it is a **500** "
+        "in the exception middleware's 25 bytes, because an unexpected comparison throws "
+        "InvalidOperationException where an unexpected condition *property* returns true "
+        "[source: MediaBrowser.Model/Dlna/ConditionProcessor.cs:96-97, 222 @ v10.11.11]"
+    )
+    return checks
+
+
 def _protocol_battery(server: Server, probe: Probe, source) -> list[bool]:
     """What does the profile's delivery protocol bind to, and what does the answer echo back?
 
@@ -699,6 +859,7 @@ def run(server: Server, args) -> Probe:
     checks.extend(_refusal_battery(server, probe, source.item_id))
     checks.extend(_protocol_battery(server, probe, source))
     checks.extend(_defaultless_enum_battery(server, probe, source))
+    checks.extend(_vocabulary_battery(server, probe, source))
 
     if args.allow_writes:
         checks.extend(_policy_battery(server, probe, source, reject_vcodec))
@@ -739,7 +900,12 @@ def run(server: Server, args) -> Probe:
             "HLS, an unbindable word refuses the whole body with problem details naming the JSON "
             "path, an empty string and a missing property take the declared default, and the two "
             "ordinals bind - including one out of range, which comes back as a number in a field "
-            "the enumeration spells as a word",
+            "the enumeration spells as a word. And the leniency is the binder's rather than that "
+            "one enumeration's: the four further vocabularies a device profile carries each bind "
+            "in an altered case and by the ordinal the reference **declares** - CodecType's 0 is "
+            "Video and ProfileConditionValue's 25 is NumStreams, neither of them the member's "
+            "position - while a number no member has is ignored on two of them, satisfies the "
+            "condition on a third, and is a 500 on the fourth",
             matches_documentation=True,
         )
     else:

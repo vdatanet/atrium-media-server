@@ -88,11 +88,12 @@ specs/011-subtitle-delivery/plan.md section 6.3.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Final, NamedTuple
 
+from atrium.compat.model import ordinals_of, wire_ordinals
 from atrium.domain.media import InspectedStream, MediaInspection, StreamKind
 from atrium.media.info import is_text_format, is_text_subtitle, supports_external_stream
 
@@ -123,6 +124,7 @@ class StreamAction(Enum):
     ENCODE = "encode"
 
 
+@wire_ordinals({0: "Encode", 1: "Embed", 2: "External", 3: "Hls", 4: "Drop"})
 class SubtitleMethod(Enum):
     """How one subtitle track would reach this client, in the reference's own five spellings.
 
@@ -151,20 +153,17 @@ class SubtitleMethod(Enum):
 
 
 #: The ordinal each member of the delivery-method vocabulary carries in the reference's own enum
-#: `[source: MediaBrowser.Model/Dlna/SubtitleDeliveryMethod.cs @ v10.11.11]`. Written out rather
-#: than taken from declaration order, because a reordering here would silently rebind a number.
+#: `[source: MediaBrowser.Model/Dlna/SubtitleDeliveryMethod.cs @ v10.11.11]`. Declared on the
+#: enumeration rather than counted off it, because a reordering here would silently rebind a
+#: number - which 012 T7 then measured happening to a *different* vocabulary: `CodecType`
+#: declares `Video = 0` where this project declares its audio member first.
 #:
-#: It lives beside the enumeration rather than beside either binder because **both** binders read
-#: it: a profile entry's `Method` on a request body (011 T9, `api/media_info.py`) and a delivery
-#: address's `SubtitleMethod` in a query string (011 T11, `api/delivery.py`). Two copies of this
-#: table would be two answers to one question about the reference.
-SUBTITLE_METHOD_ORDINALS: Final[dict[int, SubtitleMethod]] = {
-    0: SubtitleMethod.ENCODE,
-    1: SubtitleMethod.EMBED,
-    2: SubtitleMethod.EXTERNAL,
-    3: SubtitleMethod.HLS,
-    4: SubtitleMethod.DROP,
-}
+#: It lives beside the enumeration rather than beside either binder because **three** readers
+#: need it: a profile entry's `Method` on a request body (`compat/model.py`'s binder, which the
+#: registration above is for), a delivery address's `SubtitleMethod` in a query string (011 T11,
+#: `api/delivery.py`), and `_SUBTITLE_METHOD_NAMES` below. Two copies of this table would be two
+#: answers to one question about the reference.
+SUBTITLE_METHOD_ORDINALS: Final[Mapping[int, SubtitleMethod]] = ordinals_of(SubtitleMethod)
 
 
 #: Each member's name, folded, against the ordinal it carries - the inverse of the table above,
@@ -463,18 +462,37 @@ class MediaKind(Enum):
     VIDEO = "Video"
 
 
+@wire_ordinals({0: "Video", 1: "VideoAudio", 2: "Audio"})
 class CodecKind(Enum):
     """Which stream a codec profile constrains. `VideoAudio` is the audio track *of a video
-    item*, which is a different set of conditions from an audio item's own."""
+    item*, which is a different set of conditions from an audio item's own.
+
+    **The ordinals are the reference's and not this declaration's**, and this is the vocabulary
+    that proves the difference matters: it declares `Video = 0, VideoAudio = 1, Audio = 2`
+    `[source: MediaBrowser.Model/Dlna/CodecType.cs @ v10.11.11]` where the members below are
+    written audio-first, so a binder counting positions would answer a codec profile typed `0`
+    with `Audio` and constrain the stream the client did not name. Measured on the wire: `0`
+    takes a video source's direct play away and `2` does not `[probe:
+    tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-04]`."""
 
     AUDIO = "Audio"
     VIDEO = "Video"
     VIDEO_AUDIO = "VideoAudio"
 
 
+@wire_ordinals(
+    {0: "Equals", 1: "NotEquals", 2: "LessThanEqual", 3: "GreaterThanEqual", 4: "EqualsAny"}
+)
 class ConditionType(Enum):
     """The five comparisons a profile may state. `[source:
-    MediaBrowser.Model/Dlna/ProfileConditionType.cs @ v10.11.11]`"""
+    MediaBrowser.Model/Dlna/ProfileConditionType.cs @ v10.11.11]`
+
+    An ordinal no member has is the one row of this vocabulary that is not a `400` and not a
+    `200`: the reference's comparison switch throws `InvalidOperationException`, which its
+    exception middleware answers **`500`** with the same 25 bytes an `ArgumentException` gets
+    `[source: MediaBrowser.Model/Dlna/ConditionProcessor.cs:222 @ v10.11.11]`, `[probe:
+    tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-04]`. Atrium answers `400` there,
+    which is behaviours section 3.26."""
 
     EQUALS = "Equals"
     NOT_EQUALS = "NotEquals"
@@ -483,6 +501,35 @@ class ConditionType(Enum):
     EQUALS_ANY = "EqualsAny"
 
 
+@wire_ordinals(
+    {
+        0: "AudioChannels",
+        1: "AudioBitrate",
+        2: "AudioProfile",
+        3: "Width",
+        4: "Height",
+        5: "Has64BitOffsets",
+        6: "PacketLength",
+        7: "VideoBitDepth",
+        8: "VideoBitrate",
+        9: "VideoFramerate",
+        10: "VideoLevel",
+        11: "VideoProfile",
+        12: "VideoTimestamp",
+        13: "IsAnamorphic",
+        14: "RefFrames",
+        16: "NumAudioStreams",
+        17: "NumVideoStreams",
+        18: "IsSecondaryAudio",
+        19: "VideoCodecTag",
+        20: "IsAvc",
+        21: "IsInterlaced",
+        22: "AudioSampleRate",
+        23: "AudioBitDepth",
+        24: "VideoRangeType",
+        25: "NumStreams",
+    }
+)
 class ConditionProperty(Enum):
     """Everything a condition may be about. `[source:
     MediaBrowser.Model/Dlna/ProfileConditionValue.cs @ v10.11.11]`
@@ -490,6 +537,13 @@ class ConditionProperty(Enum):
     The whole vocabulary is declared because a client may send any of it and a member missing here
     would be a profile this server cannot parse. Not all of them are *decidable*: see
     `_REASON_FOR`, where the ones the reference itself leaves unmapped are absent.
+
+    **The reference's own enumeration skips 15**, so every member from `NumAudioStreams` on
+    carries a number one above its position here - measured, `25` binds to `NumStreams` and `15`
+    binds to nothing at all, which the reference answers by satisfying the condition rather than
+    refusing it `[source: MediaBrowser.Model/Dlna/ProfileConditionValue.cs,
+    MediaBrowser.Model/Dlna/ConditionProcessor.cs:96-97 @ v10.11.11]`, `[probe:
+    tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-04]`.
     """
 
     AUDIO_CHANNELS = "AudioChannels"

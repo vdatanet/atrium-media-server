@@ -39,7 +39,15 @@ answer. It decides nothing: a rung, a reason and a ceiling are all read from a `
 *query* token does (behaviours section 1.12). A `Property` of `NotAThing` inside a codec profile
 is refused rather than dropped, so the profile vocabulary is declared as enums here and the
 framework's validation produces the refusal `[probe: manual requests via tools/_probe.py, Jellyfin
-10.11.11, 2026-08-29]`. `Photo`, `Subtitle` and `Lyric` are in that vocabulary and are **not**
+10.11.11, 2026-08-29]`.
+
+**How those enums are *read* is `compat/model.py`'s and not this module's**, since 012 T7: one
+binder on the base every request model inherits takes a name in any case and a number as the
+ordinal the reference declares, on all five vocabularies this body carries. The narrow binder 011
+T9 wrote for a subtitle entry's `Method` is gone with it - two answers to one question about the
+reference being worse than either (behaviours section 2.28).
+
+`Photo`, `Subtitle` and `Lyric` are in that vocabulary and are **not**
 errors: they are profile entries about media this negotiation is not about, and they are dropped
 when the profile is mapped.
 
@@ -54,10 +62,10 @@ from collections.abc import Mapping
 from dataclasses import replace
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BeforeValidator, Field, ValidationError
+from pydantic import Field, ValidationError
 
 from atrium.api.delivery import policy_of
 from atrium.api.deps import get_sessions, require_user
@@ -66,7 +74,7 @@ from atrium.api.items import effective_user, library_context
 from atrium.compat.auth import client_info, extract_token
 from atrium.compat.errors import NegotiationRefusedError, NotFoundError
 from atrium.compat.guids import WireGuid, new_id
-from atrium.compat.model import AtriumModel
+from atrium.compat.model import AtriumModel, wire_ordinals
 from atrium.compat.ticks import WireTicks
 from atrium.db.engine import session_scope
 from atrium.db.item_queries import HydratedItem, ItemQueryRepository
@@ -95,6 +103,7 @@ CAPABILITIES_PROFILE = "DeviceProfile"
 # ------------------------------------------------------------------------------------------------
 
 
+@wire_ordinals({0: "Audio", 1: "Video", 2: "Photo", 3: "Subtitle", 4: "Lyric"})
 class ProfileType(Enum):
     """`DlnaProfileType` in full. `[source: MediaBrowser.Model/Dlna/DlnaProfileType.cs @
     v10.11.11]`
@@ -161,45 +170,6 @@ class TranscodingProfileDto(AtriumModel):
     spec section 3.4)."""
 
 
-def _bound_subtitle_method(value: Any) -> Any:
-    """The three ways the reference's binder accepts a delivery method, and the one it refuses.
-
-    Measured in one run, all four classes: `hls` and `HLS` bind exactly as `Hls` does, the
-    ordinal `3` binds to the same member, and `banana` is a `400` - which is the same shape 012's
-    gate found for an enum-typed value, arriving here on a request **body**
-    `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
-
-    **The refusal is the half that does not carry across to a query string**, measured at T11: the
-    same word in a delivery address is a `200` that announces nothing rather than a `400`, because
-    a nullable enum *parameter* binds through a binder that swallows the failure
-    (`media/decision.py`'s `method_named`). The vocabulary is one table - the ordinals live beside
-    the enumeration, read from both sides - and the two refusals are not.
-
-    Anything this function does not recognise is handed to the model unchanged, so the refusal is
-    the framework's validation `400` rather than a second refusal invented here.
-
-    **What is lenient is the binder rather than this one enum**, and the same run says so: a
-    direct-play entry typed `"video"` rather than `"Video"` binds and direct-plays on the
-    reference. So `ProfileType`, `ConditionType`, `ConditionProperty` and `CodecKind` - all bound
-    in this same body and all matched case-sensitively here - are each a `400` where the reference
-    answers `200`. Making that general is a change to `compat/model.py`, which every request model
-    inherits, so this change fixes only the vocabulary it adds. **The answer lives in 012's
-    OQ-4**, widened from the protocol value to the binder by the measurement above; 011 plan
-    section 6.8 points at it rather than restating it, and so does this.
-    """
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        wanted = value.lower()
-        return next(
-            (one for one in ladder.SubtitleMethod if one.value.lower() == wanted),
-            value,
-        )
-    if isinstance(value, int):
-        return ladder.SUBTITLE_METHOD_ORDINALS.get(value, value)
-    return value
-
-
 class SubtitleProfileDto(AtriumModel):
     """`[spec: SubtitleProfile]`: one subtitle format, and how this client will take it.
 
@@ -213,9 +183,7 @@ class SubtitleProfileDto(AtriumModel):
     """
 
     format: str | None = None
-    method: Annotated[ladder.SubtitleMethod, BeforeValidator(_bound_subtitle_method)] = (
-        ladder.SubtitleMethod.ENCODE
-    )
+    method: ladder.SubtitleMethod = ladder.SubtitleMethod.ENCODE
     language: str | None = None
     container: str | None = None
 
