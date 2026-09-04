@@ -258,6 +258,10 @@ def unopened(part: MediaSource) -> MediaInspection:
     `media/info.py:source_container` still answers the file's extension - no runtime, no bitrate,
     no streams. **Never stored.** It exists so the ladder can decide the three capability flags
     for a source with nothing in it, which is what the reference's answer carries (012 AC-1).
+
+    The empty container is also what **tells one of these from a real inspection**, which is what
+    invariant 1 needs to be testable rather than documented: `media/probe.py:inspect` refuses a
+    file whose container has no name, so no inspection it returns can carry an empty one.
     """
 ```
 
@@ -295,7 +299,9 @@ async def _negotiation(...) -> PlaybackInfoResponse:
    `MediaProbeRepository.current()` against the file's real stat and **the next scan would skip
    the file** — for ever, on a library nothing can play, with only a `deep` scan left as the cure.
    That is this feature making the listing permanently worse, which AC-10 forbids, and it is one
-   line away at every call site.
+   line away at every call site. **T3 gave it a discriminator**: a transient inspection's container
+   is empty and a real one's cannot be, so T4's *"`store` refuses what `unopened` produced"* is a
+   check the code can make rather than a rule a reviewer has to keep.
 2. `wanted()` reads source **zero** and the item's kind, and nothing else. It is not "is this part
    inspected".
 3. The resolution runs on both routes, before the profile is consulted. The reference's `GET` calls
@@ -310,12 +316,21 @@ async def _negotiation(...) -> PlaybackInfoResponse:
 Evaluated once per negotiation, before anything else looks at the body:
 
 ```
-open the item's files when   item.path ends with ".strm"                      (v1 has none)
+open the item's files when   source[0] is not a placeholder                   (v1 has none)
+                        and (item.path ends with ".strm"                      (v1 has none)
                         or   item is video and source[0] has no video stream
-                        or   item is audio and source[0] has no audio stream
+                        or   item is audio and source[0] has no audio stream)
 ```
 
-`[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:175-178 @ v10.11.11]`
+`[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:174-178 @ v10.11.11]`
+
+**The first line is T3's, and it is the clause this section did not have.** The condition is a
+conjunction, not a three-way disjunction: the reference declines to probe at all when source zero
+is a *placeholder*, which is a source of an active recording or a source with no path
+`[source: MediaBrowser.Controller/Entities/BaseItem.cs:1103, 1159 @ v10.11.11]`. v1 has no live
+television and every source here names a file the walk statted, so it is written and cited in
+`wanted`'s docstring in the same spirit as `.strm` — unreachable, and recorded so that a later
+reader learns the whole condition rather than the part that fires.
 
 Three things follow that the shape of the bug does not suggest.
 
@@ -335,7 +350,11 @@ its own — where the same bytes alone in their own folder are an item with an e
 every part whose stored inspection is absent"* has nothing to be unfaithful to on the reference,
 and what it must not do is invent a difference **here**: whether Atrium's own resolver keeps such a
 part as a source with no probe row is 003's behaviour and T3's table asks it rather than assuming
-it.
+it. **It answers yes**, measured over a real scan of the generated tree on 2026-09-04 and again on
+2026-09-03 by T2 from the other side: the film is one item with **two** sources and the second has
+no probe row. So the trigger reads an annotated source zero and does not fire, and 012 never opens
+that part — which is the same *outcome* as the reference's, reached from a different item shape,
+and the difference in the shape is 003's and is declared in the reference-reading comparison.
 
 **A zero-length file never reaches this trigger**, which the task gate measured rather than
 assumed: 003's walk skips a file of no length before it becomes a candidate
@@ -360,8 +379,18 @@ if wanted(sources, resolved, is_video=is_video):
             resolved[index] = inspection.unopened(part)     # transient, never stored
         else:
             resolved[index] = found
-            inspection.store(session, item.library_id, part.relative_path, found)
+            inspection.store(
+                session, item.id, index, item.library_id, part.relative_path, found
+            )
 ```
+
+**The call takes the item and the part, which this pseudocode did not — found at T3, when the
+signature was declared.** §5's contract has both and this line had neither, and the difference is
+not cosmetic: D-1's half of `store` updates `(size, mtime_ns)` on **one row of `item_sources`**,
+which is keyed `(item_id, part_index)`. Written as it stood, T4 could satisfy the line only by
+either dropping the change signal — the thing D-1 was taken to write — or reaching for
+`ItemRepository.update`, which rewrites every part of the item from a whole `Item` and is exactly
+the power §4 says a negotiation must not have.
 
 **Off the event loop.** `media/probe.py:inspect` is `subprocess.run`, and a negotiation is served by
 an `async def`; 0.2 s of blocked loop on the measured happy path and up to `TIMEOUT_SECONDS` on a
@@ -390,6 +419,17 @@ process that may have several workers — is a bigger claim than the problem.
 bitrate and the corrected size (AC-3) because the row is there, not because anything on that path
 learned to probe. That is the mechanism the spec's §3.1 row four names, and it is the whole of the
 music client's cure.
+
+**And the transient inspection is invisible to every reader of one, not only to the one it is
+handed to** — checked at T3 rather than left to `source_of`. Five more functions in
+`media/info.py` take the same sequence to build an *item* body, and the listing routes call them;
+`item_container` is the one that would have noticed, because it answers a stored container where
+there is one and only an **empty** string falls through to the extension the way a missing
+inspection does. There is exactly one input on which the two answers differ, and no scan produces
+it: a source row with **no size**, where the transient record answers `Size: 0` against `null`,
+because `item_sources.size` is nullable and an inspection's is not. `library/walker.py`'s
+`Candidate.size` is an integer from a `stat()` and is the only thing that ever fills that column,
+so the state is unreachable — recorded with a test naming it rather than defended against.
 
 **But AC-10's second clause was overtaken by a change to implemented code after 012's spec was
 accepted, and this plan cannot write a test that asserts it.** The criterion reads *"the flags it
