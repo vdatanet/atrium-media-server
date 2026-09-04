@@ -123,7 +123,7 @@ say how it will be proven is not finished.
 | [009](009-playlists/) | Playlists | **Implemented** | **Implemented** | **Implemented** |
 | [010](010-conformance-harness/) | Conformance harness | **Implemented** | **Implemented** | **Implemented** — fifteen of fifteen tasks, [D-7 taken 2026-09-02](010-conformance-harness/tasks.md) |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
-| [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | — | — |
+| [012](012-negotiation-inputs/) | Negotiation inputs | **Accepted** | **Accepted** | **Accepted** |
 
 **001 through 011 are implemented** — 008 on 2026-08-29 across fourteen tasks,
 011 on 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, and 010 on 2026-09-02 across
@@ -364,6 +364,43 @@ ordinals bind, an empty string takes the default, and only a word that binds to 
 And the initialisation-segment restart is guarded by a file check the same session has already
 satisfied, so it costs nothing in either order a client uses — decided *replicate* under behaviours
 §3.0, at §3.14.
+
+**Its plan was drafted and accepted on 2026-09-03, and its task list drafted the same day**, and **accepted at its own gate the same day**, so what is next is T1 — which is a measurement and not a line of code. **Eleven tasks**, and the ordering carries five decisions: the measurement runs first, before any behaviour is written, because five of the six readings the plan could not check are inputs to code rather than checks on it and one of them can send an accepted decision back to its owner; the world gets files nothing can open before anything reads one, which needs a second kind of declaration in a fixture module built entirely around *ffmpeg writes it, ffprobe verifies it*; the resolution lands in three tasks so that the one that **writes** can be refused on its own; the general binder lands before the vocabulary it exists for, because typing the protocol first would turn today's wrong-shaped `200` into a `400` for a client that is correct; and nothing here adds a route, so for the first time since 002 the exact-set check is green throughout. **Its gate found five things, and the first takes half of a sentence the accepted spec had said twice**: a zero-length file is one of the two ways §3.2 gives for reaching this feature's subject, and on **this** server it reaches nothing — 003's walk skips a file of no length before it becomes an item, measured that day beside the case that does work, where the reference admits it and answers both a listing and a negotiation for it. That difference is **003's** and is handed on with its measurement. Beside it: `SubtitleMethod` is the one vocabulary of five that already binds both ways, so the task that generalises the binder is **deleting** its private one rather than fixing it; the empty-string half of *"the default clause does not generalise"* is a reading of a converter and T1 now measures it; `IMPLEMENTED_FEATURES` gains nothing, because 012 owns no row of `surface.yaml` — which makes it the first feature whose closing task adds itself to no set any test reads, and puts the whole weight of the definition of done on the acceptance map; and the differential is run with the command `conformance.md` publishes rather than bare. It is two changes that do
+not touch each other — a new `library/inspection.py` the negotiation calls before it looks at the
+profile, and the enum binder every request model in the project inherits — and **no migration at
+all**: what this feature changes is *when* a probe row is written, not what one holds. Writing it
+against the files rather than against the documents moved five things. **The reference's trigger is
+not "this source has no stored inspection"**: it is a property of source zero and of the item's own
+kind, so an inspected file that holds no stream of its item's kind is re-probed on *every*
+negotiation there and a second part with no inspection is never probed at all — two cases the
+gate's fixture cannot tell apart from the naive reading. **The audio `400` is the platform's
+generic refusal**, `ArgumentException` through the exception middleware, whose body outside a
+development environment is the 25 bytes `compat/errors.py` has shipped since 002 — and whose
+condition is the missing *audio stream*, not the unreadable file. **OQ-4's "one change rather than
+five" is right about three classes of four**: case-insensitive names and ordinals are the global
+converter's and reach every enumerated value in the body, but the empty string and the null take a
+default only for an enumeration that declares one, which of the six this body binds is
+`MediaStreamProtocol` alone — a binder that generalised all four would answer `200` on five
+properties where the reference answers `400`. **One sentence in an implemented plan is the
+invariant this feature retires**, and it is written three times: 008 plan §6.1's *"a stale row
+triggers re-inspection at the next scan, not at request time"*, that plan's §7 failure row, and
+`MediaProbeRepository`'s own docstring — the only deviation the plan declares. And **AC-10's second
+clause had been outrun by its own subject**: it said a listed source's flags *"stay `true` …
+nothing decides them"*, and since 008's policy-gate fix of 2026-09-02 the account's permissions
+decide two of the three, on both servers, measured — **amended at the gate on 2026-09-03** (D-5),
+the prohibition kept and the clause naming the values handed to the feature that states them, with
+no code changing beside it.
+
+**All five decisions it reserved were taken on 2026-09-03, every recommendation accepted**, and two
+of them moved something on the way: D-1's price is a new repository method and not a line, because
+`item_sources` is written today only by a whole-item rewrite; and D-4's recommendation had left one
+of the six owed measurements unplaced, so the multi-part refresh joins the four in T1 — it settles a
+rule the code writes rather than a property it could check. **D-2 was taken out of 012**: after a real scan, `items.runtime_ticks` is `NULL` on every file-backed item, measured in
+this repository that day, because the metadata merge refuses a runtime for exactly those types on
+the grounds that it comes from probing the file and nothing writes it from a probe. Every film,
+episode and track a real Atrium serves answers `RunTimeTicks: null` at item level while its media
+source carries the value. It is a scan-time defect that predates this feature, so it is specified
+and fixed in the feature that owns it.
 
 **007's thirteen tasks found something in seven of them, and two were features that did not
 exist.** The sharpest is T11's: **the container `PlayedPercentage` had never been implemented.**
