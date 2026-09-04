@@ -517,6 +517,56 @@ A runner that executes every probe and summarises **arrived on 2026-09-02**, as 
 step of a procedure and not an activity, and the sentence that used to stand here — *"deliberately
 not here yet, it is part of the harness feature 010 specifies"* — was true until 010 T14.
 
+## Exporting the specifications
+
+`export_specifications.py` copies the language-neutral half of this repository into an empty
+directory, so a second implementation — in another language — can be built against the same
+specifications and judged by the same reference.
+
+```bash
+python3 tools/export_specifications.py --to ../atrium-go --dry-run
+python3 tools/export_specifications.py --to ../atrium-go --from HEAD
+```
+
+**What travels is what a second implementation is entitled to inherit.** `spec.md` is WHAT and WHY;
+`plan.md` and `tasks.md` are HOW and STEPS and stay here, because a second implementation that
+starts from the first one's plan is a transliteration and measures nothing. The compatibility
+documents travel whole — they are measurements of the *reference*, not decisions of this
+implementation, and re-deriving them would be paying twice for the same reading. Four of the eight
+architecture decisions travel; the stack, the store, the password hashing and this export's own
+record ([ADR-0008](../docs/decisions/0008-exporting-the-specifications.md)) are decisions the
+receiving project takes for itself. Nothing under `tools/` travels either, and that is reuse rather
+than refusal: `differential.py` takes `--atrium <base URL>` and every probe takes a server address,
+so the harness is pointed at the new server over HTTP instead of being written twice.
+
+**Every tracked path is classified or the export fails.** A file that is neither exported nor
+withheld exits `1` and names itself — the same discipline the allowlist has in
+[conformance.md](../docs/compatibility/conformance.md), where an undeclared thing is a failure and
+never a default. A document added next month cannot be quietly left behind or quietly shipped.
+
+**It reports rather than edits**, and the destination's `PROVENANCE.md` carries the census with the
+resolved commit and a digest of the exported bytes:
+
+* **Leaks** — prose naming a technology, and pointers into `src/` and `tests/`. On 2026-09-02 there
+  are 157, and where they are is the interesting part: three lines across the twelve `spec.md`
+  files, and 108 in `behaviours.md` and the two client contracts, which cite this implementation's
+  own modules as the evidence that a client requirement is bound. `--strict` makes the census a
+  failure, which is what CI would want and what a first run does not survive.
+* **Frontmatter that is about the exporting project.** A specification exported with
+  `status: Implemented` asserts something true here and false there. The receiving project resets
+  it; this command lists the files and never touches one.
+* **Links with nothing to point at** — every one of them a document deliberately withheld, left as
+  written, because retargeting a link is an edit to a specification and that is the receiving
+  project's decision.
+
+**Which ref is exported is which experiment is run.** `--from HEAD` exports the specifications as
+amended and asks whether a mature specification is complete enough for another language to arrive
+at the same place. `--from df70b87` — the commit that accepted 002 through 010, before any code
+existed — exports ten specifications that are all still `Draft` and asks the harder question:
+whether the loop finds the same things again. The `amended:` frontmatter here is the answer sheet.
+They are different experiments and they do not belong in the same destination.
+
+
 ## Conventions
 
 **Python 3.9 or newer** — deliberately lower than the 3.12 the server requires
