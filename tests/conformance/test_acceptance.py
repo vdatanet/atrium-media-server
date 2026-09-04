@@ -14,14 +14,20 @@ This file is the map, and it fails three ways:
 It asserts that the tests **exist**, not that they pass; the suite they are in does that. What it
 protects is the *mapping*, which is the part that rots quietly.
 
-**It was written for one feature and now carries nine.** 002 T18 turned one specification path and
+**It was written for one feature and now carries twelve.** 002 T18 turned one specification path and
 one map into a table of them, betting that adding 003 would then be one entry and one dictionary
 rather than a third copy of this file. It was: nothing below changed shape for 003, and the diff
 that added it is a dictionary and a line in `FEATURES`. That is the whole of what the restructure
 was for, and it is recorded here because a restructure nobody checks the payoff of is a refactor
-that might have been a waste. **011 is the ninth and the first that is not the next number**: 009
-and 010 are specified and unimplemented, and `test_every_implemented_feature_has_a_map` reads the
-status table rather than a list here, so the gap costs nothing.
+that might have been a waste. **011 was the ninth and the first that was not the next number**: 009
+and 010 were specified and unimplemented when its map landed, and
+`test_every_implemented_feature_has_a_map` reads the status table rather than a list here, so the
+gap cost nothing — and both closed it themselves, on 2026-09-01 and 2026-09-02.
+
+**012 is the twelfth and the last, and it is the one feature whose map is the only thing carrying
+the claim.** Every closing task before it also added its number to `IMPLEMENTED_FEATURES`; 012 owns
+no row of `surface.yaml`, so there was nothing for it to add and nothing else that would have
+noticed a criterion left unasserted.
 
 **003's map is the widest**, and the reason is that 003 has no HTTP surface: its criteria are proven
 against fixtures at four different levels - the naming corpus, the resolver, a real scan into a real
@@ -1363,6 +1369,120 @@ FEATURE_010: dict[int, tuple[str, ...]] = {
 }
 
 
+#: 012's map, and **the first whose feature adds itself to no set any test reads**. Every closing
+#: task before this one put its number into `IMPLEMENTED_FEATURES`, which `surface_paths()` filters
+#: `surface.yaml` by; 012 owns no row there — it is the first feature to change what an
+#: already-listed route answers without adding one — so nothing but the status table in
+#: `specs/README.md` and this dictionary carries the claim that its criteria are asserted.
+#:
+#: **T11 found the class this file exists for twice.** Spec section 3.4's
+#: fourth row — an item whose file has **gone from disk** since the scan, answered fully annotated
+#: from what the scan stored — had no test at any level, and it is the row that tells this
+#: feature's trigger from the one it is easily mistaken for: written as *"the file cannot be read"*
+#: the trigger fires there, the inspection fails on bytes that are gone, and a client is handed the
+#: empty annotation for an item the scan had fully described. It is proven now, and its red run
+#: needed **two** mutations rather than one, which is the second finding: the row is held by the
+#: trigger *and* by `api/media_info.py:_opened` skipping a part that already carries a probe, and
+#: either alone lets it through.
+#:
+#: **And AC-9 said something two of its neighbours contradict**, which is 010 T15's AC-2 again:
+#: *"nothing in this feature changes what a negotiation answers for an item that has been opened,
+#: for any profile"* is a prohibition AC-7 and AC-8 break on purpose, so no test could have passed
+#: both. The criterion is amended to the file side it was written about — the ninth amendment on
+#: that document — and the tests named below are what it is left claiming.
+FEATURE_012: dict[int, tuple[str, ...]] = {
+    # The flags are an answer and not a default, on a file nothing opened and nothing can open.
+    1: (
+        "tests.conformance.test_playback_info:test_ac1_a_source_nothing_opened_answers_flags_that_were_decided",
+        "tests.conformance.test_playback_info:test_ac1_the_empty_annotation_is_still_the_files_own_container_and_size",
+        "tests.conformance.test_playback_info:test_ac1_a_file_that_can_never_be_read_is_reopened_on_every_negotiation",
+        "tests.unit.test_library_inspection:test_the_trigger_is_the_references_condition",
+        "tests.unit.test_library_inspection:test_opening_answers_none_for_either_failure",
+    ),
+    2: (
+        "tests.conformance.test_playback_info:test_ac2_the_negotiation_that_opens_the_file_is_the_one_that_answers",
+        "tests.unit.test_library_inspection:test_opening_a_real_file_and_a_real_refusal",
+    ),
+    3: (
+        "tests.conformance.test_playback_info:test_ac3_the_next_listing_carries_what_the_negotiation_learned",
+        "tests.unit.test_library_inspection:test_the_probe_row_and_the_source_row_describe_the_same_bytes",
+        "tests.unit.test_library_inspection:test_storing_twice_replaces_the_streams_rather_than_duplicating_them",
+        # D-1's half of the write, which is the scan's rather than the wire's: without the change
+        # signal the rescan after a heal rewrites the item for ever, one claimed update per file.
+        "tests.unit.test_library_inspection:test_a_healed_file_is_neither_reopened_nor_rewritten_by_the_next_scan",
+        "tests.unit.test_library_inspection:test_only_the_probe_row_leaves_the_next_scan_rewriting_the_item",
+        "tests.unit.test_repositories:test_the_narrow_write_moves_two_columns_of_one_part",
+    ),
+    # **AC-4 is about the negotiation answering with an address, not about the address answering.**
+    # A test that followed it would be asserting behaviours section 3.13's reference defect, which
+    # is deferred to the feature that gives v1 a live path. Both names below stop at the answer.
+    4: (
+        "tests.conformance.test_playback_info:test_ac1_a_source_nothing_opened_answers_flags_that_were_decided",
+        "tests.conformance.test_playback_info:test_a_part_the_trigger_never_fires_for_is_still_decided_rather_than_advertised",
+    ),
+    # Asked against a source the profile **can** direct-play, because against one it cannot both
+    # answers refuse and the comparison passes while asserting nothing (plan section 8, T5).
+    5: ("tests.conformance.test_playback_info:test_ac5_the_second_opinion_is_a_different_answer",),
+    6: (
+        "tests.conformance.test_playback_info:test_ac6_an_audio_item_with_no_audio_stream_refuses_the_whole_request",
+        "tests.conformance.test_playback_info:test_ac6_the_same_request_with_no_profile_answers_the_un_annotated_source",
+        "tests.conformance.test_playback_info:test_ac6_a_stored_device_profile_is_a_profile_in_play",
+        # The two that separate the refusal's real condition from the one it is confused with: a
+        # readable file with no audio stream is refused, and a film with no video stream is not.
+        "tests.conformance.test_playback_info:test_the_refusal_is_the_missing_audio_stream_and_not_the_unreadable_file",
+        "tests.conformance.test_playback_info:test_a_film_with_no_video_stream_is_answered_rather_than_refused",
+    ),
+    7: (
+        "tests.conformance.test_playback_info:test_ac7_any_case_of_hls_answers_a_playlist_and_the_enumerations_own_spelling",
+        "tests.conformance.test_playback_info:test_ac7_any_case_of_http_answers_a_progressive_address",
+        "tests.unit.test_media_decision:test_the_delivery_protocol_is_lower_case_by_declaration_with_declared_ordinals",
+        "tests.unit.test_media_decision:test_the_string_compared_against_and_the_string_echoed_are_one",
+    ),
+    # Four classes and four rows, because a criterion written over "a value that is neither
+    # spelling" would have asserted one answer where the reference gives three (spec section 3.3).
+    8: (
+        "tests.conformance.test_playback_info:test_ac8_absent_null_and_empty_take_the_declared_default",
+        "tests.conformance.test_playback_info:test_ac8_a_number_binds_to_the_ordinals_member",
+        "tests.conformance.test_playback_info:test_ac8_an_ordinal_no_member_has_survives_to_the_wire_as_a_number",
+        "tests.conformance.test_playback_info:test_ac8_a_value_that_binds_to_no_member_refuses_the_whole_body",
+        "tests.unit.test_compat_model:test_an_ordinal_binds_by_the_declared_number_and_not_by_position",
+        "tests.unit.test_compat_model:test_a_bool_is_not_an_ordinal",
+        "tests.unit.test_compat_model:test_a_union_with_a_number_keeps_an_ordinal_no_member_has",
+        # The key the refusal carries, which is what a client's error display shows.
+        "tests.unit.test_compat_errors:test_a_nested_vocabulary_refusal_is_keyed_by_its_json_path",
+        "tests.unit.test_compat_errors:test_the_position_is_an_offset_into_the_body_and_not_into_the_token",
+        "tests.conformance.test_playback_info:test_a_nested_refusal_is_keyed_by_the_propertys_own_json_path",
+    ),
+    # **The criterion's own words are "the existing conformance suite is the proof", and a map
+    # entry saying that is 010's AC-11 shape**: a claim about a suite with nothing named. These are
+    # the tests that fail if a negotiation of an opened item moves - 008's own ladder rows, 011's
+    # AC-15, the mechanism underneath (the trigger does not fire for an annotated source zero) and
+    # the row T11 wrote, which asserts two whole bodies either side of the file's disappearance.
+    9: (
+        "tests.unit.test_media_decision:test_every_rung_of_the_ladder",
+        "tests.conformance.test_playback_info:test_ac2_a_profile_that_accepts_the_source_answers_direct_play",
+        "tests.conformance.test_playback_info:test_ac3_a_rejected_container_answers_a_url_with_both_streams_copied",
+        "tests.conformance.test_playback_info:test_ac5_a_profile_that_can_play_nothing_is_flags_and_no_error_code",
+        "tests.conformance.test_playback_info:test_ac15_a_direct_played_file_answers_what_it_answered_before",
+        "tests.conformance.test_playback_info:test_a_file_gone_from_disk_since_the_scan_is_answered_from_what_the_scan_stored",
+        "tests.unit.test_library_inspection:test_a_scanned_source_that_was_opened_does_not_fire_it",
+    ),
+    # The prohibition, asserted on the response **bytes** of three routes rather than on the fields
+    # a test remembered to name - and on the guard underneath, which is six functions and not one.
+    10: (
+        "tests.conformance.test_media_shapes:test_ac10_a_negotiation_of_another_item_moves_nothing_on_any_listing",
+        "tests.conformance.test_media_shapes:test_ac10_negotiating_the_unopenable_item_itself_moves_nothing_either",
+        "tests.unit.test_library_inspection:test_every_reader_of_an_inspection_answers_the_same_either_way",
+        "tests.unit.test_library_inspection:test_the_transient_inspection_serialises_as_no_inspection_at_all",
+        "tests.unit.test_library_inspection:test_the_one_source_row_that_cannot_answer_identically_is_one_no_scan_writes",
+        # The invariant the prohibition rests on, asserted by making the wrong call fail: a stored
+        # transient inspection makes the next scan skip the file for ever and empties the report.
+        "tests.unit.test_library_inspection:test_store_refuses_the_inspection_unopened_produced",
+        "tests.unit.test_library_inspection:test_what_storing_it_would_have_cost_is_the_file_never_being_opened_again",
+    ),
+}
+
+
 FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "001-server-identity-and-discovery": FEATURE_001,
     "002-authentication-users-and-sessions": FEATURE_002,
@@ -1375,6 +1495,7 @@ FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "009-playlists": FEATURE_009,
     "010-conformance-harness": FEATURE_010,
     "011-subtitle-delivery": FEATURE_011,
+    "012-negotiation-inputs": FEATURE_012,
 }
 
 

@@ -28,13 +28,15 @@ Both reasons collapse into a single design rule, stated in the [constitution](do
 
 ## Status
 
-**Eleven of twelve features are implemented.** 001 through 009 are done — identity and discovery,
+**All twelve features are implemented.** 001 through 009 are done — identity and discovery,
 authentication and sessions, scanning, metadata, the item query API, images, user data and
 playstate, as of 2026-08-29 playback negotiation and delivery, and as of 2026-09-01 playlists —
-011 (subtitle delivery) landed on 2026-08-31, and 010 (the conformance harness) on 2026-09-02,
-across fifteen tasks and one amended acceptance criterion. **No draft is left**: 012 (negotiation
-inputs) was accepted at its own gate on 2026-08-29 and is the only feature not built. The
-[status table](specs/README.md) is the authority; this paragraph is not.
+011 (subtitle delivery) landed on 2026-08-31, 010 (the conformance harness) on 2026-09-02 across
+fifteen tasks and one amended acceptance criterion, and 012 (negotiation inputs) on 2026-09-04
+across eleven tasks and one more. **No draft is left and no feature is unbuilt.** What each
+implemented feature still owes is written at the end of its own task list rather than here, so it
+cannot go stale inside a status word. The [status table](specs/README.md) is the authority; this
+paragraph is not.
 
 The first request a Jellyfin client makes is answered the way it expects:
 

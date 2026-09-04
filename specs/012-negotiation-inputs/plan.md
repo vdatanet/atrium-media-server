@@ -1,12 +1,13 @@
 ---
 feature: 012-negotiation-inputs
 title: Negotiation inputs — implementation plan
-status: Accepted
+status: Implemented
 created: 2026-09-03
 updated: 2026-09-04
 accepted: 2026-09-03
+implemented: 2026-09-04
 spec_status_required: Accepted
-spec_status_actual: Accepted
+spec_status_actual: Implemented
 ---
 
 # 012 — Implementation plan
@@ -889,7 +890,11 @@ Four confirmed the reading; two did not, and one of those two moves a task.
    invariant says it must be `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11,
    2026-09-03]`.
 5. **Concurrency is still not measured on either server**, and stays with the finished thing
-   (D-4). This plan says two probes and no lock.
+   (D-4). This plan says two probes and no lock. **Still owed when 012 closed on 2026-09-04**: the
+   route is asserted to *yield* while a file is open, which is a different claim, and the probe
+   that would settle it needs two concurrent requests against one reference item. It is the one
+   item of these six that was not discharged, and it is on
+   [what this feature owes the next ones](tasks.md#what-this-feature-owes-the-next-ones).
 6. **The change signal moves, so D-1 is parity.** Measured across a heal: `ETag`
    `d430f79a…` → `58271a54…` and `Size` 4 096 → 148 301, on the same source in the same listing
    route. The reference's on-demand refresh rewrites the file's own signal along with the
@@ -962,7 +967,7 @@ the empty shape against a file that answers a full annotation.
 | AC-6 the audio `400` | `soundless.m4a` with a profile → `400`, `text/plain`, 25 bytes — **and the same file's junk-bytes twin for the un-annotated half**, because `soundless.m4a` is readable and its profile-less answer is therefore annotated (T6) | conformance, asserting the bytes as a literal |
 | AC-7 any case answers the same address, echoing the enumeration's spelling | table over `hls`/`Hls`/`HLS`/`hLs` and the three `http` spellings: one address shape per pair, `TranscodingSubProtocol` always the member's value | conformance |
 | AC-8 by class, not by rule | the four classes of §6.5, including `2` → `TranscodingSubProtocol: 2`, and `dash`/`" "`/`true` → `400` keyed on the JSON path | conformance + `tests/unit/test_compat_errors.py` |
-| AC-9 nothing else in a negotiation moves | the existing 008 and 011 suites, unchanged and passing | whole suite |
+| AC-9 nothing else in a negotiation moves | the existing 008 and 011 suites, unchanged and passing — **and named tests rather than a suite, since T11**: 008's ladder rows, 011's AC-15, the trigger that does not fire for an annotated source zero, and a film **deleted after the scan**, answered from what the scan stored on both sides of its disappearance. The criterion itself is amended in the same change: as accepted it forbade what AC-7 and AC-8 require | whole suite, plus conformance |
 | AC-10 no listing changes | `unreadable.mkv` on `/Items`, `/Items/{itemId}` and `/Items/Latest` before and **after a negotiation of a different item**, byte for byte — and the flags asserted as the account's own rather than as `true`, on two seats, which is what 008's policy-gate fix made them and what the amended AC-10 no longer contradicts (D-5) | conformance |
 
 **AC-5 is the criterion most likely to be proved by a test that proves less than its name**, which
@@ -1224,14 +1229,15 @@ Documentation moves in the commit that changes the behaviour, not after it (Prin
 
 | Document | Change | With which task |
 |---|---|---|
-| [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1), the never-opened-source row | Struck: the gap closes. Its "Atrium does" half becomes the behaviour, and its closing mechanism was already corrected at 012's gate | The task that lands §6.2 |
-| [behaviours §2.23](../../docs/compatibility/behaviours.md) | "Atrium does" stops saying *"until it lands"* | The same |
-| [behaviours §2.24](../../docs/compatibility/behaviours.md) | "Atrium does" stops being a promise | The task that lands §6.5 and §6.7 |
+| [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1), the never-opened-source row | Struck: the gap closes. Its "Atrium does" half becomes the behaviour, and its closing mechanism was already corrected at 012's gate | **Done at T11** — the only row that has ever left that table, with a note under it saying which and why |
+| [behaviours §2.23](../../docs/compatibility/behaviours.md) | "Atrium does" stops saying *"until it lands"* | **Done at T11**, and it gained the write's second row: the change signal beside the inspection |
+| [behaviours §2.24](../../docs/compatibility/behaviours.md) | "Atrium does" stops being a promise | **Done at T11.** T9 read it as already true — §2.24 does record all eighteen spellings — but its *"Atrium does"* half named this **specification** rather than this server, which is what the definition of done asks about |
 | [008 plan §6.1](../008-playback-negotiation-and-delivery/plan.md#61-inspection-and-the-cache) | The "not at request time" sentence gains this feature's exception | **Done at T4**, with the write itself rather than with the route that calls it |
 | `MediaProbeRepository`'s docstring | "Two readers rather than one" gains the writer | **Done at T4** |
 | [surface.yaml](../../docs/compatibility/surface.yaml) | **Nothing.** No route enters or leaves v1 (spec §7.2) | — |
 | [request-cases.yaml](../../docs/compatibility/request-cases.yaml), [named-comparisons.yaml](../../docs/compatibility/named-comparisons.yaml) | Four cases, two comparisons (§8) | The task that lands the L3 half |
 | [008 plan §7](../008-playback-negotiation-and-delivery/plan.md), the *"never inline"* failure row | The same exception as §6.1's, and D-1's write beside it | **Done at T4** |
 | [012 §4](spec.md#4-data-the-feature-owns) | **Amended at T4**: a third row, the opened file's change signal, which D-1 writes and §4 did not name | Done |
+| [012 §5 AC-9](spec.md#5-acceptance-criteria) | **Amended at T11**: the prohibition is about the negotiation's **file** side, which is what this feature resolves. As accepted it read *"for any profile"*, which AC-7 and AC-8 break on purpose — so no test could have passed all three | Done |
 | [012 §5 AC-10](spec.md#5-acceptance-criteria) | **Amended, D-5, in this same change**: the prohibition stands, the clause naming the flags' values goes to 008 | Done |
-| [specs/README](../README.md) status table, [roadmap](../../docs/roadmap.md) | 012's plan row, and then its task row | This plan's acceptance, and the list's |
+| [specs/README](../README.md) status table, [roadmap](../../docs/roadmap.md) | 012's plan row, and then its task row | This plan's acceptance, and the list's — and **at T11** the three `Implemented` words, plus the two places a status was written out in prose ([README](../../README.md), [AGENTS.md](../../AGENTS.md)) |

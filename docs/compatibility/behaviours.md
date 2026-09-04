@@ -820,9 +820,18 @@ answer promised — on the reference there is always one, because the annotation
 client depends on the *listing* half, and gets the same empty source from a stock reference that it
 gets here: that half is parity.
 
-**Atrium does:** [012](../../specs/012-negotiation-inputs/spec.md) reproduces both halves — the
-negotiation opens the file and writes what it finds, the listing does not — which is the whole of
-that feature's §3.2. Until it lands, the shortfall is [§5](#5-accepted-gaps-in-v1)'s row.
+**Atrium does:** the same, from 2026-09-04 — both halves, which is the whole of
+[012 §3.2](../../specs/012-negotiation-inputs/spec.md#32-a-media-source-the-server-has-never-opened).
+The negotiation resolves before it reads the profile, on **both** routes, and writes what it learns
+through the scan's own repository; the listing opens nothing and no value on it moved (012 AC-10).
+The write is two rows and not one: the inspection **and** the file's change signal, so a healed
+source's entity tag describes the bytes that were just read rather than the ones the scan saw —
+which is what the reference does across one heal, measured `[probe:
+tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`. A file that can never be read
+pays the probe on every negotiation here too, and nothing is stored for it: a stored transient
+inspection would satisfy the next scan's change comparison and take the file out of the library's
+own record of what it could not read. *This entry's shortfall was [§5](#5-accepted-gaps-in-v1)'s
+never-opened-source row until 012 closed it; the row is gone and the note under that table says so.*
 
 ### 2.24 A profile's delivery protocol is an enumeration, in every sense
 
@@ -859,10 +868,17 @@ client sending `Hls` is *correct* against this reference and gets HLS; a server 
 string case-sensitively sends it a progressive address instead, which is the one direction
 Principle I has least tolerance for.
 
-**Atrium does:** [012 §3.3](../../specs/012-negotiation-inputs/spec.md) reproduces the whole table,
-including the refusal — which is the same shape §1.1's binding already produces for this body, and
-the opposite of §1.12's rule for a **query** value. The out-of-range ordinal is reproduced too: it
-is a `200` a client can act on, so it is class B and there is nothing to gain by tidying it.
+**Atrium does:** the same, from 2026-09-04 — the whole table, every one of the eighteen spellings
+asserted at the HTTP boundary ([012 §3.3](../../specs/012-negotiation-inputs/spec.md#33-a-delivery-protocol-the-negotiation-does-not-recognise),
+AC-7 and AC-8). The delivery protocol is an enumeration whose members are lower-case by declaration,
+with its default and its ordinals **registered** rather than counted, and the answer echoes the
+member's spelling and never the profile's. The refusal is reproduced with its key, its message and
+its byte position — the same shape §1.1's binding already produces for this body, and the opposite
+of §1.12's rule for a **query** value. The out-of-range ordinal is reproduced too, as the number it
+is: a `200` a client can act on, so class B and nothing to gain by tidying it. **The one thing that
+is not reproduced is an out-of-range ordinal on the other five vocabularies**, which is
+[§3.26](#326-an-ordinal-no-member-has-is-answered-three-ways-one-of-them-a-500--class-a-not-decided-here)
+and is not this entry's.
 
 ### 2.25 `GET /Sessions`' three filters are two filters and a visibility rule
 
@@ -3104,7 +3120,6 @@ undocumented bug.
 | **Policy flags stored but unenforced** ([002 §3.5](../../specs/002-authentication-users-and-sessions/spec.md)) | A restriction that does not restrict | All of them gate features v1 lacks; each is enforced in the change that adds its feature |
 | **Image decoration parameters ignored** ([006 §3.2](../../specs/006-images/spec.md)) | `percentPlayed`, `blur`, `foregroundLayer` have no effect | Implement if the differential shows a client sending them |
 | **No subtitle burn-in** ([011 §2](../../specs/011-subtitle-delivery/spec.md#2-scope)) | A track whose negotiated delivery method is `Encode` is announced as burned in and is not: the reference paints those cues into the frames it produces and Atrium produces the same frames without them. It is not a rare branch — `Encode` is the reference's per-stream answer for **every** track no declared subtitle profile fits, which is every image track under a text profile and every track for a profile that declares nothing `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]` — and naming such a track costs the source its direct play on both servers, so the client is pushed onto the transcode that then carries nothing. A client whose profile names a subtitle format it can take never reaches it | A text-rendering stack — fonts, ASS positioning, shaping — and a second filter path, which is the exclusion row the [roadmap](../roadmap.md#out-of-scope-and-why) has carried since before 001. *This row is what was left of "no subtitle delivery at all" when [011](../../specs/011-subtitle-delivery/spec.md) closed the rest of it on 2026-08-31: the manifest announces every text track, the sidecars are found and served, and `Encode` is the one answer this server says and does not do. 011 T12 narrowed the row rather than deleting it, because 011 §2 and §7's OQ-5 both call this gap "already recorded" and deleting it would have made two accepted documents false* |
-| **A media source with no stored inspection is skipped** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | On a **listing**, nothing: the source keeps `Id`, a `Container` inferred from its path and `Size` and carries `RunTimeTicks: null`, `Bitrate: null` and `MediaStreams: []` — and so does the reference's `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-08-29]`. On `PlaybackInfo` the whole annotation is skipped, so it answers the model's default `SupportsDirectPlay: true` **with no `TranscodingUrl`**, where the reference opens the file and answers it annotated — or, when the file cannot be read, answers the same empty source with the flags *decided* and an address. It happens whenever a file is in the library and nothing has opened it: a scan from before 008, a file added since, a probe that failed | Not a rescan, and not a decision about what to advertise — **the negotiation itself**, which is what the reference does and what [012 §3.2](../../specs/012-negotiation-inputs/spec.md) specifies: open the file inside the request and write down what it says. *This row read "the real mechanism is a decision about what an un-inspected source should advertise" until 012's measurement gate measured the reference resolving the state rather than describing it. It also read as though the listing were part of the shortfall; it is parity, and the music client's four losses with it* |
 | **No per-user subtitle preference, so no default subtitle track is proposed** ([011 §2, §3.3](../../specs/011-subtitle-delivery/spec.md)) | A negotiation that names no subtitle index answers `DefaultSubtitleStreamIndex` absent, where a stock reference proposes a track. It is the reference's own answer for a user whose subtitle mode is `None` — but a *new* reference user's mode is `Default`, not `None` `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]` | The two user settings the choice is a function of: a subtitle mode with five values and a language preference list. Both are a per-user feature, which is what 011 §2 excludes; a client that names the track it wants is unaffected, and both analysed clients name it |
 | **`Path`-derived identifiers differ from the reference's** ([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters)) | Nothing — ids are opaque | Not a gap to close; a deliberate design choice |
 | **A container that has lost every file is still returned** ([003 §3.8](../../specs/003-library-configuration-and-scanning/spec.md#38-scanning-and-change-detection)) | An empty series or album in a library, with nothing under it — **and a stock reference returns one too**, measured on 2026-09-02 `[probe: tools/differential.py --named container-that-lost-every-file, Jellyfin 10.11.11, 2026-09-02]`, which is what this row had assumed the other way round since it was written | A query-time filter in 005: a container with no visible children is not offered. See §5.2 — which is now a **measured parity** rather than a gap, and whether the filter is still worth its predicate is 005's call |
@@ -3118,6 +3133,20 @@ undocumented bug.
 | **The rename applies `Name` and nothing else, and refuses every item that is not a playlist** ([009 §3.8](../../specs/009-playlists/spec.md)) | A client that edits a playlist's overview, rating, year, genres or tags through `POST /Items/{itemId}` finds them unchanged, and the same request against a film, an episode, a track or a by-name row is `403` where the reference applies the body. Measured: a whole posted body changes `Overview`, `ForcedSortName`, `OfficialRating`, `CustomRating`, `ProductionYear`, `Genres` and `Tags` on the reference, while `Path` and `IsFolder` are computed and ignored on both `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. Neither analysed client posts anything but a changed `Name` | Item metadata editing entering the surface with a named consumer — which is more than a route: 004 T10 measured the scan and the refresh already fighting over `Item.name`, so an edited field needs somewhere to live that the next scan does not overwrite. Until then a refusal is the honest answer and a partial apply would be Principle VI's plausible-looking stub |
 | **A required body that is missing entirely is `400` and not `415`** ([§1.11](#111-there-are-four-error-shapes-not-one)) | A request carrying no body and no `Content-Type` on one of the five routes whose body is required — 007's three reporting routes, 008's `PlaybackInfo` and 009's rename — answers the validation `400` where the reference answers `415 Unsupported Media Type` in the problem-details shape `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. No analysed client sends a body-less request to a route that requires one | A content-type gate in `compat/`, ahead of the body binding, and one measurement per required-body route rather than an extrapolation from this one: the shape is measured on the rename alone, and the four older routes were never asked. **[010](../../specs/010-conformance-harness/spec.md) is the owner of the measuring half** — a differential replaying a body-less request against both servers is what asks the other four, and it is the only thing that can — and the gate itself belongs to whoever owns `compat/model.py`, which every request model in the project inherits, rather than to any one feature. 009 T14 decided that rather than closing it inside a task about the acceptance map |
 | **A multi-part film answers one media source per part** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Two sources on one item, where the reference answers one source, a `PartCount` and a separate route for the rest | Not a gap to close on its own: it follows from 003 §3.3 modelling the parts as one item's sources, and closing it means changing that model or adding `GET /Videos/{id}/AdditionalParts` to the surface |
+
+**One row left this table on 2026-09-04, and it is the only one that ever has.** *"A media source
+with no stored inspection is skipped"* ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources))
+recorded a `PlaybackInfo` that skipped the whole annotation for a file nothing had opened, answering
+the model's default `SupportsDirectPlay: true` with **no `TranscodingUrl`** — an answer a client
+believed and could not act on. [012](../../specs/012-negotiation-inputs/spec.md) closed it: the
+negotiation opens the file inside the request and writes down what it learns (§2.23), and for a file
+that cannot be read the flags are decided against the profile and an address comes with them. The
+row's own closing mechanism had been wrong until 012's measurement gate corrected it — it read *"a
+decision about what an un-inspected source should advertise"*, where the reference **resolves** the
+state rather than describing it — and its listing half was never a shortfall at all but parity, with
+the music client's four losses inside it. What is left of the neighbourhood is not a gap but a
+deferred defect decision: [§3.13](#313-an-un-inspectable-source-is-advertised-and-the-address-it-is-given-answers-500--class-a-deferred),
+the hop at which the advertised address refuses.
 
 The difference between this section and §4 is intent. §4 says *we thought about it and chose
 differently*. This section says *we have not done it yet, and here is how we will know when it

@@ -12,7 +12,10 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**Features 001 through 011 are implemented, and 012 is the only one left `Accepted` and unbuilt.**
+**All twelve features are implemented. There is no unbuilt feature and no draft**, which has not
+been true before: what comes next is a decision about scope rather than the next unticked task,
+and the standing work is on the *"what this feature owes the next ones"* lists at the end of each
+task file.
 **[008](specs/008-playback-negotiation-and-delivery/)
 landed on 2026-08-29 across fourteen tasks**, spec, plan and tasks all accepted the same day and
 every one of the fourteen finding something the documents had wrong. Playback is therefore in: the
@@ -27,13 +30,17 @@ delivery routes, and subtitle files sitting beside the media — discovered, num
 container's own streams, and served. Not burned in, which is
 [the roadmap's exclusion row](docs/roadmap.md#out-of-scope-and-why) and the one subtitle gap left in
 [behaviours §5](docs/compatibility/behaviours.md#5-accepted-gaps-in-v1).
-**[012's spec was accepted on 2026-08-29](specs/012-negotiation-inputs/spec.md)**,
-at a gate that answered its nine open questions with two new probes and two extended ones and
-withdrew one of the two client findings it was built on. **Its plan was drafted and accepted on 2026-09-03, and its
-task list drafted and accepted at its own gate the same day**, so **what is next is T1**, which
-is a measurement and not a line of code: five of the six readings the plan could not check are
-inputs to what T4, T6 and T7 write, and one of them can send an accepted decision back to its
-owner. Eleven tasks, and the gate found five things — the sharpest being that a **zero-length file
+**[012 landed on 2026-09-04 across eleven tasks](specs/012-negotiation-inputs/tasks.md)**, its spec
+accepted on 2026-08-29 at a gate that answered its nine open questions with two new probes and two
+extended ones and **withdrew one of the two client findings it was built on**, its plan and task list
+both drafted and accepted on 2026-09-03. The negotiation therefore resolves before it reads the
+profile: it opens the file inside the request, writes down what it learns so the next listing carries
+it, decides the flags of a source it could not open and gives them an address, refuses an audio item
+with no audio stream the way the reference does, and binds **every** vocabulary a device profile
+carries in any case and by its declared ordinal — which is four vocabularies wider than the finding
+it started from. **T1 was a measurement and not a line of code**, which is D-4's decision and worth
+copying: five of the six readings the plan could not check were inputs to what T4, T6 and T7 wrote
+rather than checks on them. Eleven tasks, and the gate found five things — the sharpest being that a **zero-length file
 reaches nothing on this server**, where the accepted spec gave it as one of the two ways to reach
 the feature's own subject: 003's walk skips a file of no length before it becomes an item, which
 is a difference in an implemented feature and is handed on rather than absorbed. The plan is two changes that do not touch each other — a new
@@ -45,7 +52,28 @@ method rather than a line, the inspection timeout stays one number for both call
 six owed measurements move into T1 ahead of any behaviour, **AC-10 is amended in an accepted spec**
 because what made its second clause wrong landed nine days after the spec was accepted, and
 **D-2 goes out of 012** — after a real scan `items.runtime_ticks` is `NULL` on every file-backed
-item, measured in this repository that day, and it is a scan-time defect its owning feature fixes. **[009](specs/009-playlists/) landed on 2026-09-01 across fourteen tasks**, its spec accepted at a
+item, measured in this repository that day, and it is a scan-time defect its owning feature fixes.
+**Every one of the eleven tasks then found something further**, which is why its spec carries nine
+amendments: the trigger is a conjunction where both documents described a disjunction (T3), the
+write is two rows keyed two ways and the method that moves them takes a third argument to prove they
+name one file (T4), the branch it deletes was answering a source neither document had described
+(T5), the refusal the plan put in two places refuses in only one of them (T6), an ordinal is what
+the reference's vocabulary **declares** and not the position a reader counts — two of five say so on
+the wire (T7), the byte position inside a refusal is counted into the body as *sent* and not into the
+one the framework parsed (T8), and the first union in a request model handed a boolean back the
+ordinal `1` (T9). **Its closing task found the class it exists for twice**: [spec §3.4](specs/012-negotiation-inputs/spec.md)'s
+deleted-file row had no test at any level, and **AC-9 was a prohibition its own AC-7 and AC-8 break
+on purpose** — *"nothing in this feature changes what a negotiation answers for an item that has been
+opened, for any profile"*, where a profile spelling the protocol `Hls` is answered differently after
+this feature than before it. No test could have passed both, and the criterion is amended to the
+input it was written about. **What `Implemented` means there is eleven of eleven tasks and ten of ten
+criteria and nothing wider**: an ordinal no member has is still the one shape the defect procedure
+forbids ([behaviours §3.26](docs/compatibility/behaviours.md)), two concurrent negotiations of one
+file are measured on neither server, six differences its own runs raised belong to 003, 004, 005 and
+008, and a `--fixture` run whose reference instance fails still sweeps whatever `$JELLYFIN_URL` names,
+which is 010's — all of it on
+[012's owes list](specs/012-negotiation-inputs/tasks.md#what-this-feature-owes-the-next-ones).
+**[009](specs/009-playlists/) landed on 2026-09-01 across fourteen tasks**, its spec accepted at a
 gate whose five probes answered its six open questions and killed thirteen claims — including the
 one the feature was built on, that a playlist entry has an identifier of its own — and every one of
 the fourteen tasks then finding something further, which is why its spec carries twelve amendments
@@ -128,7 +156,7 @@ indexes, `ImageTags` emittable from `item_images` alone, and the artist **credit
 |---|---|
 | Which features have a spec, a plan, tasks? | [`specs/README.md`](specs/README.md) — the status table |
 | Which tasks are done? | The feature's `tasks.md`. Finished ones are `[x]` and carry a **Done** note saying what the task got wrong |
-| What is next? | The first unticked task in the lowest-numbered feature |
+| What is next? | The first unticked task in the lowest-numbered feature — and as of 2026-09-04 there is none, so it is the *"what this feature owes the next ones"* list at the end of each `tasks.md`, and a scope decision |
 
 The **Done** notes are worth reading before starting the next task. Most of them record something
 the task statement or the plan asserted that turned out to be false, and the same class of mistake
@@ -224,6 +252,7 @@ reasoning:
 | 012 plan | Write a plan for a negotiation that opens the file | **The trigger is not the one the defect looks like, the refusal is not this feature's own, and one of the four protocol classes does not generalise.** The reference probes when **source zero** carries no stream of the *item's* kind `[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:175-178 @ v10.11.11]` — not when a source has no stored inspection — so an inspected file holding no stream of its item's kind is re-probed on **every** negotiation for ever, and a second part with no inspection is never probed at all; the gate's own fixture cannot tell that condition from the naive one, and two new fixtures can. The audio `400` is the **platform's** refusal, not a shape this feature invents: `ArgumentNullException` escapes the audio builder `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:104 @ v10.11.11]` and the exception middleware maps every `ArgumentException` to `400`, `text/plain`, and — outside a development environment — the 25 bytes `Error processing request.` `[source: Jellyfin.Api/Middleware/ExceptionMiddleware.cs:93, 98, 127 @ v10.11.11]`, which `compat/errors.py` has shipped since 002; and its condition is the missing **audio stream**, so a perfectly readable audio file with no audio track is refused the same way. **OQ-4's *"one change rather than five"* holds for three classes of four**: case-insensitive names and ordinals come from the globally registered converter and `NumberHandling = AllowReadingFromString` `[source: src/Jellyfin.Extensions/Json/JsonDefaults.cs:34, 42 @ v10.11.11]` and reach every enumerated value this body carries, but the empty string and the null take a **declared** default, and the factory that implements it converts only a type carrying `[DefaultValue]` `[source: src/Jellyfin.Extensions/Json/Converters/JsonDefaultStringEnumConverterFactory.cs:20 @ v10.11.11]` — which of the six enumerations this body binds is `MediaStreamProtocol` alone, so a binder that generalised all four would answer `200` on five properties where the reference answers `400`. And **an accepted criterion has been outrun by its own subject**: AC-10 says a listed source's flags *"stay `true` … nothing decides them"*, and 008's policy-gate fix of 2026-09-02 made the account's permissions decide two of the three on both servers — so the criterion was **amended at this gate** — the prohibition kept, the clause naming the values handed to the feature that states them, and no code changing beside it. Plus one that is nobody's feature and was found by running the scan: **`items.runtime_ticks` is `NULL` on every file-backed item** — measured on the generated media matrix on 2026-09-03 — because `metadata/merge.py` refuses `Field.RUNTIME` for exactly those types on the grounds that the value comes from probing the file, and nothing writes it from a probe. Every film, episode and track a real Atrium serves answers `RunTimeTicks: null` at item level while its own media source carries the value, and 007's `PlayedPercentage` is `null` with it — decided out of 012 on 2026-09-03, for its owning feature |
 | 012 tasks | Review an eleven-item list against an accepted plan | **Half of a sentence the accepted spec had said twice is not true of this server, and it was found by running a scan rather than by reading one.** [Spec §3.2](specs/012-negotiation-inputs/spec.md) gives two ways to reach an un-inspectable source — *"a zero-length file, and bytes that are not the container the extension claims"* — and a real scan of a library holding one of each produces an item for the second and **nothing at all** for the first: `library/walker.py` skips a file of no length with `Skip.EMPTY` before it is ever a candidate, so there is no item, no source row and not even an `Uninspected` report, where the reference admits it and answers both a listing and a negotiation for it. The case that does work was measured in the same run and is exactly the state the feature exists for — a 4 KiB junk `.mkv` scanning into a `Movie` with a source row and **no probe row**. The difference is **003's**, handed on with its measurement the way D-2 was. Three more: `SubtitleMethod` is the one vocabulary of five that already binds in any case and by ordinal, so the task that generalises the binder is **deleting** 011 T9's private one rather than fixing a fifth `400` — a list that called it a fix would have counted a deletion as a feature; the empty-string half of *"the default clause does not generalise"*, which is the whole argument for **not** generalising the binder's fourth class, is a reading of `JsonDefaultStringEnumConverterFactory` and is measured nowhere, so T1 gains a sixth observation; and `IMPLEMENTED_FEATURES` gains nothing at T11, because that set filters `surface.yaml` by `feature` and 012 owns no row — which makes 012 **the first feature whose closing task adds itself to no set any test reads**, and puts the whole weight of *"every criterion has a passing test"* on the acceptance map |
 | 012 T1 | Measure the six things the plan could not check | **Four confirmed the reading, two did not, and the sharpest is a refusal this project already ships one shape of.** The nested vocabulary refusal names the enumeration by its fully qualified name, repeats the property's JSON path in `Path:`, and carries a `BytePositionInLine` that is the byte offset of the end of the offending token **in the body as sent** — 398, 395 and 396 for three tokens in one body. Asked of `POST /Playlists` in the same run, the same failure is keyed `$`, says `Path: $` and counts `len(token) + 2` wherever the property sits — `3` for a one-character token and `10` for an eight-character one, unchanged by a body twice as long. One failure, two shapes, two routes, and `compat/errors.py` ships the first as a single constant. And **there is no second part to re-read**: a two-part film whose `- part2` cannot be probed is one item with **one** media source, the unreadable part being neither a source of the grouped item nor an item of its own — where the same bytes alone in their own folder are an item with an empty source, so the state the plan asked about does not exist there to be faithful to. The four that held: the audio `400` is the middleware's 25 bytes exactly, the profile-less `GET` probes on demand and heals the listing in 0.19 s, the change signal **moves** across a heal — which discharges D-1's condition as parity — and an empty string is a `400` on an enumeration that declares no default, which is the whole reason the binder's default clause is registered per enumeration `[probe: tools/probe_uninspected_source.py, tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]` |
+| 012 T11 | Write an acceptance map and flip three status lines | **A criterion no test could have passed, and a specified error row nothing asserted.** AC-9 forbade what AC-7 and AC-8 require — a profile spelling the protocol `Hls` *is* answered differently on an opened item — so its only honest test would have failed the two beside it. And §3.4's deleted-file row had no test at any level: written as *"the file cannot be read"* the trigger fires on bytes that are gone and a client is handed an empty annotation for an item the scan had described |
 | 002 fix | Withdraw one `403` a probe had already contradicted | **The cell that was measured was not the route.** 009 T2 had measured a *restricted* non-administrator naming an *administrator*; the whole matrix says the reference refuses **nobody** — an ordinary non-administrator reads another whole, and the administrator's object read by a stranger is byte-identical to the administrator's own reading, so there is no per-caller representation to build. And the refusal that was withdrawn was hiding two more: an identifier no account has is `404` with the **fourth** error shape, `"User not found"`, the same body to an administrator and to a non-administrator, and a malformed one is the validation `400`. Atrium had answered both with the same `403` so that a caller who may not look could not tell them apart — and there is nobody who may not look |
 | 004 fix | Give a two-disc album the directory its discs sit in | **The proposed rule was worse than the defect, and the defect was two containers wider than reported.** The common ancestor of a container's files answers the two-disc album and scores **12 of 17** over the fixture tree against the standing rule's 15: a series with one season borrows that season's directory, an artist with one album borrows that album's. The reference's own answer was already in this repository, unread — of the 26 container rows its recorded reading makes of the fixture, the 18 carrying a directory and a kind Atrium's tree has sit at exactly that kind's depth below the library root, disc directories included — so the rule is counted **down from the root**, and scores 17 of 17. Beside the album, the **artist** above it was borrowing the album's own directory, so no artist with a disc-split album anywhere beneath them could reach an `artist.nfo`; and a track sitting directly in an artist's directory gave that artist the **parent of the library root**, where a refresh read a sidecar outside the library it was scanning — `artwork.associate` refuses a file outside the root and warns, and `find_sidecar` never had that guard |
 
