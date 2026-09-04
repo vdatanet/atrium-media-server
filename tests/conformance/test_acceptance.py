@@ -419,11 +419,16 @@ FEATURE_004: dict[int, tuple[str, ...]] = {
 }
 
 
-#: 005's sixteen. Several criteria are named twice - once where the rule is proved at
+#: 005's twenty-five - sixteen at T17, six at the 2026-08-28 audit, three at the 2026-09-04 one.
+#: Several criteria are named twice - once where the rule is proved at
 #: repository or builder level and once where the route is proved to use it - for 004's recorded
 #: reason: a correct rule and a rule the caller actually uses are two claims. AC-11 and AC-13
 #: map to tests that assert the *measured* wire, which reversed one drafted criterion and
 #: restated another; the spec carries both corrections with provenance.
+#:
+#: AC-23, AC-24 and AC-25 are audit 2026-09-04's M4, M5 and M6: three behaviours with a full test
+#: file each and no criterion, so nothing here could name them and nothing would have failed if
+#: they had been weakened.
 FEATURE_005: dict[int, tuple[str, ...]] = {
     1: (
         "tests.conformance.test_shapes:test_every_005_route_answers_its_declared_shape",
@@ -519,6 +524,39 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
         "tests.unit.test_item_ordering:test_a_year_with_no_date_sorts_at_january_the_first",
         "tests.unit.test_item_ordering:test_the_dateless_and_yearless_do_not_displace_the_dated",
         "tests.unit.test_item_ordering:test_a_search_is_ordered_by_match_quality_first",
+    ),
+    23: (
+        "tests.unit.test_filters_and_search_routes:test_the_summary_always_answers_all_four_keys_sorted",
+        "tests.unit.test_filters_and_search_routes:test_genres_are_the_items_spellings_not_the_by_name_row",
+        "tests.unit.test_filters_and_search_routes:test_the_scope_narrows_the_summary",
+        "tests.unit.test_filters_and_search_routes:test_the_summary_is_the_visible_worlds",
+        "tests.unit.test_filters_and_search_routes:test_an_unknown_parent_is_the_same_404",
+    ),
+    24: (
+        "tests.conformance.test_item_wide_widths:test_the_wide_only_tier_is_what_was_measured",
+        "tests.conformance.test_item_wide_widths:test_a_full_body_carries_all_eight",
+        "tests.conformance.test_item_wide_widths:test_a_user_view_row_carries_all_eight",
+        "tests.conformance.test_item_wide_widths:test_a_bare_list_row_carries_none_of_them",
+        "tests.conformance.test_item_wide_widths:test_a_folder_is_not_downloadable_however_permissive_the_account",
+        "tests.conformance.test_item_wide_widths:test_the_two_permissions_follow_the_effective_account",
+        "tests.conformance.test_item_wide_widths:test_an_episode_names_its_season",
+        "tests.conformance.test_item_wide_widths:test_every_item_building_route_names_the_access_it_emits_under",
+        "tests.conformance.test_item_wide_widths:test_the_context_refuses_to_be_built_without_an_access",
+    ),
+    25: (
+        "tests.conformance.test_item_media_source_policy:test_the_full_body_carries_the_accounts_flags",
+        "tests.conformance.test_item_media_source_policy:test_the_item_list_carries_the_accounts_flags",
+        "tests.conformance.test_item_media_source_policy:test_latest_carries_the_accounts_flags",
+        "tests.conformance.test_item_media_source_policy:test_resume_carries_the_accounts_flags",
+        "tests.conformance.test_item_media_source_policy:test_episodes_carry_the_accounts_flags",
+        "tests.conformance.test_item_media_source_policy:test_next_up_carries_the_accounts_flags",
+        "tests.conformance.test_item_media_source_policy:test_similar_carries_the_accounts_flags",
+        "tests.conformance.test_item_media_source_policy:test_instant_mix_carries_the_accounts_flags",
+        "tests.conformance.test_item_media_source_policy:test_playlist_entries_carry_the_accounts_flags",
+        "tests.conformance.test_item_media_source_policy:test_the_policy_is_the_named_users_and_not_the_callers",
+        "tests.conformance.test_item_media_source_policy:test_a_source_nothing_inspected_carries_the_flags_too",
+        "tests.conformance.test_item_media_source_policy:test_every_item_building_route_fills_the_policy",
+        "tests.conformance.test_item_media_source_policy:test_the_context_refuses_to_be_built_without_a_policy",
     ),
 }
 

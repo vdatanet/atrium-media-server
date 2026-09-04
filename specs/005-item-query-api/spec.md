@@ -3,10 +3,10 @@ feature: 005-item-query-api
 title: Item query API
 status: Implemented
 created: 2026-08-26
-updated: 2026-09-03
+updated: 2026-09-05
 accepted: 2026-08-27
 implemented: 2026-08-28
-amended: 2026-08-29 by 008 T3 — §3.2 gains `Container`, `HasSubtitles` and `VideoType` per type and `IsHD` gated, four properties T1 measured and declined under Principle VI and that 007's owed list and 008 AC-28 have since given readers; and 2026-08-28 by 006 T2 - section 3.2 gains `ParentBackdropItemId`, the pair 005 measured and emitted only half of; by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated); and 2026-09-01 at 010's measurement gate, by the two decisions that gate left to this feature - section 3.7's `Similar` hedge becomes a measurement and two recorded divergences (behaviours section 3.23 and section 3.24), AC-12 gains the exact-`limit` clause and names both, and OQ-5's `Similar` half moves to Resolved with both decisions made rather than owed; and 2026-09-02 by the listing media-source policy fix — section 3.2's `MediaSources` is the one property in that table whose value depends on the reading account, by one playback permission per media kind, which closes the accepted gap behaviours section 5 carried and section 3.5's full body answers the same way; and 2026-09-03 by the item-shape difference triage — section 3.2 gains `SeasonName` per type and an eight-row table for what the **two wide widths** carry and a list row does not, the first tranche of what 010's first complete sweep found against this feature, together with the two properties on those same bodies that are deliberately not sent and stay in behaviours section 5
+amended: 2026-08-29 by 008 T3 — §3.2 gains `Container`, `HasSubtitles` and `VideoType` per type and `IsHD` gated, four properties T1 measured and declined under Principle VI and that 007's owed list and 008 AC-28 have since given readers; and 2026-08-28 by 006 T2 - section 3.2 gains `ParentBackdropItemId`, the pair 005 measured and emitted only half of; by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated); and 2026-09-01 at 010's measurement gate, by the two decisions that gate left to this feature - section 3.7's `Similar` hedge becomes a measurement and two recorded divergences (behaviours section 3.23 and section 3.24), AC-12 gains the exact-`limit` clause and names both, and OQ-5's `Similar` half moves to Resolved with both decisions made rather than owed; and 2026-09-02 by the listing media-source policy fix — section 3.2's `MediaSources` is the one property in that table whose value depends on the reading account, by one playback permission per media kind, which closes the accepted gap behaviours section 5 carried and section 3.5's full body answers the same way; and 2026-09-03 by the item-shape difference triage — section 3.2 gains `SeasonName` per type and an eight-row table for what the **two wide widths** carry and a list row does not, the first tranche of what 010's first complete sweep found against this feature, together with the two properties on those same bodies that are deliberately not sent and stay in behaviours section 5; and 2026-09-05 by the 2026-09-04 audit's corrective task C4 - section 3.7 states what the filter summary answers, where the rule had lived in the route's docstring alone, and section 5 gains AC-23, AC-24 and AC-25 for three implemented and fully tested behaviours no criterion named: the filter summary, the 2026-09-03 wide-width tranche, and the per-account `MediaSources` flags of the 2026-09-02 amendment
 depends_on: [002, 004]
 ---
 
@@ -341,7 +341,7 @@ A user with no permitted libraries gets an empty envelope, not an error.
 | `GET /Shows/NextUp` | The next unwatched episode per series | One item per series, never several; "next" measured below |
 | `GET /Items/{itemId}/Similar` | Related items | v1 scores on shared genres, people and studios. Deterministic |
 | `GET /Items/{itemId}/InstantMix` | A radio-style queue from a seed | Deterministic for a given seed and library |
-| `GET /Items/Filters` | `{Genres, Tags, OfficialRatings, Years}` for a parent | `[spec: QueryFiltersLegacy]` |
+| `GET /Items/Filters` | `{Genres, Tags, OfficialRatings, Years}` for a parent | All four keys always, over the visible items in scope; the rule is below `[spec: QueryFiltersLegacy]` |
 
 **NextUp's chain, measured** *(provenance added by T13 — the claim below predates its probe)*:
 "next" is the first unplayed episode in `(season, episode)` order after the
@@ -390,6 +390,19 @@ pool size that AC-5 requires of every list endpoint in this feature. Recorded in
 
 **`InstantMix` is deterministic for the same reason, and the reference's own behaviour is still
 unmeasured** — §7 OQ-5 holds that half open, and no divergence is claimed for it until it is.
+
+**The filter summary, measured** *(the rule was measured at T15 and has lived in `api/filters.py`'s
+own docstring ever since; this paragraph is where a criterion can reach it — added 2026-09-05 by the
+2026-09-04 audit's M4)*: all four keys are on every answer, **empty lists included**, and each list
+is the distinct values the visible items in scope carry, **sorted ascending**. `Years` is those
+items' `ProductionYear` and nothing else — a film whose premiere date falls in a different year
+contributes the production year and not the premiere one, which is the column the reference reads
+`[source: Jellyfin.Api/Controllers/FilterController.cs:94 @ v10.11.11]`. `Genres` is the items'
+**own spellings**: two spellings of one genre are two entries here, where `/Genres` merges them
+into a single by-name row. `parentId`, `includeItemTypes` and `mediaTypes` narrow the scope; an
+account permitted nothing is answered four empty lists rather than an error; and a `parentId`
+naming an unknown or invisible item is §3.6's `404`
+`[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`.
 
 ### 3.8 Series navigation
 
@@ -534,6 +547,32 @@ name its tests.)*
 22. An item with no `PremiereDate` sorts at January 1 of its `ProductionYear` under
     `sortBy=PremiereDate` rather than clumping with the dateless, and a request carrying
     `searchTerm` is ordered by match quality ahead of whatever `sortBy` asked for (§3.4).
+
+*(Criteria 23–25 were added at the 2026-09-04 audit — M4, M5 and M6, the same shape as 17–22
+above: three §3 behaviours with an implementation and a full test file and no criterion, so the
+acceptance map could not name a single one of their twenty-seven tests.)*
+
+23. `GET /Items/Filters` answers `{Genres, Tags, OfficialRatings, Years}` with **all four keys
+    always**, empty lists included, and each list is the distinct values the visible items in
+    scope carry, sorted ascending: `Years` is their `ProductionYear` and never a premiere date,
+    and `Genres` is the items' own spellings, so two spellings are two entries where `/Genres`
+    merges them into one row. `parentId` and `includeItemTypes` narrow it, an account permitted
+    nothing is answered four empty lists, and an unknown `parentId` is §3.6's `404` (§3.7).
+24. The 2026-09-03 measurement's widths hold on the wire (§3.2): the eight wide-only properties
+    are on **every** full `/Items/{itemId}` body and **every** `/UserViews` row, carrying the
+    measured values, and on **no** bare `/Items` row. `CanDownload` and `PlayAccess` answer for
+    the reading account rather than for the item — a library root is not downloadable however
+    permissive the account, and an account denied playback and downloading reads `None` and
+    `false` on a film it can otherwise see — and no item-building route can emit them without
+    naming whose account they answer for. `SeasonName` is on **both** widths for an episode.
+25. A listed `MediaSources` carries the effective account's playback permissions, one per media
+    kind (§3.2's 2026-09-02 amendment), on **every** route whose rows can carry the property —
+    the eight here and the playlist listing built through the same context: a video source's
+    `SupportsTranscoding` follows video transcoding and its `SupportsDirectStream` remuxing, an
+    audio source's `SupportsTranscoding` follows audio transcoding, `SupportsDirectPlay` follows
+    none of them, and `EnableMediaPlayback` changes no flag. The account is the one `userId`
+    names and the caller when it names nobody; a source nothing has ever inspected is not exempt;
+    and no item-building route can emit a row without naming whose permissions it emits under.
 
 ## 6. Conformance
 
