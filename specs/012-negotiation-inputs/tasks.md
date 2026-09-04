@@ -240,7 +240,7 @@ against) and `tests/library/test_sidecar_discovery.py`; and the fixture tree cha
 
 ## T3 — `library/inspection.py`: the trigger, and the inspection that is never stored
 
-- [ ] **Changes:** a new module with the four functions
+- [x] **Changes:** a new module with the four functions
   [plan §5](plan.md#5-contracts) declares — `wanted`, `opened`, `store`, `unopened` — of which
   this task lands `wanted` and `unopened` complete and `opened` as the thin, never-raising wrapper
   around `media/probe.py:inspect`. `wanted` is the reference's condition and not the shape of the
@@ -263,6 +263,53 @@ against) and `tests/library/test_sidecar_discovery.py`; and the fixture tree cha
 **`opened` swallows both inspection failures on purpose.** `ProberUnavailableError` and
 `UnreadableMediaError` mean opposite things to a scan and the same thing to one request, and
 `library/scan.py` keeps the distinction where it decides something (003 §3.7).
+
+**Done, 2026-09-04** — the module, the table, and four things the documents had incomplete rather
+than wrong, two of them resizing what T4 writes; plus the question T1 could not ask, answered.
+
+* **The condition is a conjunction and this feature had described a disjunction.** Beside the
+  three clauses [plan §6.1](plan.md#61-the-trigger) lists there is a fourth in front of them: the
+  reference declines to probe at all when source zero is a **placeholder** — the source of a
+  recording in progress, or a source with no path
+  `[source: MediaBrowser.Controller/Entities/BaseItem.cs:1103, 1159 @ v10.11.11]`. Nothing
+  observable moves, because v1 has neither shape, and that is exactly why it is written and cited
+  rather than dropped: the plan's own reason for keeping `.strm` — *"how a later reader learns the
+  condition was three and not two"* — applies to the clause the plan itself did not have. Spec
+  §3.2 and plan §6.1 say so now.
+* **[Plan §6.2](plan.md#62-resolving-inside-the-request)'s call to `store` cannot write what D-1
+  decided to write**, found by declaring the signature rather than by reasoning about it. The
+  pseudocode passes a library and a path; `item_sources` is keyed `(item_id, part_index)`, and
+  [§5](plan.md#5-contracts)'s contract has both. Written as it stood, T4 could satisfy the line
+  only by dropping the change signal — the whole of D-1 — or by reaching for
+  `ItemRepository.update`, which rewrites every part of the item from a whole `Item` and is the
+  power [§4](plan.md#4-data-model) says a negotiation must not have. The pseudocode is corrected in
+  this change.
+* **The invariant T4 has to test now has something to test with.** *"`store` never receives what
+  `unopened` produced"* was a rule with no observable difference between its two sides; the empty
+  container `unopened` writes is one — `media/probe.py:inspect` raises rather than return an
+  inspection whose container has no name, so no real inspection can carry it. It is a constant in
+  the module (`UNOPENED_CONTAINER`) rather than a sentence in a docstring.
+* **AC-10's guard is six functions and not one, and there is exactly one input on which it fails.**
+  `source_of` is what the negotiation hands the transient record to; five more functions in
+  `media/info.py` read the same sequence to build an *item* body and the listing routes call them.
+  All six answer identically — `item_container` being the one that would not have, since only an
+  **empty** container falls through to the extension the way a missing inspection does. The
+  exception is a source row with **no size**: `Size: 0` against `Size: null`, because
+  `item_sources.size` is nullable and an inspection's is not. No scan produces one —
+  `library/walker.py`'s `Candidate.size` is an integer from a `stat()` and is the only writer of
+  that column — and the boundary is a test naming it rather than a defence against it.
+* **The question T1 could not ask of the reference is answered, and it confirms T2 from the other
+  side.** A real scan of the generated tree makes the two-part film **one item with two sources**,
+  the second carrying no probe row, where the reference keeps the unreadable part as neither a
+  source nor an item `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`.
+  The item shapes differ — 003's difference, declared in the reference-reading comparison at T2 —
+  and the trigger's answer does not: source zero is annotated, so nothing fires and 012 never opens
+  that part, which is what the reference does with the item it has.
+
+**One deviation from the task as written.** *"A video item whose file holds no video stream fires
+it again on the next call, for ever"* is asserted by really opening the file and asking again with
+what the inspection learned, rather than by calling a pure function twice with one value — the
+second is true of any function of its arguments and asserts nothing about this one.
 
 ## T4 — The write: an inspection and a change signal, from a request
 
