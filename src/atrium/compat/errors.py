@@ -533,6 +533,34 @@ class UserNotFoundError(Exception):
     """
 
 
+class NegotiationRefusedError(Exception):
+    """A negotiation for an **audio** item found no audio stream to negotiate about. `400`.
+
+    The third shape, and it is the **platform's** refusal rather than one this project designed:
+    the reference's audio builder asks the source for its default audio stream and throws when
+    there is none `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:104 @ v10.11.11]`, and its
+    middleware maps every `ArgumentException` - which `ArgumentNullException` is - to `400`,
+    `text/plain`, and the fixed sentence outside a development environment `[source:
+    Jellyfin.Api/Middleware/ExceptionMiddleware.cs:93, 98, 127 @ v10.11.11]`. Measured whole
+    rather than read: `400`, `text/plain`, **25 bytes**, `Error processing request.` - byte for
+    byte the `CONTROLLER_ERROR_BODY` this project has sent since 002
+    `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`.
+
+    **The condition is the missing audio stream and not the unreadable file.** The reference asks
+    `GetDefaultAudioStream(null)`, so a readable audio file carrying no audio track is refused
+    identically to one nothing could open, and the client's own `AudioStreamIndex` does not enter
+    the question at all (012 spec section 3.4, plan section 6.4).
+
+    It refuses the **whole request** and not the source, because it escapes a builder called per
+    source: a second part with no audio stream takes the answer down with it even where the first
+    part could have been played.
+
+    Deliberately not a `DeliverySourceError`, whose docstring is a statement about a
+    `mediaSourceId` and would be false here - this request named a source and that source exists.
+    The classes in this module are read where they are raised (009 T10).
+    """
+
+
 class ImageNotFoundError(Exception):
     """The item exists and has no image of that type. Answered with the fourth shape.
 
@@ -940,6 +968,16 @@ async def subtitle_request_handler(_request: Request, _exc: Exception) -> Respon
     return controller_error(400)
 
 
+async def negotiation_refused_handler(_request: Request, _exc: Exception) -> Response:
+    """The `400` a negotiation answers when there is no audio stream to negotiate about.
+
+    Plain `controller_error(400)`: the reference's exception middleware writes one body for every
+    `ArgumentException` it maps, so this is the same twenty-five bytes as every other row above
+    and the class - not the shape - is what says which refusal it is.
+    """
+    return controller_error(400)
+
+
 async def subtitle_unavailable_handler(_request: Request, _exc: Exception) -> Response:
     """The `500` a subtitle fetch answers when there was nothing to convert.
 
@@ -1083,6 +1121,13 @@ EXCEPTION_HANDLERS: dict[int | type[Exception], ExceptionHandler] = {
     # `500` and not the `400`, which is the whole reason they are their own classes.
     SubtitleRequestError: subtitle_request_handler,
     SubtitleUnavailableError: subtitle_unavailable_handler,
+    # 012 T6's, and it is the third shape at `400` reached by a route that had never sent it: a
+    # negotiation for an audio item with no audio stream. Its own class because the class is read
+    # at the raise site and every neighbouring one would be false there - the request named a
+    # source, that source exists, and nothing about a subtitle or a playlist is involved. The
+    # shape is the platform's: an `ArgumentNullException` out of the audio builder, mapped like
+    # every other `ArgumentException` (012 spec section 3.4).
+    NegotiationRefusedError: negotiation_refused_handler,
     RequestValidationError: validation_handler,
     HTTPException: routing_handler,
 }
@@ -1120,6 +1165,7 @@ __all__ = [
     "ItemUpdateError",
     "MediaDeletionRefusedError",
     "MediaUpdateRefusedError",
+    "NegotiationRefusedError",
     "NotFoundError",
     "PlaylistCreationError",
     "PlaylistMoveError",
@@ -1143,6 +1189,7 @@ __all__ = [
     "media_deletion_refused_handler",
     "media_update_refused_handler",
     "message_error",
+    "negotiation_refused_handler",
     "not_found_handler",
     "playlist_move_handler",
     "playlist_not_found_handler",

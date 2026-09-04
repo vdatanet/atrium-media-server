@@ -942,8 +942,14 @@ def _clamped(limit: float | None, source_value: int | None) -> int | None:
 # ------------------------------------------------------------------------------------------------
 
 
-def _selected_audio(source: MediaInspection, index: int | None) -> InspectedStream | None:
-    """The audio stream this negotiation is about: the one the client named, or the default one."""
+def selected_audio(source: MediaInspection, index: int | None) -> InspectedStream | None:
+    """The audio stream this negotiation is about: the one the client named, or the default one.
+
+    **Public because a refusal is decided on it and not only a plan.** 012's audio `400` is what
+    the reference's audio builder does when this answers nothing, and it asks with no index at
+    all `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:104 @ v10.11.11]` - so the route reads
+    the ladder's own selection rather than counting streams beside it (012 plan section 6.4).
+    """
     audio = [one for one in source.streams if one.kind is StreamKind.AUDIO]
     if not audio:
         return None
@@ -957,7 +963,7 @@ def _selected_audio(source: MediaInspection, index: int | None) -> InspectedStre
 def _selected_subtitle(source: MediaInspection, index: int | None) -> InspectedStream | None:
     """The subtitle stream this negotiation named, by **wire** index, or `None`.
 
-    Unlike `_selected_audio` there is no fallback: an index naming no subtitle stream selects
+    Unlike `selected_audio` there is no fallback: an index naming no subtitle stream selects
     nothing at all, and the reference then resolves no method for a selected track and refuses
     nothing - measured, on an index of 99 and on `-1`, both of which are still restated back to
     the client as the source's default `[probe: tools/probe_subtitle_negotiation.py, Jellyfin
@@ -1534,7 +1540,7 @@ def decide(
     still negotiated as audio. `media/info.py` takes the same flag from the same caller.
     """
     video = source.video if is_video else None
-    audio = _selected_audio(source, switches.audio_stream_index)
+    audio = selected_audio(source, switches.audio_stream_index)
     # The subtitle half is the *video* builder's alone: the reference's audio builder never reads
     # a subtitle index, so an audio item answers no default subtitle track however the body asks.
     wanted_subtitle = switches.subtitle_stream_index if is_video else None
@@ -1689,7 +1695,7 @@ def _can_produce(
     if not _may_process(policy, is_video=is_video):
         return False
     video = source.video if is_video else None
-    audio = _selected_audio(source, switches.audio_stream_index)
+    audio = selected_audio(source, switches.audio_stream_index)
     return (
         _choose_target(source, profile, video, audio, None, switches, is_video=is_video) is not None
     )
@@ -1723,6 +1729,7 @@ __all__ = [
     "decide",
     "method_named",
     "refused_by_policy",
+    "selected_audio",
     "subtitle_answers",
     "unnegotiated_direct_stream",
     "unnegotiated_transcoding",
