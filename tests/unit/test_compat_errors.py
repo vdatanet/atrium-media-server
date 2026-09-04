@@ -19,6 +19,8 @@ that the same status carries different bytes.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from enum import Enum
+from typing import Any, ClassVar
 
 import httpx
 import pytest
@@ -32,7 +34,9 @@ from atrium.compat.errors import (
     ImageNotFoundError,
     ItemNotFoundError,
     image_absent_message,
+    validation_errors,
 )
+from atrium.compat.model import AtriumModel, wire_ordinals
 from atrium.compat.responses import AtriumJSONResponse
 
 #: The item this fixture refuses about, and the type it lacks. Both are the measured request's:
@@ -49,9 +53,72 @@ ABSENT_TYPE = "Box"
 ODD_NAME = "DW Español"
 
 
+@wire_ordinals({0: "http", 1: "hls"})
+class Protocol(Enum):
+    """A vocabulary shaped like the reference's `MediaStreamProtocol`, ordinals and all.
+
+    It exists so the **measured** nested refusal can be reproduced here before 012 T9 types the
+    real property as an enumeration: the key the reference sends is
+    `$.DeviceProfile.TranscodingProfiles[0].Protocol`, and until that field is a vocabulary the
+    route cannot produce it `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11,
+    2026-09-03]`.
+    """
+
+    HTTP = "http"
+    HLS = "hls"
+
+
+class _Target(AtriumModel):
+    """One transcoding entry, with the one property this file is about."""
+
+    #: The reference's own name for the enumeration, as its refusal spells it in full. Measured
+    #: on this very property `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11,
+    #: 2026-09-03]`.
+    WIRE_ENUM_TYPES: ClassVar[dict[str, str]] = {
+        "Protocol": "Jellyfin.Data.Enums.MediaStreamProtocol"
+    }
+
+    container: str = ""
+    protocol: Protocol = Protocol.HTTP
+
+
+class _Profile(AtriumModel):
+    """The one list the path has to descend through, so a level is a list index."""
+
+    transcoding_profiles: list[_Target] = []  # noqa: RUF012 - pydantic copies a default per model
+
+
+class _Negotiation(AtriumModel):
+    """The body, shaped like the negotiation's: a nested object, a list, an entry, a property.
+
+    The field names are the reference's own because every `AtriumModel` anywhere is walked by the
+    alias sweep - the convention `tests/unit/test_compat_model.py` states and this file follows.
+    """
+
+    user_id: str | None = None
+    device_profile: _Profile | None = None
+
+
+#: The measured key, byte for byte, and the sentence beside it. One `errors` entry, the path
+#: repeated in `Path:`, and a `BytePositionInLine` that is an offset into the body as sent
+#: `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`.
+NESTED_KEY = "$.DeviceProfile.TranscodingProfiles[0].Protocol"
+NESTED_MESSAGE = (
+    "The JSON value could not be converted to Jellyfin.Data.Enums.MediaStreamProtocol. "
+    "Path: $.DeviceProfile.TranscodingProfiles[0].Protocol | LineNumber: {line} | "
+    "BytePositionInLine: {position}."
+)
+
+
 def build_router() -> APIRouter:
-    """Two routes, one per refusal. Neither does anything else."""
+    """Three routes, one per refusal. None of them does anything else."""
     router = APIRouter()
+
+    @router.post("/Refuse/Negotiation")
+    async def negotiation(  # pyright: ignore[reportUnusedFunction]
+        playbackInfoDto: _Negotiation | None = None,  # noqa: N803 - the reference's spelling
+    ) -> dict[str, bool]:
+        return {"Bound": True}
 
     @router.get("/Refuse/UnknownItem")
     async def unknown_item() -> None:  # pyright: ignore[reportUnusedFunction]
@@ -195,3 +262,159 @@ def test_the_item_refusal_is_a_not_found_error_so_one_handler_serves_both() -> N
     assert not issubclass(ImageNotFoundError, NotFoundError)
     assert ItemNotFoundError not in EXCEPTION_HANDLERS
     assert EXCEPTION_HANDLERS[ImageNotFoundError] is not EXCEPTION_HANDLERS[NotFoundError]
+
+
+# ------------------------------------------------------------------------------------------
+# A failure inside a nested object is keyed by its JSON path (012 T8)
+# ------------------------------------------------------------------------------------------
+#
+# The reference reports one vocabulary failure two ways, and the route decides which. On
+# `POST /Playlists` a top-level property is keyed `$`, says `Path: $` and counts `len(token) + 2`
+# wherever it sits; on the negotiation a property inside a device profile is keyed by its full
+# JSON path, repeats that path, and counts a byte offset into the document as sent
+# `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`,
+# `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`. What is asserted
+# here is the second shape on a body shaped like the negotiation's; the first is asserted where it
+# was measured, in `tests/conformance/test_playlists.py`.
+
+#: One line, which is what every measured body was — so `LineNumber` is `0` and the position is
+#: the offset from the first byte.
+ONE_LINE = (
+    b'{"UserId":"a","DeviceProfile":{"TranscodingProfiles":[{"Container":"ts","Protocol":"dash"}]}}'
+)
+
+#: The same document a client's pretty-printer would send it as.
+MANY_LINES = b"""{
+  "DeviceProfile": {
+    "TranscodingProfiles": [
+      {"Container": "ts", "Protocol": "dash"}
+    ]
+  }
+}"""
+
+
+async def _refusal(client: httpx.AsyncClient, raw: bytes) -> dict[str, Any]:
+    """One refusal of a body written byte for byte, because a byte offset is what is asserted."""
+    answered = await client.post(
+        "/Refuse/Negotiation", content=raw, headers={"Content-Type": "application/json"}
+    )
+    assert answered.status_code == 400, answered.content
+    return dict(answered.json())["errors"]
+
+
+def _token_ends_at(raw: bytes, token: bytes) -> int:
+    """Where the offending token ends, found by searching the bytes rather than by walking them.
+
+    Deliberately a different derivation from the one under test: an expectation computed by the
+    same reader would be Atrium compared with itself, which is 001 T16's finding.
+    """
+    return raw.index(token) + len(token)
+
+
+async def test_a_nested_vocabulary_refusal_is_keyed_by_its_json_path(
+    client: httpx.AsyncClient,
+) -> None:
+    """The measured key, and the sentence that repeats it, byte for byte.
+
+    Both are written out here rather than built from the module's own constants: a body compared
+    with the template it was rendered from asserts nothing about the template.
+    """
+    errors = await _refusal(client, ONE_LINE)
+
+    assert list(errors) == ["$.DeviceProfile.TranscodingProfiles[0].Protocol"]
+    assert errors[NESTED_KEY] == [
+        "The JSON value could not be converted to Jellyfin.Data.Enums.MediaStreamProtocol. "
+        "Path: $.DeviceProfile.TranscodingProfiles[0].Protocol | LineNumber: 0 | "
+        f"BytePositionInLine: {_token_ends_at(ONE_LINE, b'"dash"')}."
+    ]
+
+
+async def test_the_position_is_an_offset_into_the_body_and_not_into_the_token(
+    client: httpx.AsyncClient,
+) -> None:
+    """The difference between the two shapes, asserted as a difference.
+
+    `POST /Playlists` answers the same number for the same token wherever the property sits — `3`
+    for a one-character token in a 62-byte body and in one twice as long. Here the number *is*
+    where the token sits, so padding an earlier property moves it by exactly the padding
+    `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`.
+    """
+    padded = ONE_LINE.replace(b'"Container":"ts"', b'"Container":"ts,mp4,mkv,webm"')
+
+    first = await _refusal(client, ONE_LINE)
+    second = await _refusal(client, padded)
+
+    assert first[NESTED_KEY] == [NESTED_MESSAGE.format(line=0, position=89)]
+    assert second[NESTED_KEY] == [
+        NESTED_MESSAGE.format(line=0, position=89 + len(b",mp4,mkv,webm"))
+    ]
+    assert _token_ends_at(ONE_LINE, b'"dash"') == 89
+
+
+async def test_a_body_across_several_lines_is_counted_within_its_own_line(
+    client: httpx.AsyncClient,
+) -> None:
+    """`LineNumber` is not always the `0` every measured body had.
+
+    Both numbers are what a reader reports for the place it stopped, and the reference's own name
+    for the second one — `BytePositionInLine` — says which of the two carries the newlines. No
+    measured body had more than one line, so this row is the arithmetic and not a measurement.
+    """
+    errors = await _refusal(client, MANY_LINES)
+
+    assert errors[NESTED_KEY] == [NESTED_MESSAGE.format(line=3, position=44)]
+    assert MANY_LINES.split(b"\n")[3].index(b'"dash"') + len(b'"dash"') == 44
+
+
+async def test_a_property_the_client_spelled_differently_is_still_found_in_the_bytes(
+    client: httpx.AsyncClient,
+) -> None:
+    """The path is the model's spelling; the document is the client's, and they can differ.
+
+    `compat/model.py` accepts any casing the reference accepts, so the token this offset points at
+    sits under a key spelled `protocol` while the path reports `Protocol`. A reader matching keys
+    case-sensitively would find nothing and fall back to the other shape's number, which is the
+    one thing that would make the sentence disagree with the body it describes. Which spelling the
+    *path* carries is 012 plan §6.6's rule — the alias, per level — and is measured on a body that
+    spells them as the reference does.
+    """
+    lowered = ONE_LINE.replace(b'"Protocol"', b'"protocol"')
+
+    errors = await _refusal(client, lowered)
+
+    assert errors[NESTED_KEY] == [
+        NESTED_MESSAGE.format(line=0, position=_token_ends_at(lowered, b'"dash"'))
+    ]
+
+
+def test_with_no_bytes_to_count_the_message_falls_back_to_the_other_shapes_number() -> None:
+    """D-6's option (b), reached only where option (a) cannot run.
+
+    The key and the path are what a client's error display shows and a bug report quotes, so they
+    are produced whether or not the document is at hand; the integer is the one thing that needs
+    the bytes. A caller with none — a query failure, or a test of the keying — gets the top-level
+    rule's `len(token) + 2` rather than no sentence at all (012 plan §11, D-6).
+    """
+    failure = {
+        "type": "enum",
+        "loc": ["body", "device_profile", "transcoding_profiles", 0, "protocol"],
+        "input": "dash",
+    }
+
+    keyed = validation_errors([failure], None, _Negotiation, None)
+
+    assert keyed == {NESTED_KEY: [NESTED_MESSAGE.format(line=0, position=6)]}
+
+
+def test_a_failure_one_level_deep_keeps_the_key_it_was_measured_with() -> None:
+    """The rule that keeps every body 007 and 009 measured answering what it answered.
+
+    `$` is the path of a top-level failure as `POST /Playlists` reports one, and this builder must
+    not turn it into `$.UserId` — the same walk, one level shorter, and a different answer
+    `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`.
+    """
+    failure = {"type": "string_type", "loc": ["body", "user_id"], "input": 7}
+
+    assert validation_errors([failure], None, _Negotiation, None) == {
+        "": ["The supplied value is invalid."]
+    }

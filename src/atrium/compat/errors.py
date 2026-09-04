@@ -62,14 +62,15 @@ route no browser was meant to drive. Matching the reference is also the safer be
 
 from __future__ import annotations
 
+import json
 import secrets
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Sequence
 from typing import Any, get_args
 
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException
-from starlette.requests import Request
+from starlette.requests import ClientDisconnect, Request
 from starlette.responses import Response
 
 from atrium.compat.responses import AtriumJSONResponse
@@ -659,19 +660,35 @@ MISSING_PROPERTY_MESSAGE = (
 #: `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`
 PROPERTY_REQUIRED_MESSAGE = "The {name} field is required."
 
-#: What it says when a value matches no member of the vocabulary a property declares. The byte
-#: position is **the position inside the quoted token**, not an offset into the request - measured
-#: with a one-character token, which answers `3` where an eight-character one answers `10` - so
-#: unlike the parser message of section 1.11 this sentence is reproducible exactly.
+#: What it says when a value matches no member of the vocabulary a property declares, for a
+#: property at the **top level** of a body. The byte position there is the position inside the
+#: quoted token, not an offset into the request - measured with a one-character token, which
+#: answers `3` where an eight-character one answers `10`, unchanged by a body twice as long.
 #: `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`
 VOCABULARY_MESSAGE = (
     "The JSON value could not be converted to {wire_type}. "
     "Path: $ | LineNumber: 0 | BytePositionInLine: {position}."
 )
 
+#: **The same failure has a second shape, and the route decides which.** For a property nested
+#: inside a body the `errors` key and the `Path:` are the property's full JSON path, and the
+#: position is the byte offset of the end of the offending token **in the document as sent** -
+#: `398` for `"dash"`, `395` for `" "` and `396` for `true` in one body, and `153` for a property
+#: earlier in that same body. One converter, one exception, two renderings; 012 plan section 6.6
+#: measured them side by side on the two routes.
+#: `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`
+NESTED_VOCABULARY_MESSAGE = (
+    "The JSON value could not be converted to {wire_type}. "
+    "Path: {path} | LineNumber: {line} | BytePositionInLine: {position}."
+)
+
 #: The framework's names for "this value is in no vocabulary I declare". Two, because a `Literal`
 #: and an `Enum` annotation are the same wire contract and report themselves differently.
 VOCABULARY_MISMATCH = frozenset({"literal_error", "enum"})
+
+#: One step of a body failure's location: a property, as `(wire spelling, Python name)`, or the
+#: index of an entry in a list.
+Level = tuple[str, str] | int
 
 
 def _wire_name(body_model: type[Any] | None, name: str) -> str:
@@ -687,8 +704,220 @@ def _wire_name(body_model: type[Any] | None, name: str) -> str:
     return str(getattr(field, "alias", None) or name)
 
 
+def _nested_model(annotation: Any) -> type[Any] | None:
+    """The model a field holds, through an optional, a union or a list.
+
+    `DeviceProfile | None` and `list[TranscodingProfile]` are both levels a path has to descend,
+    and the alias of a property inside one is declared by *that* model rather than by the body's.
+    """
+    if isinstance(annotation, type) and hasattr(annotation, "model_fields"):
+        return annotation
+    for argument in get_args(annotation):
+        found = _nested_model(argument)
+        if found is not None:
+            return found
+    return None
+
+
+def _levels(
+    location: tuple[Any, ...], body_model: type[Any] | None
+) -> tuple[list[Level], type[Any] | None]:
+    """Every step of a body failure's location, resolved through the models that own it.
+
+    The walk stops at the first segment the current model does not declare, which is what keeps a
+    union's discriminating tag - `(…, "protocol", "int")`, one error per member - out of the path
+    a client is shown. The model returned is the one that **owns the last named step**: the two
+    sentences that name a reference type name it for the type that declares the property, not for
+    the outermost body.
+    """
+    model = body_model
+    owner = body_model
+    levels: list[Level] = []
+    for segment in location[1:]:
+        if isinstance(segment, int):
+            levels.append(segment)
+            continue
+        fields = getattr(model, "model_fields", {})
+        name = str(segment)
+        if name not in fields:
+            break
+        owner = model
+        levels.append((_wire_name(model, name), name))
+        model = _nested_model(fields[name].annotation)
+    return levels, owner
+
+
+def _json_path(levels: Sequence[Level]) -> str:
+    """The levels rendered as the reference renders a path: `$.A.B[0].C`."""
+    rendered = DESERIALISATION_KEY
+    for level in levels:
+        rendered += f"[{level}]" if isinstance(level, int) else f".{level[0]}"
+    return rendered
+
+
+#: Everything JSON allows between tokens, as bytes, because a position in this message is counted
+#: in bytes and not in characters.
+_BLANK = b" \t\n\r"
+_QUOTE = 0x22
+_BACKSLASH = 0x5C
+
+#: What ends a number, `true`, `false` or `null` - the only values whose length is not written down.
+_DELIMITERS = b",]}" + _BLANK
+
+
+def _past_blanks(raw: bytes, at: int) -> int:
+    while at < len(raw) and raw[at] in _BLANK:
+        at += 1
+    return at
+
+
+def _end_of_string(raw: bytes, at: int) -> int | None:
+    """Just past the closing quote of the string starting at `at`, escapes honoured."""
+    index = at + 1
+    while index < len(raw):
+        if raw[index] == _BACKSLASH:
+            index += 2
+            continue
+        if raw[index] == _QUOTE:
+            return index + 1
+        index += 1
+    return None
+
+
+def _end_of_container(raw: bytes, at: int) -> int | None:
+    """Just past the object or array starting at `at`, counted by depth.
+
+    Strings are stepped over whole rather than scanned for braces, which is the one thing a
+    depth counter gets wrong on a document containing `{"Container": "}"}`.
+    """
+    depth, index = 0, at
+    while index < len(raw):
+        if raw[index] == _QUOTE:
+            end = _end_of_string(raw, index)
+            if end is None:
+                return None
+            index = end
+            continue
+        if raw[index] in b"{[":
+            depth += 1
+        elif raw[index] in b"}]":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+        index += 1
+    return None
+
+
+def _end_of_value(raw: bytes, at: int) -> int | None:
+    """Just past the value starting at `at`, whatever kind of value it is."""
+    at = _past_blanks(raw, at)
+    if at >= len(raw):
+        return None
+    if raw[at] == _QUOTE:
+        return _end_of_string(raw, at)
+    if raw[at] in b"{[":
+        return _end_of_container(raw, at)
+    index = at
+    while index < len(raw) and raw[index] not in _DELIMITERS:
+        index += 1
+    return index if index > at else None
+
+
+def _key_at(raw: bytes, at: int) -> str | None:
+    """The text of the string starting at `at`, escapes decoded by the parser rather than here."""
+    end = _end_of_string(raw, at)
+    if end is None:
+        return None
+    try:
+        decoded = json.loads(raw[at:end])
+    except ValueError:
+        return None
+    return decoded if isinstance(decoded, str) else None
+
+
+def _locate(raw: bytes, at: int, levels: Sequence[Level]) -> int | None:
+    """The byte offset just past the value `levels` names, counted from the start of `raw`.
+
+    A key matches **case-insensitively**, against both spellings the model knows, because that is
+    how the value got this far: `compat/model.py` accepts any casing a client writes, so the
+    property that failed may be spelled in the document differently from the path this reports.
+    """
+    at = _past_blanks(raw, at)
+    if at >= len(raw):
+        return None
+    if not levels:
+        return _end_of_value(raw, at)
+    head, rest = levels[0], levels[1:]
+
+    if isinstance(head, int):
+        if raw[at] not in b"[":
+            return None
+        index, position = 0, _past_blanks(raw, at + 1)
+        while position < len(raw) and raw[position] not in b"]":
+            if index == head:
+                return _locate(raw, position, rest)
+            position = _past_separator(raw, _end_of_value(raw, position))
+            if position < 0:
+                return None
+            index += 1
+        return None
+
+    if raw[at] not in b"{":
+        return None
+    wanted = {one.lower() for one in head}
+    position = _past_blanks(raw, at + 1)
+    while position < len(raw) and raw[position] == _QUOTE:
+        key, end = _key_at(raw, position), _end_of_string(raw, position)
+        if key is None or end is None:
+            return None
+        position = _past_blanks(raw, end)
+        if raw[position : position + 1] != b":":
+            return None
+        position = _past_blanks(raw, position + 1)
+        if key.lower() in wanted:
+            return _locate(raw, position, rest)
+        position = _past_separator(raw, _end_of_value(raw, position))
+        if position < 0:
+            return None
+    return None
+
+
+def _past_separator(raw: bytes, end: int | None) -> int:
+    """The start of the next member after a value that ended at `end`, or `-1`."""
+    if end is None:
+        return -1
+    position = _past_blanks(raw, end)
+    if raw[position : position + 1] == b",":
+        return _past_blanks(raw, position + 1)
+    return position
+
+
+def _position_of(raw: bytes | None, levels: Sequence[Level]) -> tuple[int, int] | None:
+    """`(LineNumber, BytePositionInLine)` for the end of the token `levels` names, or `None`.
+
+    Both numbers are what the reference's reader reports for the place it stopped. Every measured
+    body was one line, where the second number is the offset from the start of the document; the
+    split into a line and an offset within it is this reader's own arithmetic and is what makes a
+    pretty-printed body answer the same way a compact one does.
+    """
+    if not raw:
+        return None
+    end = _locate(raw, 0, list(levels))
+    if end is None:
+        return None
+    return raw.count(b"\n", 0, end), end - (raw.rfind(b"\n", 0, end) + 1)
+
+
+def _token_position(error: dict[str, Any]) -> int:
+    """The position the **top-level** shape reports: the quotes and the token, and nothing else."""
+    return len(str(error.get("input", ""))) + 2
+
+
 def _body_error(
-    error: dict[str, Any], location: tuple[Any, ...], body_model: type[Any] | None
+    error: dict[str, Any],
+    location: tuple[Any, ...],
+    body_model: type[Any] | None,
+    sent: bytes | None = None,
 ) -> tuple[str, str]:
     """One failure inside a request body, as the reference keys and words it.
 
@@ -707,24 +936,45 @@ def _body_error(
     The first two need a name only the model can supply, so a model that declares none falls back
     to the last row rather than inventing one - which is what keeps every body 007 bound answering
     what it answered before.
+
+    **And a failure inside a nested object is keyed by its JSON path, which is the same rule and
+    not a fifth answer.** `$` is the path of a top-level failure as the route above reports one;
+    a value inside a device profile is keyed `$.DeviceProfile.TranscodingProfiles[0].Protocol`,
+    with that path repeated in the sentence and a byte position counted into the document as sent
+    `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`. Only the two rows the
+    **deserialiser** keys move: a null refused by a property validator and a value that did not
+    bind are the model binder's own keys, and what those are at depth is unmeasured, so they are
+    left exactly as 007 measured them (012 plan section 6.6).
     """
     kind = str(error.get("type", ""))
-    name = _wire_name(body_model, str(location[-1]))
-    wire_type = str(getattr(body_model, "WIRE_TYPE", "") or "")
+    levels, owner = _levels(location, body_model)
+    named = [level for level in levels if not isinstance(level, int)]
+    name = named[-1][0] if named else _wire_name(body_model, str(location[-1]))
+    path = _json_path(levels)
+    nested = len(named) > 1
+    wire_type = str(getattr(owner, "WIRE_TYPE", "") or "")
     if kind.startswith("json_"):
         # The text failing to parse is `json_invalid`, and its location is `("body", 0)` - a byte
         # offset rather than a field, so the error's *type* tells the two apart, not `len()`.
         return DESERIALISATION_KEY, str(error.get("msg", BODY_VALUE_INVALID))
     if kind == "missing" and len(location) > 1 and wire_type:
-        return DESERIALISATION_KEY, MISSING_PROPERTY_MESSAGE.format(wire_type=wire_type, name=name)
+        key = path if nested else DESERIALISATION_KEY
+        return key, MISSING_PROPERTY_MESSAGE.format(wire_type=wire_type, name=name)
     if kind in VOCABULARY_MISMATCH:
-        vocabulary = dict(getattr(body_model, "WIRE_ENUM_TYPES", {})).get(name)
+        vocabulary = dict(getattr(owner, "WIRE_ENUM_TYPES", {})).get(name)
+        if vocabulary and nested:
+            # The offset of the end of the offending token in the body as sent, which is why the
+            # bytes are carried this far at all; a document this reader cannot walk falls back to
+            # the shape above rather than to no message (plan section 11, D-6).
+            line, position = _position_of(sent, levels) or (0, _token_position(error))
+            return path, NESTED_VOCABULARY_MESSAGE.format(
+                wire_type=vocabulary, path=path, line=line, position=position
+            )
         if vocabulary:
             # The position is the offset inside the quoted token: the opening quote, the token,
             # and the closing quote the reader stops at.
-            position = len(str(error.get("input", ""))) + 2
             return DESERIALISATION_KEY, VOCABULARY_MESSAGE.format(
-                wire_type=vocabulary, position=position
+                wire_type=vocabulary, position=_token_position(error)
             )
     if kind != "missing" and len(location) > 1 and error.get("input", "") is None:
         # A null where the type declares a value. The deserialiser was happy; the property was not.
@@ -733,7 +983,10 @@ def _body_error(
 
 
 def validation_errors(
-    raw: list[Any], body_parameter: str | None = None, body_model: type[Any] | None = None
+    raw: list[Any],
+    body_parameter: str | None = None,
+    body_model: type[Any] | None = None,
+    sent: bytes | None = None,
 ) -> dict[str, list[str]]:
     """The framework's validation failures, keyed and worded as the reference words them.
 
@@ -760,12 +1013,16 @@ def validation_errors(
     where 007's three reporting routes require theirs and name two. `body_parameter` is therefore
     `None` for an optional body (`body_parameter_of`), and `_body_error` above carries the rest.
     `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`
+
+    **`sent` is the body as the client wrote it**, which one of these sentences counts a byte
+    offset into and nothing else needs. It is optional so that every caller which has no bytes -
+    a query failure, a unit test of the keying - keeps the shape it had.
     """
     collected: dict[str, list[str]] = {}
     for error in raw:
         location = tuple(error.get("loc") or ("",))
         if location and location[0] == "body":
-            key, message = _body_error(error, location, body_model)
+            key, message = _body_error(error, location, body_model, sent)
             collected.setdefault(key, []).append(message)
             if body_parameter is not None:
                 required = PROPERTY_REQUIRED_MESSAGE.format(name=body_parameter)
@@ -833,6 +1090,26 @@ def body_model_of(request: Request) -> type[Any] | None:
     )
 
 
+async def body_as_sent(request: Request, errors: list[Any]) -> bytes | None:
+    """The bytes the client actually sent, for the one sentence that counts an offset into them.
+
+    **Not `exc.body`, which is the *parsed* document.** FastAPI hands the exception the value it
+    got from `request.json()` where the text parsed, so a byte position taken from it would be a
+    position in a document nobody sent - measured here rather than assumed, and it is what 012
+    plan section 11 (D-6) named as the source. The raw bytes are on the request instead, and
+    reaching them costs nothing: Starlette gives an exception handler the **same** `Request` the
+    route was called with, and any failure located in the body proves the route already read and
+    cached it. A failure located anywhere else never asks, so no handler ever touches a receive
+    channel that a body might still be arriving on.
+    """
+    if not any(tuple(error.get("loc") or ())[:1] == ("body",) for error in errors):
+        return None
+    try:
+        return await request.body()
+    except (ClientDisconnect, RuntimeError):
+        return None
+
+
 async def validation_handler(request: Request, exc: Exception) -> Response:
     """Replace the framework's `422` with the reference's `400`, status **and** body.
 
@@ -843,12 +1120,17 @@ async def validation_handler(request: Request, exc: Exception) -> Response:
     unrecognised enum *token* is dropped and answered `200`, a value that cannot parse as its
     declared *type* is this.
     """
-    raw = exc.errors() if isinstance(exc, RequestValidationError) else []
+    raw = list(exc.errors()) if isinstance(exc, RequestValidationError) else []
     return problem_details(
         400,
         VALIDATION_TITLE,
         PROBLEM_TYPE_BAD_REQUEST,
-        validation_errors(list(raw), body_parameter_of(request), body_model_of(request)),
+        validation_errors(
+            raw,
+            body_parameter_of(request),
+            body_model_of(request),
+            await body_as_sent(request, raw),
+        ),
     )
 
 

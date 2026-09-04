@@ -1342,6 +1342,19 @@ that reproduces them (`compat/model.py`'s `WIRE_TYPE` and `WIRE_ENUM_TYPES`), an
 the reference computes them is carried over. What is still a divergence is the message under `"$"`
 when the text is **not JSON at all**, for the reason the paragraph below gives.
 
+**Row 3 is one of two shapes of one failure, and the route decides which — measured at 012 T1.**
+The table above is a **top-level** property's refusal. A property **nested** inside a body is keyed
+by its full JSON path, repeats that path in `Path:`, and its `BytePositionInLine` is the byte
+offset of the end of the offending token **in the document as sent** rather than inside the token:
+`$.DeviceProfile.TranscodingProfiles[0].Protocol`, `398` for `"dash"` and `153` for a property
+earlier in the same body, where the top-level shape answers the same number wherever the property
+sits `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`. Both are the same
+converter throwing while the document is still being read, and `$` is what that reader calls the
+path of a top-level failure — so this is one rule with two renderings, and it is [§2.24](#224-a-profiles-delivery-protocol-is-an-enumeration-in-every-sense)'s
+refusal seen from the error shape's side. Atrium sends both, keyed and worded as measured
+(012 §3.4, plan §6.6): the paths come from the models, and the offset from the bytes the request
+was read from.
+
 **One of Atrium's refusals had the wrong body, and it took three features to find out.**
 `compat/errors.ForbiddenError` answers an **empty** `403`, on the argument that it is decided in the
 same place as the empty `401` beside it — and its own docstring carried a `⚠️` saying the shape was
