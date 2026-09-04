@@ -701,7 +701,7 @@ way the binder does.
 
 ## T9 — The delivery protocol is an enumeration, in every sense
 
-- [ ] **Changes:** `media/decision.py` gains `StreamProtocol` (`http`, `hls` — lower-case by
+- [x] **Changes:** `media/decision.py` gains `StreamProtocol` (`http`, `hls` — lower-case by
   declaration) and its ordinal table, beside `SubtitleMethod`'s and for the same reason: both
   binders read it. **T7 made both of those a registration**: `@wire_ordinals({0: "http", 1: "hls"})`
   and `@wire_default("http")` on the class, with
@@ -726,6 +726,50 @@ way the binder does.
   progressive address beside the number `2`; `dash`, `" "` and `true` are `400` keyed on T8's path
   (AC-8). And AC-9: the whole 008 and 011 suite green, because nothing in the ladder moved.
 - **Spec reference:** §3.3, AC-7, AC-8, AC-9; plan §6.5
+
+**Done, 2026-09-04** — the enumeration, the union, the four classes and T8's two keys made one.
+**The first task in this feature that found nothing wrong in the spec**, and three things wrong in
+the code the union creates — one of them a `200` where the reference sends a `400`, on the exact
+value both documents had already measured.
+
+* **The union re-opens the boolean trap the binder was written to leave open on purpose.** T7's
+  binder passes a `bool` through untouched *so that the field refuses it*: `true` is a measured
+  `400` and the ordinal `1` a measured member, and `isinstance(True, int)` is Python's trap and
+  not the reference's. A property annotated `StreamProtocol | int` **stops refusing it** — the
+  union's `int` member takes `True` in the framework's lax mode and binds it to the raw ordinal
+  `1` — so the request behaviours §2.24 records as a refusal would have been answered `200` with
+  an HLS address. Measured by writing the row and watching it come back `200`; the `int` half is
+  `StrictInt`, which costs nothing else because the binder has already turned a string of digits
+  into an `int` before the annotation sees it. **The trap survived two documents naming the value
+  and a task list naming the union**, which is what says it belongs to the shape rather than to
+  anyone's inattention.
+* **T8's second key is closed by a rule about properties, not about this union.** The framework
+  reports one failure per union *member* — `enum` and `int_parsing`, each one segment deeper than
+  the property — and the second is no vocabulary mismatch, so it filed itself under 007's `""` and
+  answered two entries where every measurement of this route has one. `compat/errors.py` now
+  groups a body's failures by the path they resolve to and reports one, keeping the vocabulary
+  mismatch: written that way rather than as *"drop a trailing union tag"* because the tag is a
+  spelling of the framework's and *"one entry per property"* is what the reference does. Run red
+  by reporting every error, which fails all three refusal rows. **T8's warning was the reason it
+  was found rather than shipped**: a test asserting `errors[key]` passes over an extra key, and
+  these assert the whole map.
+* **The truthiness fallback is a real trap and an unreachable one, and no test can tell the two
+  spellings apart.** `decided.sub_protocol or wire.transcoding_sub_protocol` is `is not None` now,
+  as the gate asked. But the only falsy integer is `0`, and `0` is a *declared* ordinal binding to
+  `StreamProtocol.HTTP`, so the value that would take the `or` branch cannot be produced —
+  `wire_protocol` answers a member's word or a number no member has, and `2` is truthy. The `0`
+  row is in the suite as the row that *would* catch it, and it passes either way. Said plainly
+  rather than dressed up as a caught bug: what makes the line worth changing is the next
+  vocabulary that declares a member at an ordinal this one does not.
+
+**Two things confirmed rather than found.** `wire_default` has a production reader at last, and it
+answers what T1 measured: absent, `null` and `""` all take `http` on the one enumeration that
+declares a default, against the same empty string being a `400` on the five beside it. And the
+generated OpenAPI document survived the project's first union in a request model — `anyOf` with the
+enumeration's default kept, pinned in `tests/unit/test_server.py` beside T7's (001 T19's lesson).
+**Nothing in `docs/compatibility/behaviours.md` moves**: §2.24 already records all eighteen
+spellings and says this server reproduces them, and every answer here is a reproduction rather than
+a divergence. `surface.yaml` is untouched — 012 adds no route.
 
 ## T10 — The two L3 rows get their cases, and the two comparisons a sweep cannot raise
 

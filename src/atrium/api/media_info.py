@@ -65,7 +65,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import Field, ValidationError
+from pydantic import Field, StrictInt, ValidationError
 
 from atrium.api.delivery import policy_of
 from atrium.api.deps import get_sessions, require_user
@@ -109,6 +109,11 @@ CAPABILITIES_PROFILE = "DeviceProfile"
 #: cites the file it was read from, and this is the namespace those files declare
 #: `[source: MediaBrowser.Model/Dlna/ @ v10.11.11]`.
 DLNA = "MediaBrowser.Model.Dlna"
+
+#: And the namespace of the sixth, which is declared outside that assembly - the one whose full
+#: name was **measured** on the wire rather than derived from where its file sits
+#: `[source: Jellyfin.Data/Enums/MediaStreamProtocol.cs @ v10.11.11]`.
+JELLYFIN_ENUMS = "Jellyfin.Data.Enums"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -173,13 +178,26 @@ class TranscodingProfileDto(AtriumModel):
     parses as one, which is the reference's `int.TryParse` rather than leniency invented here.
     """
 
-    WIRE_ENUM_TYPES: ClassVar[dict[str, str]] = {"Type": f"{DLNA}.DlnaProfileType"}
+    WIRE_ENUM_TYPES: ClassVar[dict[str, str]] = {
+        "Type": f"{DLNA}.DlnaProfileType",
+        "Protocol": f"{JELLYFIN_ENUMS}.MediaStreamProtocol",
+    }
 
     container: str = ""
     type: ProfileType = ProfileType.VIDEO
     video_codec: str | None = None
     audio_codec: str | None = None
-    protocol: str = "http"
+    protocol: ladder.StreamProtocol | StrictInt = ladder.StreamProtocol.HTTP
+    """A member, or the raw ordinal for a number no member has - which is a `200` with that
+    number echoed back on the wire (behaviours section 2.24).
+
+    **The `int` half is strict, and a plain one would have re-opened the trap the binder was
+    written to avoid.** `isinstance(True, int)` is Python's, not the reference's: the binder hands
+    a boolean on untouched precisely so the *field* refuses it, and a lax `int` accepts `True` as
+    the ordinal one - answering a `200` where `true` is a measured `400`. Nothing else is lost by
+    strictness, because a string of digits has already been read into an `int` by the binder
+    before this annotation sees it."""
+
     context: str = "Streaming"
     max_audio_channels: str | None = None
     min_segments: int = 0
@@ -472,7 +490,12 @@ def _annotate(
     if decided.target is None:  # pragma: no cover - defended, not expected
         return
     wire.transcoding_container = decided.container
-    wire.transcoding_sub_protocol = decided.sub_protocol or wire.transcoding_sub_protocol
+    # `is not None` and not a truthiness test: this field can hold the ordinal `0`, which is
+    # `http` on the reference and would fall back to whatever the wire already carried under
+    # `or` - answering a client that asked for zero with the same word by luck rather than by
+    # decision. The out-of-range ordinal makes the same trap reachable with a number.
+    if decided.sub_protocol is not None:
+        wire.transcoding_sub_protocol = decided.sub_protocol
     wire.transcoding_url = urls.transcoding_url(
         decided,
         probe,

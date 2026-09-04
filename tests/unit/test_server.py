@@ -152,6 +152,31 @@ def test_a_vocabulary_still_generates_the_schema_it_generated_before_the_binder(
     assert schemas["ProfileConditionDto"]["required"] == ["Condition", "Property"]
 
 
+def test_the_first_union_in_a_request_model_still_generates_a_document(
+    unstarted: FastAPI,
+) -> None:
+    """The same lesson at 012 T9, where the shape at risk is a union rather than a validator.
+
+    A transcoding entry's `Protocol` is `StreamProtocol | StrictInt`, the first union of an
+    enumeration and a number this project declares - so that an ordinal no member has survives to
+    the wire as a number (behaviours section 2.24). It renders as `anyOf` and keeps the
+    enumeration's declared default, which is what says the union cost the generated contract
+    nothing.
+
+    **What the document does not say is that the integer is strict**, and it cannot: strictness is
+    a validation mode with no OpenAPI spelling. It is asserted at the HTTP boundary instead, where
+    a `true` is a `400` (`tests/conformance/test_playback_info.py`).
+    """
+    schemas = unstarted.openapi()["components"]["schemas"]
+
+    assert schemas["TranscodingProfileDto"]["properties"]["Protocol"] == {
+        "anyOf": [{"$ref": "#/components/schemas/StreamProtocol"}, {"type": "integer"}],
+        "title": "Protocol",
+        "default": "http",
+    }
+    assert schemas["StreamProtocol"]["enum"] == ["http", "hls"]
+
+
 # --------------------------------------------------------------------------------------------
 # The entry point
 # --------------------------------------------------------------------------------------------

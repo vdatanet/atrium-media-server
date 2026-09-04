@@ -218,7 +218,11 @@ class MediaSourceInfo(AtriumModel):
     bitrate: int | None = None
     required_http_headers: Annotated[dict[str, str] | None, PropertyKeyed] = None
     transcoding_url: str | None = None
-    transcoding_sub_protocol: str = "http"
+    transcoding_sub_protocol: str | int = "http"
+    """The enumeration's own spelling of what the negotiation chose - and a **number** when
+    the profile named an ordinal no member has, which is what the reference answers in a field
+    its enumeration spells as a word (behaviours section 2.24)."""
+
     transcoding_container: str | None = None
     default_audio_stream_index: int | None = None
     default_subtitle_stream_index: int | None = None

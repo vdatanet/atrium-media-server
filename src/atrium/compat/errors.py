@@ -913,6 +913,37 @@ def _token_position(error: dict[str, Any]) -> int:
     return len(str(error.get("input", ""))) + 2
 
 
+def _reported_body_errors(raw: Sequence[Any], body_model: type[Any] | None) -> set[int]:
+    """Which of the framework's body failures the reference would have reported: one per property.
+
+    **A union is one property here and several validations to the framework.** A transcoding
+    entry's `Protocol` is `StreamProtocol | int`, because an ordinal no member has survives to the
+    wire as a number (behaviours section 2.24) - and a value that binds to neither member is
+    reported twice, once per member, each located one segment deeper than the property at the
+    member's own tag. The reference has one converter and one exception: its `errors` names
+    `$.DeviceProfile.TranscodingProfiles[0].Protocol` and nothing else
+    `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29]`.
+
+    So the failures are grouped by the property they resolve to and one is kept - the vocabulary
+    mismatch where there is one, because that is the failure the reference reports and the only
+    one that can name the enumeration. Left alone, the second would key itself under 007's `""`
+    and answer a map with two entries where every measurement has one.
+    """
+    kept: dict[tuple[Level, ...], int] = {}
+    for index, error in enumerate(raw):
+        location = tuple(error.get("loc") or ("",))
+        if not location or location[0] != "body":
+            continue
+        levels, _ = _levels(location, body_model)
+        chosen = kept.get(tuple(levels))
+        if chosen is None or (
+            str(error.get("type", "")) in VOCABULARY_MISMATCH
+            and str(raw[chosen].get("type", "")) not in VOCABULARY_MISMATCH
+        ):
+            kept[tuple(levels)] = index
+    return set(kept.values())
+
+
 def _body_error(
     error: dict[str, Any],
     location: tuple[Any, ...],
@@ -1019,9 +1050,12 @@ def validation_errors(
     a query failure, a unit test of the keying - keeps the shape it had.
     """
     collected: dict[str, list[str]] = {}
-    for error in raw:
+    reported = _reported_body_errors(raw, body_model)
+    for index, error in enumerate(raw):
         location = tuple(error.get("loc") or ("",))
         if location and location[0] == "body":
+            if index not in reported:
+                continue
             key, message = _body_error(error, location, body_model, sent)
             collected.setdefault(key, []).append(message)
             if body_parameter is not None:
