@@ -49,8 +49,11 @@ See specs/008-playback-negotiation-and-delivery/spec.md sections 3.2 and 3.3, an
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
+from dataclasses import replace
 from enum import Enum
+from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
@@ -68,9 +71,11 @@ from atrium.compat.ticks import WireTicks
 from atrium.db.engine import session_scope
 from atrium.db.item_queries import HydratedItem, ItemQueryRepository
 from atrium.db.repositories import LibraryRepository, SessionRepository, UserRepository
+from atrium.domain.items import Item
 from atrium.domain.media import MediaInspection
 from atrium.domain.queries import ItemQuery
 from atrium.domain.user import User
+from atrium.library import inspection
 from atrium.media import decision as ladder
 from atrium.media import info as media_info
 from atrium.media import urls
@@ -433,7 +438,7 @@ def _stored_profile(request: Request) -> DeviceProfileDto | None:
 
 def _annotate(
     wire: media_info.MediaSourceInfo,
-    inspection: MediaInspection | None,
+    probe: MediaInspection,
     decided: ladder.Decision,
     *,
     item_id: str,
@@ -470,13 +475,13 @@ def _annotate(
     )
     if wire.supports_direct_play or not (wire.supports_transcoding or wire.supports_direct_stream):
         return
-    if inspection is None or decided.target is None:  # pragma: no cover - defended, not expected
+    if decided.target is None:  # pragma: no cover - defended, not expected
         return
     wire.transcoding_container = decided.container
     wire.transcoding_sub_protocol = decided.sub_protocol or wire.transcoding_sub_protocol
     wire.transcoding_url = urls.transcoding_url(
         decided,
-        inspection,
+        probe,
         profile,
         switches,
         item_id=item_id,
@@ -584,7 +589,101 @@ def _root_of(found: HydratedItem, libraries: Mapping[str, LibraryContext]) -> st
     return library.roots[0] if library is not None and library.roots else None
 
 
-def _negotiation(
+async def _resolved(
+    request: Request,
+    found: HydratedItem,
+    root: str | None,
+    *,
+    is_video: bool,
+) -> tuple[Item, list[MediaInspection]]:
+    """The item and one inspection per part, opening files first if the reference would have.
+
+    **This is the whole of 012's first half, and it runs before the profile is read** (plan
+    section 6.2). The reference walks the item's sources and, when source zero carries no stream
+    of the item's own kind, refreshes the item with probing enabled and re-reads them *before* any
+    profile is applied `[source:
+    Emby.Server.Implementations/Library/MediaSourceManager.cs:170-189 @ v10.11.11]`,
+    `[source: Jellyfin.Api/Helpers/MediaInfoHelper.cs:87-110 @ v10.11.11]`. Both routes reach it,
+    because the reference's `GET` calls the same helper with the same `allowMediaProbe`
+    `[source: Jellyfin.Api/Controllers/MediaInfoController.cs:87 @ v10.11.11]`.
+
+    **The item that comes back is a rebuilt one, and that is not tidiness.** `store` writes
+    `item_sources`; it cannot mutate the frozen `Item` this request read before any of it ran, and
+    `media/info.py:source_of` takes `Size` from the inspection and `ETag` from the *source row*.
+    Assembling the wire sources from the item as it was read would answer, inside the very request
+    that healed the file, the new size beside the tag of bytes nobody can play - which is the
+    exact half-healed answer D-1 exists to prevent, one line inside the fix (012 plan section 6.2).
+
+    **Every part comes back with something to decide against**, `unopened`'s transient record
+    where the file would not open (plan section 6.3). That is what lets the route's old
+    `if inspection is None: continue` go: a source the ladder never saw is a source whose three
+    capability flags nothing decided and whose advertised transcoding has no address, which is the
+    defect this feature is about.
+
+    **Off the event loop.** `media/probe.py:inspect` is a `subprocess.run` bounded at 60 s, and
+    0.2 s of blocked loop on the measured happy path would stall every other request in the
+    process; `asyncio.to_thread` is this project's idiom for exactly that. The write happens back
+    on this thread, in its own unit of work, because `opened` deliberately touches no session.
+    """
+    item = found.item
+    probes: list[MediaInspection | None] = [
+        found.probes[index] if index < len(found.probes) else None
+        for index in range(len(item.sources))
+    ]
+    if inspection.wanted(item.sources, probes, is_video=is_video):
+        item, probes = await _opened(request, item, probes, root)
+    return item, [
+        one if one is not None else inspection.unopened(part)
+        for one, part in zip(probes, item.sources, strict=True)
+    ]
+
+
+async def _opened(
+    request: Request,
+    item: Item,
+    probes: list[MediaInspection | None],
+    root: str | None,
+) -> tuple[Item, list[MediaInspection | None]]:
+    """Open every part of this item nothing has opened, store what opens, rebuild the item.
+
+    A library with no root and an item with no library are both "there is no file to open here":
+    the absolute path is rebuilt under the first declared root, the same rule `api/item_dto.py`
+    and `domain/media.py:DeliveredFile` follow, and a library that declares none has no file to
+    read (003 plan section 4).
+
+    **No lock.** Two negotiations of one file at once run two `ffprobe`s and write the same row
+    twice, the second replacing the first; a row is not a file two writers corrupt, and the
+    reference takes no request-level lock either (plan section 6.2, section 9).
+    """
+    library_id = item.library_id
+    if root is None or library_id is None:
+        return item, probes
+
+    learned: dict[int, MediaInspection] = {}
+    for index, part in enumerate(item.sources):
+        if probes[index] is not None:
+            continue
+        opened_now = await asyncio.to_thread(
+            inspection.opened, Path(f"{root.rstrip('/')}/{part.relative_path}")
+        )
+        if opened_now is not None:
+            probes[index] = opened_now
+            learned[index] = opened_now
+    if not learned:
+        return item, probes
+
+    with session_scope(get_sessions(request)) as opened:
+        for index, one in learned.items():
+            inspection.store(
+                opened, item.id, index, library_id, item.sources[index].relative_path, one
+            )
+    parts = list(item.sources)
+    for index, one in learned.items():
+        parts[index] = replace(parts[index], size=one.size, mtime_ns=one.mtime_ns)
+    return replace(item, sources=tuple(parts)), probes
+
+
+async def _negotiation(
     request: Request,
     caller: User,
     item_id: str,
@@ -604,14 +703,12 @@ def _negotiation(
     """
     found, target, libraries = _found(request, caller, item_id, body.user_id)
     is_video = found.item.type in VIDEO_TYPES
-    sources = media_info.sources_for(
-        found.item, found.probes, _root_of(found, libraries), is_video=is_video
-    )
-    # Positional against the sources, padded where a part was never inspected - the same rule
-    # `sources_for` follows, so index *n* is part *n* on both sides.
-    probes: list[MediaInspection | None] = [
-        found.probes[index] if index < len(found.probes) else None for index in range(len(sources))
-    ]
+    root = _root_of(found, libraries)
+    # **Before the profile is read**, which is the order the whole feature is about: the files
+    # this item is backed by are opened if the reference would have opened them, and every part
+    # comes back with an inspection to be negotiated against (012 spec section 3.2).
+    item, probes = await _resolved(request, found, root, is_video=is_video)
+    sources = media_info.sources_for(item, probes, root, is_video=is_video)
 
     if body.media_source_id:
         wanted = body.media_source_id.lower()
@@ -631,24 +728,12 @@ def _negotiation(
     play_session_id = new_id()
     decided_against = None if profile is None else profile_of(profile)
     policy = policy_of(target)
-    for wire, inspection in zip(sources, probes, strict=True):
-        if inspection is None:
-            # Nothing has opened this file, so there is nothing to negotiate against and the
-            # source keeps the intrinsic flags `sources_for` gave it. A rescan is what fixes it -
-            # but the account's own permissions are not part of what a rescan would learn, and the
-            # reference writes them onto every static source whether or not anything negotiated
-            # `[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:355-372 @
-            # v10.11.11]`. Same rule as the ladder's rule 1, because it is the same moment.
-            wire.supports_transcoding = ladder.unnegotiated_transcoding(policy, is_video=is_video)
-            wire.supports_direct_stream = ladder.unnegotiated_direct_stream(
-                policy, is_video=is_video
-            )
-            continue
+    for wire, probe in zip(sources, probes, strict=True):
         switches = _switches(
             body, names_this_source=(body.media_source_id or "").lower() == wire.id.lower()
         )
         decided = ladder.decide(
-            inspection,
+            probe,
             decided_against,
             switches,
             policy,
@@ -656,7 +741,7 @@ def _negotiation(
         )
         _annotate(
             wire,
-            inspection,
+            probe,
             decided,
             item_id=found.id,
             play_session_id=play_session_id,
@@ -689,7 +774,7 @@ async def get_posted_playback_info(
     """
     body = playbackInfoDto or PlaybackInfoDto()
     profile = body.device_profile or _stored_profile(request)
-    return _negotiation(request, caller, itemId, body, profile=profile)
+    return await _negotiation(request, caller, itemId, body, profile=profile)
 
 
 @router.get("/Items/{itemId}/PlaybackInfo")
@@ -707,7 +792,9 @@ async def get_playback_info(
     device's stored capabilities: measured on the same session that answered the `POST` with a
     transcode `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29]`.
     """
-    return _negotiation(request, caller, itemId, PlaybackInfoDto(user_id=userId), profile=None)
+    return await _negotiation(
+        request, caller, itemId, PlaybackInfoDto(user_id=userId), profile=None
+    )
 
 
 __all__ = [

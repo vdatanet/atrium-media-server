@@ -39,6 +39,7 @@ from tests.fixtures.media import (
     REJECTED_CONTAINER,
     TWO_PARTER_FIRST,
     TWO_PARTER_SECOND,
+    UNREADABLE,
     BuiltMedia,
 )
 from tests.fixtures.media_world import ScannedMediaWorld, build_scanned_media_world
@@ -332,3 +333,78 @@ async def test_a_track_carries_a_container_and_no_video_properties(
     assert body["MediaSources"][0]["Container"] == "flac"
     for absent in ("VideoType", "Width", "Height", "IsHD"):
         assert absent not in body, f"{absent} on a track, which has no video stream"
+
+
+# ------------------------------------------------------------------------------------------
+# 012 AC-10: nothing on the listing path moves, and nothing on it opens a file
+# ------------------------------------------------------------------------------------------
+#
+# The prohibition rather than a requirement: 012 changes what a *negotiation* decides and must
+# change nothing a listing says. Asserted on the response **bytes** rather than on a field,
+# because the criterion is about every value on the path and not about the ones a test remembered
+# to name - and on the three routes the reference answers this shape on identically (012 spec
+# section 3.2).
+
+#: What a listing says about a file the scan could not open. `/Items/Latest` takes no `ids`, so
+#: what is compared there is the whole page - which is the stronger comparison anyway.
+LISTING_ROUTES: tuple[tuple[str, dict[str, str]], ...] = (
+    ("/Items", {"ids": "", "fields": "MediaSources,MediaStreams"}),
+    ("/Items/{id}", {}),
+    ("/Items/Latest", {"fields": "MediaSources,MediaStreams"}),
+)
+
+
+async def _listings(client: httpx.AsyncClient, item_id: str) -> list[bytes]:
+    """The three listing routes' raw bodies, for an item that is on all three."""
+    answered = []
+    for route, params in LISTING_ROUTES:
+        query = {key: (item_id if value == "" else value) for key, value in params.items()}
+        response = await client.get(route.format(id=item_id), params=query)
+        assert response.status_code == 200, response.text
+        assert item_id in response.text, f"{route} does not carry this item: nothing is compared"
+        answered.append(response.content)
+    return answered
+
+
+async def test_ac10_a_negotiation_of_another_item_moves_nothing_on_any_listing(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The first half of AC-10, over the item the whole feature is about.
+
+    A negotiation writes an inspection, and the listing routes read the same rows - so the
+    question the criterion asks is whether the *write* reaches an item nobody negotiated. The
+    item negotiated here has been inspected since the scan, so nothing is written at all.
+    """
+    unreadable = served[1].of(UNREADABLE)
+    before = await _listings(client, unreadable.id)
+
+    negotiated = await client.post(
+        f"/Items/{served[1].of(DIRECT_PLAY).id}/PlaybackInfo",
+        json={"DeviceProfile": {}},
+    )
+    assert negotiated.status_code == 200, negotiated.text
+
+    assert await _listings(client, unreadable.id) == before
+
+
+async def test_ac10_negotiating_the_unopenable_item_itself_moves_nothing_either(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The half that could actually break, and the invariant it is the wire's view of.
+
+    The negotiation opens this file, fails, and hands the ladder a **transient** inspection that
+    is never stored (012 plan section 5, invariant 1). Store it and the next scan's change
+    comparison would be satisfied by a row nothing read, the file would never be opened again,
+    and the library's own record of what it could not read would go empty - so the boundary is
+    asserted where a client would see it and not only where the repository would.
+    """
+    unreadable = served[1].of(UNREADABLE)
+    before = await _listings(client, unreadable.id)
+
+    negotiated = await client.post(
+        f"/Items/{unreadable.id}/PlaybackInfo", json={"DeviceProfile": {}}
+    )
+    assert negotiated.status_code == 200, negotiated.text
+    assert negotiated.json()["MediaSources"][0]["MediaStreams"] == []
+
+    assert await _listings(client, unreadable.id) == before
