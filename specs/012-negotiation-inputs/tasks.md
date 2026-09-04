@@ -465,7 +465,7 @@ red.
 
 ## T6 — The audio refusal, which is the platform's and not this feature's
 
-- [ ] **Changes:** `compat/errors.py` gains `NegotiationRefusedError` and its row in
+- [x] **Changes:** `compat/errors.py` gains `NegotiationRefusedError` and its row in
   `EXCEPTION_HANDLERS`, answering `controller_error(400)` — `text/plain` and the 25 bytes
   `CONTROLLER_ERROR_BODY` has held since 002. `api/media_info.py` raises it inside the source loop,
   on the first source of an **audio** item whose selected audio stream is `None` when a profile is
@@ -479,6 +479,60 @@ red.
   a `400`, which is what a condition written as *"the inspection failed"* would get wrong while
   passing every other test here.
 - **Spec reference:** §3.4, AC-6; plan §6.4
+
+**Done, 2026-09-04** — the class, its row, the raise and six tests, and three things the documents
+had wrong rather than merely incomplete; one of them decides what a multi-part audio item answers
+and one is a fixture that does not exist.
+
+* **The plan says the refusal happens in two places, and only one of them refuses the item this
+  server can build.** [§5](plan.md#5-contracts)'s contract for `_negotiation` reads *"two things
+  happen **before** the per-source loop … and an audio item with no audio stream is refused"*,
+  where [§6.4](plan.md#64-the-audio-refusal) puts it **inside** the loop, on the first offending
+  source, and says in the next sentence that a second part with no audio stream takes the whole
+  answer down with it. Those are two different answers for one item, and the reference settles it
+  from the other side: the builder is called once **per media source**, all of it inside
+  `if (profile is not null)`
+  `[source: Jellyfin.Api/Controllers/MediaInfoController.cs:189, 192 @ v10.11.11]`. Written to §5,
+  a two-part audio item whose part zero carries audio would be answered where the reference
+  refuses — and every test in this section would still pass, there being no such fixture. §5 is
+  corrected and §6.4 now carries the citation for both of its halves at once.
+* **AC-6's second clause had no world to be proven in, and building one is not this task's to
+  spend.** The criterion and [plan §8](plan.md#8-testing-strategy)'s own row ask for *"`200` and
+  the **un-annotated** source"* from `soundless.m4a` — which is **readable**, and whose
+  profile-less answer therefore carries a video stream, a runtime and a bitrate. All four declared
+  un-inspectable files are films ([T2](#t2--the-world-gets-files-nothing-can-open)), so an *audio*
+  item nothing has opened exists nowhere in the matrix. A fifth declared file is not the cheap fix
+  it looks like: T2 priced it, and it moves the fixture tree 010's AC-2 compares two servers over,
+  which is a re-recording against a single-use reference instance rather than a test. The state is
+  made in the test instead — `unreadable.mkv`'s junk bytes written over `soundless.m4a` **before**
+  the scan, which reaches an `Audio` item with a source row and no probe row without adding a file
+  to the tree. Plan §8's fixture table and its AC-6 row say so now.
+* **The task named two files and the change is three, because the condition is the ladder's and
+  not a stream count.** `media/decision.py:_selected_audio` is now public `selected_audio`: the
+  refusal is what the reference's audio builder does when *that* selection answers nothing, and a
+  second rule beside the ladder is the kind that drifts silently once an index or a default
+  changes. It is asked with **no index** — `GetDefaultAudioStream(null)`
+  `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:104 @ v10.11.11]` — so the body's
+  `AudioStreamIndex` does not enter the refusal at all. Nothing observable moves either way, the
+  selection being `None` exactly when there is no audio stream, which is precisely why passing the
+  switch's index would have been a claim about the reference that the reference does not make.
+  Plan §6.4 records it.
+* **The three refusing tests were run red before they were run green.** The raise was deleted and
+  the section re-run: the two `400`s and the stored-profile one fail with `200`, and the two
+  controls — the profile-less `200` and the film with no video stream — stay green, which is what
+  says they are controls. The film is `videoless.mkv` and it is the mirror image the refusal has
+  to survive: the **video** builder has no `ThrowIfNull` beside the audio builder's, so a
+  condition written as *"an item with no stream of its own kind"* would refuse a film the
+  reference answers `200` for (spec §3.4, row one).
+
+**One deviation from this task as written.** *"And a golden"* is not a shape this refusal has:
+`tests/conformance/golden.py:path_for` writes `<name>.json` and every checked-in golden is a JSON
+body, where this is 25 bytes of `text/plain`. The bytes are asserted as the **literal**
+`b"Error processing request."` with its length and its content type, and deliberately **not**
+against `CONTROLLER_ERROR_BODY` — a response compared with the constant it was built from is
+Atrium compared with itself, which is [001 T16's](../001-server-identity-and-discovery/tasks.md)
+finding and the reason the literal is written out. The value is T1's, printed off the reference
+`[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`.
 
 ## T7 — One binder for every vocabulary a body carries
 

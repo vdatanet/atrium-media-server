@@ -34,6 +34,7 @@ from fastapi import FastAPI, Request
 from atrium.api.deps import require_user
 from atrium.config.paths import DataPaths
 from atrium.db.repositories import SessionRepository, UserRepository
+from atrium.domain.items import ItemType
 from atrium.domain.session import Session
 from atrium.domain.user import User
 from atrium.library import inspection
@@ -52,8 +53,10 @@ from tests.fixtures.media import (
     REJECTED_AUDIO,
     REJECTED_CONTAINER,
     REJECTED_VIDEO,
+    SOUNDLESS,
     UNCONVERTIBLE_SUBTITLE,
     UNREADABLE,
+    VIDEOLESS,
     BuiltMedia,
     MediaFile,
     UninspectableFile,
@@ -1566,3 +1569,163 @@ async def test_a_never_opened_source_with_no_profile_answers_what_it_answered_be
     answered = await client.get(f"/Items/{unreadable}/PlaybackInfo", headers=HEADERS)
     assert answered.status_code == 200
     assert flags(dict(answered.json())) == expected, "the GET carries no profile either"
+
+
+# ------------------------------------------------------------------------------------------
+# 012 - the audio refusal, which is the platform's and not this feature's
+# ------------------------------------------------------------------------------------------
+#
+# The condition is the **audio stream** and not the file: the reference's audio builder asks the
+# source for its default audio stream and throws when there is none, so a track nothing could open
+# and a perfectly readable track carrying no audio track are refused identically (012 spec section
+# 3.4). Both are asserted here, over the two worlds that can reach them - `soundless.m4a`
+# overwritten with junk before the scan for the first, and the same file as generated for the
+# second.
+
+
+@pytest.fixture
+def unopened_audio(
+    media_paths: DataPaths, writable_files: BuiltMedia
+) -> Iterator[tuple[FastAPI, ScannedMediaWorld]]:
+    """An **audio** item whose file nothing has ever opened, which the matrix has no entry for.
+
+    `tests/fixtures/media.py` declares four files no prober will accept and every one of them is
+    a film, so the row spec section 3.4 states for an audio item - a `400` with a profile and an
+    un-annotated `200` without one - is unreachable over the generated tree as it stands. The
+    junk bytes of `unreadable.mkv` are written over `soundless.m4a` **before** the scan, which
+    makes the state without adding a file: adding one would move the fixture tree that 010's AC-2
+    compares two servers over, and that is a re-recording rather than a test (012 T2's own note).
+    """
+    writable_files.path_of(SOUNDLESS).write_bytes(UNREADABLE.content())
+    yield from _serve(media_paths, writable_files)
+
+
+@pytest.fixture
+async def unopened_audio_client(
+    unopened_audio: tuple[FastAPI, ScannedMediaWorld],
+) -> AsyncIterator[httpx.AsyncClient]:
+    transport = httpx.ASGITransport(app=unopened_audio[0])
+    async with httpx.AsyncClient(transport=transport, base_url="http://atrium:8096") as opened:
+        yield opened
+
+
+def _assert_refused(answered: httpx.Response) -> None:
+    """The whole of the refusal, in the bytes a client receives.
+
+    Not `== CONTROLLER_ERROR_BODY`: that constant is what this server sends, so comparing against
+    it would compare Atrium with itself. The literal is what T1 printed off the reference - `400`,
+    `text/plain` with no charset, **25 bytes**, `Error processing request.`
+    `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`.
+    """
+    assert answered.status_code == 400
+    assert answered.headers["Content-Type"] == "text/plain"
+    assert answered.content == b"Error processing request."
+    assert len(answered.content) == 25
+
+
+async def test_ac6_an_audio_item_with_no_audio_stream_refuses_the_whole_request(
+    unopened_audio_client: httpx.AsyncClient, unopened_audio: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """AC-6's first half: `400` for the request, not a source with the flags left alone.
+
+    The whole answer goes, which is what a refusal thrown out of a builder does - there is no
+    partial body naming the source it fell over.
+    """
+    item = unopened_audio[1].of(SOUNDLESS)
+    assert item.type is ItemType.AUDIO, "an audio item, or this is not the row spec 3.4 states"
+
+    answered = await unopened_audio_client.post(
+        f"/Items/{item.id}/PlaybackInfo", json={"DeviceProfile": PLAYS_NEITHER}, headers=HEADERS
+    )
+
+    _assert_refused(answered)
+
+
+async def test_ac6_the_same_request_with_no_profile_answers_the_un_annotated_source(
+    unopened_audio_client: httpx.AsyncClient, unopened_audio: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """AC-6's second half, and it is the same request one field shorter.
+
+    The reference reaches the builder only inside `if (profile is not null)`, so with no profile
+    in the body and none stored for the device there is nothing to refuse: `200`, the source with
+    nothing annotated on it, and the flags rule 1 writes
+    `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:104 @ v10.11.11]`, 012 plan section 6.4.
+    """
+    item = unopened_audio[1].of(SOUNDLESS)
+    document = await negotiate(unopened_audio_client, item.id)
+    source = document["MediaSources"][0]
+
+    assert source["MediaStreams"] == [], "nothing opened it: there is nothing to annotate"
+    assert "RunTimeTicks" not in source
+    assert "TranscodingUrl" not in source, "rule 1 returns before an address is added"
+
+    answered = await unopened_audio_client.get(f"/Items/{item.id}/PlaybackInfo", headers=HEADERS)
+    assert answered.status_code == 200, "the GET carries no profile either"
+
+
+async def test_ac6_a_stored_device_profile_is_a_profile_in_play(
+    unopened_audio_client: httpx.AsyncClient, unopened_audio: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The gate is the profile this negotiation ended up with, not the one the body carried.
+
+    A body with no `DeviceProfile` is refused when the device stored one, which is the same
+    fallback 008 T4 measured for every other answer on this route - and the half of AC-6's
+    second clause that reads *"and no stored device profile"*.
+    """
+    app, world = unopened_audio
+    _store_capabilities(app, PLAYS_NEITHER)
+    item = world.of(SOUNDLESS)
+
+    answered = await unopened_audio_client.post(
+        f"/Items/{item.id}/PlaybackInfo", json={}, headers=HEADERS
+    )
+
+    _assert_refused(answered)
+
+
+async def test_the_refusal_is_the_missing_audio_stream_and_not_the_unreadable_file(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The row that separates the two conditions, on the file the fixture is named after.
+
+    `soundless.m4a` is a **readable** mp4 that the scan opened and stored a video stream for, and
+    it is refused exactly like the junk bytes above: `GetDefaultAudioStream(null)` answering
+    nothing is the whole condition `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:104 @
+    v10.11.11]`. A condition written as *"the inspection failed"* passes every other test in this
+    section and fails this one, which is why the fixture exists (012 plan section 6.4).
+
+    The no-profile answer is asserted first, and it is what proves the file really was opened: an
+    annotated source, refused a moment later for what it does not carry rather than for what
+    nothing could read.
+    """
+    item = served[1].of(SOUNDLESS)
+    opened = await negotiate(client, item.id)
+    source = opened["MediaSources"][0]
+
+    assert [one["Type"] for one in source["MediaStreams"]] == ["Video"], (
+        "the scan read this file: a video stream and no audio stream is the whole fixture"
+    )
+    assert source["RunTimeTicks"] > 0
+
+    answered = await client.post(
+        f"/Items/{item.id}/PlaybackInfo", json={"DeviceProfile": PLAYS_NEITHER}, headers=HEADERS
+    )
+
+    _assert_refused(answered)
+
+
+async def test_a_film_with_no_video_stream_is_answered_rather_than_refused(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The refusal belongs to the **audio** builder, and the mirror image proves it.
+
+    A film whose file carries no video stream fires the same trigger as the track above and is
+    answered `200` with its flags decided - spec section 3.4's first row - because the video
+    builder has no `ThrowIfNull` beside the audio builder's. Written as *"an item with no stream
+    of its own kind"*, this feature would refuse a film the reference answers for.
+    """
+    item = served[1].of(VIDEOLESS)
+    document = await negotiate(client, item.id, {"DeviceProfile": PLAYS_NEITHER})
+
+    assert flags(document) == (False, False, True)
+    assert "TranscodingUrl" in document["MediaSources"][0]

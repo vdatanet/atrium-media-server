@@ -304,12 +304,19 @@ class TranscodingProfile:
 # api/media_info.py
 
 async def _negotiation(...) -> PlaybackInfoResponse:
-    """Unchanged in shape. Two things happen before the per-source loop: the sources are resolved
-    (§6.2) and an audio item with no audio stream is refused (§6.4).
+    """Unchanged in shape. The sources are resolved before the per-source loop (§6.2), and an
+    audio item with no audio stream is refused **inside** it (§6.4).
 
     The resolution answers with an **item** as well as an inspection per part, because the parts
     it healed carry a change signal the frozen one this request read does not - and the wire
     sources are built from that item, after the resolution and not before it (T4's trap, §6.2).
+
+    *Corrected at T6: this line read "two things happen before the per-source loop" and the
+    refusal is not one of them. The reference throws it out of a builder called once per source,
+    inside `if (profile is not null)`
+    `[source: Jellyfin.Api/Controllers/MediaInfoController.cs:189, 192 @ v10.11.11]`, which is
+    what §6.4 already said and is the whole of why a second part with no audio stream takes the
+    answer down with it.*
     """
 ```
 
@@ -577,10 +584,16 @@ the condition as "the inspection failed" would pass every test built on the gate
 wrong about the item the fixture is named after.
 
 **It is gated on a profile and on nothing else.** The reference reaches the builder only inside
-`if (profile is not null)`, so the same request with no `DeviceProfile` — and with no stored device
-profile to fall back on — is the `200` and the un-annotated source that AC-6's second clause names.
+`if (profile is not null)`, and calls it once **per media source** inside that branch
+`[source: Jellyfin.Api/Controllers/MediaInfoController.cs:189, 192 @ v10.11.11]` — which is both
+halves of this section in one place: the gate, and the loop the refusal is thrown out of. So the
+same request with no `DeviceProfile` — and with no stored device profile to fall back on — is the
+`200` and the un-annotated source that AC-6's second clause names.
 `options.ForceDirectPlay` and `options.ForceDirectStream` short-circuit ahead of the null check and
-are set from nothing on this path, so no body can dodge the refusal.
+are set from nothing on this path, so no body can dodge the refusal. Neither can the body's
+`AudioStreamIndex`: the builder asks `GetDefaultAudioStream(**null**)`, so the stream the client
+named is not consulted at the point of the refusal at all — the route reads the ladder's own
+selection with no index rather than counting streams beside it (T6).
 
 ### 6.5 The protocol, in four classes
 
@@ -798,6 +811,7 @@ at all.**
 | `unreadable.mkv` | Four kibibytes that are not a container, in the movies tree, scanned | The state the whole feature is about. `tools/probe_uninspected_source.py` builds the same thing the same way — the scan that creates an item is the scan that probes it, so the state exists only where the probe *failed* |
 | `latent.mkv` | The same, replaced with real bytes **after** the scan, in the test | AC-2 and AC-3: the only thing that has ever read those bytes successfully is the negotiation |
 | `soundless` | A readable `.m4a` whose file holds **no audio stream**, under folders named after neither its artist nor its album | AC-6's real condition. The gate's fixture conflates "unreadable" with "no audio stream" and this one separates them. Its folders disagree with its tags on purpose: a world where they matched could not tell a scan that opened the file from one that read the path — which is also what the **reference** does with it, naming the artist off the directory (T2) |
+| An **audio** item nothing has opened | Not a declared entry: `soundless.m4a`'s junk-bytes twin, written over it **before the scan** in the test that needs it | AC-6's second clause — `200` and the *un-annotated* source — which `soundless.m4a` cannot show, being readable. All four declared un-inspectable files are films, and adding a fifth would move the tree 010's AC-2 compares two servers over, which is a re-recording rather than a test (T2, T6) |
 | `videoless.mkv` | A readable **video** item whose file holds no video stream | §6.1's trigger, in the case where "no inspection" and "no stream of the item's kind" disagree. Nothing else in the suite tells the naive trigger from the right one |
 | A two-part film with part zero annotated and part one not | A **new** entry, `The Missing Half`, not a track added to the existing two-parter — 011 T1's rule: a file whose siblings other features assert about must not change underneath them | The negative case for §6.1: the trigger must not fire. **The reference has no such item** — it keeps the unreadable part as neither a source nor an item (T1) — so this asks *this* server, and the difference is declared in the reference-reading comparison |
 
@@ -816,7 +830,7 @@ the empty shape against a file that answers a full annotation.
 | AC-3 what it learned is written down | the same fixture, read three times: listing, negotiate, listing — asserting the **second** listing carries what the negotiation answered | conformance |
 | AC-4 an advertised capability has an address | `unreadable.mkv` answers a `TranscodingUrl`; asserted **including** for the source that could not be read | conformance |
 | AC-5 the switches reach the ladder | `latent.mkv` with `EnableDirectPlay`/`EnableDirectStream` false against a profile that **direct-plays** it — first answer direct play, second a transcode with reasons | conformance |
-| AC-6 the audio `400` | `soundless.m4a` with a profile → `400`, `text/plain`, 25 bytes; without a profile → `200` and the un-annotated source | conformance + golden bytes |
+| AC-6 the audio `400` | `soundless.m4a` with a profile → `400`, `text/plain`, 25 bytes — **and the same file's junk-bytes twin for the un-annotated half**, because `soundless.m4a` is readable and its profile-less answer is therefore annotated (T6) | conformance, asserting the bytes as a literal |
 | AC-7 any case answers the same address, echoing the enumeration's spelling | table over `hls`/`Hls`/`HLS`/`hLs` and the three `http` spellings: one address shape per pair, `TranscodingSubProtocol` always the member's value | conformance |
 | AC-8 by class, not by rule | the four classes of §6.5, including `2` → `TranscodingSubProtocol: 2`, and `dash`/`" "`/`true` → `400` keyed on the JSON path | conformance + `tests/unit/test_compat_errors.py` |
 | AC-9 nothing else in a negotiation moves | the existing 008 and 011 suites, unchanged and passing | whole suite |

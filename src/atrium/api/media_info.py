@@ -64,7 +64,7 @@ from atrium.api.deps import get_sessions, require_user
 from atrium.api.item_dto import VIDEO_TYPES, LibraryContext
 from atrium.api.items import effective_user, library_context
 from atrium.compat.auth import client_info, extract_token
-from atrium.compat.errors import NotFoundError
+from atrium.compat.errors import NegotiationRefusedError, NotFoundError
 from atrium.compat.guids import WireGuid, new_id
 from atrium.compat.model import AtriumModel
 from atrium.compat.ticks import WireTicks
@@ -700,6 +700,12 @@ async def _negotiation(
     writes the caller's permissions onto every static source before any profile work, one
     permission per media kind, so a seat denied video transcoding is answered
     `SupportsTranscoding: false` here with no profile and `true` with one.
+
+    **It can also refuse outright, and only with a profile**: an audio item with no audio stream
+    is `NegotiationRefusedError`, inside the source loop rather than before it, because that is
+    where the reference's own refusal is thrown - one builder call per source, all of it inside
+    `if (profile is not null)` `[source: Jellyfin.Api/Controllers/MediaInfoController.cs:189, 192
+    @ v10.11.11]` (012 spec section 3.4).
     """
     found, target, libraries = _found(request, caller, item_id, body.user_id)
     is_video = found.item.type in VIDEO_TYPES
@@ -729,6 +735,22 @@ async def _negotiation(
     decided_against = None if profile is None else profile_of(profile)
     policy = policy_of(target)
     for wire, probe in zip(sources, probes, strict=True):
+        # **The audio refusal, and it is the platform's rather than this feature's** (012 spec
+        # section 3.4, plan section 6.4). The reference's audio builder asks the source for its
+        # default audio stream and throws when there is none `[source:
+        # MediaBrowser.Model/Dlna/StreamBuilder.cs:104 @ v10.11.11]`; the middleware maps that to
+        # the twenty-five bytes this project has sent since 002. Three properties, each measured
+        # or read: the condition is the missing **audio stream** and not the unreadable file, so
+        # a readable track with no audio track is refused identically; the index is the
+        # reference's `null` and not the body's, so `AudioStreamIndex` cannot change the answer;
+        # and it is reached only with a profile, because the builder runs inside that branch.
+        # Inside the loop, so the first offending part takes the whole answer down with it.
+        if (
+            decided_against is not None
+            and not is_video
+            and ladder.selected_audio(probe, None) is None
+        ):
+            raise NegotiationRefusedError
         switches = _switches(
             body, names_this_source=(body.media_source_id or "").lower() == wire.id.lower()
         )
