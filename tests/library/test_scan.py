@@ -288,9 +288,24 @@ def test_the_repository_still_has_no_way_to_delete_a_row() -> None:
     scanner was *incapable* of removing anything. It can now remove, softly: `mark_removed` sets a
     timestamp and `revive` clears it. Hard deletion is still not here; it is in
     `library/maintenance.py`, which a scan does not import.
+
+    **`record_change_signal` is the fourth, added by 012 T4, and this test is why it is shaped the
+    way it is.** It is the only writer of `item_sources` that is not a scan, and it exists so that
+    a negotiation that opened a file the scan could not read never has to reach `update` - which
+    rewrites every part of an item from a whole `Item`. An exact set rather than a subset, so a
+    method added for one narrow reason is read by somebody before it joins a class whose whole
+    argument is what it cannot do.
     """
     surface = {name for name in vars(ItemRepository) if not name.startswith("_")}
-    assert surface == {"by_library", "visible", "add", "update", "mark_removed", "revive"}
+    assert surface == {
+        "by_library",
+        "visible",
+        "add",
+        "update",
+        "mark_removed",
+        "revive",
+        "record_change_signal",
+    }
 
 
 def test_a_scan_never_imports_the_thing_that_purges() -> None:

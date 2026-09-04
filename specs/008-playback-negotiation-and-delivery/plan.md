@@ -389,16 +389,19 @@ track no file has, at an index a delivery command addresses.
 
 The scan pipeline, after 003's change detection says a media file is new or changed, runs
 ffprobe once and upserts the two tables. The stored `size`/`mtime_ns` pair makes staleness a
-single comparison at read time; a stale row triggers re-inspection at the next scan, not at
-request time. `media/info.py` assembles the wire shapes from rows alone: the item-level
-`Container` is the stored `container` verbatim, and the single container a **media source**
-reports is derived there rather than stored, because the two routes derive it differently
-(spec §3.1, measured). On a listing it is the file's extension where the stored list contains it
-and the list's first member where it does not — no profile is consulted. In a negotiation it is
-the first member the `DeviceProfile` accepts, which is `media/decision.py`'s to answer and T5's to
-emit; with no profile the list is passed through untouched. `format_names` is read by neither: it
-is the record of what the demuxer said, kept so that changing the normalisation costs a
-re-derivation rather than a rescan.
+single comparison at read time; a stale row triggers re-inspection at the next scan, and at
+request time on exactly one route — **012's negotiation**, for **one** file, when source zero
+carries no stream of the item's own kind. That exception is the whole of 012's spec §3.2 and it is
+narrow on purpose: it reads no other item, it opens no second part, and every listing and every
+query still answers from stored rows alone. `media/info.py` assembles the wire shapes from rows
+alone: the item-level `Container` is the stored `container` verbatim, and the single container a
+**media source** reports is derived there rather than stored, because the two routes derive it
+differently (spec §3.1, measured). On a listing it is the file's extension where the stored list
+contains it and the list's first member where it does not — no profile is consulted. In a
+negotiation it is the first member the `DeviceProfile` accepts, which is
+`media/decision.py`'s to answer and T5's to emit; with no profile the list is passed through
+untouched. `format_names` is read by neither: it is the record of what the demuxer said, kept so
+that changing the normalisation costs a re-derivation rather than a rescan.
 
 **`ETag`, read at T3 and measured rather than reasoned.** It is `MD5` over the file's time of last
 change expressed as a .NET tick count — 100-nanosecond units since year one, truncated — and then
@@ -812,7 +815,7 @@ the ceilings a plan holds. What stays owed to the task list:
 | `DELETE /Videos/ActiveEncodings`, missing parameter | Validation | `400` problem details naming the field (measured) | — |
 | Scratch partially deleted underneath a live session | Segment file missing | Treated as out-of-window: restart at that segment | Automatic |
 | Server restart | — | Registry empty; startup sweep clears orphaned scratch; clients re-negotiate | — |
-| Probe row stale (file changed since scan) | `size`/`mtime_ns` mismatch at read | Serve the stored answer (it is what 005 emitted); re-inspect at next scan — never inline | Rescan |
+| Probe row stale (file changed since scan) | `size`/`mtime_ns` mismatch at read | Serve the stored answer (it is what 005 emitted); re-inspect at next scan, and inline on 012's negotiation alone — which then writes the file's `(size, mtime_ns)` beside it, so the healed source's `Size` and `ETag` describe one set of bytes ([012 plan D-1](../012-negotiation-inputs/plan.md#d-1--the-healed-items-etag)) | Rescan, or one negotiation |
 
 ## 8. Testing strategy
 
