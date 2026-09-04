@@ -23,7 +23,7 @@ from pydantic import Field
 from pydantic.alias_generators import to_pascal
 
 from atrium.compat.aliases import IRREGULAR, atrium_alias
-from atrium.compat.model import AtriumModel
+from atrium.compat.model import AtriumModel, declares_ordinals
 from atrium.compat.registry import import_model_modules, iter_models
 
 INDEX = Path(__file__).resolve().parents[2] / "docs" / "compatibility" / "property-names.json"
@@ -208,3 +208,52 @@ def test_the_irregular_table_is_load_bearing(reference_names: frozenset[str]) ->
         assert to_pascal(field_name) != wire_name, (
             f"{field_name!r} does not need an entry: the generator already produces {wire_name!r}"
         )
+
+
+# ------------------------------------------------------------------------------------------------
+# Every vocabulary a body binds has a declared ordinal table (012 T7)
+# ------------------------------------------------------------------------------------------------
+
+
+def test_every_vocabulary_a_model_binds_declares_its_ordinals() -> None:
+    """The same sweep, asked about enumerations instead of names.
+
+    The reference reads every enumerated property of a body through one converter, so an ordinal
+    binds wherever a name does `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11,
+    2026-09-04]`. An enumeration with no registered table binds no ordinal at all - a `400` where
+    the reference answers `200`, on a property nobody remembered - and the table cannot be
+    counted off the declaration: `CodecType` declares `Video = 0` where this project declares its
+    audio member first, and `ProfileConditionValue` skips 15.
+
+    So the rule is the one the sweep above uses for names: a model author cannot forget, because
+    forgetting fails here rather than on somebody's client.
+    """
+    import_model_modules()
+    unregistered = sorted(
+        f"{model.__module__}.{model.__qualname__}.{field} binds {vocabulary.__name__}"
+        for model in iter_models()
+        for field, vocabulary in model._vocabularies().items()
+        if not declares_ordinals(vocabulary)
+    )
+    assert not unregistered, (
+        "these fields are bound to an enumeration with no declared ordinal table, so a client "
+        f"sending the number the reference accepts is refused here: {unregistered}. Read the "
+        "reference's own enum, write the numbers it declares, and apply @wire_ordinals."
+    )
+
+
+def test_the_sweep_finds_the_vocabularies_it_is_written_for() -> None:
+    """A path or an import that stopped finding models would make the test above vacuous."""
+    import_model_modules()
+    bound = {
+        vocabulary.__name__
+        for model in iter_models()
+        for vocabulary in model._vocabularies().values()
+    }
+    assert bound >= {
+        "ProfileType",
+        "CodecKind",
+        "ConditionType",
+        "ConditionProperty",
+        "SubtitleMethod",
+    }, f"the five vocabularies a device profile carries are the sweep's subject; it found {bound}"
