@@ -20,7 +20,9 @@ present.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Any
@@ -34,6 +36,7 @@ from atrium.config.paths import DataPaths
 from atrium.db.repositories import SessionRepository, UserRepository
 from atrium.domain.session import Session
 from atrium.domain.user import User
+from atrium.library import inspection
 from atrium.media.info import media_etag
 from atrium.media.urls import dashed
 from atrium.server import create_app
@@ -43,12 +46,17 @@ from tests.fixtures.media import (
     BOTH_SUBTITLE_KINDS,
     DIRECT_PLAY,
     HIGH_RATE_AUDIO,
+    LATENT,
+    MISSING_HALF_FIRST,
+    MISSING_HALF_SECOND,
     REJECTED_AUDIO,
     REJECTED_CONTAINER,
     REJECTED_VIDEO,
     UNCONVERTIBLE_SUBTITLE,
+    UNREADABLE,
     BuiltMedia,
     MediaFile,
+    UninspectableFile,
 )
 from tests.fixtures.media_world import ScannedMediaWorld, build_scanned_media_world
 
@@ -169,6 +177,15 @@ REJECTS_AC3 = profile(
 #: No container, no codec, no target: a client that can play nothing.
 NOTHING_PLAYS = profile([], transcoding=[])
 
+#: Plays an mp4 of h264 and aac, and offers the HLS target every profile here offers. What it is
+#: for is 012 AC-1: a source **nothing ever opened** matches no direct-play entry - its inspection
+#: carries no container and no codec at all - so the answer is a refusal on the first rung and a
+#: produced stream on the third, which is what the reference answers for a file it could not read
+#: `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-08-29]`.
+PLAYS_NEITHER = profile(
+    [{"Container": "mp4", "Type": "Video", "VideoCodec": "h264", "AudioCodec": "aac"}]
+)
+
 
 # ------------------------------------------------------------------------------------------
 # The world, served
@@ -183,9 +200,8 @@ def media_paths(tmp_path: Path) -> DataPaths:
     return paths
 
 
-@pytest.fixture
-def served(
-    media_paths: DataPaths, media_files: BuiltMedia
+def _serve(
+    media_paths: DataPaths, files: BuiltMedia
 ) -> Iterator[tuple[FastAPI, ScannedMediaWorld]]:
     """The real app over the real scan, committed so the routes' own sessions can see it.
 
@@ -196,7 +212,7 @@ def served(
     built = create_app(media_paths)
     built.state.readiness.mark_ready()
     with built.state.sessions.begin() as opened:
-        world = build_scanned_media_world(opened, media_files)
+        world = build_scanned_media_world(opened, files)
         UserRepository(opened).add(User(id=VIEWER_ID, name="viewer", enable_all_folders=True))
         SessionRepository(opened).upsert(
             Session(
@@ -211,6 +227,41 @@ def served(
     yield built, world
     built.dependency_overrides.clear()
     built.state.db.dispose()
+
+
+@pytest.fixture
+def served(
+    media_paths: DataPaths, media_files: BuiltMedia
+) -> Iterator[tuple[FastAPI, ScannedMediaWorld]]:
+    yield from _serve(media_paths, media_files)
+
+
+@pytest.fixture
+def writable_files(media_files: BuiltMedia, tmp_path: Path) -> BuiltMedia:
+    """A copy of the generated tree a test may write to. The cached one never is.
+
+    012's healing cases replace `latent.mkv` with a real film **after** the scan, which is the
+    only way to reach a source whose bytes nothing has ever successfully opened and that a
+    negotiation then can - so they cannot share the session-scoped tree every other test reads.
+    """
+    return media_files.copy_into(tmp_path / "writable-tree")
+
+
+@pytest.fixture
+def healable(
+    media_paths: DataPaths, writable_files: BuiltMedia
+) -> Iterator[tuple[FastAPI, ScannedMediaWorld]]:
+    """The same app and the same scan, over the tree a test may change underneath the server."""
+    yield from _serve(media_paths, writable_files)
+
+
+@pytest.fixture
+async def healable_client(
+    healable: tuple[FastAPI, ScannedMediaWorld],
+) -> AsyncIterator[httpx.AsyncClient]:
+    transport = httpx.ASGITransport(app=healable[0])
+    async with httpx.AsyncClient(transport=transport, base_url="http://atrium:8096") as opened:
+        yield opened
 
 
 def _as_viewer(policy: dict[str, Any] | None = None) -> Any:
@@ -258,6 +309,28 @@ async def _item(client: httpx.AsyncClient, item_id: str) -> dict[str, Any]:
     answered = await client.get(f"/Items/{item_id}", headers=HEADERS)
     assert answered.status_code == 200, answered.text
     return dict(answered.json())
+
+
+def _real_bytes_over(files: BuiltMedia, target: UninspectableFile, source: MediaFile) -> None:
+    """Replace a file the scan could not open with one it would have, keeping its name.
+
+    `latent.mkv`'s whole purpose: after the scan, the only thing that will ever have read these
+    bytes successfully is the negotiation (012 AC-2, AC-3). The replacement is a matroska film, so
+    the extension the empty annotation answered and the container the inspection stores agree -
+    and the only thing that moves between the two answers is what opening the file learned.
+    """
+    files.path_of(target).write_bytes(files.path_of(source).read_bytes())
+
+
+def _comparable(document: dict[str, Any]) -> str:
+    """One negotiation's answer with its session identifier normalised out, for comparing two.
+
+    A `PlaySessionId` is fresh per request and is copied into every address inside the body, so
+    two answers always differ textually - which would make "the second opinion is different" a
+    test that passes on a server that ignored the switches entirely.
+    """
+    rendered = json.dumps(document, sort_keys=True)
+    return rendered.replace(document["PlaySessionId"], "<play-session>")
 
 
 def _store_capabilities(app: FastAPI, stated: dict[str, Any]) -> None:
@@ -1226,3 +1299,270 @@ async def test_ac15_a_direct_played_file_answers_what_it_answered_before(
     assert "TranscodingUrl" not in source
     assert "DefaultSubtitleStreamIndex" not in source
     assert not [one for one in source["MediaStreams"] if one["Type"] == "Subtitle"]
+
+
+# ------------------------------------------------------------------------------------------
+# 012 - the source the negotiation resolves before it reads the profile
+# ------------------------------------------------------------------------------------------
+#
+# Every case below runs on a file the scan could not open, which is a state no other test in this
+# repository can reach: the scan that creates an item is the scan that probes it, so the state
+# exists only where the probe *failed* (012 spec section 6). `unreadable.mkv` is four kibibytes
+# that are not a container and stays that way; `latent.mkv` is the same bytes with a real film
+# written over them after the scan, so the negotiation is the only thing that has ever read them.
+
+
+async def test_ac1_a_source_nothing_opened_answers_flags_that_were_decided(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """AC-1 and AC-4, which are one answer: the reference's own for a file it cannot read.
+
+    `200`, the empty annotation, and the three flags **decided** against the profile rather than
+    left at whatever the model initialised them to - `false`/`false`/`true` for a profile that
+    plays neither the container nor the codec - with a `TranscodingUrl` beside them
+    `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-08-29]`.
+    """
+    item = served[1].of(UNREADABLE)
+    document = await negotiate(client, item.id, {"DeviceProfile": PLAYS_NEITHER})
+    source = document["MediaSources"][0]
+
+    assert flags(document) == (False, False, True)
+    assert "TranscodingUrl" in source, "AC-4: an advertised capability carries an address"
+    assert source["TranscodingSubProtocol"] == "hls"
+    assert source["MediaStreams"] == [], "nothing opened it: there is nothing to annotate"
+    assert "RunTimeTicks" not in source
+    assert "Bitrate" not in source
+
+
+async def test_ac1_the_empty_annotation_is_still_the_files_own_container_and_size(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The transient inspection is invisible on the wire, which is what keeps AC-10 true.
+
+    `unopened` carries an **empty** container so `media/info.py:source_container` still falls back
+    to the extension, and the size stays the source row's. A record that answered anything else
+    would make a negotiation change what the same file reads as.
+    """
+    item = served[1].of(UNREADABLE)
+    document = await negotiate(client, item.id, {"DeviceProfile": PLAYS_NEITHER})
+    source = document["MediaSources"][0]
+
+    assert source["Container"] == "mkv"
+    assert source["Size"] == served[1].files.path_of(UNREADABLE).stat().st_size
+
+
+async def test_ac1_a_file_that_can_never_be_read_is_reopened_on_every_negotiation(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """Measured on the reference at 0.18-0.20 s, three times running: a file that can never be
+    resolved pays the probe on **every** negotiation, for ever (012 spec section 3.2, OQ-1).
+
+    Asserted as the answer rather than as a duration: the same request answers the same decided
+    flags a second and a third time, because nothing was stored to make the trigger stop firing.
+    """
+    item = served[1].of(UNREADABLE)
+    answers = [await negotiate(client, item.id, {"DeviceProfile": PLAYS_NEITHER}) for _ in range(3)]
+
+    assert [flags(one) for one in answers] == [(False, False, True)] * 3
+
+
+async def test_ac2_the_negotiation_that_opens_the_file_is_the_one_that_answers(
+    healable_client: httpx.AsyncClient,
+    healable: tuple[FastAPI, ScannedMediaWorld],
+    writable_files: BuiltMedia,
+) -> None:
+    """AC-2: fully annotated **by the request that asked**, not by the next scan.
+
+    And the trap T4 set for this task, asserted here rather than left to the listing: `Size` comes
+    from the inspection and `ETag` from the source row (`media/info.py:source_of`), so a
+    negotiation that healed the file and then assembled the answer from the item it read *before*
+    the heal would send the new size beside the tag of bytes nobody can play - D-1's own failure,
+    one line inside the request that fixed it (012 plan section 6.2).
+    """
+    item = healable[1].of(LATENT)
+    before = await negotiate(healable_client, item.id, {"DeviceProfile": PLAYS_NEITHER})
+    assert before["MediaSources"][0]["MediaStreams"] == [], (
+        "the fixture opened: nothing below is a test"
+    )
+
+    _real_bytes_over(writable_files, LATENT, REJECTED_CONTAINER)
+    healed = await negotiate(
+        healable_client, item.id, {"DeviceProfile": accepting(REJECTED_CONTAINER)}
+    )
+    source = healed["MediaSources"][0]
+
+    assert [one["Type"] for one in source["MediaStreams"]] == ["Video", "Audio"]
+    assert source["RunTimeTicks"] > 0
+    assert source["Bitrate"] > 0
+    assert source["Size"] == writable_files.path_of(LATENT).stat().st_size
+    assert source["Size"] != LATENT.size, "the replacement is a real film, not the junk bytes"
+    assert source["ETag"] == media_etag(writable_files.path_of(LATENT).stat().st_mtime_ns), (
+        "the healed body answers the tag of the bytes it just read, not the ones the scan saw"
+    )
+    assert flags(healed) == (True, True, True)
+
+
+async def test_ac3_the_next_listing_carries_what_the_negotiation_learned(
+    healable_client: httpx.AsyncClient,
+    healable: tuple[FastAPI, ScannedMediaWorld],
+    writable_files: BuiltMedia,
+) -> None:
+    """AC-3, and the whole of the music client's cure: the inspection is **kept**.
+
+    Listed, negotiated, listed again - with no scan in between. The listing path learned nothing
+    and probes nothing; it reads the row the negotiation wrote (012 spec section 3.1 row four,
+    OQ-9).
+    """
+    item = healable[1].of(LATENT)
+    empty = await _item(healable_client, item.id)
+    assert empty["MediaSources"][0]["MediaStreams"] == []
+    assert "RunTimeTicks" not in empty["MediaSources"][0]
+
+    _real_bytes_over(writable_files, LATENT, REJECTED_CONTAINER)
+    await negotiate(healable_client, item.id, {"DeviceProfile": accepting(REJECTED_CONTAINER)})
+
+    after = await _item(healable_client, item.id)
+    source = after["MediaSources"][0]
+    assert [one["Type"] for one in source["MediaStreams"]] == ["Video", "Audio"]
+    assert source["RunTimeTicks"] > 0
+    assert source["Bitrate"] > 0
+    assert source["Size"] == writable_files.path_of(LATENT).stat().st_size
+    assert source["ETag"] != empty["MediaSources"][0]["ETag"], (
+        "D-1: the change signal moves with the inspection, or the tag describes other bytes"
+    )
+
+
+async def test_ac5_the_second_opinion_is_a_different_answer(
+    healable_client: httpx.AsyncClient,
+    healable: tuple[FastAPI, ScannedMediaWorld],
+    writable_files: BuiltMedia,
+) -> None:
+    """AC-5: a client that comes back saying *"I cannot direct-play this"* is answered differently.
+
+    **Asserted on a source the profile can direct-play**, which is the discriminating half: asked
+    against `unreadable.mkv` and a profile that plays nothing, both answers refuse and the two
+    bodies would match while proving nothing. Today - before the resolution - both answers are
+    identical for this file too, because the branch that would read the switches is the branch
+    that was skipped (012 spec section 3.1, row two).
+    """
+    item = healable[1].of(LATENT)
+    _real_bytes_over(writable_files, LATENT, REJECTED_CONTAINER)
+    profile_body = {"DeviceProfile": accepting(REJECTED_CONTAINER)}
+
+    played = await negotiate(healable_client, item.id, profile_body)
+    refused = await negotiate(
+        healable_client,
+        item.id,
+        {**profile_body, "EnableDirectPlay": False, "EnableDirectStream": False},
+    )
+
+    assert flags(played) == (True, True, True)
+    assert flags(refused) == (False, False, True)
+    assert _comparable(played) != _comparable(refused), "the switches reached the ladder"
+    assert "TranscodingUrl" in refused["MediaSources"][0]
+    assert "TranscodingUrl" not in played["MediaSources"][0]
+
+
+async def test_the_route_yields_while_a_file_is_being_opened(
+    healable_client: httpx.AsyncClient,
+    healable: tuple[FastAPI, ScannedMediaWorld],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`media/probe.py:inspect` is a `subprocess.run` bounded at 60 s, and this route is `async`.
+
+    Asserted as a fact about the loop rather than as a duration (Principle VII): a second request
+    is answered *while* the first is still inside the prober, which is only possible if the
+    inspection left the event loop (`asyncio.to_thread`, 012 plan section 6.2). Run the probe
+    inline and the second request cannot be answered until the first releases it, and this test
+    fails on its own timeout rather than on a clock.
+    """
+    entered = threading.Event()
+    release = threading.Event()
+
+    def blocking(path: Path, prober: Any = None) -> None:
+        entered.set()
+        assert release.wait(timeout=10), "the second request never answered: the loop was blocked"
+        return None
+
+    monkeypatch.setattr(inspection, "opened", blocking)
+    unreadable = healable[1].of(UNREADABLE)
+    readable = healable[1].of(DIRECT_PLAY)
+
+    first = asyncio.create_task(
+        negotiate(healable_client, unreadable.id, {"DeviceProfile": PLAYS_NEITHER})
+    )
+    assert await asyncio.to_thread(entered.wait, 10), "the negotiation never reached the prober"
+
+    answered = await healable_client.get(f"/Items/{readable.id}/PlaybackInfo", headers=HEADERS)
+
+    assert answered.status_code == 200
+    assert not first.done(), "the first request is still inside the prober, which is the point"
+    release.set()
+    assert flags(await first) == (False, False, True)
+
+
+async def test_a_part_the_trigger_never_fires_for_is_still_decided_rather_than_advertised(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The source removing the old branch reaches that nothing in this feature opens.
+
+    A two-part film whose part one is readable and whose part two is not: the trigger reads source
+    **zero**, finds it annotated and does not fire, so 012 never opens part two (plan section 6.1,
+    invariant 2). Part two is nevertheless *answered*, and this is where the rule the feature is
+    named for bites - a source advertising three capabilities with no address behind any of them
+    is the defect, whether or not the reference has an item shaped like this one. It has not: an
+    unreadable part is neither a source of the grouped item nor an item of its own there
+    `[probe: tools/probe_uninspected_source.py, Jellyfin 10.11.11, 2026-09-03]`, so what this
+    asserts is **this** server's answer being consistent with itself.
+
+    That the trigger does not fire for this item is
+    `tests/unit/test_library_inspection.py`'s row, over the same two files and the same real scan.
+    """
+    item = served[1].of(MISSING_HALF_FIRST)
+    assert item.id == served[1].of(MISSING_HALF_SECOND).id, "003 stopped merging the parts"
+
+    document = await negotiate(client, item.id, {"DeviceProfile": PLAYS_NEITHER})
+    played, unopened = document["MediaSources"]
+
+    assert unopened["MediaStreams"] == [], "part two is the half nothing ever opened"
+    assert played["MediaStreams"] != [], "part one is the half the scan read"
+    for source in (played, unopened):
+        assert source["SupportsDirectPlay"] is False
+        assert source["SupportsDirectStream"] is False
+        assert source["SupportsTranscoding"] is True
+        assert "TranscodingUrl" in source, "every advertised capability carries an address (AC-4)"
+
+
+@pytest.mark.parametrize(
+    "policy,expected",
+    [row[1:] for row in _UNNEGOTIATED],
+    ids=[row[0] for row in _UNNEGOTIATED],
+)
+async def test_a_never_opened_source_with_no_profile_answers_what_it_answered_before(
+    client: httpx.AsyncClient,
+    served: tuple[FastAPI, ScannedMediaWorld],
+    policy: dict[str, bool],
+    expected: tuple[bool, bool, bool],
+) -> None:
+    """The claim removing the old branch rests on, measured instead of traced.
+
+    That branch wrote two flags from the account's own permissions before it skipped the source,
+    and the tasks gate traced that `decide()`'s rule 1 writes the same two itself - so a
+    profile-less negotiation of a source nothing has opened answers what it answered before,
+    field for field. The **same** five policy shapes as the row above, on the source that used to
+    take the other branch: what the file behind it holds does not enter rule 1 at all, so the two
+    tables answering differently would mean the branch was load-bearing after all.
+    """
+    app, world = served
+    app.dependency_overrides[require_user] = _as_viewer(policy)
+    unreadable = world.of(UNREADABLE).id
+
+    posted = await negotiate(client, unreadable)
+    assert flags(posted) == expected
+    assert "TranscodingUrl" not in posted["MediaSources"][0], (
+        "rule 1 returns at the direct-play guard, so no address is added on this path"
+    )
+
+    answered = await client.get(f"/Items/{unreadable}/PlaybackInfo", headers=HEADERS)
+    assert answered.status_code == 200
+    assert flags(dict(answered.json())) == expected, "the GET carries no profile either"

@@ -398,7 +398,7 @@ passing for the wrong reason.
 
 ## T5 — The negotiation resolves before it reads the profile
 
-- [ ] **Changes:** `api/media_info.py`'s `_negotiation` becomes `async`, and before the source
+- [x] **Changes:** `api/media_info.py`'s `_negotiation` becomes `async`, and before the source
   loop it resolves: `wanted` → `opened` in a thread (`asyncio.to_thread`, the project's idiom for
   blocking work) → `store` or `unopened`. The `if inspection is None: continue` branch **goes**,
   and with it the two policy flags it writes — checked, not assumed: `decide()`'s rule 1 calls the
@@ -417,6 +417,51 @@ passing for the wrong reason.
   after a negotiation *of a different item*. Plus a test that the route yields — a slow stub prober
   and a second request answered while the first is still inspecting.
 - **Spec reference:** §3.2, AC-1 to AC-5, AC-10; plan §6.2, §6.3
+
+**Done, 2026-09-04** — the route, the ten tests its Verified-by line names, and three things the
+documents had wrong rather than merely incomplete; one of them amends the accepted spec, and one
+was a sentence about this route that was false about every clause it had.
+
+* **The branch that goes was answering a source neither document had described, and deleting it
+  had to answer that source too.** [Plan §6.2](plan.md#62-resolving-inside-the-request)'s
+  pseudocode fills `resolved[index]` only inside `if wanted(...)`, so a part with no inspection in
+  an item whose **source zero has one** keeps a `None` — and `if inspection is None: continue` was
+  what used to answer it. This server ships that shape as a fixture: T2's two-part film is one
+  item with two sources, the second with no probe row, where the reference keeps the unreadable
+  part as neither a source nor an item. Both documents stopped at the **trigger**, which decides
+  what is *opened*; nothing said what is *answered*. It is answered by §2.2's own rule — the flags
+  decided and an address beside them — and the file is still never opened, because the trigger is
+  a property of the item and source zero is annotated. So this feature's two halves come apart on
+  one real source, which is worth a sentence in a document rather than a reader's inference: spec
+  §3.2 gains it (recorded as an amendment) and plan §6.2 says so now.
+* **"The write happens back on the loop thread, through the request's own session, where every
+  other write in this route already happens" is false in both of its clauses.** There is no
+  request session: `_negotiation` reads the item through `_found`, which opens a `session_scope`
+  and **closes it before it returns**, and `api/media_info.py` has never written anything at all —
+  it is a reader, which is the very reason 012 is a *deviation* from 008 plan §6.1 rather than one
+  more write beside existing ones. Written to the sentence, the write would have had a closed
+  session to reach for. `store` runs in a unit of work the resolution opens after the probing is
+  done, which also keeps `opened()`'s *"touches no session"* promise meaningful rather than
+  incidental.
+* **T4's trap is real, and the assertion that catches it is not the one the listing makes.**
+  Rebuilding the healed part (`dataclasses.replace` on the `MediaSource`, then on the `Item`) was
+  written first and then **removed again to watch it fail**: without it the healed body answers
+  `Size` from the inspection beside `ETag` from the row the scan wrote — two files in one answer,
+  inside the request that fixed the file. The listing afterwards is correct in both worlds, so a
+  test written only against it would have passed. The negotiation's own answer is asserted, as
+  [plan §6.2](plan.md#62-resolving-inside-the-request) now requires.
+* **The gate's traced claim is measured now rather than inherited.** *"Removing the branch loses
+  neither of the two flags it writes"* is asserted over the **same five policy shapes** the
+  inspected source's own table uses, on the never-opened source, on both routes: five identical
+  triples, and no address on the profile-less path. The branch was not load-bearing, which is now
+  a row rather than a paragraph.
+
+**One deviation from this task as written.** *"A test that the route yields"* is written without a
+clock (Principle VII): the stub prober blocks on an event, a second request is answered while the
+first is still inside it, and the first is asserted **not done** before the event is released.
+A duration assertion would have been a flake; this one fails on its own timeout if the inspection
+ever stops leaving the event loop, and was checked by running the probe inline and watching it go
+red.
 
 ## T6 — The audio refusal, which is the platform's and not this feature's
 

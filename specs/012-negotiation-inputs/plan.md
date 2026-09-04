@@ -305,7 +305,12 @@ class TranscodingProfile:
 
 async def _negotiation(...) -> PlaybackInfoResponse:
     """Unchanged in shape. Two things happen before the per-source loop: the sources are resolved
-    (§6.2) and an audio item with no audio stream is refused (§6.4)."""
+    (§6.2) and an audio item with no audio stream is refused (§6.4).
+
+    The resolution answers with an **item** as well as an inspection per part, because the parts
+    it healed carry a change signal the frozen one this request read does not - and the wire
+    sources are built from that item, after the resolution and not before it (T4's trap, §6.2).
+    """
 ```
 
 **Invariants this feature adds, stated so a later reader cannot break them silently:**
@@ -426,8 +431,17 @@ listing that follows it rather than only against the listing.
 an `async def`; 0.2 s of blocked loop on the measured happy path and up to `TIMEOUT_SECONDS` on a
 pathological file would stall every other request in the process. `asyncio.to_thread` is the
 project's existing idiom for exactly this (`users/sessions.py`, `users/playing.py`), and it is
-enough here because `opened()` touches no session — the write happens back on the loop thread,
-through the request's own session, where every other write in this route already happens.
+enough here because `opened()` touches no session.
+
+**The write is not "back on the request's own session", because this route has not got one —
+found at T5 by looking for it.** This sentence used to end *"through the request's own session,
+where every other write in this route already happens"*, and both halves are false: `_negotiation`
+reads the item through `_found`, which opens a `session_scope` and **closes it before it returns**,
+and nothing else in `api/media_info.py` has ever written anything at all — the route is a reader,
+which is exactly why 012 is a deviation from 008 plan §6.1 rather than one more write beside
+others. So `store` runs in a unit of work the resolution opens for it, after every part has been
+probed. That order is not a workaround either: it is what keeps `opened()`'s *"touches no session"*
+promise meaningful, since the probe is over before a session exists to be held across it.
 
 **The timeout is inherited and is a divergence in the safe direction.** `media/probe.py` bounds an
 inspection at 60 s; the reference bounds its probe only by the request's cancellation token
@@ -443,6 +457,19 @@ is a *file* two writers would corrupt; a row is not, and the reference takes no 
 either. The cost is a duplicated probe on a burst, which is bounded by the same 0.2 s the single
 case pays. Recorded in §9 rather than mitigated, because the mitigation — a per-path lock in a
 process that may have several workers — is a bigger claim than the problem.
+
+**Every part is negotiated against something, including one the trigger never fired for —
+found at T5, and it is the pseudocode above read to its end.** The loop fills `resolved` only
+inside `if wanted(...)`, so a part with no stored inspection in an item whose *source zero* has
+one keeps a `None` — and the route's `if inspection is None: continue`, which this task deletes,
+is what used to answer it. This server has that shape and the reference has not:
+[§6.1](#61-the-trigger) records it as 003's difference — a two-part film here is one item with two
+sources where the reference keeps the unreadable part as neither a source nor an item — and both
+documents then stopped at the trigger, which is a statement about *opening* and not about
+*answering*. `unopened` is therefore what **any** part with no inspection is negotiated against,
+whether the trigger fired for it or not, and 012 still never opens that part (invariant 2 stands).
+What moves for it is what the feature is named for: three capability flags nothing decided and no
+address become flags the ladder decided and an address beside them. Spec §3.2 says so now.
 
 **What the listing sees afterwards.** Nothing in the listing path changes (AC-10). It reads
 `media_probes`, so the *next* listing of a healed item carries the streams, the runtime, the
@@ -502,7 +529,10 @@ permissions decide (`ladder.unnegotiated_transcoding` and `ladder.unnegotiated_d
 008's policy-gate fix). Removing it loses neither, and that was checked rather than assumed:
 `decide()`'s rule 1 — the profile-less branch — calls the same two functions itself, and the
 profiled branch reaches the ladder's own gate. So a `GET` on a source that could not be read
-answers exactly what it answers today, and a `POST` answers what AC-1 asks for.
+answers exactly what it answers today, and a `POST` answers what AC-1 asks for. **T5 measured it
+rather than inheriting the trace**: the five policy shapes that make the inspected source's flags
+move are asserted on the never-opened one, and they answer the same five triples — the branch was
+not load-bearing, which is a thing to know rather than to believe.
 
 **What this feature does not do is follow the address.** The reference's own answer for this source
 names `live.m3u8` and that playlist answers `500`
