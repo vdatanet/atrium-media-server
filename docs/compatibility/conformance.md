@@ -165,6 +165,16 @@ reproduces on one machine only can be told from a difference that is real.
 `tools/reference_instance.py` stands the same instance up and **leaves it running**, for looking at
 a difference by hand.
 
+**`--fixture` and a `--jellyfin` naming another server are mutually exclusive**, and the command
+above is therefore not the one a fixture run issues: with `--fixture` the instance *is* the
+reference, so a `--jellyfin` that names anything else is refused before the run starts — and its
+address cannot be known beforehand, because the instance picks a free port. Either drop
+`--jellyfin`, or stand an instance up by hand and name it with `--reference-url`. The second
+spelling is the one to reach for when a difference has to be looked at twice, because the instance
+then outlives the run. **A run whose instance was asked for and did not come up falls back to
+`$JELLYFIN_URL`** and sweeps whatever that names, which is right for a machine that never had a
+runtime and wrong for one whose instance died — measured at 012 T10 on 2026-09-04, and outstanding.
+
 **Exit codes: `0` clean, `1` not clean, `2` the run could not start.** *Not clean* is the ordinary
 answer and not a failure: it means the run has an untriaged difference, a declared case it could
 not issue, or a named comparison it did not run. The report is the deliverable
@@ -200,12 +210,17 @@ caller the run does not have, a library the reference cannot be given, a library
 two scans**, a deliberate **wait**, or a comparison of something that is not in a body — are
 enumerated as **named comparisons** in
 [010 §3.10](../../specs/010-conformance-harness/spec.md), and an unrun one keeps a run from being
-called clean. There are **twenty** of them: sixteen when 010's spec was accepted, and four more on
+called clean. There are **twenty-two** of them: sixteen when 010's spec was accepted; four more on
 2026-09-02, when the four readings the compatibility documents and the inherited lists owed —
 [behaviours §5.2](behaviours.md) and [§5.6](behaviours.md), 005's OQ-7 and 007's paused-session
-ticker — were given this table as their owner rather than left as debts nobody was measuring.
+ticker — were given this table as their owner rather than left as debts nobody was measuring; and
+**two more on 2026-09-04, the first a feature wrote about itself**, when 012 T10 found that its own
+two `level: L3` rows need a comparison no case can make — the *hop* at which an un-inspectable
+source's advertised address fails, and a listing that changed because a negotiation between two
+readings of it opened the file.
 
-**The twenty are checked in as [named-comparisons.yaml](named-comparisons.yaml)**, one row each,
+**The twenty-two are checked in as [named-comparisons.yaml](named-comparisons.yaml)**, one row
+each,
 and `tests/unit/test_allowlist.py` compares the file against 010 §3.10 row for row. Every row
 carries a **`needs`**: the seat, the fixture, the rescan, the wait, the latency, the bytes or the
 second run without which it cannot be asked at all. That is what lets a report say *"four
@@ -217,7 +232,7 @@ counted as a miss.
 that makes the comparison, in the six shapes [010 plan §6.4](../../specs/010-conformance-harness/plan.md)
 describes. **Naming one is not running one.** A row whose `needs` this run cannot meet is
 outstanding with the reason; a runner that raises leaves its row outstanding with the exception and
-the run carries on to the other nineteen; and a row that *ran* and measured something the entry it
+the run carries on to the other twenty-one; and a row that *ran* and measured something the entry it
 cites does not predict is an untriaged difference, which keeps the run from being called clean
 exactly as a sweep finding does. Two rows are **not** runnable as comparisons at all today and say
 so every run: *the library changed underneath a rescan* needs a second scan on both servers, and

@@ -773,7 +773,7 @@ a divergence. `surface.yaml` is untouched — 012 adds no route.
 
 ## T10 — The two L3 rows get their cases, and the two comparisons a sweep cannot raise
 
-- [ ] **Changes:** [`docs/compatibility/request-cases.yaml`](../../docs/compatibility/request-cases.yaml)
+- [x] **Changes:** [`docs/compatibility/request-cases.yaml`](../../docs/compatibility/request-cases.yaml)
   gains four cases under `POST /Items/{itemId}/PlaybackInfo` — `protocol-in-an-unexpected-case`,
   `protocol-that-binds-to-nothing`, `protocol-by-ordinal` and `a-source-the-world-never-opened` —
   each naming both identities, because twelve of twenty-three reads of this surface answer
@@ -788,11 +788,86 @@ a divergence. `surface.yaml` is untouched — 012 adds no route.
   — the registers parse, every case names an endpoint in `surface.yaml` and an anchor that
   resolves, and each named comparison carries its reason and its owner. Then
   the command [conformance.md §L3](../../docs/compatibility/conformance.md) publishes —
-  `python3 tools/differential.py --atrium … --jellyfin … --surface docs/compatibility/surface.yaml
+  `python3 tools/differential.py --atrium … --surface docs/compatibility/surface.yaml
   --report reference/differential-report.md --fixture`, the last flag being what asks for the half
   that needs a single-use reference instance over this repository's own fixture: the two L3 rows
   are compared for both identities, and any difference is declared or the run is not clean.
+  **Without `--jellyfin`, which this line named until T10 ran it**: a `--fixture` run stands its own
+  reference up and refuses a `--jellyfin` naming anything else, and nobody can know that address
+  beforehand. An instance stood up by hand with `tools/reference_instance.py` and named with
+  `--reference-url` is the other spelling, and the one this task used.
 - **Spec reference:** §6 (conformance); plan §8
+
+**Done, 2026-09-04** — five request cases, two register rows, two runners, and a full sweep against
+a single-use instance of the pinned version. **The sentence this task was written around is wrong
+about which address it is**, and the two rows cost six documents rather than one.
+
+* **Both servers hand over `master.m3u8`, and they differ one request further on.** This task's own
+  Changes line, [plan §6.3](plan.md) and [plan §8](plan.md) all said *"the reference's address names
+  `live.m3u8` where v1's names `master.m3u8`"* — which compares an **entrance line inside a
+  playlist** with a **negotiated address**. Measured on both servers over this repository's own
+  fixture: the negotiation agrees field for field — `200`, no streams, no runtime,
+  `false`/`false`/`true`, and a `TranscodingUrl` naming `master.m3u8` on each — and the difference
+  is the **hop at which the advertised address refuses**. The reference's master playlist answers
+  `200` and names a `live.m3u8` variant that sends `500`, `text/plain`, the platform's 25 bytes;
+  this server's master playlist sends that same refusal itself. Both end at the same `500`. The
+  named comparison is written about the hop, and [behaviours §3.13](../../docs/compatibility/behaviours.md)
+  is corrected: its *"Atrium does"* half still read *"v1 does not emit an address on this path at
+  all today"*, which **T5 stopped being true on the same day** by satisfying AC-4, and the deferral
+  is now handed to the feature that gives v1 a live path rather than to 012.
+  `[probe: tools/differential.py, Jellyfin 10.11.11, 2026-09-04]`
+* **Two register rows are six documents, and 012 is the first feature to write one about itself.**
+  `named-comparisons.yaml` is compared against [010 §3.10](../010-conformance-harness/spec.md)'s
+  table **row for row**, and the count is written down in three places, so the two rows move an
+  **accepted and implemented** spec — §3.10's table and prose, AC-16 — plus
+  [conformance.md](../../docs/compatibility/conformance.md), the register, the runners and two test
+  modules. Every other row there was inherited from a finished feature's *"what this feature owes
+  the next ones"* list; these were declared by 012's own plan before 012 closed, so their
+  `written_at` is a plan and the test asserting *"one document that is not an inherited list"* had
+  to learn a second. The count is twenty-two.
+* **The fourth request case needed a fifth.** An anchor is a **declared listing case** and a row
+  position, and no listing in the register indexed the un-inspectable film — so
+  `a-source-the-world-never-opened` is anchored on a new `the-unopened-film` beside it. The other
+  three need no fixture at all, which was worth finding rather than assuming: the protocol is a
+  property of the **binder** and not of the file, so they anchor on `movies-by-sort-name@0` and are
+  askable of any reachable server.
+* **The command this task's own Verified-by line publishes cannot be run as written.** `--fixture`
+  refuses a `--jellyfin` that is not the instance it just stood up, and nobody can know that address
+  before the run. What works is `--fixture` alone, or an instance stood up by hand with
+  `tools/reference_instance.py` and named with `--reference-url` — which is what this run did, and
+  what `tools/README.md` already recommends for looking at a difference twice.
+* **And the one that is 010's rather than this task's, reported rather than fixed: a `--fixture`
+  run whose instance fails to come up sweeps whatever `JELLYFIN_URL` names.** The first attempt
+  here started an instance, missed its 180-second readiness deadline, and the run carried straight
+  on to the operator's own server named in `.env` — `reference_url = instance.url or args.jellyfin
+  or os.environ[JELLYFIN_URL]` — reaching it and stopping only because that host's certificate
+  could not be verified from this shell. Nothing was written, and nothing about the failure reached
+  a report, because the run exited `2` before writing one. ADR-0007's degradation is *"a machine
+  with no runtime still sweeps a reachable server"*; an instance that was **asked for and failed**
+  is a different sentence, and the fallback does not distinguish them.
+
+**What ran, and what it says.** `POST /Items/{itemId}/PlaybackInfo` is `Compared: yes` from
+**both** seats, which is what its `level: L3` has been claiming since 008 and what nothing had
+checked. Seventeen of the twenty-two named comparisons ran and both new ones are `as_documented`.
+On the administrator's seat the three protocol cases differ in **one field each** — `TranscodingUrl`
+for the two that transcode, whose query carries a `PlaySessionId`, an `ApiKey` and two derived
+identifiers, and `traceId` for the refusal — so the `400`, its `errors` map, its
+`Jellyfin.Data.Enums.MediaStreamProtocol` sentence and its `BytePositionInLine` are **identical on
+both servers**, and so are `TranscodingSubProtocol: "hls"` and the number `2`. T9 asserted those
+eighteen spellings against golden bodies; this is the first time they have been asked of a running
+reference. `a-source-the-world-never-opened` differs in `TranscodingUrl` alone.
+
+**Three differences ride along and none of them is 012's.** `TranscodingUrl` is not on the
+allowlist and is a `derived-identifier` on its face — 008's field and 010's register, left to them
+rather than excused here, because excusing it by value would also excuse the address *shape* the
+named comparison exists to watch. The healed source's item-level `RunTimeTicks` stays `null` here
+and arrives there, which is [D-2](plan.md) exactly, decided out of this feature on 2026-09-03 and
+declared by the runner rather than compared. And **the un-inspectable film's item-level
+`Container`** is `mkv` here and `null` there — `media/info.py:item_container` falls back to the
+extension citing `BaseItem.cs:1200-1207`, and the reference measurably sends nothing on a list row
+for a file it never opened. It is a source reading contradicted by a measurement, on a listing, so
+it belongs to the feature that owns the item body rather than to this one; handed on with its
+measurement the way [D-2](plan.md) was.
 
 ## T11 — The acceptance map, the levels, and three status lines
 

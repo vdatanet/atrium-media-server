@@ -1344,8 +1344,8 @@ FEATURE_010: dict[int, tuple[str, ...]] = {
     ),
     16: (
         "tests.unit.test_allowlist:test_the_register_is_spec_310s_table",
-        "tests.unit.test_allowlist:test_the_register_counts_twenty",
-        "tests.conformance.test_differential:test_the_twenty_named_comparisons_are_all_reported_even_though_none_can_run",
+        "tests.unit.test_allowlist:test_the_register_counts_twenty_two",
+        "tests.conformance.test_differential:test_the_named_comparisons_are_all_reported_even_though_none_can_run",
         "tests.conformance.test_differential:test_a_run_with_an_outstanding_named_comparison_is_not_clean",
         "tests.conformance.test_differential:test_an_outstanding_row_says_which_need_was_missing_and_not_merely_that_it_did_not_run",
     ),

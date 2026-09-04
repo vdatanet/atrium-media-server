@@ -256,6 +256,16 @@ cases:
     needs: [fixture]
     what_it_is_for: "The film the subtitle cases anchor on: `The Unconvertible (2009)` of tests/fixtures/media.py, which carries an `ass` track inside it and a subtitle file beside it. Without it a subtitle stream at index 0 is a refusal on both servers"
 
+  - id: the-unopened-film
+    endpoint: "GET /Items"
+    query: "searchTerm=Unreadable&includeItemTypes=Movie&recursive=true&sortBy=SortName"
+    body: none
+    content_type: none
+    anchors: []
+    identities: [administrator, restricted]
+    needs: [fixture]
+    what_it_is_for: "The film 012's own case anchors on: `Unreadable (2012).mkv` of tests/fixtures/media.py, four kibibytes that are not a container, which both servers scan into a Movie and neither has ever opened. Declared here because an anchor is a declared listing case and no listing this register had indexed it - the state 012 is about exists in no library but this repository's own"
+
   # ------------------------------------------------------------------------------------------
   # GET /Items/{itemId} - 005, L3. A bare item body carries up to 39 properties a list row does
   # not, so this is the widest per-item comparison in the sweep.
@@ -351,6 +361,62 @@ cases:
     identities: [administrator, restricted]
     needs: [fixture]
     what_it_is_for: "The same negotiation as `no-body`, on the film the three subtitle cases interrogate, and the media source id those cases now take. Anchoring a {mediaSourceId} on a negotiation of a DIFFERENT item is what made the reference exit 132 on the first request of the first full sweep, 6 of 6"
+
+  # THE FOUR 012 ADDED, AND THE FIRST THREE OF THEM NEED NO FIXTURE.
+  #
+  # 012 declares this endpoint L3 twice (its spec section 6): once for the profile's delivery
+  # protocol and once for a source the world has never opened. The protocol is a property of the
+  # BINDER and not of the file, so its three cases anchor on `movies-by-sort-name@0` and are
+  # askable of any reachable server; the fourth needs the fixture, because a source nothing has
+  # ever opened exists in no library but this repository's own.
+  #
+  # Every one of the three carries a DirectPlayProfiles entry naming a container and codecs the
+  # fixture has none of. That is not decoration: a profile that direct-plays the item answers no
+  # TranscodingUrl and no TranscodingSubProtocol, and the address is the only thing in the answer
+  # that says which branch the protocol chose. Measured on both servers, 2026-09-04: `Hls` is an
+  # HLS address and `"hls"` on each, `2` is a progressive `stream.ts` address and the NUMBER 2 on
+  # each, and `dash` is the same 400 on each - down to `BytePositionInLine`, which is a byte
+  # offset into the body as sent and therefore a property of this case's own bytes.
+
+  - id: protocol-in-an-unexpected-case
+    endpoint: "POST /Items/{itemId}/PlaybackInfo"
+    query: ""
+    body: '{"DeviceProfile": {"MaxStreamingBitrate": 120000000, "DirectPlayProfiles": [{"Container": "wmv", "Type": "Video", "VideoCodec": "vc1", "AudioCodec": "wmav2"}], "TranscodingProfiles": [{"Container": "ts", "Type": "Video", "VideoCodec": "h264", "AudioCodec": "aac", "Context": "Streaming", "MinSegments": 1, "BreakOnNonKeyFrames": true, "Protocol": "Hls"}]}}'
+    content_type: application/json
+    anchors: ["itemId=listing:GET /Items#movies-by-sort-name@0"]
+    identities: [administrator, restricted]
+    needs: []
+    what_it_is_for: "behaviours 2.24's first row: a two-member enumeration read the way .NET reads one, so a profile spelling the protocol the way its own language does binds. The echo is the ENUMERATION's spelling and never the profile's - `Hls` in, the member's own `hls` out"
+
+  - id: protocol-that-binds-to-nothing
+    endpoint: "POST /Items/{itemId}/PlaybackInfo"
+    query: ""
+    body: '{"DeviceProfile": {"MaxStreamingBitrate": 120000000, "DirectPlayProfiles": [{"Container": "wmv", "Type": "Video", "VideoCodec": "vc1", "AudioCodec": "wmav2"}], "TranscodingProfiles": [{"Container": "ts", "Type": "Video", "VideoCodec": "h264", "AudioCodec": "aac", "Context": "Streaming", "MinSegments": 1, "BreakOnNonKeyFrames": true, "Protocol": "dash"}]}}'
+    content_type: application/json
+    anchors: ["itemId=listing:GET /Items#movies-by-sort-name@0"]
+    identities: [administrator, restricted]
+    needs: []
+    what_it_is_for: "behaviours 2.24's last row: a word no member spells is 400 with problem details keyed on the property's own JSON path, where the same failure on POST /Playlists is keyed `$`. One failure, two shapes, and this is the case that asks the deeper one"
+
+  - id: protocol-by-ordinal
+    endpoint: "POST /Items/{itemId}/PlaybackInfo"
+    query: ""
+    body: '{"DeviceProfile": {"MaxStreamingBitrate": 120000000, "DirectPlayProfiles": [{"Container": "wmv", "Type": "Video", "VideoCodec": "vc1", "AudioCodec": "wmav2"}], "TranscodingProfiles": [{"Container": "ts", "Type": "Video", "VideoCodec": "h264", "AudioCodec": "aac", "Context": "Streaming", "MinSegments": 1, "BreakOnNonKeyFrames": true, "Protocol": 2}]}}'
+    content_type: application/json
+    anchors: ["itemId=listing:GET /Items#movies-by-sort-name@0"]
+    identities: [administrator, restricted]
+    needs: []
+    what_it_is_for: "`2` rather than `0` or `1`, which is the discriminating row: an ordinal no member has answers 200, a progressive address and TranscodingSubProtocol: 2 - a NUMBER in a field the enumeration spells as a word, and the only place this server writes a non-string into it. `0` and `1` bind to members and would compare a member against itself"
+
+  - id: a-source-the-world-never-opened
+    endpoint: "POST /Items/{itemId}/PlaybackInfo"
+    query: ""
+    body: '{"DeviceProfile": {"MaxStreamingBitrate": 120000000, "DirectPlayProfiles": [{"Container": "wmv", "Type": "Video", "VideoCodec": "vc1", "AudioCodec": "wmav2"}], "TranscodingProfiles": [{"Container": "ts", "Type": "Video", "VideoCodec": "h264", "AudioCodec": "aac", "Context": "Streaming", "MinSegments": 1, "BreakOnNonKeyFrames": true, "Protocol": "Hls"}]}}'
+    content_type: application/json
+    anchors: ["itemId=listing:GET /Items#the-unopened-film@0"]
+    identities: [administrator, restricted]
+    needs: [fixture]
+    what_it_is_for: "012 AC-1 and AC-4 on the wire: a negotiation for a source neither server has ever opened, against a profile that plays neither its container nor its codec. Both answer 200 with no streams, no runtime, the three flags decided false/false/true and a TranscodingUrl - the guarantee being that an advertised capability has an ADDRESS, not that the address answers, which is the named comparison `uninspectable-source-address` one request further on"
 
   # ------------------------------------------------------------------------------------------
   # GET /Audio/{itemId}/stream - 008, L3. Both clients hand-build this URL, and neither sends a

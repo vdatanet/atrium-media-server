@@ -3039,6 +3039,247 @@ def named_paused_session_ticker_freeze(
     )
 
 
+# -- shape 7: the request after the answer, and the answer after the request ---------------------
+#
+# The two rows 012 T10 added on 2026-09-04, and neither is any of the six shapes 010 plan section
+# 6.4 describes. Both are about a request the sweep does not make **because of what an earlier one
+# answered**: the first follows an address a negotiation handed over, the second reads a listing on
+# either side of a negotiation. A sweep issues declared cases and compares one answer at a time, so
+# neither the second hop nor the change between two identical answers is anything it can hold.
+
+#: The film neither server has ever opened, by the name both give it. Four kibibytes that are not a
+#: container, declared in `tests/fixtures/media.py` as `Unreadable (2012).mkv` - a source in this
+#: state exists in no library but this repository's own, which is why both rows need the fixture.
+UNOPENED_FILM = "Unreadable"
+
+#: The film whose bytes become readable underneath both servers, and the film they are borrowed
+#: from. `Latent (2013).mkv` is declared for exactly this: the same junk bytes as the one above,
+#: for a reading that replaces them **after** the scan, so what annotates it is the negotiation and
+#: nothing else. The donor is a real Matroska of the same tree, so the two servers open one file.
+LATENT_FILE = "Decodable/Movies/Latent (2013).mkv"
+LATENT_FILM = "Latent"
+LATENT_DONOR = "Decodable/Movies/Rejected Container (2002).mkv"
+
+#: What the platform answers when a delivery route cannot be served: `text/plain` and these bytes,
+#: on both servers, since 002 shipped `compat/errors.py`. Named here because what this row compares
+#: is **which hop** sends them and not what they say.
+PLATFORM_REFUSAL = b"Error processing request."
+
+
+def unplayable_profile(protocol: str = "hls") -> Dict[str, Any]:
+    """A device profile that plays nothing in either fixture and transcodes over `protocol`.
+
+    The direct-play entry names a container and codecs no file in this tree has, which is not
+    decoration: a profile that direct-plays the item answers **no** `TranscodingUrl`, and the
+    address is the only thing in the answer that says which branch was taken. The same shape
+    `docs/compatibility/request-cases.yaml`'s four 012 cases send.
+    """
+    return {
+        "MaxStreamingBitrate": 120_000_000,
+        "DirectPlayProfiles": [
+            {"Container": "wmv", "Type": "Video", "VideoCodec": "vc1", "AudioCodec": "wmav2"}
+        ],
+        "TranscodingProfiles": [
+            {
+                "Container": "ts",
+                "Type": "Video",
+                "VideoCodec": "h264",
+                "AudioCodec": "aac",
+                "Context": "Streaming",
+                "MinSegments": 1,
+                "BreakOnNonKeyFrames": True,
+                "Protocol": protocol,
+            }
+        ],
+        "CodecProfiles": [],
+        "ContainerProfiles": [],
+        "SubtitleProfiles": [],
+    }
+
+
+def negotiated_source(
+    directory: WireDirectory, item_id: str, user_id: str, protocol: str = "hls"
+) -> Dict[str, Any]:
+    """The first media source of one negotiation, resolved on the server it was asked of."""
+    answer = directory.post(
+        "/Items/" + str(item_id) + "/PlaybackInfo",
+        body={
+            "UserId": user_id,
+            "DeviceProfile": unplayable_profile(protocol),
+            "AutoOpenLiveStream": False,
+        },
+    )
+    sources = (answer or {}).get("MediaSources") or []
+    if not sources:
+        raise NamedError(f"the negotiation of {item_id} answered no media source at all")
+    return dict(sources[0])
+
+
+def followed(wire: Wire, address: str, depth: int = 2) -> Tuple[Tuple[str, int, int], ...]:
+    """Follow an address a negotiation handed over, and the variant line inside what it answers.
+
+    **This is the whole of what a sweep cannot do.** A request case is a declared request; an
+    address is one the *answer* names, so nothing in `request-cases.yaml` can ask for it. Each hop
+    is reported as its own file name, its status and its length, which is what lets the comparison
+    be about *where* the refusal lands rather than about a URL two servers derive differently.
+    """
+    hops: List[Tuple[str, int, int]] = []
+    path, _, query = address.partition("?")
+    for _ in range(depth):
+        answer = wire.request("GET", path, query=query)
+        hops.append((path.rsplit("/", 1)[-1], answer.status, len(answer.raw)))
+        if answer.status != 200:
+            break
+        lines = [
+            line
+            for line in answer.raw.decode("utf-8", "replace").splitlines()
+            if line and not line.startswith("#")
+        ]
+        if not lines or "://" in lines[0]:
+            break
+        path, _, query = (path.rsplit("/", 1)[0] + "/" + lines[0]).partition("?")
+    return tuple(hops)
+
+
+def named_uninspectable_source_address(
+    instances: Instances, identities: Sequence[Seat]
+) -> NamedResult:
+    """behaviours 3.13: an advertised capability has an address, not an address that answers.
+
+    The negotiation is where the two servers **agree** - `200`, the three flags decided
+    `false`/`false`/`true`, and a `TranscodingUrl` naming `master.m3u8` on each - so the sweep's
+    own comparison of this case is expected to find nothing. What differs is the hop at which the
+    refusal lands, and reaching it means issuing the request the previous answer named.
+    """
+    admin = administrator_of(identities)
+    answers: Dict[str, Tuple[Tuple[str, int, int], ...]] = {}
+    flags: Dict[str, Tuple[Any, Any, Any]] = {}
+    for side in SIDES:
+        directory = instances.seated(side, admin)
+        user_id = admin.identity(side).user_id
+        wire = instances.wire(side).as_seat(admin.identity(side).token)
+        film = item_named(directory, user_id, UNOPENED_FILM, "Movie")
+        source = negotiated_source(directory, str(film["Id"]), user_id)
+        flags[side] = (
+            source.get("SupportsDirectPlay"),
+            source.get("SupportsDirectStream"),
+            source.get("SupportsTranscoding"),
+        )
+        address = str(source.get("TranscodingUrl") or "")
+        if not address:
+            answers[side] = (("no address at all", 0, 0),)
+            continue
+        answers[side] = followed(wire, address)
+    ours, theirs = answers["atrium"], answers["reference"]
+
+    def trail(hops: Tuple[Tuple[str, int, int], ...]) -> str:
+        return " -> ".join(f"{name} {status} ({length}B)" for name, status, length in hops)
+
+    refused = tuple(hops[-1][1] == 500 for hops in (ours, theirs))
+    return NamedResult(
+        row="uninspectable-source-address",
+        finding=(
+            f"the advertised address of a source neither server has ever opened refuses at hop "
+            f"{len(ours)} here and at hop {len(theirs)} there, with the same flags "
+            f"{flags['atrium']} against {flags['reference']}"
+        ),
+        atrium=trail(ours),
+        reference=trail(theirs),
+        # behaviours 3.13: the reference answers the master playlist and defers the `500` to the
+        # `live.m3u8` it names; this server sends the same refusal at the address itself. Both
+        # end in one, which is the sentence that entry is about - and a server that started
+        # *serving* the address would be a difference the entry does not predict.
+        as_documented=all(refused)
+        and flags["atrium"] == flags["reference"]
+        and len(ours) != len(theirs),
+    )
+
+
+def annotation(directory: WireDirectory, item_id: str, user_id: str) -> Tuple[Any, ...]:
+    """What a **listing** of one item says its source carries. Never a negotiation."""
+    body = directory.get("/Items/" + str(item_id), userId=user_id, fields="MediaSources") or {}
+    source = ((body.get("MediaSources") or [{}]) or [{}])[0]
+    return (
+        len(source.get("MediaStreams") or []),
+        source.get("RunTimeTicks"),
+        source.get("Size"),
+        body.get("RunTimeTicks"),
+    )
+
+
+def named_on_demand_probe_heals_the_listing(
+    instances: Instances, identities: Sequence[Seat]
+) -> NamedResult:
+    """behaviours 2.23: the negotiation opens the file, and what it learns is written down.
+
+    Three readings and a file that changes between the first two: list, replace the bytes, list
+    again (unchanged - a listing never opens anything), negotiate, list a third time. The signal is
+    the **third** listing, and no comparison of one response can carry it.
+
+    **It can be asked once per instance.** A heal is durable and there is no route on either server
+    that undoes it, so the bytes go back but the annotation does not - which is why this row wants
+    a single-use reference and refuses to run against an item something has already annotated.
+    """
+    admin = administrator_of(identities)
+    tree = _fixture_tree(instances)
+    latent, donor = tree / LATENT_FILE, tree / LATENT_DONOR
+    if not latent.is_file() or not donor.is_file():
+        raise NamedError(
+            f"{LATENT_FILE} or {LATENT_DONOR} is missing from {tree}: this row makes an "
+            "un-openable file readable underneath both servers and needs this repository's tree"
+        )
+    seats = {side: instances.seated(side, admin) for side in SIDES}
+    users = {side: admin.identity(side).user_id for side in SIDES}
+    films = {side: item_named(seats[side], users[side], LATENT_FILM, "Movie") for side in SIDES}
+    before = {side: annotation(seats[side], str(films[side]["Id"]), users[side]) for side in SIDES}
+    already = [side for side in SIDES if before[side][0]]
+    if already:
+        raise NamedError(
+            f"{', '.join(already)} already carries an annotation for {LATENT_FILM}: a heal is "
+            "durable and nothing undoes it, so this row is once per instance and this instance "
+            "has answered it"
+        )
+
+    saved = latent.read_bytes()
+    try:
+        latent.write_bytes(donor.read_bytes())
+        listed = {
+            side: annotation(seats[side], str(films[side]["Id"]), users[side]) for side in SIDES
+        }
+        for side in SIDES:
+            negotiated_source(seats[side], str(films[side]["Id"]), users[side])
+        after = {
+            side: annotation(seats[side], str(films[side]["Id"]), users[side]) for side in SIDES
+        }
+    finally:
+        latent.write_bytes(saved)
+
+    def said(one: Tuple[Any, ...]) -> str:
+        return f"{one[0]} stream(s), RunTimeTicks={one[1]!r}, Size={one[2]!r}, item={one[3]!r}"
+
+    healed = tuple(after[side][0] and after[side][1] for side in SIDES)
+    return NamedResult(
+        row="on-demand-probe-heals-the-listing",
+        finding=(
+            "a listing of a source nothing had opened, the same listing after its bytes became "
+            f"readable, and the same listing after one negotiation: {said(before['atrium'])} -> "
+            f"{said(listed['atrium'])} -> {said(after['atrium'])} here, and "
+            f"{said(before['reference'])} -> {said(listed['reference'])} -> "
+            f"{said(after['reference'])} there"
+        ),
+        atrium=said(after["atrium"]),
+        reference=said(after["reference"]),
+        # behaviours 2.23: both servers gain the annotation from the negotiation and from nothing
+        # else, and both keep it. The item-level `RunTimeTicks` is expected to stay `null` here
+        # and to arrive there - that is 012 plan section 11's D-2, decided out of this feature on
+        # 2026-09-03 and owed to the feature that scans, so it is declared rather than compared.
+        as_documented=all(healed)
+        and not any(listed[side][0] for side in SIDES)
+        and after["atrium"][:3] != before["atrium"][:3]
+        and after["reference"][:3] != before["reference"][:3],
+    )
+
+
 # -- here to be recognised, not discovered ------------------------------------------------------
 #
 # The last two rows of spec section 3.10 are ordinary request cases (plan section 6.4). Their
@@ -3108,7 +3349,7 @@ def named_body_with_no_content_type(
 #: Every runner the register may name, by the name it names. **A dictionary and not `getattr`**,
 #: because a register that could reach any callable in this module by writing its name is a
 #: register that can call something that is not a runner; `tests/unit/test_allowlist.py` resolves
-#: all twenty against this mapping, so a row naming a runner nobody wrote fails before a run.
+#: all twenty-two against this mapping, so a row naming a runner nobody wrote fails before a run.
 RUNNERS: Dict[str, Callable[[Instances, Sequence[Seat]], NamedResult]] = {
     "named_playlist_read_names_its_reader": named_playlist_read_names_its_reader,
     "named_playlist_entries_a_reader_cannot_reach": named_playlist_entries_a_reader_cannot_reach,
@@ -3132,6 +3373,8 @@ RUNNERS: Dict[str, Callable[[Instances, Sequence[Seat]], NamedResult]] = {
     "named_paused_session_ticker_freeze": named_paused_session_ticker_freeze,
     "named_body_binding_dollar_message": named_body_binding_dollar_message,
     "named_body_with_no_content_type": named_body_with_no_content_type,
+    "named_uninspectable_source_address": named_uninspectable_source_address,
+    "named_on_demand_probe_heals_the_listing": named_on_demand_probe_heals_the_listing,
 }
 
 
@@ -3151,8 +3394,8 @@ def named_outcomes(
     nobody has written one. Only then is the runner called.
 
     **A runner that raises leaves its row outstanding with the exception and the run continues.**
-    Twenty comparisons that stopped at the first unaskable one would report nothing about the
-    nineteen after it, and the nineteen are the point.
+    Twenty-two comparisons that stopped at the first unaskable one would report nothing about the
+    twenty-one after it, and the twenty-one are the point.
     """
     run: List[NamedResult] = []
     outstanding: List[Tuple[str, str]] = []
