@@ -3,7 +3,7 @@ feature: 005-item-query-api
 title: Item query API — tasks
 status: Implemented
 created: 2026-08-27
-updated: 2026-09-03
+updated: 2026-09-05
 accepted: 2026-08-27
 implemented: 2026-08-28
 plan_status_required: Accepted
@@ -929,6 +929,36 @@ serves five routes.
   does not exist on the wire), AC-1's "one representation" split into three widths at T1 — and
   every correction is in the spec with provenance, in the same change that learned it. The
   definition of done below is closed line by line.
+
+### Amended — 2026-09-05: three tables that had tests and no criterion
+
+**The map this task wrote can only name a behaviour that §5 names first**, and three of this
+feature's behaviours were implemented, fully tested and never given a criterion — so twenty-seven
+passing tests hung off nothing, and every one of them could have been weakened or renamed without
+a criterion failing. Found as M4, M5 and M6 of the [2026-09-04 audit](../../docs/audits/2026-09-04.md),
+which reports them as one class of ten across six features: the acceptance map checks that a named
+test *exists* and never that a behaviour *has* a name.
+
+**`GET /Items/Filters` (M4) needed §3 before it could have §5.** AC-1 named the route only to
+exempt it from the envelope, and §3.7's row said what keys come back and not what is in them —
+the rule itself had lived since T15 in `api/filters.py`'s docstring and in this file's T15 note,
+where §5 cannot reach it. §3.7 now carries the measured paragraph, with T15's probe and the
+reference's own `Years` column beside it, and **AC-23** is that paragraph. Its five tests were
+read first: the discriminating clauses are `Years` being the production year — which only holds
+because audit M18's repair (C2) turned that assertion from `sorted(...) or sorted(...)` into the
+exact list plus *`DATED_PREMIERE.year` is not in it* — and the two-spellings entry, which is what
+separates this list from `/Genres`' merged row.
+
+**The 2026-09-03 tranche (M5) and the 2026-09-02 policy fix (M6) had the §3 rows already**, so
+**AC-24** and **AC-25** are the tables restated as claims rather than as tables: the eight
+wide-only properties on both wide widths and on no list row; the per-account `MediaSources` flags,
+one permission per media kind, on every route whose rows can carry the property. Both criteria end
+on the structural half those two test files already assert — that no route can build an item
+context without naming whose account it emits under — because that is what makes each an *every*
+rather than a list of routes somebody remembered.
+
+**No behaviour changed and no `src/` file was touched.** §5 now numbers twenty-five criteria and
+`FEATURE_005` names tests for all of them.
 
 ---
 
