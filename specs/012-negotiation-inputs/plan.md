@@ -554,12 +554,18 @@ rather than inheriting the trace**: the five policy shapes that make the inspect
 move are asserted on the never-opened one, and they answer the same five triples — the branch was
 not load-bearing, which is a thing to know rather than to believe.
 
-**What this feature does not do is follow the address.** The reference's own answer for this source
-names `live.m3u8` and that playlist answers `500`
-([behaviours §3.13](../../docs/compatibility/behaviours.md)); v1 has no live path, its
-`TranscodingUrl` names `master.m3u8`, and AC-4 is explicitly about answering *with* an address. The
-byte-level difference between the two addresses is what the L3 case in §8 exists to record rather
-than to resolve.
+**What this feature does not do is follow the address** — and **T10 followed it once, on both
+servers, and found this paragraph wrong.** What was written here until 2026-09-04 was *"the
+reference's own answer for this source names `live.m3u8` … v1's `TranscodingUrl` names
+`master.m3u8`"*, which compares two different things: **both servers hand over `master.m3u8`**, and
+the negotiation is where they agree, field for field. The difference is one hop further on — the
+reference's master playlist answers `200` and names a `live.m3u8` variant that answers `500`,
+`text/plain`, the platform's 25 bytes, where this server's master playlist answers that same
+refusal itself `[probe: tools/differential.py, Jellyfin 10.11.11, 2026-09-04]`. Both end at the
+same `500`; they differ by *where* it lands, which is what
+[behaviours §3.13](../../docs/compatibility/behaviours.md) records and defers. AC-4 is still
+explicitly about answering *with* an address, and the §8 named comparison is what records the hop
+rather than resolving it.
 
 ### 6.4 The audio refusal
 
@@ -975,10 +981,25 @@ harness 010 built, which means rows in two files:
   `protocol-that-binds-to-nothing`, `protocol-by-ordinal`, and
   `a-source-the-world-never-opened` (anchored on the fixture item, both identities);
 * `docs/compatibility/named-comparisons.yaml` — two rows a sweep cannot raise:
-  `uninspectable-source-address`, because the reference's address names `live.m3u8` and answers
-  `500` where v1's names `master.m3u8` ([behaviours §3.13](../../docs/compatibility/behaviours.md)),
-  and `on-demand-probe-heals-the-listing`, because the comparison is *two requests and their
-  order*, which the engine compares one response at a time.
+  `uninspectable-source-address`, because the sweep compares the negotiation and the negotiation is
+  where the two servers **agree** — the difference is the **hop** at which the advertised address
+  refuses, two requests further on, and no declared case follows an address it was handed
+  ([behaviours §3.13](../../docs/compatibility/behaviours.md)); and
+  `on-demand-probe-heals-the-listing`, because the comparison is *two requests and their order*,
+  which the engine compares one response at a time.
+
+**Those two rows cost more than two rows, and T10 priced it.** The register is compared against
+[010 §3.10](../010-conformance-harness/spec.md)'s table row for row, and the count is written down
+in three places — that table's prose, 010's AC-16 and
+[conformance.md](../../docs/compatibility/conformance.md). So adding them moves an **accepted and
+implemented** spec, and 012 is the first feature to write a named comparison about *itself* rather
+than inherit one from a finished feature's owes list — which is why their `written_at` is this plan.
+
+**And the fourth request case needs a fifth.** An anchor is a *declared listing case* and a row
+position, and no listing in the register indexed the un-inspectable film, so
+`a-source-the-world-never-opened` is anchored on a new `the-unopened-film` listing beside it. The
+three protocol cases need no fixture at all: the protocol is a property of the binder and not of
+the file, so they anchor on `movies-by-sort-name@0` and are askable of any reachable server.
 
 Both L2 rows (the listing, and the inspection an on-demand probe writes) are the fixture read
 twice, in `tests/conformance/`, needing no reference.

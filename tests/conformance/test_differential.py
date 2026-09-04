@@ -1883,17 +1883,17 @@ def test_an_untriaged_difference_blocks_the_run_and_a_known_one_is_printed_anywa
     assert not untriaged.is_clean()
 
 
-# -- the needs vocabulary, and the twenty rows -------------------------------------------------
+# -- the needs vocabulary, and the twenty-two rows ---------------------------------------------
 
 
-def test_the_twenty_named_comparisons_are_all_reported_even_though_none_can_run() -> None:
-    """AC-16 against the register itself: twenty rows, none runnable, each outstanding by name."""
+def test_the_named_comparisons_are_all_reported_even_though_none_can_run() -> None:
+    """AC-16 against the register itself: every row, none runnable, each outstanding by name."""
     register = allowlist.load_named()
     ran, outstanding = differential.named_outcomes(
         register, differential.Inputs(roles=("administrator", "restricted"))
     )
     assert ran == ()
-    assert len(outstanding) == 20
+    assert len(outstanding) == 22
     assert {row for row, _why in outstanding} == {row.id for row in register}
     assert all(why for _row, why in outstanding)
 
@@ -1930,14 +1930,14 @@ def test_a_reference_somebody_else_stood_up_makes_the_fixture_rows_askable() -> 
     assert differential.unmet_need("bytes", without) == ""
 
 
-def test_selecting_one_named_comparison_leaves_the_other_nineteen_counted() -> None:
-    """`--named` narrows what is attempted and never what is reported: AC-16 counts twenty."""
+def test_selecting_one_named_comparison_leaves_the_others_counted() -> None:
+    """`--named` narrows what is attempted and never what is reported: AC-16 counts them all."""
     register = allowlist.load_named()
     _ran_ids, outstanding = differential.named_outcomes(
         register,
         differential.Inputs(roles=("administrator",), named_selected=("subtitle-burn-in",)),
     )
-    assert len(outstanding) == 20
+    assert len(outstanding) == 22
     assert dict(outstanding)["manifest-announced-track-name"] == "not selected by --named"
 
 
@@ -2450,7 +2450,7 @@ def test_a_fixture_run_with_no_runtime_reports_every_fixture_row_outstanding_and
     """ADR-0007: *"the dependency buys coverage; its absence costs coverage and says so"*.
 
     The whole degradation, end to end over the **real** registers: no runtime, so no instance, so
-    each of the 12 request cases and 10 named rows that declared `needs: fixture`, `rescan` or
+    each of the 11 request cases and 12 named rows that declared `needs: fixture`, `rescan` or
     `wait` is named with that reason, and `is_clean()` is false. Delete the degradation branch —
     let a run with no instance simply not ask — and the report comes back clean having compared
     nothing, which is the CI job that reported green because it ran nothing (008 T18) with a
@@ -2483,12 +2483,17 @@ def test_a_fixture_run_with_no_runtime_reports_every_fixture_row_outstanding_and
     # on the first request of the first full sweep. They take it from
     # `POST /Items/{itemId}/PlaybackInfo#no-body-on-the-subtitled-film` now, and a case that
     # negotiates the fixture's subtitled film needs the fixture.
-    assert len(needing) == 9
+    #
+    # **Eleven since 2026-09-04.** 012 T10 declared the film neither server has ever opened - a
+    # listing that names it, and the negotiation of it that is one of this feature's two `level:
+    # L3` rows. Its other three cases are about the profile's protocol, which is a property of the
+    # binder and not of the file, so they ask on any reachable server and declare no `fixture`.
+    assert len(needing) == 11
     for case in needing:
         assert differential.unmet_needs(case.needs, inputs), case.id
 
     _ran_ids, outstanding = differential.named_outcomes(allowlist.load_named(), inputs)
-    assert len([row for row, why in outstanding if absent in why]) == 10
+    assert len([row for row, why in outstanding if absent in why]) == 12
 
     report = _report(named_outstanding=outstanding, comparisons=(_ran(),))
     assert not report.is_clean()
@@ -2524,10 +2529,10 @@ def test_the_instance_command_line_starts_nothing_when_it_is_asked_for_help() ->
 
 
 # --------------------------------------------------------------------------------------------
-# The named comparisons: six runner shapes over twenty rows — 010 T12, spec §3.10, AC-16
+# The named comparisons: seven runner shapes over twenty-two rows — 010 T12, 012 T10, AC-16
 # --------------------------------------------------------------------------------------------
 #
-# Most of the twenty need two real servers, a fixture and in one case eleven minutes, so what runs
+# Most of the twenty-two need two real servers, a fixture and in one case eleven minutes, so what
 # here is what can be driven without any of that: the mechanism that keeps an unrunnable row
 # **outstanding** rather than silently absent, and the one runner whose whole signal is a number
 # that a body comparison cannot see.
@@ -2562,10 +2567,10 @@ def test_every_register_row_names_a_runner_this_module_actually_has() -> None:
     one run that needed the row.
     """
     register = allowlist.load_named()
-    assert len(register) == 20
+    assert len(register) == 22
     unknown = [row.id for row in register if row.runner not in differential.RUNNERS]
     assert not unknown, f"the register names runners differential.py has not got: {unknown}"
-    assert len(differential.RUNNERS) == 20, "a runner exists that no register row names"
+    assert len(differential.RUNNERS) == 22, "a runner exists that no register row names"
 
 
 def test_a_runner_that_raises_leaves_its_row_outstanding_and_the_run_continues(
@@ -2618,7 +2623,7 @@ def test_a_named_comparison_that_contradicts_its_own_entry_is_not_a_clean_run() 
     """The fourth condition on `is_clean`, and it is the first three read the other way round.
 
     A row that *ran* and measured something its own citation does not predict is an untriaged
-    difference arriving through a runner. Without this, all twenty could run, every one of them
+    difference arriving through a runner. Without this, all twenty-two could run, every one of them
     contradict the entry it cites, and the report say `20 run, 0 outstanding`.
     """
     agreed = differential.NamedResult("subtitle-burn-in", "as behaviours §5 says", "a", "b")
@@ -2732,7 +2737,7 @@ def test_the_row_count_is_the_signal_for_the_unreachable_entries_row() -> None:
 
 
 def test_a_seat_this_run_has_not_got_is_a_named_row_outstanding_and_never_a_crash() -> None:
-    """Two of the twenty are invisible without the restricted seat, so a run without one says so."""
+    """Two rows are invisible without the restricted seat, so a run without one says so."""
     instances = differential.Instances(atrium=object(), reference=object())
     with pytest.raises(differential.NamedError) as refused:
         differential.named_playlist_read_names_its_reader(instances, [_seat()])

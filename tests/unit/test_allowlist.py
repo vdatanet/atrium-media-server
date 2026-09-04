@@ -417,6 +417,15 @@ D6_ROWS = (
     "paused-session-ticker-freeze",
 )
 
+#: The two rows 012 T10 added on 2026-09-04, by id. They are the first rows a feature wrote about
+#: **itself**: every other row here was inherited from a finished feature's "what this feature owes
+#: the next ones" list, and these two were declared by 012's own plan because its two `level: L3`
+#: rows cannot be reached without them.
+FEATURE_012_ROWS = (
+    "uninspectable-source-address",
+    "on-demand-probe-heals-the-listing",
+)
+
 #: The six "what this feature owes the next ones" lists spec §3.10 collects, and §8 names.
 INHERITED_LISTS = (
     "specs/005-item-query-api/tasks.md",
@@ -454,23 +463,26 @@ def test_the_register_is_spec_310s_table() -> None:
     assert [row.what for row in NAMED] == prose, "the register and spec §3.10 disagree"
 
 
-def test_the_register_counts_twenty() -> None:
-    """AC-16's count, and D-6's four rows inside it rather than beside it.
+def test_the_register_counts_twenty_two() -> None:
+    """AC-16's count, D-6's four rows inside it rather than beside it, and 012's two beside those.
 
     The count is written down in three places since D-6 — AC-16, conformance.md's L3 section and
-    this file — and this is what fails when one of them moves without the others.
+    this file — and this is what fails when one of them moves without the others. It moved twice:
+    sixteen to twenty on 2026-09-02 (D-6), twenty to twenty-two on 2026-09-04, when 012 T10 wrote
+    the two rows its own L3 conformance needs.
     """
-    assert len(NAMED) == 20
-    assert len({row.id for row in NAMED}) == 20
+    assert len(NAMED) == 22
+    assert len({row.id for row in NAMED}) == 22
     assert set(D6_ROWS) <= {row.id for row in NAMED}, "a D-6 row fell back out of the count"
+    assert set(FEATURE_012_ROWS) <= {row.id for row in NAMED}, "a 012 row fell out of the count"
 
     criterion = next(
         line
         for line in SPEC.read_text(encoding="utf-8").splitlines()
         if "named comparisons is either run or reported outstanding" in line
     )
-    assert "twenty" in criterion, criterion
-    assert "There are **twenty** of them" in CONFORMANCE.read_text(encoding="utf-8")
+    assert "twenty-two" in criterion, criterion
+    assert "There are **twenty-two** of them" in CONFORMANCE.read_text(encoding="utf-8")
 
 
 def test_every_row_names_a_behaviours_section_that_exists() -> None:
@@ -490,9 +502,11 @@ def test_every_row_names_a_behaviours_section_that_exists() -> None:
 def test_every_row_names_a_document_of_this_repository_that_exists() -> None:
     """`written_at` is where the reading is owed from, and a dead path owes nothing.
 
-    Nineteen of the twenty came from one of the six inherited lists; behaviours §5.2 is the one
+    Nineteen of 010's twenty came from one of the six inherited lists; behaviours §5.2 is the one
     that did not, which is what 010's task list meant by *"the six lists **and** the compatibility
-    documents"*.
+    documents"*. **012's two came from neither**, and that is the third kind: a feature's own plan,
+    declaring a comparison its own conformance rows need, which no inherited list could have
+    collected because the feature was not finished when they were written.
     """
     for row in NAMED:
         document = REPO_ROOT / row.written_at
@@ -502,7 +516,12 @@ def test_every_row_names_a_document_of_this_repository_that_exists() -> None:
 
     cited = {row.written_at for row in NAMED}
     assert set(INHERITED_LISTS) <= cited, sorted(set(INHERITED_LISTS) - cited)
-    assert cited - set(INHERITED_LISTS) == {"docs/compatibility/behaviours.md"}
+    assert cited - set(INHERITED_LISTS) == {
+        "docs/compatibility/behaviours.md",
+        "specs/012-negotiation-inputs/plan.md",
+    }
+    owned = {row.written_at for row in NAMED if row.id in FEATURE_012_ROWS}
+    assert owned == {"specs/012-negotiation-inputs/plan.md"}, sorted(owned)
 
 
 def test_the_two_rows_the_second_seat_is_the_whole_signal_for_declare_it() -> None:
@@ -536,7 +555,7 @@ def test_every_row_that_d6_added_needs_the_single_use_instance() -> None:
 
 
 def test_every_row_names_a_runner_and_none_of_them_is_none() -> None:
-    """All twenty since 010 T12, where every one of them read `none` before it.
+    """All twenty-two, where every one of 010's read `none` before 010 T12.
 
     The name is only half the check: `tests/conformance/test_differential.py` resolves each of
     these against `differential.RUNNERS`, so a row naming a function nobody wrote fails there
@@ -544,7 +563,7 @@ def test_every_row_names_a_runner_and_none_of_them_is_none() -> None:
     """
     outstanding = [row.id for row in NAMED if row.is_outstanding]
     assert not outstanding, f"these rows still name no runner: {outstanding}"
-    assert len({row.runner for row in NAMED}) == 20, "two rows name the same runner"
+    assert len({row.runner for row in NAMED}) == 22, "two rows name the same runner"
 
 
 def test_an_unknown_need_fails_the_load() -> None:

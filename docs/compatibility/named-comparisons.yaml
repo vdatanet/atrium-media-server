@@ -1,11 +1,11 @@
 # The named comparisons: the differences a differential sweep cannot raise on its own.
 #
-# Read with specs/010-conformance-harness/spec.md section 3.10, which carries the same twenty rows
-# in prose, and with docs/compatibility/conformance.md's L3 section, which says why they exist.
+# Read with specs/010-conformance-harness/spec.md section 3.10, which carries the same twenty-two
+# rows in prose, and with docs/compatibility/conformance.md's L3 section, which says why they exist.
 # tests/unit/test_allowlist.py compares this file against that table row for row, so the two
 # cannot drift apart.
 #
-# A sweep finds only what a request under comparison exposes. Twenty differences are outside that:
+# A sweep finds only what a request under comparison exposes. Twenty-two differences are outside that:
 # they need a caller the run does not have, a library the reference cannot be given, a library
 # changed between two scans, a deliberate wait, or a comparison of something that is not in a body.
 # Each one is run deliberately, and AN UNRUN ROW KEEPS A RUN FROM BEING CALLED CLEAN (010 AC-16).
@@ -13,7 +13,9 @@
 #
 # Sixteen rows when 010's spec was accepted on 2026-09-01, twenty since 2026-09-02 and the decision
 # 010's task list reserved as D-6: behaviours 5.2, behaviours 5.6, 005's OQ-7 and 007's
-# paused-session ticker are rows here rather than debts beside the count.
+# paused-session ticker are rows here rather than debts beside the count. TWENTY-TWO since
+# 2026-09-04, when 012 T10 added the two its own L3 rows need - the first rows a feature has
+# written about itself rather than inherited from the one before it.
 #
 # Fields:
 #   id            A stable name for the row. It is what the report prints, so it outlives the
@@ -43,7 +45,7 @@
 #                 rather than "four outstanding", and what a run consults to decide whether a row
 #                 is askable before it counts it as a miss (010 plan section 4.2).
 #   behaviours    The behaviours.md section that is the answer, or `none`. FIVE ROWS SAY `none`,
-#                 and that is a measurement rather than an omission: five of the twenty differences
+#                 and that is a measurement rather than an omission: five of the twenty-two
 #                 have no behaviours.md entry at all, because an entry there records what the
 #                 reference does and nobody has yet watched it do these. FOUR MORE CITE A WHOLE
 #                 CHAPTER, `behaviours 5`, because their answer is a row of that section's table
@@ -51,11 +53,15 @@
 #                 `what` says which row.
 #   written_at    The document this row was collected from: one of the six "what this feature owes
 #                 the next ones" lists spec section 3.10 collects, or the compatibility document
-#                 that carries the question where no list does. Nineteen of the twenty came from a
-#                 list; behaviours 5.2 is the one that did not, which is what 010's task list meant
-#                 by "the six lists AND the compatibility documents".
+#                 that carries the question where no list does. Nineteen of 010's twenty came from
+#                 a list; behaviours 5.2 is the one that did not, which is what 010's task list
+#                 meant by "the six lists AND the compatibility documents". The two 012 added on
+#                 2026-09-04 came from neither: a feature's own plan, declaring a comparison its
+#                 own L3 rows need, which no list could have collected because 012 was not
+#                 finished when they were written.
 #   runner        The callable in tools/differential.py that runs the comparison, or `none` while
-#                 it is outstanding. All twenty name one since 2026-09-02 (010 T12), in the six
+#                 it is outstanding. All of them name one - 010's twenty since 2026-09-02 (010
+#                 T12) and 012's two from the day they were written - in the six
 #                 runner shapes of 010 plan section 6.4, and every name is resolved against that
 #                 module's own RUNNERS mapping rather than by getattr - a register that could
 #                 reach any callable in a module by writing its name is a register that can call
@@ -225,6 +231,29 @@ comparisons:
     behaviours: none
     written_at: "specs/007-user-data-and-playstate/tasks.md"
     runner: named_paused_session_ticker_freeze
+
+  # ------------------------------------------------------------------------------------------
+  # The two 012 added on 2026-09-04, and they are the first rows a feature wrote about ITSELF.
+  # Every row above was inherited - a reading one feature owed and another collects - and these
+  # two were declared by 012's own plan section 8 before 012 closed, which is why their
+  # `written_at` is a plan and not one of the six "what this feature owes the next ones" lists.
+  # ------------------------------------------------------------------------------------------
+
+  - id: uninspectable-source-address
+    what: The hop at which an un-inspectable source's advertised address fails (behaviours §3.13)
+    why_the_sweep_misses_it: "The sweep compares the negotiation and stops there, and the negotiation is where the two servers AGREE: both answer 200 with the flags decided and a TranscodingUrl naming `master.m3u8`. What differs is two requests further on - the reference's master playlist answers 200 and names a `live.m3u8` variant which answers the 500, and this server's master playlist answers the same 500 itself - and no declared case follows an address it was handed"
+    needs: [fixture]
+    behaviours: "behaviours §3.13"
+    written_at: "specs/012-negotiation-inputs/plan.md"
+    runner: named_uninspectable_source_address
+
+  - id: on-demand-probe-heals-the-listing
+    what: A negotiation writing down what it opened (behaviours §2.23)
+    why_the_sweep_misses_it: "Its subject is two requests and their order - a listing, a negotiation, the same listing again - and the engine compares one response at a time, so a listing that CHANGED between two identical requests is a difference no single comparison can hold. It also needs the file to become readable between the two, which means changing the tree both servers are mounted over"
+    needs: [fixture, twice]
+    behaviours: "behaviours §2.23"
+    written_at: "specs/012-negotiation-inputs/plan.md"
+    runner: named_on_demand_probe_heals_the_listing
 
   # ------------------------------------------------------------------------------------------
   # Here to be recognised, not discovered. The last two rows of spec section 3.10 are ordinary

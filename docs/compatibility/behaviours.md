@@ -2420,15 +2420,34 @@ of them is true.
 user sees. The video client's documented behaviour on this path is to stop, which it does either
 way.
 
-**Atrium does: not decided here, and the deferral is the point.** v1 does not emit an address on
-this path at all today, so the defect is in a code path this project does not yet have — which is
-[§3.0.1](#301-the-tie-breaks) tie-break 3 exactly: *a decision made about code nobody will write
-for a while is a decision made with the least information it will ever have.* The candidates are
-two and they are both defensible: reproduce the `200`-with-an-address and let the delivery route
-fail as the reference's does, or decide that a source nothing could read advertises no capability
-at all. Choosing now would also be choosing before
-[012](../../specs/012-negotiation-inputs/spec.md)'s delivery half exists to be measured against.
-Recorded at 012's measurement gate on 2026-08-29, and owed to the task that implements 012 §3.2.
+**Atrium does: emit the same address, and refuse one hop earlier.** The first half of the choice
+was taken by [012 T5](../../specs/012-negotiation-inputs/tasks.md) on 2026-09-04 — AC-4 — and the
+second half is still open. Measured on both servers over this repository's own fixture, as the
+named comparison `uninspectable-source-address`:
+
+| | Atrium | The reference |
+|---|---|---|
+| The negotiation | `200`, no streams, no runtime, `false`/`false`/`true`, `TranscodingUrl` → **`master.m3u8`** | identical |
+| `master.m3u8` | **`500`**, `text/plain`, the 25 bytes `Error processing request.` | `200`, `application/vnd.apple.mpegurl`, one variant line naming **`live.m3u8`** |
+| `live.m3u8` | there is no such route here | **`500`**, `text/plain`, the same 25 bytes |
+
+`[probe: tools/differential.py, Jellyfin 10.11.11, 2026-09-04]` — the named comparison
+`uninspectable-source-address`, run with `--fixture` against a single-use instance of the
+pinned version
+
+So the negotiated address is **not** where the two differ — that sentence stood in
+[012's plan §6.3 and §8](../../specs/012-negotiation-inputs/plan.md) until T10 measured it, and
+both servers name `master.m3u8`. What differs is which hop carries the refusal, and both carry the
+same one: an advertised capability has an address on each, and neither address plays anything.
+
+**What is still deferred is the shape of the middle row**, and it stays deferred for
+[§3.0.1](#301-the-tie-breaks) tie-break 3's reason: whether v1's master playlist should answer
+`200` with a variant that then refuses, which means a `live.m3u8` route this project does not have
+and no measured client asks for, or keep the refusal where it is. Nothing can observe the
+difference except a client that parses a playlist in order to fetch a variant that fails, and the
+video client's documented behaviour on this path is to stop. Recorded at 012's measurement gate on
+2026-08-29, measured on both servers at 012 T10 on 2026-09-04, and owed to the feature that gives
+v1 a live path — not to 012, whose AC-4 is about the negotiation answering *with* an address.
 
 ### 3.14 The fMP4 initialisation segment restarts production — class B, replicated
 

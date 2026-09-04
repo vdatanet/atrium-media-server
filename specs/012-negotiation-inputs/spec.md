@@ -275,12 +275,13 @@ trace proposed: what closes the music client's symptom is not a change to the li
 negotiation's write.
 
 **And the reference's own answer for an unreadable file is not one this feature can copy whole.**
-The address it hands out for a source with no `RunTimeTicks` names `live.m3u8` rather than
-`main.m3u8` — a source with no runtime is addressed as an infinite stream — and that playlist
-answers **`500`**. So the reference does satisfy *"every capability has an address"* and does not
-satisfy *"every address can be fetched"*, and the two are not the same rule. That is a defect of
-the reference in a path v1 does not yet have, recorded and deferred rather than argued here
-([behaviours §3.13](../../docs/compatibility/behaviours.md)).
+The address it hands over is the ordinary one; what sits **behind** it is not. For a source with no
+runtime the reference's master playlist offers a single entrance named for an infinite stream, and
+that entrance answers **`500`**. So the reference does satisfy *"every capability has an address"*
+and does not satisfy *"every address can be fetched"*, and the two are not the same rule. Measured
+on both servers on 2026-09-04, the two do the same thing one request apart — this server refuses at
+the address itself — which is a defect of the reference in a path v1 does not yet have, recorded and
+deferred rather than argued here ([behaviours §3.13](../../docs/compatibility/behaviours.md)).
 
 **What v1 does**, now that the measurements are in, and the candidates were not equivalent:
 
