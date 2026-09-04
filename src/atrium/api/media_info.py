@@ -39,7 +39,15 @@ answer. It decides nothing: a rung, a reason and a ceiling are all read from a `
 *query* token does (behaviours section 1.12). A `Property` of `NotAThing` inside a codec profile
 is refused rather than dropped, so the profile vocabulary is declared as enums here and the
 framework's validation produces the refusal `[probe: manual requests via tools/_probe.py, Jellyfin
-10.11.11, 2026-08-29]`. `Photo`, `Subtitle` and `Lyric` are in that vocabulary and are **not**
+10.11.11, 2026-08-29]`.
+
+**How those enums are *read* is `compat/model.py`'s and not this module's**, since 012 T7: one
+binder on the base every request model inherits takes a name in any case and a number as the
+ordinal the reference declares, on all five vocabularies this body carries. The narrow binder 011
+T9 wrote for a subtitle entry's `Method` is gone with it - two answers to one question about the
+reference being worse than either (behaviours section 2.28).
+
+`Photo`, `Subtitle` and `Lyric` are in that vocabulary and are **not**
 errors: they are profile entries about media this negotiation is not about, and they are dropped
 when the profile is mapped.
 
