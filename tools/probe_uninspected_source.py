@@ -124,6 +124,8 @@ def build_fixture(root: Path) -> dict[str, Path]:
         "Atrium Probe Empty (2004)",
         "Atrium Probe Truncated (2005)",
         "Atrium Probe Latent (2006)",
+        "Atrium Probe Latent Get (2007)",
+        "Atrium Probe Two Parter (2008)",
     ):
         (movies / name).mkdir(parents=True, exist_ok=True)
     (music / "Atrium Probe Artist" / "Atrium Probe Album").mkdir(parents=True, exist_ok=True)
@@ -157,6 +159,22 @@ def build_fixture(root: Path) -> dict[str, Path]:
     broken_track = album / "02 Atrium Probe Broken.mp3"
     broken_track.write_bytes(os.urandom(4096))
 
+    #: The **GET** route's own copy of the latent question (012 plan section 6.8 item 4). It has
+    #: to be a second file: once a negotiation has healed the first one the question cannot be
+    #: asked again, and the whole point is which route did the healing.
+    latent_get = movies / "Atrium Probe Latent Get (2007)" / "Atrium Probe Latent Get (2007).mkv"
+    latent_get.write_bytes(noise)
+
+    #: **Two parts, one of them unreadable** (012 plan section 6.8 item 3). The reference's
+    #: trigger reads source *zero* and the refresh it fires is over the whole item, so this is the
+    #: only shape that can say whether a second part is re-read - and whether the trigger fires at
+    #: all when part one is annotated and part two is not.
+    two_parter = movies / "Atrium Probe Two Parter (2008)"
+    part1 = two_parter / "Atrium Probe Two Parter (2008) - part1.mkv"
+    part2 = two_parter / "Atrium Probe Two Parter (2008) - part2.mkv"
+    shutil.copyfile(readable, part1)
+    part2.write_bytes(noise)
+
     empty = movies / "Atrium Probe Empty (2004)" / "Atrium Probe Empty (2004).mkv"
     empty.write_bytes(b"")
 
@@ -172,6 +190,9 @@ def build_fixture(root: Path) -> dict[str, Path]:
         "latent": latent,
         "track": track,
         "broken_track": broken_track,
+        "latent_get": latent_get,
+        "two_parter_part1": part1,
+        "two_parter_part2": part2,
     }
 
 
@@ -365,9 +386,15 @@ def _negotiation_battery(server: Server, probe: Probe, items: dict[str, dict]) -
     seconds, status, headers, payload = negotiate_raw(
         server, items["broken_track"]["Id"], AUDIO_PROFILE
     )
+    #: **The whole body, not the first sixty bytes** (012 plan section 6.8 item 1). 012's plan
+    #: reads this as the exception middleware's fixed sentence outside a development environment
+    #: `[source: Jellyfin.Api/Middleware/ExceptionMiddleware.cs:93, 98, 127 @ v10.11.11]`, which
+    #: is the same 25 bytes this project already sends on its delivery routes - and a reading is
+    #: not a measurement. The length is printed beside it because that is what a golden asserts.
     probe.observe(
         "negotiation, audio with no audio stream",
-        f"{seconds:.2f}s {status} {headers.get('Content-Type')} {payload[:60]!r}",
+        f"{seconds:.2f}s {status} {headers.get('Content-Type')} "
+        f"{len(payload)} bytes {payload.decode('utf-8', 'replace')!r}",
     )
     checks.append(status == 400)
     seconds, status, headers, payload = negotiate_raw(server, items["broken_track"]["Id"], None)
@@ -432,6 +459,17 @@ def _on_demand_battery(server: Server, probe: Probe, items: dict[str, dict]) -> 
         and after.get("Size") == source.get("Size")
     )
 
+    #: **The change signal, across the heal** (012 plan section 6.8 item 6, and D-1 rests on it).
+    #: `ETag` is derived from the file's modification time, so whether it moves says whether the
+    #: reference's on-demand refresh rewrites the source row's own signal or only the inspection.
+    #: If it does not move, Atrium writing it is an improvement rather than parity and the
+    #: decision goes back to its owner.
+    probe.observe(
+        "latent, ETag and Size across the heal",
+        f"{before.get('ETag')!r} {before.get('Size')} -> {after.get('ETag')!r} {after.get('Size')}",
+    )
+    probe.observe("latent, ETag moved", before.get("ETag") != after.get("ETag"))
+
     seconds, status, _, payload = negotiate_raw(server, latent["Id"], VIDEO_PROFILE)
     probe.observe("latent, second negotiation", f"{seconds:.2f}s {status}")
     checks.append(status == 200 and seconds < first_wait)
@@ -448,6 +486,87 @@ def _on_demand_battery(server: Server, probe: Probe, items: dict[str, dict]) -> 
     probe.observe("what the client waits for, unresolvable", f"{repeats} s")
     probe.observe("what it waits for, already annotated", f"{control} s")
     checks.append(min(repeats) > max(control))
+    return checks
+
+
+def _get_route_battery(server: Server, probe: Probe, items: dict[str, dict]) -> list[bool]:
+    """012 plan section 6.8 item 4: does the **profile-less** route probe on demand too?
+
+    Read rather than measured until now: the reference's `GET` action calls the same helper with
+    the same `allowMediaProbe` `[source: Jellyfin.Api/Controllers/MediaInfoController.cs:87 @
+    v10.11.11]`. It decides where 012 puts its resolution - before the profile branch, on both
+    routes, or inside the half that has a profile - and a listing healed by a `GET` is a listing
+    healed by a client that never negotiated anything.
+    """
+    checks: list[bool] = []
+    latent = items["latent_get"]
+    before = listing_source(server, latent["Id"])
+    probe.observe("latent (GET), listing before", _shape(before))
+    checks.append(not before.get("MediaStreams"))
+
+    shutil.copyfile(items["readable"]["Path"], latent["Path"])
+
+    started = time.monotonic()
+    answered = server.get(f"/Items/{latent['Id']}/PlaybackInfo", userId=server.user_id)
+    seconds = time.monotonic() - started
+    source = ((answered.get("MediaSources") or [{}]) or [{}])[0]
+    probe.observe("latent (GET), the GET negotiation", f"{seconds:.2f}s: {_shape(source)}")
+
+    after = listing_source(server, latent["Id"])
+    probe.observe("latent (GET), listing after", _shape(after))
+    checks.append(len(after.get("MediaStreams") or []) == 2)
+    return checks
+
+
+def _multipart_battery(server: Server, probe: Probe, items: dict[str, dict]) -> list[bool]:
+    """012 plan section 6.8 item 3: what a refresh does to a **second** part.
+
+    The trigger reads source *zero* `[source:
+    Emby.Server.Implementations/Library/MediaSourceManager.cs:175-178 @ v10.11.11]` and the
+    refresh it fires is over the whole item, so an item whose first part is annotated and whose
+    second is not is the one shape that separates two readings of 012 plan section 6.1: *open
+    every part with no inspection* against *do what the trigger's own subject does*.
+
+    It asks two things at once, and the first is a fact about the scan rather than about the
+    negotiation: whether two parts named `- part1` and `- part2` are **one** item here at all.
+    """
+    checks: list[bool] = []
+    item = items.get("two_parter")
+    if item is None:
+        probe.observe("two-parter", "the scan produced no such item - see the note")
+        return [False]
+
+    detail = server.get(f"/Items/{item['Id']}", userId=server.user_id)
+    sources = detail.get("MediaSources") or []
+    probe.observe("two-parter, sources on a listing", len(sources))
+    for index, source in enumerate(sources):
+        probe.observe(f"two-parter, source {index} before", _shape(source))
+    #: **One source, not two, and that is the answer rather than a failure.** Measured
+    #: 2026-09-03: a part the probe cannot read is not a media source of the grouped item and
+    #: gets no item of its own either, where the *same* bytes standing alone in their own folder
+    #: do become an item with an empty source. So the state 012 plan section 6.1 asked about -
+    #: part zero annotated, part one not - does not exist here to be faithful to.
+    checks.append(len(sources) == 1)
+
+    seconds, status, _, payload = negotiate_raw(server, item["Id"], VIDEO_PROFILE)
+    negotiated = json.loads(payload).get("MediaSources") or []
+    probe.observe("two-parter, negotiation", f"{seconds:.2f}s {status}, {len(negotiated)} sources")
+    for index, source in enumerate(negotiated):
+        probe.observe(f"two-parter, source {index} negotiated", _shape(source))
+
+    detail = server.get(f"/Items/{item['Id']}", userId=server.user_id)
+    listed = detail.get("MediaSources") or []
+    for index, source in enumerate(listed):
+        probe.observe(f"two-parter, source {index} after", _shape(source))
+
+    #: The question, in one line: did the part that could not be read stay unannotated while the
+    #: one that could stayed annotated - and did anything happen to either?
+    unreadable_healed = any(
+        (source.get("MediaStreams") or []) and index > 0 for index, source in enumerate(listed)
+    )
+    probe.observe("two-parter, the unreadable part gained streams", unreadable_healed)
+    probe.observe("two-parter, sources after", len(listed))
+    checks.append(status == 200 and len(listed) == 1 and not unreadable_healed)
     return checks
 
 
@@ -482,6 +601,13 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
         items: dict[str, dict[str, Any]] = {}
         for label, path in made.items():
             row = by_path.get(f"{server_root}/{path.relative_to(root).as_posix()}")
+            if row is None and label.startswith("two_parter"):
+                #: **Not a failure, and possibly the answer.** Two parts the reference groups are
+                #: one item under one `Path`, so at most one of these two keys can resolve here;
+                #: `_multipart_battery` observes which, and a run where neither does has measured
+                #: that this server does not group them at all.
+                probe.observe(f"{label}, no item of its own", True)
+                continue
             if row is None:
                 raise ProbeError(
                     f"the scan produced no item for {label}: the server sees "
@@ -494,9 +620,19 @@ def run(server: Server, args: argparse.Namespace) -> Probe:
         truncated = listing_source(server, items["truncated"]["Id"])
         probe.observe("listing, truncated to 1 KiB", _shape(truncated))
 
+        #: A multi-part film is **one** item with two sources if the reference groups it, so it
+        #: is not in `made` under either part's path. Found by the source it holds rather than by
+        #: its name, which is what `items_by_path` cannot do.
+        part1_path = f"{server_root}/{made['two_parter_part1'].relative_to(root).as_posix()}"
+        grouped = by_path.get(part1_path)
+        if grouped is not None:
+            items["two_parter"] = {"Id": grouped["Id"], "Path": part1_path}
+
         checks = _listing_battery(server, probe, items)
         checks += _negotiation_battery(server, probe, items)
         checks += _on_demand_battery(server, probe, items)
+        checks += _get_route_battery(server, probe, items)
+        checks += _multipart_battery(server, probe, items)
     finally:
         for name in (MOVIE_LIBRARY, MUSIC_LIBRARY):
             status, _, _ = server.delete_raw(

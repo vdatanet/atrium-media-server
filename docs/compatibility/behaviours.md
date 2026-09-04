@@ -843,6 +843,17 @@ lower-case by declaration `[source: Jellyfin.Data/Enums/MediaStreamProtocol.cs @
 
 The echo is the enumeration's spelling, never the profile's: `Hls` in, `"hls"` out.
 
+**The refusal's message is a second shape of the same failure, and the reference has both.**
+Here it names the enumeration by its fully qualified name, repeats the property's path and gives a
+byte position that is the offset of the end of the offending token **in the body as sent** —
+`The JSON value could not be converted to Jellyfin.Data.Enums.MediaStreamProtocol. Path:
+$.DeviceProfile.TranscodingProfiles[0].Protocol | LineNumber: 0 | BytePositionInLine: 398.`, with
+`395` for `" "` and `396` for `true` in the same body. On `POST /Playlists` the same class of
+failure is keyed `$`, says `Path: $`, and counts `len(token) + 2` wherever the property sits —
+`3` for a one-character token and `10` for an eight-character one, unchanged by a body twice the
+length `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`,
+`[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`.
+
 **Depends on it:** any client whose profile spells the protocol the way its own language does. A
 client sending `Hls` is *correct* against this reference and gets HLS; a server that compares the
 string case-sensitively sends it a progressive address instead, which is the one direction
