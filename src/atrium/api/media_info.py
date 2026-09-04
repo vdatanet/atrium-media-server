@@ -62,7 +62,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, ClassVar
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import Field, ValidationError
@@ -97,6 +97,19 @@ NO_COMPATIBLE_STREAM = "NoCompatibleStream"
 #: Where a device stores the profile a bare `POST` falls back to.
 CAPABILITIES_PROFILE = "DeviceProfile"
 
+#: The namespace the five enumerations a device profile carries are declared in. A refusal of a
+#: value none of their members matches spells the type out **in full**, and nothing but the model
+#: can supply that string (`compat/model.py`'s `WIRE_ENUM_TYPES`, `compat/errors.py`), so each DTO
+#: below names the type its property deserialises to.
+#:
+#: The form is measured rather than assumed, on the one enumeration of the six that is declared
+#: somewhere else: the sentence names `Jellyfin.Data.Enums.MediaStreamProtocol`, which is exactly
+#: the namespace and type name of `Jellyfin.Data/Enums/MediaStreamProtocol.cs`
+#: `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`. Every enumeration below
+#: cites the file it was read from, and this is the namespace those files declare
+#: `[source: MediaBrowser.Model/Dlna/ @ v10.11.11]`.
+DLNA = "MediaBrowser.Model.Dlna"
+
 
 # ------------------------------------------------------------------------------------------------
 # What a client says about itself
@@ -130,6 +143,11 @@ NEGOTIABLE: dict[ProfileType, ladder.MediaKind] = {
 class ProfileConditionDto(AtriumModel):
     """`[spec: ProfileCondition]`. `IsRequired` defaults true, as the reference's own does."""
 
+    WIRE_ENUM_TYPES: ClassVar[dict[str, str]] = {
+        "Condition": f"{DLNA}.ProfileConditionType",
+        "Property": f"{DLNA}.ProfileConditionValue",
+    }
+
     condition: ladder.ConditionType
     property: ladder.ConditionProperty
     value: str | None = None
@@ -138,6 +156,8 @@ class ProfileConditionDto(AtriumModel):
 
 class DirectPlayProfileDto(AtriumModel):
     """`[spec: DirectPlayProfile]`: a container this client can open, and what may be inside it."""
+
+    WIRE_ENUM_TYPES: ClassVar[dict[str, str]] = {"Type": f"{DLNA}.DlnaProfileType"}
 
     container: str | None = None
     audio_codec: str | None = None
@@ -152,6 +172,8 @@ class TranscodingProfileDto(AtriumModel):
     (`media/urls.py`). `MaxAudioChannels` is a **string** on the wire and a number only when it
     parses as one, which is the reference's `int.TryParse` rather than leniency invented here.
     """
+
+    WIRE_ENUM_TYPES: ClassVar[dict[str, str]] = {"Type": f"{DLNA}.DlnaProfileType"}
 
     container: str = ""
     type: ProfileType = ProfileType.VIDEO
@@ -182,6 +204,8 @@ class SubtitleProfileDto(AtriumModel):
     member `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-30]`.
     """
 
+    WIRE_ENUM_TYPES: ClassVar[dict[str, str]] = {"Method": f"{DLNA}.SubtitleDeliveryMethod"}
+
     format: str | None = None
     method: ladder.SubtitleMethod = ladder.SubtitleMethod.ENCODE
     language: str | None = None
@@ -191,6 +215,8 @@ class SubtitleProfileDto(AtriumModel):
 class CodecProfileDto(AtriumModel):
     """`[spec: CodecProfile]`: conditions that apply to one codec, sometimes only in one
     container."""
+
+    WIRE_ENUM_TYPES: ClassVar[dict[str, str]] = {"Type": f"{DLNA}.CodecType"}
 
     type: ladder.CodecKind = ladder.CodecKind.VIDEO
     codec: str | None = None

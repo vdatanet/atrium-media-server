@@ -25,13 +25,15 @@ import json
 import threading
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import httpx
 import pytest
 from fastapi import FastAPI, Request
 
 from atrium.api.deps import require_user
+from atrium.api.media_info import PlaybackInfoDto
+from atrium.compat.model import AtriumModel
 from atrium.config.paths import DataPaths
 from atrium.db.repositories import SessionRepository, UserRepository
 from atrium.domain.items import ItemType
@@ -1076,6 +1078,178 @@ async def test_an_ordinal_no_member_has_is_the_400_behaviours_326_records(
         _narrow_video(DIRECT_PLAY, Property=15),
     ):
         assert await _refused(client, item.id, document) == 400
+
+
+# ------------------------------------------------------------------------------------------
+# What a nested refusal is keyed by - 012 AC-8, spec section 3.4, plan section 6.6
+# ------------------------------------------------------------------------------------------
+#
+# One vocabulary failure, two shapes, and the route decides which. `POST /Playlists` keys a
+# top-level property `$`, says `Path: $` and counts `len(token) + 2` wherever the property sits;
+# this route keys the property's **full JSON path**, repeats it, and counts the byte offset of the
+# end of the offending token in the document as sent - `398` for `"dash"`, `395` for `" "` and
+# `396` for `true` in one measured body, and `153` for a property earlier in the same one
+# `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`,
+# `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`.
+
+#: Every vocabulary a device profile carries, with the key its refusal is filed under and the
+#: reference's own name for the enumeration behind it. The measured key names the transcoding
+#: entry's `Protocol`, which is a plain string until 012 T9 types it - so the entry's `Type` is
+#: asked here instead, at the same depth under the same list.
+NESTED_REFUSALS = [
+    ("DirectPlayProfiles[0].Type", "DlnaProfileType"),
+    ("TranscodingProfiles[0].Type", "DlnaProfileType"),
+    ("CodecProfiles[0].Type", "CodecType"),
+    ("CodecProfiles[0].Conditions[0].Condition", "ProfileConditionType"),
+    ("CodecProfiles[0].Conditions[0].Property", "ProfileConditionValue"),
+    ("SubtitleProfiles[0].Method", "SubtitleDeliveryMethod"),
+]
+
+
+def _with_unbindable(one: MediaFile, where: str) -> dict[str, Any]:
+    """The profile of that row, with the one property carrying a word no member has."""
+    if where.startswith("DirectPlayProfiles"):
+        document = accepting(one)
+        document["DirectPlayProfiles"][0]["Type"] = "dash"
+        return document
+    if where.startswith("TranscodingProfiles"):
+        document = accepting(one)
+        document["TranscodingProfiles"] = [{**TS_HLS, "Type": "dash"}]
+        return document
+    if where.startswith("SubtitleProfiles"):
+        document = accepting(one)
+        document["SubtitleProfiles"] = [{"Format": "vtt", "Method": "dash"}]
+        return document
+    if where.endswith("Condition"):
+        return _narrow_video(one, Condition="dash")
+    if where.endswith("Property"):
+        return _narrow_video(one, Property="dash")
+    document = _narrow_video(one)
+    document["CodecProfiles"][0]["Type"] = "dash"
+    return document
+
+
+async def _refusal_errors(
+    client: httpx.AsyncClient, item_id: str, raw: bytes
+) -> dict[str, list[str]]:
+    """One refusal of a body written byte for byte, because a byte offset is what it reports."""
+    answered = await client.post(
+        f"/Items/{item_id}/PlaybackInfo",
+        content=raw,
+        headers={**HEADERS, "Content-Type": "application/json"},
+    )
+    assert answered.status_code == 400, answered.content
+    return dict(answered.json()["errors"])
+
+
+@pytest.mark.parametrize(("where", "vocabulary"), NESTED_REFUSALS)
+async def test_a_nested_refusal_is_keyed_by_the_propertys_own_json_path(
+    client: httpx.AsyncClient,
+    served: tuple[FastAPI, ScannedMediaWorld],
+    where: str,
+    vocabulary: str,
+) -> None:
+    """Every vocabulary this body carries, keyed where it sits rather than at the document root.
+
+    T7 made each of these a `400`; what is asserted here is the key and the sentence, which are
+    what a client's error display shows and what a bug report quotes. The enumeration is named in
+    full, as the reference names it - the namespace each of these is declared in
+    `[source: MediaBrowser.Model/Dlna/ @ v10.11.11]`.
+    """
+    item = served[1].of(DIRECT_PLAY)
+    raw = json.dumps(
+        {"DeviceProfile": _with_unbindable(DIRECT_PLAY, where)}, separators=(",", ":")
+    ).encode()
+
+    errors = await _refusal_errors(client, item.id, raw)
+
+    key = f"$.DeviceProfile.{where}"
+    assert list(errors) == [key]
+    ends_at = raw.index(b'"dash"') + len(b'"dash"')
+    assert errors[key] == [
+        f"The JSON value could not be converted to MediaBrowser.Model.Dlna.{vocabulary}. "
+        f"Path: {key} | LineNumber: 0 | BytePositionInLine: {ends_at}."
+    ]
+
+
+async def test_the_nested_positions_move_with_the_property_where_the_top_levels_do_not(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The difference between the two shapes, asserted as a difference rather than described.
+
+    `POST /Playlists` answers `3` for a one-character token whether the body is 62 bytes or twice
+    that (`tests/conformance/test_playlists.py`). Here the same token in the same property answers
+    a different number once something earlier in the document grows, because the number *is* where
+    the token sits.
+    """
+    item = served[1].of(DIRECT_PLAY)
+    document = accepting(DIRECT_PLAY)
+    document["DirectPlayProfiles"][0]["Type"] = "dash"
+    near = json.dumps({"DeviceProfile": document}, separators=(",", ":")).encode()
+    far = near.replace(
+        b'"MaxStreamingBitrate":120000000',
+        b'"MaxStreamingBitrate":120000000' + b',"X":"' + b"y" * 40 + b'"',
+    )
+
+    first = await _refusal_errors(client, item.id, near)
+    second = await _refusal_errors(client, item.id, far)
+
+    key = "$.DeviceProfile.DirectPlayProfiles[0].Type"
+    assert first[key] != second[key]
+    assert first[key][0].endswith(f"BytePositionInLine: {near.index(b'"dash"') + 6}.")
+    assert second[key][0].endswith(f"BytePositionInLine: {far.index(b'"dash"') + 6}.")
+
+
+def _models_under(model: type[AtriumModel]) -> Iterator[type[AtriumModel]]:
+    """Every model this body reaches, so a property added inside a nested one is not missed."""
+    yield model
+    for field in model.model_fields.values():
+        for argument in (field.annotation, *get_args(field.annotation)):
+            for nested in get_args(argument) or (argument,):
+                if isinstance(nested, type) and issubclass(nested, AtriumModel):
+                    yield from _models_under(nested)
+
+
+def test_every_vocabulary_this_body_binds_names_the_enumeration_its_refusal_spells() -> None:
+    """The registration the key depends on, asked of the whole body rather than of what T8 typed.
+
+    `compat/errors.py` will not invent the reference's name for an enumeration: a property whose
+    model does not supply one is answered 007's `""` and `The supplied value is invalid.`, which
+    is a body this route does not send. That is a silent shortfall - the status is right and the
+    refusal is right - so the rule is asserted here rather than left to whoever adds the next
+    enumerated property. It is the shape T7's ordinal sweep has for the same class of omission.
+    """
+    unnamed = sorted(
+        f"{model.__qualname__}.{field}"
+        for model in set(_models_under(PlaybackInfoDto))
+        for field in model._vocabularies()
+        if (model.model_fields[field].alias or field) not in model.WIRE_ENUM_TYPES
+    )
+
+    assert not unnamed, (
+        f"these properties bind a vocabulary and name no type for its refusal: {unnamed}. The "
+        "reference spells the enumeration out in full, and a model that supplies no name is "
+        "answered a sentence measured on another route entirely."
+    )
+
+
+async def test_a_top_level_refusal_of_this_body_keeps_the_key_007_measured(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """The rule that keeps the path builder from moving anything that already passed.
+
+    A value one level deep is keyed the way 007 and 009 measured it - the empty string and the
+    fixed sentence - on the same route and in the same request as the paths above
+    `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`.
+    """
+    item = served[1].of(DIRECT_PLAY)
+
+    answered = await client.post(
+        f"/Items/{item.id}/PlaybackInfo", json={"UserId": "banana"}, headers=HEADERS
+    )
+
+    assert answered.status_code == 400
+    assert answered.json()["errors"] == {"": ["The supplied value is invalid."]}
 
 
 # ------------------------------------------------------------------------------------------

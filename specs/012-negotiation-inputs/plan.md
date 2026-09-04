@@ -626,6 +626,18 @@ client's, because nothing carries the client's spelling any further than the bin
 `int` fails, so a `2` takes the progressive branch by falling through — which is precisely how the
 reference reaches the same answer. `AtriumModel` serialises the int as a JSON number without help.
 
+**And the union costs a second `errors` entry, which T8 measured while building the key it will be
+filed under.** A value that binds to neither member of `StreamProtocol | int` produces **two**
+framework errors, not one — `enum` and `int_parsing`, each located one segment deeper than the
+property, at `(…, "protocol", "enum[StreamProtocol]")` and `(…, "protocol", "int")`. The path
+builder drops that trailing segment, so both are keyed by the measured path; but the second one is
+not a vocabulary mismatch, so it falls to `""` and the refusal answers **two** keys where the
+reference answers exactly one — measured, `errors` names
+`["$.DeviceProfile.TranscodingProfiles[0].Protocol"]` and nothing else
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29]`. The task that types the
+property is the task that has to answer it, and the test that catches it is one asserting the whole
+`errors` map rather than one key of it.
+
 ### 6.6 The refusal's key is a JSON path
 
 The measured key is `$.DeviceProfile.TranscodingProfiles[0].Protocol` — one entry in `errors`, with
@@ -656,8 +668,16 @@ The JSON value could not be converted to Jellyfin.Data.Enums.MediaStreamProtocol
 Path: $.DeviceProfile.TranscodingProfiles[0].Protocol | LineNumber: 0 | BytePositionInLine: 398.
 ```
 
-The type name is the fully qualified one `WIRE_ENUM_TYPES` already holds, so that half carries
-across. The other two do not, and the same run measured **why** by asking the route 009 measured:
+The type name is the fully qualified one `WIRE_ENUM_TYPES` holds — *corrected at T8: **holds for
+one model**, and for none of the five this body nests. `CreatePlaylistDto` is the only model in the
+project that had declared the map, so the sentence naming the enumeration was unreachable on every
+property of a device profile, and `_body_error`'s vocabulary row fell through to 007's `""` and
+`The supplied value is invalid.` — a body no reference server sends on this route. The path builder
+alone would therefore have produced the nested key on **nothing**. The five nested DTOs declare the
+map at T8, one entry per enumerated property, each name being the namespace that property's
+enumeration is already cited from `[source: MediaBrowser.Model/Dlna/ @ v10.11.11]`.* The other two
+halves do not carry across at all, and the same run measured **why** by asking the route 009
+measured:
 
 | | `POST /Playlists`, `MediaType` | `POST …/PlaybackInfo`, a profile's enum |
 |---|---|---|
@@ -667,10 +687,25 @@ across. The other two do not, and the same run measured **why** by asking the ro
 
 So the reference reports one failure two ways, `compat/errors.py`'s single `VOCABULARY_MESSAGE`
 is right for the route it was measured on, and reproducing this one needs a second shape: the
-property's path in `Path:` and an offset into the **raw body**, which is reachable — a validation
-handler has `exc.body` — and is not derivable from the framework's error alone. **That resizes T8
-from "build a key" to "build a key and a message", and the integer inside it is a Principle I
-question rather than an implementation detail: D-6.**
+property's path in `Path:` and an offset into the **raw body**, which is reachable and is not
+derivable from the framework's error alone. **That resizes T8 from "build a key" to "build a key
+and a message", and the integer inside it is a Principle I question rather than an implementation
+detail: D-6.**
+
+**And the raw body is not where this plan said it was.** *(T8, measured.)* `exc.body` is the
+**parsed** document, not the bytes: the framework hands the exception what its own JSON reader
+returned, so an offset counted into it would be an offset into a document nobody sent — different
+separators, different key order, different escapes. The bytes are on the **request**, which the
+handler is given the same instance of that the route was called with, already read and cached
+before any body failure can exist. So the handler asks the request for them, and only when a
+failure is located in the body at all: no refusal of a query parameter ever touches a channel a
+body might still be arriving on. Option (a) of [D-6](#d-6--the-integer-inside-a-refusal-nobody-reads)
+therefore ships, and its fallback is reachable only where there are no bytes to count.
+
+**`LineNumber` is arithmetic and not a measurement.** Every measured body was one line, where the
+offset from the first byte and the offset within the line are the same number. The reader's own
+names say which of the two carries the newlines, so a body a client pretty-printed is answered the
+line it stopped on and the offset within that line — stated here because nothing measured it.
 
 ### 6.7 The general enum binder
 
@@ -1110,6 +1145,15 @@ not, the integer is a recorded divergence under
 on a number inside a sentence it did not parse. **The order matters and is part of the decision**:
 T8 attempts (a) first and falls back, rather than writing (b) and calling the attempt optional —
 a fallback nobody tries is a divergence nobody measured.
+
+**Answered at T8: (a) ships, and there is no divergence to record.** The attempt was made and it
+came out of the raw body cleanly — but not from where this decision said it would. `exc.body` is
+the **parsed** document, so an offset taken from it would have counted into bytes nobody sent; the
+document as sent is on the request, cached by the read the route already made, and a handler asks
+for it only when a failure is located in the body (§6.6). Both numbers the sentence carries are
+now the reader's own: the line the token ends on and the offset within that line. The fallback
+stays, unreachable from any route in v1 and reachable from a caller with no bytes, and it is the
+top-level rule's `len(token) + 2` rather than an absent sentence.
 
 ## 12. What moves with the code
 

@@ -619,7 +619,7 @@ the binder been written per field are pinned in `tests/unit/test_server.py`.
 
 ## T8 — A nested refusal is keyed by its JSON path
 
-- [ ] **Changes:** `compat/errors.py:_body_error` builds the property's path from pydantic's
+- [x] **Changes:** `compat/errors.py:_body_error` builds the property's path from pydantic's
   `loc` — drop the leading `body`, map each level through its own model's alias, render a list
   index as `[n]`, join after a leading `$` — so a value inside a device profile is keyed
   `$.DeviceProfile.TranscodingProfiles[0].Protocol` as the reference keys it
@@ -636,6 +636,68 @@ the binder been written per field are pinned in `tests/unit/test_server.py`.
   (`"$"`, the property's own name, `""`) unchanged byte for byte, and every measured body refusal
   007 and 009 asserted still passing.
 - **Spec reference:** §3.4, AC-8; plan §6.6
+
+**Done, 2026-09-04** — the path builder, the message beside it, and **three things the documents
+had wrong rather than merely incomplete**; one of them meant the key this task exists for would
+have appeared on no property at all, one answers D-6, and one is a trap set for T9.
+
+* **The key was unreachable without a second registration, and building the path alone would have
+  produced it nowhere.** `_body_error`'s vocabulary row needs the reference's own name for the
+  enumeration, and a model that cannot supply one falls back to 007's `""` and
+  `The supplied value is invalid.` — deliberately, so that no route invents a sentence.
+  `CreatePlaylistDto` is the **only** model in the project that had ever declared
+  `WIRE_ENUM_TYPES`, and every vocabulary this body carries lives on a *nested* one: five DTOs,
+  six enumerated properties, five enumerations, none of them named. So the path builder would
+  have shipped correct and unobservable. The five declare the map now, each name being the
+  namespace its enumeration is already cited from `[source: MediaBrowser.Model/Dlna/ @ v10.11.11]`
+  — and the reference's own spelling for the sixth,
+  `Jellyfin.Data.Enums.MediaStreamProtocol`, is the one that was measured, which is what says the
+  form is `namespace.TypeName` rather than a guess. A **sweep** over the body's whole model tree
+  asserts it, in the shape T7 gave the same class of omission: a property that binds a vocabulary
+  and names no type for its refusal fails there rather than on a client, and it is run red by
+  removing one of the six. Scoped to this body rather than to every model in the project, because
+  a *response* model's enumeration has no refusal to name and a rule demanding one would be
+  demanding an unmeasurable string.
+* **D-6's option (a) ships, and the source it named is the parsed document.** The decision says
+  the offset comes from `exc.body`, *"which a validation handler holds"*. It holds the **parsed**
+  JSON: the framework hands the exception what its own reader returned, so a position counted
+  there would be a position in bytes nobody sent — different separators, different escapes, a
+  different length. The document as sent is on the **request**, and the handler is given the same
+  `Request` instance the route was called with, its body already read and cached, so asking for it
+  costs nothing and touches no receive channel — measured, not assumed. It is asked for only when
+  a failure is located in the body at all. So there is no divergence to record and no wrong
+  integer: `398` for `"dash"` is the offset of the end of that token, and this server counts the
+  same thing in the same units.
+* **T9's own refusal is two keys where the reference sends one, and it is measurable today.** A
+  `StreamProtocol | int` property that binds to neither member produces **two** framework errors —
+  `enum` and `int_parsing` — each located one segment *deeper* than the property, at
+  `(…, "protocol", "enum[StreamProtocol]")` and `(…, "protocol", "int")`. The path builder stops
+  at the first segment no model declares, so the union tag never reaches a client and both errors
+  are keyed by the measured path; but the second is not a vocabulary mismatch, so it falls to
+  `""` and the answer names **two** keys where the reference's `errors` names exactly one
+  `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29]`. Measured here while the
+  key was being built, written into [plan §6.5](plan.md#65-the-protocol-in-four-classes), and left
+  to the task that types the property — a T9 test asserting one key rather than the whole `errors`
+  map would pass over it.
+
+**Two deviations from this task as written.** The Verified-by line names three test files and the
+change is four: the nested key is a property of the **negotiation's** body, and the only body in
+this project with anything nested is that one, so `tests/conformance/test_playback_info.py` asserts
+every one of the six enumerated properties at the HTTP boundary — the key, the type name and the
+position — where `tests/unit/test_compat_errors.py` owns the mechanics. And the measured key names
+`TranscodingProfiles[0].Protocol`, which is a plain string until T9: the unit file reproduces the
+**measured** string on a body shaped like the reference's own, and the route asserts that same
+list's `Type` at the same depth, so the exact measured key is pinned now rather than at T9.
+
+**And two things nothing measures, said rather than left to be inferred.** `LineNumber` is `0` in
+every measurement because every measured body was one line; a pretty-printed body is answered the
+line the token ends on and the offset within it, which is the reader's own arithmetic and is the
+only reading under which the measured numbers are what they are. And the path is built from the
+model's **aliases**, per level ([plan §6.6](plan.md#66-the-refusals-key-is-a-json-path)), so a
+client that spells a property in another case — which this binder accepts and the reference accepts
+— is answered the reference's spelling of it rather than its own. Nothing measured that body; the
+offset it carries is still the right one, because the reader that finds the token matches keys the
+way the binder does.
 
 ## T9 — The delivery protocol is an enumeration, in every sense
 
