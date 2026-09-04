@@ -57,14 +57,17 @@ from atrium.media.decision import (
     DeviceProfile,
     StreamAction,
     StreamPlan,
+    StreamProtocol,
     SubtitleMethod,
     Switches,
     ceiling,
 )
 from atrium.media.info import as_single
 
-#: The sub-protocol whose URL is a playlist rather than a stream.
-HLS = "hls"
+#: The sub-protocol whose URL is a playlist rather than a stream - the enumeration's own
+#: spelling, so the string a comparison is made against and the string an answer echoes
+#: cannot come apart (012 plan section 6.5).
+HLS = StreamProtocol.HLS.value
 
 #: The floor the reference puts under a computed video bitrate, whatever the arithmetic said.
 #: `[source: MediaBrowser.Model/Dlna/StreamBuilder.cs:1116-1119 @ v10.11.11]`

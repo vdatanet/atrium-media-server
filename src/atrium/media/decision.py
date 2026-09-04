@@ -93,7 +93,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Final, NamedTuple
 
-from atrium.compat.model import ordinals_of, wire_ordinals
+from atrium.compat.model import ordinals_of, wire_default, wire_ordinals
 from atrium.domain.media import InspectedStream, MediaInspection, StreamKind
 from atrium.media.info import is_text_format, is_text_subtitle, supports_external_stream
 
@@ -122,6 +122,50 @@ class StreamAction(Enum):
 
     COPY = "copy"
     ENCODE = "encode"
+
+
+@wire_ordinals({0: "http", 1: "hls"})
+@wire_default("http")
+class StreamProtocol(Enum):
+    """How a produced stream is delivered, in the reference's own two spellings.
+
+    `[source: Jellyfin.Data/Enums/MediaStreamProtocol.cs @ v10.11.11]`
+
+    **Lower-case by declaration, and that is the reference's own doing rather than a convention
+    borrowed here**: the members are written `http` and `hls` and carry a comment saying the
+    casing is deliberate. What a client sends is read case-insensitively like every other
+    vocabulary this body binds, and what comes back is *this* spelling - `Hls` in, `"hls"` out
+    (behaviours section 2.24).
+
+    It is the **only** enumeration in v1 that declares a default, which is why `wire_default`
+    exists and why an empty string is a `200` here and a `400` on the five beside it
+    `[source: MediaBrowser.Model/Dlna/TranscodingProfile.cs:77 @ v10.11.11]`,
+    `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-09-03]`.
+    """
+
+    HTTP = "http"
+    HLS = "hls"
+
+
+#: The ordinal each delivery protocol carries, declared rather than counted, for the same reason
+#: the subtitle method's is (below) - and read outside the body binder by nothing today, which is
+#: why it is exported rather than used here: a query string that spells this value would read it
+#: through this table rather than through a second copy of it.
+STREAM_PROTOCOL_ORDINALS: Final[Mapping[int, StreamProtocol]] = ordinals_of(StreamProtocol)
+
+
+def wire_protocol(protocol: StreamProtocol | int) -> str | int:
+    """What a delivery protocol is spelled as on the wire: the member's own value, or the raw
+    ordinal no member has.
+
+    The reference echoes a number back in a field its enumeration spells as a word, which is the
+    one self-contradiction of that shape it has and which behaviours section 2.24 reproduces. So
+    the int survives the whole way to `TranscodingSubProtocol` rather than being normalised into
+    a member here - and every comparison in this project is against a member's value, which an
+    int fails, so an out-of-range ordinal takes the progressive branch by falling through exactly
+    as the reference reaches the same answer.
+    """
+    return protocol.value if isinstance(protocol, StreamProtocol) else protocol
 
 
 @wire_ordinals({0: "Encode", 1: "Embed", 2: "External", 3: "Hls", 4: "Drop"})
@@ -227,8 +271,9 @@ DIRECT_PLAYABLE_SUBTITLE_METHODS: Final = frozenset(
     {SubtitleMethod.DROP, SubtitleMethod.EXTERNAL, SubtitleMethod.EMBED}
 )
 
-#: The sub-protocol whose manifest can carry a subtitle track, spelled as the wire spells it.
-HLS_SUB_PROTOCOL: Final = "hls"
+#: The sub-protocol whose manifest can carry a subtitle track, spelled as the wire spells it -
+#: which is now the enumeration's own spelling rather than a second copy of the same word.
+HLS_SUB_PROTOCOL: Final = StreamProtocol.HLS.value
 
 #: What a stream with no language of its own is matched as. `[source:
 #: MediaBrowser.Model/Dlna/SubtitleProfile.cs:48-61 @ v10.11.11]`
@@ -373,9 +418,14 @@ class Decision:
     container: str | None
     """The negotiated output container - `"ts"` - and `None` when nothing is produced."""
 
-    sub_protocol: str | None
+    sub_protocol: str | int | None
     """`"hls"` or `"http"`, and `None` when nothing is produced. The wire's own default for a
-    source with no answer is `"http"`, which `media/info.py` already declares."""
+    source with no answer is `"http"`, which `media/info.py` already declares.
+
+    **An `int` when the profile named an ordinal no member has**, which the reference answers
+    with a number in this field beside a progressive address (behaviours section 2.24). Nothing
+    here branches on it: every comparison is against a member's value and an int fails all of
+    them, which is the fall-through that produces that same answer."""
 
     video: StreamPlan | None
     audio: StreamPlan | None
@@ -647,7 +697,11 @@ class TranscodingProfile:
     audio_codec: str | None = None
     video_codec: str | None = None
     type: MediaKind = MediaKind.VIDEO
-    protocol: str = "http"
+    protocol: StreamProtocol | int = StreamProtocol.HTTP
+    """A member, or the raw ordinal for a number no member has - which the reference accepts and
+    echoes back as a number (behaviours section 2.24). Read for one comparison and copied to the
+    wire through `wire_protocol`."""
+
     context: str = "Streaming"
     max_audio_channels: int | None = None
     min_segments: int | None = None
@@ -1164,7 +1218,7 @@ def _subtitle_answer(
     *,
     transcoding: bool,
     container: str | None,
-    sub_protocol: str | None,
+    sub_protocol: str | int | None,
 ) -> SubtitleAnswer:
     """The reference's four-step ladder for one stream, and its `Encode` fallback.
 
@@ -1198,7 +1252,7 @@ def subtitle_answers(
     *,
     outcome: Outcome,
     container: str | None,
-    sub_protocol: str | None,
+    sub_protocol: str | int | None,
 ) -> tuple[SubtitleAnswer, ...]:
     """One answer per subtitle stream, in stream order - the whole of 011 plan section 6.3.
 
@@ -1624,7 +1678,7 @@ def decide(
     )
 
     def answered(
-        outcome: Outcome, container: str | None, sub_protocol: str | None
+        outcome: Outcome, container: str | None, sub_protocol: str | int | None
     ) -> tuple[SubtitleAnswer, ...]:
         return subtitle_answers(
             source,
@@ -1681,11 +1735,11 @@ def decide(
         outcome=outcome,
         reasons=tuple(one.wire_name for one in sorted(reasons, key=lambda one: one.value)),
         container=target.container,
-        sub_protocol=target.protocol,
+        sub_protocol=wire_protocol(target.protocol),
         video=video_plan,
         audio=audio_plan,
         supports_transcoding=True,
-        subtitles=answered(outcome, target.container, target.protocol),
+        subtitles=answered(outcome, target.container, wire_protocol(target.protocol)),
         subtitle_index=wanted_subtitle,
         target=target,
     )
@@ -1759,6 +1813,7 @@ __all__ = [
     "DIRECT_PLAYABLE_SUBTITLE_METHODS",
     "EVERY_PERMISSION",
     "EVERY_SWITCH_ON",
+    "STREAM_PROTOCOL_ORDINALS",
     "SUBTITLE_METHOD_ORDINALS",
     "CodecKind",
     "CodecProfile",
@@ -1773,6 +1828,7 @@ __all__ = [
     "ProfileCondition",
     "StreamAction",
     "StreamPlan",
+    "StreamProtocol",
     "SubtitleAnswer",
     "SubtitleMethod",
     "SubtitleProfile",
@@ -1787,4 +1843,5 @@ __all__ = [
     "subtitle_answers",
     "unnegotiated_direct_stream",
     "unnegotiated_transcoding",
+    "wire_protocol",
 ]

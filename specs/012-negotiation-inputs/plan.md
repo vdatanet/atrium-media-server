@@ -295,12 +295,23 @@ class StreamProtocol(Enum):
 
 STREAM_PROTOCOL_ORDINALS: Final[Mapping[int, StreamProtocol]] = ordinals_of(StreamProtocol)
 
+def wire_protocol(protocol: StreamProtocol | int) -> str | int:
+    """What reaches `TranscodingSubProtocol`: the member's own value, or the raw ordinal.
+
+    *Added at T9.* The alternative was `.value if isinstance(...)` written at each of the two
+    call sites in `decide`, which is the same expression twice about one question.
+    """
+
 @dataclass(frozen=True, slots=True)
 class TranscodingProfile:
     protocol: StreamProtocol | int = StreamProtocol.HTTP
     """A member, or the raw ordinal for a number no member has - which the reference accepts and
     echoes back as a number (behaviours §2.24). Read for one comparison and copied to the wire."""
 ```
+
+The **request model's** half of that union is `StreamProtocol | StrictInt` and not
+`StreamProtocol | int`, which §6.5 explains: a lax `int` accepts `True` and answers `200` to a
+measured `400`. *(T9, measured.)*
 
 ```python
 # api/media_info.py
@@ -626,8 +637,39 @@ client's, because nothing carries the client's spelling any further than the bin
 `int` fails, so a `2` takes the progressive branch by falling through — which is precisely how the
 reference reaches the same answer. `AtriumModel` serialises the int as a JSON number without help.
 
+**And the `int` half has to be a strict one, which is §6.7's boolean trap arriving through a second
+door.** *(T9, measured.)* The binder hands a `bool` on untouched **so that the field refuses it** —
+`true` is a measured `400` and the ordinal `1` a measured member, and `isinstance(True, int)` is
+Python's trap and not the reference's. A field annotated `StreamProtocol | int` stops refusing it:
+the union's `int` member accepts `True` in the framework's lax mode and binds it to the raw ordinal
+`1`, so a value the reference refuses would have been answered `200` with an HLS address beside it.
+`StrictInt` closes it and costs nothing else, because a string of digits has already been read into
+an `int` by the binder before this annotation sees it. The generated OpenAPI document renders the
+union as `anyOf` and keeps the enumeration's declared default (001 T19's lesson, pinned in
+`tests/unit/test_server.py`); what it cannot say is that the integer is strict, so that half is
+asserted at the HTTP boundary.
+
+**The second `errors` entry is closed by a rule about properties rather than about this union.**
+*(T9.)* The framework reports one failure per union **member** and the reference reports one per
+**property**, so `compat/errors.py` groups a body's failures by the path they resolve to and keeps
+one — the vocabulary mismatch where there is one, since that is the failure the reference reports
+and the only one that can name the enumeration. Written that way rather than as "drop a trailing
+union tag" because the tag is a spelling of the framework's that a later version may change, where
+"one entry per property" is what every measurement of this route and of `POST /Playlists` shows
+`[probe: tools/probe_playback_info.py, Jellyfin 10.11.11, 2026-08-29]`,
+`[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`.
+
+**The truthiness trap `_annotate` carried is real and unreachable, and both halves are worth
+saying.** *(T9.)* `decided.sub_protocol or wire.transcoding_sub_protocol` is an `is not None` test
+now, because the field can hold an integer — but the only falsy integer is `0`, and `0` is a
+declared ordinal that binds to `StreamProtocol.HTTP`, so `wire_protocol` never returns it. **No
+test can tell the two spellings apart**, which is exactly why the line was worth changing at the
+task that made the field able to hold a number rather than left for the vocabulary that one day
+declares a member at some other ordinal.
+
 **And the union costs a second `errors` entry, which T8 measured while building the key it will be
-filed under.** A value that binds to neither member of `StreamProtocol | int` produces **two**
+filed under — closed at T9 by the paragraph above, one entry per property.** A value that binds to
+neither member of `StreamProtocol | int` produces **two**
 framework errors, not one — `enum` and `int_parsing`, each located one segment deeper than the
 property, at `(…, "protocol", "enum[StreamProtocol]")` and `(…, "protocol", "int")`. The path
 builder drops that trailing segment, so both are keyed by the measured path; but the second one is

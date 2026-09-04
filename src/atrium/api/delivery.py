@@ -90,6 +90,7 @@ from atrium.media.decision import (
     Outcome,
     PlaybackPolicy,
     ProfileCondition,
+    StreamProtocol,
     Switches,
     TranscodingProfile,
     decide,
@@ -689,7 +690,7 @@ def decide_delivery(
     is_video_route: bool,
     is_video: bool,
     container: str | None = None,
-    protocol: str = "http",
+    protocol: StreamProtocol = StreamProtocol.HTTP,
 ) -> tuple[Decision, str]:
     """The delivery request, run through the one ladder, plus the container it produces into.
 

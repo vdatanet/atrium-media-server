@@ -74,11 +74,16 @@ from atrium.domain.media import DeliveredFile, MediaInspection
 from atrium.domain.user import User
 from atrium.library.naming.external import LANGUAGE_TOKENS
 from atrium.media import ffmpeg, hls, names
-from atrium.media.decision import Decision, StreamAction, SubtitleMethod, method_named
+from atrium.media.decision import (
+    Decision,
+    StreamAction,
+    StreamProtocol,
+    SubtitleMethod,
+    method_named,
+)
 from atrium.media.info import is_text_subtitle
 from atrium.media.labels import DEFAULT_MEDIA_TYPE, media_type_of
 from atrium.media.sessions import SegmentPlan, SessionKey, TranscodeManager
-from atrium.media.urls import HLS
 
 router = APIRouter(tags=["DynamicHls"])
 
@@ -336,7 +341,7 @@ def _negotiate(
         is_video_route=True,
         is_video=found.is_video,
         container=container,
-        protocol=HLS,
+        protocol=StreamProtocol.HLS,
     )
     copying = decision.video is not None and decision.video.action is StreamAction.COPY
     return _Negotiation(

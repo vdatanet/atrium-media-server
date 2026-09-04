@@ -22,7 +22,13 @@ from atrium.api.universal_audio import (
     direct_play_profiles,
     synthesised_profile,
 )
-from atrium.media.decision import CodecKind, ConditionProperty, ConditionType, MediaKind
+from atrium.media.decision import (
+    CodecKind,
+    ConditionProperty,
+    ConditionType,
+    MediaKind,
+    StreamProtocol,
+)
 
 
 def profile(**named: object) -> object:
@@ -124,7 +130,7 @@ def test_the_transcoding_entry_defaults_to_mp3_in_both_halves() -> None:
     (target,) = profile().transcoding_profiles  # type: ignore[attr-defined]
 
     assert (target.container, target.audio_codec) == ("mp3", "mp3")
-    assert target.protocol == "http"
+    assert target.protocol is StreamProtocol.HTTP
     assert target.type is MediaKind.AUDIO
 
 
@@ -146,16 +152,22 @@ def test_a_named_codec_wins_over_the_containers_own() -> None:
 
 @pytest.mark.parametrize(
     ("stated", "expected"),
-    [("hls", "hls"), ("HLS", "hls"), ("http", "http"), ("banana", "http"), (None, "http")],
+    [
+        ("hls", StreamProtocol.HLS),
+        ("HLS", StreamProtocol.HLS),
+        ("http", StreamProtocol.HTTP),
+        ("banana", StreamProtocol.HTTP),
+        (None, StreamProtocol.HTTP),
+    ],
 )
 def test_the_protocol_is_case_insensitive_and_never_refused(
-    stated: str | None, expected: str
+    stated: str | None, expected: StreamProtocol
 ) -> None:
     """Measured: `HLS` answers a master playlist and `banana` answers the same progressive body
     `http` does. A typed parameter here would refuse a request the reference serves."""
     (target,) = profile(transcoding_protocol=stated).transcoding_profiles  # type: ignore[attr-defined]
 
-    assert target.protocol == expected
+    assert target.protocol is expected
 
 
 def test_every_stated_ceiling_becomes_one_unscoped_audio_condition() -> None:

@@ -72,6 +72,7 @@ from atrium.media.decision import (
     MediaKind,
     Outcome,
     ProfileCondition,
+    StreamProtocol,
     Switches,
     TranscodingProfile,
     decide,
@@ -262,9 +263,15 @@ def _conditions(
     )
 
 
-def _protocol(stated: str | None) -> str:
-    """`hls` or `http`, and everything unrecognised is `http` - measured, not lenience."""
-    return HLS_PROTOCOL if (stated or "").strip().lower() == HLS_PROTOCOL else "http"
+def _protocol(stated: str | None) -> StreamProtocol:
+    """`hls` or `http`, and everything unrecognised is `http` - measured, not lenience.
+
+    The **query** parameter is still a plain string (it is never refused, which a declared
+    enumeration would do); what it selects is a member, because that is what a transcoding
+    profile's protocol has been since 012 T9."""
+    if (stated or "").strip().lower() == HLS_PROTOCOL:
+        return StreamProtocol.HLS
+    return StreamProtocol.HTTP
 
 
 @router.get(PATH)

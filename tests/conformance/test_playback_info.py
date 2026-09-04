@@ -1253,6 +1253,176 @@ async def test_a_top_level_refusal_of_this_body_keeps_the_key_007_measured(
 
 
 # ------------------------------------------------------------------------------------------
+# The delivery protocol, in four classes - 012 AC-7, AC-8; spec section 3.3
+# ------------------------------------------------------------------------------------------
+#
+# Eighteen spellings, posted to one item on one profile, answering four ways rather than the two
+# the spec's opening reading predicted `[probe: tools/probe_playback_info.py, Jellyfin 10.11.11,
+# 2026-08-29]`, behaviours section 2.24. What separates the classes is observable in two fields at
+# once - the address handed over and the sub-protocol stated beside it - and the finding this
+# feature exists for is that they used to disagree: a profile saying `Hls` was answered a
+# progressive address with `TranscodingSubProtocol: "Hls"`, the client's own spelling, on a
+# request that was correct against the reference.
+
+#: The one item every row below negotiates: its container is refused, so a target is chosen and an
+#: address is answered whatever the protocol turns out to be.
+_PROTOCOL_ITEM = REJECTED_CONTAINER
+
+#: Absent, which is a class of its own and cannot be spelled as a value.
+UNSTATED = object()
+
+
+def _stating(protocol: Any) -> dict[str, Any]:
+    """`REMUXABLE` with its transcoding target's `Protocol` set to this - or left out entirely."""
+    target = {**TS_HLS, "AudioCodec": "ac3"}
+    if protocol is UNSTATED:
+        del target["Protocol"]
+    else:
+        target["Protocol"] = protocol
+    return profile(
+        [{"Container": "mp4", "Type": "Video", "VideoCodec": "h264", "AudioCodec": "ac3"}],
+        transcoding=[target],
+    )
+
+
+async def _delivery(client: httpx.AsyncClient, item_id: str, protocol: Any) -> tuple[Any, str]:
+    """What the negotiation states the sub-protocol is, and the address it hands over with it."""
+    document = await negotiate(client, item_id, {"DeviceProfile": _stating(protocol)})
+    one = document["MediaSources"][0]
+    return one["TranscodingSubProtocol"], one["TranscodingUrl"]
+
+
+@pytest.mark.parametrize("spelling", ["hls", "Hls", "HLS", "hLs"])
+async def test_ac7_any_case_of_hls_answers_a_playlist_and_the_enumerations_own_spelling(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld], spelling: str
+) -> None:
+    """The delta this feature was opened for, in the direction Principle I tolerates least.
+
+    Three of these four spellings selected a **progressive** address here and an HLS one on the
+    reference, because the comparison was against a string. And the answer echoes the
+    enumeration's spelling rather than the profile's, which is the second half of the same
+    finding: `Hls` in, `"hls"` out.
+    """
+    item = served[1].of(_PROTOCOL_ITEM)
+
+    stated, address = await _delivery(client, item.id, spelling)
+
+    assert stated == "hls", "AC-7: the enumeration's spelling, never the profile's"
+    assert f"/videos/{dashed(item.id)}/master.m3u8?" in address
+
+
+@pytest.mark.parametrize("spelling", ["http", "Http", "HTTP"])
+async def test_ac7_any_case_of_http_answers_a_progressive_address(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld], spelling: str
+) -> None:
+    """The other member, read the same way - and the control the HLS rows are read against."""
+    item = served[1].of(_PROTOCOL_ITEM)
+
+    stated, address = await _delivery(client, item.id, spelling)
+
+    assert stated == "http"
+    assert f"/videos/{dashed(item.id)}/stream.ts?" in address
+
+
+@pytest.mark.parametrize("stated_as", [UNSTATED, None, ""])
+async def test_ac8_absent_null_and_empty_take_the_declared_default(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld], stated_as: Any
+) -> None:
+    """The one enumeration in v1 that declares a default, and the only place `wire_default` is
+    read by something other than its own test.
+
+    The same empty string is a `400` on the five vocabularies beside this one, which is what says
+    the fourth class is a registration rather than a rule (T7,
+    `test_an_empty_string_refuses_on_every_vocabulary_that_declares_no_default`).
+    """
+    item = served[1].of(_PROTOCOL_ITEM)
+
+    stated, address = await _delivery(client, item.id, stated_as)
+
+    assert stated == "http", "the declared default, not a fall-through to whatever was on the wire"
+    assert f"/videos/{dashed(item.id)}/stream.ts?" in address
+
+
+@pytest.mark.parametrize(
+    ("ordinal", "expected"), [(0, "http"), ("0", "http"), (1, "hls"), ("1", "hls")]
+)
+async def test_ac8_a_number_binds_to_the_ordinals_member(
+    client: httpx.AsyncClient,
+    served: tuple[FastAPI, ScannedMediaWorld],
+    ordinal: Any,
+    expected: str,
+) -> None:
+    """Both members by number and by digit string, which one converter reads for the whole body.
+
+    `0` is the row `_annotate`'s fallback would have hidden: under a truthiness test the member it
+    binds to is written and then discarded, and the field keeps the `"http"` it was initialised
+    with - the right word for the wrong reason, which no assertion on this row could tell apart.
+    The out-of-range ordinal below is the same trap with a number that is *not* the default.
+    """
+    item = served[1].of(_PROTOCOL_ITEM)
+
+    stated, address = await _delivery(client, item.id, ordinal)
+
+    assert stated == expected
+    playlist = f"/videos/{dashed(item.id)}/master.m3u8?" in address
+    assert playlist is (expected == "hls"), "the address and the stated sub-protocol agree (AC-7)"
+
+
+@pytest.mark.parametrize("ordinal", [2, "2"])
+async def test_ac8_an_ordinal_no_member_has_survives_to_the_wire_as_a_number(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld], ordinal: Any
+) -> None:
+    """The reference's own one self-contradiction of this shape, reproduced rather than tidied.
+
+    A progressive address beside `TranscodingSubProtocol: 2` - a **number** in a field the
+    enumeration spells as a word (behaviours section 2.24). It is a `200` a client can act on, so
+    class B: there is nothing to gain by answering `400` where the reference answers a body.
+
+    `is not True` is not pedantry: `True == 1` in Python, and a boolean reaching this field would
+    satisfy an `== 2` written any other way.
+    """
+    item = served[1].of(_PROTOCOL_ITEM)
+
+    stated, address = await _delivery(client, item.id, ordinal)
+
+    assert stated == 2 and not isinstance(stated, bool), "a JSON number, not the word for one"
+    assert f"/videos/{dashed(item.id)}/stream.ts?" in address
+
+
+@pytest.mark.parametrize("unbindable", ["dash", " ", True])
+async def test_ac8_a_value_that_binds_to_no_member_refuses_the_whole_body(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld], unbindable: Any
+) -> None:
+    """The refusal, keyed on the path this feature's T8 built - and the whole `errors` map.
+
+    **Asserted as a map and not as one key**, because the property is `StreamProtocol | int` and
+    the framework refuses it once per member: the second refusal is not a vocabulary mismatch, so
+    left alone it files itself under 007's `""` and answers two entries where the reference
+    answers exactly one (`compat/errors.py:_reported_body_errors`). A test naming `errors[key]`
+    would pass over that.
+
+    `true` is the row that says the `int` half of the union is **strict**. A lax one accepts a
+    boolean as the ordinal `1` - `isinstance(True, int)` - and would have answered an HLS address
+    and a `200` to a value the reference refuses.
+    """
+    item = served[1].of(_PROTOCOL_ITEM)
+    raw = json.dumps({"DeviceProfile": _stating(unbindable)}, separators=(",", ":")).encode()
+
+    errors = await _refusal_errors(client, item.id, raw)
+
+    key = "$.DeviceProfile.TranscodingProfiles[0].Protocol"
+    token = json.dumps(unbindable, separators=(",", ":")).encode()
+    ends_at = raw.index(b'"Protocol":' + token) + len(b'"Protocol":') + len(token)
+    assert errors == {
+        key: [
+            "The JSON value could not be converted to "
+            f"Jellyfin.Data.Enums.MediaStreamProtocol. Path: {key} | "
+            f"LineNumber: 0 | BytePositionInLine: {ends_at}."
+        ]
+    }
+
+
+# ------------------------------------------------------------------------------------------
 # The subtitle half - 011 AC-1, AC-2, AC-3, AC-15
 # ------------------------------------------------------------------------------------------
 #

@@ -14,6 +14,7 @@ checked without producing a single frame.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -25,7 +26,10 @@ from atrium.domain.media import (
     VideoRange,
     VideoRangeType,
 )
+from atrium.media import urls
 from atrium.media.decision import (
+    HLS_SUB_PROTOCOL,
+    STREAM_PROTOCOL_ORDINALS,
     CodecKind,
     CodecProfile,
     ConditionProperty,
@@ -38,6 +42,7 @@ from atrium.media.decision import (
     PlaybackPolicy,
     ProfileCondition,
     StreamAction,
+    StreamProtocol,
     SubtitleMethod,
     SubtitleProfile,
     Switches,
@@ -45,6 +50,7 @@ from atrium.media.decision import (
     TranscodingProfile,
     decide,
     method_named,
+    wire_protocol,
 )
 from atrium.media.info import stream_of
 
@@ -129,16 +135,16 @@ TS_HLS = TranscodingProfile(
     container="ts",
     video_codec="hevc,h264",
     audio_codec="ac3,aac",
-    protocol="hls",
+    protocol=StreamProtocol.HLS,
 )
 #: The same target with no way to keep the source's video: the rung below.
 TS_HLS_H264_ONLY = TranscodingProfile(
-    container="ts", video_codec="h264", audio_codec="aac", protocol="hls"
+    container="ts", video_codec="h264", audio_codec="aac", protocol=StreamProtocol.HLS
 )
 #: What a browser actually offers - it will take the source's video and will not take its
 #: surround ac3, which is the common case section 3.4 is written about.
 TS_HLS_AAC_ONLY = TranscodingProfile(
-    container="ts", video_codec="hevc,h264", audio_codec="aac", protocol="hls"
+    container="ts", video_codec="hevc,h264", audio_codec="aac", protocol=StreamProtocol.HLS
 )
 
 PLAYS_EVERYTHING = DirectPlayProfile(container="mp4", video_codec="hevc", audio_codec="ac3")
@@ -374,6 +380,51 @@ def test_the_negotiated_container_and_protocol_come_from_the_chosen_target() -> 
     """What `TranscodingContainer` and `TranscodingSubProtocol` are answered from (T5's input)."""
     decision = answer(a_profile(DirectPlayProfile(container="mkv")))
     assert (decision.container, decision.sub_protocol) == ("ts", "hls")
+
+
+# ------------------------------------------------------------------------------------------
+# The delivery protocol as a vocabulary - 012 spec section 3.3, plan section 6.5
+# ------------------------------------------------------------------------------------------
+
+
+def test_the_delivery_protocol_is_lower_case_by_declaration_with_declared_ordinals() -> None:
+    """Two facts about the reference's own enumeration, asserted where they are declared.
+
+    The members are lower-case because `MediaStreamProtocol` writes them that way on purpose, and
+    this is the **only** enumeration in v1 that carries a default - the registration itself is
+    asserted where a client can see it, in `tests/conformance/test_playback_info.py`, because an
+    empty string is a `200` here and a `400` on the five vocabularies beside it
+    `[source: Jellyfin.Data/Enums/MediaStreamProtocol.cs @ v10.11.11]`,
+    `[source: MediaBrowser.Model/Dlna/TranscodingProfile.cs:77 @ v10.11.11]`.
+    """
+    assert [one.value for one in StreamProtocol] == ["http", "hls"]
+    assert STREAM_PROTOCOL_ORDINALS == {0: StreamProtocol.HTTP, 1: StreamProtocol.HLS}
+
+
+def test_wire_protocol_answers_a_members_value_and_an_ordinal_unchanged() -> None:
+    """What reaches `TranscodingSubProtocol`: a word for a member, and the number for anything the
+    enumeration has no member for (behaviours section 2.24)."""
+    assert wire_protocol(StreamProtocol.HLS) == "hls"
+    assert wire_protocol(StreamProtocol.HTTP) == "http"
+    assert wire_protocol(2) == 2
+
+
+def test_an_out_of_range_ordinal_falls_through_to_the_progressive_branch() -> None:
+    """Why the union costs nothing in the ladder: every comparison here is against a member's
+    value, which an `int` fails - so a target the client numbered `2` is answered the progressive
+    address the reference answers, with the number stated beside it rather than a word."""
+    numbered = replace(TS_HLS, protocol=2)
+    decision = answer(a_profile(DirectPlayProfile(container="mkv"), transcoding=(numbered,)))
+
+    assert decision.sub_protocol == 2
+    assert decision.sub_protocol != HLS_SUB_PROTOCOL, "an int is not the HLS branch"
+
+
+def test_the_string_compared_against_and_the_string_echoed_are_one() -> None:
+    """The two constants that decide the address and state the sub-protocol, asserted to be the
+    same object's value - which is what stops them coming apart in a later edit (plan 6.5)."""
+    assert StreamProtocol.HLS.value == urls.HLS
+    assert StreamProtocol.HLS.value == HLS_SUB_PROTOCOL
 
 
 # ------------------------------------------------------------------------------------------
@@ -926,10 +977,10 @@ SUBTITLED = a_source(
 PLAYS_MATROSKA = DirectPlayProfile(container="matroska", video_codec="hevc", audio_codec="ac3")
 #: A target that cannot embed - `ts` is refused by name - beside one that can.
 TS_HLS_MATROSKA = TranscodingProfile(
-    container="ts", video_codec="hevc,h264", audio_codec="ac3,aac", protocol="hls"
+    container="ts", video_codec="hevc,h264", audio_codec="ac3,aac", protocol=StreamProtocol.HLS
 )
 MKV_HTTP = TranscodingProfile(
-    container="mkv", video_codec="hevc,h264", audio_codec="ac3,aac", protocol="http"
+    container="mkv", video_codec="hevc,h264", audio_codec="ac3,aac", protocol=StreamProtocol.HTTP
 )
 
 EXTERNAL_VTT = SubtitleProfile(format="vtt", method=SubtitleMethod.EXTERNAL)
