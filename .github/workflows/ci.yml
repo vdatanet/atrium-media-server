@@ -34,6 +34,40 @@ env:
   UV_PYTHON_DOWNLOADS: automatic
 
 jobs:
+  # **What changed, so a change that cannot break the suite does not wait 24 minutes for it.**
+  #
+  # A pull request touching nothing but `.md` runs the fast jobs and the `documents` job below
+  # instead of the two full matrices. **A push to `main` always counts as code**, whatever it
+  # touched: the branch gate may be lighter, this one is not, so anything the lighter gate let
+  # through is caught here within the same half hour rather than never.
+  #
+  # The failure direction is deliberate: an empty diff, a detached base, anything the `grep` cannot
+  # read as markdown-only, all answer `true` and run everything.
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.decide.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: decide
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            echo "not a pull request: the full gate runs"
+            exit 0
+          fi
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          echo "$changed"
+          if printf '%s\n' "$changed" | grep -qv '\.md$'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "documents only"
+          fi
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -63,6 +97,8 @@ jobs:
   test:
     name: Tests (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -96,6 +132,37 @@ jobs:
         # `--update-golden` rewrites them; if a run needed it, the working tree would differ here.
         # A golden that regenerated itself in CI would assert whatever the server happened to send.
         run: git diff --exit-code -- tests/golden
+
+  # **The suite a documents-only change can actually fail**, in seconds rather than in the two
+  # matrices above. `specs/` and `docs/` are not decoration here: the acceptance map reads each
+  # criterion out of `spec.md`, the registers are parsed from `docs/compatibility/`, and the
+  # definition-of-done counts are held against them - so *"only markdown"* is not *"cannot break"*.
+  #
+  # **This list is a floor and not a proof.** More modules read a document than are named here, and
+  # one that is missed would pass a change this gate should have caught. What makes that survivable
+  # is the line above: `main` runs the whole suite on every push, so a miss costs one red run on
+  # `main` and not a defect nobody sees. Widen the list rather than trusting it.
+  documents:
+    name: Documents
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'false'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+      - run: uv sync --locked --python 3.14
+      - name: The tests that read the documents
+        run: |
+          uv run --no-sync pytest -q \
+            tests/conformance/test_acceptance.py \
+            tests/unit/test_allowlist.py \
+            tests/unit/test_version_bump.py \
+            tests/unit/test_probe_convention.py \
+            tests/unit/test_server.py \
+            tests/unit/test_sorting.py \
+            tests/unit/test_media_fixtures.py
 
   documentation:
     name: Documentation
