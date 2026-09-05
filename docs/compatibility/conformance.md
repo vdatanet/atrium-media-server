@@ -199,7 +199,13 @@ it. A server an earlier run touched still holds what that run left — and that 
 `POST /Users/Configuration` is a declared case, so a second run against the same server reads back
 the configuration the first one wrote and reports **36 differences the first run did not have**
 (measured 2026-09-05, two identical runs, 703 of 708 rows stable). **Point each run at a server no
-earlier run has swept.**
+earlier run has swept.** The declared write that caused those 36 is refused now — a case that
+replaces the caller's own document declares `owned-seat`, and no seat on the server under test is
+one a run created — but the rule stands for a larger reason: two runs repeated with that closed
+still differ by 51 rows, **33 of them sessions the first run's devices opened and the destroyed reference
+never had**, and others a play state whose `play_count` counts the runs rather than the plays. Every
+writing case leaves something; only the reference is reborn. Neither server is non-deterministic:
+asked twice in isolation, each answers the same.
 
 **Exit codes: `0` clean, `1` not clean, `2` the run could not start.** *Not clean* is the ordinary
 answer and not a failure: it means the run has an untriaged difference, a declared case it could

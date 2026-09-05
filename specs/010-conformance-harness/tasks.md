@@ -2452,6 +2452,45 @@ request more, proving the paused report was stored before the silence begins.
    comparison still runs against the reference. §4.2's vocabulary moves with it, amended and dated
    in the plan's frontmatter.
 
+   **It was verified by repeating the experiment, and the verification is the important half: the
+   configuration was an instance of the problem and not the problem.** Two more identical runs, on
+   a fresh Atrium, with the fix in:
+
+   ```
+   run C  703 differences      run D  745
+   identical in both  694      only in C  9      only in D  51
+   ```
+
+   The twelve `Configuration` keys are gone from all three endpoints and the case is reported
+   unasked with its reason, so **that** write is closed. What the second run now gains instead is
+   **33 rows on `GET /Sessions`** — `/N/Capabilities/…`, `/N/RemoteEndPoint`, `/N/UserName`, which
+   are an array of sessions compared by position and no longer aligned. The lengths say it:
+   `ours=2 theirs=0` at session 3. Atrium keeps the sessions the first run's devices opened; the
+   single-use reference is destroyed and holds only the second run's.
+
+   **So the remedy cannot be per case.** Every writing case the register declares leaves something
+   on the server under test, and the reference is reborn stock for each run; closing them one at a
+   time will not converge, and `owned-seat` should be read as the register's own rule enforced
+   rather than as a strategy. What it has to be is at the level of the server: **each run gets one
+   no earlier run has swept** (which is what [conformance.md](../../docs/compatibility/conformance.md)
+   now tells an operator), or the harness gets a way to return one to its initial state — and that
+   runs straight into the largest thing this list owes 003, since without account or library
+   administration on the v1 surface there is no way to do it from outside.
+
+   **The third instance, and it was measured rather than left open.** The second run also gains
+   rows on `GET /Items/Latest`, and about half of them are an alignment cascade — normalising the
+   row index folds 36 of them into 21. The 21 that remain pair different items at the same
+   position (`ours=Soundless` against `theirs=Latent`), which looked like an ordering that does not
+   reproduce. **Neither server's does.** Atrium answers that listing identically to four identical
+   requests, and three consecutive reference instances answer it identically to each other, row for
+   row and in order.
+
+   What differs is the state again: `item_user_data` on Atrium holds seven rows after two runs, one
+   of them `played=1` with **`play_count=2`** — once per run — and `/Items/Latest` hides played
+   items, so the listing's own contents move between runs while the destroyed reference always
+   starts with nothing played. **Three instances of one asymmetry: the configuration, the sessions,
+   and the play state.** None of them is either server being non-deterministic.
+
 **And one thing this feature hands back rather than forward.** The three remaining
 prior-measurement debts in [reference-target.md](../../docs/compatibility/reference-target.md) are
 *"one author's afternoon and one library scanned twice"*: the `SortBy` closure — the cheapest of the
