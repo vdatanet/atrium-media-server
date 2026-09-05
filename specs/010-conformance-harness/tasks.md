@@ -2437,10 +2437,20 @@ request more, proving the paused report was stored before the silence begins.
    the case's. Run A had the write land mid-sweep, which is the whole of its five-row difference
    from B.
 
-   Three shapes the remedy could take, and all three are 010's: the sweep restores what it
-   overwrote, the run refuses to start against a server still holding an earlier run's writes, or
-   the report names the comparisons taken after a write to the same resource. **The middle one is
-   the only one that needs no new bookkeeping** — a pre-flight already exists for seats (AC-15).
+   **Taken on 2026-09-05, and by none of the three shapes this entry first listed.** They were: the
+   sweep restores what it overwrote, the run refuses to start against a server still holding an
+   earlier run's writes, or the report names the comparisons taken after a write. What the register
+   turned out to want was **none of them**, because it had already stated the rule in prose —
+   `replace-configuration` is *"the restricted seat alone: … the only account a run may overwrite is
+   the one it created and destroys"*. That premise holds on the reference, whose seats a run makes
+   and destroys with it, and fails on the server under test, where every seat is handed in because
+   the three account routes are outside the v1 surface.
+
+   So the fix reads the sentence rather than adding a mechanism: `needs` gains **`owned-seat`**,
+   `unmet_need` resolves it with the seat in hand and names only the side that was handed in, and
+   the case is reported unasked with the reason — the machinery that was already there. The
+   comparison still runs against the reference. §4.2's vocabulary moves with it, amended and dated
+   in the plan's frontmatter.
 
 **And one thing this feature hands back rather than forward.** The three remaining
 prior-measurement debts in [reference-target.md](../../docs/compatibility/reference-target.md) are
