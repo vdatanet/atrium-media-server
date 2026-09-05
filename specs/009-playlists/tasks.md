@@ -3,8 +3,9 @@ feature: 009-playlists
 title: Playlists — tasks
 status: Implemented
 created: 2026-08-31
-updated: 2026-09-01
+updated: 2026-09-05
 accepted: 2026-08-31
+amended: 2026-09-05 by the 2026-09-04 audit's corrective task C5 — spec §5 gains AC-21 for the two of T8's four refusal bodies that no criterion covered (the converter's unknown `MediaType` and the binder's malformed identifier), and spec §6's *"the two `400` shapes"* becomes the four T8 counted
 plan_status_required: Accepted
 plan_status_actual: Implemented
 ---
@@ -1082,6 +1083,31 @@ one migration; it is one migration, four maps and a clause.
 > *One thing this task did not do.* `surface.yaml` needed no edit: T8 through T13 each added their
 > row with its consumers, feature and level as they landed, so the check was a check and not a
 > change. `tools/extract_v1_surface.py` reports `009=7`.
+
+### Amended — 2026-09-05: two of the four refusal bodies had no criterion, and §6 had the count
+
+**T8's own title is *"two refusals that are not the same shape"*, and its measurement found four.**
+The finding went into §3.2's table and into this file's T8 note; what never happened is the half
+that makes a measurement checkable — §5 covers the `Name` rows (AC-2) and the `Ids`-resolution rows
+(AC-3), and the converter's refusal of an unknown `MediaType` and the binder's refusal of a
+malformed identifier were named in no criterion at all. Found as M9 of the
+[2026-09-04 audit](../../docs/audits/2026-09-04.md), one of ten of that class.
+
+**AC-21 states the four bodies as one claim**, because the thing worth asserting is not that each
+refuses but that the four are *told apart by what was wrong with the body* — `$` for a required
+property the deserialiser did not find, the property's own name for one present and null, `$` again
+from the converter with the byte position counted inside the quoted token, and the empty string
+from the binder. It ends on the clause the test file already asserts and no list of rows would
+have: **no** refusal of this body names the action parameter, which is why behaviours §1.11's row
+is a property of a *required* body and this optional one is the route that separates the two.
+
+**§6 carried the wrong count in the same sentence a reader consults for the proof.** Its
+`POST /Playlists` row said *"the two `400` shapes"* — the drafted number, not T8's — so a reader
+checking the conformance table against the wire would have found one shape too few and no
+criterion for either of the two missing. It now says four, told apart by their keys, and names
+AC-21 beside AC-2 and AC-3.
+
+**No behaviour changed and no `src/` file was touched.** §5 now numbers twenty-one criteria.
 
 ---
 

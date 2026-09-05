@@ -772,6 +772,12 @@ FEATURE_007: dict[int, tuple[str, ...]] = {
 #: `Content-Length` asserted on one route and a `Size` asserted in a golden, and nothing that put
 #: the two numbers side by side; AC-8's `audioStreamIndex` was asserted as a string in a URL and
 #: never as a property of the audio that came back.
+#:
+#: AC-33 and AC-34 are audit 2026-09-04's M7 and M8: two refusal tables with a full battery of
+#: tests and no criterion. M7 is also the one finding of that class that made a **neighbouring
+#: criterion false** - AC-32 counted three delivery routes refusing without a token where section
+#: 3.7 has made it four since T11, while row 32 below named the segment route's test anyway. The
+#: criterion now says four, and the row is honest rather than merely populated.
 FEATURE_008: dict[int, tuple[str, ...]] = {
     1: (
         "tests.unit.test_media_decision:test_every_rung_of_the_ladder",
@@ -955,6 +961,22 @@ FEATURE_008: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_hls_playlists:test_the_playlists_require_a_token_where_their_siblings_require_none",
         "tests.conformance.test_hls_segments:test_the_segment_route_requires_a_token",
     ),
+    # The segment route's own table (M7). The token row is AC-32's too, because which routes
+    # refuse without one is that criterion's whole subject and this is one of the four.
+    33: (
+        "tests.conformance.test_hls_segments:test_the_segment_route_requires_a_token",
+        "tests.conformance.test_hls_segments:test_an_item_nothing_holds_is_the_third_error_shape",
+        "tests.conformance.test_hls_segments:test_a_media_source_id_naming_no_source_is_the_same_body_at_400",
+        "tests.conformance.test_hls_segments:test_a_segment_carrying_a_start_position_is_refused",
+        "tests.conformance.test_hls_segments:test_a_segment_with_no_query_at_all_is_the_frameworks_refusal",
+        # The row that is not a refusal, and the reason it is in the criterion: a `playlistId`
+        # nothing named decides nothing, so validating it would be an invented refusal.
+        "tests.conformance.test_hls_segments:test_a_playlist_id_nothing_named_still_answers_the_segment",
+    ),
+    34: (
+        "tests.conformance.test_playback_info:test_an_unknown_item_is_the_same_404_as_the_item_route",
+        "tests.conformance.test_playback_info:test_a_request_with_no_token_is_the_empty_401",
+    ),
 }
 
 
@@ -1108,6 +1130,19 @@ FEATURE_011: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_subtitle_playlist:test_ac16_a_partial_window_is_written_with_a_decimal_point",
         "tests.unit.test_hls_planning:test_ac16_the_decimal_point_survives_a_locale_that_writes_a_comma",
         "tests.unit.test_hls_planning:test_a_window_duration_is_written_with_a_point_and_no_trailing_zeros",
+    ),
+    # Audit 2026-09-04's M10: section 3.5's format table, where AC-13 is section 3.7's rows. The
+    # discriminating name is the byte-order-mark one - it is what says `subrip` is a *rendered*
+    # document where `srt` is the short circuit's artefact, which is the table's own claim that
+    # a spelling with no media type answers a different body from its canonical one.
+    17: (
+        "tests.conformance.test_subtitle_fetch:test_every_writable_spelling_answers_its_measured_label",
+        "tests.conformance.test_subtitle_fetch:test_the_byte_order_mark_is_on_every_rendered_document_but_the_json_one",
+        "tests.conformance.test_subtitle_fetch:test_the_json_answer_is_the_cue_list_as_an_object_of_track_events",
+        # The other half of "a different body from its canonical spelling", for the alias whose
+        # writer *is* `vtt`'s: the switch is read against one spelling and not the other.
+        "tests.conformance.test_subtitle_fetch:test_the_time_map_switch_prepends_a_line_and_drops_the_mark",
+        "tests.conformance.test_subtitle_fetch:test_the_time_map_is_read_against_vtt_and_not_against_its_alias",
     ),
 }
 
@@ -1267,6 +1302,17 @@ FEATURE_009: dict[int, tuple[str, ...]] = {
         "tests.library.test_removal:test_ac20_a_purge_does_not_take_the_playlist_row_with_it",
         # The rename's half of "state": three columns of one row, and nothing else about it.
         "tests.conformance.test_playlists:test_ac20_a_renamed_playlist_keeps_its_entries",
+    ),
+    # Audit 2026-09-04's M9. The first two of the four bodies are AC-2's above; the two named
+    # here are the converter's and the binder's, which had tests and no criterion at all - and
+    # section 6 said "the two `400` shapes" where T8 had counted four.
+    21: (
+        "tests.conformance.test_playlists:test_an_unrecognised_media_type_in_the_body_is_the_converters_refusal",
+        "tests.conformance.test_playlists:test_the_media_type_refusals_position_follows_the_token_and_not_the_request",
+        "tests.conformance.test_playlists:test_a_malformed_identifier_is_the_binders_refusal_keyed_on_the_empty_string",
+        # The structural half, and what makes this a claim about every refusal of the route: the
+        # row behaviours section 1.11 states of every body refusal is a *required* body's.
+        "tests.conformance.test_playlists:test_no_refusal_of_this_body_names_the_action_parameter",
     ),
 }
 

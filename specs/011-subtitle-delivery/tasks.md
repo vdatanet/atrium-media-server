@@ -3,10 +3,10 @@ feature: 011-subtitle-delivery
 title: Subtitle delivery — tasks
 status: Implemented
 created: 2026-08-30
-updated: 2026-08-31
+updated: 2026-09-05
 accepted: 2026-08-30
 implemented: 2026-08-31
-amended: 2026-08-30 at the gate — 008's amendment of the same day gave the master playlist more than one variant and the subtitle group belongs on all of them; the codec spelling the text/image split reads is not the spelling this server stores; ffmpeg cannot encode the image subtitle track the fixture needs; and the sidecar language rule's "eight regional rows" are nine, two of which are not regional. See "What the gate changed"; and 2026-08-30 by T11 — the gate's own row for T11, and the ordering paragraph above it, say the only lever is `SubtitleMethod=Hls` **beside a `SubtitleStreamIndex`**. Measured, the method announces on its own: no index, `-1` and an index naming no stream each announce every text track, and the index decides only which entry is the default. The wording came from spec §3.4, which is amended with AC-5 in T11's change; plan §6.5's condition never asked for the index and needed no correction there
+amended: 2026-08-30 at the gate — 008's amendment of the same day gave the master playlist more than one variant and the subtitle group belongs on all of them; the codec spelling the text/image split reads is not the spelling this server stores; ffmpeg cannot encode the image subtitle track the fixture needs; and the sidecar language rule's "eight regional rows" are nine, two of which are not regional. See "What the gate changed"; and 2026-08-30 by T11 — the gate's own row for T11, and the ordering paragraph above it, say the only lever is `SubtitleMethod=Hls` **beside a `SubtitleStreamIndex`**. Measured, the method announces on its own: no index, `-1` and an index naming no stream each announce every text track, and the index decides only which entry is the default. The wording came from spec §3.4, which is amended with AC-5 in T11's change; plan §6.5's condition never asked for the index and needed no correction there; and 2026-09-05 by the 2026-09-04 audit's corrective task C5 — spec §5 gains AC-17 for §3.5's format-spelling table, which T7's battery covers and no criterion named, and spec §3.5's *different body from its canonical spelling* is narrowed to `subrip`'s reason with `webvtt`'s own stated beside it
 plan_status_required: Accepted
 plan_status_actual: Implemented
 ---
@@ -1328,6 +1328,33 @@ available for a manifest whose numbers come from the machine's own encoder. And 
 done's *"`-map` … has exactly one call site"* is two, one per module: `media/extract.py`'s and
 `media/ffmpeg.py`'s, both reading `file_index` now, and the bullet says so rather than being
 ticked as written.
+
+### Amended — 2026-09-05: the format table had a battery and no criterion
+
+**T7 measured every spelling a client can put in the address and wrote the battery for it**, and
+§5 never learned about any of it: AC-13 is written against §3.7's error rows, so the eleven
+spellings of §3.5's own table — nine that answer and two that refuse — were named in no criterion,
+and `FEATURE_011` could name none of those tests. Found as M10 of the
+[2026-09-04 audit](../../docs/audits/2026-09-04.md), which points at the two rows that make the
+table worth a criterion rather than a paragraph: `subrip` and `webvtt` are the two the reference
+can write and has **no media type for**, and the answer is not the refusal that suggests but a body
+under the framework's fallback label.
+
+**AC-17 is that table as a claim**, ending on the boundary that makes it an *every*: a spelling no
+writer admits is the controller `400` before any file is opened, which is AC-13's row and the edge
+the list above it stops at. Its discriminating name is the byte-order-mark test — the mark is what
+says `subrip` is a **rendered** document where `srt` is the same-format short circuit handing back
+the artefact's own bytes, which is the table's own claim that a spelling with no media type answers
+a *different* body from its canonical one.
+
+**Reading the tests against that sentence corrected §3.5.** *"A different body from the one its
+canonical spelling answers, because `Stream.subrip` converts where `Stream.srt` short-circuits"*
+is `subrip`'s reason given for both spellings: `webvtt` shares `vtt`'s writer, so what parts the
+two is the label and the time-map switch — read against `vtt` and not against the alias, which the
+paragraph above it already measured. §3.5 now says so, and the criterion is written against what
+the two tests actually assert rather than against the generalised sentence.
+
+**No behaviour changed and no `src/` file was touched.** §5 now numbers seventeen criteria.
 
 ---
 
