@@ -6,7 +6,7 @@ created: 2026-08-26
 updated: 2026-09-05
 accepted: 2026-08-27
 implemented: 2026-08-28
-amended: 2026-08-29 by 008 T3 — §3.2 gains `Container`, `HasSubtitles` and `VideoType` per type and `IsHD` gated, four properties T1 measured and declined under Principle VI and that 007's owed list and 008 AC-28 have since given readers; and 2026-08-28 by 006 T2 - section 3.2 gains `ParentBackdropItemId`, the pair 005 measured and emitted only half of; by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated); and 2026-09-01 at 010's measurement gate, by the two decisions that gate left to this feature - section 3.7's `Similar` hedge becomes a measurement and two recorded divergences (behaviours section 3.23 and section 3.24), AC-12 gains the exact-`limit` clause and names both, and OQ-5's `Similar` half moves to Resolved with both decisions made rather than owed; and 2026-09-02 by the listing media-source policy fix — section 3.2's `MediaSources` is the one property in that table whose value depends on the reading account, by one playback permission per media kind, which closes the accepted gap behaviours section 5 carried and section 3.5's full body answers the same way; and 2026-09-03 by the item-shape difference triage — section 3.2 gains `SeasonName` per type and an eight-row table for what the **two wide widths** carry and a list row does not, the first tranche of what 010's first complete sweep found against this feature, together with the two properties on those same bodies that are deliberately not sent and stay in behaviours section 5; and 2026-09-05 by the 2026-09-04 audit's corrective task C4 - section 3.7 states what the filter summary answers, where the rule had lived in the route's docstring alone, and section 5 gains AC-23, AC-24 and AC-25 for three implemented and fully tested behaviours no criterion named: the filter summary, the 2026-09-03 wide-width tranche, and the per-account `MediaSources` flags of the 2026-09-02 amendment
+amended: 2026-08-29 by 008 T3 — §3.2 gains `Container`, `HasSubtitles` and `VideoType` per type and `IsHD` gated, four properties T1 measured and declined under Principle VI and that 007's owed list and 008 AC-28 have since given readers; and 2026-08-28 by 006 T2 - section 3.2 gains `ParentBackdropItemId`, the pair 005 measured and emitted only half of; by T9 - section 3.2; by T10 - section 3.3; by T11 - section 3.7; by T12 - sections 3.8 and 5 (AC-11 reversed); by T13 - section 3.7 (NextUp measured); by T14 - sections 3.9 and 5 (AC-13 restated); by T15 - sections 3.10 and 5 (AC-14 restated); and 2026-09-01 at 010's measurement gate, by the two decisions that gate left to this feature - section 3.7's `Similar` hedge becomes a measurement and two recorded divergences (behaviours section 3.23 and section 3.24), AC-12 gains the exact-`limit` clause and names both, and OQ-5's `Similar` half moves to Resolved with both decisions made rather than owed; and 2026-09-02 by the listing media-source policy fix — section 3.2's `MediaSources` is the one property in that table whose value depends on the reading account, by one playback permission per media kind, which closes the accepted gap behaviours section 5 carried and section 3.5's full body answers the same way; and 2026-09-03 by the item-shape difference triage — section 3.2 gains `SeasonName` per type and an eight-row table for what the **two wide widths** carry and a list row does not, the first tranche of what 010's first complete sweep found against this feature, together with the two properties on those same bodies that are deliberately not sent and stay in behaviours section 5; and 2026-09-05 by the 2026-09-04 audit's corrective task C4 - section 3.7 states what the filter summary answers, where the rule had lived in the route's docstring alone, and section 5 gains AC-23, AC-24 and AC-25 for three implemented and fully tested behaviours no criterion named: the filter summary, the 2026-09-03 wide-width tranche, and the per-account `MediaSources` flags of the 2026-09-02 amendment; and 2026-09-05 by that audit's corrective task C8 - two measured claims that carried no citation in their own paragraph get the ones that already existed elsewhere: section 3.2's single-item route emitting everything whatever the request says is `tools/probe_item_shapes.py`'s 2026-08-27 run, and section 3.3's reference answering `200` where a rejection would be the delta is `tools/probe_query_envelope.py`'s binder measurement, which behaviours section 1.12 already named this decision as the evidence for - `[spec: GetItems]` declares the parameters and says nothing about what a request carrying one is answered
 depends_on: [002, 004]
 ---
 
@@ -203,9 +203,11 @@ Emitting the full set would mean specifying and testing a hundred fields whose c
 can check.
 
 **The single-item route is the exception to that**, and it is not a choice: the reference emits
-everything there whatever the request says, so a narrow answer is observable as a missing field
-rather than as a smaller one. What v1 emits from it is the union above, and the differential
-harness is what closes the rest.
+everything there whatever the request says
+`[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]` — the same run that measured
+§3.2's three widths measured this one as the width `Fields` has nothing left to add to — so a
+narrow answer is observable as a missing field rather than as a smaller one. What v1 emits from it
+is the union above, and the differential harness is what closes the rest.
 
 > ⚠️ **This is a known, bounded delta.** A different client reading a field Atrium omits sees it as
 > absent. The mitigation is measurement, not guessing: the differential harness (010) reports every
@@ -251,7 +253,12 @@ available answer is free:
 - *Ignore it silently* — the client receives more items than it asked for and shows the user wrong
   results, with nothing to indicate why.
 - *Reject with `400`* — the reference answers `200`, so this is itself a delta, and it breaks a
-  client that sends a parameter harmlessly.
+  client that sends a parameter harmlessly. That half is measured rather than declared: the
+  reference's query binder refuses nothing it does not recognise, and the only `400` it produces
+  is for a value that cannot parse as its declared **type**
+  `[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`
+  ([behaviours §1.12](../../docs/compatibility/behaviours.md#112-an-unrecognised-query-value-is-ignored-not-rejected),
+  which names this decision as the thing it is evidence for).
 
 **v1 ignores the parameter and records it.** Rejecting turns a partial answer into no answer, which
 is worse for the client and further from the reference. Every ignored Tier 3 parameter is counted
