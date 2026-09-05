@@ -31,6 +31,7 @@ import copy
 import importlib.util
 import json
 import re
+import shutil
 import socket
 import sys
 from pathlib import Path
@@ -1174,6 +1175,25 @@ def _ran(identity: str = "administrator", **overrides: Any) -> Any:
     }
     fields.update(overrides)
     return differential.Comparison(**fields)
+
+
+def test_a_body_that_will_not_decode_says_which_server_produced_it() -> None:
+    """`subtitle-burn-in` was outstanding on every run of 2026-09-05 saying *this server*.
+
+    Which server was whichever one the loop had reached, so the report could not be acted on
+    without re-running the row by hand against each in turn — which is what it then took, and the
+    answer was that neither fails when asked alone. The side is in the message now, and the byte
+    count with it: a body that arrived short and a body that arrived whole and undecodable are
+    different problems and used to read the same.
+    """
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("this machine has no ffmpeg, which is the other branch of the same function")
+
+    with pytest.raises(differential.NamedError) as refused:
+        differential.frame_hashes(b"not a video at all", side="reference")
+
+    assert "the reference produced" in str(refused.value)
+    assert "18 bytes" in str(refused.value), "the length is what tells a short body from a bad one"
 
 
 # -- one case, one issue ---------------------------------------------------------------------
