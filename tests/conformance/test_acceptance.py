@@ -519,6 +519,16 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
         "tests.unit.test_played_state_routes:test_the_most_recently_played_series_leads",
     ),
     11: ("tests.unit.test_tv_routes:test_ac11_season_zero_sorts_first_as_measured",),
+    # **The three names below are the determinism half only, and the second half of this criterion
+    # is asserted nowhere** - found by audit 2026-09-04's C10 while sweeping for L15's shape, and
+    # recorded here rather than mapped dishonestly. *"`Similar` returns exactly `limit` rows for
+    # every seed type"* is 010's gate decision and the observable side of behaviours section 3.24,
+    # where the reference answers `limit + 4` on a movie seed. The seeded world cannot discriminate
+    # it: `Similar` answers an empty pool for a series, an album, an artist and a track seed, and a
+    # one-row pool for a movie, so any `limit` a test could ask for is satisfied by a route that
+    # ignores the parameter entirely. Closing it is a fixture question - which items share a genre
+    # row - and that world is load-bearing for the query goldens and the by-name counts, so it is
+    # named here for a decision rather than taken in a corrective task.
     12: (
         "tests.unit.test_deterministic_pair_routes:test_ac12_similar_answers_identically_on_repeated_calls",
         "tests.unit.test_deterministic_pair_routes:test_the_mix_is_the_keyed_shuffle_of_the_shared_genre_pool",
@@ -981,8 +991,13 @@ FEATURE_008: dict[int, tuple[str, ...]] = {
         "tests.unit.test_transcode_throttle:test_ac29_nothing_is_deleted_until_the_client_has_fetched_past_the_window",
         "tests.unit.test_transcode_throttle:test_ac29_a_deleted_segment_is_produced_again_when_it_is_asked_for",
     ),
+    # Both halves of the "and", after audit 2026-09-04's L15 found only the second named. The
+    # unit test mints the id with the function the negotiation calls and hands it to the stop
+    # route; the conformance one is the identifier itself as a subject, followed from the
+    # negotiated body through the segment route's session key to the same stop route.
     30: (
         "tests.unit.test_transcode_lifecycle:test_ac30_a_play_session_id_from_a_negotiation_is_accepted",
+        "tests.conformance.test_hls_playlists:test_ac30_the_negotiated_id_keys_the_delivery_session_and_names_it_to_the_stop_route",
     ),
     31: (
         "tests.unit.test_media_decision:test_ac31_a_video_policy_needs_all_three_denials",

@@ -543,3 +543,65 @@ async def test_ac11_a_playlist_is_sized_and_carries_no_range_unit(
         assert answered.headers["Content-Length"] == str(len(answered.content))
         assert "Accept-Ranges" not in answered.headers
         assert "Content-Range" not in answered.headers
+
+
+# ------------------------------------------------------------------------------------------
+# AC-30: the identifier the negotiation minted, spent on both routes that take one
+# ------------------------------------------------------------------------------------------
+
+
+async def test_ac30_the_negotiated_id_keys_the_delivery_session_and_names_it_to_the_stop_route(
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+) -> None:
+    """AC-30 as one claim rather than two halves: *one* `PlaySessionId`, accepted by both.
+
+    The criterion says a `PlaySessionId` from `PlaybackInfo` "is accepted by the delivery route
+    **and** by `ActiveEncodings`", and until the 2026-09-04 audit's L15 the only test it named
+    asserted the second half: it minted an id with the same function the negotiation calls and
+    handed it straight to the manager, so the delivery route was never in it. The first half was
+    exercised - the round trips in this file all follow a `TranscodingUrl` that carries one - but
+    by tests whose subject is a variant line or a cadence, which is the shape a rename can carry
+    off without any criterion failing.
+
+    So the identifier is the subject here, and it is followed rather than rebuilt at every hop:
+    the body's `PlaySessionId`, then the `TranscodingUrl` that must carry that same string, then
+    the master, the variant and the first segment the variant names, then the manager's own key -
+    which is what section 3.8's *"delivery request with a `PlaySessionId`: session created or
+    reused"* means by accepted - and finally the stop route, naming the same string, after which
+    nothing is running. A server that minted a fresh id anywhere in that chain answers every
+    request here with a `200` and fails on the key.
+    """
+    application, world = served
+    item = world.of(LONG_TAKE)
+
+    answered = await client.post(
+        f"/Items/{item.id}/PlaybackInfo", json={"DeviceProfile": REENCODE}, headers=HEADERS
+    )
+    assert answered.status_code == 200, answered.text
+    negotiated = answered.json()["PlaySessionId"]
+    assert len(negotiated) == 32
+    url = answered.json()["MediaSources"][0]["TranscodingUrl"]
+    assert f"&PlaySessionId={negotiated}" in url, url
+
+    master = await client.get(url, headers=HEADERS)
+    assert master.status_code == 200, master.text
+    variant = next(line for line in master.text.splitlines() if line.startswith("main.m3u8"))
+    main = await client.get(f"/Videos/{item.id}/{variant}", headers=HEADERS)
+    assert main.status_code == 200, main.text
+    first = next(line for line in main.text.splitlines() if line and not line.startswith("#"))
+    assert f"PlaySessionId={negotiated}" in first, first
+
+    segment = await client.get(f"/Videos/{item.id}/{first}", headers=HEADERS)
+    assert segment.status_code == 200, segment.text
+    assert [one.key.play_session_id for one in application.state.transcodes.sessions] == [
+        negotiated
+    ], "the delivery route keyed its session by something other than the negotiated id"
+
+    stopped = await client.delete(
+        "/Videos/ActiveEncodings",
+        params={"deviceId": DEVICE_ID, "playSessionId": negotiated},
+        headers=HEADERS,
+    )
+
+    assert stopped.status_code == 204
+    assert application.state.transcodes.sessions == ()
