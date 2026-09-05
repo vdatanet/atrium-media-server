@@ -1421,3 +1421,28 @@ enforces (`tests/unit/test_import_directions.py`); playlists and segment boundar
 in `media/hls.py` with no process behind them; and the fixture world is **real media** —
 `tests/fixtures/media.py`'s matrix, generated bit-exactly and scanned by the real 003 pipeline, so
 "the delivered bytes" is a measurement rather than a fixture's word.
+
+**One divergence in the produced container, found on 2026-09-05 by looking at what
+`subtitle-burn-in` had actually downloaded.** `GET /Videos/{itemId}/stream.mp4` with
+`static=false&videoCodec=h264&audioCodec=aac` answers a **complete, index-last** MP4 here and a
+**fragmented** one there `[probe: tools/differential.py's own runner, by hand, Jellyfin 10.11.11,
+2026-09-05]`:
+
+```
+reference   ftyp  moov  moof  mdat  mfra     no Content-Length
+atrium      ftyp  free  mdat  moov           Content-Length: 59576
+```
+
+**This feature already knows how to fragment** — `NEEDS_FRAGMENTING` and
+`-movflags frag_keyframe+empty_moov+default_base_moof` ([`media/ffmpeg.py`](../../src/atrium/media/ffmpeg.py),
+plan §6.8) — and applies it to a destination that cannot be seeked. This route is not one: the
+production is written to the scratch directory and the finished file is served, so the flags never
+go on and the index lands last.
+
+**What differs for a client is when the first frame can be shown, not whether it can.** The
+reference's answer plays from its first bytes and carries no length; this one carries a length and
+seeks perfectly, and cannot start until the production ends. On the four-second fixture that is
+73 ms and invisible. On a film it is the whole difference between progressive playback and a wait,
+which is why it is written down here rather than left to whoever meets it. Not decided: the
+opposite trade is real too, and `Content-Length` is what [§3.5](spec.md)'s table and AC-11 are
+about.

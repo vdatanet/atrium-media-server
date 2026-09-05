@@ -2279,12 +2279,19 @@ def named_progressive_re_encode_header_frame(
     )
 
 
-def frame_hashes(payload: bytes) -> str:
+def frame_hashes(payload: bytes, side: str = "") -> str:
     """The decoded frames of a produced body, as one hash. `ffmpeg`, or a reason there is none.
 
     Comparing the produced **bytes** would compare two encoders and two containers; comparing the
     decoded frames compares the picture, which is what burn-in changes and what nothing else here
     does.
+
+    **`side` is in the failure, because without it the failure names no server.** `subtitle-burn-in`
+    was outstanding on every run of 2026-09-05 with `ffmpeg could not decode what this server
+    produced`, and *this server* was whichever of the two the loop had reached - a report that
+    cannot be acted on without re-running the row by hand, which is what it then took. Asked by
+    hand afterwards, both servers answered that pair completely and decodably, so the reason the
+    row fails inside a run is still open; naming the side is what the next run will say first.
     """
     binary = shutil.which("ffmpeg")
     if binary is None:
@@ -2299,14 +2306,16 @@ def frame_hashes(payload: bytes) -> str:
         timeout=PRODUCTION_TIMEOUT,
     )
     if finished.returncode != 0:
+        whose = f"the {side}" if side else "this server"
         raise NamedError(
-            "ffmpeg could not decode what this server produced: "
+            f"ffmpeg could not decode what {whose} produced ({len(payload)} bytes): "
             + finished.stderr.decode("utf-8", "replace").strip()[:200]
         )
     decoded = finished.stdout.decode("ascii", "replace").splitlines()
     lines = [line for line in decoded if line[:1] != "#"]
     if not lines:
-        raise NamedError("the produced body decoded to no video frames at all")
+        whose = f"the {side}" if side else "this server"
+        raise NamedError(f"the body {whose} produced decoded to no video frames at all")
     return hashlib.sha256("\n".join(lines).encode("ascii")).hexdigest()[:16]
 
 
@@ -2342,7 +2351,8 @@ def named_subtitle_burn_in(instances: Instances, identities: Sequence[Seat]) -> 
                 f"the {side} would not produce the pair this row compares: "
                 f"{plain.status} without the track and {with_cues.status} with it"
             )
-        without_hash, with_hash = frame_hashes(plain.raw), frame_hashes(with_cues.raw)
+        without_hash = frame_hashes(plain.raw, side)
+        with_hash = frame_hashes(with_cues.raw, side)
         answers[side] = (without_hash != with_hash, without_hash, with_hash)
     ours, theirs = answers["atrium"], answers["reference"]
     return NamedResult(

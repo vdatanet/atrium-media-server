@@ -1503,3 +1503,30 @@ that failure and prescribed a mitigation that proves a property of `renumber` in
 `-map`, any new `-vf` that names a stream, reads `file_index`; and the test that catches it is one
 over a source whose two numbers are **stated apart**, because a stream built the ordinary way
 mirrors one onto the other and agrees with itself either way.
+
+**And a row of 010's whose premise did not survive being asked — measured 2026-09-05.**
+[`named-comparisons.yaml`](../../docs/compatibility/named-comparisons.yaml)'s `subtitle-burn-in`
+carries `written_at: specs/011-subtitle-delivery/tasks.md`, so it is this list's to answer. It
+compares a production naming a subtitle track against one naming none, and passes when *the
+reference's frames change and Atrium's do not*. **On a stock instance of the pinned version over
+this repository's own fixture, the reference's do not change either** — and not by a hash: the two
+bodies are **byte-identical**, which no encoding difference survives
+`[probe: tools/differential.py's own runner, by hand, Jellyfin 10.11.11, 2026-09-05]`.
+
+Asked of **every** subtitle stream on `The Unconvertible` rather than the one the runner picks:
+
+```
+index 0  codec=subrip  external=True   DeliveryMethod=None  ->  identical
+index 3  codec=ass     external=False  DeliveryMethod=None  ->  identical
+```
+
+**`DeliveryMethod` is `None` on both**, and there is the mismatch: the runner selects the track by
+**codec** (`Codec="ass"`) while its own docstring states the premise as *"the track whose negotiated
+delivery method is `Encode`"*. Nothing on this film negotiates `Encode`, so the request the row
+makes cannot burn anything in and the row cannot pass as written. Two instances measured, both
+identical, one fixture film — enough to stop trusting the row, not enough to say what the reference
+does with a track it *does* offer `Encode` for. What it needs is a source the reference negotiates
+that way, and then the row selects on the delivery method its premise names.
+
+Separately, and this is why the row read as a defect for a day: `frame_hashes` raised
+`ffmpeg could not decode what this server produced` without naming the server. It names it now.
