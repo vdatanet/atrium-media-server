@@ -1380,3 +1380,22 @@ here, and they are two different shapes rather than one rule missed
 
 Neither is a defect this list can settle: both are 003's rule about what a season *is*, and the
 measurement is here so that the next person deciding does not have to stand a reference up again.
+
+**`DateCreated` is the scan's clock and not the file's, and it makes a listing mean two things —
+found on 2026-09-05 by an independent audit of the harness's own drift.** `scan.py` stamps every
+item of a library with one `utc_now()`, so a library's items are all created at the same instant and
+no date ordering among them is total. The reference takes the file's modification time, which the
+fixture generator fixes, so its items carry distinct and reproducible dates.
+
+Two consequences, and only the second is arguably a defect:
+
+* **Every tie falls through to the identifier.** `db/item_queries` ends its ordering
+  `models.Item.id.asc()` under a comment that already names it *"the divergence and the whole of
+  it"*, and `identity.for_file` derives that identifier from a `library_id` minted per build — so
+  the order of a tied listing is reproducible within an install and not across installs. That much
+  is within 003 §3.6, which asks for stability across **rescans** and not reinstalls.
+* **`GET /Items/Latest` orders by that stamp**, and answers 20 rows of 52. On this server the window
+  is therefore *which library was scanned last*, and on the reference it is *which file is newest*.
+  A client asking what is new gets a different answer for a different reason. Whether that matters
+  enough to take the file's `mtime` instead is 003's call with 005's listing in hand; the
+  measurement is here so it can be made without standing a reference up again.
