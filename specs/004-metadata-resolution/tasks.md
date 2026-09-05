@@ -804,7 +804,12 @@ And the fixture's three `.nfo` sidecars declare **no people at all**, so nothing
 for them: the reference derives them from the tags it read.
 
 Atrium answers no `Person` hint for any artist — zero `Person` rows in the database against the
-reference's two for this tree. **Whether to reproduce it is 004's**, and it may be the cheaper half
+reference's two for this tree. **And on 2026-09-05 that turned out to be the small half of it: this
+server holds no by-name row of _any_ type over this fixture** — no `Person`, `Genre`, `Studio`,
+`MusicGenre` or `Year`, where the reference answers `GET /Years` with **23** rows and this one with
+none, and `GET /Items/Filters` reports the same emptiness. Some of that is the tree (its three
+`.nfo` sidecars declare no genres and no people), but `Year` is not: the reference derives it from
+names like `The Matrix (1999)`, which this scan reads for the title already. **Whether to reproduce it is 004's**, and it may be the cheaper half
 of §5.3 rather than another instance of the expensive one: `Person` is already a by-name type here
 (`domain/items.py`, `BY_NAME`) with an identity rule of its own, so a `Person` row per artist name
 needs no identity migration — only a decision about whether `BY_NAME_FIELD` should stop leaving

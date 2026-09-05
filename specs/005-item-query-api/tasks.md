@@ -1073,10 +1073,12 @@ and will move; the classes are what to work from.
 | **46** | `LENGTH` | `Items` 17, and the artist arrays (`AlbumArtists`, `ArtistItems`, `Artists`) 6 each |
 | **7** | `TYPE` | one cause: `GET /UserViews` answers `ParentId` `null` here and an identifier there, on every view |
 
-**Read the `EXTRA_KEY` class against [§1.7](../../docs/compatibility/behaviours.md) before treating
-it as work.** The reference suppresses nulls globally, so a field this server emits as `null` where
-the reference omits it is one difference wearing two names, and part of that 130 is the same
-question as part of the 224. Nothing has separated them yet.
+**The two key classes are very nearly disjoint, which was worth measuring rather than assuming.**
+The reference suppresses nulls globally ([§1.7](../../docs/compatibility/behaviours.md)), so a field
+this server emits as `null` where the reference omits it would be one difference wearing two names —
+but by field name, **46 appear only as missing, 11 only as extra, and 3 as both**: `Container`,
+`HasSubtitles`, `UnplayedItemCount`. So §1.7 accounts for three fields here and not for a class, and
+the 224 and the 130 are two questions.
 
 **The sharpest single row is in none of those classes.** `GET /Items` with no parameters answers
 **77 rows here against 7** — 17 against 2 for a narrowed reader — so the two servers disagree about
