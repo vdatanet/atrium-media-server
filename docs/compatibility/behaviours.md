@@ -1166,14 +1166,32 @@ tokenless request refuses" — while [002 §3.1](../../specs/002-authentication-
 accepted three days earlier, already said none is required on this class. The measurement settled it
 in 002's favour.
 
-**Two more delivery actions require one, found at 008 T10**: `GET /Videos/{id}/master.m3u8` and
-`GET /Videos/{id}/main.m3u8` answer the empty `401` to a request carrying nothing, because the
-reference's whole HLS controller carries the authorization attribute where its stream actions carry
-none `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:39-41 @ v10.11.11]`, `[probe:
-tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]`. That does not soften the heading: the routes a
-bare URL is handed to are the ones that require nothing, and a playlist is followed by a player that
-already holds a token. It does mean the split is genuinely **per action** rather than "delivery
-requires none".
+**The three HLS routes require one — the first two found at 008 T10 and the third at T11, both on
+2026-08-29**:
+`GET /Videos/{id}/master.m3u8`, `GET /Videos/{id}/main.m3u8` and
+`GET /Videos/{id}/hls1/{playlistId}/{segmentId}.{container}` answer the empty `401` to a request
+carrying nothing. The reason is one attribute rather than three decisions: the reference's whole
+HLS controller carries the authorization attribute, and the segment action is on that same
+controller, where the stream actions carry none `[source:
+Jellyfin.Api/Controllers/DynamicHlsController.cs:39-41, 1102-1106 @ v10.11.11]`.
+
+**Two of the three were sent without a credential; the third was not.** `master.m3u8` answered the
+empty `401` in the playlist run `[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]` and
+the segment route answered it in the session run `[probe: tools/probe_transcode_session.py,
+Jellyfin 10.11.11, 2026-08-29]`. **Nothing has ever sent `main.m3u8` without one** — the playlist
+run's tokenless row is `master.m3u8`'s alone — so for that route the reference's answer is the
+controller attribute read in the source and not a measurement, and it is written that way here
+rather than folded into the two beside it. Closing that is one tokenless request in
+`probe_hls.py`, against a live server, which is why it is stated rather than taken.
+
+That does not soften the heading: the routes a bare URL is handed to are the ones that require
+nothing, and a playlist, a segment and a subtitle window are each followed by a player that already
+holds the token it was handed the address with. It does mean the split is genuinely **per action**
+rather than "delivery requires none" — and the count of the actions is the thing that has gone
+stale twice. Atrium requires a token on all three, decided with the routes at 008 T10 and T11.
+[008 AC-32](../../specs/008-playback-negotiation-and-delivery/spec.md) states the same split and
+**said "three delivery routes" until the 2026-09-04 audit's C5 counted the segment route into it**
+on 2026-09-05; this entry named two HLS routes for the same reason and until the same date.
 
 **Two more require none, added at 011 T7**, and they are the two a subtitle playlist's own entries
 point at: `GET /Videos/{id}/{sourceId}/Subtitles/{index}/Stream.{format}` and its ticks-in-path
@@ -1182,9 +1200,15 @@ alike, measured in the same run in which the subtitle *playlist* beside them ref
 with the empty `401` `[probe: tools/probe_subtitle_delivery.py, Jellyfin 10.11.11, 2026-08-29]`.
 The reference's own controller carries the authorization attribute on the playlist action alone
 `[source: Jellyfin.Api/Controllers/SubtitleController.cs:208, 338-345 @ v10.11.11]`. Atrium does
-the same, so the count is now **six of nine require nothing** and three do —
-`/Audio/{id}/universal` and the two HLS playlists — with the subtitle playlist joining the three
-when 011 T8 lands it.
+the same on all three, the playlist included since 011 T8 landed it on 2026-08-30.
+
+**So the delivery family is eleven routes, and six of the eleven require nothing.** The four
+`stream` routes and the two subtitle fetches require none; `/Audio/{id}/universal`, the three HLS
+routes and the subtitle playlist require one. The two image routes require none, which is where
+the heading starts. The regularity is not the feature that owns a route but what a client is
+holding when it asks: an address a human or an image loader can paste requires nothing, and an
+address the server itself handed over — a variant, a segment, a subtitle window — is followed by a
+client that already has a token.
 
 What 002 records is the consequence, so that whoever takes it takes it knowingly: on the
 reference **an item id is a capability**, and any divergence 006 or 008 chooses is one a client can
