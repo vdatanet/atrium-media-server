@@ -108,6 +108,7 @@ NEEDS = (
     "latency",
     "bytes",
     "twice",
+    "owned-seat",
 )
 
 #: The value both `behaviours` and `runner` take when there is nothing to name. On `behaviours` it

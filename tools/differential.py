@@ -1041,8 +1041,13 @@ class Inputs:
 NEEDS_THE_INSTANCE = ("fixture", "rescan", "wait")
 
 
-def unmet_need(need: str, inputs: Inputs) -> str:
-    """Why this run cannot meet `need`, or `""` when it can. Never a silent skip."""
+def unmet_need(need: str, inputs: Inputs, seat: Optional[Seat] = None) -> str:
+    """Why this run cannot meet `need`, or `""` when it can. Never a silent skip.
+
+    `seat` is optional because two callers have none: the report prints a row's needs against the
+    run as a whole, where a seat has no meaning. A token that asks about the seat therefore reads
+    as met when none is given, and is decided at the one call site that has one.
+    """
     if need.startswith("identity:"):
         role = need.split(":", 1)[1]
         if role in inputs.roles:
@@ -1065,10 +1070,45 @@ def unmet_need(need: str, inputs: Inputs) -> str:
             head + "stood up: --reference-url named none, and --fixture-root named no tree for "
             "this run to stand one up over"
         )
+    if need == "owned-seat":
+        return unowned_seat(seat)
     return ""
 
 
-def unmet_needs(needs: Sequence[str], inputs: Inputs) -> Tuple[str, ...]:
+def unowned_seat(seat: Optional[Seat]) -> str:
+    """Why a case that replaces the caller's own document may not be issued as this seat.
+
+    **`request-cases.yaml` has always said it in prose** — `replace-configuration` is *"the
+    restricted seat alone: this route REPLACES the caller's configuration rather than merging it,
+    and the only account a run may overwrite is the one it created and destroys"*. That premise
+    holds on the reference, whose seats this run makes and destroys with it, and **fails on the
+    server under test**, whose seats are handed in: `GET /Users`, `POST /Users/New` and
+    `POST /Users/{userId}/Policy` are not in the v1 surface, so no seat there was ever created by
+    a run.
+
+    Measured 2026-09-05, and it is why this token exists rather than a comment: two identical runs
+    against one Atrium answered 708 differences and 752. Of the 44 new ones, **36 were twelve
+    `Configuration` keys on three endpoints** — the first run had replaced the seat's stock
+    configuration with this case's 91-byte body, the single-use reference came back stock, and the
+    second run read the difference back as the server's. The write also moved results *within* a
+    run, since an endpoint compared before it saw one document and one compared after saw another.
+    """
+    if seat is None:
+        return ""
+    borrowed = [side for side in SIDES if not seat.identity(side).created_by_the_run]
+    if not borrowed:
+        return ""
+    return (
+        "it replaces the caller's own document, and on the "
+        + " and the ".join(borrowed)
+        + " this seat was handed in rather than created by this run - so the write outlives the "
+        "run on a server the run does not own, and the next run reads it back as a difference"
+    )
+
+
+def unmet_needs(
+    needs: Sequence[str], inputs: Inputs, seat: Optional[Seat] = None
+) -> Tuple[str, ...]:
     """Every reason this run cannot ask for something, in the order the register declares them.
 
     Distinct reasons only: two tokens of one row can be blocked by one absence - `fixture` and
@@ -1076,7 +1116,7 @@ def unmet_needs(needs: Sequence[str], inputs: Inputs) -> Tuple[str, ...]:
     """
     reasons: List[str] = []
     for need in needs:
-        reason = unmet_need(need, inputs)
+        reason = unmet_need(need, inputs, seat)
         if reason and reason not in reasons:
             reasons.append(reason)
     return tuple(reasons)
@@ -1658,7 +1698,7 @@ def compare_case(
     used: set,
 ) -> Comparison:
     """One case, one seat, both servers - or one `Comparison` saying why it could not be asked."""
-    blocked = unmet_needs(case.needs, inputs)
+    blocked = unmet_needs(case.needs, inputs, seat)
     if blocked:
         return Comparison(
             endpoint=endpoint.key,

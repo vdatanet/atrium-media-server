@@ -569,8 +569,8 @@ cases:
     content_type: application/json
     anchors: []
     identities: [restricted]
-    needs: []
-    what_it_is_for: "The restricted seat alone: this route REPLACES the caller's configuration rather than merging it, and the only account a run may overwrite is the one it created and destroys"
+    needs: [owned-seat]
+    what_it_is_for: "The restricted seat alone: this route REPLACES the caller's configuration rather than merging it, and the only account a run may overwrite is the one it created and destroys - which `owned-seat` is that sentence made checkable, after two runs against one Atrium measured the second reading back what the first had written (010's list, 2026-09-05)"
 
   - id: full-capabilities
     endpoint: "POST /Sessions/Capabilities/Full"
