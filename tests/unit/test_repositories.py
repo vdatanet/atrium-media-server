@@ -1,10 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The boundary: domain objects out, never rows.
 
-The first test in this file is a **sweep**, not an example. It walks every public method of the
-module and resolves its return annotation, so a method added next year that returns a row fails
-here without anybody remembering that it should. Checking three representative methods by hand
-would pass for exactly as long as somebody kept doing it.
+The first test in this file is a **sweep**, not an example. It walks every public method of every
+repository `REPOSITORIES` names and resolves its return annotation, so a method added next year
+that returns a row fails here without anybody remembering that it should. Checking three
+representative methods by hand would pass for exactly as long as somebody kept doing it.
+
+**`REPOSITORIES` is not the whole module yet**, and this docstring said it was until 2026-09-05.
+Seven of the eleven repository classes are in it; the note above the tuple names the four that are
+not and why, and a test holds both counts against the module so neither can drift again.
 """
 
 from __future__ import annotations
@@ -58,12 +62,15 @@ ALLOWED_MODULES = {
     "atrium.domain.items",
 }
 
-#: **Not every repository in the module**, and the gap is worth knowing about: five of the eleven
+#: **Not every repository in the module**, and the gap is worth knowing about: four of the eleven
 #: classes there are outside this list, so the sweep below is a sweep of what it names rather than
 #: of the module. `ItemRepository` was added by 012 T4, which gave it a new writing method, and it
 #: brought `atrium.domain.items` into the allowed set with it - which is why the others are still
 #: out: each needs its own domain module admitted, and admitting one blind is how a sweep starts
 #: passing for the wrong reason.
+#:
+#: *The count said five until 2026-09-05, T4 having admitted `ItemRepository` and left the sentence
+#: beside it alone. It is asserted against the module now.*
 REPOSITORIES = (
     UserRepository,
     TokenRepository,
@@ -72,6 +79,13 @@ REPOSITORIES = (
     ItemRepository,
     MediaProbeRepository,
     MediaFileRepository,
+)
+
+#: The four the sweep does not reach, by name rather than by import: naming them is what lets the
+#: count above be checked instead of believed, and each one arrives here by having its own domain
+#: module admitted to `ALLOWED_MODULES` - read, not assumed.
+NOT_YET_SWEPT = frozenset(
+    {"LibraryRepository", "MetadataRepository", "PlaylistRepository", "ImageRepository"}
 )
 
 
@@ -168,6 +182,27 @@ def test_the_sweep_actually_finds_the_methods() -> None:
     names = {name for name, _ in public_methods()}
     assert {"UserRepository.by_id", "TokenRepository.issue", "SessionRepository.all"} <= names
     assert len(names) > 15
+
+
+def test_the_sweep_says_how_much_of_the_module_it_covers() -> None:
+    """*Seven of the eleven* is a live claim about the module, so it is held against the module.
+
+    It had already drifted: 012 T4 admitted `ItemRepository` and left the sentence beside the tuple
+    saying five classes were outside when four were. A count in a comment that nothing can fail
+    goes stale the next time the module grows - which is the argument for the sweep itself, applied
+    to the sweep's own reach. A class added to `repositories.py` fails here until somebody decides
+    which side of the line it is on.
+    """
+    in_the_module = {
+        name
+        for name, member in inspect.getmembers(repositories, inspect.isclass)
+        if name.endswith("Repository") and member.__module__ == repositories.__name__
+    }
+    swept = {repository.__name__ for repository in REPOSITORIES}
+    assert not swept & NOT_YET_SWEPT, "a class cannot be both swept and owed"
+    assert swept | NOT_YET_SWEPT == in_the_module
+    # Written out, so that admitting one has to come here and move the sentence with it.
+    assert (len(swept), len(NOT_YET_SWEPT), len(in_the_module)) == (7, 4, 11)
 
 
 @pytest.mark.parametrize("name,method", public_methods(), ids=[n for n, _ in public_methods()])
