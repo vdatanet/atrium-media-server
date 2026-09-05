@@ -3,10 +3,10 @@ feature: 007-user-data-and-playstate
 title: User data and playstate — implementation plan
 status: Implemented
 created: 2026-08-28
-updated: 2026-08-28
+updated: 2026-09-05
 accepted: 2026-08-28
 implemented: 2026-08-28
-amended: 2026-08-28 at the gate, which measured §6.8's catalogue before accepting — §1's sequencing note, §5's replacement semantics, §6.1's error floor, §6.4 rewritten around the measured session shape, §6.7, §6.8, §7, §9; the playing-session block and AC-21/AC-22 went back into the spec
+amended: 2026-08-28 at the gate, which measured §6.8's catalogue before accepting — §1's sequencing note, §5's replacement semantics, §6.1's error floor, §6.4 rewritten around the measured session shape, §6.7, §6.8, §7, §9; the playing-session block and AC-21/AC-22 went back into the spec; and 2026-09-05 by the 2026-09-04 audit's L13, the first amendment here that no task of this feature made — §5's `PlayingNow` listed the right thirteen fields in the wrong order, which for a frozen dataclass is a wrong positional constructor, and the `NowPlayingRegistry` beside it listed six of nine public methods. Both read back against `users/playing.py`; no code moves
 spec_status_required: Accepted
 spec_status_actual: Implemented
 ---
@@ -176,13 +176,13 @@ class PlayingNow:             # a snapshot; position already extrapolated
     position_ticks: int       # last reported + unpaused elapsed, capped at runtime
     is_paused: bool
     can_seek: bool
-    play_method: str | None
-    play_session_id: str | None
-    media_source_id: str | None
-    audio_stream_index: int | None
-    subtitle_stream_index: int | None
     is_muted: bool
     volume_level: int | None
+    audio_stream_index: int | None
+    subtitle_stream_index: int | None
+    media_source_id: str | None
+    play_method: str | None
+    play_session_id: str | None
     runtime_ticks: int | None # the item's, carried so the position cap needs no lookup
     last_check_in: datetime
 
@@ -191,9 +191,22 @@ class NowPlayingRegistry:
     def update(self, session_id, report) -> None      # progress; remembers paused-at
     def clear(self, session_id) -> PlayingNow | None  # stop; the final snapshot
     def snapshot(self, session_id) -> PlayingNow | None
+    def check_in(self, session_id) -> datetime | None # the live LastPlaybackCheckIn
+    def playing(self) -> dict[str, PlayingNow]        # every session, for a multi-session /Sessions
     def reap(self, older_than: timedelta | None = None) -> list[tuple[str, PlayingNow]]
+    def sweep(self) -> int                            # one reap, each committed; what run() calls
     async def run(self) -> None                       # the sweep loop; commits via callback
 ```
+
+> **Corrected on 2026-09-05 by the 2026-09-04 audit's L13.** `PlayingNow`'s thirteen fields were
+> the right thirteen in the wrong order against `src/atrium/users/playing.py:76-96`, and a frozen
+> dataclass's declaration order is its **positional constructor**: the block as written builds a
+> snapshot whose `play_method` holds a mute flag, silently, for any caller who reads it as a
+> signature rather than as a list of names. Reordered to the class. Reading the block against the
+> module also found the audit's finding to be half of one: **`NowPlayingRegistry` has nine public
+> methods and this block listed six**, missing `check_in`, `playing` and `sweep` — `sweep` being
+> the pass `run()` actually loops over, so the block skipped the seam every test of the reaper
+> drives. Added; nothing here is a behaviour change and no code moves.
 
 `start` and `update` **replace the whole record** — fields the new report omits are gone,
 because that is what the reference's `PlayState` measurably does *(amended at the gate: the

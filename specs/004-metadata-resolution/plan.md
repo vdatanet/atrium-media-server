@@ -3,9 +3,9 @@ feature: 004-metadata-resolution
 title: Metadata resolution — implementation plan
 status: Implemented
 created: 2026-08-27
-updated: 2026-09-03
+updated: 2026-09-05
 implemented: 2026-08-27
-amended: 2026-08-28 by 006 T12 - section 6.1's list rules gain a fifth, for `IMAGES`; and 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7; by T10 - sections 4, 6.1 and 6.8; by T14 - section 6.8; by T15 - section 6.9; and 2026-09-03 by the container-directory fix - section 6.2
+amended: 2026-08-28 by 006 T12 - section 6.1's list rules gain a fifth, for `IMAGES`; and 2026-08-27 by the tasks gate - section 6.8; by T1 - section 4; by T2 - section 6.2; by T3 - sections 5, 6.1 and 6.2; by T4 - section 6.7; by T5 - section 6.2; by T6 - section 6.1; by T7 - section 2; by T8 - section 6.4; by T9 - sections 4 and 6.7; by T10 - sections 4, 6.1 and 6.8; by T14 - section 6.8; by T15 - section 6.9; and 2026-09-03 by the container-directory fix - section 6.2; and 2026-09-05 by the 2026-09-04 audit's M11, the first amendment here that no task of this feature made - section 5's call to the orchestrator raised `TypeError` as written and named the wrong function besides. The real signature is `refresh_items(library, session, item_ids, *, mode, tags, roots, providers)`, `refresh_library` is the whole-library convenience over it, and `library/scan.py` has always called the first. The block is a signature now; no code moves
 spec_status_required: Accepted
 spec_status_actual: Implemented
 accepted: 2026-08-27
@@ -261,9 +261,33 @@ def ensure_by_name(self, kind: ItemType, spelling: str) -> str        # folds, r
 def collect_by_name_garbage(self) -> int                              # rows nothing references
 ```
 
-`refresh.refresh_library(library, mode, providers, session)` is the orchestrator and the only
-caller of `apply`. `library/scan.py` gains one call site: after a scan commits, it hands the
-changed and new item ids to `refresh`, and `deep` hands everything.
+```python
+def refresh_items(library: Library, session: OrmSession, item_ids: Sequence[str], *,
+                  mode: RefreshMode = RefreshMode.DEFAULT, tags: ReadsTags | None = None,
+                  roots: Sequence[Path] | None = None,
+                  providers: Sequence[RemoteProvider] = ()) -> RefreshReport
+def refresh_library(library: Library, session: OrmSession, *,
+                    mode=..., tags=..., roots=..., providers=...) -> RefreshReport  # same defaults
+```
+
+`refresh.refresh_items` is the orchestrator and the only caller of `apply` — `refresh_library` is
+the whole-library convenience over it, one `ItemRepository.by_library` and the same call.
+`library/scan.py` gains one call site: after a scan commits, it hands the changed and new item ids
+to `refresh_items`, and `deep` hands everything.
+
+> **Corrected on 2026-09-05 by the 2026-09-04 audit's M11.** This paragraph read
+> *"`refresh.refresh_library(library, mode, providers, session)` is the orchestrator and the only
+> caller of `apply`"*, which **raises `TypeError` as written**: `session` is the second positional
+> parameter and `mode`, `tags`, `roots` and `providers` are keyword-only
+> (`src/atrium/metadata/refresh.py:184-192`). The finding named the signature; reading the module
+> against it found a second thing wrong in the same sentence, which is why the block is a signature
+> now rather than a corrected call. **`refresh_library` is not the entry point this section hands
+> to `library/scan.py`** — `refresh_items` is, and always has been (`library/scan.py:88,327`),
+> because a scan refreshes what it touched and not the library. `refresh_library` takes no item
+> ids and so cannot be that caller, and the one `apply` is `_apply_one`'s, reached from
+> `refresh_items` on either path. §3's *"the only caller of the write repository"* is a claim about
+> the module and stays true; §6.8's *"a batch of item ids"* and its step 3 already described the
+> real shape. Nothing in the code moves.
 
 **`GET /Localization/Cultures`** (`api/localization.py`) — authenticated via the existing
 `require_user` seam, returns `metadata.cultures.CULTURES` serialised through the compat base

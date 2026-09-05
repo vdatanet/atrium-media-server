@@ -3,10 +3,10 @@ feature: 008-playback-negotiation-and-delivery
 title: Playback negotiation and delivery — implementation plan
 status: Implemented
 created: 2026-08-29
-updated: 2026-08-29
+updated: 2026-09-05
 accepted: 2026-08-29
 implemented: 2026-08-29
-amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's; and 2026-08-29 by T6 — §3 gains `media/labels.py`, `api/delivery.py` and a `MediaFileRepository` that takes no user, §6.5 records that the four `stream` routes declare no authentication dependency at all and why the response is built header by header, §6.8's delivery-route error shape is discharged for those four (the third shape, not the problem details §7 implied), and §7 gains the container pattern's `400` and the missing-file case; and 2026-08-29 by T8 — §6.6's "exactly as the reference's controller does" is one clause too strong: its codec profile is scoped to the direct-play containers and therefore constrains nothing on the transcoding path, so the ceilings are stated unscoped here; and 2026-08-29 by T9 — §6.5's "a WAV re-encode, whose length is computable from sample count" is the wrong shape: a WAV states its own length inside the body and a piped one states `ffffffff`, so the output goes to scratch like a remux and the length is the file's, with `media/ffmpeg.py` refusing to build the piped invocation at all; and §6.6 gains the one inference row the reference has not got, kept out of the transcribed table; and 2026-08-29 by T10 — §6.4's two cadence claims both moved when the rounding rule was finally read: the scaling divides by the rate the *request* carries at 32-bit precision, so the published 3.004 s is a fact about one film's stored 23.975988 and the T1 fixture's exact `24000/1001` answers 3.003 s; and a copy buckets the source's keyframes only for a container the operator has permitted on-demand extraction for, shipped as Matroska alone, so the published 6.0 s was the equal grid at the copy default. §6.4 also records that forwarding a query string verbatim needed the pre-canonicalisation bytes, and that `BANDWIDTH` is this server's own encoder target rather than the reference's codec-scaled one; and 2026-08-29 by T11 — §5's `TranscodeManager` moved in three places: the decision belongs to the request rather than to the session, the restart position is the URI's `runtimeTicks` rather than `plan_segments()[index]`, and `run()` arrives with the policy it enforces at T12; §6.4's forced-keyframe grid is a divergence the reference does not share; and §6.8's segment refusal shapes are discharged; and 2026-08-29 by T12 — §5's `stop` takes the play session and not the device, because the reference keys on it alone and the `deviceId` the route requires decides nothing; §6.7 gains the measured kill-timer constants (§6.8's third debt), the reason the two clearing paths differ, and the diagnostic drain the ledger needed before any of them could reap a process at all — an unread `stderr` pipe fills and a process blocked on it never exits; and 2026-08-29 by T13 — §6.7 gains the four operator knobs' semantics and both of their floors: both measure against `runtimeTicks + actualSegmentLengthTicks`, the parameter the segment route bound and ignored; the encoder's position is read off the scratch directory rather than parsed out of its progress; the pause is `SIGSTOP` rather than the reference's stdin pause key, which `-nostdin` has already made unreachable; segment deletion is keyed on position rather than on age, measured; and policy at delivery is a per-stream refusal on the segment route answered with the `500` that route already has, never a `403`; and 2026-08-29 by T14 — nothing in this plan moved: the map is over `spec.md` §5 and the route set is over `surface.yaml`, and both were counted against the file rather than against prose. What T14 found belongs to the spec (AC-6 and AC-11) and to behaviours (the pipe destination's cost, §3.3); and 2026-08-30 by T15 — recorded late, by the audit of the same day (M1), because T15 amended `spec.md`, `tasks.md`, `behaviours.md` and the code and left this plan behind: §5's `media/hls.py` block is rewritten against the three signatures as they actually stand, and its **"exactly one variant"** is withdrawn in both places it survived — a stream-copied video whose source range is HDR gets an h264 SDR entrance beside the copy, at the copy's own `BANDWIDTH`, so one variant is a fact about the source and not about the route; and 2026-09-02 by the negotiation policy-gate fix — §1's *"the all-three policy gate"* and §4's *"the policy gate is the measured all-three rule for video and the single audio permission for audio items"* are both true of a negotiation **against a profile** and of no other. With none, the reference reaches no ladder answer to gate and reads one permission per media kind off the source instead, so `media/decision.py` gains `unnegotiated_transcoding` and `Decision.remuxing_denied` — the one place `SupportsDirectStream` stops mirroring `SupportsDirectPlay` — and rule 1 stops returning three unconditional `True`s. The contract sentence is therefore two rules and not one, still in this one module and nowhere else
+amended: 2026-08-29 by T3 — §6.1 records the `ETag` derivation and §6.8's first debt is discharged: MD5 over the modification time in .NET ticks, hashed as UTF-16 little-endian and rendered in .NET's GUID byte order, proven by recovering three files' tick counts from the tags the reference sent; and 2026-08-29 by T1 — §8 gains the bit-exactness the cached fixture directory rests on, measured where it fails; and 2026-08-29 by T4 — §5's contract gains `supports_transcoding` and `is_video` and loses "or empty" from rule 1, §6.2 records the containment rules, the reasons' order and subject, the comparison precision and the HDR rule's unreachability, and §6.3 records that the URL carries the profile's ceilings rather than the plan's; and 2026-08-29 by T6 — §3 gains `media/labels.py`, `api/delivery.py` and a `MediaFileRepository` that takes no user, §6.5 records that the four `stream` routes declare no authentication dependency at all and why the response is built header by header, §6.8's delivery-route error shape is discharged for those four (the third shape, not the problem details §7 implied), and §7 gains the container pattern's `400` and the missing-file case; and 2026-08-29 by T8 — §6.6's "exactly as the reference's controller does" is one clause too strong: its codec profile is scoped to the direct-play containers and therefore constrains nothing on the transcoding path, so the ceilings are stated unscoped here; and 2026-08-29 by T9 — §6.5's "a WAV re-encode, whose length is computable from sample count" is the wrong shape: a WAV states its own length inside the body and a piped one states `ffffffff`, so the output goes to scratch like a remux and the length is the file's, with `media/ffmpeg.py` refusing to build the piped invocation at all; and §6.6 gains the one inference row the reference has not got, kept out of the transcribed table; and 2026-08-29 by T10 — §6.4's two cadence claims both moved when the rounding rule was finally read: the scaling divides by the rate the *request* carries at 32-bit precision, so the published 3.004 s is a fact about one film's stored 23.975988 and the T1 fixture's exact `24000/1001` answers 3.003 s; and a copy buckets the source's keyframes only for a container the operator has permitted on-demand extraction for, shipped as Matroska alone, so the published 6.0 s was the equal grid at the copy default. §6.4 also records that forwarding a query string verbatim needed the pre-canonicalisation bytes, and that `BANDWIDTH` is this server's own encoder target rather than the reference's codec-scaled one; and 2026-08-29 by T11 — §5's `TranscodeManager` moved in three places: the decision belongs to the request rather than to the session, the restart position is the URI's `runtimeTicks` rather than `plan_segments()[index]`, and `run()` arrives with the policy it enforces at T12; §6.4's forced-keyframe grid is a divergence the reference does not share; and §6.8's segment refusal shapes are discharged; and 2026-08-29 by T12 — §5's `stop` takes the play session and not the device, because the reference keys on it alone and the `deviceId` the route requires decides nothing; §6.7 gains the measured kill-timer constants (§6.8's third debt), the reason the two clearing paths differ, and the diagnostic drain the ledger needed before any of them could reap a process at all — an unread `stderr` pipe fills and a process blocked on it never exits; and 2026-08-29 by T13 — §6.7 gains the four operator knobs' semantics and both of their floors: both measure against `runtimeTicks + actualSegmentLengthTicks`, the parameter the segment route bound and ignored; the encoder's position is read off the scratch directory rather than parsed out of its progress; the pause is `SIGSTOP` rather than the reference's stdin pause key, which `-nostdin` has already made unreachable; segment deletion is keyed on position rather than on age, measured; and policy at delivery is a per-stream refusal on the segment route answered with the `500` that route already has, never a `403`; and 2026-08-29 by T14 — nothing in this plan moved: the map is over `spec.md` §5 and the route set is over `surface.yaml`, and both were counted against the file rather than against prose. What T14 found belongs to the spec (AC-6 and AC-11) and to behaviours (the pipe destination's cost, §3.3); and 2026-08-30 by T15 — recorded late, by the audit of the same day (M1), because T15 amended `spec.md`, `tasks.md`, `behaviours.md` and the code and left this plan behind: §5's `media/hls.py` block is rewritten against the three signatures as they actually stand, and its **"exactly one variant"** is withdrawn in both places it survived — a stream-copied video whose source range is HDR gets an h264 SDR entrance beside the copy, at the copy's own `BANDWIDTH`, so one variant is a fact about the source and not about the route; and 2026-09-02 by the negotiation policy-gate fix — §1's *"the all-three policy gate"* and §4's *"the policy gate is the measured all-three rule for video and the single audio permission for audio items"* are both true of a negotiation **against a profile** and of no other. With none, the reference reaches no ladder answer to gate and reads one permission per media kind off the source instead, so `media/decision.py` gains `unnegotiated_transcoding` and `Decision.remuxing_denied` — the one place `SupportsDirectStream` stops mirroring `SupportsDirectPlay` — and rule 1 stops returning three unconditional `True`s. The contract sentence is therefore two rules and not one, still in this one module and nowhere else; and 2026-09-05 by the 2026-09-04 audit's L2 and L7–L12, the first amendments here that no task of this feature made — §3's tree gains `domain/media.py`, which this feature created and which no plan's tree drew, and §5's four blocks are read back against the modules. `Decision` had grown `target` (T5), `remuxing_denied` (the 2026-09-02 fix) and 011's `subtitles`/`subtitle_index`, and its `sub_protocol` is `str | int | None` since 012 T9; `StreamPlan.codec` is `str | None` on both branches; `master_playlist` grew 011's `subtitles`; `TranscodeManager.segment` grew T13's `length_ticks`; and the `RangeAnswer` comment described three variants of a class that is one dataclass with `status`/`start`/`length`/`total`. Every correction is additive or a type, each carries a dated note under the block it corrects, and no code moves
 spec_status_required: Accepted
 spec_status_actual: Implemented
 ---
@@ -104,6 +104,9 @@ src/atrium/
 │                        timers, restart-at-seek, the configurable throttle
 ├── compat/
 │   └── ranges.py        negotiate_range: the §3.5 table, one place
+├── domain/
+│   └── media.py         MediaInspection and InspectedStream — what a file turned out to
+│                        contain, so the repository can hand them out (ADR-0003, §4)
 ├── api/
 │   ├── media_info.py    MediaInfoController: POST and GET /Items/{itemId}/PlaybackInfo
 │   ├── delivery.py      what the four stream routes share: the lookup, the range answer,
@@ -118,6 +121,15 @@ src/atrium/
     ├── repositories.py  grows MediaProbeRepository
     └── migrations/versions/0006_media_probes.py
 ```
+
+**`domain/media.py` is not in the tree this plan was accepted with, and this feature created it**
+— added on 2026-09-05 by the 2026-09-04 audit's L2, which found it drawn in no plan's §3 at all
+while §5 and §6.2 both name it and its own module docstring closes with *"See
+specs/008-playback-negotiation-and-delivery/plan.md section 4"*, a section that does not draw it
+either. It is where the two records the prober produces and the repository hands back have to
+live, because ADR-0003 sends domain objects out and never rows; 011 §5 grows the same module and
+its tree does not draw it either. Drawn here rather than restated there, in 001's own style for a
+tree that outgrew its acceptance.
 
 `db/repositories.py` also grows a `MediaFileRepository`, whose one query is an item id to the file
 behind it. Separate from `ItemQueryRepository` because that one takes a **user** and applies 005's
@@ -226,7 +238,7 @@ class StreamAction(Enum):
 class StreamPlan:              # one per output stream
     source_index: int
     action: StreamAction
-    codec: str                 # target; source codec when COPY
+    codec: str | None          # target; source codec when COPY, which can itself be unknown
     # ceilings already clamped to min(profile, source): §3.4 "limits, not targets"
     width: int | None
     height: int | None
@@ -240,10 +252,19 @@ class Decision:
     outcome: Outcome
     reasons: tuple[str, ...]   # TranscodeReason names, ascending flag value
     container: str | None      # negotiated output container ("ts")
-    sub_protocol: str | None   # "hls" | "http"
+    sub_protocol: str | int | None   # "hls" | "http"; the int is 012 T9's, below
     video: StreamPlan | None
     audio: StreamPlan | None
     supports_transcoding: bool # what this profile leaves producible, not what was answered
+    subtitles: tuple[SubtitleAnswer, ...] = ()   # 011 T9; declared in 011 §5
+    subtitle_index: int | None = None            # 011 T9; declared in 011 §5
+    remuxing_denied: bool = False                # the 2026-09-02 policy-gate fix, above
+    target: TranscodingProfile | None = None     # T5: the entry this answer was built from
+
+    @property
+    def supports_direct_play(self) -> bool       # outcome is DIRECT_PLAY
+    @property
+    def supports_direct_stream(self) -> bool     # the mirror, less `remuxing_denied`
 
 def decide(source, profile, switches, policy, *, is_video) -> Decision
 ```
@@ -280,6 +301,32 @@ same flag from the same caller. And `supports_transcoding` cannot be derived fro
 accepting profile answered direct play with the flag true and false depending only on whether it
 declared a transcoding target.
 
+> **Corrected on 2026-09-05 by the 2026-09-04 audit's L7, L8 and L9**, which read this block
+> against `src/atrium/media/decision.py:370-499` and found four declarations behind the class and
+> one type behind it.
+>
+> * **`sub_protocol` is `str | int | None`** since 012 T9 (L7). An `int` is what the reference
+>   answers when the profile named an ordinal no member has — behaviours §2.24, a number in this
+>   field beside a progressive address. Recorded in 012's plan; this is the block a reader consults
+>   for the dataclass, so it says so here too rather than only there.
+> * **`codec` is `str | None`** (L8), and the audit named one branch where there are two: a COPY
+>   carries the source's own codec and `InspectedStream.codec` is optional, *and* an ENCODE carries
+>   `_first_codec(target.video_codec)`, which answers `None` for a transcoding entry that named no
+>   codec at all. The block already annotated `width`/`height`/`bitrate` as optional, so the bare
+>   `str` read as a decision rather than as drift.
+> * **`target` was added at T5** (`f8893a6`) and named in no plan's text, this feature's amendment
+>   log included — the `TranscodingUrl` repeats five of that entry's fields back to the client, and
+>   re-deriving which entry won would be a second copy of `_choose_target`'s ranking (L9).
+> * **`remuxing_denied`** is the same gap and the audit did not list it: the 2026-09-02 policy-gate
+>   fix records it in this plan's frontmatter and in the *"Callers may assume"* paragraph above,
+>   and never put it in the block.
+> * **`subtitles` and `subtitle_index` are declared in [011 §5](../011-subtitle-delivery/plan.md#5-contracts)**,
+>   so they are named here as a pointer rather than restated: 011 owns what a `SubtitleAnswer` is
+>   and what "no default" means.
+>
+> The two properties are listed because `supports_direct_stream` stopped being a pure mirror at
+> the same fix. `decide`'s signature is unchanged and was correct. No code moves.
+
 **`media/hls.py`** — pure:
 
 ```python
@@ -300,13 +347,22 @@ def media_playlist(segments: Sequence[Segment], *,
 def master_playlist(*, query: str,
                     video: StreamPlan | None, audio: StreamPlan | None,
                     source_video: InspectedStream | None, frame_rate: float | None,
-                    options: Mapping[str, str] | None = None) -> str
+                    options: Mapping[str, str] | None = None,
+                    subtitles: Sequence[AnnouncedSubtitle] = ()) -> str
     # One variant for the negotiation, and an h264 SDR entrance beside an HDR stream copy.
     # Not "exactly one variant": see 6.4.
 ```
 
 The same `plan_segments` output drives the playlist, the per-segment `-ss` restart points and
 the tests — one derivation, so the playlist can never disagree with production (AC-22's shape).
+
+> **Corrected on 2026-09-05 by the 2026-09-04 audit's L11.** `master_playlist` grew
+> `subtitles: Sequence[AnnouncedSubtitle] = ()` at 011, which is the `#EXT-X-MEDIA` block and the
+> `SUBTITLES` group on every variant. The parameter and `AnnouncedSubtitle` are declared in
+> [011 §5](../011-subtitle-delivery/plan.md#5-contracts) and are named here as a pointer, not
+> restated — but this block was **rewritten by T15 "against the three signatures as they actually
+> stand"**, which is the sentence that makes a reader trust it, and it went behind again one
+> feature later. Purely additive: every call this plan describes is still valid. No code moves.
 
 **`media/sessions.py`**, as T11 landed it — three of these moved, and each of them for a measured
 reason:
@@ -315,8 +371,10 @@ reason:
 class TranscodeManager:
     def obtain(self, key: SessionKey) -> TranscodeSession
         # keyed by (device, play session, media path); reused whether or not anything is running
-    async def segment(self, session, plan: SegmentPlan, *, index: int, start_ticks: int) -> Path
+    async def segment(self, session, plan: SegmentPlan, *, index: int, start_ticks: int,
+                      length_ticks: int = 0) -> Path
         # on disk → return; behind or far ahead of production → kill, restart at start_ticks
+        # length_ticks: T13's floors measure against runtimeTicks + actualSegmentLengthTicks
     async def stop(self, play_session_id: str) -> bool   # T12: the play session is the whole key
     def ping(self, session) -> None                  # every segment request
     def reporting(self, device_id: str) -> TranscodingReport | None   # T12, for /Sessions
@@ -357,13 +415,38 @@ registry (architecture §4) and started through the `ProductionLedger`, which
 `False` — the route still answers `204`, matching the reference's fire-and-forget contract; time
 is injectable like `SessionRegistry`'s, so kill-timer and throttle tests never sleep.
 
+> **Corrected on 2026-09-05 by the 2026-09-04 audit's L10.** `segment` takes a fifth argument,
+> `length_ticks: int = 0`, added at T13 — and T13 amended §6.7 with the reason for it, *"both
+> measure against `runtimeTicks + actualSegmentLengthTicks`, the parameter the segment route bound
+> and ignored"*, without touching the signature it changed. The block above is where a reader
+> looks for the shape, so the argument is in it now. Defaulted and purely additive; no code moves.
+
 **`compat/ranges.py`**:
 
 ```python
+@dataclass(frozen=True)
+class RangeAnswer:         # one record, not a variant set — see the note below
+    status: int            # 200, 206 or 416
+    start: int
+    length: int            # what to send, in every case, including none of it
+    total: int
+    @property
+    def content_range(self) -> str | None    # None where the reference sends no header
+    @property
+    def is_refusal(self) -> bool
+
 def negotiate_range(header: str | None, size: int) -> RangeAnswer
-    # RangeAnswer is one of: Full(200), Partial(206, start, end), Unsatisfiable(416)
-    # multi-range and reversed → Full; suffix → Partial — the measured table, nothing else
+    # multi-range and reversed → whole body; suffix → 206 — the measured table, nothing else
 ```
+
+> **Corrected on 2026-09-05 by the 2026-09-04 audit's L12.** The comment read
+> *"`RangeAnswer` is one of: Full(200), Partial(206, start, end), Unsatisfiable(416)"*, and there
+> are no such variants: it is **one** dataclass carrying `status`, `start`, `length` and `total`,
+> and the field is a `length` rather than an `end`. That is not a naming accident — `start` and
+> `length` describe what to send in every one of the three cases, *"so a caller never branches on
+> the status to know how much to read"*, which is the opposite of what a variant set would make a
+> caller do. The function's own signature was right and the comment under it described a shape
+> nobody wrote. The record is declared here now instead. No code moves.
 
 **`media/probe.py`**: `inspect(path) -> MediaInspection` — a dataclass mirror of the two tables,
 in `domain/media.py` so the repository can hand them out (ADR-0003). Raises on an unreadable or
