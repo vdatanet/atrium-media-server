@@ -195,7 +195,11 @@ on the seat, so a case declared for one identity was issued again for another, a
 compared issue was a second creation the declared delete never named. **Both were fixed on
 2026-09-05**, at the cost of one comparison: a `response:` anchor naming a case the seat is not
 declared for is refused, so `rename-a-playlist` is reported unasked until the register re-anchors
-it. A server an earlier run touched still holds what that run left.
+it. A server an earlier run touched still holds what that run left — and that is not only litter:
+`POST /Users/Configuration` is a declared case, so a second run against the same server reads back
+the configuration the first one wrote and reports **36 differences the first run did not have**
+(measured 2026-09-05, two identical runs, 703 of 708 rows stable). **Point each run at a server no
+earlier run has swept.**
 
 **Exit codes: `0` clean, `1` not clean, `2` the run could not start.** *Not clean* is the ordinary
 answer and not a failure: it means the run has an untriaged difference, a declared case it could

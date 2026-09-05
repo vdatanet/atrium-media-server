@@ -2299,7 +2299,7 @@ paused-session ticker freeze cannot be read at all yet: both servers commit
 and the freeze cited from the reference's source is invisible from the wire — what it needs is one
 request more, proving the paused report was stored before the silence begins.
 
-**To whoever runs the harness next, four things that are true of it today.**
+**To whoever runs the harness next, six things that are true of it today.**
 
 1. **A full sweep has been run — on 2026-09-04, and it was not clean.** When this list was
    written, fourteen of the then-twenty named comparisons had run against a real pair on
@@ -2369,7 +2369,7 @@ request more, proving the paused report was stored before the silence begins.
    Runs from before the fix are still not comparable with each other: what earlier runs left is
    still on whatever server they were pointed at.
 
-5. **A `listing:…@0` anchor is not the same item on the two servers when their orderings differ,
+4. **A `listing:…@0` anchor is not the same item on the two servers when their orderings differ,
    and one listing's already does.** Measured 2026-09-05
    `[probe: tools/differential.py's own client, by hand, Jellyfin 10.11.11, 2026-09-05]`:
 
@@ -2401,11 +2401,46 @@ request more, proving the paused report was stored before the silence begins.
    identifiers in hand when it resolves an anchor, and saying *"these two rows are not the same
    item"* costs one line and turns a silent mis-pairing into a stated one.
 
-4. **Two of the twenty named comparisons are not comparisons.** behaviours §5.2 and §5.6 need a
+5. **Two of the twenty named comparisons are not comparisons.** behaviours §5.2 and §5.6 need a
    second scan on **both** servers; `POST /Library/Refresh` is the reference's and Principle VI
    keeps it out of the surface, so only the reference half can be taken. Both entries carry that
    half and both rows stay outstanding — a one-server reading is not a differential, and counting it
    as run would be this feature claiming coverage it does not have.
+
+6. **The sweep writes to the server under test, and the next run reads what it wrote — this one
+   changes results rather than leaving litter.** Two identical runs against one Atrium, nothing
+   touched between them, measured 2026-09-05:
+
+   ```
+   run A  708 differences      run B  752
+   identical in both  703      only in A  5      only in B  49
+   ```
+
+   **703 of 708 rows are stable**, so this is not noise: `listing-ordered-at-random` contributes
+   exactly **one** row. Of the 49 new ones, **36 are one thing counted three times** — twelve
+   `Configuration` keys reported missing on `/Users/Me`, `/Users/{userId}` and
+   `POST /Users/AuthenticateByName`. The cause is in the database:
+
+   ```
+   atrium-differential-admin             442 bytes  {"CastReceiverId": "F007D354", …}
+   atrium-differential-restricted         91 bytes  {"PlayDefaultAudioTrack": true, …}
+   atrium-differential-playback-denied   442 bytes  {"CastReceiverId": "F007D354", …}
+   ```
+
+   `POST /Users/Configuration` is a declared case, the sweep issues it as the restricted seat, and
+   the stock 442-byte configuration is replaced by the case's own 91-byte body. The single-use
+   reference is destroyed and comes back stock; the server under test keeps it.
+
+   **It is the asymmetry item 3 records, in a worse place.** A leaked playlist is a row in a
+   listing; this changes what a comparison *concludes*, and it does so **within a run as well**:
+   an endpoint compared before the write sees the stock configuration and one compared after sees
+   the case's. Run A had the write land mid-sweep, which is the whole of its five-row difference
+   from B.
+
+   Three shapes the remedy could take, and all three are 010's: the sweep restores what it
+   overwrote, the run refuses to start against a server still holding an earlier run's writes, or
+   the report names the comparisons taken after a write to the same resource. **The middle one is
+   the only one that needs no new bookkeeping** — a pre-flight already exists for seats (AC-15).
 
 **And one thing this feature hands back rather than forward.** The three remaining
 prior-measurement debts in [reference-target.md](../../docs/compatibility/reference-target.md) are
