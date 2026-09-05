@@ -477,6 +477,14 @@ can find what a killed run left. **A machine with no runtime loses nothing it ha
 against a reachable server still runs, and every case and named row that needed an instance is
 reported *outstanding with the reason* rather than skipped.
 
+**An instance that was asked for and died is the other sentence, and `differential.py` refuses it.**
+ADR-0007 licenses the degradation above for a machine with no runtime *at all*; a runtime that
+could not start the image, a wizard that refused, a scan that timed out or a fixture tree that
+could not be built leave a run with no tree to compare over, and taking `--jellyfin` or
+`$JELLYFIN_URL` for the reference there sweeps somebody's own library under the name of a fixture
+run. It exits `2` naming the instance's failure. Stand one up by hand and pass `--reference-url`,
+or drop `--fixture`.
+
 ### Moving the pinned version
 
 `bump_reference_version.py` runs

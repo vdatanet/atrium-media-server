@@ -70,8 +70,8 @@ input it was written about. **What `Implemented` means there is eleven of eleven
 criteria and nothing wider**: an ordinal no member has is still the one shape the defect procedure
 forbids ([behaviours §3.26](docs/compatibility/behaviours.md)), two concurrent negotiations of one
 file are measured on neither server, six differences its own runs raised belong to 003, 004, 005 and
-008, and a `--fixture` run whose reference instance fails still sweeps whatever `$JELLYFIN_URL` names,
-which is 010's — all of it on
+008, and a `--fixture` run whose reference instance failed swept whatever `$JELLYFIN_URL` named until
+2026-09-05, which was 010's and is fixed — the rest on
 [012's owes list](specs/012-negotiation-inputs/tasks.md#what-this-feature-owes-the-next-ones).
 **[009](specs/009-playlists/) landed on 2026-09-01 across fourteen tasks**, its spec accepted at a
 gate whose five probes answered its six open questions and killed thirteen claims — including the

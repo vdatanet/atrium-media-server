@@ -2789,6 +2789,129 @@ def test_a_fixture_run_compares_the_instance_and_never_a_second_reference() -> N
     assert "404s as coverage" in str(refused.value)
 
 
+def _fixture_instance_whose_instance_raises(
+    monkeypatch: pytest.MonkeyPatch, tree: Path, failure: BaseException, *argv: str
+) -> Any:
+    """A `--fixture` run over a tree that is already there, whose instance dies on the way up.
+
+    Everything but the dying is real: the error classes are `tools/_reference.py`'s own, so the
+    subclassing `FixtureInstance.__enter__` sorts on is the shipped one and not a restatement of
+    it. Only two things are replaced — the instance, which would need a container runtime, and the
+    tree entry point, which would need ffmpeg to encode the media world.
+    """
+
+    class Dies:
+        def __init__(self, spec: Any) -> None:
+            self.spec = spec
+
+        def __enter__(self) -> Any:
+            raise failure
+
+        def __exit__(self, *_: Any) -> None:
+            return None
+
+    class Reference:
+        Library = reference.Library
+        InstanceSpec = reference.InstanceSpec
+        InstanceError = reference.InstanceError
+        RuntimeAbsentError = reference.RuntimeAbsentError
+        ReferenceInstance = Dies
+
+    class Tree:
+        def is_complete(self, root: Path) -> bool:
+            return True
+
+        def libraries(self) -> tuple:
+            return (reference.Library(name="Movies", collection_type="movies", subpath="movies"),)
+
+    monkeypatch.setattr(differential, "_sibling", lambda name: Reference)
+    monkeypatch.setattr(differential, "fixture_entry_point", Tree)
+    args = differential.build_parser().parse_args(
+        ["--atrium", "http://localhost:8096", "--fixture", "--fixture-root", str(tree), *argv]
+    )
+    return differential.FixtureInstance(args)
+
+
+def test_an_instance_asked_for_and_dead_refuses_rather_than_sweeping_the_operators_server(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """012 T10, 2026-09-04, and the only run of this harness that reached a server nobody aimed it
+    at.
+
+    An instance missed its 180-second readiness deadline; the run took `$JELLYFIN_URL` for its
+    reference and swept an operator's own library, stopping at a certificate it could not verify —
+    and exiting `2` on that certificate, so no report was written and nothing recorded which
+    server it had been about to compare. ADR-0007's degradation is *"a machine with no runtime at
+    all"*, which this machine is not: it has one, it was asked for an instance, and the instance
+    died. The refusal names the reason the fallback swallowed.
+    """
+    instance = _fixture_instance_whose_instance_raises(
+        monkeypatch,
+        tmp_path,
+        reference.ScanTimeoutError("the library scan did not finish within 180s"),
+        "--jellyfin",
+        "https://the-operators-own-server:8920",
+    )
+    with instance:
+        assert instance.reason
+        assert not instance.runtime_absent
+        with pytest.raises(differential.GuardError) as refused:
+            differential.reference_url_for(instance.args, instance)
+    assert "did not finish within 180s" in str(refused.value)
+    assert "the-operators-own-server" not in str(refused.value)
+
+
+def test_the_same_refusal_holds_when_the_server_it_would_have_swept_is_only_in_the_environment(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`--jellyfin` is at least written down at the command line. `$JELLYFIN_URL` is the shape the
+    incident actually had: nothing on the command line named the server that got swept."""
+    monkeypatch.setenv(differential.ENV_REFERENCE_URL, "https://the-operators-own-server:8920")
+    instance = _fixture_instance_whose_instance_raises(
+        monkeypatch, tmp_path, reference.WizardRefusedError("the wizard answered 400")
+    )
+    with instance, pytest.raises(differential.GuardError):
+        differential.reference_url_for(instance.args, instance)
+
+
+def test_a_machine_that_never_had_a_runtime_still_sweeps_the_server_it_was_pointed_at(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The other side of the same branch, and it is ADR-0007 in one sentence: *"a machine with no
+    runtime at all still runs the sweep against a reachable server and everything in the default
+    CI job"*.
+
+    The refusal above must not cost this. What the run loses is coverage and it says so — every
+    `needs: fixture` row is outstanding with this reason, asserted end to end by
+    `test_a_fixture_run_with_no_runtime_reports_every_fixture_row_outstanding_and_is_not_clean`.
+    """
+    instance = _fixture_instance_whose_instance_raises(
+        monkeypatch,
+        tmp_path,
+        reference.RuntimeAbsentError("no container runtime on this machine"),
+        "--jellyfin",
+        "https://a-reachable-reference:8096",
+    )
+    with instance:
+        assert instance.runtime_absent
+        assert differential.reference_url_for(instance.args, instance) == (
+            "https://a-reachable-reference:8096"
+        )
+
+
+def test_the_licensed_degradation_is_one_class_and_the_ordering_that_finds_it_is_load_bearing() -> (
+    None
+):
+    """`RuntimeAbsentError` is an `InstanceError`, so `__enter__` catches it first or never.
+
+    Written down because the two `except` clauses read as alternatives and are not: swap them and
+    every machine without a runtime starts refusing, which is the CI job ADR-0007 kept.
+    """
+    assert issubclass(reference.RuntimeAbsentError, reference.InstanceError)
+    assert not issubclass(reference.ScanTimeoutError, reference.RuntimeAbsentError)
+    assert not issubclass(reference.WizardRefusedError, reference.RuntimeAbsentError)
+
+
 def test_an_instance_hands_the_run_its_own_administrator_and_never_the_operators() -> None:
     """An instance the run stood up has no operator: its administrator is the one its own wizard
     made seconds ago, and `.env`'s credentials belong to somebody else's server."""
