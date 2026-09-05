@@ -2319,8 +2319,8 @@ request more, proving the paused report was stored before the silence begins.
    only visible to a watcher outside the run. Batching a run against an instance stood up by hand
    with `tools/reference_instance.py` and `--reference-url` is the working practice, and it is
    ADR-0007's degradation rather than a workaround.
-3. **The sweep leaves rows on Atrium and not on the reference, so a second run against the same
-   Atrium does not measure what the first did.** Measured on 2026-09-05, after two completed runs
+3. **The sweep left rows on Atrium and not on the reference — fixed on 2026-09-05, and one
+   comparison is reported unasked in its place.** Measured that day, after two completed runs
    against one Atrium: **four playlist rows** in its item table — `atrium-differential` twice and
    `atrium-differential-renamed` twice — and both names came back in a
    `GET /Search/Hints?searchTerm=a` comparison as rows the reference did not have, on a listing
@@ -2353,8 +2353,21 @@ request more, proving the paused report was stored before the silence begins.
    and a server that did not would answer this case identically. The reference does the same thing
    and only its destruction hides it.
 
-   Until it is fixed, a run's totals are comparable with an earlier run's only against a server that
-   earlier run never touched.
+   **Both are closed.** `compare_case` asks for `issue_once`, so the sweep and the anchors share
+   one answer and the delete now names what the compared create made; and a `response:` anchor
+   whose case does not declare the referring seat is **refused** rather than issued, because which
+   identity owns an anchor is `request-cases.yaml`'s question and not this program's. A `listing:`
+   anchor still keeps the referring seat, and must: the row it names is that seat's own view.
+
+   **What it costs, and it is owed to whoever picks this up: `rename-a-playlist` is now reported
+   unasked on every run.** Widening `create-with-a-name` to the administrator does not settle it on
+   its own — within a seat's phase this register runs `delete-a-playlist` before
+   `rename-a-playlist`, so the rename would meet a playlist that had just been deleted. Re-anchoring
+   or reordering is the register's call, and the latent ordering assumption is worth knowing about
+   either way.
+
+   Runs from before the fix are still not comparable with each other: what earlier runs left is
+   still on whatever server they were pointed at.
 
 4. **Two of the twenty named comparisons are not comparisons.** behaviours §5.2 and §5.6 need a
    second scan on **both** servers; `POST /Library/Refresh` is the reference's and Principle VI
