@@ -2299,7 +2299,7 @@ paused-session ticker freeze cannot be read at all yet: both servers commit
 and the freeze cited from the reference's source is invisible from the wire — what it needs is one
 request more, proving the paused report was stored before the silence begins.
 
-**To whoever runs the harness next, three things that are true of it today.**
+**To whoever runs the harness next, four things that are true of it today.**
 
 1. **A full sweep has been run — on 2026-09-04, and it was not clean.** When this list was
    written, fourteen of the then-twenty named comparisons had run against a real pair on
@@ -2319,7 +2319,28 @@ request more, proving the paused report was stored before the silence begins.
    only visible to a watcher outside the run. Batching a run against an instance stood up by hand
    with `tools/reference_instance.py` and `--reference-url` is the working practice, and it is
    ADR-0007's degradation rather than a workaround.
-3. **Two of the twenty named comparisons are not comparisons.** behaviours §5.2 and §5.6 need a
+3. **The sweep leaves rows on Atrium and not on the reference, so a second run against the same
+   Atrium does not measure what the first did.** Measured on 2026-09-05, after two completed runs
+   against one Atrium: **four playlist rows** in its item table — `atrium-differential` twice and
+   `atrium-differential-renamed` twice — and both names came back in a
+   `GET /Search/Hints?searchTerm=a` comparison as rows the reference did not have, on a listing
+   nothing about playlists was being asked of. The asymmetry is structural rather than careless:
+   `--fixture` destroys its reference and everything it wrote (ADR-0007), and Atrium is whatever
+   the operator is running.
+
+   **What is *not* the cause, because each was checked.** The register intends the cleanup —
+   [`delete-a-playlist`](../../docs/compatibility/request-cases.yaml) says so in its own
+   `what_it_is_for`, *"it is also how the sweep removes the one thing it created"*, and it is
+   anchored on the created playlist's own id. The route is not missing either: `DELETE
+   /Items/{itemId}` answered `204` on Atrium when it was issued by hand, and the row went.
+   **Why the rows survive a run is unmeasured**, and that is the question this entry exists to
+   hand on rather than answer — two rows per run where the register creates one is itself part of
+   it.
+
+   Until it is settled, a run's totals are comparable with an earlier run's only against an Atrium
+   that earlier run never touched.
+
+4. **Two of the twenty named comparisons are not comparisons.** behaviours §5.2 and §5.6 need a
    second scan on **both** servers; `POST /Library/Refresh` is the reference's and Principle VI
    keeps it out of the surface, so only the reference half can be taken. Both entries carry that
    half and both rows stay outstanding — a one-server reading is not a differential, and counting it
