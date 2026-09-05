@@ -183,6 +183,17 @@ needed an instance reported outstanding with the reason. The first would otherwi
 fixture run, which is what it did at 012 T10 on 2026-09-04, stopping only at a certificate it could
 not verify. It exits `2` naming the instance's own failure instead.
 
+**A run leaves rows on the server under test, and takes its own reference away with it.** With
+`--fixture` the reference is destroyed together with everything the run wrote to it; the server
+under test is the operator's, and what the sweep's own writing cases created stays there. Measured
+on 2026-09-05: two completed runs against one Atrium left four playlists behind, and a later run's
+`/Search/Hints` comparison reported them as rows the reference did not have. **So a run's counts are
+comparable with an earlier run's only against a server that earlier run never touched** — point the
+next run at a fresh data directory, or read its listing totals knowing what is in them. Why the
+rows outlive the run is 010's, and it is the harness rather than either server: the anchor cache is
+keyed on the seat, so a case declared for one identity is issued again for another, and the sweep's
+own compared issue is a second creation the declared delete never names.
+
 **Exit codes: `0` clean, `1` not clean, `2` the run could not start.** *Not clean* is the ordinary
 answer and not a failure: it means the run has an untriaged difference, a declared case it could
 not issue, or a named comparison it did not run. The report is the deliverable

@@ -2299,7 +2299,7 @@ paused-session ticker freeze cannot be read at all yet: both servers commit
 and the freeze cited from the reference's source is invisible from the wire — what it needs is one
 request more, proving the paused report was stored before the silence begins.
 
-**To whoever runs the harness next, three things that are true of it today.**
+**To whoever runs the harness next, four things that are true of it today.**
 
 1. **A full sweep has been run — on 2026-09-04, and it was not clean.** When this list was
    written, fourteen of the then-twenty named comparisons had run against a real pair on
@@ -2319,7 +2319,44 @@ request more, proving the paused report was stored before the silence begins.
    only visible to a watcher outside the run. Batching a run against an instance stood up by hand
    with `tools/reference_instance.py` and `--reference-url` is the working practice, and it is
    ADR-0007's degradation rather than a workaround.
-3. **Two of the twenty named comparisons are not comparisons.** behaviours §5.2 and §5.6 need a
+3. **The sweep leaves rows on Atrium and not on the reference, so a second run against the same
+   Atrium does not measure what the first did.** Measured on 2026-09-05, after two completed runs
+   against one Atrium: **four playlist rows** in its item table — `atrium-differential` twice and
+   `atrium-differential-renamed` twice — and both names came back in a
+   `GET /Search/Hints?searchTerm=a` comparison as rows the reference did not have, on a listing
+   nothing about playlists was being asked of. The asymmetry is structural rather than careless:
+   `--fixture` destroys its reference and everything it wrote (ADR-0007), and Atrium is whatever
+   the operator is running.
+
+   **The cleanup is declared and the route works; the leak is this program's own anchor cache.**
+   `delete-a-playlist` says so in its own `what_it_is_for` — *"it is also how the sweep removes the
+   one thing it created"* — and `DELETE /Items/{itemId}` answered `204` when it was issued by hand.
+   What settles it is **who owns the rows**: the surviving `atrium-differential-renamed` belongs to
+   the **administrator**, and `create-with-a-name` declares `identities: [restricted]`, so a seat
+   that must never have issued that case has a playlist from it.
+
+   `Issuer.answer_of` caches an anchor's answer under `(seat.role, endpoint#case)`, and **two leaks
+   come out of that one key**:
+
+   1. **The key carries the seat.** `rename-a-playlist` runs as the **administrator** and anchors on
+      `response:POST /Playlists#create-with-a-name@/Id`. The administrator's key is not in the cache,
+      so resolving the anchor **issues `POST /Playlists` again, as the administrator** — a playlist
+      the register never asked that seat to make. `delete-a-playlist` is `restricted` and resolves
+      through the restricted key, so nothing ever removes it.
+   2. **The compared issue and the anchor issue are two issues.** The sweep issues
+      `create-with-a-name` as the case it compares; anchor resolution issues it again to fill the
+      cache. The delete removes the second. **Nothing removes the first.**
+
+   One survivor of each per run, which is exactly the two rows and the two owners in the database.
+   And a consequence that is not hygiene: **the sweep's create/delete pair is not a pair.** The
+   delete removes a playlist the compared create did not make, so a server that leaked on creation
+   and a server that did not would answer this case identically. The reference does the same thing
+   and only its destruction hides it.
+
+   Until it is fixed, a run's totals are comparable with an earlier run's only against a server that
+   earlier run never touched.
+
+4. **Two of the twenty named comparisons are not comparisons.** behaviours §5.2 and §5.6 need a
    second scan on **both** servers; `POST /Library/Refresh` is the reference's and Principle VI
    keeps it out of the surface, so only the reference half can be taken. Both entries carry that
    half and both rows stay outstanding — a one-server reading is not a differential, and counting it
