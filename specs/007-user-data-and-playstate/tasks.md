@@ -601,7 +601,7 @@ in the repository without one — M25 in [the record](../../docs/audits/2026-08-
 The feature is done when **all** of these hold:
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
-      twenty-two — has a passing test, by name, in `FEATURE_007`. AC-16's two are 003's, which is
+      twenty-four — has a passing test, by name, in `FEATURE_007`. *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* AC-16's two are 003's, which is
       what the gate found instead of a task.
 - [x] Every endpoint reaches the level [spec §6](spec.md#6-conformance) declares, and the
       `UserData` shape's L3 is the goldens 005 already pins plus the byte comparison of T12 —

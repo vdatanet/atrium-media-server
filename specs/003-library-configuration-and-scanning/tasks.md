@@ -355,7 +355,7 @@ directory abort a library. It is a different identity from season zero, which ma
 - [x] **Changes:** `libraries` and roots; `items` with `relative_path`, `sort_name` and
   `removed_at`; `item_user_data` keyed on the derived identity **with no foreign key to `items`**.
 - **Depends on:** **002 T4** (migration `0001_users_and_sessions`)
-- **Verified by:** up and down; the indexes 005 will need exist; **deleting an item row leaves its
+- **Verified by:** up and down; the indexes 005 needs exist; **deleting an item row leaves its
   user data intact** — asserted directly, because a cascade added later would silently break
   [spec §3.8](spec.md#38-scanning-and-change-detection) and nothing else would notice. Extends
   `tests/unit/test_migrations.py` rather than adding a second harness beside it.
@@ -524,7 +524,7 @@ overlap *is* the fallback the reference was measured not to have.
 
 - [x] **Changes:** `tests/corpus/naming.yaml` — rows of path, collection type and expected
   resolution, **each with a one-line reason it exists**; the table-driven harness; a YAML parser in
-  the `dev` dependency group, which currently has none.
+  the `dev` dependency group, which had none until this task added `pyyaml`.
 - **Depends on:** T3
 - **Verified by:** the harness enumerates every row and **the suite is green**, because each row
   carries `xfail(strict=True)` naming the parser it is waiting for. The corpus is complete and the
@@ -750,7 +750,7 @@ and there is a test for each.
 
 ## T13 — `library/naming/music.py` and the metadata seam  ✅
 
-- [x] **Changes:** path-based structure; the `MetadataSource` protocol 004 will implement, with a
+- [x] **Changes:** path-based structure; the `MetadataSource` protocol 004 implements, with a
   path-only implementation for now. Removes the `xfail` markers from the `music` rows.
 - **Depends on:** T10, T1 — the precedence is measured, in
   [spec §3.5](spec.md#35-music). Note what it does **not** cover: a flat directory of well-tagged
@@ -1312,7 +1312,7 @@ said `Implemented` would make the gate record a state that no longer existed.
 ## Definition of done
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing
-      test — all thirteen, by name, in `FEATURE_003` (T21).
+      test — all fifteen, by name, in `FEATURE_003` (T21). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)*
 - [x] The naming corpus passes in full, **carries no `xfail` marker**, and every row states the
       reason it exists. Checked rather than assumed: `AWAITING` is empty, which is what
       `test_no_row_is_parked_behind_an_xfail` asserts.

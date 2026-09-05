@@ -3,7 +3,8 @@ feature: 001-server-identity-and-discovery
 title: Server identity and discovery — implementation plan
 status: Implemented
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-09-05
+amended: 2026-09-05 by the 2026-09-04 audit's M14, the first amendment recorded here and the first no task of this feature made - section 2's `AtriumModel` paragraph still read *"absent-versus-null is per property in the reference and currently unverified"* under a T14 note saying the opposite, and still sent a reader to behaviours section 1.7 for the doubt that section had discharged with a `[source:]` and a `[probe:]`. The paragraph states the measured rule now, with the `NULL_KEPT` exception the code has carried since 005, and the note under it records what the paragraph used to say. No code moves. (The T14 and T19 notes below this one are the plan's own amendments, made by those tasks in 2026-08-26 and recorded in prose rather than here, which is why this field did not exist until now.)
 spec_status_required: Accepted
 spec_status_actual: Implemented
 accepted: 2026-08-26
@@ -173,14 +174,25 @@ class AtriumModel(BaseModel):
 ```
 
 Responses are returned through FastAPI's `response_model`, which serialises `by_alias=True` by
-default. The base does **not** set `exclude_none`: absent-versus-null is per property in the
-reference and currently unverified
-([behaviours §1.7](../../docs/compatibility/behaviours.md#17-a-null-property-is-absent-everywhere-by-one-setting)),
-so it is decided per model against a golden response rather than by a blanket rule.
+default. The base sets no `exclude_none` **flag**, and drops nulls in its own serialiser instead,
+because absent-versus-null turned out to be one global setting in the reference rather than a
+per-property judgement
+([behaviours §1.7](../../docs/compatibility/behaviours.md#17-a-null-property-is-absent-everywhere-by-one-setting)):
+`DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull` over its whole JSON pipeline. Two
+properties survive it — `ChannelId` on every item and `ParentId` on a parentless view row — and
+they are the reason the base carries a `NULL_KEPT` exception set rather than a bare drop.
 
-> **Superseded by measurement, T14.** There is no per-property judgement: the reference omits every
-> null, through one `DefaultIgnoreCondition` setting on its whole JSON pipeline. `AtriumModel`
-> therefore drops nulls in its serialiser, and no route needs `response_model_exclude_none`.
+> **This paragraph was drafted the other way round, and T14 measured it.** As accepted it read
+> *"absent-versus-null is per property in the reference and currently unverified … so it is decided
+> per model against a golden response rather than by a blanket rule"*, and the note under it
+> recorded the supersession without the paragraph moving. Restated above on **2026-09-05** by the
+> 2026-09-04 audit's M14, which is the M12 shape: a correction written as a note beside a claim
+> that goes on making the claim. What T14 found is unchanged — one setting, applied in the
+> serialiser rather than as a `response_model_exclude_none` on every route, because a per-route
+> flag is one somebody eventually forgets
+> (`src/atrium/compat/model.py:255-282`). The word *"unverified"* was the sharp half: §1.7 carries
+> a `[source:]` and a `[probe:]`, so the sentence citing it as unverified pointed at its own
+> refutation.
 
 > **Amended by T19: the serialiser also applies the content-type profile.** The reference answers
 > `Accept: application/json; profile="CamelCase"` in camelCase, and it converts **property names at

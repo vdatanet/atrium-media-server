@@ -1099,8 +1099,8 @@ row has been shown to reach L3, and both are on the owes list at the end of this
 > and `wait` resolve to the instance and not to a capability**, deliberately: a rescan is a write to
 > a library, and the paused-session reading is *"a write held open for ten minutes, which is the one
 > thing an operator's server must not be asked for"* (spec §3.10). **The report header already has
-> both lines T9 fills** — `reference instance` and `reference image digest`, each currently saying
-> that no instance was stood up — so the digest ADR-0007 asks for lands beside the Atrium sha
+> both lines T9 fills** — `reference instance` and `reference image digest`, each saying at this
+> point that no instance was stood up — so the digest ADR-0007 asks for lands beside the Atrium sha
 > without the report changing shape. And **the roster is entered around the sweep in `_execute`**, so the
 > instance's context manager wraps that call and nothing else moves.
 

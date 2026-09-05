@@ -1362,9 +1362,9 @@ the two tests actually assert rather than against the generalised sentence.
 
 The feature is done when **all** of these hold:
 
-- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all sixteen —
-      has a passing test, by name, in `FEATURE_011`. **Four of the sixteen named tests that proved
-      less than the criterion said**, and the assertions they were missing are written: AC-1's
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
+      seventeen — has a passing test, by name, in `FEATURE_011`. *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* **Four of the sixteen
+      then named proved less than the criterion said**, and the assertions they were missing are written: AC-1's
       listing row, AC-11's `HasSubtitles` on the discovered streams alone, AC-12's item and user
       data, and two rows of §3.7 (T12's note).
 - [x] Every endpoint reaches the level [spec §6](spec.md#6-conformance) declares: the three L3
