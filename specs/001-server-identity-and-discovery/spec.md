@@ -5,7 +5,7 @@ status: Implemented
 created: 2026-08-26
 updated: 2026-09-05
 accepted: 2026-08-26
-amended: 2026-09-04 by the 2026-09-04 audit's corrective task C1 - section 3.2's uncited refusal row gets the condition its measurement narrowed it to, and says why no criterion accompanies it; and 2026-09-05 by that audit's corrective task C6 - section 3.2's value table is corrected in two rows the golden had always contradicted (`PackageName` is absent rather than empty, `WebPath` is empty rather than a path) and section 5 gains AC-14 for the whole of it, an implemented and golden-tested behaviour no criterion named
+amended: 2026-09-04 by the 2026-09-04 audit's corrective task C1 - section 3.2's uncited refusal row gets the condition its measurement narrowed it to, and says why no criterion accompanies it; and 2026-09-05 by that audit's corrective task C6 - section 3.2's value table is corrected in two rows the golden had always contradicted (`PackageName` is absent rather than empty, `WebPath` is empty rather than a path) and section 5 gains AC-14 for the whole of it, an implemented and golden-tested behaviour no criterion named; and 2026-09-05 by that audit's H1 - section 3.2's refusal row records the decision that closed it, the divergence is accepted deliberately at behaviours section 4.5, and section 5 gains AC-15, which asserts this server's answer where a criterion for the reference's refusal could only have asserted a refusal no route performs
 depends_on: []
 ---
 
@@ -187,13 +187,25 @@ that flag. It is not this route's refusal either: the same seat is refused `/Use
 breath, and an **administrator** without the flag is refused too, because the check runs ahead of
 the administrator bypass. `[probe: tools/probe_system_info_permission.py, Jellyfin 10.11.11, 2026-09-04]`
 
-**Atrium implements none of it, here or anywhere**, which is a live delta recorded at
-[behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1). **No acceptance
-criterion is added with this measurement, deliberately**: a criterion for this row could only
-assert a refusal no route performs, and whether Atrium grows the server-wide gate that would
-perform it is the open scope decision of the 2026-09-04 audit's H1 — which stays open, and which
-this row is the reason for. AC-5's *"`200` with a valid one"* is exact for every caller on the
-server's own network, which is every caller the goldens and the differential have.
+**Atrium implements none of it, here or anywhere — and since 2026-09-05 that is a decision
+rather than an open question.** The divergence is **accepted deliberately and permanently**, argued
+at [behaviours §4.5](../../docs/compatibility/behaviours.md#45-enableremoteaccess-is-not-enforced-on-any-route),
+where what it costs is written down rather than argued away: an operator who switches remote access
+off for an account is not restricted by having done so, and that account's `Policy` goes on
+reporting the restriction in every body [002](../002-authentication-users-and-sessions/spec.md)
+serves it in. It moved out of
+[behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) in the same change,
+because a gap is something not done yet and this is not.
+
+**It is not this route's divergence, which is why the argument is not in this document.** The
+reference's gate is server-wide — every route that takes a token, `/Users/Me` measured refused in
+the same breath — and `/System/Info` is only where the 2026-09-04 audit happened to find it.
+
+**AC-15 is the criterion this row now carries.** It asserts *Atrium's* answer, not the reference's
+refusal, which is why it can exist at all: C1 added no criterion on 2026-09-04 on the ground that
+one could only assert a refusal no route performs, and that is true of the row above and not of
+what this server does. AC-5's *"`200` with a valid one"* is exact for every caller, from anywhere,
+which is the divergence stated as a fact about this feature.
 
 ### 3.3 `GET /System/Ping`, `POST /System/Ping` — `GetPingSystem`, `PostPingSystem`
 
@@ -349,6 +361,21 @@ Everything else in these responses is derived at request time.
     property added to the model without a value decided here is a diff a reader has to look at.
     *(Added at the 2026-09-04 audit — M1: the table had two tests and a golden and no criterion,
     so none of the three could be named in the acceptance map.)*
+15. **No route refuses on `EnableRemoteAccess`, and none refuses on the address a request arrived
+    from.** §3.2's second error row is the reference's refusal and not this server's: an account
+    whose stored policy holds the flag `false` is answered `200` on `/System/Info` **and** on
+    `/Users/Me` — the two routes the measurement covered, because the reference's gate is not this
+    route's — whether that account is an administrator or not, and from an address on no private
+    network as readily as from the LAN. Its own `Policy` goes on reporting
+    `EnableRemoteAccess: false` in the same body, which is what the divergence costs and is
+    asserted beside it rather than left to the prose. And the absence is **structural**: the flag
+    is in the carried set and in neither honoured set, and no network setting names a subnet or a
+    local network, so there is nothing here to gate on and nothing to quietly start gating on.
+    *(Added at the 2026-09-04 audit — H1, closed by accepting the divergence at
+    [behaviours §4.5](../../docs/compatibility/behaviours.md#45-enableremoteaccess-is-not-enforced-on-any-route)
+    rather than by building the gate. C1 wrote no criterion for the row on the ground that one
+    could only assert a refusal no route performs; with the divergence accepted, the criterion is
+    this server's answer, which nothing had ever asserted.)*
 
 ## 6. Conformance
 

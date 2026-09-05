@@ -128,6 +128,23 @@ FEATURE_001: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_system_routes:test_system_info_omits_the_null_property",
         "tests.conformance.test_golden:test_system_info",
     ),
+    15: (
+        # Audit 2026-09-04's H1, closed by accepting the divergence (behaviours 4.5) rather than
+        # by building the gate. The criterion asserts *Atrium's* answer, which is what makes it
+        # writable at all: C1 was right that a criterion for section 3.2's refusal row could only
+        # assert a refusal no route performs, and that is a claim about the row, not about the
+        # decision the row was waiting for.
+        #
+        # Four tests for three clauses. The two wire tests are the divergence and its cost - the
+        # account is served, and its own policy goes on announcing the restriction - on both
+        # routes the probe measured, because the gate is not this route's. The two unit tests are
+        # the structural half: no honoured flag to read and no setting to read it against, so an
+        # exception that lives only in a document cannot quietly become one nobody chose.
+        "tests.conformance.test_system_routes:test_the_remote_access_flag_refuses_nobody_on_either_route",
+        "tests.conformance.test_system_routes:test_the_address_a_request_arrives_from_gates_nothing",
+        "tests.unit.test_policy:test_the_remote_access_flag_is_carried_and_never_read",
+        "tests.unit.test_net_address:test_there_is_no_local_network_to_gate_on",
+    ),
 }
 
 

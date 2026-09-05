@@ -832,9 +832,16 @@ default, so `WebSocketPortNumber` is the one value in the table an implementatio
 constant would still satisfy. The criterion states it because §3.2 states it and the golden holds
 the byte; what no test separates today is the configured port from the number.
 
-**Nothing under `src/` was touched.** §5 now numbers fourteen criteria and `FEATURE_001` names
-tests for all of them. **H1 is untouched too**: §3.2's refusal row still carries no criterion, on
-purpose and for C1's recorded reason.
+**Nothing under `src/` was touched.** §5 numbered fourteen criteria when this task closed and
+`FEATURE_001` named tests for all of them. **H1 was untouched too**: §3.2's refusal row carried no
+criterion, on purpose and for C1's recorded reason.
+
+> **That last half moved on 2026-09-05**, which is why both sentences above are in the past tense:
+> H1 was closed by **accepting** the divergence
+> ([behaviours §4.5](../../docs/compatibility/behaviours.md#45-enableremoteaccess-is-not-enforced-on-any-route)),
+> and with the reference's refusal accepted rather than owed, the row's criterion became a
+> statement of *Atrium's* answer — which C1's reason never covered. §5 gains **AC-15** and now
+> numbers fifteen.
 
 ---
 
@@ -842,7 +849,7 @@ purpose and for C1's recorded reason.
 
 The feature is done when **all** of these hold:
 
-- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing test — all **fourteen** now, by name, and the mapping is itself a test (T18). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)*
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing test — all **fifteen** now, by name, and the mapping is itself a test (T18). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now. It moved again the same day, from fourteen, when H1's closure added AC-15 — which is that test working as intended rather than the class re-opening.)*
 - [x] Every endpoint reaches the level declared in [`spec.md` §6](spec.md#6-conformance): L3 for `/System/Info/Public` is deferred until the differential harness (010) exists; **L2 is met now and the gap is recorded**, not silently skipped.
 - [x] `docs/compatibility/surface.yaml` lists every route added, and no route exists outside it (T17).
 - [x] The two cross-cutting sweeps run in CI and fail on a deliberately introduced violation of each — each sweep carries the tests that prove it rejects what it exists to reject.
