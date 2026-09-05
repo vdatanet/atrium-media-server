@@ -1037,10 +1037,13 @@ computed in hydration (measured, `db/item_queries._rolled`), and `PlayedPercenta
 from position over runtime at DTO level. If 007 changes what a stored row means, those two are
 where the change surfaces.
 
-**008** has a failing-test-in-waiting: `MediaSources`, `MediaStreams`, `Chapters`, `Width` and
-`Height` are the `UNPROBED` set in `api/item_dto.py`, undeclared on the model on purpose, and
-`test_the_unprobed_five_stay_absent_even_when_asked` asserts the absence — 008's first emission
-breaks that test, which is the intended signal to declare the fields and delete the tripwire.
+**008** had a failing-test-in-waiting and it fired as designed: `MediaSources`, `MediaStreams`,
+`Chapters`, `Width` and `Height` were the `UNPROBED` set in `api/item_dto.py`, undeclared on the
+model on purpose, with a test asserting the absence so that 008's first emission would break
+something rather than pass silently. **008 T3 declared four of them.** `Chapters` is what is left —
+nothing extracts a chapter list and a stub would lie (plan §1) — so the set is
+`frozenset({"Chapters"})` and the tripwire is `test_the_unprobed_stay_absent_even_when_asked`,
+waiting now on the feature that generates chapters rather than on 008.
 
 **009** flips one behaviour by existing: `includeItemTypes=Playlist` narrows to nothing today
 because `Playlist` is a `BaseItemKind` v1 cannot produce (`api/items.py`, `BASE_ITEM_KINDS`) —

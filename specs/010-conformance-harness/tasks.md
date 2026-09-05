@@ -2301,12 +2301,18 @@ request more, proving the paused report was stored before the silence begins.
 
 **To whoever runs the harness next, three things that are true of it today.**
 
-1. **No complete sweep has been run.** Fourteen of the twenty named comparisons ran against a real
-   pair on 2026-09-02; the 84 request cases have only ever been driven over stub wires. **So no
-   `level: L3` row has been shown to reach L3**, which is the half of every feature's definition of
-   done that was deferred here. The report can finally answer it — it prints the declared level
-   beside each endpoint and, since T15, `**partly**` with the seats where it used to print `yes`
-   from a flat set — and nothing has asked it.
+1. **A full sweep has been run — on 2026-09-04, and it was not clean.** When this list was
+   written, fourteen of the then-twenty named comparisons had run against a real pair on
+   2026-09-02 and the 84 request cases had only ever been driven over stub wires, so **no
+   `level: L3` row had been shown to reach L3** — the half of every feature's definition of done
+   that was deferred here. [012 T10](../012-negotiation-inputs/tasks.md#t10--the-two-l3-rows-get-their-cases-and-the-two-comparisons-a-sweep-cannot-raise)
+   swept both halves against a single-use instance of the pinned version: **seventeen of the now
+   twenty-two named comparisons ran**, and `POST /Items/{itemId}/PlaybackInfo` came back
+   `Compared: yes` from **both** seats, which is what its declared level had been claiming since
+   008 and what nothing had checked. **What is still owed is a run that is clean**, and no figure
+   from a past one is restated here: the report is `reference/differential-<date>-<sha>.md`,
+   git-ignored and regenerable and never the input to anything ([plan §4.4](plan.md#44-the-outputs)),
+   so the standing counts live in the run that produces them and nowhere else.
 2. **The pinned image dies with `SIGILL`, exit 132, on about half of starts** on an `arm64` host
    with no emulation, at startup and mid-sweep alike (plan §7). It costs the readiness deadline and
    `--rm` has already removed the container before the run can read its logs, so the exit code is

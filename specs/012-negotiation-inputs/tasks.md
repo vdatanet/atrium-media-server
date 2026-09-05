@@ -1132,8 +1132,12 @@ measured client asks for, so it is owed to **the feature that gives v1 one**, un
 
 ### One testing debt, from T4
 
-`tests/unit/test_repositories.py`'s boundary sweep calls itself a walk over *"every public method of
-the module"* and covers seven of the eleven repository classes — `ItemRepository` having been
-admitted at T4, with `atrium.domain.items`, when 012's narrow write was added to it. The remaining
-four each need their own domain module admitted, and admitting one without reading it is how a sweep
-starts passing for the wrong reason. Listed in that module rather than fixed blind.
+`tests/unit/test_repositories.py`'s boundary sweep covers seven of the eleven repository classes —
+`ItemRepository` having been admitted at T4, with `atrium.domain.items`, when 012's narrow write was
+added to it. The remaining four — `LibraryRepository`, `MetadataRepository`, `PlaylistRepository`
+and `ImageRepository` — each need their own domain module admitted, and admitting one without
+reading it is how a sweep starts passing for the wrong reason. Listed in that module rather than
+fixed blind. *(It also called itself a walk over "every public method of the module", and the note
+beside its tuple said five classes were outside where four are — T4 admitted `ItemRepository` and
+left the sentence alone. Both corrected on 2026-09-05, with a test holding the counts against the
+module so the next drift fails rather than sits.)*
