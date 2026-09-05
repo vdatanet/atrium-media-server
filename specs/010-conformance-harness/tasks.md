@@ -2477,9 +2477,19 @@ request more, proving the paused report was stored before the silence begins.
    runs straight into the largest thing this list owes 003, since without account or library
    administration on the v1 surface there is no way to do it from outside.
 
-   *Not attributed:* the second run also gains **17 rows on `GET /Items/Latest`**, on `VideoType`
-   and `UserData/UnplayedItemCount`. That listing already carried a length difference, so these may
-   be an alignment cascade rather than a surviving write. Unmeasured either way.
+   **The third instance, and it was measured rather than left open.** The second run also gains
+   rows on `GET /Items/Latest`, and about half of them are an alignment cascade — normalising the
+   row index folds 36 of them into 21. The 21 that remain pair different items at the same
+   position (`ours=Soundless` against `theirs=Latent`), which looked like an ordering that does not
+   reproduce. **Neither server's does.** Atrium answers that listing identically to four identical
+   requests, and three consecutive reference instances answer it identically to each other, row for
+   row and in order.
+
+   What differs is the state again: `item_user_data` on Atrium holds seven rows after two runs, one
+   of them `played=1` with **`play_count=2`** — once per run — and `/Items/Latest` hides played
+   items, so the listing's own contents move between runs while the destroyed reference always
+   starts with nothing played. **Three instances of one asymmetry: the configuration, the sessions,
+   and the play state.** None of them is either server being non-deterministic.
 
 **And one thing this feature hands back rather than forward.** The three remaining
 prior-measurement debts in [reference-target.md](../../docs/compatibility/reference-target.md) are
