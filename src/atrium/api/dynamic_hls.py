@@ -33,10 +33,17 @@ Jellyfin.Api/Controllers/DynamicHlsController.cs:39-41 @ v10.11.11]`.
 measured on all three routes: an item nothing holds is `404`, `text/plain`, the fixed 25 bytes; a
 `mediaSourceId` naming no source is the same body at `400`; a source with no runtime to divide is
 the same body at `500`; and, on the segment route alone, so is a request carrying
-`startTimeTicks`, which the reference refuses before it looks at anything else. The one refusal
-that is *not* that shape is the framework's own: `runtimeTicks` and `actualSegmentLengthTicks` are
-required, so a segment URI stripped of its query answers problem details where a `main.m3u8`
-stripped of its query answers a playlist.
+`startTimeTicks`, which the reference refuses before it looks at anything else. The refusals that
+are *not* that shape are the framework's own, and they are where a required parameter is missing:
+`runtimeTicks` and `actualSegmentLengthTicks` on the segment route, so a segment URI stripped of
+its query answers problem details where a `main.m3u8` stripped of its query answers a playlist.
+
+**On the reference `master.m3u8` is a third such route and here it is not**, which is a difference
+this module has not yet decided: upstream declares `mediaSourceId` required on the master and
+optional on the variant `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:422, 768 @
+v10.11.11]`, so a bare `master.m3u8` is problem details naming that field there and a playlist
+here `[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-09-05]`. Recorded in spec section 3.7
+with the decision it owes; nothing here binds it differently yet.
 
 See specs/008-playback-negotiation-and-delivery/spec.md sections 3.4, 3.7 and 3.8, and plan
 sections 6.4 and 6.7.
