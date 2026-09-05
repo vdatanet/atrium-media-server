@@ -1058,3 +1058,29 @@ specials half of NextUp's chain (⚠️ spec §3.7 — **OQ-7, and since 2026-09
 gap (reference-target §1 — the alias sweep's measured exception empties if the pin moves), and
 OQ-1/OQ-2, whose answers are the ignored-parameter record and the field-by-field diff this
 feature built the events for.
+
+**And what a differential run actually reports against this feature — the first triage of one,
+2026-09-05.** A clean-server run over this repository's own fixture answers **524 differences owned
+by 005**, three quarters of the whole report, and they are **five classes and not 524 problems**
+`[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-05]`. The counts are one run's
+and will move; the classes are what to work from.
+
+| | | |
+|---|---|---|
+| **224** | `MISSING_KEY` | fields this server never emits: `RunTimeTicks` 37, `ProductionYear` 37, `HasLyrics` 24, `PremiereDate` 20, `ChildCount` 20 |
+| **130** | `EXTRA_KEY` | fields this server emits and the reference omits: `ParentIndexNumber` 26, `IndexNumber` 24, `Album` 22, `UnplayedItemCount` 21, `Container` 18 |
+| **117** | `VALUE` | `Name` 61 — 003's derivation against the reference's whole-filename rule, already on [010's list](../010-conformance-harness/tasks.md) — then `TotalRecordCount` 22 and `Container` 12 |
+| **46** | `LENGTH` | `Items` 17, and the artist arrays (`AlbumArtists`, `ArtistItems`, `Artists`) 6 each |
+| **7** | `TYPE` | one cause: `GET /UserViews` answers `ParentId` `null` here and an identifier there, on every view |
+
+**The two key classes are very nearly disjoint, which was worth measuring rather than assuming.**
+The reference suppresses nulls globally ([§1.7](../../docs/compatibility/behaviours.md)), so a field
+this server emits as `null` where the reference omits it would be one difference wearing two names —
+but by field name, **46 appear only as missing, 11 only as extra, and 3 as both**: `Container`,
+`HasSubtitles`, `UnplayedItemCount`. So §1.7 accounts for three fields here and not for a class, and
+the 224 and the 130 are two questions.
+
+**The sharpest single row is in none of those classes.** `GET /Items` with no parameters answers
+**77 rows here against 7** — 17 against 2 for a narrowed reader — so the two servers disagree about
+what a bare listing *is*, the reference giving top-level views where this one recurses. The `LENGTH`
+guard stops it cascading, so it costs four rows in the report and is worth more than four.

@@ -1484,3 +1484,27 @@ about **different files** — the anchor is `listing:GET /Items#audio-by-sort-na
 is not the same track ([010's list](../010-conformance-harness/tasks.md#what-this-feature-owes-the-next-ones)).
 So the divergence half is open and the `500` half is not: a decode this server cannot do is not an
 internal error, and [§3.5](spec.md)'s refusal shapes have no row for it.
+
+**What the same run reports against this feature: 104 differences, and 90 of them are one route.**
+`POST /Items/{itemId}/PlaybackInfo` carries 83 and its `GET` sibling 7; the rest are four on
+`main.m3u8` and two each on `/Audio/{itemId}/stream` and `/universal`, which are the `500`s the
+entry above records `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-05]`.
+
+**One shape inside the negotiation's 83 reads like a defect of this feature and is not, which is
+worth writing down because the next reader will meet it too.** The report shows a **restricted**
+seat answered `MediaSources/0/MediaStreams` of length **0** where the reference answers **4**, on
+five cases, with the administrator answered alike on both servers. It is neither a permission nor a
+hydration: **the two seats are looking at different films.**
+
+```
+atrium's restricted seat     narrowed to Movies   row 0 = 2 Fast 2 Furious     0 streams
+the reference's              narrowed to Films    row 0 = Both Subtitle Kinds  4 streams
+```
+
+Asked directly, Atrium answers **0 streams for that film to both of its seats** — the row is a filler
+`.mkv` from the structural tree and no prober can open it. `movies_library_id` narrows a restricted
+seat to *the first movies view holding something*, and the composed fixture has three: it lands on
+`Films` there and on `Movies` here, so `listing:GET /Items#movies-by-sort-name@0` resolves to a
+different film per side. That is
+[010's position-anchor entry](../010-conformance-harness/tasks.md#what-this-feature-owes-the-next-ones)
+in a second listing, and this feature owes nothing for it.
