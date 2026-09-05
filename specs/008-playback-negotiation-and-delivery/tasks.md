@@ -1446,3 +1446,28 @@ seeks perfectly, and cannot start until the production ends. On the four-second 
 which is why it is written down here rather than left to whoever meets it. Not decided: the
 opposite trade is real too, and `Content-Length` is what [§3.5](spec.md)'s table and AC-11 are
 about.
+
+**And the error path this feature has never had, measured on 2026-09-05.** **When `ffmpeg` cannot
+decode the source, the three audio delivery routes answer `500`.** The fixture's structural music
+tree is filler bytes — 003 generates it that way on purpose — and asking for one of those tracks
+gives:
+
+```
+WARNING  ffmpeg exited 234: [flac] sample rate not set /
+         Could not write header (incorrect codec parameters ?): Invalid argument
+INFO     "GET /Audio/{itemId}/stream" 500
+```
+
+`GET /Audio/{itemId}/stream`, `stream.{container}` and `/universal` all answer `500` with
+`Error processing request.`; the same requests against a track the media world really encodes answer
+`200` with real bytes, so this is the unreadable source and not the routes. It is the same hole
+[011's list](../011-subtitle-delivery/tasks.md) and this one already name from the other side — *an
+error path for a missing or unusable `ffmpeg` is not specified anywhere* — reached through the
+**source** rather than through the binary.
+
+**What the reference does with an unreadable audio source is not measured**, and the run that raised
+this could not say: it reported `500` here against `200` there, but the two servers had been asked
+about **different files** — the anchor is `listing:GET /Items#audio-by-sort-name@0` and their row 0
+is not the same track ([010's list](../010-conformance-harness/tasks.md#what-this-feature-owes-the-next-ones)).
+So the divergence half is open and the `500` half is not: a decode this server cannot do is not an
+internal error, and [§3.5](spec.md)'s refusal shapes have no row for it.
