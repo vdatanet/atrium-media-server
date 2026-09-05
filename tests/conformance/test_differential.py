@@ -1176,6 +1176,105 @@ def _ran(identity: str = "administrator", **overrides: Any) -> Any:
     return differential.Comparison(**fields)
 
 
+# -- one case, one issue ---------------------------------------------------------------------
+
+
+def _playlist_cases() -> tuple[Any, Any, Any]:
+    """The three that measured the leak: a create, the delete anchored on it, and the rename."""
+    made = allowlist.Anchor(
+        parameter="itemId",
+        kind="response",
+        endpoint="POST /Playlists",
+        case="create-with-a-name",
+        at="/Id",
+    )
+    return (
+        _case(
+            "create-with-a-name",
+            endpoint="POST /Playlists",
+            identities=("restricted",),
+            body='{"Name": "atrium-differential", "Ids": [], "MediaType": "Audio"}',
+            content_type="application/json",
+        ),
+        _case(
+            "delete-a-playlist",
+            endpoint="DELETE /Items/{itemId}",
+            identities=("restricted",),
+            anchors=(made,),
+        ),
+        _case(
+            "rename-a-playlist",
+            endpoint="POST /Items/{itemId}",
+            identities=("administrator",),
+            body='{"Name": "atrium-differential-renamed"}',
+            content_type="application/json",
+            anchors=(made,),
+        ),
+    )
+
+
+def test_a_case_the_sweep_compares_and_an_anchor_names_is_issued_once() -> None:
+    """Measured on 2026-09-05: it was issued twice, and a case that writes wrote twice.
+
+    `POST /Playlists#create-with-a-name` made one playlist for the comparison and a second to fill
+    the anchor cache; `delete-a-playlist` resolves that same anchor, so it removed the second one
+    only. **The register's own create/delete pair was not a pair** — a server that leaked on
+    creation and a server that did not answered the delete identically — and the first playlist
+    outlived the run on the server that outlives runs, which is never the single-use reference.
+    """
+    created, deleted, _ = _playlist_cases()
+    log: list[tuple[str, str, str]] = []
+    issuers, _wires = _issuers(
+        [created, deleted], log, bodies=({"Id": "p" * 32}, {"Id": "q" * 32})
+    )
+    seat = _seat("restricted")
+    endpoint = differential.Endpoint(
+        method="POST", path="/Playlists", level="L2", feature="009"
+    )
+
+    # Through the sweep's own door, because that is where the second issue came from.
+    differential.compare_case(
+        endpoint, created, seat, [], issuers, differential.Inputs(roles=("restricted",)), set()
+    )
+    issuers["atrium"].fill(deleted, seat)
+
+    posts = [row for row in log if row == ("atrium", "POST", "/Playlists")]
+    assert posts == [("atrium", "POST", "/Playlists")], (
+        "the compared issue and the anchor issue are one issue, or a writing case writes twice"
+    )
+    # And the delete names what the create made, which is the half that is not hygiene.
+    assert issuers["atrium"].fill(deleted, seat) == "/Items/" + "p" * 32
+
+
+def test_a_response_anchor_may_not_issue_a_case_this_seat_is_not_declared_for() -> None:
+    """The other half of the same leak, and the one that put an administrator's row in the table.
+
+    `rename-a-playlist` is declared for the administrator and anchors on a case declared for the
+    restricted seat alone. The anchor cache is keyed on the seat, so the administrator's key missed
+    and resolving the anchor issued `POST /Playlists` **as the administrator** — a playlist that
+    seat was never asked to make and that the restricted `delete-a-playlist` could not name. Two
+    runs later it was still in the item table, owned by the administrator, and turning up in a
+    `/Search/Hints` comparison as a row the reference did not have.
+
+    Refused rather than quietly resolved as some other seat: which identity owns the anchor is
+    `request-cases.yaml`'s question, and the report says the case was not asked and why.
+    """
+    created, _, renamed = _playlist_cases()
+    log: list[tuple[str, str, str]] = []
+    issuers, _wires = _issuers([created, renamed], log, bodies=({"Id": "p" * 32}, None))
+
+    with pytest.raises(differential.UnreachableError) as refused:
+        issuers["atrium"].fill(renamed, _seat("administrator"))
+
+    assert "restricted" in str(refused.value)
+    assert "never declared" in str(refused.value)
+    assert log == [], "a refused anchor must not have issued anything"
+
+    # The seat the case *is* declared for still resolves it, which is the whole point of refusing
+    # only the undeclared one.
+    assert issuers["atrium"].fill(renamed, _seat("restricted")) == "/Items/" + "p" * 32
+
+
 # -- the two-server guard --------------------------------------------------------------------
 
 
@@ -1418,10 +1517,13 @@ def test_one_case_that_raises_something_unexpected_does_not_take_the_sweep_with_
     issuers, _wires = _issuers(cases, log)
 
     class Explodes:
-        def issue(self, case: Any, seat: Any, depth: int = 0) -> Any:
+        # `issue_once` and not `issue`: the sweep asks for the one issue of a case for a seat, so
+        # that a case that writes writes once (010, 2026-09-05). A stub that keeps the older name
+        # would stand in for an interface nothing has.
+        def issue_once(self, case: Any, seat: Any, depth: int = 0) -> Any:
             if case.id == "default":
                 raise OSError("connection reset by peer")
-            return issuers["atrium"].issue(case, seat)
+            return issuers["atrium"].issue_once(case, seat)
 
     comparisons = differential.sweep(
         [ENDPOINT],

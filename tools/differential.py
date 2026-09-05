@@ -1222,6 +1222,23 @@ class Issuer:
         content_type = "" if case.content_type == registers().NONE else case.content_type
         return wire.request(case.method, path, query=query, body=body, content_type=content_type)
 
+    def issue_once(self, case: Any, seat: Seat, depth: int = 0) -> Any:
+        """This case's **one** issue for this seat on this side, shared by the sweep and by anchors.
+
+        **They used to be two issues, and a case that writes made two of whatever it writes.**
+        `POST /Playlists#create-with-a-name` created one playlist for the comparison and a second
+        to fill the anchor cache, and `DELETE /Items/{itemId}#delete-a-playlist` - which resolves
+        that same anchor - removed the second one only. Two consequences, and the smaller one is
+        the leak: the register's own create/delete pair **was not a pair**, so a server that
+        leaked on creation and a server that did not answered the delete case identically. The
+        first playlist then outlived the run on whichever server outlives the run, which is the
+        server under test and never the single-use reference (010's owes list, 2026-09-05).
+        """
+        key = (seat.role, case.endpoint + "#" + case.id)
+        if key not in self._answers:
+            self._answers[key] = self.issue(case, seat, depth=depth)
+        return self._answers[key]
+
     def answer_of(self, endpoint: str, case_id: str, seat: Seat, depth: int) -> Any:
         """A case's response, cached: an anchor over a listing asks for it once per seat."""
         key = (seat.role, endpoint + "#" + case_id)
@@ -1258,6 +1275,8 @@ class Issuer:
         """One anchor, in the three kinds T6 found where plan section 6.1.1 described one."""
         if anchor.kind == "literal":
             return anchor.at
+        if anchor.kind == "response":
+            self.refuse_an_undeclared_issue(anchor, seat)
         answer = self.answer_of(anchor.endpoint, anchor.case, seat, depth)
         if answer.status >= 400 or answer.body is None:
             raise UnreachableError(
@@ -1280,6 +1299,39 @@ class Issuer:
                 f"{self.side}"
             )
         return str(row["Id"])
+
+    def refuse_an_undeclared_issue(self, anchor: Any, seat: Seat) -> None:
+        """A `response:` anchor may not make this run issue a case this seat is not declared for.
+
+        **A `listing:` anchor is a view and a `response:` anchor is a thing.** Resolving a listing
+        as the referring seat is the whole point - the row it names is that seat's own, which is
+        spec section 3.9's 12-of-23 finding - and resolving it as somebody else would compare the
+        administrator's row while claiming to be the other seat. A `response:` anchor names a
+        value an earlier case's answer carried, and when that case *writes*, resolving it as a
+        seat the register did not give it makes the run **create something nobody declared**.
+
+        Measured on 2026-09-05: `rename-a-playlist` is declared for the administrator and anchors
+        on `POST /Playlists#create-with-a-name`, which is declared for the restricted seat alone.
+        The administrator's key was not in the anchor cache, so resolving the anchor issued
+        `POST /Playlists` **as the administrator** - a playlist that seat was never asked to make,
+        that `delete-a-playlist` (restricted, resolving its own key) could not name, and that was
+        still in the item table two runs later, owned by the administrator, turning up in a search
+        listing as a row the reference did not have.
+
+        Refused rather than resolved to some other seat: which identity should own the anchor is
+        the register's question, and answering it here would be this program deciding what
+        `request-cases.yaml` declares. The case is reported unasked with this reason, which is what
+        the report exists to say.
+        """
+        target = self.case_named(anchor.endpoint, anchor.case)
+        if not target.identities or seat.role in target.identities:
+            return
+        raise UnreachableError(
+            f"{anchor.endpoint}#{anchor.case} is declared for "
+            f"{', '.join(target.identities)} and this case anchors on its response as the "
+            f"{seat.role} seat: issuing it here would be this run making a request "
+            "request-cases.yaml never declared, and a case that writes would leave what it made"
+        )
 
 
 # --------------------------------------------------------------------------------------------
@@ -1615,8 +1667,8 @@ def compare_case(
             unreachable="; ".join(blocked),
         )
     try:
-        ours = issuers["atrium"].issue(case, seat)
-        theirs = issuers["reference"].issue(case, seat)
+        ours = issuers["atrium"].issue_once(case, seat)
+        theirs = issuers["reference"].issue_once(case, seat)
     except (UnreachableError, WireError) as failure:
         return Comparison(
             endpoint=endpoint.key,
