@@ -40,7 +40,12 @@ from typing import NamedTuple
 
 from tests.fixtures.library.generate import build as build_fixture_library
 from tests.fixtures.library.manifest import LIBRARIES
-from tests.fixtures.media import MOVIES_ROOT, MUSIC_ROOT, build_media_files
+from tests.fixtures.media import (
+    MOVIES_ROOT,
+    MUSIC_ROOT,
+    build_media_files,
+    declared_media_files,
+)
 
 #: Where the media world lands under the mount. One subtree rather than two top-level directories,
 #: because both worlds name their roots `Movies` and `Music` and a flat layout would have one
@@ -148,3 +153,29 @@ def build(destination: Path) -> Path:
     build_media_files().copy_into(destination / MEDIA_SUBTREE)
     (destination / EMPTY_LIBRARY).mkdir(parents=True, exist_ok=True)
     return destination
+
+
+def is_complete(destination: Path) -> bool:
+    """Whether `destination` already holds everything `build` writes there.
+
+    **The question a caller reusing a tree from an earlier run has to ask, and a directory is not
+    it.** `tools/differential.py` asked whether the root was a directory with anything at all in
+    it, which a directory structure whose files have gone still satisfies - the same defect
+    `tests/fixtures/media.py` carried in its own cache check, and the reason `build` is cheap to
+    call again: it rewrites the same bytes at the same fixed modification time.
+
+    Every declared file, not one of them. A tree missing a single entry stands two servers up over
+    a library that is not the declared one, and the comparison then measures the gap in the
+    fixture rather than the gap between the servers.
+    """
+    for library in LIBRARIES:
+        root = destination / library.name
+        for entry in library.entries:
+            # A trailing slash declares a directory that stays empty, which `generate._write`
+            # creates and no file ever lands in.
+            path = root.joinpath(*entry.path.rstrip("/").split("/"))
+            if not (path.is_dir() if entry.path.endswith("/") else path.is_file()):
+                return False
+    if not (destination / EMPTY_LIBRARY).is_dir():
+        return False
+    return all(path.is_file() for path in declared_media_files(destination / MEDIA_SUBTREE))

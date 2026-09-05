@@ -32,6 +32,7 @@ from atrium.domain.items import ItemType
 from atrium.library.scan import scan
 from atrium.media.probe import UnreadableMediaError, inspect
 from tests.fixtures.library.generate import FIXED_MTIME_NS
+from tests.fixtures.library.manifest import LIBRARIES
 from tests.fixtures.media import (
     BOTH_SUBTITLE_KINDS,
     CUES,
@@ -61,6 +62,7 @@ from tests.fixtures.media import (
     Cue,
     MediaFile,
     UninspectableFile,
+    build_media_files,
     generate,
     keyframe_seconds,
     pgs_bitstream,
@@ -69,7 +71,9 @@ from tests.fixtures.media import (
     subtitle_packet_seconds,
 )
 from tests.fixtures.media_world import ScannedMediaWorld
+from tests.fixtures.reference_tree import MEDIA_SUBTREE
 from tests.fixtures.reference_tree import build as build_reference_tree
+from tests.fixtures.reference_tree import is_complete as reference_tree_is_complete
 from tests.fixtures.reference_tree import libraries as reference_libraries
 
 pytestmark = pytest.mark.ffmpeg
@@ -766,6 +770,77 @@ def test_every_file_in_the_media_tree_is_generated_by_a_declared_entry(
     )
     found = {path for path in media_files.base.rglob("*") if path.is_file()}
     assert found == declared
+
+
+def test_a_cache_whose_files_were_purged_is_rebuilt_rather_than_reported_as_a_hit(
+    tmp_path: Path,
+) -> None:
+    """The cache check asks about the files, and asking about the directory was the defect.
+
+    macOS purges *files* out of `$TMPDIR` and leaves the directory structure standing, which is
+    exactly where the default cache lives. A check reading `base.is_dir()` calls that a hit and
+    hands the caller a tree whose paths no longer open - about thirty ffmpeg-dependent tests
+    failing with `FileNotFoundError`, worked around three separate times in one day by pointing
+    `ATRIUM_MEDIA_FIXTURE_CACHE` somewhere fresh.
+
+    **Both shapes of the purge**, because a rebuild that only fired on a tree with nothing left
+    would be the same defect at a smaller size: a tree that lost one file is as unusable as one
+    that lost all of them. The file removed second is a *planted image*, which is a file no
+    declaration's own path names - so a completeness check that walked the entries and not what
+    lands beside them fails here.
+
+    **Publishing over the remains is the second half of it.** A rename cannot land on a name a
+    directory already holds, so a rebuild that got as far as the publish and then swallowed the
+    failure would hand back the very tree it was called to replace.
+    """
+    cache = tmp_path / "cache"
+    first = build_media_files(cache=cache)
+    assert first.is_complete()
+
+    for path in sorted(first.base.rglob("*")):
+        if path.is_file():
+            path.unlink()
+    assert first.base.is_dir(), "the directories surviving is the premise, not an accident"
+    assert not first.is_complete()
+
+    rebuilt = build_media_files(cache=cache)
+    assert rebuilt.base == first.base, "a rebuild publishes under the digest, not beside it"
+    assert rebuilt.is_complete()
+    assert [path.name for path in cache.iterdir()] == [first.base.name], (
+        "the swept remains are not left in the cache directory"
+    )
+
+    beside = rebuilt.image_path_of(PLANTED_POSTER, PLANTED_POSTER.images[0])
+    beside.unlink()
+    assert not rebuilt.is_complete(), "a tree missing one file is a tree that cannot be used"
+    assert build_media_files(cache=cache).is_complete()
+
+
+def test_the_composed_trees_own_reuse_check_asks_about_files_too(tmp_path: Path) -> None:
+    """The same question, where `tools/differential.py` reuses a tree from an earlier run.
+
+    It asked whether the root was a directory with anything at all in it, which a directory
+    structure whose files have gone still satisfies. `reference/fixture-tree` is not under
+    `$TMPDIR` and no purge sweeps it, so this is the latent form rather than the one that bit -
+    but a run over a tree missing an entry stands both servers up over a library that is not the
+    declared one, and then measures the fixture instead of the servers.
+
+    Both halves of the composition, because a check covering only the 003 tree would be satisfied
+    by a tree whose media subtree had gone, and the media world is what the decodable libraries
+    are made of.
+    """
+    root = build_reference_tree(tmp_path / "tree")
+    assert reference_tree_is_complete(root)
+
+    (root / MEDIA_SUBTREE / MOVIES_ROOT / DIRECT_PLAY.path).unlink()
+    assert not reference_tree_is_complete(root), "the media subtree is half of what build writes"
+
+    assert reference_tree_is_complete(build_reference_tree(root)), "build is safe to call again"
+
+    library = LIBRARIES[0]
+    entry = next(one for one in library.entries if not one.path.endswith("/"))
+    (root / library.name).joinpath(*entry.path.split("/")).unlink()
+    assert not reference_tree_is_complete(root), "the 003 tree is the other half"
 
 
 def test_the_mount_preserves_the_fixed_time(tmp_path: Path) -> None:
