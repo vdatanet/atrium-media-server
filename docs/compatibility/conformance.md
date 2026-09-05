@@ -175,9 +175,13 @@ reference, so a `--jellyfin` that names anything else is refused before the run 
 address cannot be known beforehand, because the instance picks a free port. Either drop
 `--jellyfin`, or stand an instance up by hand and name it with `--reference-url`. The second
 spelling is the one to reach for when a difference has to be looked at twice, because the instance
-then outlives the run. **A run whose instance was asked for and did not come up falls back to
-`$JELLYFIN_URL`** and sweeps whatever that names, which is right for a machine that never had a
-runtime and wrong for one whose instance died — measured at 012 T10 on 2026-09-04, and outstanding.
+then outlives the run. **A run whose instance was asked for and died is refused; one on a machine that never had a
+container runtime is not.** ADR-0007 licenses the degradation for the second and names it — a
+machine with no runtime at all still sweeps a reachable server, with every case and named row that
+needed an instance reported outstanding with the reason. The first would otherwise take whatever
+`$JELLYFIN_URL` names for its reference and sweep somebody's own library under the name of a
+fixture run, which is what it did at 012 T10 on 2026-09-04, stopping only at a certificate it could
+not verify. It exits `2` naming the instance's own failure instead.
 
 **Exit codes: `0` clean, `1` not clean, `2` the run could not start.** *Not clean* is the ordinary
 answer and not a failure: it means the run has an untriaged difference, a declared case it could

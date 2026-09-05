@@ -845,7 +845,8 @@ about which address it is**, and the two rows cost six documents rather than one
   could not be verified from this shell. Nothing was written, and nothing about the failure reached
   a report, because the run exited `2` before writing one. ADR-0007's degradation is *"a machine
   with no runtime still sweeps a reachable server"*; an instance that was **asked for and failed**
-  is a different sentence, and the fallback does not distinguish them.
+  is a different sentence, and the fallback did not distinguish them. *(Fixed on 2026-09-05: it
+  distinguishes them by the class `tools/_reference.py` already raised, and refuses the second.)*
 
 **What ran, and what it says.** `POST /Items/{itemId}/PlaybackInfo` is `Compared: yes` from
 **both** seats, which is what its `level: L3` has been claiming since 008 and what nothing had
@@ -1110,15 +1111,20 @@ measured client asks for, so it is owed to **the feature that gives v1 one**, un
 
 ### Two things about the harness, both 010's
 
-* **A `--fixture` run whose instance was asked for and failed sweeps whatever `$JELLYFIN_URL`
-  names.** Found at T10 when an instance missed its 180-second readiness deadline and the run
-  carried straight on to an operator's own server, stopping only on a certificate it could not
-  verify — with nothing written and nothing about the failure in a report, the run having exited `2`
+* **A `--fixture` run whose instance was asked for and failed swept whatever `$JELLYFIN_URL`
+  named — fixed on 2026-09-05.** Found at T10 when an instance missed its 180-second readiness
+  deadline and the run carried straight on to an operator's own server, stopping only on a
+  certificate it could not verify — with nothing written and nothing about the failure in a report,
+  the run having exited `2`
   before writing one. [ADR-0007](../../docs/decisions/0007-a-container-runtime-for-the-reference-instance.md)'s
-  degradation is *"a machine with no runtime still sweeps a reachable server"*; an instance that was
-  **asked for and failed** is a different sentence and the fallback does not distinguish them.
-  Recorded in [conformance.md's L3 section](../../docs/compatibility/conformance.md) and
-  outstanding.
+  degradation is *"a machine with no runtime **at all**"*; an instance that was **asked for and
+  failed** is a different sentence and the fallback did not distinguish them. **What it took was no
+  new mechanism:** `tools/_reference.py` already raises `RuntimeAbsentError` for the licensed case
+  and a different `InstanceError` for every other, and nothing had read the difference —
+  `FixtureInstance` records it as `runtime_absent` and `reference_url_for` refuses the run that
+  cannot have the tree it asked for, naming the instance's own reason where the incident reported
+  a certificate. Recorded in
+  [conformance.md's L3 section](../../docs/compatibility/conformance.md).
 * **Five of the twenty-two named comparisons are still outstanding**, unchanged by this feature
   except in the denominator: 012 added two and both are `as_documented`. The rest are on
   [010's list](../010-conformance-harness/tasks.md#what-this-feature-owes-the-next-ones) with their

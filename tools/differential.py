@@ -4002,11 +4002,18 @@ def build_parser() -> argparse.ArgumentParser:
 class FixtureInstance:
     """The single-use reference instance a run stands up around its own sweep, or the reason not.
 
-    **It never fails the run**, which is ADR-0007's degradation and not politeness: a machine with
-    no runtime still sweeps a reachable server and runs everything in the default CI job, and what
-    it loses is reported outstanding with the reason rather than skipped. So `__enter__` catches
-    what `tools/_reference.py` raises and turns it into `reason`, which `unmet_need` prints
+    **A machine with no runtime at all never fails the run**, which is ADR-0007's degradation and
+    not politeness: it still sweeps a reachable server and runs everything in the default CI job,
+    and what it loses is reported outstanding with the reason rather than skipped. So `__enter__`
+    catches what `tools/_reference.py` raises and turns it into `reason`, which `unmet_need` prints
     against every `needs: fixture`, `rescan` and `wait` row.
+
+    **An instance that was asked for and died is a different sentence**, and `runtime_absent` is
+    what tells the two apart. ADR-0007 licenses the degradation for *"a machine with no runtime at
+    all"* and for nothing else; a runtime that is present and could not start the image, a wizard
+    that refused, a scan that timed out and a fixture tree that could not be built all leave a run
+    that asked to compare two servers over a declared tree holding no tree at all, and
+    `reference_url_for` refuses those rather than adopting whatever `$JELLYFIN_URL` names.
 
     A context manager wrapping the sweep and nothing else (plan section 6.5): the seats die with
     the roster inside it, and the instance dies after them.
@@ -4017,6 +4024,10 @@ class FixtureInstance:
         self.url = args.reference_url or ""
         self.digest = ""
         self.reason = ""
+        #: Whether `reason` is ADR-0007's licensed degradation - no container runtime on this
+        #: machine - rather than an instance that was asked for and failed. Only the first of
+        #: those may go on to sweep a server this run was never pointed at.
+        self.runtime_absent = False
         #: The account the instance's own wizard created, when this run stood one up. `None` for a
         #: reference somebody else is running, whose administrator is in `.env` and not here -
         #: which is 010 T9's correction to plan section 5 arriving where it is consumed.
@@ -4058,6 +4069,12 @@ class FixtureInstance:
         instance = module.ReferenceInstance(spec)
         try:
             instance.__enter__()
+        except module.RuntimeAbsentError as failure:
+            # First, because it is the subclass: the one failure ADR-0007 names, and the only one
+            # a run may degrade past.
+            self.reason = str(failure)
+            self.runtime_absent = True
+            return self
         except module.InstanceError as failure:
             self.reason = str(failure)
             return self
@@ -4292,6 +4309,33 @@ def _execute(
         return _run_against(args, instance, salvage)
 
 
+def reference_url_for(args: argparse.Namespace, instance: FixtureInstance) -> str:
+    """The server this run compares Atrium against, and the one refusal that is not about a pair.
+
+    **An instance that was asked for and did not come up is not a machine that never had one.**
+    ADR-0007 licenses the degradation for the second and says which - *"a machine with no runtime
+    at all still runs the sweep against a reachable server"* - so the first is refused here. The
+    run asked to compare two servers over a tree this repository declares; with no instance it
+    would instead sweep whatever `--jellyfin` or `$JELLYFIN_URL` happens to name, which is not a
+    smaller run but a different one, reported under the name of the run that was asked for.
+
+    Measured at 012 T10 on 2026-09-04: an instance missed its 180-second readiness deadline and
+    the run carried straight on to an operator's own server, stopping only at a certificate it
+    could not verify - and exiting `2` on that certificate, so the report never said, and could
+    not have said, which server it had been about to sweep.
+    """
+    if instance.reason and not instance.runtime_absent:
+        raise GuardError(
+            f"--fixture asked for a reference instance and it did not come up: {instance.reason}. "
+            "This run will not fall back to another server: a fixture run compares both servers "
+            "over this repository's own tree, and adopting whatever --jellyfin or "
+            f"${ENV_REFERENCE_URL} names would sweep somebody's own library under the name of a "
+            "fixture run. Stand an instance up by hand with tools/reference_instance.py and pass "
+            "--reference-url, or drop --fixture and sweep that server deliberately"
+        )
+    return instance.url or args.jellyfin or os.environ.get(ENV_REFERENCE_URL, "")
+
+
 def _run_against(
     args: argparse.Namespace,
     instance: FixtureInstance,
@@ -4309,7 +4353,7 @@ def _run_against(
     an instance, **the instance is the reference**.
     """
     atrium_url = args.atrium or ""
-    reference_url = instance.url or args.jellyfin or os.environ.get(ENV_REFERENCE_URL, "")
+    reference_url = reference_url_for(args, instance)
     if not atrium_url or not reference_url:
         raise GuardError(
             "a differential needs both servers: pass --atrium and --jellyfin (or set "
