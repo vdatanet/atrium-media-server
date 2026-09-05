@@ -960,3 +960,27 @@ account.
 005 filters every query on library visibility, so `user_library_access` has to be a real join table
 and not a JSON list. 007 attaches play state to sessions, so the registry has to expose a session by
 its id without a database round-trip. Both are cheap here and awkward to retrofit.
+
+**`LastLoginDate` is the login before this one on the reference, and this one here — measured
+2026-09-06.** The differential reports it as an `EXTRA_KEY` on
+`POST /Users/AuthenticateByName`: this server answers a timestamp where the reference answers
+nothing at all. Asked of a fresh account on a stock instance of the pinned version, three logins two
+seconds apart `[probe: tools/differential.py's own client, by hand, Jellyfin 10.11.11, 2026-09-06]`:
+
+```
+login 1 -> LastLoginDate  None
+login 2 -> 2026-09-05T22:52:38.8375544Z
+login 3 -> 2026-09-05T22:52:40.9746556Z      (2.14 s later, and the logins were 2 s apart)
+```
+
+**It is never the login being made.** Null on the first and a step behind after that, which is what
+`theirs=null` on a first authentication looks like from the other side. This server writes the
+current one, so a client reading *"you last signed in at…"* is told this moment here and the previous
+moment there.
+
+Two limits on the measurement, because they change what may be concluded: it reads
+`GET /Users/{userId}`, **not the `User` object the authentication response carries**, which is where
+the differential sees the row — the stored value is what both render, but it is not the same read.
+And the field is excused by value in [allowlist.yaml](../../docs/compatibility/allowlist.yaml) as
+`wall-clock` since 2026-09-06, which is right for the *timestamps* and is why only the presence
+difference survives a run: the entry excuses the value and not whether the field is there.
