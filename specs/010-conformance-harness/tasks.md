@@ -2528,10 +2528,31 @@ request more, proving the paused report was stored before the silence begins.
    identifiers differ by design. The defect is this harness comparing, **by position**, an order
    that is total on neither server.
 
-   **What it costs is the thing a report is for.** Two honest runs of this harness over one tree
-   differ by about 8 per cent today, so **comparing one run's report against an earlier one to see
-   whether a piece of work helped does not yet work.** That is a stronger reason to settle this
-   entry than the litter it started as.
+   **The 8 per cent this entry first claimed was mostly the yardstick, and the correction matters
+   more than the number.** That figure came from comparing two reports row by row with the two
+   *values* in the key — and four fields in every report carry values that cannot agree twice:
+   `TranscodingUrl` (it carries a `PlaySessionId` and an `ApiKey` minted per request), `traceId`,
+   `LastLoginDate` and the `age` response header. Counting those as movement counts the clock.
+   Measured four ways over the same pair of runs:
+
+   ```
+   values in the key                            277 of ~1075   25.8%
+   values in the key, row index normalised      183            17.0%
+   values ignored                                53             4.9%
+   values ignored, row index normalised          19             1.8%
+   ```
+
+   **So the structural drift — a difference present in one run and absent from the other — is 19
+   rows, not 90.** Comparing one run's report against an earlier one *does* largely work; what does
+   not work is comparing them the way this entry originally did.
+
+   **Those four fields are also 25 of run E's 1073 differences and none of them is on the
+   allowlist.** Three are plainly excusable and would leave every run quieter: a trace identifier, a
+   login timestamp, a cache age. The fourth is not an oversight —
+   [012 T10](../012-negotiation-inputs/tasks.md) left `TranscodingUrl` unexcused on purpose,
+   *"because excusing it by value would also excuse the address shape the named comparison exists to
+   watch"* — so it wants a rule that compares the shape and not the value, which is a mechanism and
+   not an entry.
 
    **The obvious remedy is half already applied and does not reach the rest.** The audit proposed
    excusing the order of the two listings that move, the way `listing-ordered-at-random` is excused.
