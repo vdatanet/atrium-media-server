@@ -2491,6 +2491,28 @@ request more, proving the paused report was stored before the silence begins.
    starts with nothing played. **Three instances of one asymmetry: the configuration, the sessions,
    and the play state.** None of them is either server being non-deterministic.
 
+   **And accumulation is not the whole of it, which is the part that bites hardest.** Two runs each
+   against a **freshly built** Atrium — nothing carried over, the restricted seat narrowed the way
+   the reference narrows its own — still disagree:
+
+   ```
+   run E  1073 differences      run F  1078
+   identical in both  937       only in E  136      only in F  141
+   with the row index normalised: 984 identical, 89 and 94
+   ```
+
+   The shape says these are not new findings but **the same ones pairing differently**: 24 against
+   24 on one endpoint, 6 against 6 on another, and `GET /Items/Latest` carrying 77 of them in one
+   run and 83 in the other. Both servers answer identically when asked twice in the cold, so what
+   is left is **the run's own writes landing at different points relative to its reads** — the sweep
+   marks items played while it goes, that listing hides played items, and the interleaving is not
+   identical twice. *The mechanism is inferred from which listings move; it has not been measured.*
+
+   **What it costs is the thing a report is for.** Two honest runs of this harness over one tree
+   differ by about 8 per cent today, so **comparing one run's report against an earlier one to see
+   whether a piece of work helped does not yet work.** That is a stronger reason to settle this
+   entry than the litter it started as.
+
 **Where the first kept run's differences went, so nobody triages them twice.** A clean-server run
 on 2026-09-05 answered **703 differences**, and this feature owns none of them: spec §2's rule is
 that each belongs to the feature owning its endpoint, and they are written on those lists rather
