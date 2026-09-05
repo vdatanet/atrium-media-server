@@ -19,7 +19,9 @@ Four batteries were added at T10, all of them playlist-only and therefore free o
 * **the copy bucketing question** - whether a stream copy's boundaries follow the source's own
   keyframes or an equal-length grid, asked of one container and then of another;
 * **the refusal shapes** of both playlist routes, which plan section 6.8 leaves owed to the task
-  that lands them.
+  that lands them. Each row is asked of **both** routes since 2026-09-05: it was written as four
+  rows spread over five requests, so three of the four rested on one route while the document
+  they went into said two.
 
 Needs --allow-writes: fetching segments starts real encodes in the reference's scratch space.
 The probe fetches three segments and stops every session it opened - including on failure.
@@ -48,6 +50,10 @@ from _probe import Probe, ProbeError, Server, main
 #: The requested segment lengths the cadence matrix asks for. `None` is "state none", which is
 #: what every real client sends and what the measured 3.004 s came from.
 REQUESTED_LENGTHS: tuple[int | None, ...] = (None, 1, 2, 5, 10)
+
+#: The two playlist routes. Every refusal row below is asked of both of them: a table that
+#: names two routes has to have been sent to two routes.
+ROUTES: tuple[str, ...] = ("master.m3u8", "main.m3u8")
 
 #: How many characters of a playlist body an observation prints. The media playlists here run to
 #: thousands of segments; the header and the first two entries are what the shape lives in.
@@ -122,8 +128,22 @@ def _copy_profile(source: VideoSource, segment_length: int | None = None) -> dic
     )
 
 
-def _session(server: Server, source: VideoSource, profile, label: str, probe: Probe):
-    """Negotiate, fetch both playlists, and report their shape. Returns what the caller needs."""
+def _session(
+    server: Server,
+    source: VideoSource,
+    profile,
+    label: str,
+    probe: Probe,
+    expect_uniform: bool = True,
+):
+    """Negotiate, fetch both playlists, and report their shape. Returns what the caller needs.
+
+    `expect_uniform` is False where uniformity is not the reference's own answer: a stream copy
+    of a container the operator has permitted on-demand keyframe extraction for is bucketed on
+    the file's real keyframes, which is section 3.7's own rule and not a failure of it. The
+    caller reads the permission off the server rather than assuming the shipped Matroska-only
+    default, because the measured operator's may differ.
+    """
     _status, data = negotiate(server, source.item_id, profile)
     one = data["MediaSources"][0]
     url = one.get("TranscodingUrl")
@@ -151,7 +171,9 @@ def _session(server: Server, source: VideoSource, profile, label: str, probe: Pr
     probe.observe(
         f"{label}: per-segment query", f"runtime+actualSegmentLength ticks: {per_segment}"
     )
-    ok = complete and vod and body_uniform and last_shorter and per_segment and elapsed < 5.0
+    ok = complete and vod and last_shorter and per_segment and elapsed < 5.0
+    if expect_uniform:
+        ok = ok and body_uniform
     return data["PlaySessionId"], playlists, ok
 
 
@@ -259,10 +281,13 @@ def _pick_container(server: Server, container: str) -> VideoSource | None:
     return None
 
 
-def _refusals(server: Server, source: VideoSource, probe: Probe) -> list[bool]:
-    """How the two playlist routes refuse. Plan section 6.8 leaves these owed to this task."""
-    checks: list[bool] = []
-    common = {
+def _common(server: Server, source: VideoSource) -> dict[str, str]:
+    """The query a well-formed playlist request carries, on a device nobody has used.
+
+    Rebuilt per request rather than shared, so that no row below can be answered out of a
+    neighbouring row's scratch space (`_fresh_device`).
+    """
+    return {
         "UserId": server.user_id or "",
         "DeviceId": _fresh_device(),
         "MediaSourceId": source.item_id,
@@ -271,53 +296,70 @@ def _refusals(server: Server, source: VideoSource, probe: Probe) -> list[bool]:
         "SegmentContainer": "ts",
         "api_key": server.token or "",
     }
-    query = urllib.parse.urlencode(common)
 
-    unknown = uuid.uuid4().hex
-    status, headers, body = server.get_streaming(
-        f"/Videos/{unknown}/master.m3u8?{query}", max_bytes=512
-    )
-    probe.observe(
-        "refusal: an item nothing holds, master.m3u8",
-        f"{status}, {headers.get('Content-Type')}, {body[:120]!r}",
-    )
-    checks.append(status >= 400)
 
-    status, headers, body = server.get_streaming(
-        f"/Videos/{unknown}/main.m3u8?{query}", max_bytes=512
-    )
-    probe.observe(
-        "refusal: the same on main.m3u8",
-        f"{status}, {headers.get('Content-Type')}, {body[:120]!r}",
-    )
-    checks.append(status >= 400)
+def _refusals(server: Server, source: VideoSource, probe: Probe) -> list[bool]:
+    """How the two playlist routes refuse - every row asked of **both** of them.
 
-    tokenless = urllib.parse.urlencode({k: v for k, v in common.items() if k != "api_key"})
-    status, headers, body = server.get_streaming(
-        f"/Videos/{source.item_id}/master.m3u8?{tokenless}", max_bytes=512, send_token=False
-    )
-    probe.observe(
-        "refusal: no credential at all",
-        f"{status}, {headers.get('Content-Type')}, {len(body)} bytes, {body[:120]!r}",
-    )
-    checks.append(status == 401)
+    Plan section 6.8 leaves these owed to this task. Until 2026-09-05 the battery asked four
+    rows across five requests rather than eight: only the unknown item went to both routes, the
+    tokenless request and the unknown `MediaSourceId` went to `master.m3u8` alone, and the empty
+    query to `main.m3u8` alone - so a table headed *"measured on both playlist routes"* rested on
+    one route for three of its four rows.
+    """
+    checks: list[bool] = []
 
-    status, headers, body = server.get_streaming(
-        f"/Videos/{source.item_id}/main.m3u8", max_bytes=512
-    )
-    probe.observe(
-        "refusal: main.m3u8 with no query at all",
-        f"{status}, {headers.get('Content-Type')}, {body[:120]!r}",
-    )
+    for route in ROUTES:
+        unknown = uuid.uuid4().hex
+        query = urllib.parse.urlencode(_common(server, source))
+        status, headers, body = server.get_streaming(
+            f"/Videos/{unknown}/{route}?{query}", max_bytes=512
+        )
+        probe.observe(
+            f"refusal: an item nothing holds, {route}",
+            f"{status}, {headers.get('Content-Type')}, {len(body)} bytes, {body[:120]!r}",
+        )
+        checks.append(status == 404)
 
-    unknown_source = urllib.parse.urlencode({**common, "MediaSourceId": uuid.uuid4().hex})
-    status, headers, body = server.get_streaming(
-        f"/Videos/{source.item_id}/master.m3u8?{unknown_source}", max_bytes=512
-    )
-    probe.observe(
-        "refusal: a MediaSourceId naming no source",
-        f"{status}, {headers.get('Content-Type')}, {body[:120]!r}",
-    )
+    for route in ROUTES:
+        tokenless = urllib.parse.urlencode(
+            {k: v for k, v in _common(server, source).items() if k != "api_key"}
+        )
+        status, headers, body = server.get_streaming(
+            f"/Videos/{source.item_id}/{route}?{tokenless}", max_bytes=512, send_token=False
+        )
+        probe.observe(
+            f"refusal: no credential at all, {route}",
+            f"{status}, {headers.get('Content-Type')}, {len(body)} bytes, {body[:120]!r}",
+        )
+        checks.append(status == 401 and not body)
+
+    for route in ROUTES:
+        unknown_source = urllib.parse.urlencode(
+            {**_common(server, source), "MediaSourceId": uuid.uuid4().hex}
+        )
+        status, headers, body = server.get_streaming(
+            f"/Videos/{source.item_id}/{route}?{unknown_source}", max_bytes=512
+        )
+        probe.observe(
+            f"refusal: a MediaSourceId naming no source, {route}",
+            f"{status}, {headers.get('Content-Type')}, {len(body)} bytes, {body[:120]!r}",
+        )
+        checks.append(status == 400)
+
+    # The one row where the two routes answer differently, which is why asking both of them was
+    # worth the request: `master.m3u8` declares `mediaSourceId` required and `main.m3u8` does not
+    # `[source: Jellyfin.Api/Controllers/DynamicHlsController.cs:422, 768 @ v10.11.11]`.
+    for route, expected in (("master.m3u8", 400), ("main.m3u8", 200)):
+        status, headers, body = server.get_streaming(
+            f"/Videos/{source.item_id}/{route}", max_bytes=512
+        )
+        probe.observe(
+            f"{route} with no query at all",
+            f"{status}, {headers.get('Content-Type')}, {len(body)} bytes, {body[:260]!r}",
+        )
+        checks.append(status == expected)
+
     return checks
 
 
@@ -380,8 +422,10 @@ def run(server: Server) -> Probe:
             "actualSegmentLengthTicks; a re-requested segment is byte-identical within the "
             "session; an out-of-order segment is served; segments carry Content-Length "
             "and Accept-Ranges: bytes; the re-encode cadence is the requested segment length "
-            "scaled by the frame rate; and a stream copy's boundaries are the source's own "
-            "keyframes"
+            "scaled by the frame rate; a stream copy's boundaries are the source's own "
+            "keyframes only for a container the operator permits extraction for; and both "
+            "playlist routes answer the same three refusals, differing only on an empty query - "
+            "where master.m3u8 requires mediaSourceId and main.m3u8 answers a playlist"
         ),
     )
 
@@ -398,6 +442,11 @@ def run(server: Server) -> Probe:
     encoding = server.get("/System/Configuration/encoding")
     allowed = encoding.get("AllowOnDemandMetadataBasedKeyframeExtractionForExtensions")
     probe.observe("  keyframe extraction allowed for", f"{allowed}")
+    bucketed = source.container.lower() in {one.lower() for one in allowed or []}
+    probe.observe(
+        "  so a copy of this source is",
+        "bucketed on its own keyframes" if bucketed else "an equal grid over the runtime",
+    )
 
     checks: list[bool] = []
     sessions: list[str] = []
@@ -439,7 +488,7 @@ def run(server: Server) -> Probe:
         checks.append(status == 200 and len(body) > 0)
 
         play_session_id, playlists, shape_ok = _session(
-            server, source, _copy_profile(source), "copy", probe
+            server, source, _copy_profile(source), "copy", probe, expect_uniform=not bucketed
         )
         sessions.append(play_session_id)
         checks.append(shape_ok)
@@ -483,14 +532,17 @@ def run(server: Server) -> Probe:
     probe.note(
         "The two sessions' segment durations differ (the re-encode's boundaries are the "
         "forced-keyframe cadence, the copy's follow the source), which is why the assertion is "
-        "uniformity within a session, never a particular number of seconds."
+        "uniformity within a session, never a particular number of seconds - and why it is not "
+        "asserted at all for a copy of a container the operator permits keyframe extraction for, "
+        "where the reference's own answer is a bucketed playlist."
     )
 
     if all(checks):
         probe.conclude(
-            "as documented: predicted complete playlists, uniform bodies with a short tail, "
-            "per-segment tick parameters, sized range-capable segments, byte-identical "
-            "retries, out-of-order service",
+            "as documented: predicted complete playlists, bodies of one duration with a short "
+            "tail wherever the path lays a grid, per-segment tick parameters, sized "
+            "range-capable segments, byte-identical retries, out-of-order service, and the "
+            "same three refusals on both playlist routes",
             matches_documentation=True,
         )
     else:

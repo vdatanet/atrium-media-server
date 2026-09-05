@@ -15,7 +15,9 @@ master, then the variant. Only the round trip can show that T5's URL and T10's c
 wiring, the headers, and the three refusals.
 
 `[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]` is the measurement behind every
-expected value.
+expected value, except the refusals' `main.m3u8` halves: three of the four rows had only ever been
+sent to `master.m3u8` or to `main.m3u8` and not to both, and the missing halves were measured on
+2026-09-05 `[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-09-05]`.
 """
 
 from __future__ import annotations
@@ -481,13 +483,16 @@ async def test_an_item_nothing_holds_is_the_third_error_shape(
     assert answered.content == CONTROLLER_ERROR_BODY
 
 
+@pytest.mark.parametrize("route", ["master.m3u8", "main.m3u8"])
 async def test_a_media_source_id_naming_no_source_is_the_same_body_at_400(
-    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld]
+    client: httpx.AsyncClient, served: tuple[FastAPI, ScannedMediaWorld], route: str
 ) -> None:
+    """Both routes, because the row had only ever been sent to `master.m3u8`: asked of the
+    variant too on 2026-09-05, the reference answers the same `400` and the same 25 bytes."""
     item = served[1].of(LONG_TAKE)
 
     answered = await client.get(
-        f"/Videos/{item.id}/master.m3u8", params={"mediaSourceId": UNKNOWN_ITEM}, headers=HEADERS
+        f"/Videos/{item.id}/{route}", params={"mediaSourceId": UNKNOWN_ITEM}, headers=HEADERS
     )
 
     assert answered.status_code == 400
@@ -500,7 +505,12 @@ async def test_the_playlists_require_a_token_where_their_siblings_require_none(
 ) -> None:
     """The split behaviours section 2.10 records, from the other side: the four `stream` routes
     answer `200` to a request carrying nothing and these two answer the empty `401`, because the
-    reference's whole HLS controller carries `[Authorize]` and its stream actions do not."""
+    reference's whole HLS controller carries `[Authorize]` and its stream actions do not.
+
+    Both routes have been sent one now. `main.m3u8` had never been asked without a credential and
+    its answer was the attribute read in the source; measured on 2026-09-05 it is the same empty
+    `401` `[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-09-05]`.
+    """
     item = served[1].of(LONG_TAKE)
 
     answered = await unauthenticated.get(f"/Videos/{item.id}/{route}")

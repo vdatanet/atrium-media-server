@@ -1175,14 +1175,24 @@ HLS controller carries the authorization attribute, and the segment action is on
 controller, where the stream actions carry none `[source:
 Jellyfin.Api/Controllers/DynamicHlsController.cs:39-41, 1102-1106 @ v10.11.11]`.
 
-**Two of the three were sent without a credential; the third was not.** `master.m3u8` answered the
-empty `401` in the playlist run `[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-08-29]` and
-the segment route answered it in the session run `[probe: tools/probe_transcode_session.py,
-Jellyfin 10.11.11, 2026-08-29]`. **Nothing has ever sent `main.m3u8` without one** — the playlist
-run's tokenless row is `master.m3u8`'s alone — so for that route the reference's answer is the
-controller attribute read in the source and not a measurement, and it is written that way here
-rather than folded into the two beside it. Closing that is one tokenless request in
-`probe_hls.py`, against a live server, which is why it is stated rather than taken.
+**All three have now been sent without a credential, and the third was the last to be asked.**
+`master.m3u8` answered the empty `401` in the playlist run of 2026-08-29 and the segment route
+answered it in the session run of the same day `[probe: tools/probe_transcode_session.py, Jellyfin
+10.11.11, 2026-08-29]`; **`main.m3u8` had never been sent one at all** — that run's tokenless row
+was `master.m3u8`'s alone — so until 2026-09-05 this entry gave the reference's answer for that
+route as the controller attribute read in the source rather than as a measurement, and said so
+here rather than folding it into the two beside it. The request it named as the way to close that
+was made: `main.m3u8` answers the same empty `401`, zero bytes and no `Content-Type`
+`[probe: tools/probe_hls.py, Jellyfin 10.11.11, 2026-09-05]`. The reading and the measurement
+agree, which is worth recording in a register where they have disagreed before, and the source
+citation above stays as the *reason* the three routes answer alike.
+
+*(The same run found the one place these two routes do not answer alike, which is not a credential
+question and belongs to the route rather than to this entry: `master.m3u8` declares `mediaSourceId`
+required and `main.m3u8` declares it optional, so a request stripped of its whole query is problem
+details on the first and a playlist on the second — measured on both, and
+[008 §3.7](../../specs/008-playback-negotiation-and-delivery/spec.md) carries it with the decision
+it owes.)*
 
 That does not soften the heading: the routes a bare URL is handed to are the ones that require
 nothing, and a playlist, a segment and a subtitle window are each followed by a player that already
