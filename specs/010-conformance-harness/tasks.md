@@ -2369,6 +2369,38 @@ request more, proving the paused report was stored before the silence begins.
    Runs from before the fix are still not comparable with each other: what earlier runs left is
    still on whatever server they were pointed at.
 
+5. **A `listing:…@0` anchor is not the same item on the two servers when their orderings differ,
+   and one listing's already does.** Measured 2026-09-05
+   `[probe: tools/differential.py's own client, by hand, Jellyfin 10.11.11, 2026-09-05]`:
+
+   | anchor listing | Atrium row 0 | reference row 0 | |
+   |---|---|---|---|
+   | `movies-by-sort-name@0` | 2 Fast 2 Furious | 2 Fast 2 Furious | same (31 vs 32 rows) |
+   | `audio-by-sort-name@0` | By One Artist | Ninety Six Kilohertz | **different** |
+   | `series-by-sort-name@0` | 24 | 24 | same |
+   | `albums-by-sort-name@0` | The Album | The Album | same |
+
+   **This is the failure §4.2's anchor note was written to prevent, arriving by the other door.**
+   That note keeps identifiers out of anchors because *"the two servers derive those differently by
+   design, so a case that carried one would be comparing two different items"* — and a **position**
+   does the same thing whenever the two orderings differ. All 43 listing anchors in
+   `request-cases.yaml` name position `0`, so today it bites exactly one listing and the **twelve
+   cases anchored on it**: the three audio delivery routes and the user-data routes the music client
+   calls. `movies-by-sort-name` holds 31 rows here against 32 there, so it agrees at position 0 by
+   one row.
+
+   **What it cost on the run that found it:** the four audio comparisons reported `500` here against
+   `200` there, which reads as a delivery defect and is not one — Atrium was asked for the fixture's
+   filler-byte FLAC and the reference for a file it can decode. The `500` is real and is 008's; the
+   *comparison* proves nothing about it.
+
+   Not fixed here, because the remedy is a scope call: an anchor that names a row by something both
+   servers agree on (a path is not available — §4.2 says so — and a name is 003's derivation), or a
+   listing whose order cannot diverge, or a report that says when the two anchors resolved to
+   different items. **The cheapest honest step is the last one**: the run already has both
+   identifiers in hand when it resolves an anchor, and saying *"these two rows are not the same
+   item"* costs one line and turns a silent mis-pairing into a stated one.
+
 4. **Two of the twenty named comparisons are not comparisons.** behaviours §5.2 and §5.6 need a
    second scan on **both** servers; `POST /Library/Refresh` is the reference's and Principle VI
    keeps it out of the surface, so only the reference half can be taken. Both entries carry that
