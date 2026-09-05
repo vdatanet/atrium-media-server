@@ -35,6 +35,7 @@ import shutil
 import socket
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -1274,6 +1275,52 @@ def test_a_body_that_will_not_decode_says_which_server_produced_it() -> None:
 
     assert "the reference produced" in str(refused.value)
     assert "18 bytes" in str(refused.value), "the length is what tells a short body from a bad one"
+
+
+def test_a_case_that_replaces_the_callers_document_needs_a_seat_this_run_owns() -> None:
+    """`request-cases.yaml` said it in prose and nothing read it.
+
+    `replace-configuration` is *"the restricted seat alone: this route REPLACES the caller's
+    configuration rather than merging it, and the only account a run may overwrite is the one it
+    created and destroys"*. That holds on the reference, whose seats the run makes and destroys
+    with it, and fails on the server under test, whose seats are handed in because the three
+    account routes are not in the v1 surface.
+
+    Measured on 2026-09-05: two identical runs against one Atrium answered 708 differences and
+    752, and 36 of the 44 new ones were twelve `Configuration` keys on three endpoints — the first
+    run's write, read back by the second as if it were the server's.
+    """
+    inputs = differential.Inputs(roles=("restricted",))
+    owned = _seat("restricted")
+    borrowed = differential.Seat(
+        role="restricted",
+        atrium=differential.Identity(
+            name="restricted", token="t", user_id="a" * 32, created_by_the_run=False
+        ),
+        reference=differential.Identity(
+            name="restricted", token="t", user_id="b" * 32, created_by_the_run=True
+        ),
+    )
+
+    assert differential.unmet_needs(("owned-seat",), inputs, borrowed), (
+        "a handed-in seat is one the run does not own"
+    )
+    said = differential.unmet_needs(("owned-seat",), inputs, borrowed)[0]
+    assert "atrium" in said and "reference" not in said, "only the side that was handed in"
+    assert "reads it back" in said
+
+    made = differential.Seat(
+        role="restricted",
+        atrium=replace(owned.atrium, created_by_the_run=True),
+        reference=replace(owned.reference, created_by_the_run=True),
+    )
+    assert differential.unmet_needs(("owned-seat",), inputs, made) == (), (
+        "a seat the run made on both sides is one it may overwrite; that is the reference's case"
+    )
+
+    # The report prints a row's needs against the run as a whole, where there is no seat: the
+    # token must read as met there rather than blocking every row it appears on.
+    assert differential.unmet_needs(("owned-seat",), inputs) == ()
 
 
 # -- one case, one issue ---------------------------------------------------------------------

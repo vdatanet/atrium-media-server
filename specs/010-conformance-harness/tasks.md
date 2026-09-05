@@ -582,7 +582,7 @@ row has been shown to reach L3, and both are on the owes list at the end of this
 - [x] **Changes:** new `docs/compatibility/named-comparisons.yaml` — one row per row of spec §3.10,
   **twenty of them since D-6**, each with `id`, `what`, `why_the_sweep_misses_it`, `needs`
   (`identity:restricted`, `identity:playback-denied`, `fixture`, `rescan`, `wait`, `latency`,
-  `bytes`, `twice`), `behaviours` and `runner`,
+  `bytes`, `twice`, `owned-seat`), `behaviours` and `runner`,
   which is `none` until the task that writes it. **`needs` is the field that earns the file**: it is
   what lets a report say *"four outstanding, and three of them because no fixture instance was
   available"*, and what a run consults to decide whether a row is even askable before it counts it
