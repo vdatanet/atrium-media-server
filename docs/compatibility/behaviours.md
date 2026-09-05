@@ -2992,6 +2992,120 @@ paying for a probe run.
 Every one of them is listed here so it is never mistaken for an oversight — including §4.4, which
 stays after its 2026-08-28 withdrawal because the record of an exception outlives the exception.
 
+**Ordered by scope rather than by number**, the way §1 and §2 are. §4.5 comes first because it is
+the only entry here that is about neither a field nor a route but about **every route that takes a
+token**, and a reader who meets it after three entries each about one field or one route will read
+it as a fourth of those. The numbers are stable identifiers; the order is an argument.
+
+### 4.5 `EnableRemoteAccess` is not enforced, on any route
+
+**Scope first, because this is the entry most easily filed under the wrong heading.** It is not a
+`/System/Info` fact. The refusal is made by `DefaultAuthorizationHandler`, which runs under every
+policy that subclasses the default requirement, so it gates **every route that takes a token**.
+`/System/Info` is where the [2026-09-04 audit](../audits/2026-09-04.md)'s H1 happened to find it,
+and the measurement found `/Users/Me` refused in the same breath. Anything built from this entry is
+server-wide or it is not this behaviour.
+
+**Jellyfin does:** refuse `403`, empty body and no content type, when the account behind a valid
+token does not hold `EnableRemoteAccess` **and** the request arrives from an address the server
+does not count as its own local network. Both conditions are needed, which is what makes the row a
+2x2 rather than a permission: on the LAN, an account holding **no** `Enable*` flag at all is
+answered `200`; off it, the same account **with** the flag is answered `200` too. The check runs
+**ahead of the administrator bypass**, so an administrator lacking the flag is refused as well —
+which is what tells a per-route permission from a gate underneath every route
+`[source: Jellyfin.Api/Auth/DefaultAuthorizationPolicy/DefaultAuthorizationHandler.cs:52-88 @ v10.11.11]`.
+The route's own policy refuses nobody: `FirstTimeSetupOrIgnoreParentalControl` admits both roles
+the reference issues, and its one refusing branch needs `Guest`, which no token is ever given
+`[source: Jellyfin.Api/Auth/CustomAuthenticationHandler.cs:53-57 @ v10.11.11]`. The whole 2x2 was
+measured on `/System/Info` and on `/Users/Me`, and **remoteness was proved rather than assumed** —
+`/System/Endpoint`'s own `IsInNetwork` reads `true` before the instance's `LocalNetworkSubnets`
+were narrowed and `false` after
+`[probe: tools/probe_system_info_permission.py, Jellyfin 10.11.11, 2026-09-04]`.
+
+**Depends on it:** no client, and that is the less important half. A client meeting this `403` can
+show an error or fall back; nothing can be built *on* a refusal whose condition the client cannot
+see. **The party who depends on it is the operator**, who cleared the flag in order to restrict an
+account and is entitled to expect that clearing it did something. That is why [§3.0](#30-how-the-decision-is-made)'s
+question — *can a client have built something that being correct would break?* — does not settle
+this one, and why it is an exception here rather than a defect decision in §3.
+
+**Atrium does:** nothing, on any route. The flag is stored and echoed like the other 27 unenforced
+policy properties ([002 §3.5](../../specs/002-authentication-users-and-sessions/spec.md)); no route
+reads it, and no route reads the address a request came from in order to refuse it. There is
+nothing to switch on, either: no setting in this server's network configuration names a subnet or a
+local network, so *"outside the server's own local network"* is not a question Atrium can ask.
+
+**What it costs, and it is not nothing.** A deployment that switches remote access off for an
+account **is not restricted by having done so** — that account is served from any address. And the
+difference is visible in a body as well as in a status: `/Users/Me`, `/Users/{userId}` and
+`/Users/Public` go on reporting `EnableRemoteAccess: false` for an account this server will serve
+from anywhere, so the wire carries a restriction that is not in force. **This is not
+[§4.2](#42-localaddress-does-not-get-an-https-override)'s shape**, and reading it as that shape is
+the mistake this paragraph exists to prevent: there, the configuration under which the reference
+behaves differently cannot exist on Atrium at all, so nobody can be standing where the two servers
+disagree. Here the configuration exists, its value is on the wire, and anyone reaching this server
+from off its network is standing exactly there.
+
+**Why it is accepted anyway, and permanently.** Three arguments, none of them "no client can tell".
+
+*It is a server-wide gate landing in a finished feature, and the gate is the smaller half of what
+it needs.* [001 §3.2](../../specs/001-server-identity-and-discovery/spec.md#32-get-systeminfo--getsysteminfo)'s
+error row is one route's row, and what would satisfy it is a decision taken ahead of every
+authorized route **plus** a definition of *this server's own network* — the reference's
+`LocalNetworkSubnets`, its defaults and its matching rules — arriving in a feature that has been
+`Implemented` since 2026-08-26. The route-level check that would look like closing it would not be
+this behaviour at all.
+
+*Half-enforcing it is worse than not enforcing it, and half is all v1 could enforce.* The only
+address this server has is the one the connection arrived on — read today for `LocalAddress`'s
+third tier ([§2.3](#23-localaddress-is-one-string-and-may-be-https)) and for a session's
+`RemoteEndPoint`, and for nothing else. v1 reads no forwarded header and has no trusted-proxy
+configuration. In precisely the deployment where this flag would matter — a server reachable from
+outside — the request has crossed a proxy, a tunnel or a NAT, and a gate built on that address
+either counts every caller local, which enforces nothing while announcing that it does, or counts
+every caller remote, which locks the account out of the deployment it was configured for. The first
+is Principle VI's plausible-looking stub, and a security control is the worst thing to ship one of.
+
+*Doing it properly needs a measurement this project has not made.* Principle II: the probe measured
+the refusal's **effect** — which cells refuse, and that the check precedes the administrator bypass.
+It did not measure the **classifier**: what the reference counts as local with nothing configured,
+how `LocalNetworkSubnets` is parsed and matched, or what either does behind a proxy. Building the
+gate from what is known today would put an unmeasured rule on the wire, and an unmeasured rule
+about *who is refused* is the worst kind.
+
+**What a reader must not take from this entry.** Not that the difference is invisible: it is
+visible to the person who set the flag, who is the only person who was looking. Not that Atrium
+restricts where an account may connect from — it restricts what an account may **do** with the
+library, fourteen of the reference's 42 policy properties, and nothing at all about the caller's
+address. An Atrium reachable from a network its operator does not trust is restricted by whatever
+fronts it — a proxy, a VPN, a firewall — and not by this flag. The project's existing position
+points the same way from the other side: the [roadmap](../roadmap.md#v2--the-management-cli) puts
+*"a second authentication path for `local` callers"* out of v2, so *local* has never been an
+authorization category here.
+
+**Revisited when Atrium has a notion of its own network**, which is an event and not a formula: a
+trusted-proxy or forwarded-address configuration is the first thing that would give this server an
+answer to *where did this request come from* worth gating on. On that day the classifier is
+measured before anything is built, the gate lands **once, ahead of every authorized route** rather
+than in the feature that owns the row, and this entry is **withdrawn** the way §4.4 was — its
+reasoning kept underneath the note that ends it, because the record of an exception outlives the
+exception.
+
+**Held by a test rather than only by this section.** 001's AC-15 asserts Atrium's answer on both
+measured routes, for an administrator and a non-administrator, from an address on no private
+network — with the flag reading `false` in the same body, so the cost is asserted beside the
+divergence — plus the structural half: the flag is in the carried set and in neither honoured set,
+and no network setting names a subnet or a local network. An exception that lives only in a
+document is one refactor away from becoming an accident.
+
+**Where else this is written down.** [001 §3.2](../../specs/001-server-identity-and-discovery/spec.md#32-get-systeminfo--getsysteminfo)
+carries the reference's row, this decision and AC-15;
+[002 §3.5](../../specs/002-authentication-users-and-sessions/spec.md) carries the corrected ground
+for the unenforced set, which this measurement falsified — *the unenforced flags all gate features
+v1 does not have* was the reason the whole set was accepted, and this flag gates a feature v1 has.
+It left [§5](#5-accepted-gaps-in-v1)'s policy row on 2026-09-05 for that reason: a gap is something
+not done yet, and this is not.
+
 ### 4.1 Atrium identifies as Jellyfin on the fields clients parse
 
 `ProductName: "Jellyfin Server"` and a real `10.11.x` version string. Full reasoning in
@@ -3117,7 +3231,7 @@ undocumented bug.
 |---|---|---|
 | **Tier 3 query parameters ignored** ([005 §3.3](../../specs/005-item-query-api/spec.md)) | A filter that does not narrow — more items than asked for | The ignored-parameter report ([010 §3.6](../../specs/010-conformance-harness/spec.md)); anything real clients send gets promoted |
 | **Item fields outside the observed union omitted** ([005 §3.2](../../specs/005-item-query-api/spec.md)) | A field absent that the reference sends. **Narrowed on 2026-09-03, not closed.** The key-set pass ran, and what it found on a **full body** and a `/UserViews` row was twelve properties, of which eight now travel (005 §3.2's wide-width table). What is left on that width is `CanDelete` — deliberately not sent, because it would advertise a deletion [§4.3](#43-delete-itemsitemid-refuses-to-delete-media) refuses — and `DisplayPreferencesId`, a digest of the reference's own display-preferences key. Beside them: `Trickplay`, `ProductionLocations` and `AirDays` on the types that carry them, the eight by-name counts on a `MusicArtist` (`AlbumCount`, `SongCount` and their six siblings), `SeriesStudio` on a season and an episode, `HasLyrics` on a track — `false` here and `true` beside an `.lrc` there, so a constant would be wrong rather than absent — and `CumulativeRunTimeTicks` and a rolled-up `RunTimeTicks` on a music container. On a **list row**, `SeasonName` was the only one and it now travels `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-03]` | The differential's key-set pass, which exists mainly for this — **joined item by item and not row position by row position**, which is the half the first sweep got wrong: a listing ordered by a key the two servers disagree about is a listing whose rows do not line up, and it reported `Album`, `IndexNumber`, `ParentIndexNumber`, `Artists`, `ArtistItems` and `AlbumArtists` as fields Atrium sends and the reference does not, every one of which disappears under the join. What is left of the row is one tranche per width, each with its own measurement |
-| **Policy flags stored but unenforced** ([002 §3.5](../../specs/002-authentication-users-and-sessions/spec.md)) | A restriction that does not restrict. **Narrowed on 2026-09-04, and the narrowing is not in this row's favour**: the ground for accepting the set was that every unenforced flag gates a feature v1 lacks, and one of them does not. `EnableRemoteAccess` gates every authorized route the reference serves — an account without it is refused `403` with an empty body, from any address outside the server's own local network, and an **administrator** without it is refused too, because the check runs ahead of the administrator bypass. Measured on `/System/Info` and on `/Users/Me`, in the whole 2x2 of local-or-remote against flag-held-or-not `[probe: tools/probe_system_info_permission.py, Jellyfin 10.11.11, 2026-09-04]`. So this is not a restriction that restricts nothing observable: it is a refusal Atrium does not make, on every route that takes a token, visible to any client reaching this server from off its LAN | For the other 27, unchanged: each is enforced in the change that adds its feature. **For `EnableRemoteAccess` the mechanism is not yet chosen, and choosing it is a Principle I scope call rather than a task's** — it is a server-wide gate ahead of every authorized route plus a definition of "this server's own network" that Atrium does not have today, landing in an already-implemented feature. It is the open half of the 2026-09-04 audit's [H1](../audits/2026-09-04.md), whose box stays unticked until it is decided |
+| **Policy flags stored but unenforced** ([002 §3.5](../../specs/002-authentication-users-and-sessions/spec.md)) | A restriction that does not restrict. **Twenty-seven flags since 2026-09-05, not twenty-eight.** `EnableRemoteAccess` was the one that did not fit this row's ground: it gates a feature v1 **has**, and the reference refuses an account without it — `403`, empty body — on every route that takes a token, from any address outside the server's own local network, an administrator included `[probe: tools/probe_system_info_permission.py, Jellyfin 10.11.11, 2026-09-04]`. That is not a shortfall waiting for a mechanism, and on 2026-09-05 it stopped being filed as one: it is a **deliberate exception**, with what it costs written out at [§4.5](#45-enableremoteaccess-is-not-enforced-on-any-route). What is left in this row is the original ground, now true of everything it covers: each of the twenty-seven gates a feature v1 does not have (Live TV, sync, remote control), and enforcing *you may not sync* on a server that never syncs is not observable | Each is enforced in the change that adds its feature. **This row lost a flag and not a row**, which is why the paragraph below still says only one row has ever left this table: nothing closed `EnableRemoteAccess` — a decision moved it to §4, where the argument is that the gate is server-wide, that half of it is all v1 could enforce, and that the classifier it needs has not been measured |
 | **Image decoration parameters ignored** ([006 §3.2](../../specs/006-images/spec.md)) | `percentPlayed`, `blur`, `foregroundLayer` have no effect | Implement if the differential shows a client sending them |
 | **No subtitle burn-in** ([011 §2](../../specs/011-subtitle-delivery/spec.md#2-scope)) | A track whose negotiated delivery method is `Encode` is announced as burned in and is not: the reference paints those cues into the frames it produces and Atrium produces the same frames without them. It is not a rare branch — `Encode` is the reference's per-stream answer for **every** track no declared subtitle profile fits, which is every image track under a text profile and every track for a profile that declares nothing `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]` — and naming such a track costs the source its direct play on both servers, so the client is pushed onto the transcode that then carries nothing. A client whose profile names a subtitle format it can take never reaches it | A text-rendering stack — fonts, ASS positioning, shaping — and a second filter path, which is the exclusion row the [roadmap](../roadmap.md#out-of-scope-and-why) has carried since before 001. *This row is what was left of "no subtitle delivery at all" when [011](../../specs/011-subtitle-delivery/spec.md) closed the rest of it on 2026-08-31: the manifest announces every text track, the sidecars are found and served, and `Encode` is the one answer this server says and does not do. 011 T12 narrowed the row rather than deleting it, because 011 §2 and §7's OQ-5 both call this gap "already recorded" and deleting it would have made two accepted documents false* |
 | **No per-user subtitle preference, so no default subtitle track is proposed** ([011 §2, §3.3](../../specs/011-subtitle-delivery/spec.md)) | A negotiation that names no subtitle index answers `DefaultSubtitleStreamIndex` absent, where a stock reference proposes a track. It is the reference's own answer for a user whose subtitle mode is `None` — but a *new* reference user's mode is `Default`, not `None` `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]` | The two user settings the choice is a function of: a subtitle mode with five values and a language preference list. Both are a per-user feature, which is what 011 §2 excludes; a client that names the track it wants is unaffected, and both analysed clients name it |

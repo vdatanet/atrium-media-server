@@ -138,6 +138,24 @@ def test_the_advertised_scheme_does_not_follow_the_request() -> None:
     assert resolve(settings, request_scheme="https").startswith("http://")
 
 
+def test_there_is_no_local_network_to_gate_on() -> None:
+    """behaviours 4.5's structural half, and why that exception is permanent rather than owed.
+
+    The reference refuses a token whose account lacks `EnableRemoteAccess` when the request comes
+    from outside `LocalNetworkSubnets`. Nothing here answers the question that refusal asks: no
+    setting names a network, a subnet or a LAN, so there is nothing an operator could configure
+    that would make Atrium classify a caller as remote.
+
+    Asserted rather than written down, because "we chose not to" and "nobody has got to it" read
+    identically in a document and differently in a settings model.
+    """
+    assert not any(
+        word in name.lower()
+        for name in NetworkSettings.model_fields
+        for word in ("subnet", "network", "lan", "remote")
+    )
+
+
 def test_there_is_no_certificate_path_that_could_override_it() -> None:
     """A divergence that only lives in a document is one refactor away from disappearing.
 

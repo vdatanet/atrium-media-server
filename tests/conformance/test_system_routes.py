@@ -2,8 +2,8 @@
 """`/System` at the HTTP boundary - the shape a client actually receives.
 
 Acceptance criteria 1, 2, 3, 5 and 6 of specs/001-server-identity-and-discovery/spec.md live
-here, plus AC-7's wire half. AC-9 moved to test_golden.py, for the reason written where it used
-to be.
+here, plus AC-7's wire half and AC-15's. AC-9 moved to test_golden.py, for the reason written
+where it used to be.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from atrium.config.paths import DataPaths
 from atrium.config.state import ServerState
 from atrium.domain.user import User
 from atrium.server import create_app
+from tests.conformance.test_user_routes import log_in, make_user
 
 pytestmark = pytest.mark.conformance
 
@@ -187,6 +188,70 @@ async def test_system_info_claims_no_capability_it_lacks(
     body = (await client.get("/System/Info")).json()
     assert body["SupportsLibraryMonitor"] is False
     assert body["CanSelfRestart"] is False
+
+
+# --------------------------------------------------------------------------------------------
+# AC-15 - the refusal this server does not make
+#
+# behaviours 4.5. The reference gates every route that takes a token on `EnableRemoteAccess`,
+# from an address outside its own local network, and ahead of the administrator bypass
+# `[probe: tools/probe_system_info_permission.py, Jellyfin 10.11.11, 2026-09-04]`. Atrium makes
+# no such refusal anywhere, and that is a deliberate exception rather than an unwritten task, so
+# it is asserted here in the shape a client sees rather than only argued in a document.
+#
+# Both routes the probe measured are asked, because the divergence is not this route's: the
+# refusal it found on `/System/Info` is one the reference makes on `/Users/Me` in the same breath.
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("elevated", [False, True], ids=["a user", "an administrator"])
+async def test_the_remote_access_flag_refuses_nobody_on_either_route(
+    app: FastAPI, client: httpx.AsyncClient, elevated: bool
+) -> None:
+    """The flag is on the wire saying `false`, and the account is served anyway.
+
+    Both halves matter. That the account is served is the divergence; that its own policy goes on
+    announcing the restriction is what the divergence costs, and asserting only the status would
+    leave the second half unwritten.
+
+    The administrator case is the probe's sharpest cell: there the check runs *ahead* of the
+    administrator bypass, so an administrator without the flag is refused too. Here there is no
+    check to run ahead of anything, and the answer is the same for both seats.
+    """
+    make_user(
+        app, name="Ada", is_administrator=elevated, policy_extra={"EnableRemoteAccess": False}
+    )
+    token = (await log_in(client, name="Ada")).json()["AccessToken"]
+    headers = {"X-Emby-Token": token}
+
+    assert (await client.get("/System/Info", headers=headers)).status_code == 200
+
+    me = await client.get("/Users/Me", headers=headers)
+    assert me.status_code == 200
+    assert me.json()["Policy"]["EnableRemoteAccess"] is False
+
+
+async def test_the_address_a_request_arrives_from_gates_nothing(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """The other axis of the probe's 2x2, and the one v1 has no way to read.
+
+    The reference's refusal needs both: the flag absent *and* the caller outside the server's own
+    local network. This asks the same account from an address on no private network at all - a
+    documentation range, chosen so no test machine's own addressing can make it accidentally
+    local - and gets the same `200`, which is the whole of what §4.5 accepts.
+    """
+    make_user(app, name="Ada", policy_extra={"EnableRemoteAccess": False})
+    token = (await log_in(client, name="Ada")).json()["AccessToken"]
+    headers = {"X-Emby-Token": token}
+
+    transport = httpx.ASGITransport(app=app, client=("198.51.100.7", 51234))
+    async with httpx.AsyncClient(transport=transport, base_url="http://atrium:8096") as remote:
+        assert (await remote.get("/System/Info", headers=headers)).status_code == 200
+        elsewhere = await remote.get("/Users/Me", headers=headers)
+
+    assert elsewhere.status_code == 200
+    assert elsewhere.json()["Policy"]["EnableRemoteAccess"] is False
 
 
 # --------------------------------------------------------------------------------------------

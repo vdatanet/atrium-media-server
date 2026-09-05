@@ -5,7 +5,7 @@ status: Implemented
 created: 2026-08-26
 updated: 2026-09-05
 accepted: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6; by T12 - section 3.8; by T18 - AC-3 and AC-10. 2026-08-28 by the L2 probe fold - section 3.8: an unknown capabilities property is dropped from the session's echo, not kept. 2026-09-01 by tools/probe_user_read.py - section 3.7, AC-7 and the section 6 matrix: GET /Users/{userId} refuses no authenticated caller, the 403 it stated with no provenance is withdrawn, and the two identifiers that name nobody are a 404 and a 400 rather than that same refusal; and 2026-09-01 at the closing audit - OQ-5 is narrowed to the three refusals still unmeasurable without costing somebody's account a lockout counter. It also held the `403` for insufficient permission and the shape of both `403`s, on the premise that the only account available to measure with is an administrator; three probes now create throwaway non-administrators, and 009 T2 measured both shapes, so that half was a debt the table was still reporting after it had been paid. And 2026-09-05 by the 2026-09-04 audit's corrective task C6 - section 5 gains AC-14 for section 3.2's grammar table, which was implemented and tested row for row and named by no criterion, and section 6's claim that the grammar is proven under AC-3 is corrected: AC-3 is the five token mechanisms, and none of the tests it names reads a header's grammar; and 2026-09-05 by the same audit's corrective task C8 - section 3.4's empty-`/Users/Public` claim carries the `tools/probe_public_users.py` discharge of 2026-09-02 in place of the `prior-probe` it kept after the register struck that row, and states the half that discharge added: `[]` is what a server nobody has configured already answers, because `IsHidden` is true on the wizard's own administrator
+amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6; by T12 - section 3.8; by T18 - AC-3 and AC-10. 2026-08-28 by the L2 probe fold - section 3.8: an unknown capabilities property is dropped from the session's echo, not kept. 2026-09-01 by tools/probe_user_read.py - section 3.7, AC-7 and the section 6 matrix: GET /Users/{userId} refuses no authenticated caller, the 403 it stated with no provenance is withdrawn, and the two identifiers that name nobody are a 404 and a 400 rather than that same refusal; and 2026-09-01 at the closing audit - OQ-5 is narrowed to the three refusals still unmeasurable without costing somebody's account a lockout counter. It also held the `403` for insufficient permission and the shape of both `403`s, on the premise that the only account available to measure with is an administrator; three probes now create throwaway non-administrators, and 009 T2 measured both shapes, so that half was a debt the table was still reporting after it had been paid. And 2026-09-05 by the 2026-09-04 audit's corrective task C6 - section 5 gains AC-14 for section 3.2's grammar table, which was implemented and tested row for row and named by no criterion, and section 6's claim that the grammar is proven under AC-3 is corrected: AC-3 is the five token mechanisms, and none of the tests it names reads a header's grammar; and 2026-09-05 by the same audit's corrective task C8 - section 3.4's empty-`/Users/Public` claim carries the `tools/probe_public_users.py` discharge of 2026-09-02 in place of the `prior-probe` it kept after the register struck that row, and states the half that discharge added: `[]` is what a server nobody has configured already answers, because `IsHidden` is true on the wizard's own administrator; and 2026-09-05 by that audit's H1 - section 3.5's stated ground for the unenforced policy set is corrected rather than excepted: it was *the unenforced flags all gate features v1 does not have*, and `EnableRemoteAccess` gates one v1 has, so the set is accepted for two reasons and the twenty-eighth is a deliberate divergence argued at behaviours section 4.5 rather than a gap
 depends_on: [001]
 ---
 
@@ -268,25 +268,36 @@ row of this table and the amendment below it:
 | `MaxActiveSessions` | Cap on concurrent sessions; `0` means unlimited, and `0` is what the reference sends `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]` |
 | `EnableVideoPlaybackTranscoding`, `EnableAudioPlaybackTranscoding`, `EnablePlaybackRemuxing` | Whether the negotiation may answer this user with a transcode or a remux ([008 §3.3](../008-playback-negotiation-and-delivery/spec.md#33-the-decision)) `[spec: UserPolicy]` |
 
-**The other 28 are stored and echoed unchanged.** **This is a known, bounded gap**, not an oversight: a
-flag returned but unenforced is a delta a client could observe by testing the restriction. It is
-accepted for v1 because the unenforced flags all gate features v1 does not have (Live TV, sync,
-remote control) — enforcing "you may not sync" on a server that never syncs is not observable. Any
-flag whose feature arrives must be enforced in the same change.
+**The other 28 are stored and echoed unchanged**, and a flag returned but unenforced is a delta a
+client could observe by testing the restriction. **They are accepted for two reasons and not one**,
+which is a correction to what this paragraph claimed rather than an exception to it: until
+2026-09-05 it read *"the unenforced flags all gate features v1 does not have"*, and that sentence
+was false of one of them.
 
-> **One of the 28 does not fit that ground, measured 2026-09-04.** `EnableRemoteAccess` gates no
-> absent feature: the reference refuses **every** route that takes a token — measured on
-> `/System/Info` and on `/Users/Me` — with an empty `403` when the account lacks the flag and the
-> request arrives from outside the server's own local network, and it refuses an **administrator**
-> the same way, because the check runs ahead of the administrator bypass. From the local network
-> an account holding no permission at all is answered `200`, with or without the flag.
-> `[probe: tools/probe_system_info_permission.py, Jellyfin 10.11.11, 2026-09-04]` So the delta here
-> is observable rather than not, and the rule above — *enforced in the change that adds its
-> feature* — has no feature to attach to. What enforcing it would take is a server-wide gate ahead
-> of every authenticated route and a definition of "this server's own network" that v1 does not
-> have; that is a scope decision and not this paragraph's to take. Recorded at
-> [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) and left open as
-> the 2026-09-04 audit's H1.
+**Twenty-seven of them gate features v1 does not have** (Live TV, sync, remote control). Enforcing
+"you may not sync" on a server that never syncs is not observable, so those are a known, bounded
+gap ([behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)), and any flag
+whose feature arrives must be enforced in the same change — which is the rule, and it still holds
+for all twenty-seven.
+
+**The twenty-eighth is `EnableRemoteAccess`, and it is a deliberate divergence rather than a gap.**
+It gates a feature v1 **has** — being reachable — so the ground above never covered it and there is
+no arriving feature for the rule to attach to. Measured 2026-09-04: the reference refuses **every**
+route that takes a token, on `/System/Info` and on `/Users/Me` alike, with an empty `403` when the
+account lacks the flag and the request arrives from outside the server's own local network, and it
+refuses an **administrator** the same way, because the check runs ahead of the administrator
+bypass. From the local network an account holding no permission at all is answered `200`, with or
+without the flag. `[probe: tools/probe_system_info_permission.py, Jellyfin 10.11.11, 2026-09-04]`
+
+**Decided 2026-09-05, and the decision is to accept the divergence permanently**, argued with its
+cost at
+[behaviours §4.5](../../docs/compatibility/behaviours.md#45-enableremoteaccess-is-not-enforced-on-any-route):
+a deployment that switches remote access off for an account is not restricted by having done so,
+and this table's own object goes on reporting the restriction. What enforcing it would take is a
+server-wide gate ahead of every authenticated route, a definition of "this server's own network"
+that v1 does not have, and a measurement of the reference's classifier that nobody has taken — and
+half of it would be worse than none. That closed the 2026-09-04 audit's H1; the flag left
+behaviours §5's policy row in the same change, because a gap is something not done yet.
 
 **The three transcoding flags moved into the enforced set on 2026-08-27**, when transcoding entered
 v1 ([roadmap](../../docs/roadmap.md#in-scope)). That is this rule working as written rather than an

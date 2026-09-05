@@ -120,6 +120,20 @@ def test_the_reference_sends_forty_two_and_eleven_are_honoured() -> None:
     assert set(document) - HONOURED == set(CARRIED)
 
 
+def test_the_remote_access_flag_is_carried_and_never_read() -> None:
+    """The one carried property whose feature this server *has*. behaviours 4.5.
+
+    The other 27 gate something v1 does not do, so storing them and reading none of them is
+    unobservable. This one gates being reachable, which v1 does, and it is accepted as a
+    deliberate exception rather than as a gap - which means the split has to keep putting it on
+    the side nothing enforces, deliberately, and a future contributor promoting it to `HONOURED`
+    has to come past this line.
+    """
+    assert "EnableRemoteAccess" in CARRIED
+    assert "EnableRemoteAccess" not in HONOURED
+    assert "EnableRemoteAccess" not in HONOURED_COLUMNS
+
+
 # --------------------------------------------------------------------------------------------
 # The round trip
 # --------------------------------------------------------------------------------------------
