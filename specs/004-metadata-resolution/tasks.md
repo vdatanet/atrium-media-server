@@ -781,3 +781,32 @@ because its whole cache story hangs off tags this feature computes.
 `refresh_pending` retry channel if probing ever needs to request a metadata revisit.
 
 All of these are cheap here and expensive later.
+
+**The reference holds a `Person` row for a music artist, and this refresh makes none — measured on
+2026-09-05, and it is a third thing rather than either half of §5.3.**
+[Behaviours §5.3](../../docs/compatibility/behaviours.md#53-an-artist-in-two-music-libraries-is-two-rows)
+records two divergences already: *which* row an artist is (a per-library tree item here, a
+server-wide by-name row there), and a performer who is nobody's album artist having a name on the
+track and no artist item behind it. This is neither. The reference holds **both** rows for the same
+name, under **different identifiers**
+`[probe: tools/differential.py --fixture with tools/_reference.py, Jellyfin 10.11.11, 2026-09-05]`:
+
+```
+Type=Person       Id=60d400d7472579966fe9a28833d39db8  Name='The Artist'
+Type=MusicArtist  Id=57fbc6a4ad99cdf488c80555e927369e  Name='The Artist'
+```
+
+**Two measurements go beside it, because they are what makes the row hard to find at all.**
+`GET /Persons` answers **0 rows** on that same server, and every audio item comes back with
+`People: []` — so these `Person` rows are reachable through `/Search/Hints` and not through the
+route named after them, and a probe that asked `/Persons` would have concluded they do not exist.
+And the fixture's three `.nfo` sidecars declare **no people at all**, so nothing in the tree asks
+for them: the reference derives them from the tags it read.
+
+Atrium answers no `Person` hint for any artist — zero `Person` rows in the database against the
+reference's two for this tree. **Whether to reproduce it is 004's**, and it may be the cheaper half
+of §5.3 rather than another instance of the expensive one: `Person` is already a by-name type here
+(`domain/items.py`, `BY_NAME`) with an identity rule of its own, so a `Person` row per artist name
+needs no identity migration — only a decision about whether `BY_NAME_FIELD` should stop leaving
+`ARTISTS` and `ALBUM_ARTISTS` out, and what a client would do with a row it can find by search and
+not by `/Persons`.
