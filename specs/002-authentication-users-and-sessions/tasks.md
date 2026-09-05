@@ -3,7 +3,7 @@ feature: 002-authentication-users-and-sessions
 title: Authentication, users and sessions — tasks
 status: Implemented
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-09-05
 accepted: 2026-08-26
 started: 2026-08-26
 plan_status_required: Accepted
@@ -897,6 +897,37 @@ untouched; adding 003 is one entry and one dictionary, which is what the restruc
 read out of `specs/README.md`'s status table rather than listed here, so marking 003 `Implemented`
 fails this file until its map is written — at the moment somebody is actually in a position to
 write it, rather than a year later when nobody remembers what the criteria meant.
+
+### Amended — 2026-09-05: the grammar table was proven by nothing, and §6 said otherwise
+
+**The Done note above says the map's value is having to name, for each criterion, the test that
+asserts it. This is the other half of that argument**: a *behaviour* with no criterion is a
+behaviour the map cannot name, and §3.2's grammar table is one. Found as M2 of the
+[2026-09-04 audit](../../docs/audits/2026-09-04.md), one of a class of ten across six features.
+Nine tests in `tests/unit/test_compat_auth.py` — the fifteen-row measured table and the eight
+beside it — hung off no criterion and could have been weakened or renamed without one failing.
+**AC-14** is that table.
+
+**And this one had made a neighbouring sentence false**, which is why it is worth more than a map
+row. §6's last line read *"Table-driven across three route classes, including the precedence pairs
+and the grammar table (AC-3)"*. AC-3 is the five token mechanisms and their precedence order; its
+six mapped tests are all in `tests/conformance/test_auth_mechanisms.py`, and **not one of them
+reads a header's grammar** — no quoting, no ordering, no `Client = "x"`. A reader checking whether
+the grammar was proven would have found a criterion that says nothing about it and stopped there.
+§6 now names AC-14 for the grammar and AC-3 for the pairs, and says the attribution was corrected
+rather than quietly restating it.
+
+**Two of the file's tests are deliberately not mapped, and the reason is provenance.**
+`test_a_quoted_value_may_contain_a_comma` is Atrium's parser keeping a comma inside quotes, and
+`tools/probe_auth_mechanisms.py` never asked the reference that question — every row of §3.2's
+table is a measurement, so a criterion claiming parity there would claim something nobody has
+measured, and a row cannot be added to a measured table without a probe. It is a real gap and is
+recorded here rather than papered over with a criterion. `test_the_token_stays_out_of_the_repr` is
+about a token in a `repr`, not about a grammar: AC-11 is passwords, so that one names a claim no
+criterion in this feature makes either.
+
+**Nothing under `src/` was touched and no measured row moved.** §5 now numbers fourteen criteria
+and `FEATURE_002` names tests for all of them.
 
 ---
 

@@ -53,6 +53,10 @@ SPECS = Path(__file__).resolve().parents[2] / "specs"
 
 #: Criterion -> the tests that assert it. A criterion whose only coverage is indirect names the
 #: test that covers it indirectly and says so, rather than being left out.
+#:
+#: AC-14 is audit 2026-09-04's M1: section 3.2's value table had two tests and a golden and no
+#: criterion, so nothing here could name them. It is the one criterion in this feature whose last
+#: clause is a *golden* rather than a field - which is what makes it a claim about the whole body.
 FEATURE_001: dict[int, tuple[str, ...]] = {
     1: (
         "tests.conformance.test_golden:test_public_system_info",
@@ -112,11 +116,25 @@ FEATURE_001: dict[int, tuple[str, ...]] = {
         "tests.unit.test_net_address:test_the_request_host_is_used_when_configured",
         "tests.unit.test_net_address:test_the_default_port_is_omitted",
     ),
+    14: (
+        # The two values a client acts on - a capability claimed and a property absent - and then
+        # the whole body, which is where the other eighteen live. AC-5 asserts the two statuses and
+        # the seven *shared* fields; every value of section 3.2's table is one of the twenty that
+        # are not shared, so none of these three was reachable from it.
+        "tests.conformance.test_system_routes:test_system_info_claims_no_capability_it_lacks",
+        "tests.conformance.test_system_routes:test_system_info_omits_the_null_property",
+        "tests.conformance.test_golden:test_system_info",
+    ),
 }
 
 
 #: Feature 002. Three criteria are asserted at the HTTP boundary rather than against the function
 #: behind the route, because Principle VIII does not accept them anywhere else.
+#:
+#: AC-14 is audit 2026-09-04's M2, and it is the opposite case on purpose: the grammar is a
+#: property of the parser every route calls, and the boundary tests AC-3 names prove the routes
+#: call it. Section 6 said the grammar table was proven under AC-3 - it was proven by nothing, and
+#: none of AC-3's six tests reads a header's grammar at all.
 FEATURE_002: dict[int, tuple[str, ...]] = {
     1: (
         "tests.conformance.test_user_routes:test_valid_credentials_answer_with_a_token_a_user_and_a_session",
@@ -208,6 +226,23 @@ FEATURE_002: dict[int, tuple[str, ...]] = {
         "tests.unit.test_session_registry:test_a_flush_writes_both_the_session_and_the_token",
         "tests.conformance.test_session_routes:test_posting_replaces_rather_than_merges",
         "tests.conformance.test_golden_users:test_post_capabilities_answers_with_no_body",
+    ),
+    14: (
+        # The measured table itself, fifteen rows, and the strictness spelled out again at the
+        # parser beneath it - `Token = "x"` yields no components at all, which is the difference
+        # between refusing a header and reading nothing out of one.
+        "tests.unit.test_compat_auth:test_the_grammar_matches_the_reference_row_for_row",
+        "tests.unit.test_compat_auth:test_being_kinder_than_the_reference_would_be_the_delta",
+        "tests.unit.test_compat_auth:test_a_header_with_no_scheme_reads_as_nothing",
+        "tests.unit.test_compat_auth:test_the_four_components_are_read",
+        "tests.unit.test_compat_auth:test_an_unknown_component_is_ignored_rather_than_rejected",
+        "tests.unit.test_compat_auth:test_the_client_header_is_read_from_either_name",
+        # The `DeviceId` half, which is a rule about *where* rather than about spelling: fatal on
+        # one route and on no other. Both directions, because a parser that raised would have
+        # refused requests the reference serves.
+        "tests.unit.test_compat_auth:test_a_missing_device_id_is_not_fatal_in_general",
+        "tests.unit.test_compat_auth:test_authentication_requires_a_device_id_and_refuses_without_one",
+        "tests.unit.test_compat_auth:test_a_good_header_passes_the_authentication_rule",
     ),
 }
 
@@ -415,6 +450,18 @@ FEATURE_004: dict[int, tuple[str, ...]] = {
         "tests.metadata.test_local_refresh:test_an_artist_whose_tracks_have_no_album_directory_reads_their_own_sidecar",
         "tests.metadata.test_local_refresh:test_a_season_missing_one_episode_keeps_its_own_directory",
         "tests.metadata.test_local_refresh:test_a_container_never_borrows_a_directory_above_the_library_root",
+    ),
+    # Audit 2026-09-04's M3: section 3.6's third row, where the other two are AC-10 and AC-11. The
+    # pairing holds here as it does above - the engine proves the rule, the scan proves it is the
+    # rule being used - and `test_the_matrix` is named twice, under AC-11 for its whole nine cells
+    # and here for the three that are this mode, which are the only assertion anywhere that a
+    # **lock** is honoured under `Local only`.
+    20: (
+        "tests.metadata.test_merge:test_local_only_drops_the_remote_sources_rather_than_behaving_differently",
+        "tests.metadata.test_merge:test_local_only_still_fills_from_a_local_source_under_replace_semantics",
+        "tests.metadata.test_merge:test_the_matrix",
+        "tests.metadata.test_local_refresh:test_local_only_is_the_whole_of_this_slice",
+        "tests.metadata.test_remote_refresh:test_a_local_only_refresh_names_the_providers_it_did_not_consult",
     ),
 }
 
