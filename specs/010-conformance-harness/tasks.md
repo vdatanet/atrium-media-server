@@ -2503,15 +2503,49 @@ request more, proving the paused report was stored before the silence begins.
 
    The shape says these are not new findings but **the same ones pairing differently**: 24 against
    24 on one endpoint, 6 against 6 on another, and `GET /Items/Latest` carrying 77 of them in one
-   run and 83 in the other. Both servers answer identically when asked twice in the cold, so what
-   is left is **the run's own writes landing at different points relative to its reads** — the sweep
-   marks items played while it goes, that listing hides played items, and the interleaving is not
-   identical twice. *The mechanism is inferred from which listings move; it has not been measured.*
+   run and 83 in the other.
+
+   **The first mechanism written here was wrong, and an independent audit measured the real one on
+   2026-09-05.** This entry said the cause was the run's own writes — the sweep marking items
+   played, `/Items/Latest` hiding them — and marked it inferred rather than measured. It is not
+   that: two Atriums built from nothing, **with no differential run against either and nothing
+   written to them**, already disagree on that listing. No play state exists, so play state cannot
+   be the cause.
+
+   What is, checked here against the code and the fixture:
+
+   * `library/scan.py` stamps `DateCreated` with `utc_now()` **once per library at scan time**, not
+     from the file, so every item in a library shares one timestamp and every `SortName` or
+     date ordering falls through to the last key.
+   * That key is the identifier — `db/item_queries` ends its ordering `models.Item.id.asc()`, under
+     a comment that already calls it *"the divergence and the whole of it"*.
+   * `library/identity.for_file` derives that identifier from `(type, library_id, relative_path)`,
+     and `library/config.create` mints `library_id` with `new_id()` **per build**. So a rebuild
+     reshuffles every file-backed identifier, which reshuffles every tie.
+
+   **None of that is an identifier-stability defect**: 003 §3.6 requires stability across rescans of
+   one install, and [behaviours §1.4](../../docs/compatibility/behaviours.md) makes the two servers'
+   identifiers differ by design. The defect is this harness comparing, **by position**, an order
+   that is total on neither server.
 
    **What it costs is the thing a report is for.** Two honest runs of this harness over one tree
    differ by about 8 per cent today, so **comparing one run's report against an earlier one to see
    whether a piece of work helped does not yet work.** That is a stronger reason to settle this
    entry than the litter it started as.
+
+   **The obvious remedy is half already applied and does not reach the rest.** The audit proposed
+   excusing the order of the two listings that move, the way `listing-ordered-at-random` is excused.
+   `listing-ordered-by-a-key-with-ties` **already carries `kind: unordered`** in
+   [allowlist.yaml](../../docs/compatibility/allowlist.yaml) and has since 2026-09-02; its rows are
+   the residue that survives the multiset match, not an order this run failed to excuse. And
+   `GET /Items/Latest` needs more than an order excused: it answers **20 rows of 52 file-backed
+   items**, so a window over an order that is total on neither server does not hold the same items
+   on two builds — the set differs because the order does, and `unordered` compares sets.
+
+   So the choice this entry hands on is sharper than *excuse the order*: either the array is excused
+   whole, which stops comparing a listing two measured clients call, or the orderings are made to
+   agree — and the second is not this feature's, because what makes them disagree is where
+   `DateCreated` comes from ([003's list](../003-library-configuration-and-scanning/tasks.md#what-this-feature-owes-the-next-ones)).
 
 **Where the first kept run's differences went, so nobody triages them twice.** A clean-server run
 on 2026-09-05 answered **703 differences**, and this feature owns none of them: spec §2's rule is
