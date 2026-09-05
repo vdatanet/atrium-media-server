@@ -3,8 +3,9 @@ feature: 001-server-identity-and-discovery
 title: Server identity and discovery
 status: Implemented
 created: 2026-08-26
-updated: 2026-09-04
+updated: 2026-09-05
 accepted: 2026-08-26
+amended: 2026-09-04 by the 2026-09-04 audit's corrective task C1 - section 3.2's uncited refusal row gets the condition its measurement narrowed it to, and says why no criterion accompanies it; and 2026-09-05 by that audit's corrective task C6 - section 3.2's value table is corrected in two rows the golden had always contradicted (`PackageName` is absent rather than empty, `WebPath` is empty rather than a path) and section 5 gains AC-14 for the whole of it, an implemented and golden-tested behaviour no criterion named
 depends_on: []
 ---
 
@@ -146,9 +147,23 @@ Atrium returns the superset with these values:
 | `HasPendingRestart`, `IsShuttingDown`, `CanSelfRestart`, `CanLaunchWebBrowser`, `HasUpdateAvailable` | `false` — Atrium has no self-update or restart capability |
 | `SupportsLibraryMonitor` | `false` in v1 — filesystem watching is not implemented |
 | `WebSocketPortNumber` | The server's own port; v1 serves no WebSocket, but the field is a number clients read unconditionally |
-| `ProgramDataPath`, `CachePath`, `LogPath`, `InternalMetadataPath`, `ItemsByNamePath`, `TranscodingTempPath`, `WebPath` | Real paths from the running configuration |
+| `ProgramDataPath`, `CachePath`, `LogPath`, `InternalMetadataPath`, `ItemsByNamePath`, `TranscodingTempPath` | Real paths from the running configuration |
+| `WebPath` | **The empty string** — v1 ships no web client, so there is no directory to name |
 | `CompletedInstallations`, `CastReceiverApplications` | Empty arrays |
-| `PackageName`, `OperatingSystemDisplayName`, `SystemArchitecture`, `EncoderLocation` | Real values where meaningful, empty string otherwise |
+| `OperatingSystemDisplayName`, `SystemArchitecture`, `EncoderLocation` | Real values where meaningful, empty string otherwise |
+| `PackageName` | **Absent, not empty**: declared, never assigned, and dropped by the one setting that omits every null |
+
+**Two of those rows were corrected on 2026-09-05, by the 2026-09-04 audit's M1** — reading the
+tests and the golden against the table rather than the table against itself. `PackageName` stood
+among the values that are the empty string when they are nothing, and it is not sent at all: the
+property is declared and never assigned, so
+[behaviours §1.7](../../docs/compatibility/behaviours.md#17-a-null-property-is-absent-everywhere-by-one-setting)'s
+single `WhenWritingNull` drops it — which is what the reference does with its own `PackageName`,
+and is the measurement that section rests on
+`[probe: tools/probe_public_info.py, Jellyfin 10.11.11, 2026-08-28]`. `WebPath` stood among the
+paths that are real, and is the empty string. **Neither is a change to what this server sends**:
+`tests/golden/System.Info.json` has carried both since this feature landed, and AC-14 is the
+criterion that finally reads them.
 
 > ⚠️ **Open question OQ-1.** Whether any client branches on `SupportsLibraryMonitor` or
 > `WebSocketPortNumber`. Neither analysed client reads them. Answering it needs the differential
@@ -322,6 +337,18 @@ Everything else in these responses is derived at request time.
 13. With no published URL and the server configured to derive the address from the request, the
     request's own host and scheme come back in `LocalAddress`, with the port omitted when it is
     the scheme's default (§3.4 tier 2). *(Added at the same audit — M28.)*
+14. `GET /System/Info` carries the **values** of §3.2's table and not only the shape AC-5 asserts:
+    the five restart-and-update flags and `SupportsLibraryMonitor` are `false`, because this server
+    claims no capability it lacks and a client told a capability exists behaves differently from
+    one told it does not; `CompletedInstallations` and `CastReceiverApplications` are empty arrays;
+    the six data paths are the running configuration's own and `WebPath` is the empty string;
+    `WebSocketPortNumber` is the port the configuration names; and `PackageName` is **absent** —
+    not `null`, not empty — which is behaviours §1.7's global rule and the property the reference
+    itself declares and does not send. The whole body is held **to the byte** by a golden, which is
+    what makes this a claim about the response rather than about the fields somebody listed: a
+    property added to the model without a value decided here is a diff a reader has to look at.
+    *(Added at the 2026-09-04 audit — M1: the table had two tests and a golden and no criterion,
+    so none of the three could be named in the acceptance map.)*
 
 ## 6. Conformance
 

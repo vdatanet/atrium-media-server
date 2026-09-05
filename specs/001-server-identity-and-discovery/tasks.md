@@ -3,7 +3,7 @@ feature: 001-server-identity-and-discovery
 title: Server identity and discovery — tasks
 status: Implemented
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-09-05
 plan_status_required: Accepted
 plan_status_actual: Implemented
 ---
@@ -799,6 +799,42 @@ anything.
 `/System/Info/Public` now has **two** golden files, because it has two contracts. A client that
 asks for the second and receives the first does not get a degraded response — it gets an empty
 object out of its decoder.
+
+### Amended — 2026-09-05: the value table had a golden and no criterion
+
+**T18 built the map, and the map can only name a behaviour §5 names first.** §3.2's table — what
+`/System/Info` answers in the twenty fields `/System/Info/Public` does not have — was implemented,
+golden-tested and never given a criterion, so `test_system_info_claims_no_capability_it_lacks`,
+`test_system_info_omits_the_null_property` and the `System.Info` golden hung off nothing and could
+have been weakened or renamed without a criterion failing. Found as M1 of the
+[2026-09-04 audit](../../docs/audits/2026-09-04.md), which reports it as one of a class of ten
+across six features: the map checks that a named test *exists* and never that a behaviour *has* a
+name. **AC-14** is that table, and it ends on the golden rather than on the fields — the golden is
+the whole body, so it is the clause that makes the criterion an *every*.
+
+**Reading the tests against the table corrected two of its rows**, which is the reason to read
+them in that order. `PackageName` sat among the values that are the empty string when they are
+nothing, and `test_system_info_omits_the_null_property` asserts it is not sent at all — it is
+declared, never assigned, and dropped by behaviours §1.7's one setting, which is the very
+behaviour `/System/Info` is that section's measured example of. `WebPath` sat among the paths that
+are real, and is the empty string, because v1 ships no web client. Both have been in
+`tests/golden/System.Info.json` since this feature landed: the table was describing a server this
+one has never been, and no byte moved to fix it.
+
+**AC-5 was not generous enough to cover any of this**, which is what makes M1 a gap rather than a
+duplicate: it asserts the two statuses and that the body is a superset agreeing with
+`/System/Info/Public` on the seven shared fields, and every value in §3.2's table is one of the
+twenty fields that are *not* shared.
+
+**One clause of AC-14 is pinned rather than discriminated, and it is named here rather than
+quietly relied on**: the golden fixture's configuration sets `port = 8096`, which is also the
+default, so `WebSocketPortNumber` is the one value in the table an implementation that hardcoded a
+constant would still satisfy. The criterion states it because §3.2 states it and the golden holds
+the byte; what no test separates today is the configured port from the number.
+
+**Nothing under `src/` was touched.** §5 now numbers fourteen criteria and `FEATURE_001` names
+tests for all of them. **H1 is untouched too**: §3.2's refusal row still carries no criterion, on
+purpose and for C1's recorded reason.
 
 ---
 

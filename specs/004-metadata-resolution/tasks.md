@@ -3,7 +3,7 @@ feature: 004-metadata-resolution
 title: Metadata resolution — tasks
 status: Implemented
 created: 2026-08-27
-updated: 2026-09-03
+updated: 2026-09-05
 implemented: 2026-08-27
 accepted: 2026-08-27
 plan_status_required: Accepted
@@ -642,6 +642,37 @@ it.
   the reference's rather than byte-identical — a divergence argued in
   [behaviours §4.4](../../docs/compatibility/behaviours.md#44-non-ascii-characters-are-sent-as-themselves-not-as-uxxxx--withdrawn-2026-08-28)
   rather than hidden by a comparison that would not have seen it.
+
+### Amended — 2026-09-05: the third refresh mode had tests and no criterion
+
+**The map T16 wrote can only name a behaviour §5 names first**, and §3.6's table has three rows
+where §5 had two: AC-10 is Replace's lock half, AC-11 is Default, and **`Local only` had nothing**.
+Four dedicated tests — two in `tests/metadata/test_merge.py`, one in `test_local_refresh.py` and
+one in `test_remote_refresh.py`, plus three rows of `THE_MATRIX` — asserted a mode no criterion
+mentioned, so every one of them could have been weakened or renamed without a criterion failing.
+Found as M3 of the [2026-09-04 audit](../../docs/audits/2026-09-04.md), one of a class of ten
+across six features.
+
+**It needed §3 before it could have §5**, the M4 shape one feature along. The table row says
+*"Sidecars, tags and local artwork; no network"* — which sources, and nothing about the rule that
+runs over them — and the rule itself has lived since T6 in `_apply`'s own docstring in
+`metadata/merge.py`: *"`Local only` is `Default` over a shorter chain, not a fourth behaviour: the
+remote sources are already gone by the time this runs."* A docstring is not somewhere §5 can
+reach. §3.6 now carries that sentence as a paragraph, with the half the code makes true one layer
+up — the refresh reports the provider it did not consult, `local-only refresh` as the reason, in
+the list a missing credential fills — and **AC-20** is that paragraph.
+
+**Every mapped test was read against the criterion first**, and one of them is named twice on
+purpose: `test_the_matrix` is AC-11's whole nine-cell matrix and is also the only test that asserts
+a **lock** under `Local only`, which is the clause that makes the mode Default's rule rather than
+its own. The discriminating test is the merge one that offers a local source *and* a remote source
+in the same call: it is what separates dropping the remote sources from behaving differently with
+them. One clause is narrower than it reads and is named here rather than relied on: the report test
+configures **one** provider, so *"names the provider it did not consult"* is asserted for one, and
+the per-provider width belongs to `_usable` rather than to a test.
+
+**Nothing under `src/` was touched.** §5 now numbers twenty criteria and `FEATURE_004` names tests
+for all of them.
 
 ---
 

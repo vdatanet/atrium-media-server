@@ -3,11 +3,14 @@ feature: 004-metadata-resolution
 title: Metadata resolution
 status: Implemented
 created: 2026-08-26
-updated: 2026-09-03
+updated: 2026-09-05
 implemented: 2026-08-27
 accepted: 2026-08-27
 amended: 2026-08-27 by T1 - section 3.3, OQ-4 and OQ-5; by T8 - section 3.4;
-  2026-09-03 by the container-directory fix - section 3.2 and AC-19
+  2026-09-03 by the container-directory fix - section 3.2 and AC-19;
+  2026-09-05 by the 2026-09-04 audit's corrective task C6 - section 3.6 states what `Local only`
+  does with the rule the other two modes share, where that rule had lived in `metadata/merge.py`'s
+  own docstring, and section 5 gains AC-20 for it
 depends_on: [003]
 ---
 
@@ -218,6 +221,18 @@ to survive the next refresh, or they will correct it forever.
 
 Locks are honoured in every mode, including Replace.
 
+**`Local only` is `Default` over a shorter chain, not a fourth behaviour** *(the rule was written
+at T6 and has lived in `metadata/merge.py`'s own docstring ever since; this paragraph is where a
+criterion can reach it — added 2026-09-05 by the 2026-09-04 audit's M3)*. The remote sources are
+dropped **before** the merge runs, and what is left is Default's rule over what remains: an empty
+field is filled from a sidecar, tags, the path or local artwork, a field that already has a value
+is kept, and a locked field is refused as it is in the other two modes. So the mode is a choice of
+*sources*, not a third arithmetic — and with no remote provider to ask, `Local only` and `Default`
+produce the same library, which is the honest statement of the difference between them. The
+refresh also **says** it consulted nobody: each configured provider is reported as having sat out
+with `local-only refresh` as its reason, in the same list of the report that a missing credential
+fills (§3.5).
+
 A refresh is triggered by a scan finding a changed file, by an item having no metadata yet, or by
 an operator asking. v1 has no HTTP route for the last one; it is a configuration and command-line
 concern.
@@ -295,6 +310,17 @@ Static data. Authenticated, `200`, no parameters.
     container ever reads a directory above the library root (§3.2). *(Added 2026-09-03 by the
     container-directory fix, which found the borrowing wrong for two shapes the project's own
     fixture already has and reaching outside the library for a third.)*
+20. A **Local only** refresh reads sidecars, tags, the path and local artwork, asks no provider
+    anything, and resolves the item from what it found (§3.6). It is not a third arithmetic: the
+    remote sources are dropped before the merge, so the rule that then runs is AC-11's — an empty
+    field is filled, a field that already has a value is kept — and AC-10's lock refuses a value in
+    this mode exactly as it does under Replace. The run reports the provider it did not consult,
+    with `local-only refresh` as its reason, in the same list of the report that a missing
+    credential fills (AC-9); and with no remote provider to ask, the library it produces is the one
+    `Default` produces, which is what makes this a claim about the *sources* a mode consults rather
+    than about a behaviour of its own. *(Added at the 2026-09-04 audit — M3: the third row of
+    §3.6's table had four dedicated tests and no criterion, where the other two rows have AC-10 and
+    AC-11.)*
 
 ## 6. Conformance
 

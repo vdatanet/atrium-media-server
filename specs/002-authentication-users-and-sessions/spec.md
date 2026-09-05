@@ -3,9 +3,9 @@ feature: 002-authentication-users-and-sessions
 title: Authentication, users and sessions
 status: Implemented
 created: 2026-08-26
-updated: 2026-09-04
+updated: 2026-09-05
 accepted: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6; by T12 - section 3.8; by T18 - AC-3 and AC-10. 2026-08-28 by the L2 probe fold - section 3.8: an unknown capabilities property is dropped from the session's echo, not kept. 2026-09-01 by tools/probe_user_read.py - section 3.7, AC-7 and the section 6 matrix: GET /Users/{userId} refuses no authenticated caller, the 403 it stated with no provenance is withdrawn, and the two identifiers that name nobody are a 404 and a 400 rather than that same refusal; and 2026-09-01 at the closing audit - OQ-5 is narrowed to the three refusals still unmeasurable without costing somebody's account a lockout counter. It also held the `403` for insufficient permission and the shape of both `403`s, on the premise that the only account available to measure with is an administrator; three probes now create throwaway non-administrators, and 009 T2 measured both shapes, so that half was a debt the table was still reporting after it had been paid
+amended: 2026-08-26 by the T1 probe - sections 3.1, 3.2, 3.3, 3.5, AC-2, AC-3 and the open questions; by T7 - sections 2, 3.1, 3.2, AC-3 and section 6; by T11 - sections 3.3, 3.4, 3.5 and AC-6; by T12 - section 3.8; by T18 - AC-3 and AC-10. 2026-08-28 by the L2 probe fold - section 3.8: an unknown capabilities property is dropped from the session's echo, not kept. 2026-09-01 by tools/probe_user_read.py - section 3.7, AC-7 and the section 6 matrix: GET /Users/{userId} refuses no authenticated caller, the 403 it stated with no provenance is withdrawn, and the two identifiers that name nobody are a 404 and a 400 rather than that same refusal; and 2026-09-01 at the closing audit - OQ-5 is narrowed to the three refusals still unmeasurable without costing somebody's account a lockout counter. It also held the `403` for insufficient permission and the shape of both `403`s, on the premise that the only account available to measure with is an administrator; three probes now create throwaway non-administrators, and 009 T2 measured both shapes, so that half was a debt the table was still reporting after it had been paid. And 2026-09-05 by the 2026-09-04 audit's corrective task C6 - section 5 gains AC-14 for section 3.2's grammar table, which was implemented and tested row for row and named by no criterion, and section 6's claim that the grammar is proven under AC-3 is corrected: AC-3 is the five token mechanisms, and none of the tests it names reads a header's grammar
 depends_on: [001]
 ---
 
@@ -449,6 +449,22 @@ verbatim.
     the next flush; and `POST /Sessions/Capabilities/Full` answers `204` with no body and
     **replaces** the previous set rather than merging into it (§3.8). *(Added at the same
     audit — M29.)*
+14. The identification header is one grammar under either name — `X-Emby-Authorization` and
+    `Authorization`, which §3.1 measured as one grammar — and it matches the reference **row for
+    row** (§3.2). A scheme word is required, and it is `MediaBrowser` or `Emby` in any case:
+    without one, or with any other word, nothing is read out of the header at all. Values may be
+    quoted or bare, the four components of §3.2's table are read and may arrive in any order, a
+    comma may be crowded or spaced, a trailing comma is not an error, and an unknown component is
+    ignored rather than refused. The two strictnesses are strict: **whitespace around the `=`** and
+    **a lower-case component name** each read as nothing, because a parser kinder than the
+    reference lets a client be built against Atrium that fails against Jellyfin
+    ([behaviours §6](../../docs/compatibility/behaviours.md#6-non-improvements)). And `DeviceId` is
+    mandatory on `POST /Users/AuthenticateByName` **and there only**: absent anywhere else the
+    header still parses, still presents its token and the request is still served — the half a rule
+    written as "the one fatal case" gets wrong, and the reason this criterion is about the header
+    rather than about the route that demands the most of it. *(Added at the 2026-09-04 audit — M2.
+    §6 claimed the table was proven under AC-3; AC-3 is the five token mechanisms, and not one of
+    the tests it names reads a grammar.)*
 
 ## 6. Conformance
 
@@ -460,7 +476,7 @@ verbatim.
 | `POST /Users/Configuration` | **L2** | Round-trip test |
 | `GET /Sessions` | **L2** | Fixture with two sessions on two devices |
 | `POST /Sessions/Capabilities/Full` | **L1** | Shape only; its effect is asserted through `/Sessions` |
-| The five token mechanisms | **L2** | Table-driven across three route classes, including the precedence pairs and the grammar table (AC-3) |
+| The five token mechanisms | **L2** | Table-driven across three route classes, including the precedence pairs (AC-3). **The grammar table is not AC-3's and never was** — corrected 2026-09-05 by the 2026-09-04 audit's M2 — it is AC-14, proven row for row against the parser every one of those routes calls |
 
 ## 7. Open questions
 
