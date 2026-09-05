@@ -645,6 +645,36 @@ entries:
     because: "behaviours §3.1"
     since: 2026-09-02
 
+  # **Two values no run can ever match, and they cost more than their count.** Measured 2026-09-05
+  # while working out why two runs over one tree looked 8 per cent apart: a comparison keyed on the
+  # values counted these as movement on every pair of runs, which is counting the clock. Twenty-five
+  # rows of one run sat on four such fields; these are the two that are nothing but the moment or
+  # the request. `TranscodingUrl` is the third and stays out on purpose (012 T10: excusing it by
+  # value would excuse the address *shape* a named comparison exists to watch), and the `age`
+  # response header is the fourth and is not this at all - Atrium sends none, which is a difference
+  # and not a drift.
+  - kind: field
+    endpoint: "*"
+    pointer: "/traceId"
+    case: "*"
+    reason: "The W3C trace-context id a problem-details body carries, minted per request on each server: `00-<trace>-<span>-00`, and never twice the same"
+    because: derived-identifier
+    since: 2026-09-06
+  - kind: field
+    endpoint: "*"
+    pointer: "/LastLoginDate"
+    case: "*"
+    reason: "The moment this seat authenticated, and the run authenticates against each server in turn - measured 90 milliseconds apart"
+    because: wall-clock
+    since: 2026-09-06
+  - kind: field
+    endpoint: "*"
+    pointer: "/User/LastLoginDate"
+    case: "*"
+    reason: "The same moment on the authentication response's own copy of the user"
+    because: wall-clock
+    since: 2026-09-06
+
   - kind: field
     endpoint: "*"
     pointer: "header:X-Response-Time-ms"

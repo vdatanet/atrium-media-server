@@ -330,9 +330,10 @@ for row, so the two prose copies cannot drift apart from each other or from what
 | Field | Why it may differ | Because |
 |---|---|---|
 | `Id`, `ItemId`, `Key`, `ServerId`, `ParentId`, `SeriesId`, `SeasonId`, `AlbumId`, `ParentThumbItemId`, `ParentBackdropItemId`, `PlaylistItemId`, `ThumbImageItemId`, `BackdropImageItemId`, `UserId`, `DeviceId` | Derivation differs by design (behaviours §1.4) | `derived-identifier` |
-| `DateCreated`, `DateLastMediaAdded`, `LastActivityDate` | Scan wall-clock time | `wall-clock` |
+| `DateCreated`, `DateLastMediaAdded`, `LastActivityDate`, `LastLoginDate` | Scan wall-clock time, and for the last one the moment this seat authenticated — the run authenticates against each server in turn, measured 90 ms apart | `wall-clock` |
 | `Etag`, `ETag`, `ImageTags.*` | Content hashes over differently-derived inputs | `content-hash` |
 | `PlaySessionId`, `AccessToken` | Generated once per session and per token, by each server for itself | `derived-identifier` |
+| `traceId` | The W3C trace-context id a problem-details body carries, minted per request and never twice the same | `derived-identifier` |
 | `Path` | Different mount points, and on the by-name rows a different installation's data directory | `installation-path` |
 | `LocalAddress` | Deliberate divergence | [behaviours §4.2](behaviours.md#42-localaddress-does-not-get-an-https-override) |
 | `TotalRecordCount` on the by-name endpoints, on a request that carries no limit (`by-name-without-limit`) | Deliberate divergence | [behaviours §3.1](behaviours.md#31-totalrecordcount-is-0-on-by-name-endpoints-without-limit--class-b) |
