@@ -1439,13 +1439,26 @@ plan §6.8) — and applies it to a destination that cannot be seeked. This rout
 production is written to the scratch directory and the finished file is served, so the flags never
 go on and the index lands last.
 
-**What differs for a client is when the first frame can be shown, not whether it can.** The
-reference's answer plays from its first bytes and carries no length; this one carries a length and
-seeks perfectly, and cannot start until the production ends. On the four-second fixture that is
-73 ms and invisible. On a film it is the whole difference between progressive playback and a wait,
-which is why it is written down here rather than left to whoever meets it. Not decided: the
-opposite trade is real too, and `Content-Length` is what [§3.5](spec.md)'s table and AC-11 are
-about.
+**First written here as a difference in *when* the first frame can be shown. It is larger than
+that, and the correction is the same day's:** a consumer that cannot seek **cannot decode this at
+all**. With the index last, ffmpeg must read to the end and seek back to the `mdat`; over a pipe it
+can only go back as far as it still holds, and a writer feeding it in chunks loses the head before
+the index arrives. Measured on the same 59 576 bytes, four ways:
+
+```
+stdin = bytes through a pipe          ffmpeg exit 183, "partial file"
+stdin = an open file (seekable)       exit 0
+cat file | ffmpeg                     exit 0   (the whole file fits the pipe buffer)
+the reference's fragmented answer     exit 0
+```
+
+**It had already cost a comparison.** `subtitle-burn-in` was outstanding through every run of
+2026-09-05 reporting `partial file`, and neither server was at fault in the way that reads: the row
+feeds ffmpeg through a pipe, so it was testing container structure under a frame test's name. The
+harness now hands ffmpeg a seekable input, which is 010's to do; **whether this route should answer
+a body a streaming consumer can decode is this feature's**, and it is not decided here. The opposite
+trade is real — `Content-Length` is what [§3.5](spec.md)'s table and AC-11 are about, and the
+reference's fragmented answer carries none.
 
 **And the error path this feature has never had, measured on 2026-09-05.** **When `ffmpeg` cannot
 decode the source, the three audio delivery routes answer `500`.** The fixture's structural music
