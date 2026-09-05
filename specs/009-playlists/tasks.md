@@ -1113,9 +1113,9 @@ AC-21 beside AC-2 and AC-3.
 
 ## Definition of done
 
-- [x] Every one of spec §5's twenty acceptance criteria has a passing test, named in
-      `FEATURE_009`. **Four of the twenty did not have one when this box was ticked the first
-      time**: AC-20 had no test of any kind, AC-5's creation path and AC-13's other two routes had
+- [x] Every one of spec §5's twenty-one acceptance criteria has a passing test, named in
+      `FEATURE_009`. *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* **Four of the twenty that existed then did not have one when this
+      box was ticked the first time**: AC-20 had no test of any kind, AC-5's creation path and AC-13's other two routes had
       never been asked, and AC-9's `PlaylistItemId` was compared on `Id`. All four are written
       (T14's note), and AC-15's own wording was corrected to the shape its tests assert.
 - [x] Every endpoint reaches the conformance level in spec §6. All seven rows are **L2**: the

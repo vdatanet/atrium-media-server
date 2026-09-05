@@ -934,7 +934,7 @@ and `FEATURE_002` names tests for all of them.
 ## Definition of done
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing
-      test — all eleven, by name, and the mapping is itself a test (T18).
+      test — all fourteen, by name, and the mapping is itself a test (T18). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)*
 - [x] Every endpoint reaches the level declared in [`spec.md` §6](spec.md#6-conformance). **L3 for
       `AuthenticateByName` is deferred to 010** and the gap is recorded, not counted as met — L2 is
       met now, and §6 says so in writing.

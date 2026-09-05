@@ -680,8 +680,8 @@ for all of them.
 
 Closed line by line at T16, on 2026-08-27.
 
-- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all sixteen —
-      has a passing test, by name, in `FEATURE_004` (T16). **Nine are named twice**, once at
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all twenty —
+      has a passing test, by name, in `FEATURE_004` (T16). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* **Nine are named twice**, once at
       engine level and once end to end, because a correct rule and a rule the caller actually
       uses are two claims.
 - [x] `GET /Localization/Cultures` reaches **L2** with a reviewed golden, and no route exists

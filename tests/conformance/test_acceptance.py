@@ -2,14 +2,17 @@
 """Every acceptance criterion of every implemented feature, mapped to the test that asserts it.
 
 Every feature's definition of done says some version of *"every acceptance criterion has a passing
-test, by name"* - eleven of them for 001, eleven for 002, thirteen for 003. That is a claim somebody
-has to check, and checking it by reading two documents side by side is a thing nobody does twice.
-This file is the map, and it fails three ways:
+test, by name"* - fourteen of them for 001, fourteen for 002, fifteen for 003. That is a claim
+somebody has to check, and checking it by reading two documents side by side is a thing nobody does
+twice. This file is the map, and it fails four ways:
 
 * an acceptance criterion in the specification with no test named here — the box cannot be ticked;
 * a test named here that no longer exists — a rename or a deletion that silently orphaned a
   criterion;
-* a count that no longer matches the specification — a criterion added or removed.
+* a count that no longer matches the specification — a criterion added or removed;
+* a definition of done whose count no longer matches this map — the last one added, on 2026-09-05,
+  because the counts in the sentence above were themselves three of the stale ones, and ten of the
+  twelve definitions of done were wrong before an audit's corrective task read them together.
 
 It asserts that the tests **exist**, not that they pass; the suite they are in does that. What it
 protects is the *mapping*, which is the part that rots quietly.
@@ -1709,4 +1712,56 @@ def test_every_implemented_feature_has_a_map() -> None:
         f"{sorted(implemented - mapped)} is marked Implemented in specs/README.md and has no "
         f"acceptance map. Its definition of done claims every criterion has a passing test, and "
         f"nothing here checks that claim."
+    )
+
+
+#: English for the counts a definition of done can currently carry. Spelled out because that is how
+#: every one of the twelve writes it, and a digit there would be the one spelling this cannot read
+#: - which the assertion below says in its message rather than passing quietly.
+NUMBER_WORDS = {
+    1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight",
+    9: "nine", 10: "ten", 11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen",
+    15: "fifteen", 16: "sixteen", 17: "seventeen", 18: "eighteen", 19: "nineteen", 20: "twenty",
+    21: "twenty-one", 22: "twenty-two", 23: "twenty-three", 24: "twenty-four", 25: "twenty-five",
+    26: "twenty-six", 27: "twenty-seven", 28: "twenty-eight", 29: "twenty-nine", 30: "thirty",
+    31: "thirty-one", 32: "thirty-two", 33: "thirty-three", 34: "thirty-four", 35: "thirty-five",
+}  # fmt: skip
+
+
+def definition_of_done_opening(feature: str) -> str:
+    """The first bullet of the feature's definition of done - the one that counts the criteria."""
+    body = (SPECS / feature / "tasks.md").read_text(encoding="utf-8")
+    section = body.split("## Definition of done", 1)[1].split("\n## ", 1)[0]
+    bullets = re.split(r"^- \[[ x]\] ", section, flags=re.MULTILINE)
+    return bullets[1] if len(bullets) > 1 else ""
+
+
+@pytest.mark.parametrize("feature", sorted(FEATURES))
+def test_the_definition_of_done_counts_the_criteria_that_exist(feature: str) -> None:
+    """The count in a definition of done is a live claim, and this is what holds it to the map.
+
+    Audit 2026-09-04's corrective task C9 found it stale in **ten of the twelve features** - 001
+    said eleven against fourteen, 005 sixteen against twenty-five, 008 thirty-one against
+    thirty-four - because the number is written once, by the closing task, and every criterion
+    added afterwards moves it without anybody rereading that line. Three earlier corrective tasks
+    each noticed and each left it, reading it as a record of the tick rather than as a claim.
+
+    It is a claim: the box is `[x]` and the sentence is *"every acceptance criterion has a passing
+    test - all N"*, which a reader checks coverage by. 007 T13 had already settled it in this
+    repository's own voice, correcting its own route count from five to seven with a parenthetical
+    saying so. This assertion is what stops the next criterion re-opening the class.
+    """
+    count = len(FEATURES[feature])
+    word = NUMBER_WORDS[count]
+    opening = definition_of_done_opening(feature)
+    assert opening, f"{feature} has no definition of done bullet to check"
+    #: Longest first, so "twenty-one" is read as itself and not as "twenty" followed by a stray
+    #: word - which is the one way a wrong count could slip past a substring test.
+    spellings = sorted(NUMBER_WORDS.values(), key=len, reverse=True)
+    said = set(re.findall(r"\b(?:" + "|".join(spellings) + r")\b", opening.lower()))
+    assert word in said, (
+        f"{feature} has {count} acceptance criteria and the bullet that counts them says "
+        f'{sorted(said) or "no number at all"} rather than "{word}":\n\n{opening.strip()}\n\n'
+        f"A criterion was added or removed and that line still carries the old number. Correct "
+        f"the count - it is a live claim about section 5, not a record of when the box was ticked."
     )

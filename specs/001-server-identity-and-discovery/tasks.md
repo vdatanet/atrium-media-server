@@ -187,7 +187,7 @@ is a documented cost rather than a surprise.
 
 ## T6 — `compat/guids.py`: identifiers  ✅
 
-- [x] **Changes:** `WireGuid` — this statement called it `Guid32`, a name that never shipped — validated against `^[0-9a-f]{32}$`; generation from `secrets.token_hex(16)`; the deterministic derivation helper 003 will use.
+- [x] **Changes:** `WireGuid` — this statement called it `Guid32`, a name that never shipped — validated against `^[0-9a-f]{32}$`; generation from `secrets.token_hex(16)`; the deterministic derivation helper 003 uses.
 - **Depends on:** T2
 - **Verified by:** rejection tests for uppercase, dashes, wrong length; the derivation helper returns the same value for the same key across processes.
 - **Plan reference:** §6.3
@@ -442,7 +442,7 @@ and without touching a real interface. T14 supplies the adapter that pulls those
 
 ## T13 — `api/deps.py`: the authentication seam  ✅
 
-- [x] **Changes:** `require_user()` with the signature 002 will keep, raising `401` unconditionally.
+- [x] **Changes:** `require_user()` with the signature 002 keeps, raising `401` unconditionally.
 - **Depends on:** T1
 - **Verified by:** a route depending on it answers `401`; a test overriding it through `app.dependency_overrides` reaches the route body.
 - **Note:** no credential of any kind ships. The `200` path is exercised by the override, per [plan §1](plan.md#1-approach).
@@ -842,7 +842,7 @@ purpose and for C1's recorded reason.
 
 The feature is done when **all** of these hold:
 
-- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing test — all **eleven** now, by name, and the mapping is itself a test (T18).
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing test — all **fourteen** now, by name, and the mapping is itself a test (T18). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)*
 - [x] Every endpoint reaches the level declared in [`spec.md` §6](spec.md#6-conformance): L3 for `/System/Info/Public` is deferred until the differential harness (010) exists; **L2 is met now and the gap is recorded**, not silently skipped.
 - [x] `docs/compatibility/surface.yaml` lists every route added, and no route exists outside it (T17).
 - [x] The two cross-cutting sweeps run in CI and fail on a deliberately introduced violation of each — each sweep carries the tests that prove it rejects what it exists to reject.

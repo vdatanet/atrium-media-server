@@ -19,7 +19,7 @@ Ordered. Each is a reviewable change on its own and states how you know it worke
 
 **The measurement runs before any behaviour is written, and that is a decision this list inherits
 rather than one it takes.** [Plan §11's D-4](plan.md#d-4--whether-68s-six-owed-measurements-are-this-features-or-its-first-tasks)
-was taken on 2026-09-03: five of the six readings [plan §6.8](plan.md#68-what-this-plan-read-and-did-not-measure)
+was taken on 2026-09-03: five of the six readings [plan §6.8](plan.md#68-what-this-plan-read-and-what-t1-measured)
 records as *read but not measured* are **inputs** to code written in T4, T6 and T7, not checks on
 it — and one of them can send an accepted decision back to its owner. T1 is therefore a probe run
 and nothing else, and it is the only task here that needs a reference server.
@@ -90,7 +90,7 @@ And one the review confirmed rather than changed, because a task would otherwise
 
 - [x] **Changes:** `tools/probe_uninspected_source.py` gains a two-part film in its fixture (one
   readable part, one that ffprobe refuses) and five observations, each answering a numbered item
-  of [plan §6.8](plan.md#68-what-this-plan-read-and-did-not-measure): **(1)** the whole body of the
+  of [plan §6.8](plan.md#68-what-this-plan-read-and-what-t1-measured): **(1)** the whole body of the
   audio item's `400`, printed rather than truncated at 60 bytes, against the plan's reading that it
   is the middleware's fixed `Error processing request.`; **(2)** the `errors` **message** beside the
   key `$.DeviceProfile.TranscodingProfiles[0].Protocol`, which no run has recorded — the key alone
@@ -110,7 +110,7 @@ And one the review confirmed rather than changed, because a task would otherwise
   the probe's own docstring describes standing up, or the single-use instance
   [`tools/reference_instance.py`](../../tools/reference_instance.py) 010 T9 built. The run must
   print all five observations and conclude; each of the five is then written into
-  [plan §6.8](plan.md#68-what-this-plan-read-and-did-not-measure) with its `[probe: …]` citation
+  [plan §6.8](plan.md#68-what-this-plan-read-and-what-t1-measured) with its `[probe: …]` citation
   **in this same change**, whether it confirms the reading or contradicts it.
 - **Spec reference:** §7 (the gate's four probes); plan §6.8, §11 D-4
 
@@ -1012,7 +1012,7 @@ The feature is done when **all** of these hold:
       change as the code. **Nine amendments to an accepted spec** — one from another feature's
       task, one at each of two gates, and six from tasks — and the plan corrected at §4, §5, §6.1,
       §6.2, §6.4, §6.5, §6.7 and §8 by the tasks that found it wrong.
-- [x] Every reading [plan §6.8](plan.md#68-what-this-plan-read-and-did-not-measure) records as
+- [x] Every reading [plan §6.8](plan.md#68-what-this-plan-read-and-what-t1-measured) records as
       *read* is either measured and cited, or restated as still owed with its owner. **Five of the
       six were measured by T1** on 2026-09-03 against a single-use instance, four confirming the
       reading and two not; the sixth is **concurrency**, which D-4 placed with the finished thing
@@ -1057,7 +1057,7 @@ number on the wire on both servers, and 012 reproduces it (AC-8).
 
 ### One measurement nobody has taken, on either server
 
-**Two negotiations of one file at once.** [Plan §6.8](plan.md#68-what-this-plan-read-and-did-not-measure)'s
+**Two negotiations of one file at once.** [Plan §6.8](plan.md#68-what-this-plan-read-and-what-t1-measured)'s
 fifth reading, placed with the finished thing by [D-4](plan.md#d-4--whether-68s-six-owed-measurements-are-this-features-or-its-first-tasks)
 and still owed. This server takes **no lock**: two requests run two probes and write the same row
 twice, the second replacing the first, which [plan §7](plan.md#7-failure-handling) calls idempotent

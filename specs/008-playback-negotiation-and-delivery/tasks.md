@@ -1261,7 +1261,7 @@ family so the count moves with §3.7 rather than with a list somebody remembered
 The feature is done when **all** of these hold:
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
-      thirty-one — has a passing test, by name, in `FEATURE_008`.
+      thirty-four — has a passing test, by name, in `FEATURE_008`. *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)*
 - [x] Every endpoint reaches the level [spec §6](spec.md#6-conformance) declares: the four L3
       routes carry goldens (per profile class, per constraint class, headers and the range
       matrix), and transcoded output is asserted against the profile it was negotiated for —

@@ -95,10 +95,11 @@ stated in [005 §3.7 and AC-12](specs/005-item-query-api/spec.md). The same day 
 question that gate left open: a run that needs the fixture on both servers **stands up a single-use
 reference instance over it and destroys it**, so 010's AC-2 is no longer blocked — which also takes
 the writing measurements off an operator's server, where 009's runs had left 28 playlists behind.
-**010's plan was drafted and accepted on 2026-09-01**, so its task list is the next gate: the plan's bulk is the thing
-that does not exist yet — a **single-use reference instance**, stood up from a pinned image over
+**010's plan was drafted and accepted on 2026-09-01**, and its task list was the gate after it: the plan's bulk was
+the thing that did not exist then — a **single-use reference instance**, stood up from a pinned image over
 this repository's own fixture, configured over the reference's first-time-setup operations with no
-human, and destroyed with everything it wrote. It reserved **five decisions** for their owner
+human, and destroyed with everything it wrote. **It exists**, as `tools/_reference.py` and
+`tools/reference_instance.py`, built by T9 on 2026-09-02 and swept from by 012 T10. It reserved **five decisions** for their owner
 instead of taking them, and **all five were taken on 2026-09-01**, every recommendation accepted:
 the reference instance gets a container runtime, with
 [ADR-0007](docs/decisions/0007-a-container-runtime-for-the-reference-instance.md) and no CI job
@@ -106,9 +107,9 @@ allowed near it; the harness stays in `tools/` on the standard library and the 3
 refined and an accepted spec amended for it**, because as accepted it failed the very allowlist its
 own document ships — an entry now cites a behaviours section or one of four derivation classes, and
 the reference's random `ChildCount` finally has an entry of its own
-([behaviours §3.25](docs/compatibility/behaviours.md)); the fixture world keeps its default and its
-measurement **waits on the instance that does not exist yet**, since a library scan is a write and
-the only reachable server is an operator's; and the ignored-parameter report gets its fourth column,
+([behaviours §3.25](docs/compatibility/behaviours.md)); the fixture world kept its default and its
+measurement **waited on the instance that did not exist then**, since a library scan is a write and
+the only reachable server was an operator's; and the ignored-parameter report gets its fourth column,
 written to the data directory and never to a route. **Its task list was accepted on 2026-09-02 and
 all fifteen tasks ran the same day** — the comparison engine, the allowlist and the two other
 registers, the identities a run creates and destroys, the single-use reference instance, the fixture
@@ -300,6 +301,28 @@ idea that creates a delta goes in
 [behaviours.md §6](docs/compatibility/behaviours.md#6-non-improvements) and is then not done.
 
 **Dates are absolute.** `2026-08-26`, never "recently".
+
+**A finished record still makes live claims.** A `[x]` task and a definition of done are read long
+after they were written, and every clause in one is exactly one of two things. Decide which, and
+write it that way — the 2026-09-04 audit found this class at five sites (M14, M15, L3) and its
+corrective task C9 found three more of the same shape plus eleven stale counts:
+
+| The clause is about | Then it is | And it takes |
+|---|---|---|
+| the change **this task** made | a record | the tense it was written in — `for now`, `will`, `does not exist yet` are all fine when the same sentence names the moment (*"T7 owns `PlaylistRepository` and does not exist yet"*) |
+| the **rest of the repository** | a live claim | the present tense **and it has to be true today** — or the past tense, if the state has moved on. A future tense about a feature that has since shipped is neither |
+
+So *"the `dev` dependency group, which currently has none"* became *"which had none until this task
+added `pyyaml`"*, and *"the protocol 004 will implement"* became *"the protocol 004 implements"*.
+Under the same rule the **criterion count** in a definition of done is live, not a snapshot of the
+tick: it was stale in 10 of the 12 features on 2026-09-05, and
+`tests/conformance/test_acceptance.py` holds it against the map now, so the next criterion cannot
+re-open the class quietly. 007 T13 had already taken this decision once, for its own route count.
+
+**A `plan.md` §3 tree draws every module the feature created**, including one another feature only
+mentions in prose. When it turns out not to, the module is added with a sentence saying the tree
+outgrew its acceptance rather than by a silent edit — 001's plan is the exemplar, and 002's and
+008's follow it.
 
 **Verify that an edit landed.** A `pyproject.toml` change once matched nothing and reported success
 because another tool had rewritten the block underneath it. A scripted edit that cannot fail is a

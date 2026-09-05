@@ -3,8 +3,8 @@ feature: 002-authentication-users-and-sessions
 title: Authentication, users and sessions — implementation plan
 status: Implemented
 created: 2026-08-26
-updated: 2026-08-26
-amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3; by T8 - sections 6.5 and 6.6; by T9 - section 7; by T14 - sections 8.2 and 9; by T15 - sections 8.1 and 9; by T16 - section 8.3
+updated: 2026-09-05
+amended: 2026-08-26 by the T1 probe - sections 6.1, 6.2, 7 and 8; by T2 - sections 3 and 7; by T3 - section 6.2; by T4 - sections 1, 3, 4 and 10; by T6 - section 6.4; by T7 - sections 5, 6.1 and 6.3; by T8 - sections 6.5 and 6.6; by T9 - section 7; by T14 - sections 8.2 and 9; by T15 - sections 8.1 and 9; by T16 - section 8.3; and 2026-09-05 by the 2026-09-04 audit's M16, the first amendment here that no task of this feature made - section 3's tree omitted two modules this feature's own tasks created, `domain/session.py` (T5, `fb4df84`) and `logs.py` (T14, `54fd132`), the second of which appeared in no plan's tree in the repository at all. Both are drawn now, with the reconciliation sentence 001's plan set the style for. No code moves
 spec_status_required: Accepted
 spec_status_actual: Implemented
 accepted: 2026-08-26
@@ -65,6 +65,7 @@ behaviour WAL mode exists to avoid needing. Sessions live in memory with periodi
 
 ```
 src/atrium/
+├── logs.py               the engine logger's level, and the credential a URL puts in a log line
 ├── db/
 │   ├── engine.py         session factory, WAL pragmas, lifecycle
 │   ├── types.py          the column types SQLite does not have
@@ -72,6 +73,8 @@ src/atrium/
 │   ├── models.py         ORM tables
 │   ├── repositories.py   the boundary: domain objects in and out
 │   └── migrations/       Alembic, starting at revision 0001
+├── domain/
+│   └── session.py        AccessToken, IssuedToken and Session — the seam's other return types
 ├── users/
 │   ├── service.py        authenticate, lock out, resolve a token
 │   ├── passwords.py      Argon2id hash, verify, rehash-on-login
@@ -84,6 +87,19 @@ src/atrium/
     ├── sessions.py       /Sessions, /Sessions/Capabilities/Full
     └── deps.py           require_user — the 001 seam, now implemented
 ```
+
+**Two of those modules are not in the tree this plan was accepted with, and both are this
+feature's own** — added on 2026-09-05 by the 2026-09-04 audit's M16, in 001's style for a tree that
+outgrew its acceptance rather than as a silent edit. `domain/session.py` arrived with **T5**
+(`fb4df84`) beside the repositories, because ADR-0003 sends domain objects across that boundary and
+never rows, and a `Session` is what `/Sessions` reports where an `AccessToken` is what a request is
+authenticated against — one module because they are created, replaced and deleted together. It is
+named in **007's** plan twice (`plan.md:45,130`) and drawn in no tree until now, which is
+`domain/media.py`'s shape one audit finding earlier (L2). `logs.py` arrived with **T14**
+(`54fd132`), out of §9's risk table rather than out of a route: the two leaks it closes are library
+defaults, not anything this project wrote, and the section below and that table have named
+`atrium.logs` since the day it landed while §3 did not. Neither is a change to the module set this
+plan chose; both are the record catching up with it.
 
 `alembic.ini` sits at the repository root for running migrations by hand. **The server does not
 read it**, and no database URL appears in it: a path in an ini file is a path that disagrees with
