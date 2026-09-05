@@ -1358,3 +1358,25 @@ keeps its row, so `/Items` has to decline to return a container with no visible 
 ([behaviours §5.2](../../docs/compatibility/behaviours.md#52-a-container-that-has-lost-every-file-is-not-removed)).
 A predicate in one query, rather than a removal written into the database at scan time by a scanner
 with none of §6.5's guards watching it.
+
+**Two seasons the reference builds and this scanner does not — measured on 2026-09-05, and the
+first differential run over both trees is what raised them.** Seven seasons there against five
+here, and they are two different shapes rather than one rule missed
+`[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-05]`.
+
+* **`Season 3`, out of an empty directory.** `Shows/The Series/Season 03/` holds no file at all,
+  and the reference makes a season of it: `IndexNumber: 3`, **zero children**, listed in `/Items`
+  and answered by `/Search/Hints`. `library/resolver.py` reaches a season *through the episode
+  under it*, so a directory with nothing in it produces nothing here. Whether an empty season
+  ought to exist is the decision — the row costs a client one navigable dead end, and not having
+  it costs a listing the reference has — but that the reference has one is now measured rather
+  than supposed.
+* **`Season Unknown`, for the episode with no number.** `Season 01/blob.mkv` carries no episode
+  number and no date, which this scanner already notices — `Notice.NO_EPISODE_NUMBER`, and §3.4's
+  rule is that it keeps its title and takes no place in its season. The reference files it under a
+  season whose `IndexNumber` is **null**, *as well as* under `Season 1`: the same episode is a
+  child of two seasons there and of one here. So the divergence is not that the episode is lost —
+  both servers show it — but that the reference mints a second season to hold it.
+
+Neither is a defect this list can settle: both are 003's rule about what a season *is*, and the
+measurement is here so that the next person deciding does not have to stand a reference up again.
