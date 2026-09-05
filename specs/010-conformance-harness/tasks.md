@@ -2328,17 +2328,33 @@ request more, proving the paused report was stored before the silence begins.
    `--fixture` destroys its reference and everything it wrote (ADR-0007), and Atrium is whatever
    the operator is running.
 
-   **What is *not* the cause, because each was checked.** The register intends the cleanup —
-   [`delete-a-playlist`](../../docs/compatibility/request-cases.yaml) says so in its own
-   `what_it_is_for`, *"it is also how the sweep removes the one thing it created"*, and it is
-   anchored on the created playlist's own id. The route is not missing either: `DELETE
-   /Items/{itemId}` answered `204` on Atrium when it was issued by hand, and the row went.
-   **Why the rows survive a run is unmeasured**, and that is the question this entry exists to
-   hand on rather than answer — two rows per run where the register creates one is itself part of
-   it.
+   **The cleanup is declared and the route works; the leak is this program's own anchor cache.**
+   `delete-a-playlist` says so in its own `what_it_is_for` — *"it is also how the sweep removes the
+   one thing it created"* — and `DELETE /Items/{itemId}` answered `204` when it was issued by hand.
+   What settles it is **who owns the rows**: the surviving `atrium-differential-renamed` belongs to
+   the **administrator**, and `create-with-a-name` declares `identities: [restricted]`, so a seat
+   that must never have issued that case has a playlist from it.
 
-   Until it is settled, a run's totals are comparable with an earlier run's only against an Atrium
-   that earlier run never touched.
+   `Issuer.answer_of` caches an anchor's answer under `(seat.role, endpoint#case)`, and **two leaks
+   come out of that one key**:
+
+   1. **The key carries the seat.** `rename-a-playlist` runs as the **administrator** and anchors on
+      `response:POST /Playlists#create-with-a-name@/Id`. The administrator's key is not in the cache,
+      so resolving the anchor **issues `POST /Playlists` again, as the administrator** — a playlist
+      the register never asked that seat to make. `delete-a-playlist` is `restricted` and resolves
+      through the restricted key, so nothing ever removes it.
+   2. **The compared issue and the anchor issue are two issues.** The sweep issues
+      `create-with-a-name` as the case it compares; anchor resolution issues it again to fill the
+      cache. The delete removes the second. **Nothing removes the first.**
+
+   One survivor of each per run, which is exactly the two rows and the two owners in the database.
+   And a consequence that is not hygiene: **the sweep's create/delete pair is not a pair.** The
+   delete removes a playlist the compared create did not make, so a server that leaked on creation
+   and a server that did not would answer this case identically. The reference does the same thing
+   and only its destruction hides it.
+
+   Until it is fixed, a run's totals are comparable with an earlier run's only against a server that
+   earlier run never touched.
 
 4. **Two of the twenty named comparisons are not comparisons.** behaviours §5.2 and §5.6 need a
    second scan on **both** servers; `POST /Library/Refresh` is the reference's and Principle VI

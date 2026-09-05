@@ -190,8 +190,9 @@ on 2026-09-05: two completed runs against one Atrium left four playlists behind,
 `/Search/Hints` comparison reported them as rows the reference did not have. **So a run's counts are
 comparable with an earlier run's only against a server that earlier run never touched** — point the
 next run at a fresh data directory, or read its listing totals knowing what is in them. Why the
-rows outlive the run is 010's and unmeasured: the register declares the cleanup and the route works
-when it is asked by hand.
+rows outlive the run is 010's, and it is the harness rather than either server: the anchor cache is
+keyed on the seat, so a case declared for one identity is issued again for another, and the sweep's
+own compared issue is a second creation the declared delete never names.
 
 **Exit codes: `0` clean, `1` not clean, `2` the run could not start.** *Not clean* is the ordinary
 answer and not a failure: it means the run has an untriaged difference, a declared case it could
