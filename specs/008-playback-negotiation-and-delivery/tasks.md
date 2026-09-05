@@ -1484,3 +1484,16 @@ about **different files** — the anchor is `listing:GET /Items#audio-by-sort-na
 is not the same track ([010's list](../010-conformance-harness/tasks.md#what-this-feature-owes-the-next-ones)).
 So the divergence half is open and the `500` half is not: a decode this server cannot do is not an
 internal error, and [§3.5](spec.md)'s refusal shapes have no row for it.
+
+**What the same run reports against this feature: 104 differences, and 90 of them are one route.**
+`POST /Items/{itemId}/PlaybackInfo` carries 83 and its `GET` sibling 7; the rest are four on
+`main.m3u8` and two each on `/Audio/{itemId}/stream` and `/universal`, which are the `500`s the
+entry above records `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-05]`.
+
+**Inside the negotiation's 83, one shape is worth separating from the field noise:** a **restricted**
+seat is answered `MediaSources/0/MediaStreams` of length **0** where the reference answers **4**, on
+`no-body`, `a-device-profile`, `protocol-by-ordinal`, `protocol-in-an-unexpected-case` and the
+`GET`. The administrator is answered the streams on both servers. A seat narrowed to one library
+being told a source has no streams at all is either a permission this feature applies where the
+reference does not, or a hydration that stops at the library check; neither has been measured, and
+a sweep cannot tell them apart.
