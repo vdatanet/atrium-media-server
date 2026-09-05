@@ -33,6 +33,7 @@ import json
 import re
 import shutil
 import socket
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -1175,6 +1176,85 @@ def _ran(identity: str = "administrator", **overrides: Any) -> Any:
     }
     fields.update(overrides)
     return differential.Comparison(**fields)
+
+
+def test_frames_are_never_read_through_a_pipe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The assertion that can fail, because the end-to-end one cannot be made to.
+
+    Whether a pipe defeats ffmpeg depends on how much it still holds when it needs to seek back,
+    so a clip small enough to live in the pipe's buffer decodes either way — and a test built on a
+    clip large enough is a test about a buffer size on one machine. What is stable is the rule:
+    this function hands ffmpeg something it can seek. `subtitle-burn-in` spent 2026-09-05
+    outstanding because it did not.
+    """
+    seen: dict[str, Any] = {}
+
+    class Finished:
+        returncode = 0
+        stdout = b"#software: stub\n0, 0, 0, 1, deadbeef\n"
+        stderr = b""
+
+    def watched(command: list[str], **rest: Any) -> Any:
+        seen["command"] = command
+        named = Path(command[command.index("-i") + 1])
+        seen["input"] = named.read_bytes() if named.exists() else None
+        return Finished()
+
+    monkeypatch.setattr(differential.subprocess, "run", watched)
+    monkeypatch.setattr(differential.shutil, "which", lambda binary: "/usr/bin/ffmpeg")
+
+    differential.frame_hashes(b"the produced body", side="atrium")
+
+    assert "pipe:0" not in seen["command"], "an index-last MP4 cannot be read from a pipe"
+    assert seen["input"] == b"the produced body", "ffmpeg was pointed at the payload, seekably"
+
+
+@pytest.mark.ffmpeg
+def test_frames_are_read_from_a_seekable_input_so_an_index_last_mp4_decodes(
+    tmp_path: Path,
+) -> None:
+    """Measured 2026-09-05, and it is why `subtitle-burn-in` was outstanding all day.
+
+    An MP4 whose `moov` sits **after** its `mdat` must be read to the end and then seeked back to.
+    Over `pipe:0` ffmpeg can only go back as far as it still holds, and `subprocess.run(input=...)`
+    feeds it in chunks — so the head is gone by the time the index arrives and it reports
+    `partial file`. Atrium's productions are that shape; the reference's are fragmented. The same
+    59576 bytes decoded from a file and were refused from that pipe, which made this function a
+    container test wearing a frame test's name.
+
+    The container difference is real and is 008's, written down there. Here the input is made
+    seekable, so the row can measure the picture instead.
+    """
+    produced = tmp_path / "index-last.mp4"
+    binary = shutil.which("ffmpeg")
+    assert binary, "the ffmpeg marker promised one"
+    made = subprocess.run(  # noqa: S603 - the arguments are this test's own
+        [
+            binary,
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=duration=1:size=32x32:rate=5",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(produced),
+        ],
+        capture_output=True,
+        timeout=120,
+    )
+    assert made.returncode == 0, made.stderr.decode("utf-8", "replace")[:300]
+    body = produced.read_bytes()
+
+    # The shape this test is about: `mdat` before `moov`, which is what writing to a real file
+    # gives without `+faststart` — and what Atrium's scratch-file productions are.
+    assert body.index(b"mdat") < body.index(b"moov"), "not an index-last MP4"
+
+    assert len(differential.frame_hashes(body, side="atrium")) == 16
 
 
 def test_a_body_that_will_not_decode_says_which_server_produced_it() -> None:

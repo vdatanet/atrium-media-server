@@ -74,6 +74,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 from dataclasses import dataclass, replace
@@ -2299,12 +2300,23 @@ def frame_hashes(payload: bytes, side: str = "") -> str:
             "burn-in is a difference in the pixels and this machine has no ffmpeg to decode them "
             "with; the row is a comparison of frames rather than of a body"
         )
-    finished = subprocess.run(  # noqa: S603 - the arguments are this module's own
-        [binary, "-v", "error", "-i", "pipe:0", "-map", "0:v:0", "-f", "framemd5", "-"],
-        input=payload,
-        capture_output=True,
-        timeout=PRODUCTION_TIMEOUT,
-    )
+    # **A file and not `pipe:0`, and that is a finding rather than a detail.** An MP4 whose
+    # `moov` sits after its `mdat` has to be read to the end and then seeked back to; over a pipe
+    # ffmpeg can only go back as far as it still holds, and a writer that feeds it in chunks -
+    # `subprocess.run(input=...)` - loses the head before the index arrives. Atrium's productions
+    # are that shape and the reference's are fragmented, so this function decoded one server's
+    # answer and refused the other's, and `subtitle-burn-in` was outstanding all through
+    # 2026-09-05 reporting `partial file` for what was really a container difference. Comparing
+    # frames is this function's job; whether a body survives a non-seekable reader is 008's, and
+    # it is written down there instead of being enforced here by accident.
+    with tempfile.NamedTemporaryFile(suffix=".bin") as seekable:
+        seekable.write(payload)
+        seekable.flush()
+        finished = subprocess.run(  # noqa: S603 - the arguments are this module's own
+            [binary, "-v", "error", "-i", seekable.name, "-map", "0:v:0", "-f", "framemd5", "-"],
+            capture_output=True,
+            timeout=PRODUCTION_TIMEOUT,
+        )
     if finished.returncode != 0:
         whose = f"the {side}" if side else "this server"
         raise NamedError(
