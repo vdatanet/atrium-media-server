@@ -1224,13 +1224,9 @@ def test_a_case_the_sweep_compares_and_an_anchor_names_is_issued_once() -> None:
     """
     created, deleted, _ = _playlist_cases()
     log: list[tuple[str, str, str]] = []
-    issuers, _wires = _issuers(
-        [created, deleted], log, bodies=({"Id": "p" * 32}, {"Id": "q" * 32})
-    )
+    issuers, _wires = _issuers([created, deleted], log, bodies=({"Id": "p" * 32}, {"Id": "q" * 32}))
     seat = _seat("restricted")
-    endpoint = differential.Endpoint(
-        method="POST", path="/Playlists", level="L2", feature="009"
-    )
+    endpoint = differential.Endpoint(method="POST", path="/Playlists", level="L2", feature="009")
 
     # Through the sweep's own door, because that is where the second issue came from.
     differential.compare_case(
