@@ -73,7 +73,7 @@ if TYPE_CHECKING:
     from atrium.db.item_queries import ItemQueryRepository
 
 #: Sixteen bytes, rendered as 32 lowercase hex characters - the shape the reference's `AccessToken`
-#: has. `[prior-probe: Jellyfin 10.11.11, 2026-06-13]`, spec section 3.3.
+#: has. `[probe: tools/probe_auth_mechanisms.py, Jellyfin 10.11.11, 2026-08-28]`, spec section 3.3.
 TOKEN_BYTES = 16
 
 

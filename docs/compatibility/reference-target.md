@@ -38,10 +38,19 @@ The reasoning for pinning, and for pinning to this particular line rather than `
 > **A Jellyfin's OpenAPI document is the core API plus whatever plugins are installed.** That is
 > measured, not inferred: the reference server has six plugins, and two of its 316 paths —
 > `/TMDbBoxSets/Refresh` and `/Tmdb/ClientConfiguration` — come from them
-> `[probe: /Plugins and /api-docs/openapi.json, Jellyfin 10.11.11, 2026-09-01]`. None of the six is
+> `[probe: tools/probe_plugin_paths.py, Jellyfin 10.11.11, 2026-09-05]`. None of the six is
 > Trakt. So the index was an extraction of **one server's** `10.11.10` document, taken while that
 > server had a plugin this one does not — and no server this project can reach serves that
 > document. The freshness check could not pass anywhere, and had never once run.
+>
+> *The 2026-09-01 reading was taken by hand and its citation named the two endpoints rather than
+> a script, so nothing re-runnable resolved from it; the 2026-09-04 audit's L4
+> asked for the script, and on 2026-09-05 `tools/probe_plugin_paths.py` reproduced the reading
+> exactly — six plugins, 316 paths, the same two. It adds the half a count cannot show: **four of
+> the six plugins claim no path at all** (AudioDB, MusicBrainz, OMDb, Studio Images), so the
+> widening is two paths from two plugins and not a per-plugin surcharge, and the document also
+> declares 389 operations. The attribution is by name and is therefore a lower bound, which the
+> probe says in its own output rather than in a comment.*
 >
 > **The second: step 2 of the procedure had no input.**
 > [conformance.md](conformance.md#when-the-reference-version-moves) says *"run the full
