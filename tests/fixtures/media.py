@@ -28,6 +28,11 @@ atomic rename, and reused; change the matrix and the digest moves, so a stale ca
 Nothing scans destructively, so sharing one tree between tests is safe - a test that wants to
 *mutate* a file copies it out first.
 
+**A hit is every declared file being there, not the directory existing.** The default cache is
+under `$TMPDIR`, which macOS purges *files* out of while leaving the directory structure standing;
+a cache check asking about the directory calls that a hit and hands back paths that no longer open.
+`BuiltMedia.is_complete` is the check, and a tree missing any one of its files is rebuilt.
+
 **Every entry says why it is in the matrix**, the discipline `tests/fixtures/library/manifest.py`
 holds itself to: an entry with no reason is one nobody dares delete when it is inconvenient.
 
@@ -50,6 +55,7 @@ remember.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -1441,10 +1447,54 @@ class BuiltMedia:
         """Where a declared planted image landed - beside its film, for the same reason."""
         return self.path_of(one).with_name(planted.name)
 
+    def declared_files(self) -> tuple[Path, ...]:
+        """Every file a complete tree holds: each declaration, and the sidecars and images that
+        landed beside it.
+
+        Derived from `DECLARED` rather than from a walk of the tree, so it says what *should* be
+        there - which is the only form of the question `is_complete` can be asked in.
+        """
+        paths: list[Path] = []
+        for one in DECLARED:
+            paths.append(self.path_of(one))
+            if isinstance(one, MediaFile):
+                paths.extend(self.sidecar_path_of(one, sidecar) for sidecar in one.sidecars)
+                paths.extend(self.image_path_of(one, planted) for planted in one.images)
+        return tuple(paths)
+
+    def is_complete(self) -> bool:
+        """Whether every declared file is really on disk.
+
+        **The question the cache has to ask, and asking it about the directory is a bug.** macOS
+        purges files out of `$TMPDIR` and leaves the directory structure standing, so a check on
+        `base.is_dir()` goes on saying *hit* over a tree whose files are gone and the caller gets
+        paths that no longer open - about thirty ffmpeg-dependent tests failing with
+        `FileNotFoundError`, three times in one day, each worked around with a fresh cache
+        directory.
+
+        Every file, not one of them: a purge that took all but one leaves a tree exactly as
+        unusable as a purge that took everything, and a check the survivor satisfied would be the
+        same bug at a smaller size. `is_file` and not a length, because what a purge removes is the
+        file - and a size assertion here would be this module's declarations written twice.
+        """
+        return all(path.is_file() for path in self.declared_files())
+
     def copy_into(self, destination: Path) -> BuiltMedia:
         """The whole tree, somewhere a test may write to. The cache never is."""
         shutil.copytree(self.base, destination, dirs_exist_ok=True)
         return BuiltMedia(base=destination, ffmpeg=self.ffmpeg)
+
+
+def declared_media_files(base: Path) -> tuple[Path, ...]:
+    """Every file the media world holds, once it stands under `base`.
+
+    The same question `BuiltMedia.is_complete` asks, for a caller holding a *copy* of the tree and
+    no build of its own - `tests/fixtures/reference_tree.py` asking whether the media subtree of a
+    fixture tree composed on an earlier run is still there. Which files should be present is a
+    property of the declarations and not of the encoder, so this takes a path and nothing else; the
+    empty version line never leaves this function.
+    """
+    return BuiltMedia(base=base, ffmpeg="").declared_files()
 
 
 def digest_of(version: str) -> str:
@@ -1463,35 +1513,69 @@ def cache_root() -> Path:
     return base
 
 
+def _discard(base: Path) -> None:
+    """Take a tree out from under the published name, then delete it.
+
+    The rename is what makes this safe to do while another process is reading: the directory it
+    holds open goes on existing until it lets go, and the name resolved after this call is either
+    missing or a complete tree. Both steps are best-effort - if somebody published over the name
+    first there is nothing here to sweep, and the caller's retry says so.
+    """
+    doomed = Path(tempfile.mkdtemp(prefix=f"{base.name}.purged.", dir=base.parent))
+    with contextlib.suppress(OSError):
+        base.replace(doomed / base.name)
+    shutil.rmtree(doomed, ignore_errors=True)
+
+
+def _publish(staging: Path, built: BuiltMedia) -> None:
+    """Move a finished build under the name everything reads, or establish that it need not be.
+
+    A rename cannot land on a name a directory already holds, and there are two ways one does.
+    Somebody published first, and theirs is the same tree - the digest says so - so ours goes in
+    the bin. Or what stands there is a **purged** tree, whose empty directories survived the files:
+    that one is swept and the publish retried, because leaving it would mean the rebuild this
+    function was called for is thrown away and the caller handed the purged tree back again.
+    """
+    for last in (False, True):
+        try:
+            staging.replace(built.base)
+            return
+        except OSError:
+            if built.is_complete():
+                return
+            if last:
+                raise
+            _discard(built.base)
+
+
 def build_media_files(cache: Path | None = None) -> BuiltMedia:
     """The whole matrix on disk, generated once per (matrix, ffmpeg) and reused after that.
 
     Published with a rename, so two processes racing - a `pytest -p xdist`, two checkouts, a
     second suite in another terminal - either both see a complete tree or one of them throws its
     own away. A half-written directory is never visible under the name anything reads.
+
+    **The cache is hit on the files and not on the directory**, which is `BuiltMedia.is_complete`
+    and the reason it exists: the default cache lives under `$TMPDIR`, macOS purges files out of
+    there and leaves the directories behind, and a tree in that state is rebuilt rather than
+    reported as a hit.
     """
     version = ffmpeg_version()
-    base = (cache or cache_root()) / digest_of(version)
-    if base.is_dir():
-        return BuiltMedia(base=base, ffmpeg=version)
+    built = BuiltMedia(base=(cache or cache_root()) / digest_of(version), ffmpeg=version)
+    if built.is_complete():
+        return built
 
-    base.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=f"{base.name}.building.", dir=base.parent))
+    built.base.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f"{built.base.name}.building.", dir=built.base.parent))
     try:
         for one in MATRIX:
             generate(one, staging)
         for refused in UNINSPECTABLE:
             write_uninspectable(refused, staging)
-        try:
-            staging.replace(base)
-        except OSError:
-            # Somebody else published first. Theirs is the same tree - the digest says so - and
-            # ours goes in the bin.
-            if not base.is_dir():
-                raise
+        _publish(staging, built)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
-    return BuiltMedia(base=base, ffmpeg=version)
+    return built
 
 
 # ------------------------------------------------------------------------------------------
@@ -1682,6 +1766,7 @@ __all__ = [
     "UninspectableFile",
     "binary",
     "build_media_files",
+    "declared_media_files",
     "exif_orientation_segment",
     "extraction_offset_seconds",
     "ffmpeg_version",

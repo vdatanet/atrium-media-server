@@ -4037,7 +4037,11 @@ class FixtureInstance:
             return self
         root = Path(self.args.fixture_root) if self.args.fixture_root else DEFAULT_FIXTURE_TREE
         try:
-            if not root.is_dir() or not any(root.iterdir()):
+            # Every declared file, not merely a directory with something in it: a tree whose
+            # files have been swept out from under its directories is not a tree this run can
+            # compare two servers over, and `build` rewrites the same bytes at the same fixed
+            # modification time, so asking again costs a rebuild only when one is owed.
+            if not root.is_dir() or not tree.is_complete(root):
                 tree.build(root)
             libraries = tuple(
                 module.Library(
