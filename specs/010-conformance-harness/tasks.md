@@ -2491,6 +2491,24 @@ request more, proving the paused report was stored before the silence begins.
    starts with nothing played. **Three instances of one asymmetry: the configuration, the sessions,
    and the play state.** None of them is either server being non-deterministic.
 
+**Where the first kept run's differences went, so nobody triages them twice.** A clean-server run
+on 2026-09-05 answered **703 differences**, and this feature owns none of them: spec §2's rule is
+that each belongs to the feature owning its endpoint, and they are written on those lists rather
+than here.
+
+| feature | rows | where |
+|---|---|---|
+| 005 | 524 | [its list](../005-item-query-api/tasks.md#what-this-feature-owes-the-next-ones), as five classes plus the bare-`/Items` disagreement |
+| 008 | 104 | [its list](../008-playback-negotiation-and-delivery/tasks.md#what-this-feature-owes-the-next-ones), 90 of them one route |
+| 002 | 37 | the user object, and the seat's own `EnabledFolders` — identifiers differ by design (§1.4) |
+| 001 | 30 | `GET /System/Info`, `CastReceiverApplications` among them |
+| 007 | 6 | user data |
+| 006 | 2 | `BackdropImageTags` |
+
+**The counts are one run's and the classes are not.** A run against a different library answers
+different numbers; what survives re-running is which cause owns which rows, which is why the lists
+carry the classes and this table carries only the pointer.
+
 **And one thing this feature hands back rather than forward.** The three remaining
 prior-measurement debts in [reference-target.md](../../docs/compatibility/reference-target.md) are
 *"one author's afternoon and one library scanned twice"*: the `SortBy` closure — the cheapest of the
