@@ -34,11 +34,41 @@ BANNER = b"atrium synthetic fixture - not media, not a copyrighted work\n"
 #: the change detection of section 6.4, small enough that the whole tree is trivial.
 MINIMUM_BODY = 512
 
-#: Every file gets this modification time. A fixed clock is not tidiness: section 6.4 makes
-#: `(size, mtime_ns)` the change-detection signal, so a fixture built at the current time would
-#: hand every scan a different signal and quietly make "the same tree scanned twice produces the
-#: same items" untestable. 2026-01-01T00:00:00Z.
+#: The instant every file's modification time is measured from. A fixed clock is not tidiness:
+#: section 6.4 makes `(size, mtime_ns)` the change-detection signal, so a fixture built at the
+#: current time would hand every scan a different signal and quietly make "the same tree scanned
+#: twice produces the same items" untestable. 2026-01-01T00:00:00Z.
 FIXED_MTIME_NS = 1_767_225_600_000_000_000
+
+#: How far past that instant a file's own time may land. A year, so that every date in the tree
+#: reads as an ordinary 2026 date, and so that ~100 files over ~31.5 million seconds practically
+#: never land on the same one - `test_every_file_carries_its_own_instant` is what says they did
+#: not, rather than this comment.
+MTIME_SPREAD_SECONDS = 365 * 24 * 3600
+
+
+def mtime_ns_for(key: str) -> int:
+    """One fixed instant per file, and a **different** one for each - both halves load-bearing.
+
+    **Fixed**, for the reason `FIXED_MTIME_NS` gives: the change signal is `(size, mtime_ns)`, so a
+    tree stamped with the clock makes "the same tree scanned twice" untestable.
+
+    **Different**, from 2026-09-06, and that half was bought at a price this project paid twice
+    before spotting it. Every file carried *one* instant, so every date ordering over the fixture
+    was one enormous tie on **both** servers - and a window over a tie, which is what
+    `GET /Items/Latest` is, then holds whichever rows the tie-break happened to favour. It hid a
+    real defect (003 section 3.9: `DateCreated` was the scan's clock, and a tree of identical times
+    could not tell that from the file's) and it made a differential run's `/Items/Latest`
+    incomparable between two servers for a reason that was the fixture's rather than either
+    server's (010's list).
+
+    **Keyed on the path and not on a position in a list**, deliberately: an ordinal would mean
+    inserting one declaration moved every file after it, and a rescan would then report a library
+    of unchanged files as changed. A digest of the path moves exactly the file whose path moved.
+    """
+    digest = hashlib.sha256(key.encode("utf-8")).digest()
+    offset = int.from_bytes(digest[:6], "big") % MTIME_SPREAD_SECONDS
+    return FIXED_MTIME_NS + offset * 1_000_000_000
 
 
 @dataclass(frozen=True)
@@ -140,4 +170,8 @@ def _write(root: Path, entry: Entry) -> None:
     target = root.joinpath(*entry.path.split("/"))
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(content_of(entry))
-    os.utime(target, ns=(FIXED_MTIME_NS, FIXED_MTIME_NS))
+    # Keyed on the library's name and the entry's path within it, which is what stays the same
+    # between two builds and between two mount points - never on the absolute path, which is a
+    # temporary directory in this suite and `/fixture` inside a reference instance.
+    stamped = mtime_ns_for(f"{root.name}/{entry.path}")
+    os.utime(target, ns=(stamped, stamped))

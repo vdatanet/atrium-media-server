@@ -2562,15 +2562,21 @@ request more, proving the paused report was stored before the silence begins.
    over 3 instants either way. The tie is not the defect and never was; the tie-break holding still
    is the property.
 
-   **Two things this does not close.** Containers still share one instant per scan where the
-   reference gives each row its own to sub-second precision (measured 2026-09-06 on the same
-   instance as behaviours §2.29), so a date ordering over containers is one large tie here and a
-   total order there - it holds still now, but it is not the reference's order. And `/Items/Latest`
-   answers 20 rows of 52 on a fixture whose files all carry **one** modification time, which is the
-   fixture's own doing: both generators stamp a single fixed instant on purpose, so that
-   `(size, mtime_ns)` stays a testable change signal. Distinct-but-fixed instants would satisfy
-   that requirement just as well and would make the date orderings total on **both** servers, which
-   is the cheapest remaining step and is 003's fixture rather than this harness's code.
+   **The fixture half was taken the same day.** `/Items/Latest` answered 20 rows of 52 over a tree
+   whose files all carried **one** modification time - the generators' own doing, so that
+   `(size, mtime_ns)` stays a testable change signal - which made a date ordering one enormous tie
+   on **both** servers rather than on either. Both generators now stamp a fixed instant **per
+   file**, keyed on its path so that adding a declaration moves only the file it adds; the change
+   signal is exactly as testable and the date orderings are total on both sides. `GENERATOR_VERSION`
+   moved with it, because a cached media tree from before the change is byte-identical and would
+   otherwise have been read straight through the change.
+
+   **What is left is the containers.** They share one instant per scan here, where the reference
+   gives each row its own to sub-second precision (measured 2026-09-06 on the same instance as
+   behaviours §2.29). A date ordering over containers is therefore still one tie on this side and a
+   total order on the other. It holds still, so no run's report moves because of it; what it is not
+   is the reference's order, and a comparison of a container listing by position is comparing two
+   orders that agree only by luck.
 
    **The 8 per cent this entry first claimed was mostly the yardstick, and the correction matters
    more than the number.** That figure came from comparing two reports row by row with the two

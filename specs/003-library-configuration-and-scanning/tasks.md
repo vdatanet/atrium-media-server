@@ -1381,6 +1381,20 @@ here, and they are two different shapes rather than one rule missed
 Neither is a defect this list can settle: both are 003's rule about what a season *is*, and the
 measurement is here so that the next person deciding does not have to stand a reference up again.
 
+**The fixture stamps a fixed instant on every file rather than one on the whole tree, from
+2026-09-06.** Both generators stamped `FIXED_MTIME_NS` on everything, for a good reason —
+§3.8 makes `(size, mtime_ns)` the change signal, so a tree built at the current time makes *"the
+same tree scanned twice"* untestable — and the cost of the shortcut only became visible once
+`DateCreated` came from the file (§3.9): a tree of identical instants makes every date ordering one
+enormous tie on **both** servers, so a window over it — `/Items/Latest` — holds whichever rows each
+side's tie-break favours, and a differential run reads a difference the fixture invented. A fixed
+instant **per file** satisfies the original requirement exactly as well. It is keyed on the file's
+path rather than on its position in the declarations, so adding one entry moves one file's signal
+instead of every entry after it, which would have reported an unchanged library as changed on the
+next scan. `tests/fixtures/media.py`'s `GENERATOR_VERSION` moved with it: the bytes did not change,
+so without the bump a cached tree from before would have been read and the change would silently
+not have applied.
+
 **A library's identifier is derived from its declaration, from 2026-09-06 — and the reason it was
 found here is that no test in this repository could have found it.** `config.create` minted the
 identifier with `new_id()`, and every file-backed identifier hashes it, so two installs built from
