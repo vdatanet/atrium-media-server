@@ -1027,8 +1027,23 @@ tranche of seven properties and it is two, and the line between them is not *"fu
 | `ProductionLocations` on a `Movie`, `Trickplay` on a `Movie` and an `Episode`, `AirDays` on a `Series` | **Done.** All three are things this server resolves **none of and never will in v1**, so the empty value is a statement it can make truthfully rather than a stand-in for data it failed to fetch |
 | `SeriesStudio`, the nine by-name counts, `CumulativeRunTimeTicks` and `RunTimeTicks` on a music container | **Not done, and not for want of the machinery** |
 
-Three findings hold the second half open, and each is about the *fixture* being unable to tell two
-answers apart rather than about the work being large:
+**All three were answered on 2026-09-06, on a library with real music** — which is the one thing
+each of them was waiting for `[probe: tools/probe_real_library_shapes.py, Jellyfin 10.11.11,
+2026-09-06]`:
+
+| | reading |
+|---|---|
+| `SeriesStudio` | **a derivation, as the paragraph below guessed and could not show**: five sampled episodes of five carry a `SeriesStudio` that is one of their series' own studios, none disagreed |
+| the by-name counts | **two of them count and seven are always zero.** `AlbumCount` and `SongCount` are the artist's albums and songs — 5 and 42, 3 and 55, 1 and 19 on the sampled artists — and `ArtistCount`, `MusicVideoCount`, `MovieCount`, `SeriesCount`, `EpisodeCount`, `ProgramCount` and `TrailerCount` answered `0` on every one. And the artist's own `ChildCount` was `AlbumCount + SongCount` on **five of five** |
+| a music container's runtimes | **a rollup, not a constant.** On three albums, `RunTimeTicks` equalled `CumulativeRunTimeTicks` equalled the exact sum of that album's tracks |
+
+So the tranche is no longer three open questions but three specifications, and the by-name half
+shrank from nine unknowns to two counts and seven zeros. What is left is writing them, which is
+this feature's ordinary work rather than a measurement anybody is waiting on.
+
+The paragraphs below are what those three looked like before the reading, kept because each names
+the *reason* the fixture could not answer it — and that reason is what will apply to the next field
+of the same shape:
 
 * **`SeriesStudio` is not a constant, though it looks exactly like one here.** The reference answers
   `""` on all 9 episodes and all 7 seasons — because this fixture's series have no studio. This
@@ -1180,12 +1195,18 @@ regardless. §5.3 describes the gap as *"a shorter list of artists to browse"*, 
 music library shows and the opposite of what this fixture does — the section now says that the
 direction is a property of the library rather than of the gap.
 
-**So the class has no unattributed row left**, and what it has instead is a question §5.3 raises
-and nobody has measured: the two `/Artists` are listing different **populations**, not counting one
-population differently. `Soundless Artist` is a row on the reference and not an item there;
-`Various Artists` is an item on both and a row on neither's terms but this server's. What the
-reference's by-name path lists, exactly, is read from its source in §5.3 and has never been
-measured from outside.
+**So the class has no unattributed row left**, and what it had instead was a question §5.3 raises:
+the two `/Artists` are listing different **populations**, not counting one population differently.
+
+**Measured on 2026-09-06, on a library with real music** `[probe:
+tools/probe_real_library_shapes.py, Jellyfin 10.11.11, 2026-09-06]`: the reference's `/Artists`
+answers **684 rows** where its own item tree holds **210** `MusicArtist` items — 165 identifiers in
+both, **519 rows that are no item**, 45 items that are no row — and every one of the **134**
+distinct performer names on 200 sampled tracks has a row. So §5.3's *"every performer has a row"*
+holds from outside, and the registry is three times the size of the tree this project derives its
+artists from. That is the shape of the gap rather than a defect to close: closing it is the
+deliberate identity migration §5.3 names, and this reading is what a feature doing it would start
+from.
 
 **So the useful count is not 971 or 524.** It is: 003's naming, one cause, carrying the largest part
 of two classes; three deltas already owned by 007, 008 and 002; the playlists folder and the
