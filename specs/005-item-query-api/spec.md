@@ -429,6 +429,30 @@ were measured by name on a live configuration: `LatestItemsExcludes` (view ident
 to the unscoped request) and `HidePlayedInLatest`, `true` on a configuration never edited, which
 keeps played items out unless the caller's own played filter asks for them.
 
+> **The music half of that reading did not reproduce, and is corrected here rather than deleted —
+> 2026-09-06.** Read against a reference over this repository's own fixture, with both servers
+> answering in the same breath, **a track surfaces as its album however few tracks the album
+> holds**:
+>
+> | album | recent children | atrium, before | reference |
+> |---|---|---|---|
+> | `A Compilation` — 3 tracks | 1 | the container | the container |
+> | `Second Album` — 2 tracks | 1 | the container | the container |
+> | `spandau_ballet…` — **1 track** | 1 | **the track** | the container |
+>
+> All three groups hold exactly one *recent* member, so what separated them was the album's total
+> size and not anything about recency — and the reference does not separate them at all. The
+> sentence above describes the middle case exactly (*"a lone new track arrives as the `Audio`"*)
+> and the reference answered with the album, so it is a claim that failed to reproduce on a case
+> of its own shape rather than one this fixture could not produce.
+>
+> **The television half held exactly as written and does not move**: a series with three recent
+> episodes surfaced as the `Series` and a series with one surfaced as the `Episode`, on both
+> servers, in the same response `[probe: tools/differential.py's own client, by hand, Jellyfin
+> 10.11.11, 2026-09-06]`. So the rule is one sentence per media kind and not one sentence: a track
+> is always its album, an episode is its series only when the series has more than one recent
+> episode. AC-28.
+
 **`Similar` is deterministic on purpose, and that is a recorded divergence** *(corrected at 010's
 measurement gate, 2026-09-01 — this paragraph said "the reference's are not obviously so", which
 was a hedge in a place where a measurement was available)*. **The reference does not rank `Similar`
@@ -644,6 +668,11 @@ acceptance map could not name a single one of their twenty-seven tests.)*
     account's visibility still applies. `ids` escapes the shape and answers the items it names;
     `recursive=true` answers the library. *(Added 2026-09-06 with the behaviour, from the sharpest
     single row of 010's first kept run — 77 rows against 7 — which none of its five classes fitted.)*
+28. `GET /Items/Latest` groups **by media kind** (§3.7): a recent track surfaces as its album
+    however few tracks that album holds, and a recent episode surfaces as its series only when
+    the series has more than one recent episode — a lone one surfaces as the `Episode`.
+    *(Added 2026-09-06, when the music half of the 2026-08-28 reading failed to reproduce against
+    a reference on a case of its own shape.)*
 
 ## 6. Conformance
 

@@ -147,22 +147,48 @@ async def test_latest_is_a_bare_array(client: httpx.AsyncClient) -> None:
     assert isinstance(answered.json(), list)
 
 
-async def test_a_group_of_several_surfaces_as_its_container_and_a_singleton_as_itself(
+async def test_a_track_surfaces_as_its_album_however_few_the_album_holds(
     client: httpx.AsyncClient, world: QueryWorld
 ) -> None:
-    """The measured rule, on one response: the compilation's three tracks arrive as the album,
-    the guest album's lone track arrives as the track, and no compilation track leaks through."""
+    """AC-28's music half, and it **overturns a measurement** rather than filling a gap.
+
+    This asserted the opposite until 2026-09-06: that the guest album's lone track arrives as the
+    `Audio`, which is what a live library was read as answering on 2026-08-28. Read against a
+    reference over this repository's own fixture — both servers in the same breath — a track
+    surfaces as its album on every case there is, including an album of three tracks with one
+    recent member, which is the very shape that sentence described
+    `[probe: tools/differential.py's own client, by hand, Jellyfin 10.11.11, 2026-09-06]`.
+
+    So no `Audio` row survives the grouping, and that absence is the sharp half of the claim: a
+    rule that grouped by count would leave the lone track standing.
+    """
     answered = await client.get("/Items/Latest", params={"limit": "50"})
     rows = answered.json()
     ids = [one["Id"] for one in rows]
 
-    assert ids[0] == world.guest_track, "the newest item is the lone guest track, ungrouped"
-    assert rows[0]["Type"] == "Audio"
+    assert not any(one["Type"] == "Audio" for one in rows), (
+        "a track surfaces as its album, so no ungrouped track is left in the answer"
+    )
+    assert world.guest_track not in ids, "the lone guest track arrives as its album"
 
     assert world.album in ids, "three recent tracks surface as their album"
     album_row = next(one for one in rows if one["Id"] == world.album)
     assert album_row["Type"] == "MusicAlbum"
     assert not set(world.tracks) & set(ids), "no grouped track appears beside its album"
+
+
+async def test_a_lone_episode_still_surfaces_as_itself(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """AC-28's television half, which the same reading found **unchanged**.
+
+    It is asserted apart from the music half now precisely because the two halves parted: a series
+    with several recent episodes arrives as the `Series` and a series with one arrives as the
+    `Episode`, on both servers, in the same response. A rule made uniform in either direction
+    breaks one of these two tests.
+    """
+    answered = await client.get("/Items/Latest", params={"limit": "50"})
+    ids = [one["Id"] for one in answered.json()]
 
     for handle in world.series:
         assert handle.id in ids, "several recent episodes surface as their series"

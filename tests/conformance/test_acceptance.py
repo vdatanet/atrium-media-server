@@ -599,7 +599,10 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
         "tests.unit.test_items_route:test_the_item_route_emits_everything_unasked",
     ),
     19: (
-        "tests.unit.test_user_world_routes:test_a_group_of_several_surfaces_as_its_container_and_a_singleton_as_itself",
+        # Renamed and split on 2026-09-06, when the music half of the rule was overturned: the
+        # criterion is about the grouping, and both halves of it are named here.
+        "tests.unit.test_user_world_routes:test_a_track_surfaces_as_its_album_however_few_the_album_holds",
+        "tests.unit.test_user_world_routes:test_a_lone_episode_still_surfaces_as_itself",
         "tests.unit.test_user_world_routes:test_each_group_appears_once_and_newest_first",
         "tests.unit.test_user_world_routes:test_an_excluded_library_contributes_nothing_unscoped",
         "tests.unit.test_user_world_routes:test_played_items_stay_out_by_default_and_come_back_when_asked",
@@ -663,6 +666,13 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
         # And on the wire, where a client reads them: the goldens for the three bodies that moved.
         "tests.conformance.test_golden_items:test_the_full_body_per_type",
         "tests.conformance.test_golden_items:test_the_list_row_per_type",
+    ),
+    28: (
+        # The two halves apart, because the rule parted: a rule made uniform in either direction
+        # breaks one of them.
+        "tests.unit.test_user_world_routes:test_a_track_surfaces_as_its_album_however_few_the_album_holds",
+        "tests.unit.test_user_world_routes:test_a_lone_episode_still_surfaces_as_itself",
+        "tests.unit.test_user_world_routes:test_each_group_appears_once_and_newest_first",
     ),
     27: (
         "tests.unit.test_items_route:test_a_bare_listing_is_the_accounts_top_level_folders",
