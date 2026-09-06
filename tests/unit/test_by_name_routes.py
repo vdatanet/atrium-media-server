@@ -137,8 +137,15 @@ async def test_ac13_the_two_artist_routes_coincide_for_the_recorded_reason(
     assert album <= every
     assert album == every, "if these ever differ, behaviours 5.3's argument needs rereading"
 
-    performer = await client.get("/Items", params={"artistIds": world.album_artist})
-    fronted = await client.get("/Items", params={"albumArtistIds": world.album_artist})
+    # `recursive`, because a listing with neither a parent nor it is the account's top-level
+    # folders on both servers and answers no filter at all (005 section 3.3, AC-27) - so without
+    # it this asserts a narrowing neither server performs.
+    performer = await client.get(
+        "/Items", params={"artistIds": world.album_artist, "recursive": "true"}
+    )
+    fronted = await client.get(
+        "/Items", params={"albumArtistIds": world.album_artist, "recursive": "true"}
+    )
     assert world.guest_track in {one["Id"] for one in performer.json()["Items"]}
     assert world.guest_track not in {one["Id"] for one in fronted.json()["Items"]}
 

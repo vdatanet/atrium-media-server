@@ -250,6 +250,55 @@ class ItemQueryRepository:
         rows = list(self._session.execute(page).scalars())
         return QueryPage(items=self._hydrate(rows, query.user), total=total)
 
+    def root_listing(self, query: ItemQuery) -> QueryPage:
+        """The user's top-level folders, and **not a query at all**.
+
+        Measured on a reference instance over this repository's own fixture, one request per
+        parameter `[probe: tools/probe_bare_items.py, Jellyfin 10.11.11, 2026-09-06]`: with no
+        `parentId`, without `recursive`, and with no `ids`, the reference answers the reading
+        account's top-level folders and **ignores every other parameter it was given** -
+        `includeItemTypes`, `excludeItemTypes`, `mediaTypes`, `searchTerm`, `nameStartsWith`, the
+        five by-name id filters, `years`, `genres`, `filters`, `isPlayed`, `sortBy`, `sortOrder`,
+        `startIndex` and **`limit`**. `limit=2` answers six rows of six; `startIndex=2` answers all
+        six and echoes the `2`.
+
+        So this is a shape rather than a narrowing, which is why it is here and not a branch in
+        `_scope`: everything `_scope` composes - the filters, the ordering, the paging - is exactly
+        what this listing does not do.
+
+        **`ids` is the one escape, and it is measured rather than assumed.** `ids=<a film>` with no
+        parent and no `recursive` answers that film. A client naming items by identifier is asking
+        about those items and not about the shape of the library, and treating it as a root listing
+        would answer a question nobody asked - which is the regression this measurement prevented.
+
+        **One row of the reference's six is not here.** Beside the five `CollectionFolder` rows it
+        answers a `ManualPlaylistsFolder` named `Playlists`, a type this project does not model:
+        009's playlists have no folder above them. That is a declared difference on 005's list
+        rather than a gap this method invents an item to fill.
+
+        **Called by the route and not by `run`, which is where the first attempt put it.** Every
+        caller of `run` builds an `ItemQuery`, and two of them - `/Shows/NextUp` and
+        `/UserItems/Resume` - build one with no parent and no recursion meaning *these items*
+        rather than *the root*. A rule in the engine answered both of them with the library
+        folders. The shape is a property of what `GET /Items` does with a request, so it is
+        decided where the request is read.
+        """
+        rows = list(
+            self._session.execute(
+                select(models.Item)
+                .where(self._visible_to(query.user))
+                .where(models.Item.type == ItemType.COLLECTION_FOLDER.value)
+                # By name, which is what the reference answered: the five went out alphabetically
+                # rather than in the order they were declared, and its own playlists folder is
+                # appended after them rather than sorted among them.
+                .order_by(models.Item.name.asc(), models.Item.id.asc())
+            ).scalars()
+        )
+        return QueryPage(
+            items=self._hydrate(rows, query.user),
+            total=len(rows) if query.count else 0,
+        )
+
     def visible_ids(self, ids: Sequence[str], user: User) -> set[str]:
         """Which of these identifiers this user may see - the one predicate, asked as a question.
 
