@@ -2618,6 +2618,41 @@ request more, proving the paused report was stored before the silence begins.
    agree — and the second is not this feature's, because what makes them disagree is where
    `DateCreated` comes from ([003's list](../003-library-configuration-and-scanning/tasks.md#what-this-feature-owes-the-next-ones)).
 
+**A run against a clean pair, 2026-09-06 — the first since six changes landed, and the first this
+harness has had an Atrium of its own to ask.** 971 differences, 166 comparisons over 51 of 59
+endpoints, 25 cases not asked, 17 of 22 named comparisons run, 561 findings suppressed by an
+allowlist entry `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-06]`. The
+report is git-ignored and regenerable, so the standing numbers live in it and not here; what is
+recorded here is what the run *cost* and what it *proved*.
+
+**What it took, and every step of it is this list's own backlog.** The reference instance died on
+its first two attempts and came up on the third — the `SIGILL` of item 2 — so the run was given
+`--reference-url` and an instance stood up by hand, which is the working practice ADR-0007 already
+describes. The Atrium side is the entry above about **a running Atrium not being able to be given a
+library**: the six libraries were written straight into a data directory through `library.config`
+and `library.scan`, and the two seats the run has to be handed were written through
+`UserRepository` — the roadmap's *"direct database access"* answer for v1, done by a script that
+belongs in nobody's repository. It works, and the friction is worth stating precisely because the
+entry above prices it: a run needs an operator to build a server before it can compare one. One
+detail is new — with `--reference-url` the run authenticates against the named instance with the
+**environment's** Jellyfin credentials, not the throwaway administrator that instance prints, so a
+by-hand pair needs `JELLYFIN_USERNAME`/`JELLYFIN_PASSWORD` overridden for the run as well.
+
+**The anchor section earned its place on its first run** (plan §4.4, added a day earlier): **four of
+eight** listing anchors resolved to rows with different names, and it is what tells the two kinds
+apart. Two are naming — `The Planted Poster` here against `The Planted Poster (2011)` there, the
+same film under 003's derivation and the reference's whole-filename rule. Two are genuine
+mis-pairings: `audio-by-sort-name@0` (`By One Artist` against `Ninety Six Kilohertz`) and
+`movies-by-sort-name@0` **for the restricted seat** (`2 Fast 2 Furious` of 16 against
+`Both Subtitle Kinds` of 15), which is the narrowing 008's list already records. Without the
+section all four read as silence.
+
+**One thing the run discharged rather than found.** behaviours §5's row on a required body arriving
+with no `Content-Type` said the shape was measured on 009's rename alone and that *"the four older
+routes were never asked"*, and named this harness as the only thing that could ask them. It asked:
+`POST /Items/{itemId}/PlaybackInfo` under both seats and 007's three reporting routes all answer
+`400` here against `415` there. The extrapolation is a measurement now, and the gap row says so.
+
 **Where the first kept run's differences went, so nobody triages them twice.** A clean-server run
 on 2026-09-05 answered **703 differences**, and this feature owns none of them: spec §2's rule is
 that each belongs to the feature owning its endpoint, and they are written on those lists rather
