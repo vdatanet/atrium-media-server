@@ -370,6 +370,19 @@ FEATURE_003: dict[int, tuple[str, ...]] = {
         "tests.library.test_creation_dates:test_a_modification_time_that_moves_moves_the_creation_date",
         "tests.library.test_creation_dates:test_a_date_left_by_an_older_scan_is_corrected_without_a_metadata_refresh",
     ),
+    17: (
+        # The two that build one declaration twice, which no other test in this suite does: every
+        # fixture world pins its library identifiers, so nothing here could ever have seen this.
+        "tests.library.test_identity_across_builds:test_two_databases_from_one_declaration_hold_the_same_identifiers",
+        "tests.library.test_identity_across_builds:test_the_window_over_a_tied_ordering_holds_still_across_two_builds",
+        # And the declaration-level half: one declaration is one library, and editing one moves
+        # nothing - which is the promise the minted identifier used to keep on its own.
+        "tests.library.test_config:test_declaring_one_library_twice_is_refused",
+        "tests.library.test_config:test_the_roots_are_a_set_rather_than_a_sequence",
+        "tests.library.test_config:test_the_case_flag_is_part_of_the_declaration",
+        "tests.library.test_config:test_renaming_a_library_keeps_every_identifier",
+        "tests.library.test_config:test_moving_a_root_keeps_every_identifier",
+    ),
 }
 
 #: Feature directory -> its map. Adding 003 was one entry here and one dictionary above, which is

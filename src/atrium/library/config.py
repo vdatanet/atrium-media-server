@@ -13,12 +13,26 @@ undo - the old identifiers are not stored anywhere, because they were derived.
 
 * **`case_sensitive_identity`** decides whether two paths differing only in case are one item or
   two, and it is an input to every identifier in the library (003 plan section 6.3).
-* **`id`** is the other input. It is allocated once rather than derived, so that renaming a library
-  or moving its roots costs nothing - and it means *deleting* a library and creating another with
-  the same name is not the same library.
+* **`id`** is the other input. It is **derived from the declaration this module was given** - the
+  collection type, the name, the roots and that flag - and then stored, never recomputed.
 
 Changing either means creating a new library and rescanning, which is a decision an operator makes
 with their eyes open rather than a side effect of an edit that looked cosmetic.
+
+**The identifier was allocated rather than derived until 2026-09-06, and the sentence that used to
+stand here said why: so that renaming a library or moving its roots costs nothing, and so that
+deleting a library and creating another with the same name is not the same library.** The first
+half still holds and is why the derivation happens once: `update` writes a new name or new roots
+and does not touch the identifier, so an edit still moves nothing. The second half is what was
+given up, deliberately, and it is the whole point of the change - **a library recreated from one
+declaration is one library**, and its items keep the identifiers a client cached. What forced it is
+that every file-backed identifier hangs off this one, so a minted value made a rebuilt install a
+different library holding different items with a different ordering, for no reason a client or an
+operator could see. Two servers cannot be compared through that, and 010's differential is what
+found it. 003 section 3.6 and AC-17 carry the argument.
+
+**The cost is that one declaration is now one library, and a second attempt at it is refused**
+rather than quietly making a duplicate that would find every file twice.
 """
 
 from __future__ import annotations
@@ -26,11 +40,21 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import PurePath
 
-from atrium.compat.guids import new_id
 from atrium.db.repositories import LibraryRepository
 from atrium.domain.items import CollectionType
 from atrium.domain.library import Library
-from atrium.library.identity import for_library
+from atrium.library.identity import for_library, for_library_configuration
+
+
+class LibraryAlreadyDeclaredError(ValueError):
+    """The declaration names a library that already exists, and would be a second copy of it.
+
+    Possible only since the identifier became a derivation of the declaration (2026-09-06): with a
+    minted one this was two libraries that happened to look alike, and every file under them was
+    found twice, under two identifiers, in two libraries a client would show side by side. A
+    distinct type rather than the database's integrity error, because the useful thing to say is
+    which library it already is.
+    """
 
 
 class FrozenAtCreationError(ValueError):
@@ -58,14 +82,24 @@ def create(
     global switch would rewrite every identifier in every library at once.
     """
     kind = CollectionType(collection_type)
+    cleaned = tuple(normalise_root(root) for root in roots)
     library = Library(
-        id=new_id(),
+        id=for_library_configuration(kind, name, cleaned, case_sensitive=case_sensitive_identity),
         name=name.strip(),
         collection_type=kind,
-        roots=tuple(normalise_root(root) for root in roots),
+        roots=cleaned,
         case_sensitive_identity=case_sensitive_identity,
     )
     _require_roots(library.roots)
+    already = repository.by_id(library.id)
+    if already is not None:
+        raise LibraryAlreadyDeclaredError(
+            f"this declaration is library {already.id} - {already.name!r} of type "
+            f"{already.collection_type.value} over {list(already.roots)}. Since the identifier is "
+            f"derived from the declaration, creating it again would be a second copy of one "
+            f"library: every file under it found twice, under two identifiers. Edit that library "
+            f"with `update`, or declare this one with a different name or different roots."
+        )
     stored = repository.add(library)
     return replace(stored, item_id=for_library(stored.id))
 
@@ -160,4 +194,10 @@ def _contains(outer: str, inner: str) -> bool:
     return PurePath(inner) != PurePath(outer) and PurePath(outer) in PurePath(inner).parents
 
 
-__all__ = ["FrozenAtCreationError", "create", "normalise_root", "update"]
+__all__ = [
+    "FrozenAtCreationError",
+    "LibraryAlreadyDeclaredError",
+    "create",
+    "normalise_root",
+    "update",
+]

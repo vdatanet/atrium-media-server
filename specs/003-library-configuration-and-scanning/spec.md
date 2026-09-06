@@ -293,12 +293,28 @@ afterwards is refused, not accepted with a warning** — changing it rewrites ev
 it, and nothing stores the old ones to undo with. Making it a server-wide switch would mean one
 flip rewrote every identifier in every library at once.
 
-**The same applies to a library's own identity, and it is easier to trigger by accident.** A
-library's identity is allocated when it is declared and kept, rather than derived from its name or
-its roots — so renaming a library, or moving its roots to another mount, costs nothing. The
-consequence worth stating plainly: *deleting* a library and declaring another one with the same
-name and the same roots is **not** the same library, and every item under it gets a new
-identifier. Editing a library is free; recreating one is not.
+**A library's own identity is derived from its declaration, and derived once.** The key is the
+collection type, the name, the roots as a set and the case-sensitivity flag — everything
+`config.create` is given — hashed the way every other identifier here is, and then **stored**.
+Nothing recomputes it: `update` writes a new name or new roots and leaves the identifier alone, so
+renaming a library, or moving its roots to another mount, still costs nothing. What follows is that
+**a library recreated from the same declaration is the same library**, and every item under it
+keeps the identifier a client cached. Declaring it twice is refused rather than silently made into
+a second copy, which would find every file twice under two identifiers.
+
+> **This reverses what this section said until 2026-09-06**, and the reversal is the point rather
+> than a tidy-up. The identity was *allocated* — `new_id()` — and this paragraph said so, with the
+> consequence stated plainly: deleting a library and declaring another with the same name was not
+> the same library. What that sentence did not say is that **every file-backed identifier hangs off
+> this one** (`for_file` hashes the library into the key), so a rebuilt install held different
+> items with different identifiers, and `db/item_queries` ends every ordering on that identifier —
+> so it also ordered its ties differently. None of it is visible to a client of one server and all
+> of it is fatal to a differential run comparing two by position, which is where it was found
+> ([010's list](../010-conformance-harness/tasks.md#what-this-feature-owes-the-next-ones)).
+> Measured before and after over one tree: two builds put **16 of 20** rows of a windowed
+> date ordering in different places and put **two items in one window that the other did not have**;
+> with the derivation, none. The ties are unchanged — 52 items over 3 instants either way — and it
+> is the tie-*break* that stopped moving.
 
 **A library's collection type is fixed at creation too**, and refused afterwards for the same
 reason: it selects which resolution rules apply, so changing it re-resolves every file under a
@@ -508,6 +524,11 @@ migration — the value derives from a file that is still there, so the first re
     by no file carries the moment of the scan and not its directory's time (§3.9). *(Added
     2026-09-06 with the behaviour, from the measurement that found the column had never been
     asserted at all.)*
+17. Two databases built from the same library declaration hold the **same identifiers**, and
+    therefore the same order within a tie: a library's identity is derived from its declaration and
+    stored, editing it moves no identifier, and declaring one twice is refused (§3.6). *(Added
+    2026-09-06 with the reversal, which no test could have caught: every fixture world in this
+    suite pins its library identifiers, so nothing here had ever built one twice.)*
 
 ## 6. Conformance
 

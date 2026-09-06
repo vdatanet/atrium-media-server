@@ -20,6 +20,12 @@ There are **six** identity rules, not one, and `RULE_OF` says which type uses wh
 from 003; the fifth is 004's by-name rule, and it is the only one with no library in the key. The
 sixth is 009's, and it is the only one that derives nothing at all: a playlist's identifier is
 minted when the user creates it, so every function here refuses to be asked for one.
+
+**And one identifier here belongs to no item.** `for_library_configuration` is a *library's* own,
+and it moved here on 2026-09-06 from being minted in `library/config.py` - because every
+file-backed key hashes it, so a minted one made two installs of one declaration hold different
+items. It has no row in `RULE_OF`, which is a map over `ItemType` and stays total over exactly
+that.
 """
 
 from __future__ import annotations
@@ -29,7 +35,7 @@ from collections.abc import Iterable, Mapping
 from enum import StrEnum
 
 from atrium.compat.guids import derive
-from atrium.domain.items import ItemType
+from atrium.domain.items import CollectionType, ItemType
 
 
 class IdentityRule(StrEnum):
@@ -240,6 +246,46 @@ def for_season(series_id: str, season_number: int | None) -> str:
     )
 
 
+def for_library_configuration(
+    collection_type: str,
+    name: str,
+    roots: Iterable[str],
+    *,
+    case_sensitive: bool = False,
+) -> str:
+    """A **library's own** identifier, from the configuration an operator declared it with.
+
+    The one identifier here that is not an item's, and the last one in this project to stop being
+    minted. It was `new_id()` until 2026-09-06, and the reason it changed is that every
+    file-backed identifier hangs off it: `for_file` hashes `(type, library_id, relative_path)`, so
+    a minted library identifier makes **every item in it different on a rebuilt install** even
+    when the tree, the configuration and this software are identical. The ordering tail in
+    `db/item_queries` is that identifier, so two builds of one library also order their ties
+    differently - which is invisible to a client and fatal to a differential run comparing two
+    servers by position (010's list).
+
+    **What is in the key is the configuration `config.create` was given**, and nothing else: the
+    collection type, the name, the roots as a set, and the case-sensitivity flag that is an input
+    to every identifier under it. Roots are sorted, so declaring the same two directories in the
+    other order is the same library rather than a second one.
+
+    **It is derived once and then stored**, which is what keeps the promise the old comment made
+    about renaming: `config.update` writes a new name or new roots and never recomputes this, so
+    an edit still costs nothing and no identifier moves. What it gives up is the other half of
+    that comment - deleting a library and creating it again from the same declaration now **is**
+    the same library, and its items keep the identifiers a client cached. That is a reversal of a
+    decision taken when OQ-2 closed, taken deliberately on 2026-09-06 and argued in
+    [003 §3.6](../../../specs/003-library-configuration-and-scanning/spec.md), AC-17.
+    """
+    return derive(
+        "Library",
+        CollectionType(collection_type).value,
+        name.strip(),
+        "1" if case_sensitive else "0",
+        *sorted(roots),
+    )
+
+
 def for_library(library_id: str) -> str:
     """The `CollectionFolder` that is the library itself."""
     return derive(ItemType.COLLECTION_FOLDER.value, library_id)
@@ -285,6 +331,7 @@ __all__ = [
     "for_by_name",
     "for_file",
     "for_library",
+    "for_library_configuration",
     "for_name",
     "for_season",
     "normalise_name",

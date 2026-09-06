@@ -2533,13 +2533,44 @@ request more, proving the paused report was stored before the silence begins.
    identifiers differ by design. The defect is this harness comparing, **by position**, an order
    that is total on neither server.
 
-   **So what is left of this after 2026-09-06 is the tie-break alone**, and it is the one of the
-   three the fix did not touch. A `library_id` minted per build is what reshuffles every tie, and
-   the reference is reproducible across three fresh instances with the same ties because its own
-   tie-break does not move. Whoever takes it has two doors - a `library_id` this repository derives
-   rather than mints, which is 003 §3.6's territory and changes every file-backed identifier once,
-   or a final ordering key that is not the identifier - and the second is this feature's business
-   only in that it is the one that would make a run's reports comparable.
+   **The tie-break was the whole of what was left, and it was taken the same day.** The first door
+   was the one used: `library/config.create` **derives** a library's identifier from the
+   declaration it is given rather than minting one, and stores it
+   ([003 §3.6](../003-library-configuration-and-scanning/spec.md), AC-17). No identifier of an
+   existing install moves - the derivation happens once, at creation, and `update` never recomputes
+   it - and no schema changed. What it gives up is that recreating a library is no longer making a
+   different one, which was a decision recorded when OQ-2 closed and is reversed on purpose.
+
+   **Measured over one tree, before and after, on 2026-09-06.** Two Atriums built from nothing
+   through `config.create`, then the same listings from each:
+
+   ```
+   listing                   rows   same position   moved
+   movies-by-sort-name         16              16       0
+   series-by-sort-name          3               3       0
+   albums-by-sort-name          5               5       0
+   audio-by-sort-name          10              10       0
+   everything, recursive       53              53       0
+   latest-20 (a window)        20               4      16     <- and 2 items only one window held
+   ```
+
+   **Only the window moved**, which is the sharpest thing this measurement says: the four named
+   `SortName` comparisons never depended on the tie-break at all, because this fixture's sort names
+   are distinct. What an unstable tail costs is a listing that is **windowed** over a tie - which
+   is `/Items/Latest`, and is also every page of every paged listing on a library with repeated
+   names. After the change the same run answers `20 / 20 / 0`, with the ties untouched: 52 items
+   over 3 instants either way. The tie is not the defect and never was; the tie-break holding still
+   is the property.
+
+   **Two things this does not close.** Containers still share one instant per scan where the
+   reference gives each row its own to sub-second precision (measured 2026-09-06 on the same
+   instance as behaviours §2.29), so a date ordering over containers is one large tie here and a
+   total order there - it holds still now, but it is not the reference's order. And `/Items/Latest`
+   answers 20 rows of 52 on a fixture whose files all carry **one** modification time, which is the
+   fixture's own doing: both generators stamp a single fixed instant on purpose, so that
+   `(size, mtime_ns)` stays a testable change signal. Distinct-but-fixed instants would satisfy
+   that requirement just as well and would make the date orderings total on **both** servers, which
+   is the cheapest remaining step and is 003's fixture rather than this harness's code.
 
    **The 8 per cent this entry first claimed was mostly the yardstick, and the correction matters
    more than the number.** That figure came from comparing two reports row by row with the two

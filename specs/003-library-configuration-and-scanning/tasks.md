@@ -1312,7 +1312,7 @@ said `Implemented` would make the gate record a state that no longer existed.
 ## Definition of done
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing
-      test — all sixteen, by name, in `FEATURE_003` (T21). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)*
+      test — all seventeen, by name, in `FEATURE_003` (T21). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)*
 - [x] The naming corpus passes in full, **carries no `xfail` marker**, and every row states the
       reason it exists. Checked rather than assumed: `AWAITING` is empty, which is what
       `test_no_row_is_parked_behind_an_xfail` asserts.
@@ -1380,6 +1380,23 @@ here, and they are two different shapes rather than one rule missed
 
 Neither is a defect this list can settle: both are 003's rule about what a season *is*, and the
 measurement is here so that the next person deciding does not have to stand a reference up again.
+
+**A library's identifier is derived from its declaration, from 2026-09-06 — and the reason it was
+found here is that no test in this repository could have found it.** `config.create` minted the
+identifier with `new_id()`, and every file-backed identifier hashes it, so two installs built from
+one declaration over one tree held different items in a different order. It is invisible to a
+client of either server and fatal to a run comparing two by position, which is where 010 found it.
+Every fixture world in this suite **pins** its library identifiers — `tests/fixtures/media_world.py`
+says so in as many words — and nothing anywhere called `config.create` twice for one declaration, so
+the whole suite passed before the change and after it. `tests/library/test_identity_across_builds.py`
+is the file that closes that, and §3.6's paragraph is rewritten rather than annotated because what
+it said was a decision and the decision is reversed (AC-17).
+
+Measured over one tree, two builds, before and after: a windowed date ordering put **16 of 20** rows
+in different places and held **two items the other window did not**, and answers `20 / 20 / 0` now,
+with the ties themselves untouched. The four `SortName` comparisons never moved either way — this
+fixture's sort names are distinct, so the tail decided nothing in them. **What an unstable tail
+costs is a window over a tie**, and paging is one.
 
 **`DateCreated` is the scan's clock and not the file's, and it makes a listing mean two things —
 found on 2026-09-05 by an independent audit of the harness's own drift. Answered on 2026-09-06, and
