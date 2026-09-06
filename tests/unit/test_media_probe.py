@@ -50,7 +50,6 @@ from atrium.media.probe import (
     inspect,
 )
 from tests.conftest import data_dir
-from tests.fixtures.library.generate import FIXED_MTIME_NS
 from tests.fixtures.media import (
     DIRECT_PLAY,
     HIGH_RATE_AUDIO,
@@ -140,7 +139,10 @@ def test_the_change_signal_comes_from_the_file_that_was_read(media_files: BuiltM
     found = inspect(path)
 
     assert found.size == path.stat().st_size
-    assert found.mtime_ns == FIXED_MTIME_NS, "the fixture stamps a fixed instant; this reads it"
+    # Against the file's own stamp rather than against the fixture's base instant, which is what
+    # this test was always trying to say: every file carries its **own** fixed time since
+    # 2026-09-06, and "the signal came from the file that was read" is exactly this comparison.
+    assert found.mtime_ns == path.stat().st_mtime_ns
     assert found.unchanged_since(found.size, found.mtime_ns)
     assert not found.unchanged_since(found.size, found.mtime_ns + 1)
 

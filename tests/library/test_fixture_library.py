@@ -24,7 +24,12 @@ from pathlib import Path
 import pytest
 
 from tests.fixtures.library import LIBRARIES, Kind, build_fixture_library
-from tests.fixtures.library.generate import BANNER, FIXED_MTIME_NS, content_of
+from tests.fixtures.library.generate import (
+    BANNER,
+    FIXED_MTIME_NS,
+    MTIME_SPREAD_SECONDS,
+    content_of,
+)
 from tests.fixtures.library.manifest import Entry
 
 FIXTURE_PACKAGE = Path(__file__).resolve().parents[1] / "fixtures"
@@ -97,11 +102,55 @@ def test_a_rebuild_into_the_same_directory_changes_nothing(tmp_path: Path) -> No
     assert every_file(build_fixture_library(destination).base) == before
 
 
-def test_every_file_carries_the_fixed_modification_time(tmp_path: Path) -> None:
-    """`(size, mtime_ns)` is the change-detection signal, so the fixture must not supply a clock."""
+def test_every_file_carries_a_fixed_modification_time(tmp_path: Path) -> None:
+    """`(size, mtime_ns)` is the change-detection signal, so the fixture must not supply a clock.
+
+    Fixed, and within the declared window - not one shared instant, which is the other half and
+    the test below.
+    """
     root = build_fixture_library(tmp_path / "library").base
     stamps = {path.stat().st_mtime_ns for path in root.rglob("*") if path.is_file()}
-    assert stamps == {FIXED_MTIME_NS}
+    assert stamps
+    assert all(
+        FIXED_MTIME_NS <= one < FIXED_MTIME_NS + MTIME_SPREAD_SECONDS * 1_000_000_000
+        for one in stamps
+    )
+
+
+def test_two_builds_stamp_the_same_times(tmp_path: Path) -> None:
+    """The half that makes it *fixed*: a rebuilt tree hands the scan the signal it had before."""
+    first = build_fixture_library(tmp_path / "first").base
+    second = build_fixture_library(tmp_path / "second").base
+    assert {
+        path.relative_to(first).as_posix(): path.stat().st_mtime_ns
+        for path in first.rglob("*")
+        if path.is_file()
+    } == {
+        path.relative_to(second).as_posix(): path.stat().st_mtime_ns
+        for path in second.rglob("*")
+        if path.is_file()
+    }
+
+
+def test_every_file_carries_its_own_instant(tmp_path: Path) -> None:
+    """The half that makes a date ordering **total**, from 2026-09-06.
+
+    One instant for the whole tree made every date ordering one enormous tie on both servers, so a
+    window over it - `GET /Items/Latest` - held whichever rows each server's tie-break favoured,
+    and a differential run read a difference the fixture had invented. It also hid a real defect:
+    `DateCreated` was the scan's clock and a tree of identical times could not tell that from the
+    file's (003 §3.9).
+
+    The instants come from a digest of each path, so this is a statement about a collision rather
+    than about the rule - two paths landing on one second would be unlucky rather than wrong, and
+    the fixture would rather hear about it here than in a listing that will not hold still.
+    """
+    root = build_fixture_library(tmp_path / "library").base
+    files = [path for path in root.rglob("*") if path.is_file()]
+    stamps = [path.stat().st_mtime_ns for path in files]
+    assert len(set(stamps)) == len(files), sorted(
+        path.name for path in files if stamps.count(path.stat().st_mtime_ns) > 1
+    )
 
 
 def test_every_generated_file_is_derived_from_its_declared_path(tmp_path: Path) -> None:

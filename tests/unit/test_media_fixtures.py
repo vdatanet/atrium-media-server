@@ -31,7 +31,7 @@ import pytest
 from atrium.domain.items import ItemType
 from atrium.library.scan import scan
 from atrium.media.probe import UnreadableMediaError, inspect
-from tests.fixtures.library.generate import FIXED_MTIME_NS
+from tests.fixtures.library.generate import mtime_ns_for
 from tests.fixtures.library.manifest import LIBRARIES
 from tests.fixtures.media import (
     BOTH_SUBTITLE_KINDS,
@@ -245,7 +245,9 @@ def test_a_sidecar_is_written_beside_its_film_with_the_cues_it_declares(
         assert path.is_file(), sidecar.reason
         assert path.parent == media_files.path_of(entry).parent
         assert path.read_text(encoding=sidecar.encoding) == srt_document(sidecar.cues)
-        assert path.stat().st_mtime_ns == FIXED_MTIME_NS, (
+        assert path.stat().st_mtime_ns == mtime_ns_for(
+            f"{entry.root}/{path.relative_to(media_files.base / entry.root).as_posix()}"
+        ), (
             "a sidecar carries its own change signal, so an unstamped one would make the scan "
             "that notices it untestable"
         )
@@ -415,7 +417,9 @@ def test_two_builds_of_one_entry_are_byte_identical(matroska: MediaFile, tmp_pat
     for sidecar in matroska.sidecars:
         beside = first.with_name(sidecar.name)
         assert beside.read_bytes() == second.with_name(sidecar.name).read_bytes()
-        assert beside.stat().st_mtime_ns == FIXED_MTIME_NS
+        # The same instant from both builds - which is the whole of what "fixed" has to mean now
+        # that it is no longer one instant shared by every file in the tree.
+        assert beside.stat().st_mtime_ns == second.with_name(sidecar.name).stat().st_mtime_ns
 
 
 # ------------------------------------------------------------------------------------------
@@ -843,15 +847,21 @@ def test_the_composed_trees_own_reuse_check_asks_about_files_too(tmp_path: Path)
     assert not reference_tree_is_complete(root), "the 003 tree is the other half"
 
 
-def test_the_mount_preserves_the_fixed_time(tmp_path: Path) -> None:
-    """Every file the reference instance is given carries the one fixed modification time.
+def test_the_mount_preserves_each_files_fixed_time(tmp_path: Path) -> None:
+    """Every file the reference instance is given carries the time it was stamped with.
 
     **The invisible false positive 010 plan section 9 names.**
-    Both generators stamp `FIXED_MTIME_NS`; a bind mount preserves it and a copy does not unless
-    the copy preserves times. A fixture whose timestamps moved between the two servers would put a
-    difference into `DateCreated` on **every** item - a field the allowlist excuses - so the noise
-    would not even be reported. Break the media world's placement into a copy that drops times and
-    this fails; leave it a `copy2` and it passes.
+    Both generators stamp a fixed instant per file; a bind mount preserves it and a copy does not
+    unless the copy preserves times. A fixture whose timestamps moved between the two servers would
+    put a difference into `DateCreated` on **every** item - and since 2026-09-06 that field is
+    compared rather than excused on anything backed by a file (behaviours section 2.29), so the
+    noise would now be reported on every row instead of hidden. Break the media world's placement
+    into a copy that drops times and this fails; leave it a `copy2` and it passes.
+
+    **It asserts the declared time rather than merely a shared one**, which the rule made possible
+    on 2026-09-06: one instant for the whole tree made this a comparison against a constant, and a
+    per-file instant makes it a comparison against the generator's own rule - which also catches a
+    file stamped with *another* file's time.
 
     Asserted over `reference_tree.build`, which is the composition the instance is actually handed:
     the 003 tree written in place and the media world copied in from its cache.
@@ -860,9 +870,17 @@ def test_the_mount_preserves_the_fixed_time(tmp_path: Path) -> None:
     files = [path for path in root.rglob("*") if path.is_file()]
     assert len(files) > len(DECLARED), "the composed tree is both worlds, not one"
 
-    moved = sorted(
-        str(path.relative_to(root)) for path in files if path.stat().st_mtime_ns != FIXED_MTIME_NS
-    )
+    moved = []
+    for path in files:
+        relative = path.relative_to(root).as_posix()
+        # The media world is composed one directory deeper than it is generated in, and its
+        # instants were keyed on the path inside its own tree - so the prefix comes off before the
+        # key is rebuilt. The 003 tree is written in place and its key is the whole relative path.
+        key = relative
+        if relative.startswith(MEDIA_SUBTREE + "/"):
+            key = relative[len(MEDIA_SUBTREE) + 1 :]
+        if path.stat().st_mtime_ns != mtime_ns_for(key):
+            moved.append(relative)
     assert not moved, f"{len(moved)} files crossed the mount with a different time: {moved[:5]}"
 
 

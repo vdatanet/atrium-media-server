@@ -1009,12 +1009,20 @@ name is misleading on both servers — this is a property of the file, re-read e
 server that wrote it once when it first saw the item would drift away from the reference with every
 file anyone touched.
 
-**Why the fixture could not answer this without being marked:** both of this repository's tree
-generators stamp every file with one fixed instant (`FIXED_MTIME_NS`, 2026-01-01), which is what
-makes 003's `(size, mtime_ns)` change signal testable. On that tree a modification time, a creation
-time and the moment of a scan are indistinguishable, and a reading taken from it would have
-confirmed whatever it was asked to. The probe stamps five paths years apart for exactly that
-reason, and the marks are what every row above is measured against.
+**Why the fixture could not answer this without being marked:** when this was measured, both of
+this repository's tree generators stamped every file with one fixed instant (`FIXED_MTIME_NS`,
+2026-01-01), which is what makes 003's `(size, mtime_ns)` change signal testable. On that tree a
+modification time, a creation time and the moment of a scan are indistinguishable, and a reading
+taken from it would have confirmed whatever it was asked to. The probe stamps five paths years
+apart for exactly that reason, and the marks are what every row above is measured against.
+
+> **The generators stamp a fixed instant per *file* from 2026-09-06**, keyed on its path, which
+> keeps the change signal exactly as testable and makes a date ordering over the fixture **total on
+> both servers** — where one shared instant made it one tie on each, and a window over it, which is
+> what `/Items/Latest` is, held whichever rows each server's tie-break happened to favour. The
+> probe goes on marking its five paths: what it needs is not distinct times but *known* ones, and a
+> directory and a second film part stamped years away are how the three candidate sources are told
+> apart at all.
 
 **Depends on it:** `sortBy=DateCreated` on every listing, and `GET /Items/Latest`, which is a
 window over that order. A server taking the scan's clock for everything answers *"what is new"*

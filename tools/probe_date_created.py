@@ -4,11 +4,14 @@
 
 The question 003's handover list left open on 2026-09-05, and it left it open with a **wrong
 premise**: it said the reference takes the file's modification time *"which the fixture generator
-fixes, so its items carry distinct and reproducible dates"*. The generator fixes one instant for
-the whole tree (`tests/fixtures/library/generate.py`'s `FIXED_MTIME_NS`), so on that tree the
-reference's dates are as tied as Atrium's and the tree as it stands cannot tell a modification time
-from a creation time from the moment of the scan. **This probe marks four paths before the scan so
-that it can**, which is the whole reason it is a program and not a reading.
+fixes, so its items carry distinct and reproducible dates"*. When this probe was written the
+generator fixed one instant for the *whole tree*, so the reference's dates were as tied as
+Atrium's. **This probe marks five paths before the scan**, which is the whole reason it is a
+program and not a reading: known instants years apart are what tell a modification time from a
+directory's time from the moment of the scan, and no unmarked tree can do that however its times
+are spread. The generators give each file its own fixed instant from 2026-09-06 - which makes the
+orderings total and changes nothing here, because what these marks buy is knowing what the answer
+should be rather than merely that answers differ.
 
 What it measures, in one instance:
 

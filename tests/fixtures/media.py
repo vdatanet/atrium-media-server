@@ -68,7 +68,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
-from tests.fixtures.library.generate import FIXED_MTIME_NS
+from tests.fixtures.library.generate import mtime_ns_for
 
 #: The two binaries. Named once so the skip in `tests/conftest.py` and the failure raised here
 #: cannot disagree about what "ffmpeg is available" means.
@@ -87,7 +87,12 @@ BINARIES = ("ffmpeg", "ffprobe")
 #: 4: 012 T2. An entry may declare **no audio stream at all**, and a second kind of declaration
 #: writes bytes no prober will accept. Both change what is on disk in ways the `MediaFile` rows
 #: alone do not express.
-GENERATOR_VERSION = 4
+#:
+#: 5: 2026-09-06. Every file carries **its own** fixed modification time rather than one shared
+#: instant. Nothing about the bytes moved, which is exactly why this number has to: a cached tree
+#: from before the change is byte-identical and carries the old uniform times, so without a bump
+#: the cache would be read and the change would silently not apply.
+GENERATOR_VERSION = 5
 
 #: Where a cached tree lands, unless the environment names somewhere else. A digest directory
 #: under it holds one build.
@@ -1348,22 +1353,34 @@ def generate(one: MediaFile, into: Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="atrium-subtitle-sources.") as scratch:
         _run(_encode_command(one, destination, subtitle_sources(one, Path(scratch))))
-    # The same fixed instant `tests/fixtures/library/generate.py` uses, and for its reason: 003
-    # makes `(size, mtime_ns)` the change signal, so a tree stamped with the current time would
-    # hand every scan a different one and make "the same tree scanned twice" untestable.
-    os.utime(destination, ns=(FIXED_MTIME_NS, FIXED_MTIME_NS))
+    # The same rule `tests/fixtures/library/generate.py` uses, and for its two reasons: fixed, so
+    # that `(size, mtime_ns)` stays a testable change signal, and different per file, so that a
+    # date ordering over the tree is total on both servers rather than one enormous tie.
+    _stamp(destination, f"{one.root}/{one.path}")
     for sidecar in one.sidecars:
         beside = destination.with_name(sidecar.name)
         # `errors="strict"` by construction: an encoding that cannot hold the declared cues is a
         # declaration that is wrong, and a silently replaced character would be a fixture nobody
         # could tell from a decoder bug.
         beside.write_bytes(srt_document(sidecar.cues).encode(sidecar.encoding))
-        os.utime(beside, ns=(FIXED_MTIME_NS, FIXED_MTIME_NS))
+        _stamp(beside, f"{one.root}/{beside.relative_to(into / one.root).as_posix()}")
     for planted in one.images:
         beside = destination.with_name(planted.name)
         beside.write_bytes(planted_image(planted))
-        os.utime(beside, ns=(FIXED_MTIME_NS, FIXED_MTIME_NS))
+        _stamp(beside, f"{one.root}/{beside.relative_to(into / one.root).as_posix()}")
     return destination
+
+
+def _stamp(target: Path, key: str) -> None:
+    """One file's fixed, own modification time. The key is its path inside the media tree.
+
+    Inside the tree and never the absolute path: the same bytes stand under a temporary directory
+    in this suite, under a cache directory between runs, and under `/fixture/Decodable` inside a
+    reference instance, and all three have to carry the same instant or a differential run would
+    read a difference the tree invented.
+    """
+    stamped = mtime_ns_for(key)
+    os.utime(target, ns=(stamped, stamped))
 
 
 def write_uninspectable(one: UninspectableFile, into: Path) -> Path:
@@ -1372,12 +1389,13 @@ def write_uninspectable(one: UninspectableFile, into: Path) -> Path:
     No encoder, no scratch directory and no subtitle sources: the whole content is the
     declaration's. The fixed modification time matters here for the same reason it matters for a
     generated file - 003 makes `(size, mtime_ns)` the change signal, and a tree stamped with the
-    clock would make "the same tree scanned twice" untestable.
+    clock would make "the same tree scanned twice" untestable. Its instant is its own, like every
+    other file's, so that a date ordering over the tree is total.
     """
     destination = into.joinpath(one.root, *one.path.split("/"))
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(one.content())
-    os.utime(destination, ns=(FIXED_MTIME_NS, FIXED_MTIME_NS))
+    _stamp(destination, f"{one.root}/{one.path}")
     return destination
 
 

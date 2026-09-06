@@ -20,10 +20,14 @@ and AC-2 compares both.
 
 **Nothing here is a third fixture world.** It is the two declared trees, the collection types
 their own declarations give each library, and one library with nothing in it - handed across the
-mount unchanged. The fixed modification time both generators stamp is load-bearing across that
-mount and a bind preserves it; a copy would not, and a fixture whose timestamps moved between the
-two servers would put a difference into `DateCreated` on every item - a field the allowlist
-excuses, which is worse than a visible failure because the noise would be invisible.
+mount unchanged. The fixed modification time both generators stamp on each file is load-bearing
+across that mount and a bind preserves it; a copy would not, and a fixture whose timestamps moved
+between the two servers would put a difference into `DateCreated` on every item - which since
+2026-09-06 is a **compared** field on anything backed by a file (behaviours section 2.29), so the
+noise would be reported on every row rather than swallowed by an allowlist entry. The times are one
+per file rather than one for the tree, from the same date and for a second reason: a date ordering
+over a tree of identical instants is one enormous tie on *both* servers, and a window over it holds
+whichever rows each side's tie-break favours.
 
 **Standard library only, and that is why the media matrix is where it is.** This module is
 imported by `tools/probe_reference_scan.py`, a standalone program on the Python 3.9 floor where
