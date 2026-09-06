@@ -1155,7 +1155,11 @@ Three things that measurement decided which reasoning would have got wrong:
   thing neither server does. They ask with `recursive=true` now — which is what a client must send
   to filter across views — and the battery says why once rather than eighteen times.
 
-**One row of the reference's answer is still not replicated**: beside the views it sends a
-`ManualPlaylistsFolder` named `Playlists`. This project models no folder above 009's playlists, so
-the row is absent — a declared difference, and 009's to decide rather than something to invent an
-item for.
+**One row of the reference's answer is not replicated, and it was decided on 2026-09-06**: beside
+the views it sends a `ManualPlaylistsFolder` named `Playlists`. Measured on both routes in one run
+`[probe: tools/probe_playlists_folder.py, Jellyfin 10.11.11, 2026-09-06]` — absent from
+`/UserViews`, present in the bare listing with no playlists on the server, and the `ParentId` of a
+playlist created afterwards. Atrium models no such container and neither analysed client navigates
+to one, so it is an accepted gap under Principle VI (behaviours §5), and **009's own §3.2 is
+corrected**: it concluded from the `/UserViews` half alone that the folder means *"009 adds nothing
+to a 005 response"*, and the bare listing is a 005 response carrying it.
