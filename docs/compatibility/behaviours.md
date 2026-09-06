@@ -3466,6 +3466,33 @@ AC-6 exists to keep. So the name is stored and the link is nullable
 mechanism is the same deliberate identity migration as above; until then a client sees a complete
 list of who played on a track and a shorter list of artists to browse.
 
+**Seen between two servers for the first time on 2026-09-06, and the direction was the other one.**
+Both halves above were read from the reference's source and from this project's own scan; a run
+against a clean pair over this repository's own fixture put them on the wire
+`[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-06]`, and `/Artists` answered
+**4 rows here against 2 there** — longer, not shorter. It decomposes into exactly the two
+consequences of this section and nothing else:
+
+```
+atrium     The Artist · The Artist · Soundless Artist · Various Artists
+reference  The Artist · Soundless Artist
+```
+
+The two `The Artist` rows are **two items with two identifiers**, one per music library, which is
+the first consequence. The rest is the second one arriving from its far side: on a tree whose files
+mostly carry no readable tag, the reference's by-name registry has almost **no credits to make rows
+from**, while this server's artists come from directories and album tags and exist regardless. So
+the missing-performer half is invisible here and the surplus-artist half is what shows. `Various
+Artists` is an item on **both** servers and a `/Artists` row on neither's terms but this one's, and
+`Soundless Artist` is a row there and not an item there: the two routes are listing different
+populations, which is what *"a tree item here rather than a by-name one"* means once it is
+measured rather than read.
+
+**Which way it points is a property of the library, not of the gap.** A real music library, where
+tags are readable and performers are many, shows the shorter list this section describes; a
+structural fixture shows the longer one. Both are this gap, and a report that met only one of them
+would misdescribe it.
+
 ### 5.4 No loudness scan, so a track without the tag has no gain
 
 **Jellyfin does:** serve `NormalizationGain` on an item from **two** sources, in a fixed
