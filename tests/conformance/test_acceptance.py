@@ -655,6 +655,15 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_item_media_source_policy:test_every_item_building_route_fills_the_policy",
         "tests.conformance.test_item_media_source_policy:test_the_context_refuses_to_be_built_without_a_policy",
     ),
+    26: (
+        # The presences and, harder, the absences: a field added to WIDE_ONLY rather than to
+        # WIDE_PER_TYPE passes every presence check and puts `Trickplay` on an album.
+        "tests.unit.test_item_dto:test_the_wide_widths_gate_by_type_too",
+        "tests.unit.test_item_dto:test_the_three_wide_constants_carry_the_measured_empty_value",
+        # And on the wire, where a client reads them: the goldens for the three bodies that moved.
+        "tests.conformance.test_golden_items:test_the_full_body_per_type",
+        "tests.conformance.test_golden_items:test_the_list_row_per_type",
+    ),
 }
 
 

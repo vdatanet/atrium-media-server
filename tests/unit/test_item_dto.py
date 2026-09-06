@@ -33,6 +33,7 @@ from atrium.api.item_dto import (
     UNPROBED,
     USER_VIEW_EXTRAS,
     WIDE_ONLY,
+    WIDE_PER_TYPE,
     BuildContext,
     ItemAccess,
     LibraryContext,
@@ -140,6 +141,7 @@ SPEC_ALWAYS = {
 
 #: Spec section 3.2, "Present in a list row when the item type has them" - the measured matrix.
 SPEC_PER_TYPE: dict[str, set[str]] = {
+    "AirDays": {"Series"},
     "ProductionYear": {"Movie", "Series", "Season", "Episode", "MusicAlbum", "Audio"},
     "PremiereDate": {"Movie", "Series", "Season", "Episode", "MusicAlbum", "Audio"},
     "RunTimeTicks": {"Movie", "Series", "Episode", "MusicArtist", "MusicAlbum", "Audio"},
@@ -217,7 +219,9 @@ def test_the_gated_list_is_the_specs() -> None:
 
 
 def test_every_registry_name_has_an_emitter_and_no_emitter_is_unreachable() -> None:
-    assert set(EMITTERS) == set(ALWAYS) | set(PER_TYPE) | set(GATED) | PLAYLIST_EXTRA | WIDE_ONLY
+    assert set(EMITTERS) == (
+        set(ALWAYS) | set(PER_TYPE) | set(GATED) | PLAYLIST_EXTRA | WIDE_ONLY | set(WIDE_PER_TYPE)
+    )
 
 
 def test_every_emitted_name_is_a_field_the_model_declares() -> None:
@@ -414,6 +418,66 @@ def test_ac3_a_gated_field_is_absent_bare_and_present_when_asked(
 
     asked = wire(hydrated[item_id], ctx(fields=frozenset({GATED[name]}), **overrides))
     assert name in asked, f"{name} absent although fields={GATED[name]} asked for it"
+
+
+def test_the_wide_widths_gate_by_type_too(
+    hydrated: dict[str, HydratedItem], world: QueryWorld
+) -> None:
+    """AC-26. `WIDE_ONLY` is every type or none; these three are per type, on a full body only.
+
+    Measured over this repository's own fixture, every item of every type read at both widths
+    `[probe: tools/probe_wide_body_constants.py, Jellyfin 10.11.11, 2026-09-06]`: 32 of 32 movies
+    carry `ProductionLocations` and `Trickplay`, 9 of 9 episodes carry `Trickplay`, 3 of 3 series
+    carry `AirDays` at **both** widths, and no other type carries any of them at either.
+
+    The absences are what this asserts hardest. A field added to `WIDE_ONLY` instead of
+    `WIDE_PER_TYPE` would pass every presence check here and put `Trickplay` on an album.
+    """
+    of_type = {
+        "Movie": world.corpus[0],
+        "Series": world.series[0].id,
+        "Season": world.series[0].seasons[0],
+        "Episode": world.series[0].episodes[0],
+        "MusicAlbum": world.album,
+        "Audio": world.tracks[0],
+        "MusicArtist": world.album_artist,
+    }
+    on_a_full_body = {
+        "ProductionLocations": {"Movie"},
+        "Trickplay": {"Movie", "Episode"},
+        "AirDays": {"Series"},
+    }
+    #: The one of the three that is not wide-only, which is why it is in `PER_TYPE` and the other
+    #: two are not: the reference sends it on a series' **list row** as well.
+    on_a_list_row = {"AirDays": {"Series"}}
+
+    for field, carrying in on_a_full_body.items():
+        for kind, item_id in of_type.items():
+            body = wire(hydrated[item_id], ctx(width=Width.FULL, libraries=libraries_of(world)))
+            assert (field in body) is (kind in carrying), (
+                f"{field} on a full body of a {kind}: "
+                f"{'present' if field in body else 'absent'}, and the measurement says otherwise"
+            )
+            row = wire(hydrated[item_id], ctx(libraries=libraries_of(world)))
+            assert (field in row) is (kind in on_a_list_row.get(field, set())), (
+                f"{field} on a list row of a {kind}"
+            )
+
+
+def test_the_three_wide_constants_carry_the_measured_empty_value(
+    hydrated: dict[str, HydratedItem], world: QueryWorld
+) -> None:
+    """They are constants because this server resolves none of the three, and says so emptily.
+
+    Not because the fixture happened to answer empty — which is the distinction that kept
+    `HasLyrics` and `SeriesStudio` out of the same tranche, and it is argued in §3.2 rather than
+    here.
+    """
+    film = wire(hydrated[world.corpus[0]], ctx(width=Width.FULL, libraries=libraries_of(world)))
+    assert film["ProductionLocations"] == []
+    assert film["Trickplay"] == {}
+    series = wire(hydrated[world.series[0].id], ctx(libraries=libraries_of(world)))
+    assert series["AirDays"] == []
 
 
 def test_the_unprobed_stay_absent_even_when_asked(

@@ -177,6 +177,10 @@ PARENT_BACKDROP_TYPES: frozenset[ItemType] = frozenset(
 #: the fields the spec lists. A type absent from a row means the reference never emits that
 #: property on that type's bare list row, asked-for or not observed.
 PER_TYPE: Mapping[str, frozenset[ItemType]] = {
+    #: Measured on a bare list row of all three series of this repository's fixture and on no
+    #: other type, at both widths `[probe: tools/probe_wide_body_constants.py, Jellyfin 10.11.11,
+    #: 2026-09-06]`. It is the one field of that tranche that is not wide-only.
+    "AirDays": frozenset({ItemType.SERIES}),
     "ProductionYear": frozenset(
         {
             ItemType.MOVIE,
@@ -320,6 +324,18 @@ WIDE_ONLY: frozenset[str] = frozenset(
         "SpecialFeatureCount",
     }
 )
+
+#: What the two wide widths add for **some types only**, unasked. `WIDE_ONLY` above is every type
+#: or none; this is the same idea with the per-type matrix `PER_TYPE` carries for list rows, and it
+#: exists because the reference's full body is not a list row with more fields on it - it gates by
+#: type there too. Measured over this repository's own fixture, every item of every type, one full
+#: body each `[probe: tools/probe_wide_body_constants.py, Jellyfin 10.11.11, 2026-09-06]`: 32 of 32
+#: movies carry `ProductionLocations` and `Trickplay`, 9 of 9 episodes carry `Trickplay`, and no
+#: list row of any type carries either.
+WIDE_PER_TYPE: Mapping[str, frozenset[ItemType]] = {
+    "ProductionLocations": frozenset({ItemType.MOVIE}),
+    "Trickplay": frozenset({ItemType.MOVIE, ItemType.EPISODE}),
+}
 
 #: What `/UserViews` adds on top of a list row, unasked - measured, all sixteen on all six rows
 #: `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`. T11's route passes
@@ -754,6 +770,14 @@ EMITTERS: Mapping[str, Callable[[HydratedItem, BuildContext], Any]] = {
     #: not: 003 discovers no local trailer and 004 stores no remote one, so both are exact.
     "LocalTrailerCount": lambda one, ctx: 0,
     "RemoteTrailers": lambda one, ctx: [],
+    # Three constants, and each is a statement this server can make truthfully: no provider in v1
+    # supplies a production location or a broadcast day, and trickplay tiles are images this
+    # server does not generate at all. That is the difference from `HasLyrics`, which the same
+    # tranche left alone - `false` there would deny lyrics sitting in an `.lrc` beside the track
+    # (005 tasks, cause 4).
+    "ProductionLocations": lambda one, ctx: [],
+    "AirDays": lambda one, ctx: [],
+    "Trickplay": lambda one, ctx: {},
     #: Nothing in v1 locks a field against the next rescan - 004 T10 measured the scan and the
     #: refresh already fighting over one column, and neither of them consults a lock - so there
     #: is no locked field to name and nothing is locked.
@@ -829,11 +853,12 @@ def _considered(item_type: ItemType, ctx: BuildContext) -> frozenset[str]:
     named = ALWAYS | frozenset(name for name, types in PER_TYPE.items() if item_type in types)
     if ctx.playlist_row:
         named = named | PLAYLIST_EXTRA
+    wide_per_type = frozenset(name for name, types in WIDE_PER_TYPE.items() if item_type in types)
     if ctx.width is Width.FULL:
-        return named | frozenset(GATED) | WIDE_ONLY
+        return named | frozenset(GATED) | WIDE_ONLY | wide_per_type
     gated = frozenset(name for name, token in GATED.items() if token in ctx.fields)
     if ctx.width is Width.USER_VIEW:
-        return named | gated | USER_VIEW_EXTRAS | WIDE_ONLY
+        return named | gated | USER_VIEW_EXTRAS | WIDE_ONLY | wide_per_type
     return named | gated
 
 
