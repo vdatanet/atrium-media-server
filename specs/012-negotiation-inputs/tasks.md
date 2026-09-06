@@ -359,6 +359,14 @@ rather than wrong; one of them is a trap set for the next task and one amends th
   probe row, it skips the inspection — the probe row is current — and **rewrites the item anyway**,
   one claimed update per healed file, for ever. Option (b) was never "the same behaviour with a
   stale tag". [D-1](plan.md#d-1--the-healed-items-etag) records it.
+
+  **`updated == 0` became `updated == 0` on the *second* scan, on 2026-09-06**, and the finding
+  survives the change. A heal replaces the file's bytes, so its modification time has moved — and
+  from that date an item's creation date is its file's modification time and follows it
+  ([003 §3.9](../003-library-configuration-and-scanning/spec.md), behaviours §2.29). The first
+  scan after a heal therefore corrects that one column once and the next has nothing to do, which
+  is still the whole of the difference from option (b)'s *for ever*. The test asserts both scans
+  now rather than the first alone.
 * **The trap this task found is in the task after it.** `api/media_info.py:_negotiation` builds
   its wire sources from `sources_for(found.item, …)` **before** the per-source loop, and
   `found.item` is a frozen object read before any of this ran; `store` writes `item_sources` and

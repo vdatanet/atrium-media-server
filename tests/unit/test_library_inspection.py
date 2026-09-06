@@ -602,9 +602,17 @@ def test_a_healed_file_is_neither_reopened_nor_rewritten_by_the_next_scan(
 
     `library/scan.py:_differs` compares `before.sources != after.sources`, and a `MediaSource`
     carries its `(size, mtime_ns)`. So the write does two things rather than one: it keeps the tag
-    and the size describing the same bytes, **and** it leaves the next scan with nothing to do -
-    where writing only the probe row would have the scan skip the inspection and rewrite the item
-    anyway, reporting work it did not do on every healed file.
+    and the size describing the same bytes, **and** it stops the next scan rewriting the item for
+    ever - where writing only the probe row would have the scan skip the inspection and claim an
+    update on every scan of every healed file, which is the sibling test below.
+
+    **Rewritten on 2026-09-06, because "nothing to do" was one scan too strong.** This asserted
+    `updated == 0` on the first scan after the heal. What the heal replaces is the file's *bytes*,
+    so its modification time really has moved - and from that date an item's creation date is its
+    file's modification time and follows it (003 section 3.9, behaviours section 2.29). The first
+    scan after a heal therefore corrects one column, once, and every scan after it has nothing to
+    do. That is what D-1 buys and what is asserted here now: the perpetual rewrite is what the
+    change signal prevents, and a single correction of a date that genuinely moved is not one.
     """
     item, index = part_of(session, films, LATENT)
     latent = tmp_path / "tree" / LATENT.root / LATENT.path
@@ -617,7 +625,11 @@ def test_a_healed_file_is_neither_reopened_nor_rewritten_by_the_next_scan(
 
     assert again.inspected == 0, "the negotiation already stored what this file says"
     assert LATENT.path not in {one.relative_path for one in again.uninspected}
-    assert again.updated == 0
+
+    settled = scan(films, session)
+
+    assert settled.inspected == 0
+    assert settled.updated == 0, "the correction is once, not once per scan"
 
 
 @pytest.mark.ffmpeg

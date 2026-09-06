@@ -363,6 +363,13 @@ FEATURE_003: dict[int, tuple[str, ...]] = {
         "tests.unit.test_sorting:test_an_explicit_sort_title_is_lowercased_and_padded_but_keeps_its_articles",
         "tests.unit.test_sorting:test_an_explicit_sort_title_replaces_the_override_too",
     ),
+    16: (
+        "tests.library.test_creation_dates:test_a_file_backed_item_carries_its_files_modification_time",
+        "tests.library.test_creation_dates:test_a_container_carries_the_scans_moment_and_not_its_directorys",
+        "tests.library.test_creation_dates:test_a_two_part_item_takes_the_time_of_the_part_its_path_names",
+        "tests.library.test_creation_dates:test_a_modification_time_that_moves_moves_the_creation_date",
+        "tests.library.test_creation_dates:test_a_date_left_by_an_older_scan_is_corrected_without_a_metadata_refresh",
+    ),
 }
 
 #: Feature directory -> its map. Adding 003 was one entry here and one dictionary above, which is

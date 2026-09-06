@@ -715,6 +715,13 @@ class ItemRepository:
         row.parent_index_number = item.parent_index_number
         row.end_index_number = item.end_index_number
         row.date_modified = item.date_modified
+        # **`date_created` is among them, and that is measured rather than obvious.** The reference
+        # keeps a file-backed item's creation date in step with the file's modification time - move
+        # the file's and the next scan moves the item's - so this column is not a first sighting and
+        # cannot be written only by `add` `[probe: tools/probe_date_created.py, Jellyfin 10.11.11,
+        # 2026-09-06]`. `library/scan.py` computes what belongs here; a container's is the value it
+        # was created with, handed straight back.
+        row.date_created = item.date_created
         self._session.execute(delete(models.ItemSource).where(models.ItemSource.item_id == item.id))
         self._write_sources(item)
 

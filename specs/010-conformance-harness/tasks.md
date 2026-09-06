@@ -2516,7 +2516,12 @@ request more, proving the paused report was stored before the silence begins.
 
    * `library/scan.py` stamps `DateCreated` with `utc_now()` **once per library at scan time**, not
      from the file, so every item in a library shares one timestamp and every `SortName` or
-     date ordering falls through to the last key.
+     date ordering falls through to the last key. **Fixed on 2026-09-06** (003 §3.9, AC-16,
+     behaviours §2.29) — and fixing it does **not** close this entry, which is the part worth
+     carrying: the reference takes the file's modification time and this repository's two fixture
+     generators stamp the whole tree with **one** instant, so the reference's dates over this
+     fixture are as tied as Atrium's were. The tie was never the difference between the two
+     servers; the next two bullets are.
    * That key is the identifier — `db/item_queries` ends its ordering `models.Item.id.asc()`, under
      a comment that already calls it *"the divergence and the whole of it"*.
    * `library/identity.for_file` derives that identifier from `(type, library_id, relative_path)`,
@@ -2527,6 +2532,14 @@ request more, proving the paused report was stored before the silence begins.
    one install, and [behaviours §1.4](../../docs/compatibility/behaviours.md) makes the two servers'
    identifiers differ by design. The defect is this harness comparing, **by position**, an order
    that is total on neither server.
+
+   **So what is left of this after 2026-09-06 is the tie-break alone**, and it is the one of the
+   three the fix did not touch. A `library_id` minted per build is what reshuffles every tie, and
+   the reference is reproducible across three fresh instances with the same ties because its own
+   tie-break does not move. Whoever takes it has two doors - a `library_id` this repository derives
+   rather than mints, which is 003 §3.6's territory and changes every file-backed identifier once,
+   or a final ordering key that is not the identifier - and the second is this feature's business
+   only in that it is the one that would make a run's reports comparable.
 
    **The 8 per cent this entry first claimed was mostly the yardstick, and the correction matters
    more than the number.** That figure came from comparing two reports row by row with the two
