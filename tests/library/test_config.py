@@ -134,14 +134,53 @@ def test_a_library_becomes_a_collection_folder_item(repositories: LibraryReposit
 def test_two_libraries_with_the_same_name_are_two_libraries(
     repositories: LibraryRepository,
 ) -> None:
-    """The id is allocated, not derived, so a name is a label rather than an identity."""
+    """Two roots are two libraries, whatever they are called.
+
+    The reason changed on 2026-09-06 and the answer did not: this passed because the identifier was
+    minted and a name was a label, and it passes now because the **roots** are in the key. The
+    stronger half of the same claim is the test below, which the old rule could not have made.
+    """
     one = config.create(repositories, "Movies", "movies", ("/mnt/a",))
     other = config.create(repositories, "Movies", "movies", ("/mnt/b",))
     assert one.id != other.id
 
 
+def test_declaring_one_library_twice_is_refused(repositories: LibraryRepository) -> None:
+    """AC-17's other half. The same declaration is the same library, so this is not a second one.
+
+    Under the minted identifier this made two libraries that looked alike, and every file under
+    them was found twice under two identifiers - which nothing refused and nothing reported.
+    """
+    config.create(repositories, "Movies", "movies", ("/mnt/films",))
+    with pytest.raises(config.LibraryAlreadyDeclaredError) as refusal:
+        config.create(repositories, "Movies", "movies", ("/mnt/films",))
+    assert "found twice" in str(refusal.value)
+    assert len(repositories.all()) == 1
+
+
+def test_the_roots_are_a_set_rather_than_a_sequence(repositories: LibraryRepository) -> None:
+    """Declaring the same two directories in the other order is the same library, not a second."""
+    one = config.create(repositories, "Movies", "movies", ("/mnt/a", "/mnt/b"))
+    with pytest.raises(config.LibraryAlreadyDeclaredError):
+        config.create(repositories, "Movies", "movies", ("/mnt/b", "/mnt/a"))
+    assert len(repositories.all()) == 1
+    assert one.roots == ("/mnt/a", "/mnt/b"), "what is stored is what the operator declared"
+
+
+def test_the_case_flag_is_part_of_the_declaration(repositories: LibraryRepository) -> None:
+    """It is an input to every identifier under the library, so it is one to the library's own."""
+    one = config.create(repositories, "Movies", "movies", ("/mnt/films",))
+    other = config.create(
+        repositories, "Movies", "movies", ("/mnt/films",), case_sensitive_identity=True
+    )
+    assert one.id != other.id
+
+
 def test_renaming_a_library_keeps_every_identifier(repositories: LibraryRepository) -> None:
-    """Which is the whole reason the id is allocated rather than derived from the name."""
+    """The half of the old rule that survives deriving the identifier: it is derived **once**.
+
+    `update` writes the new name and never recomputes the key, so an edit still moves nothing.
+    """
     library = config.create(repositories, "Movies", "movies", ("/mnt/films",))
     before = for_file(ItemType.MOVIE, library.id, "The Film (1999).mkv")
     config.update(repositories, library.id, name="Films")
@@ -150,7 +189,12 @@ def test_renaming_a_library_keeps_every_identifier(repositories: LibraryReposito
 
 
 def test_moving_a_root_keeps_every_identifier(repositories: LibraryRepository) -> None:
-    """AC-10 at the configuration level: the root is not part of any key."""
+    """AC-10 at the configuration level: the root is not part of any **item's** key.
+
+    It is part of the library's own, since 2026-09-06 - and that is why this asserts an `update`
+    and not a re-declaration: the derivation happens once, at creation, and moving a mount
+    afterwards leaves every identifier where it was.
+    """
     library = config.create(repositories, "Movies", "movies", ("/mnt/a",))
     before = for_file(ItemType.MOVIE, library.id, "The Film (1999).mkv")
     config.update(repositories, library.id, roots=("/mnt/b",))
