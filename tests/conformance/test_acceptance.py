@@ -664,6 +664,18 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_golden_items:test_the_full_body_per_type",
         "tests.conformance.test_golden_items:test_the_list_row_per_type",
     ),
+    27: (
+        "tests.unit.test_items_route:test_a_bare_listing_is_the_accounts_top_level_folders",
+        # The half that makes it a shape: fifteen parameters, one request each, none of which
+        # moves a row - `limit` and `startIndex` among them.
+        "tests.unit.test_items_route:test_nothing_a_client_sends_changes_a_bare_listing",
+        "tests.unit.test_items_route:test_a_bare_listing_echoes_the_start_index_it_ignores",
+        # The escape, and the regression the measurement prevented.
+        "tests.unit.test_items_route:test_ids_escapes_the_bare_listing",
+        "tests.unit.test_items_route:test_recursive_at_the_root_is_the_whole_library",
+        # It ignores every parameter and not the account.
+        "tests.unit.test_items_route:test_a_bare_listing_still_answers_the_accounts_own_visibility",
+    ),
 }
 
 

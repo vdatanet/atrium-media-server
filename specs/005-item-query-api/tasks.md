@@ -967,7 +967,7 @@ rather than a list of routes somebody remembered.
 Closed line by line at T17, on 2026-08-28.
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
-      twenty-six — has a passing test, by name, in `FEATURE_005` (T17). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* Ten are named at more than one
+      twenty-seven — has a passing test, by name, in `FEATURE_005` (T17). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* Ten are named at more than one
       level, once where the rule is proved and once where the route is proved to use it.
 - [x] Every endpoint reaches the conformance level [spec §6](spec.md#6-conformance) declares —
       with the L3 debt stated rather than hidden: `GET /Items` and `GET /Items/{itemId}` carry
@@ -1135,3 +1135,27 @@ reading was 003's and is done (003 §3.9, AC-16, behaviours §2.29).
 **77 rows here against 7** — 17 against 2 for a narrowed reader — so the two servers disagree about
 what a bare listing *is*, the reference giving top-level views where this one recurses. The `LENGTH`
 guard stops it cascading, so it costs four rows in the report and is worth more than four.
+
+**Closed on 2026-09-06, and the shape is stranger than the row count says** (§3.3, AC-27). Measured
+one parameter at a time `[probe: tools/probe_bare_items.py, Jellyfin 10.11.11, 2026-09-06]`: with no
+`parentId`, without `recursive` and with no `ids`, the reference answers the account's top-level
+folders and **ignores every other parameter it was given** — sixteen of them, `limit` and
+`startIndex` included. `limit=2` answers all six rows; `startIndex=2` answers all six and echoes the
+`2`. It is a shape, not a narrowing.
+
+Three things that measurement decided which reasoning would have got wrong:
+
+* **`ids` escapes it**, and nothing but `ids`. Without that reading a client asking for one film by
+  identifier at the root would have been handed the library views — the one bare-root request
+  clients actually make.
+* **The rule belongs to the route and not to the query engine.** The first implementation put it in
+  `ItemQueryRepository.run`, and `/Shows/NextUp` and `/UserItems/Resume` build a query with no
+  parent and no recursion meaning *these items*: seven of their tests answered the library folders.
+* **Eighteen of this repository's own tests were asserting a narrowing at the root**, which is a
+  thing neither server does. They ask with `recursive=true` now — which is what a client must send
+  to filter across views — and the battery says why once rather than eighteen times.
+
+**One row of the reference's answer is still not replicated**: beside the views it sends a
+`ManualPlaylistsFolder` named `Playlists`. This project models no folder above 009's playlists, so
+the row is absent — a declared difference, and 009's to decide rather than something to invent an
+item for.

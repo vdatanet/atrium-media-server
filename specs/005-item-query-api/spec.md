@@ -241,6 +241,34 @@ is the union above, and the differential harness is what closes the rest.
 The reference declares **86 query parameters**. `[spec: GetItems]` v1 implements them in two tiers,
 and refuses to pretend about the third.
 
+**A request with no `parentId`, without `recursive` and with no `ids` is not a query at all**, and
+that is the first thing to know about this endpoint. It answers the reading account's **top-level
+folders** — its library views — and **ignores every other parameter it was given**. Measured one
+parameter at a time against a reference instance over this repository's own fixture
+`[probe: tools/probe_bare_items.py, Jellyfin 10.11.11, 2026-09-06]`: sixteen parameters, including
+`includeItemTypes`, `excludeItemTypes`, `mediaTypes`, `searchTerm`, `nameStartsWith`, `years`,
+`genres`, `filters`, `isPlayed`, `isFolder`, `sortBy`, `sortOrder`, `startIndex` and **`limit`**,
+each changed nothing: `limit=2` answers all six rows, and `startIndex=2` answers all six and echoes
+the `2` it was given.
+
+> **`ids` is the one escape, and it was measured rather than assumed.** `ids=<a film>` with no
+> parent and without `recursive` answers that film. A client naming items by identifier is asking
+> about those items and not about the shape of the library, and a server that answered it with the
+> folders would break the one bare-root request clients actually make.
+>
+> **`recursive=true` with no `parentId` is the whole library**, which is what a client sends when
+> it means to filter across every view — and it is where every parameter above does apply.
+>
+> **One row of the reference's answer is not replicated.** Beside the library views it sends a
+> `ManualPlaylistsFolder` named `Playlists`; this project models no folder above 009's playlists,
+> so the row is absent here. Recorded on [005's list](tasks.md#what-this-feature-owes-the-next-ones)
+> rather than papered over with an invented item.
+
+This is what 010's first kept differential run found and could not classify: a bare `GET /Items`
+answered **77 rows here against 7**, because this server read the request as a query over the whole
+world. The `LENGTH` guard stopped it cascading, so it cost four rows in that report and was worth
+more than four.
+
 **Tier 1 — observed in use, required.**
 
 | Parameter | Effect |
@@ -606,6 +634,12 @@ acceptance map could not name a single one of their twenty-seven tests.)*
     `Episode`, and neither on a full body of any other type nor on a list row of any type;
     `AirDays` is on a `Series` at **both** widths and on no other type. All three carry the empty
     value, which is what this server can say truthfully about three things it resolves none of.
+27. A `GET /Items` with no `parentId`, without `recursive` and with no `ids` answers the reading
+    account's top-level folders and **nothing else changes it** (§3.3): a type filter, a search
+    term, a sort, a `startIndex` and a `limit` all leave the same rows in the same order, and the
+    account's visibility still applies. `ids` escapes the shape and answers the items it names;
+    `recursive=true` answers the library. *(Added 2026-09-06 with the behaviour, from the sharpest
+    single row of 010's first kept run — 77 rows against 7 — which none of its five classes fitted.)*
 
 ## 6. Conformance
 

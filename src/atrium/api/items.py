@@ -387,7 +387,18 @@ async def items(
         )
         repository = ItemQueryRepository(opened)
         try:
-            page = repository.run(query)
+            # **A bare listing is a shape and not a query** (spec section 3.3). With no `parentId`,
+            # without `recursive` and with no `ids`, the reference answers the account's top-level
+            # folders and ignores every other parameter it was given - sixteen of them, measured
+            # one at a time `[probe: tools/probe_bare_items.py, Jellyfin 10.11.11, 2026-09-06]`.
+            # `ids` is the one escape, so a client naming an item by identifier is answered about
+            # that item. Decided here, at the route: two other routes build a query with neither
+            # key and mean *these items* rather than *the root*.
+            page = (
+                repository.root_listing(query)
+                if parentId is None and not recursive and not query.ids
+                else repository.run(query)
+            )
         except ParentNotFoundError as refused:
             # One exception for "no such item" and "not yours", one 404 for both (plan 6.13).
             raise NotFoundError from refused

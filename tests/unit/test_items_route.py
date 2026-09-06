@@ -141,6 +141,32 @@ def _resumable(body: dict[str, Any], _bare: dict[str, Any], world: QueryWorld) -
 #: identifiers are derived, not literal. `userId` is exercised separately - its interesting
 #: cases are refusals - and the four `enable*` options assert on the body rather than the count.
 def battery(world: QueryWorld) -> list[tuple[str, dict[str, str], Check]]:
+    return [_asked_where_it_has_an_answer(case) for case in _battery(world)]
+
+
+def _asked_where_it_has_an_answer(
+    case: tuple[str, dict[str, str], Check],
+) -> tuple[str, dict[str, str], Check]:
+    """Give a case `recursive=true` unless it already names a parent or asks for recursion.
+
+    **A parameter cannot be shown to narrow a listing that ignores every parameter.** With no
+    `parentId` and without `recursive`, both servers answer the account's top-level folders and
+    ignore everything else - measured one parameter at a time on the reference, sixteen of them
+    `[probe: tools/probe_bare_items.py, Jellyfin 10.11.11, 2026-09-06]`, and replicated in 005
+    §3.3. Eighteen of these cases were written without either key, so each was asserting a
+    narrowing this route does not perform and never did on the reference.
+
+    Done here rather than by editing eighteen literals, because the reason is one reason and a
+    reader who meets it once should not have to infer it eighteen times. A case that names a
+    parent, or asks for recursion itself, is left exactly as it was written.
+    """
+    label, params, check = case
+    if "parentId" in params or "recursive" in params:
+        return case
+    return (label, {**params, "recursive": "true"}, check)
+
+
+def _battery(world: QueryWorld) -> list[tuple[str, dict[str, str], Check]]:
     series = world.series[0]
     return [
         (
@@ -333,7 +359,17 @@ def battery(world: QueryWorld) -> list[tuple[str, dict[str, str], Check]]:
 
 
 async def _bare(client: httpx.AsyncClient) -> dict[str, Any]:
-    answered = await client.get("/Items", params={"limit": "1000"})
+    """The unfiltered listing every battery check measures a narrowing against.
+
+    **`recursive=true`, from 2026-09-06, and it is not a detail.** A `GET /Items` with no
+    `parentId` and without `recursive` is not a query on either server: the reference answers the
+    account's top-level folders and ignores every parameter it was given - `includeItemTypes`,
+    `searchTerm`, the by-name id filters, `sortBy`, `startIndex` and `limit` among them
+    `[probe: tools/probe_bare_items.py, Jellyfin 10.11.11, 2026-09-06]`, and Atrium answers the
+    same shape since 005 §3.3. So a baseline taken without it was the *folders*, and every check
+    below would have been comparing a narrowing against six rows that no parameter can narrow.
+    """
+    answered = await client.get("/Items", params={"limit": "1000", "recursive": "true"})
     assert answered.status_code == 200
     return dict(answered.json())
 
@@ -426,6 +462,131 @@ async def test_every_parameter_changes_the_answer_and_survives_mangled_casing(
     again = await client.get("/Items", params=mangled)
     assert again.status_code == 200, f"{label} mangled: {again.text[:200]}"
     assert again.json() == answered.json(), f"{label}: the mangled casing changed the answer"
+
+
+# ------------------------------------------------------------------------------------------
+# The bare listing (AC-27)
+# ------------------------------------------------------------------------------------------
+
+
+#: Every parameter the probe sent one at a time and the reference answered identically to. The
+#: labels are the request as a client would write it, because a failure naming `years=2003` says
+#: more than one naming an index `[probe: tools/probe_bare_items.py, Jellyfin 10.11.11,
+#: 2026-09-06]`.
+IGNORED_AT_THE_ROOT: Final = (
+    {"includeItemTypes": "Movie"},
+    {"includeItemTypes": "CollectionFolder"},
+    {"excludeItemTypes": "CollectionFolder"},
+    {"mediaTypes": "Video"},
+    {"searchTerm": "a"},
+    {"nameStartsWith": "A"},
+    {"years": "2003"},
+    {"genres": "Rock"},
+    {"filters": "IsFavorite"},
+    {"isPlayed": "false"},
+    {"isFolder": "false"},
+    {"sortBy": "SortName", "sortOrder": "Descending"},
+    {"limit": "2"},
+    {"startIndex": "2"},
+    {"recursive": "false"},
+)
+
+
+async def test_a_bare_listing_is_the_accounts_top_level_folders(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """AC-27. The sharpest single row of 010's first kept run: 77 here against 7 there."""
+    answered = await client.get("/Items")
+    assert answered.status_code == 200
+    body = answered.json()
+
+    kinds = {row["Type"] for row in body["Items"]}
+    assert kinds == {"CollectionFolder"}, "a bare listing is the views and nothing under them"
+    assert body["TotalRecordCount"] == len(body["Items"])
+    assert [row["Name"] for row in body["Items"]] == sorted(row["Name"] for row in body["Items"])
+
+
+@pytest.mark.parametrize("params", IGNORED_AT_THE_ROOT, ids=lambda one: ",".join(one))
+async def test_nothing_a_client_sends_changes_a_bare_listing(
+    client: httpx.AsyncClient, world: QueryWorld, params: dict[str, str]
+) -> None:
+    """The half that makes it a **shape** rather than a narrowing, `limit` included.
+
+    Measured one parameter at a time, because a battery sent together could not tell which of them
+    the server was honouring - and the surprising members are exactly the ones a reader would
+    assume: `limit=2` answers every row, and `startIndex=2` answers every row from the first.
+    """
+    bare = await client.get("/Items")
+    answered = await client.get("/Items", params=params)
+
+    assert answered.status_code == 200, answered.text[:200]
+    # The rows and the count, not the whole envelope: `StartIndex` **echoes** what it was sent on
+    # both servers - `startIndex=2` comes back as `2` beside all six rows, measured. That is the
+    # envelope repeating the request, not the listing being paged.
+    assert answered.json()["Items"] == bare.json()["Items"], (
+        f"{params} changed a listing that answers no parameter"
+    )
+    assert answered.json()["TotalRecordCount"] == bare.json()["TotalRecordCount"]
+
+
+async def test_a_bare_listing_echoes_the_start_index_it_ignores(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """The one visible trace of a parameter the listing does not act on, and the reference's too.
+
+    `startIndex=2` answers every row from the first and reports `StartIndex: 2`. A reader who
+    trusted the envelope would think it had been handed page two.
+    """
+    answered = await client.get("/Items", params={"startIndex": "2"})
+    body = answered.json()
+
+    assert body["StartIndex"] == 2
+    assert len(body["Items"]) == body["TotalRecordCount"]
+
+
+async def test_ids_escapes_the_bare_listing(client: httpx.AsyncClient, world: QueryWorld) -> None:
+    """The one parameter that does change it, and the regression this measurement prevented.
+
+    A client naming an item by identifier with no parent and no recursion is asking about that
+    item. Answering it with the library views would break the one bare-root request clients
+    actually make.
+    """
+    answered = await client.get("/Items", params={"ids": world.corpus[0]})
+
+    assert answered.status_code == 200
+    assert [row["Id"] for row in answered.json()["Items"]] == [world.corpus[0]]
+
+
+async def test_recursive_at_the_root_is_the_whole_library(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """The other side of the shape: with `recursive`, every parameter applies again."""
+    everything = await client.get("/Items", params={"recursive": "true", "limit": "1000"})
+    narrowed = await client.get(
+        "/Items", params={"recursive": "true", "includeItemTypes": "Movie", "limit": "1000"}
+    )
+
+    assert everything.json()["TotalRecordCount"] > narrowed.json()["TotalRecordCount"]
+    assert {row["Type"] for row in narrowed.json()["Items"]} == {"Movie"}
+
+
+async def test_a_bare_listing_still_answers_the_accounts_own_visibility(
+    harness: Harness, client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """It ignores every parameter and **not** the account: a narrowed reader sees fewer folders.
+
+    This is the one thing the shape must keep doing, and the measurement says so from the other
+    side - 010's run read 17 rows against 2 for a narrowed reader where the administrator read 77
+    against 7.
+    """
+    as_user(harness, world.restricted)
+    narrowed = await client.get("/Items")
+
+    as_user(harness, world.everyone)
+    everyone = await client.get("/Items")
+
+    assert narrowed.json()["Items"], "the restricted reader sees one library, not none"
+    assert len(narrowed.json()["Items"]) < len(everyone.json()["Items"])
 
 
 # ------------------------------------------------------------------------------------------
@@ -640,7 +801,13 @@ async def test_an_administrator_queries_with_the_named_users_visibility(
 ) -> None:
     """`userId` is *whose visibility applies* (spec 3.3 tier 1), not merely an access check."""
     as_user(harness, harness.admin)
-    answered = await client.get("/Items", params={"userId": world.restricted.id, "limit": "1000"})
+    answered = await client.get(
+        "/Items",
+        # `recursive`, because a listing without it is the account's top-level folders and
+        # narrows to nothing (005 §3.3) - and what is under test here is *whose* visibility the
+        # rows were chosen by, which needs rows.
+        params={"userId": world.restricted.id, "limit": "1000", "recursive": "true"},
+    )
     assert answered.status_code == 200
     types = {one["Type"] for one in answered.json()["Items"]}
     assert "Movie" in types
@@ -651,7 +818,9 @@ async def test_ac15_a_tier_3_parameter_is_ignored_answered_and_recorded(
     app: FastAPI, client: httpx.AsyncClient
 ) -> None:
     bare = await _bare(client)
-    answered = await client.get("/Items", params={"limit": "1000", "isMovie": "true"})
+    answered = await client.get(
+        "/Items", params={"limit": "1000", "isMovie": "true", "recursive": "true"}
+    )
     assert answered.status_code == 200
     assert answered.json()["TotalRecordCount"] == bare["TotalRecordCount"], (
         "a tier 3 parameter must not filter"
@@ -686,7 +855,9 @@ async def test_a_real_kind_this_version_cannot_produce_narrows_to_nothing(
     that happens to hold no playlists, which is a different mechanism answering with the same
     zero. The token has to name a kind the domain still does not have.
     """
-    answered = await client.get("/Items", params={"includeItemTypes": "BoxSet"})
+    answered = await client.get(
+        "/Items", params={"includeItemTypes": "BoxSet", "recursive": "true"}
+    )
     assert answered.status_code == 200
     assert answered.json()["TotalRecordCount"] == 0
     assert answered.json()["Items"] == []
@@ -795,6 +966,10 @@ async def test_ac4_paging_over_http_visits_every_movie_exactly_once(
                 "sortBy": "SortName",
                 "startIndex": str(start),
                 "limit": "7",
+                # AC-4 is about paging visiting every movie exactly once, and a listing with no
+                # parent and no `recursive` is not paged at all: it is the account's top-level
+                # folders, whole, whatever `limit` and `startIndex` say (005 §3.3).
+                "recursive": "true",
             },
         )
         body = page.json()
