@@ -667,6 +667,15 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_golden_items:test_the_full_body_per_type",
         "tests.conformance.test_golden_items:test_the_list_row_per_type",
     ),
+    29: (
+        "tests.unit.test_item_dto:test_series_studio_is_the_series_studio_and_not_the_items",
+        "tests.unit.test_item_dto:test_a_music_artists_counts_are_two_counts_and_seven_zeros",
+        # The absences, where a per-type field goes wrong: a name in WIDE_ONLY rather than
+        # WIDE_PER_TYPE passes every presence check and puts AlbumCount on a film.
+        "tests.unit.test_item_dto:test_the_tranche_is_on_its_own_types_and_on_no_list_row",
+        # And on the wire, where a client reads them.
+        "tests.conformance.test_golden_items:test_the_full_body_per_type",
+    ),
     28: (
         # The two halves apart, because the rule parted: a rule made uniform in either direction
         # breaks one of them.

@@ -154,6 +154,11 @@ class Ancestor:
     name: str
     images: tuple[ImageAssociation, ...] = ()
     artists: tuple[NameLink, ...] = ()
+    #: The ancestor's own studios, carried for one reader: `SeriesStudio` on a season and an
+    #: episode is the **series'** studio, measured on a library that has them (005 §3.2). Fetched
+    #: with the ancestors' artists in the same grouped read, so it costs a column rather than a
+    #: query.
+    studios: tuple[NameLink, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +219,12 @@ class ContainerAggregates:
     recursive_count: int = 0
     cumulative_runtime_ticks: int = 0
     date_last_media_added: datetime | None = None
+    #: The same direct children, split by type. One reader: `AlbumCount` on a `MusicArtist`, which
+    #: is the albums under it and not its children - a track sitting directly in an artist's
+    #: directory is a child and not an album (004 T9). It comes from the same grouped statement
+    #: `child_count` does, with `type` added to the grouping, so it costs a column rather than a
+    #: query.
+    children_by_type: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -906,6 +917,7 @@ class ItemQueryRepository:
         everyone = {**parents, **grands}
         images = self._grouped(models.ItemImage, sorted(everyone))
         artists = self._grouped(models.ItemArtist, sorted(everyone))
+        studios = self._grouped(models.ItemStudio, sorted(everyone))
 
         def summarised(row: models.Item) -> Ancestor:
             return Ancestor(
@@ -919,6 +931,10 @@ class ItemQueryRepository:
                 artists=tuple(
                     NameLink(name=one.name, item_id=one.artist_item_id, credit=one.credit)
                     for one in _ordered(artists.get(row.id, []))
+                ),
+                studios=tuple(
+                    NameLink(name=one.name, item_id=one.studio_item_id)
+                    for one in _ordered(studios.get(row.id, []))
                 ),
             )
 
@@ -1072,15 +1088,17 @@ class ItemQueryRepository:
             if ItemType(row.type) is ItemType.COLLECTION_FOLDER and row.library_id
         }
 
+        by_type: dict[str, dict[str, int]] = {}
+        for parent_id, kind, counted in self._session.execute(
+            select(models.Item.parent_id, models.Item.type, func.count())
+            .where(models.Item.parent_id.in_(sorted(row.id for row in containers)))
+            .where(self._visible_to(user))
+            .group_by(models.Item.parent_id, models.Item.type)
+        ):
+            if parent_id is not None:
+                by_type.setdefault(parent_id, {})[str(kind)] = counted
         children: dict[str, int] = {
-            parent_id: counted
-            for parent_id, counted in self._session.execute(
-                select(models.Item.parent_id, func.count())
-                .where(models.Item.parent_id.in_(sorted(row.id for row in containers)))
-                .where(self._visible_to(user))
-                .group_by(models.Item.parent_id)
-            )
-            if parent_id is not None
+            parent_id: sum(counts.values()) for parent_id, counts in by_type.items()
         }
 
         wanted = {row.id for row in containers}
@@ -1114,6 +1132,7 @@ class ItemQueryRepository:
                 recursive_count=recursive.get(row.id, (0, 0, None))[0],
                 cumulative_runtime_ticks=recursive.get(row.id, (0, 0, None))[1],
                 date_last_media_added=recursive.get(row.id, (0, 0, None))[2],
+                children_by_type=by_type.get(row.id, {}),
             )
             for row in containers
         }

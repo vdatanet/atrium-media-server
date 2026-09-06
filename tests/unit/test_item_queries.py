@@ -536,10 +536,22 @@ def test_the_statement_count_is_what_the_plan_says_it_is(
     **A fourth since 009 T6**: the stored media type of the page's playlists. It is the one column
     on a row that no scanner wrote, `MEDIA_TYPE_OF` is only the fallback behind it (plan section
     4.2), and without it every playlist listed through `/Items` answers `Audio`. Unconditional for
-    the reason above - a page of films costs it too, and it compiles to an empty `IN`."""
+    the reason above - a page of films costs it too, and it compiles to an empty `IN`.
+
+    **A fifth since 2026-09-06**: the **ancestors' studios**. `SeriesStudio` on a season and an
+    episode is the parent series' studio and not the item's (spec section 3.2, AC-29), and the
+    ancestor summaries carried images and artists but nothing else - so the field had no way to be
+    a derivation without this read. It is the fifth grouped statement over the same ancestor ids
+    the four above already collected, beside their artists.
+
+    **Unconditional, and that is the cost this number exists to make visible.** No list row carries
+    `SeriesStudio` and only a full body of two types does, so a page could be told to skip this
+    when it holds no season and no episode - and then the count would depend on what the page
+    happened to hold, which is exactly the drift the equality here is written to catch. Nineteen
+    became twenty as a decision."""
     with query_counter.watching(engine):
         repository.run(ItemQuery(user=world.everyone, limit=10))
-    assert len(query_counter) == 19, query_counter.report()
+    assert len(query_counter) == 20, query_counter.report()
 
 
 def test_a_page_with_no_files_costs_the_same_as_a_page_of_films(
