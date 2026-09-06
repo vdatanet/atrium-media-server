@@ -35,6 +35,14 @@ track as the `Audio`, in one and the same response
 `[probe: manual requests via tools/_probe.py, Jellyfin 10.11.11, 2026-08-28]`. `groupItems=false`
 switches the grouping off and serves the file items plainly `[spec: GetLatestMedia]`.
 
+**The music half of that reading did not reproduce, and was overturned on 2026-09-06.** Read
+against a reference over this repository's own fixture, with both servers answering in the same
+breath, **a track surfaces as its album however few tracks the album holds** - including an album
+holding exactly one, and including an album of three whose recent members number one, which is the
+very shape the 2026-08-28 sentence describes. The television half held exactly as written and is
+unchanged. `_always_its_container` carries the table; the older reading stays above it because a
+claim that fails to reproduce is not deleted.
+
 **Two stored configuration keys steer it**, both measured by name on a live user's configuration
 (002 section 3.6 stores them faithfully): `LatestItemsExcludes` - view identifiers whose
 libraries contribute nothing when the request is unscoped - and `HidePlayedInLatest`, `true` on
@@ -96,12 +104,42 @@ def _excluded_libraries(target: User, libraries: LibraryRepository) -> frozenset
 
 
 def _representative(one: HydratedItem) -> tuple[str, HydratedItem]:
-    """The group key, and the container the group surfaces as when it grows past one."""
+    """The group key, and the item that stands for the group until a container replaces it."""
     if one.item.type is ItemType.EPISODE and one.grandparent is not None:
         return one.grandparent.id, one
     if one.item.type is ItemType.AUDIO and one.parent is not None:
         return one.parent.id, one
     return one.id, one
+
+
+def _always_its_container(one: HydratedItem) -> bool:
+    """Whether this group surfaces as its container however few members it has.
+
+    **A track does; an episode does not** - measured against a reference over this repository's own
+    fixture, both servers read in the same breath
+    `[probe: tools/differential.py's own client, by hand, Jellyfin 10.11.11, 2026-09-06]`:
+
+    ```
+    album                       recent children   atrium          reference
+    A Compilation (3 tracks)          1           the container   the container
+    Second Album (2 tracks)           1           the container   the container
+    spandau_ballet... (1 track)       1           THE TRACK       the container
+    ```
+
+    All three groups hold exactly one *recent* member, so the count that separated them here was
+    the album's total size rather than anything about recency - and the reference does not separate
+    them at all. Television is untouched because both servers already agree on it: a series with
+    three recent episodes surfaces as the `Series` and a series with one surfaces as the `Episode`,
+    on both, in the same response.
+
+    **This overturns a measurement rather than filling a gap**, which is why it is written out
+    here. The rule this module carried was read from a live library on 2026-08-28 - *"a lone new
+    track arrives as the `Audio`"* - and the fixture contains a case of exactly that shape,
+    `A Compilation`: three tracks, one of them recent. The reference answered with the album. The
+    older reading is kept in the module docstring with this one beside it, because a claim that
+    fails to reproduce is not deleted.
+    """
+    return one.item.type is ItemType.AUDIO
 
 
 @router.get("/Items/Latest")
@@ -183,7 +221,9 @@ async def latest_media(
         # A group of several surfaces as its container, which is an item of its own - fetched
         # through the same pipeline, so its row carries the rollups a container row carries.
         container_ids = tuple(
-            key for key, first in chosen if members.get(key, 0) > 1 and key != first.id
+            key
+            for key, first in chosen
+            if key != first.id and (members.get(key, 0) > 1 or _always_its_container(first))
         )
         containers: dict[str, HydratedItem] = {}
         if container_ids:

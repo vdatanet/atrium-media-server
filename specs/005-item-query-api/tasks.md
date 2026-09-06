@@ -967,7 +967,7 @@ rather than a list of routes somebody remembered.
 Closed line by line at T17, on 2026-08-28.
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
-      twenty-seven — has a passing test, by name, in `FEATURE_005` (T17). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* Ten are named at more than one
+      twenty-eight — has a passing test, by name, in `FEATURE_005` (T17). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* Ten are named at more than one
       level, once where the rule is proved and once where the route is proved to use it.
 - [x] Every endpoint reaches the conformance level [spec §6](spec.md#6-conformance) declares —
       with the L3 debt stated rather than hidden: `GET /Items` and `GET /Items/{itemId}` carry
@@ -1107,6 +1107,34 @@ and will move; the classes are what to work from.
 | **117** | `VALUE` | `Name` 61 — 003's derivation against the reference's whole-filename rule, already on [010's list](../010-conformance-harness/tasks.md) — then `TotalRecordCount` 22 and `Container` 12 |
 | **46** | `LENGTH` | `Items` 17, and the artist arrays (`AlbumArtists`, `ArtistItems`, `Artists`) 6 each |
 | **7** | `TYPE` | one cause: `GET /UserViews` answers `ParentId` `null` here and an identifier there, on every view |
+
+**The `/Items/Latest` residue, measured on 2026-09-06 and it is one row.** With the fixture's
+instants distinct and none of them in the future (003, the same day), the two windows hold
+**19 of 20** the same items once 003's name derivation is folded — `The Long Take` against
+`The Long Take (2005)` and three more of that shape. The twentieth is not a naming difference and
+not a mis-pairing: **Atrium answered a track where the reference answered that track's album**, and
+the two are the same content — the track's parent *is* that album on both servers.
+
+With `groupItems=false` the two windows agree exactly, `{Movie 13, Episode 4, Audio 3}` on both, so
+what differs is the grouping and nothing upstream of it. Every container in the pool, both sides:
+
+| container | recent children | atrium, before | reference |
+|---|---|---|---|
+| `Movies` (13) · `Season 1` (3) · `Season 2` (1) | — | its items | its items |
+| `A Compilation` — 3 tracks | 1 | the container | the container |
+| `Second Album` — 2 tracks | 1 | the container | the container |
+| `spandau_ballet…` — **1 track** | 1 | **the track** | the container |
+
+**Two findings, and the second is the one worth the trip.** The first: this server's rule was not
+the one its own documents state — §3.7 and the route's docstring say *"more than one recent item"*,
+all three albums hold exactly one, and what separated them was the album's **total** size. The
+second: the reference does not separate them at all, so the 2026-08-28 reading that *"a lone new
+track arrives as the `Audio`"* **failed to reproduce on a case of its own shape** —
+`A Compilation` is three tracks with one recent member, and the reference answered with the album.
+
+Decided the same day: **a track surfaces as its album always**, the television half is unchanged
+because both servers already agreed on it, and the older reading stays in §3.7 with the new one
+beside it. AC-28.
 
 **Re-run against a clean pair on 2026-09-06, after six changes, and the classes look different
 because one of them was never a class.** 971 differences over the whole report
