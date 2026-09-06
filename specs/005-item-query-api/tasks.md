@@ -1108,6 +1108,49 @@ and will move; the classes are what to work from.
 | **46** | `LENGTH` | `Items` 17, and the artist arrays (`AlbumArtists`, `ArtistItems`, `Artists`) 6 each |
 | **7** | `TYPE` | one cause: `GET /UserViews` answers `ParentId` `null` here and an identifier there, on every view |
 
+**Re-run against a clean pair on 2026-09-06, after six changes, and the classes look different
+because one of them was never a class.** 971 differences over the whole report
+`[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-06]`. The table above is one
+run's and this is another's; what changed is not the arithmetic but what the rows turned out to be.
+
+**`EXTRA_KEY` — 128 rows, and 66 of them are one cause wearing a field name.** `ParentIndexNumber`
+26, `IndexNumber` 24 and `Album` 21 sit almost entirely on two cases — `audio-by-sort-name` and
+`listing-ordered-by-a-key-with-ties` — and both listings are **misaligned end to end**. Asked of
+both servers directly on the same pair:
+
+```
+ #  atrium                  reference
+ 0  By One Artist           Ninety Six Kilohertz
+ 1  First Disc              01 - By One Artist
+ 2  In Another Container    01 - First Disc
+ ...
+ rows aligned by position: 0 of 12
+```
+
+The reference names a track with the whole filename — `01 - By One Artist` — and 003 strips the
+track number, so **every** name differs, the `SortName` ordering differs with it, and a positional
+comparison pairs twelve tracks with twelve other tracks. The extra keys are then not fields this
+server sends and the reference does not: they are two different tracks having different properties.
+That is cause 10 again, and the 2026-09-03 note said so — *joined item by item, every one of them
+disappears* — which the re-count by field name lost. What is left of `EXTRA_KEY` after it is
+`UnplayedItemCount` 20 (cause 8, 007's), `Container` 19 (cause 9, 008's) and about 23 rows on
+`/Items/Latest`.
+
+**`VALUE` — 208 rows, and the big ones are already owned.** `Name` 72 is 003's derivation, the same
+cause as the misalignment above. `TotalRecordCount` 22 decomposes into things already declared: the
+bare `GET /Items` answers **6 against 7** because of the playlists folder (behaviours §5, decided
+2026-09-06), the same case for a restricted seat is **1 against 2** for that reason, and
+`movies-by-sort-name` is **31 against 32** — the zero-byte film, which is the forty-seventh declared
+difference of AC-2. `Container` 15 is 008's; `TranscodingUrl` 7 wants the shape rule 010's list
+names; `IsHidden` 6 is 002's `is_hidden` default. Genuinely unattributed after all that:
+`GET /Artists#by-name-with-a-limit` answering `TotalRecordCount` **4 against 2**, which is this
+feature's and is the one row of the class worth a measurement of its own.
+
+**So the useful count is not 971 or 524.** It is: 003's naming, one cause, carrying the largest part
+of two classes; three deltas already owned by 007, 008 and 002; the playlists folder and the
+zero-byte film, both declared; and a short list of rows nobody has yet explained — the `/Items/Latest`
+residue and the by-name limit above.
+
 **The two key classes are very nearly disjoint, which was worth measuring rather than assuming.**
 The reference suppresses nulls globally ([§1.7](../../docs/compatibility/behaviours.md)), so a field
 this server emits as `null` where the reference omits it would be one difference wearing two names —
