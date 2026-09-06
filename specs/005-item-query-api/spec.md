@@ -259,10 +259,14 @@ the `2` it was given.
 > **`recursive=true` with no `parentId` is the whole library**, which is what a client sends when
 > it means to filter across every view — and it is where every parameter above does apply.
 >
-> **One row of the reference's answer is not replicated.** Beside the library views it sends a
-> `ManualPlaylistsFolder` named `Playlists`; this project models no folder above 009's playlists,
-> so the row is absent here. Recorded on [005's list](tasks.md#what-this-feature-owes-the-next-ones)
-> rather than papered over with an invented item.
+> **One row of the reference's answer is not replicated, and it is an accepted gap.** Beside the
+> library views it sends a `ManualPlaylistsFolder` named `Playlists` — absent from `/UserViews` and
+> present here, on a server holding no playlists at all
+> `[probe: tools/probe_playlists_folder.py, Jellyfin 10.11.11, 2026-09-06]`. This project models no
+> container above 009's playlists, and neither analysed client navigates to one, so Principle VI
+> holds it shut: [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) and
+> [009 §3.2](../009-playlists/spec.md), where the sentence this measurement falsified is corrected
+> rather than deleted.
 
 This is what 010's first kept differential run found and could not classify: a bare `GET /Items`
 answered **77 rows here against 7**, because this server read the request as a query over the whole

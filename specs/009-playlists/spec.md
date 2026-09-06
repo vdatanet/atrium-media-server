@@ -200,9 +200,25 @@ out. `[probe: tools/probe_playlist_media_type.py, Jellyfin 10.11.11, 2026-08-31]
 
 **The reference builds a playlist as a directory**, and three of its fields say so: `Path` is a
 filesystem path under the server's data directory, and `DateCreated` and `DateModified` come from
-that directory. The parent is a playlists folder that **does not appear in `/UserViews`**, so this
-feature adds no view to a 005 response. §4 says what Atrium does with the three fields.
+that directory. The parent is a playlists folder that **does not appear in `/UserViews`**. §4 says
+what Atrium does with the three fields.
 `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]`
+
+> **This section said *"so this feature adds no view to a 005 response"*, and that conclusion was
+> wrong — corrected 2026-09-06.** The premise holds: the folder is absent from `/UserViews`, and
+> that was the route it had been measured on. It is present in a **bare `GET /Items`**, which is a
+> 005 response and is exactly the listing nobody had asked either server for until then: a
+> `ManualPlaylistsFolder` named `Playlists`, `CollectionType: playlists`, sitting beside the
+> library views on a stock server holding no playlists at all, and the `ParentId` of every playlist
+> once there are any `[probe: tools/probe_playlists_folder.py, Jellyfin 10.11.11, 2026-09-06]`.
+>
+> **Atrium does not model it**, decided on 2026-09-06 and recorded as an accepted gap in
+> [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) rather than left as
+> a silent absence. Modelling it is a new item type, an identity rule and a parent for every
+> playlist, and **neither analysed client navigates to it** — both reach playlists through
+> `/Playlists/{id}/Items` and the playlist routes — so Principle VI is what holds it shut. What a
+> client sees is one folder fewer in the root listing; what it cannot do is walk to a playlist.
+> Every route that *reads* a playlist is unaffected.
 
 ### 3.3 `GET /Playlists/{playlistId}/Items` — `GetPlaylistItems`
 
@@ -873,7 +889,7 @@ None. All six were answered at the spec-review gate on 2026-08-31.
 | Shares are reachable from the create body | §3.2, §3.7, AC-14 |
 | The rename route is administrator-only | §3.8, AC-18 |
 | A playlist is a directory, and a rename does not move it | §3.2, §3.8, §4 |
-| The playlists folder is not a view | §3.2 — 009 adds nothing to a 005 response |
+| The playlists folder is not a view — **and is still a row of one** | §3.2 — it is absent from `/UserViews` and present in a bare `GET /Items`, so *"009 adds nothing to a 005 response"* was false; corrected 2026-09-06, and the folder is an accepted gap (behaviours §5) |
 | A playlist's `MediaType` is fixed at creation and never follows its contents | §3.2, §4 — it is a value the row carries, not one anybody derives |
 | An unrecognised `MediaType` is a `400`, not a dropped token | §3.2's error table — the third refusal on that route |
 | `mediaTypes=` filters playlists by the row, not by the type | §4 — undecided, and the only place 009 meets a 005 parameter it cannot answer from a kind |
