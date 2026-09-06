@@ -180,10 +180,23 @@ on the 3.9 floor they promise to run on. **No job contacts a Jellyfin server**, 
 any test that opens a TCP connection — so a probe belongs in `tools/`, run by hand, never in the
 suite.
 
-**Never commit to `main`.** It has happened once in this project, caught only because opening the
-pull request failed with *"No commits between main and …"*. Merge with `--delete-branch`: a stacked
-pull request is only retargeted when its base branch is deleted, and three of them once merged into
-each other instead of into `main` because the branches were kept.
+**Never commit to `main`.** It has happened twice in this project, and both times what caught it
+was luck of the same kind — a push or a pull-request creation failing afterwards, with a message
+about something else. **There is a hook for it now**, and it needs one line per clone because git
+will not enable a repository's own hooks on its own:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`.githooks/pre-commit` then refuses a commit whose `HEAD` is `main`, says how to move work that is
+already committed, and leaves `ALLOW_COMMIT_ON_MAIN=1` for the one case that is not a mistake —
+repairing `main` itself. `tests/unit/test_commit_hook.py` runs it the way git does, in a repository
+of its own, because a hook asserted by reading its text is a hook nobody has run.
+
+Merge with `--delete-branch`: a stacked pull request is only retargeted when its base branch is
+deleted, and three of them once merged into each other instead of into `main` because the branches
+were kept.
 
 Every gate is a real gate. A plan does not start until its spec is `Accepted`; tasks do not start
 until the plan is; code does not start until the tasks are (Principle III).
