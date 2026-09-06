@@ -175,7 +175,8 @@ Fields compared by **shape** rather than by value, each with a written reason.
 | Field | Why it may differ | Because |
 |---|---|---|
 | `Id`, `ItemId`, `Key`, `ServerId`, `ParentId`, `SeriesId`, `SeasonId`, `AlbumId`, `ParentThumbItemId`, `ParentBackdropItemId`, `PlaylistItemId`, `ThumbImageItemId`, `BackdropImageItemId`, `UserId`, `DeviceId` | Derivation differs by design (behaviours §1.4) | `derived-identifier` |
-| `DateCreated`, `DateLastMediaAdded`, `LastActivityDate`, `LastLoginDate` | Scan wall-clock time, and for the last one the moment this seat authenticated — the run authenticates against each server in turn, measured 90 ms apart | `wall-clock` |
+| `DateCreated` | **A container's only, from 2026-09-06**: the moment each server's own scan made the row. A file-backed item's is its file's modification time on both servers and is compared — see [behaviours §2.29](../../docs/compatibility/behaviours.md) | `wall-clock` |
+| `DateLastMediaAdded`, `LastActivityDate`, `LastLoginDate` | Scan wall-clock time, and for the last one the moment this seat authenticated — the run authenticates against each server in turn, measured 90 ms apart | `wall-clock` |
 | `Etag`, `ETag`, `ImageTags.*` | Content hashes over differently-derived inputs | `content-hash` |
 | `PlaySessionId`, `AccessToken` | Generated once per session and per token, by each server for itself | `derived-identifier` |
 | `traceId` | The W3C trace-context id a problem-details body carries, minted per request and never twice the same | `derived-identifier` |

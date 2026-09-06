@@ -1312,7 +1312,7 @@ said `Implemented` would make the gate record a state that no longer existed.
 ## Definition of done
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing
-      test — all fifteen, by name, in `FEATURE_003` (T21). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)*
+      test — all sixteen, by name, in `FEATURE_003` (T21). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)*
 - [x] The naming corpus passes in full, **carries no `xfail` marker**, and every row states the
       reason it exists. Checked rather than assumed: `AWAITING` is empty, which is what
       `test_no_row_is_parked_behind_an_xfail` asserts.
@@ -1382,7 +1382,8 @@ Neither is a defect this list can settle: both are 003's rule about what a seaso
 measurement is here so that the next person deciding does not have to stand a reference up again.
 
 **`DateCreated` is the scan's clock and not the file's, and it makes a listing mean two things —
-found on 2026-09-05 by an independent audit of the harness's own drift.** `scan.py` stamps every
+found on 2026-09-05 by an independent audit of the harness's own drift. Answered on 2026-09-06, and
+the measurement corrected the entry as well as the code (§3.9, AC-16, behaviours §2.29).** `scan.py` stamps every
 item of a library with one `utc_now()`, so a library's items are all created at the same instant and
 no date ordering among them is total. The reference takes the file's modification time, which the
 fixture generator fixes, so its items carry distinct and reproducible dates.
@@ -1399,3 +1400,27 @@ Two consequences, and only the second is arguably a defect:
   A client asking what is new gets a different answer for a different reason. Whether that matters
   enough to take the file's `mtime` instead is 003's call with 005's listing in hand; the
   measurement is here so it can be made without standing a reference up again.
+
+**What the measurement said, and two things in the paragraph above it corrected.** A reference
+instance over this repository's own fixture, with five paths stamped years apart before the scan so
+that a modification time, a directory's time and the moment of the scan could be told apart
+`[probe: tools/probe_date_created.py, Jellyfin 10.11.11, 2026-09-06]`:
+
+* **A file-backed item carries its file's modification time and a container carries the scan's** —
+  53 of 53 and 27 of 27. So the containers were already right by accident, and the whole of the
+  difference was the file-backed items. A season directory stamped four years earlier came back
+  carrying the instant of the scan, which is what makes that half a measurement rather than a
+  guess, and a two-part film carries the time of the part its `Path` names.
+* **It follows the file rather than recording a first sighting.** One film's modification time was
+  moved after the first scan; the reference's date moved with it. That is why the column is written
+  by a rescan here too, and why an existing installation needs no migration.
+
+**And the premise this entry gave for the drift was wrong.** It said the reference's items *"carry
+distinct and reproducible dates"* because the generator fixes the modification time — the generator
+fixes **one instant for the whole tree**, so on this fixture the reference's dates are as tied as
+Atrium's was. Taking the file's time therefore does **not** make the ordering total here, and does
+not stop two builds of Atrium disagreeing about `/Items/Latest`. What does that is the tie-break:
+`db/item_queries` ends its ordering on `Item.id`, and `library/config.create` mints the `library_id`
+that identifier derives from with `new_id()` per build. That is the open half, and it is on
+[010's list](../010-conformance-harness/tasks.md#what-this-feature-owes-the-next-ones) where the
+drift is measured rather than here.

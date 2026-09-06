@@ -989,6 +989,54 @@ would answer a codec profile typed `0` with the opposite member. The refusal for
 has is unchanged and is still the validation `400`, which is the opposite of §1.12's rule for a
 **query** value and is measured on both sides.
 
+### 2.29 `DateCreated` is the file's own time for an item, and the scan's for a container
+
+**Jellyfin does:** answer a file-backed item's `DateCreated` with **its file's modification time**,
+and a container's with **the moment the scan made the row**. Measured over this repository's own
+fixture tree, with five paths stamped before the scan so that the three candidate sources could be
+told apart `[probe: tools/probe_date_created.py, Jellyfin 10.11.11, 2026-09-06]`:
+
+| Row | `DateCreated` |
+|---|---|
+| `Movie`, `Episode`, `Audio` — 53 of 53 | the file's modification time, to the second |
+| `Folder`, `Season`, `Series`, `MusicAlbum`, `MusicArtist` — 28, counting the virtual season the reference invents for an episode whose season nothing names and which has no directory at all (§2.27) | the instant of the scan, none of them earlier |
+| A season whose **directory** was stamped four years earlier | the instant of the scan, not the directory's time |
+| A two-part film whose parts were stamped two years apart | part one's — the file its `Path` names |
+
+**And it is not a first sighting: it follows the file.** One film's modification time was moved
+after the first scan and the library refreshed; the field moved with it within one scan. So the
+name is misleading on both servers — this is a property of the file, re-read every time, and a
+server that wrote it once when it first saw the item would drift away from the reference with every
+file anyone touched.
+
+**Why the fixture could not answer this without being marked:** both of this repository's tree
+generators stamp every file with one fixed instant (`FIXED_MTIME_NS`, 2026-01-01), which is what
+makes 003's `(size, mtime_ns)` change signal testable. On that tree a modification time, a creation
+time and the moment of a scan are indistinguishable, and a reading taken from it would have
+confirmed whatever it was asked to. The probe stamps five paths years apart for exactly that
+reason, and the marks are what every row above is measured against.
+
+**Depends on it:** `sortBy=DateCreated` on every listing, and `GET /Items/Latest`, which is a
+window over that order. A server taking the scan's clock for everything answers *"what is new"*
+with **which library was scanned last** rather than which file is newest — and, because one clock
+per library leaves no total order, hands the whole ordering to whatever tie-break follows it.
+
+**Atrium does:** the same, from 2026-09-06
+([003 §3.9](../../specs/003-library-configuration-and-scanning/spec.md), AC-16). Until that date it
+stamped every item of a library — files and containers alike — with one `utc_now()` taken once per
+scan. The containers were right by accident and the files were not, and nothing in the suite
+asserted the column at all, which is why the defect survived an implemented feature and two audits.
+There is no migration: the value is derived from a file that is still there, so the first rescan
+after the change corrects every row it applies to.
+
+**What this does not fix, and it is worth stating here because the two travel together.** The
+ordering ties this defect created are not the reason two builds of Atrium disagree about
+`/Items/Latest`. Both servers tie on this fixture — the reference's dates are as identical as
+Atrium's on a tree stamped at one instant — and the reference is reproducible anyway because its
+tie-break is stable. Atrium's is `Item.id`, derived from a `library_id` minted per build, so a
+rebuild reshuffles it. That is a separate defect and it is on
+[010's list](../../specs/010-conformance-harness/tasks.md#what-this-feature-owes-the-next-ones).
+
 ### 2.13 `DeviceId` is mandatory on one route, not on the header
 
 **Jellyfin does:** answer `200` on an ordinary authenticated route for a client header carrying no

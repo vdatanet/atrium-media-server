@@ -429,25 +429,33 @@ entries:
   # different moments. Neither server chose it and no argument is owed for it.
   # ------------------------------------------------------------------------------------------
 
+  # **`DateCreated` is excused on containers and compared on everything else, from 2026-09-06.**
+  # Until that date these three entries said `endpoint: "*"` and excused the field everywhere, on
+  # the reason "the moment this server's scan first saw the item" - which was true of Atrium and
+  # not of the reference: a file-backed item carries its **file's** modification time there, and
+  # now here (behaviours section 2.29, 003 section 3.9, AC-16). Excusing that by value would hide
+  # a field the two servers now agree on exactly, and hide it going wrong again.
+  #
+  # A container's is each server's own scan clock and can never agree, so the excuse survives
+  # where the rows are containers. The register has no predicate for an item's **type**, so the
+  # scope is written the two ways it does have - the endpoint whose every row is a library root,
+  # and the one declared case whose body is a container. What that cannot reach is a mixed
+  # listing: `GET /Items` answers containers and files in one array, and any case asking for the
+  # field there would report its container rows. None asks for it today - `DateCreated` is not on
+  # a default list row (005 section 3.2) - and the day one does, this is the entry that has to
+  # grow a third scope rather than go back to "*".
   - kind: field
-    endpoint: "*"
+    endpoint: "GET /UserViews"
     pointer: "/Items/-/DateCreated"
     case: "*"
-    reason: "The moment this server's scan first saw the item"
+    reason: "Every row of this listing is a library root, and a container's creation date is the moment each server's own scan made the row"
     because: wall-clock
     since: 2026-09-02
   - kind: field
-    endpoint: "*"
-    pointer: "/-/DateCreated"
-    case: "*"
-    reason: "The moment this server's scan first saw a bare-array row"
-    because: wall-clock
-    since: 2026-09-02
-  - kind: field
-    endpoint: "*"
+    endpoint: "GET /Items/{itemId}"
     pointer: "/DateCreated"
-    case: "*"
-    reason: "The moment this server's scan first saw the item a bare body describes"
+    case: a-series
+    reason: "The one declared case whose body is a container, whose creation date is the moment each server's own scan made the row"
     because: wall-clock
     since: 2026-09-02
   - kind: field

@@ -68,6 +68,7 @@ import os
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 
 from sqlalchemy.orm import Session as OrmSession
@@ -291,16 +292,25 @@ def scan(
     for written, item in enumerate(ordered, start=1):
         report(Phase.WRITING, written, len(ordered))
         before = existing.get(item.id)
+        created = _created_at(item, before, now)
         if before is None:
-            repository.add(replace(item, date_created=now, date_modified=now))
+            repository.add(replace(item, date_created=created, date_modified=now))
             added += 1
             continue
         if before.is_removed:
             # The file came back. Same path, same derivation, same identifier - so the user data
             # keyed to it is still there and was never disturbed (spec section 3.8).
             returning.append(item.id)
-        if _differs(before, item, names_are_the_scanners=item.id not in resolved):
-            repository.update(replace(item, date_modified=now))
+        # **The date is checked here and not inside `_differs`**, which is the difference between
+        # a correction and a re-read. `_touched` asks `_differs` which items 004 refreshes, and a
+        # creation date that has moved - because the file's modification time moved, or because
+        # this column used to hold the scan's clock and now holds the file's - is no reason to open
+        # a file and read its tags again. So it writes the row and leaves the refresh alone.
+        if (
+            _differs(before, item, names_are_the_scanners=item.id not in resolved)
+            or created != before.date_created
+        ):
+            repository.update(replace(item, date_created=created, date_modified=now))
             updated += 1
         else:
             unchanged += 1
@@ -819,6 +829,44 @@ def _require_removals_under_threshold(
         f"it because the root still yields something. Nothing is changed. Check the mount; if the "
         f"files really are gone, scan again with removals confirmed."
     )
+
+
+def _created_at(item: Item, before: Item | None, now: datetime) -> datetime | None:
+    """When an item was created, which for a file-backed one is a fact about the **file**.
+
+    Measured against a reference instance over this repository's own fixture: a `Movie`, an
+    `Episode` and an `Audio` carry their file's modification time exactly, and every container -
+    `Folder`, `Season`, `Series`, `MusicAlbum`, `MusicArtist` - carries the moment the scan made
+    the row and **not** its directory's time. Both halves were measured rather than reasoned: a
+    season directory stamped four years into the past came back carrying the instant of the scan
+    `[probe: tools/probe_date_created.py, Jellyfin 10.11.11, 2026-09-06]`.
+
+    **A two-part film takes the time of the part its path names**, measured on the same instance
+    by giving the two parts different times: the item followed part one, which is the file its
+    `Path` reports. That is `sources[0]` here, and it is the same choice `Item.path` already makes.
+
+    **It stays in step with the file rather than recording a first sighting.** The probe moved one
+    file's modification time and the reference's `DateCreated` followed it within one scan, so a
+    rescan writes this column again - which is why `ItemRepository.update` carries it now. A
+    container keeps what it was created with, because nothing about a directory feeds it.
+
+    A source with no modification time stored falls back to the scan's clock, which is the shape
+    `_unchanged_paths` already guards against: `mtime_ns` is set for every file this walk found,
+    and `None` only ever arrives from a row written before there was one.
+    """
+    if item.sources and item.sources[0].mtime_ns is not None:
+        seconds, remainder = divmod(item.sources[0].mtime_ns, 1_000_000_000)
+        try:
+            # To the microsecond, by division rather than by float seconds: `datetime` cannot hold
+            # the nanosecond, and `mtime_ns / 1e9` loses the microsecond too on a date far from
+            # zero.
+            return datetime.fromtimestamp(seconds, UTC).replace(microsecond=remainder // 1_000)
+        except (OSError, OverflowError, ValueError):
+            # A modification time no `datetime` can hold - a filesystem that allows a year outside
+            # the range, a tool that wrote one - is a bad date on one file and must not be a scan
+            # that fails. This feature's whole discipline is that a scanner fails safely.
+            pass
+    return now if before is None else before.date_created
 
 
 def _differs(before: Item, after: Item, *, names_are_the_scanners: bool = True) -> bool:

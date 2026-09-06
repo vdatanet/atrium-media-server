@@ -438,6 +438,36 @@ the item they produced. The last two are counted apart. A file that was skipped 
 library and a file that was noticed is, so an operator told that both were "skipped" would go
 looking for something that is not missing.
 
+### 3.9 Creation dates
+
+**An item's creation date is a fact about its file; a container's is a fact about the scan.**
+Measured against a reference instance over this repository's own fixture, with five paths stamped
+before the scan so the candidate sources could be told apart
+`[probe: tools/probe_date_created.py, Jellyfin 10.11.11, 2026-09-06]` and recorded in
+[behaviours §2.29](../../docs/compatibility/behaviours.md).
+
+| Item | Its creation date is |
+|---|---|
+| `Movie`, `Episode`, `Audio` — anything backed by a file | that file's modification time |
+| A multi-part item | the modification time of the part its path names, which is its first source |
+| `CollectionFolder`, `Series`, `Season`, `MusicAlbum`, `MusicArtist` — anything backed by no file | the moment the scan created the row, and **not** its directory's modification time |
+
+**It follows the file rather than recording a first sighting.** A file whose modification time
+moves has an item whose creation date moves with it on the next scan, which is what the reference
+does and is why this column is written by a rescan and not only by an insert. A container keeps
+what it was created with: nothing about a directory feeds it.
+
+**A corrected date is not a reason to re-read the file.** A rescan that finds only this column
+wrong writes the row and does not hand the item to 004's refresh — §3.8's change signal decides
+what is examined, and a date derived from a modification time this scan already read tells nobody
+anything new about the file's contents.
+
+This is the one column of §3.8's table whose value comes from outside the scan, and it was wrong
+from the first implementation until 2026-09-06: every item of a library was stamped with one
+`utc_now()`, which made no date ordering among them total and made `GET /Items/Latest` mean *which
+library was scanned last* rather than *which file is newest* (005 owns that listing). There is no
+migration — the value derives from a file that is still there, so the first rescan corrects it.
+
 ## 4. Data the feature owns
 
 | State | Observable as (via 005) | Lifetime |
@@ -473,6 +503,11 @@ looking for something that is not missing.
 15. An explicit sort title from metadata replaces the §3.7 derivation entirely, for every type —
     the overriding three included — and is lowercased and digit-padded but not article-stripped
     (§3.7.3). *(Added at the same audit — M32.)*
+16. An item backed by a file carries **that file's modification time** as its creation date — the
+    first part's, for a multi-part item — and follows it when the file's time moves; an item backed
+    by no file carries the moment of the scan and not its directory's time (§3.9). *(Added
+    2026-09-06 with the behaviour, from the measurement that found the column had never been
+    asserted at all.)*
 
 ## 6. Conformance
 

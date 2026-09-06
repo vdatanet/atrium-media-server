@@ -1080,6 +1080,22 @@ but by field name, **46 appear only as missing, 11 only as extra, and 3 as both*
 `HasSubtitles`, `UnplayedItemCount`. So §1.7 accounts for three fields here and not for a class, and
 the 224 and the 130 are two questions.
 
+**`DateLastMediaAdded` is a zero date on every container the reference answers but a series —
+measured 2026-09-06, and handed here because this feature computes it.** Read off a reference
+instance over this repository's own fixture while measuring where `DateCreated` comes from
+`[probe: tools/probe_date_created.py, Jellyfin 10.11.11, 2026-09-06]`: of the 28 rows carrying the
+field, the three `Series` rows carry a real date - the modification time of their newest episode's
+file - and the other 25, every `Folder`, `Season`, `MusicAlbum` and `MusicArtist`, carry
+`0001-01-01T00:00:00.0000000Z`, which is .NET's zero rather than a date anybody chose.
+
+Atrium computes it as `max(child.date_created)` over the subtree for every container
+(`db/item_queries`, `_rolled`'s neighbour), so where the reference answers its zero this server
+answers a plausible timestamp. The allowlist excuses the field as `wall-clock`, which is the wrong
+class for it now that the two answers differ in **kind** rather than in the moment - and the entry
+was written before anybody had read the reference's. What the difference is worth, and whether a
+zero date is a thing to replicate, is this feature's call. The `DateCreated` half of the same
+reading was 003's and is done (003 §3.9, AC-16, behaviours §2.29).
+
 **The sharpest single row is in none of those classes.** `GET /Items` with no parameters answers
 **77 rows here against 7** — 17 against 2 for a narrowed reader — so the two servers disagree about
 what a bare listing *is*, the reference giving top-level views where this one recurses. The `LENGTH`
