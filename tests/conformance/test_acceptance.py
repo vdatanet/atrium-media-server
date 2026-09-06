@@ -887,6 +887,17 @@ FEATURE_007: dict[int, tuple[str, ...]] = {
     24: (
         "tests.conformance.test_session_routes:test_a_report_lands_on_the_callers_session_whatever_it_names",
     ),
+    25: (
+        # The two rows of the measured table, apart: a gate that ignored whether the body is
+        # required passes the second and fails the first, which is how the first was found.
+        "tests.unit.test_content_type_gate:test_a_required_body_refuses_every_unreadable_media_type",
+        "tests.unit.test_content_type_gate:test_an_optional_body_is_only_refused_when_one_arrives",
+        "tests.unit.test_content_type_gate:test_the_refusal_is_the_problem_details_shape",
+        "tests.unit.test_content_type_gate:test_what_counts_as_readable_is_a_suffix_rule",
+        # And the absence that keeps the gate from becoming a rule about headers: a GET declares
+        # no media type and every listing here would answer 415 if it were.
+        "tests.unit.test_content_type_gate:test_a_get_is_never_gated",
+    ),
 }
 
 

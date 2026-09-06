@@ -157,10 +157,14 @@ class AccountUnavailableError(Exception):
 #: `[probe: tools/probe_query_envelope.py, Jellyfin 10.11.11, 2026-08-28]`
 PROBLEM_TYPE_BAD_REQUEST = "https://tools.ietf.org/html/rfc9110#section-15.5.1"
 PROBLEM_TYPE_NOT_FOUND = "https://tools.ietf.org/html/rfc9110#section-15.5.5"
+#: Measured 2026-09-06 on a route whose body is required and on one whose body is optional, four
+#: content types each `[probe: tools/probe_content_type_gate.py, Jellyfin 10.11.11, 2026-09-06]`.
+PROBLEM_TYPE_UNSUPPORTED_MEDIA_TYPE = "https://tools.ietf.org/html/rfc9110#section-15.5.16"
 
 #: The reference's own wording, byte for byte.
 VALIDATION_TITLE = "One or more validation errors occurred."
 NOT_FOUND_TITLE = "Not Found"
+UNSUPPORTED_MEDIA_TYPE_TITLE = "Unsupported Media Type"
 
 #: The framework's name for "this string did not match the declared pattern".
 PATTERN_MISMATCH = "string_pattern_mismatch"
@@ -1459,9 +1463,11 @@ __all__ = [
     "PLAYLIST_ABSENT_MESSAGE",
     "PROBLEM_TYPE_BAD_REQUEST",
     "PROBLEM_TYPE_NOT_FOUND",
+    "PROBLEM_TYPE_UNSUPPORTED_MEDIA_TYPE",
     "PROPERTY_REQUIRED_MESSAGE",
     "ROUTING_REFUSALS",
     "UNAUTHORIZED_ACCESS_MESSAGE",
+    "UNSUPPORTED_MEDIA_TYPE_TITLE",
     "USER_ABSENT_MESSAGE",
     "VALIDATION_TITLE",
     "AccountUnavailableError",

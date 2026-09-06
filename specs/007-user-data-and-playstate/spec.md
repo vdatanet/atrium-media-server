@@ -198,6 +198,27 @@ Three endpoints, all answering **`204`**, all used by both analysed clients.
 
 `[spec: PlaybackStartInfo, PlaybackProgressInfo, PlaybackStopInfo]`
 
+**The body is required on all three, and a request the server cannot read one from is `415`** —
+not the validation `400` this project answered until 2026-09-06. The refusal is decided ahead of
+the binding, in `compat/content_type.py`, because a validation handler downstream sees a body that
+failed to parse and cannot tell that apart from a body that parsed into the wrong shape. Measured
+one request at a time `[probe: tools/probe_content_type_gate.py, Jellyfin 10.11.11, 2026-09-06]`:
+
+| request | these three | a route whose body is optional |
+|---|---|---|
+| no body, no `Content-Type` | `415` | `200` |
+| a body, no `Content-Type` | `415` | `415` |
+| a body announced `text/plain` | `415` | `415` |
+| a readable body | `204` | `200` |
+
+So the condition is **the media type of a body the server has to read**, not a body that is
+missing: these three must read one however the request arrived. What counts as readable is a
+suffix rule — `application/json`, `text/json` and anything ending `+json`, in any case and with
+parameters. The refusal is the problem-details shape with no `errors` map
+([behaviours §1.11](../../docs/compatibility/behaviours.md)'s fifth shape), and the gate covers
+every route in this project whose body is required, which is these three, 002's authentication and
+009's rename — read off each route's own declaration rather than off a list here. AC-25.
+
 **`MediaSourceId` is not required on `Progress`.** Emby requires it; Jellyfin does not, and a server
 that rejected reports without it would silently lose the resume positions of any client written
 against the Jellyfin dialect. `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`
@@ -446,6 +467,14 @@ because the alternative is a user losing their library's history to a temporaril
     `PlaySessionId` or session identifier a body carries, the playback lands on the
     authenticated device's `/Sessions` entry and nowhere else (§3.6). *(Added at the same
     audit — M46, with the discriminating test it lacked.)*
+
+25. A request a required body cannot be read from is `415` in the problem-details shape with no
+    `errors` map, ahead of the binding (§3.6): the three reporting routes refuse a request with no
+    `Content-Type` **even when it carries no body**, a route whose body is optional answers such a
+    request normally and refuses only one that carries an unreadable body, and what is readable is
+    `application/json`, `text/json` and any `+json` suffix in any case. *(Added 2026-09-06, when
+    the accepted gap recording this was closed and its own description of the condition turned out
+    to be wrong.)*
 
 ## 6. Conformance
 
