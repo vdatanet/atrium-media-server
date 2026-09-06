@@ -311,6 +311,20 @@ which is a mechanism rather than a fixture, and the case says so in its own `wha
 git-ignored, both regenerable, neither ever the input to anything. The report's shape is spec
 §3.4's, plus the per-identity coverage line AC-14 asks for.
 
+**And, from 2026-09-06, a section saying what each listing anchor resolved to on each side.** It is
+the remedy §4.2's anchor note could not be: that note keeps identifiers out of
+anchors because the two servers derive them differently by design, and every listing anchor names a
+**position** instead — which is the same item on both servers only while their orderings agree. One
+of this register's listings already disagrees, measured 2026-09-05: `audio-by-sort-name@0` was
+`By One Artist` here and `Ninety Six Kilohertz` there, and the twelve cases anchored on it compared
+two different tracks while reporting a delivery difference that was not one.
+
+The section **states and does not judge**, which is the whole of what a report can honestly do
+here. A name difference is not proof of a mis-pairing — 003's derivation differs from the
+reference's whole-filename rule on dozens of rows, so two spellings can be one item — and a name
+match is not proof of a pairing either. What it removes is the silence: a run that mis-pairs now
+says which two rows it compared, on every anchor, for every seat.
+
 ## 5. Contracts
 
 ```python
