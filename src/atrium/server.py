@@ -61,6 +61,7 @@ from atrium.api import (
 )
 from atrium.api import sessions as session_routes
 from atrium.api.playstate import record_stop
+from atrium.compat.content_type import ContentTypeGateMiddleware
 from atrium.compat.errors import EXCEPTION_HANDLERS
 from atrium.compat.middleware import ResponseHeadersMiddleware
 from atrium.compat.profiles import ContentProfileMiddleware
@@ -314,6 +315,10 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     # profile, which every serialiser downstream reads; then the gate; then the headers - the last
     # added is the outermost, which is what puts `Server` and `X-Response-Time-ms` on a 503 served
     # while starting.
+    # Then the content-type gate, which needs the router to know whether the route it is about to
+    # let through must read a body - so it is inside the path rewrite like the query canonicaliser,
+    # and outside the binding it exists to run ahead of (behaviours section 1.11's fifth shape).
+    app.add_middleware(ContentTypeGateMiddleware, routes=app.routes)
     app.add_middleware(RelaxedPathMiddleware, table=routes)
     app.add_middleware(ContentProfileMiddleware)
     app.add_middleware(ReadinessMiddleware, readiness=readiness)

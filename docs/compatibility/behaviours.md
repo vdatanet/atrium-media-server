@@ -1425,11 +1425,32 @@ with `"$"` **and** `{"request": ["The request field is required."]}`
 `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. Two features, two
 required bodies, and neither spelling is anything a client sent.
 
-**And there is a fifth shape this project does not send, measured in the same run.** A request with
-**no body and no `Content-Type` at all** on a route whose body is required is answered `415`,
-`Unsupported Media Type`, in the problem-details shape — not the `400` above. Atrium answers the
-validation `400` there, on this route and on the four older ones with a required body, which is the
-gap [§5](#5-accepted-gaps-in-v1) records rather than a shape any route here reproduces.
+**And there is a fifth shape, sent here from 2026-09-06.** A body whose media type this server
+cannot read is answered `415`, `Unsupported Media Type`, in the problem-details shape with **no
+`errors` map** — not the `400` above.
+
+**The condition is the media type of a body the server has to read, and not a missing body**, which
+is what the accepted gap recording this said until it was measured. A route whose body is
+*required* must read one however the request arrived, so it refuses a request with nothing in it;
+a route whose body is *optional* reads nothing when nothing was sent and answers normally. Measured
+one request at a time on a route of each kind `[probe: tools/probe_content_type_gate.py, Jellyfin
+10.11.11, 2026-09-06]`:
+
+```
+                                no body, no CT   body, no CT   body, text/plain   valid body
+POST /Sessions/Playing                     415           415                415          204
+POST /Items/{itemId}/PlaybackInfo          200           415                415          200
+```
+
+**What counts as readable is a suffix rule**, nine media types asked on one route:
+`application/json`, `text/json` and anything ending `+json` are read — in any case and with
+parameters — while `application/x-www-form-urlencoded`, `*/*` and an empty header are refused.
+
+Atrium answered the validation `400` here until 2026-09-06, on all five of its own routes with a
+required body — 002's authentication, 007's three reporting routes and 009's rename — which was an
+accepted gap in [§5](#5-accepted-gaps-in-v1) and is the second row ever to leave that table. The
+gate is `compat/content_type.py`, ahead of the binding, and it reads *whether a body is required*
+off the route's own declaration rather than off a list.
 
 **The second key is not universal, and 009 T8 measured what decides it: whether the body is
 *required*.** `POST /Playlists` declares an optional body — its four properties may be sent as
@@ -3345,10 +3366,11 @@ undocumented bug.
 | **A playlist item carries no `Path`** ([009 §4](../../specs/009-playlists/spec.md)) | A `Playlist` item fetched with `fields=Path` has none, and its two date fields are its store's rather than a directory's. The reference builds a playlist as a directory under its data path and reports it `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]` | Nothing to close: v1's playlists are not files, and reporting a path no file backs would be the worse answer. Visible only to a client that asks for `Path` by name, and neither analysed client does |
 | **A non-administrator cannot rename their own playlist** ([009 §3.8](../../specs/009-playlists/spec.md)) | The music client's rename button answers `403` for every user who is not an administrator — which is what a stock reference server answers too, because the route that client calls is declared elevated `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-08-31]`. This is a reproduced gap, not an introduced one: the reference's own working rename for an owner is `POST /Playlists/{playlistId}`, which no analysed client calls | `UpdatePlaylist` entering the surface, on the day a client is measured calling it. Principle VI keeps it out until then, and 009 §2 records what the exclusion costs |
 | **The rename applies `Name` and nothing else, and refuses every item that is not a playlist** ([009 §3.8](../../specs/009-playlists/spec.md)) | A client that edits a playlist's overview, rating, year, genres or tags through `POST /Items/{itemId}` finds them unchanged, and the same request against a film, an episode, a track or a by-name row is `403` where the reference applies the body. Measured: a whole posted body changes `Overview`, `ForcedSortName`, `OfficialRating`, `CustomRating`, `ProductionYear`, `Genres` and `Tags` on the reference, while `Path` and `IsFolder` are computed and ignored on both `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. Neither analysed client posts anything but a changed `Name` | Item metadata editing entering the surface with a named consumer — which is more than a route: 004 T10 measured the scan and the refresh already fighting over `Item.name`, so an edited field needs somewhere to live that the next scan does not overwrite. Until then a refusal is the honest answer and a partial apply would be Principle VI's plausible-looking stub |
-| **A required body that is missing entirely is `400` and not `415`** ([§1.11](#111-there-are-four-error-shapes-not-one)) | A request carrying no body and no `Content-Type` on one of the five routes whose body is required — 007's three reporting routes, 008's `PlaybackInfo` and 009's rename — answers the validation `400` where the reference answers `415 Unsupported Media Type` in the problem-details shape `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. No analysed client sends a body-less request to a route that requires one | A content-type gate in `compat/`, ahead of the body binding, and one measurement per required-body route rather than an extrapolation from this one: the shape is measured on the rename alone, and the four older routes were never asked. **[010](../../specs/010-conformance-harness/spec.md) is the owner of the measuring half** — a differential replaying a body-less request against both servers is what asks the other four, and it is the only thing that can — and the gate itself belongs to whoever owns `compat/model.py`, which every request model in the project inherits, rather than to any one feature. 009 T14 decided that rather than closing it inside a task about the acceptance map. **The measuring half is done, 2026-09-06**: a run against a clean pair over this repository's own fixture asked `body-with-no-content-type` on four of the five routes — `POST /Items/{itemId}/PlaybackInfo` under both seats and 007's three reporting routes — and every one answered `400` here against `415` there `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-06]`. So the shape the rename measured **is** the shape of all of them, and this row's extrapolation stopped being one. The fifth route is the rename itself, which that run reports *unasked*: its case anchors on a creation declared for another seat, which this program refuses to issue. What is left of this row is the gate |
 | **A multi-part film answers one media source per part** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Two sources on one item, where the reference answers one source, a `PartCount` and a separate route for the rest | Not a gap to close on its own: it follows from 003 §3.3 modelling the parts as one item's sources, and closing it means changing that model or adding `GET /Videos/{id}/AdditionalParts` to the surface |
 
-**One row left this table on 2026-09-04, and it is the only one that ever has.** *"A media source
+**Two rows have left this table, and the second went on 2026-09-06.** *"A required body that is missing entirely is `400` and not `415`"* is now [§1.11](#111-there-are-four-error-shapes-not-one)'s fifth shape rather than a gap: `compat/content_type.py` refuses an unreadable body ahead of the binding. **Its own description was wrong about the request and about one of its five routes**, which is what closing it found — the condition is the media type of a body the server must read, not a body that is missing, and `POST /Items/{itemId}/PlaybackInfo` answers a body-less request `200` on both servers because its body is optional. The row named it among the required five; the fifth required one is 002's authentication, which nobody had asked.
+
+**The first left on 2026-09-04.** *"A media source
 with no stored inspection is skipped"* ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources))
 recorded a `PlaybackInfo` that skipped the whole annotation for a file nothing had opened, answering
 the model's default `SupportsDirectPlay: true` with **no `TranscodingUrl`** — an answer a client
