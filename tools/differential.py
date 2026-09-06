@@ -1232,6 +1232,10 @@ class Issuer:
         self.wires = wires
         self.cases = cases
         self._answers: Dict[Tuple[str, str], Any] = {}
+        #: What each `listing:` anchor resolved to on this side, keyed by `role|endpoint#case@at`.
+        #: Written where the row is picked and read once, at report time, so that the report can
+        #: say **which row** each side compared - see `anchor_resolutions`.
+        self.anchor_rows: Dict[str, Dict[str, str]] = {}
 
     def case_named(self, endpoint: str, case_id: str) -> Any:
         for case in self.cases:
@@ -1339,6 +1343,20 @@ class Issuer:
                 f"row {position} of {anchor.endpoint}#{anchor.case} carries no Id on the "
                 f"{self.side}"
             )
+        # **Written down because a position is not an item.** Section 4.2 keeps identifiers out of
+        # anchors, since the two servers derive those differently by design and a case carrying one
+        # would compare two different items - and a **position** does the same thing whenever the
+        # two orderings differ, which one of this register's listings already does
+        # (`audio-by-sort-name` resolved to `By One Artist` here and `Ninety Six Kilohertz` there,
+        # measured 2026-09-05). Nothing here decides that the two rows are different items: a name
+        # is 003's derivation, so two spellings can be one item and one spelling can be two. What
+        # it does is stop the pairing being **silent**, which is the whole of what the report can
+        # honestly do about it.
+        self.anchor_rows[f"{seat.role}|{anchor.endpoint}#{anchor.case}@{anchor.at}"] = {
+            "id": str(row["Id"]),
+            "name": str(row.get("Name", "")),
+            "rows": str(len(rows)),
+        }
         return str(row["Id"])
 
     def refuse_an_undeclared_issue(self, anchor: Any, seat: Seat) -> None:
@@ -1504,6 +1522,10 @@ class RunReport:
     endpoints: Tuple[Endpoint, ...] = ()
     provenance: Tuple[Tuple[str, str], ...] = ()
     unused_entries: Tuple[Tuple[str, str, str], ...] = ()
+    #: What every `listing:` anchor resolved to on each side. Added 2026-09-06: all 43 listing
+    #: anchors in the register name position `0`, and a position is the same item on two servers
+    #: only while their orderings agree - which one of them already does not.
+    anchors: Tuple[Tuple[str, str, str, str, str], ...] = ()
     #: What went wrong with the RUN rather than with a comparison: a sweep that could not finish,
     #: a seat the teardown could not delete, a reference that stopped answering. **Added on
     #: 2026-09-03, after the first full sweep produced no report at all.** The sweep had completed
@@ -3717,6 +3739,7 @@ def render(report: RunReport) -> str:
     lines.extend(_conclusions(report))
     lines.extend(_coverage_section(report))
     lines.extend(_unasked_section(report))
+    lines.extend(_anchor_section(report))
     lines.extend(_named_section(report))
     lines.extend(_differences_section(report))
     lines.extend(_known_section(report))
@@ -3859,6 +3882,49 @@ def _unasked_section(report: RunReport) -> List[str]:
             f"{comparison.unreachable} |"
         )
     lines.append("")
+    return lines
+
+
+def _anchor_section(report: RunReport) -> List[str]:
+    """What each listing anchor resolved to, on each side, for every seat that resolved one.
+
+    **A position is not an item, and this section is the whole of what a report can honestly say
+    about that.** Section 4.2 keeps identifiers out of anchors because the two servers derive them
+    differently by design, and a case carrying one would compare two different items. Every one of
+    the register's listing anchors names position `0` instead - and a position does the same thing
+    the moment the two orderings differ. Measured 2026-09-05: `audio-by-sort-name@0` was
+    `By One Artist` here and `Ninety Six Kilohertz` there, and the twelve cases anchored on it
+    compared two different tracks while reporting a delivery difference.
+
+    The section states, and does not judge. A name difference is not proof of a mis-pairing: 003's
+    derivation differs from the reference's whole-filename rule on dozens of rows, so two spellings
+    can be one item. What it removes is the silence.
+    """
+    if not report.anchors:
+        return []
+    lines = ["## What each listing anchor resolved to", ""]
+    lines.append(
+        "Every listing anchor in `request-cases.yaml` names a **position**, and a position is the "
+        "same item on both servers only while their orderings agree. This table says which row "
+        "each side actually compared. `DIFFERENT` is a difference of **name**, which is not the "
+        "same claim as a different item - 003's name derivation differs from the reference's - so "
+        "a row marked here is a comparison worth reading twice, not a defect."
+    )
+    lines.append("")
+    lines.append("| Anchor | Seat | Atrium | Reference | Name |")
+    lines.append("|---|---|---|---|---|")
+    for anchor, seat, ours, theirs, agreement in report.anchors:
+        marked = f"**{agreement}**" if agreement != "same name" else agreement
+        lines.append(f"| `{anchor}` | {seat} | {ours or '—'} | {theirs or '—'} | {marked} |")
+    lines.append("")
+    differing = [one for one in report.anchors if one[4] != "same name"]
+    if differing:
+        lines.append(
+            f"**{len(differing)} of {len(report.anchors)} resolved to rows with different names.** "
+            "Every case anchored on one of them compared a pair this run cannot show to be the "
+            "same item."
+        )
+        lines.append("")
     return lines
 
 
@@ -4283,8 +4349,44 @@ def run(
         endpoints=tuple(endpoints),
         provenance=tuple(provenance),
         unused_entries=unused_entries(entries, used),
+        anchors=anchor_resolutions(issuers),
         incidents=tuple(incidents),
     )
+
+
+def anchor_resolutions(
+    issuers: Mapping[str, Issuer],
+) -> Tuple[Tuple[str, str, str, str, str], ...]:
+    """Every `listing:` anchor this run resolved, with the row each side picked.
+
+    `(anchor, seat, ours, theirs, agreement)`. The two sides resolve independently and neither
+    knows what the other picked; this is the one place in the program where both are in hand.
+
+    **The agreement column is deliberately not a verdict.** Two spellings can be one item - 003's
+    derivation against the reference's whole-filename rule differs on 61 rows of a run - and one
+    spelling can be two items in two libraries. So it says `same name` or `DIFFERENT`, which is a
+    statement about the label and not about the item, and the section's prose says which of the
+    two a reader is looking at.
+    """
+    ours = issuers["atrium"].anchor_rows
+    theirs = issuers["reference"].anchor_rows
+    rows = []
+    for key in sorted(set(ours) | set(theirs)):
+        seat, anchor = key.split("|", 1)
+        here = ours.get(key)
+        there = theirs.get(key)
+        rows.append(
+            (
+                anchor,
+                seat,
+                "" if here is None else f"{here['name']} (of {here['rows']})",
+                "" if there is None else f"{there['name']} (of {there['rows']})",
+                "one side only"
+                if here is None or there is None
+                else ("same name" if here["name"] == there["name"] else "DIFFERENT"),
+            )
+        )
+    return tuple(rows)
 
 
 def unreached(
