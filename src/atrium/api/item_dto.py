@@ -335,7 +335,45 @@ WIDE_ONLY: frozenset[str] = frozenset(
 WIDE_PER_TYPE: Mapping[str, frozenset[ItemType]] = {
     "ProductionLocations": frozenset({ItemType.MOVIE}),
     "Trickplay": frozenset({ItemType.MOVIE, ItemType.EPISODE}),
+    #: The parent series' studio. On both of the types that hang under a series, and on no other -
+    #: measured on every item of every type of this repository's fixture, 9 of 9 episodes and 7 of
+    #: 7 seasons `[probe: tools/probe_wide_body_constants.py, Jellyfin 10.11.11, 2026-09-06]`.
+    "SeriesStudio": frozenset({ItemType.EPISODE, ItemType.SEASON}),
+    #: The nine by-name counts, on a `MusicArtist` and on nothing else - 4 of 4 artists there and
+    #: no other type, at the same reading.
+    **{
+        name: frozenset({ItemType.MUSIC_ARTIST})
+        for name in (
+            "TrailerCount",
+            "MovieCount",
+            "SeriesCount",
+            "ProgramCount",
+            "EpisodeCount",
+            "SongCount",
+            "AlbumCount",
+            "ArtistCount",
+            "MusicVideoCount",
+        )
+    },
 }
+
+#: What a `MusicArtist`'s by-name counts count on a server that models none of it. Seven of the
+#: nine, measured `0` on every sampled artist of a library with **real music** rather than of this
+#: fixture - which is the reading that makes them constants this server can state truthfully
+#: instead of numbers it failed to compute
+#: `[probe: tools/probe_real_library_shapes.py, Jellyfin 10.11.11, 2026-09-06]`. The two that count
+#: are `AlbumCount` and `SongCount`, and they have emitters of their own.
+COUNTS_OF_WHAT_AN_ARTIST_HAS_NONE_OF: frozenset[str] = frozenset(
+    {
+        "TrailerCount",
+        "MovieCount",
+        "SeriesCount",
+        "ProgramCount",
+        "EpisodeCount",
+        "ArtistCount",
+        "MusicVideoCount",
+    }
+)
 
 #: What `/UserViews` adds on top of a list row, unasked - measured, all sixteen on all six rows
 #: `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08-27]`. T11's route passes
@@ -580,6 +618,26 @@ def _path(one: HydratedItem, ctx: BuildContext) -> str | None:
     return f"{library.roots[0].rstrip('/')}/{relative}"
 
 
+#: The two container types whose runtime rollup the reference answers as `0` rather than omitting.
+MUSIC_CONTAINERS: frozenset[ItemType] = frozenset({ItemType.MUSIC_ALBUM, ItemType.MUSIC_ARTIST})
+
+
+def _series_studio(one: HydratedItem) -> str:
+    """The **series'** first studio, for a season or an episode, or the empty string.
+
+    A season's series is its parent and an episode's is its grandparent, which is the same two-hop
+    shape `SeriesName` already reads. Empty rather than absent where the series carries none: the
+    reference answered `""` on all 9 episodes and all 7 seasons of this repository's fixture, whose
+    series have no studio, and answered a real one on five sampled episodes of a library that does
+    `[probe: tools/probe_real_library_shapes.py, Jellyfin 10.11.11, 2026-09-06]`. That pair of
+    readings is what settled it as a derivation rather than the constant it looks like here.
+    """
+    above = one.grandparent if one.item.type is ItemType.EPISODE else one.parent
+    if above is None or above.type is not ItemType.SERIES or not above.studios:
+        return ""
+    return above.studios[0].name
+
+
 def _aggregate(
     one: HydratedItem, ctx: BuildContext, pick: Callable[[ContainerAggregates], Any]
 ) -> Any:
@@ -776,6 +834,7 @@ EMITTERS: Mapping[str, Callable[[HydratedItem, BuildContext], Any]] = {
     # tranche left alone - `false` there would deny lyrics sitting in an `.lrc` beside the track
     # (005 tasks, cause 4).
     "ProductionLocations": lambda one, ctx: [],
+    **{name: (lambda one, ctx: 0) for name in COUNTS_OF_WHAT_AN_ARTIST_HAS_NONE_OF},
     "AirDays": lambda one, ctx: [],
     "Trickplay": lambda one, ctx: {},
     #: Nothing in v1 locks a field against the next rescan - 004 T10 measured the scan and the
@@ -808,9 +867,30 @@ EMITTERS: Mapping[str, Callable[[HydratedItem, BuildContext], Any]] = {
     "ExternalUrls": lambda one, ctx: _external_urls(one),
     "OriginalTitle": lambda one, ctx: one.metadata.original_title,
     "ParentId": lambda one, ctx: one.item.parent_id,
+    # **`0` is a value on a music container and an absence everywhere else.** The `or None` below
+    # is what kept this field off an album and an artist whose tracks have no readable duration -
+    # every album of this repository's fixture - where the reference answers `0`. Measured on a
+    # library with real music, the same field is the exact sum of that album's tracks, so it is a
+    # rollup rather than a constant `[probe: tools/probe_real_library_shapes.py, Jellyfin 10.11.11,
+    # 2026-09-06]`; both readings are the same rule, and only the empty case told them apart.
     "CumulativeRunTimeTicks": lambda one, ctx: _aggregate(
-        one, ctx, lambda numbers: numbers.cumulative_runtime_ticks or None
+        one,
+        ctx,
+        lambda numbers: (
+            numbers.cumulative_runtime_ticks
+            if one.item.type in MUSIC_CONTAINERS
+            else (numbers.cumulative_runtime_ticks or None)
+        ),
     ),
+    # The series' studio, not the item's. Empty string where the series has none, which is what the
+    # reference answers rather than omitting the property (005 §3.2).
+    "SeriesStudio": lambda one, ctx: _series_studio(one),
+    "AlbumCount": lambda one, ctx: _aggregate(
+        one, ctx, lambda numbers: numbers.children_by_type.get(ItemType.MUSIC_ALBUM.value, 0)
+    ),
+    # A song under an artist is a file under it, which is what the recursive rollup already counts:
+    # every file-backed descendant of a music artist is a track.
+    "SongCount": lambda one, ctx: _aggregate(one, ctx, lambda numbers: numbers.recursive_count),
     "RecursiveItemCount": lambda one, ctx: _aggregate(
         one, ctx, lambda numbers: numbers.recursive_count
     ),

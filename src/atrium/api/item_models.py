@@ -219,6 +219,13 @@ class BaseItemDto(AtriumModel):
     backdrop_image_tags: list[str] | None = None
     series_thumb_image_tag: str | None = None
     image_blur_hashes: dict[str, dict[str, str]] | None = None
+    #: The **parent series'** studio, on a season and an episode - a derivation and not a constant,
+    #: which is what a library with real studios settled: five sampled episodes of five carried one
+    #: of their own series' studios and none disagreed
+    #: `[probe: tools/probe_real_library_shapes.py, Jellyfin 10.11.11, 2026-09-06]`. Empty where the
+    #: series has none, which is every series of this repository's fixture and is why the fixture
+    #: could not tell the two apart.
+    series_studio: str | None = None
     parent_thumb_item_id: str | None = None
     parent_thumb_image_tag: str | None = None
     #: Always the empty map, and this one is a statement about v1's scope rather than about a
@@ -232,6 +239,25 @@ class BaseItemDto(AtriumModel):
     #: rescan, so there is no locked field to name. Positions 109 and 119 of the pinned document,
     #: which is why they sit either side of nothing and immediately before `Width`.
     locked_fields: list[str] | None = None
+    #: The nine by-name counts a `MusicArtist` full body carries, in the pinned document's own
+    #: order - positions 110 to 118, which is why they sit between `LockedFields` and `LockData`.
+    #:
+    #: **Two of the nine count anything.** On a library with real music, `AlbumCount` and
+    #: `SongCount` answered 5 and 42, 3 and 55, 1 and 19 on the sampled artists while the other
+    #: seven answered `0` on every one
+    #: `[probe: tools/probe_real_library_shapes.py, Jellyfin 10.11.11, 2026-09-06]`. The seven are
+    #: constants here for `ProductionLocations`' reason: v1 models no movie, series, episode,
+    #: programme, trailer, music video or nested artist under an artist, so nought is what this
+    #: server can say truthfully rather than a stand-in for something it failed to count.
+    trailer_count: int | None = None
+    movie_count: int | None = None
+    series_count: int | None = None
+    program_count: int | None = None
+    episode_count: int | None = None
+    song_count: int | None = None
+    album_count: int | None = None
+    artist_count: int | None = None
+    music_video_count: int | None = None
     lock_data: bool | None = None
     #: Last, because the pinned document puts them last - after `LockData`. Both are the primary
     #: video stream's, and both are absent rather than zero when the

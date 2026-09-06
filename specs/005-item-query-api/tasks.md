@@ -967,7 +967,7 @@ rather than a list of routes somebody remembered.
 Closed line by line at T17, on 2026-08-28.
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
-      twenty-eight — has a passing test, by name, in `FEATURE_005` (T17). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* Ten are named at more than one
+      twenty-nine — has a passing test, by name, in `FEATURE_005` (T17). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* Ten are named at more than one
       level, once where the rule is proved and once where the route is proved to use it.
 - [x] Every endpoint reaches the conformance level [spec §6](spec.md#6-conformance) declares —
       with the L3 debt stated rather than hidden: `GET /Items` and `GET /Items/{itemId}` carry
@@ -1038,8 +1038,24 @@ each of them was waiting for `[probe: tools/probe_real_library_shapes.py, Jellyf
 | a music container's runtimes | **a rollup, not a constant.** On three albums, `RunTimeTicks` equalled `CumulativeRunTimeTicks` equalled the exact sum of that album's tracks |
 
 So the tranche is no longer three open questions but three specifications, and the by-name half
-shrank from nine unknowns to two counts and seven zeros. What is left is writing them, which is
-this feature's ordinary work rather than a measurement anybody is waiting on.
+shrank from nine unknowns to two counts and seven zeros.
+
+**Written on 2026-09-06** (§3.2's per-type wide table, AC-29). `SeriesStudio` reads the parent
+series' first studio — an `Ancestor` carries its studios now, fetched in the same grouped read that
+already fetched its artists, so it cost a column rather than a query. `AlbumCount` and `SongCount`
+come from the subtree rollup `ChildCount` already used: the direct-children count learned to group
+by **type** in the same statement, which is what tells an album under an artist from a track
+sitting directly in the artist's directory (004 T9's shape). The seven zeros are constants beside
+`ProductionLocations`. And `CumulativeRunTimeTicks` emits `0` on a music container rather than
+dropping it, which is the one line of the four that had been hiding behind an `or None`.
+
+**What is still outstanding from this tranche is one row of a list.** The reference carries
+`RunTimeTicks` on a **bare** `MusicAlbum` and `MusicArtist` list row — 7 of 7 and 4 of 4 on this
+repository's fixture — where this server carries it only where an item has a metadata runtime, so a
+music container's is absent. Supplying it means fetching the subtree rollup for **every page that
+holds a music container**, which is the cost `aggregates_for` exists to avoid: *"a count nobody
+asked for is a count the page paid for anyway"*. That is a decision about a query per page rather
+than a measurement, and it is the only piece of this tranche that has one.
 
 The paragraphs below are what those three looked like before the reading, kept because each names
 the *reason* the fixture could not answer it — and that reason is what will apply to the next field

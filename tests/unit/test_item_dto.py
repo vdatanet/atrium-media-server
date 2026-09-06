@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +45,7 @@ from atrium.api.item_dto import (
 from atrium.config.paths import DataPaths
 from atrium.db import schema
 from atrium.db.engine import create_database_engine, session_factory
-from atrium.db.item_queries import HydratedItem, ItemQueryRepository
+from atrium.db.item_queries import HydratedItem, ItemQueryRepository, NameLink
 from atrium.domain.items import ItemType
 from atrium.domain.queries import ItemQuery
 from atrium.media.decision import EVERY_PERMISSION
@@ -478,6 +479,116 @@ def test_the_three_wide_constants_carry_the_measured_empty_value(
     assert film["Trickplay"] == {}
     series = wire(hydrated[world.series[0].id], ctx(libraries=libraries_of(world)))
     assert series["AirDays"] == []
+
+
+def test_series_studio_is_the_series_studio_and_not_the_items(
+    hydrated: dict[str, HydratedItem], world: QueryWorld
+) -> None:
+    """AC-29's first half, and the reason it is not a constant.
+
+    On this repository's fixture the reference answers `""` on every season and every episode,
+    because those series have no studio — which is exactly what a constant would answer, and is why
+    the fixture could not settle it. A library with real studios did: five sampled episodes of five
+    carried one of their **own series'** studios and none disagreed
+    `[probe: tools/probe_real_library_shapes.py, Jellyfin 10.11.11, 2026-09-06]`.
+
+    So the empty case is asserted from the world and the non-empty one is built here, because the
+    seeded series have no studios either — and a test that only had the empty case would pass
+    against `lambda one, ctx: ""`.
+    """
+    episode = hydrated[world.series[0].episodes[0]]
+    context = ctx(width=Width.FULL, libraries=libraries_of(world))
+
+    assert wire(episode, context)["SeriesStudio"] == ""
+
+    with_a_studio = replace(
+        episode,
+        grandparent=replace(
+            episode.grandparent,
+            studios=(NameLink(name="A Studio", item_id="s" * 32),),
+        ),
+    )
+    assert wire(with_a_studio, context)["SeriesStudio"] == "A Studio"
+
+
+def test_a_music_artists_counts_are_two_counts_and_seven_zeros(
+    hydrated: dict[str, HydratedItem], world: QueryWorld, repository: ItemQueryRepository
+) -> None:
+    """AC-29's second half. Measured on a library with real music, not on this fixture.
+
+    `AlbumCount` and `SongCount` answered 5 and 42, 3 and 55, 1 and 19 on the sampled artists there
+    while the other seven answered `0` on every one — which is what makes those seven constants
+    this server can state truthfully and these two real counts
+    `[probe: tools/probe_real_library_shapes.py, Jellyfin 10.11.11, 2026-09-06]`.
+
+    The two are asserted against the world's own shape rather than against a number, so a seeded
+    album more or less moves the test with the world instead of breaking it.
+    """
+    artist = hydrated[world.album_artist]
+    body = wire(
+        artist,
+        ctx(
+            width=Width.FULL,
+            libraries=libraries_of(world),
+            # The counts are subtree numbers, so the route fetches them; a context without them
+            # answers `None` and the property is dropped, which is what the absence test below
+            # relies on for every other type.
+            aggregates=repository.aggregates_for([world.album_artist], world.everyone),
+        ),
+    )
+
+    assert body["AlbumCount"] >= 1
+    assert body["SongCount"] == body["RecursiveItemCount"], "a file under an artist is a song"
+    assert body["AlbumCount"] == body["ChildCount"] or body["AlbumCount"] < body["ChildCount"], (
+        "an album is a child; a track sitting directly under the artist is a child and not an album"
+    )
+    for name in (
+        "TrailerCount",
+        "MovieCount",
+        "SeriesCount",
+        "ProgramCount",
+        "EpisodeCount",
+        "ArtistCount",
+        "MusicVideoCount",
+    ):
+        assert body[name] == 0, f"{name} counts something v1 models nowhere under an artist"
+
+
+def test_the_tranche_is_on_its_own_types_and_on_no_list_row(
+    hydrated: dict[str, HydratedItem], world: QueryWorld, repository: ItemQueryRepository
+) -> None:
+    """The absences, which is where a per-type field goes wrong.
+
+    A name added to `WIDE_ONLY` rather than to `WIDE_PER_TYPE` passes every presence assertion
+    above and puts `AlbumCount` on a film.
+    """
+    of_type = {
+        "Movie": world.corpus[0],
+        "Series": world.series[0].id,
+        "Season": world.series[0].seasons[0],
+        "Episode": world.series[0].episodes[0],
+        "MusicAlbum": world.album,
+        "Audio": world.tracks[0],
+        "MusicArtist": world.album_artist,
+    }
+    carrying = {
+        "SeriesStudio": {"Season", "Episode"},
+        "AlbumCount": {"MusicArtist"},
+        "SongCount": {"MusicArtist"},
+        "TrailerCount": {"MusicArtist"},
+    }
+    for field_name, types in carrying.items():
+        for kind, item_id in of_type.items():
+            # The subtree numbers are supplied for **every** type, so an absence below is the
+            # gating and never a context that could not answer.
+            numbers = repository.aggregates_for([item_id], world.everyone)
+            body = wire(
+                hydrated[item_id],
+                ctx(width=Width.FULL, libraries=libraries_of(world), aggregates=numbers),
+            )
+            assert (field_name in body) is (kind in types), f"{field_name} on a full {kind}"
+            row = wire(hydrated[item_id], ctx(libraries=libraries_of(world), aggregates=numbers))
+            assert field_name not in row, f"{field_name} leaked onto a {kind} list row"
 
 
 def test_the_unprobed_stay_absent_even_when_asked(

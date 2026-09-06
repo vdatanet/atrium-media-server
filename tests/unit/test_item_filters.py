@@ -136,16 +136,19 @@ def test_a_predicate_costs_no_extra_statements(
 ) -> None:
     """Every filter is a clause on the one statement, never a second query or a walk in Python.
 
-    The ceiling is the hydration budget - nineteen: one count, one page, seven related tables,
-    the two 008 T3 added for the page's inspections, the one 011 T4 added for the subtitle streams
-    discovered beside them, the one 009 T6 added for the page's stored playlist media types, four
-    ancestor fetches and two rollups (`test_item_queries` holds the exact number and the
-    reasoning). What this test guards is that a *predicate* adds no statement on top of it -
-    including `media_types`, which since T6 reads a second table and does it in the same clause.
+    The ceiling is the hydration budget - **twenty** since 2026-09-06, when the ancestors' studios
+    joined their images and artists so that `SeriesStudio` could be the parent series' studio
+    rather than a constant (spec section 3.2, AC-29). Before that it was nineteen: one count, one
+    page, seven related tables, the two 008 T3 added for the page's inspections, the one 011 T4
+    added for the subtitle streams discovered beside them, the one 009 T6 added for the page's
+    stored playlist media types, four ancestor fetches and two rollups (`test_item_queries` holds
+    the exact number and the reasoning). What this test guards is that a *predicate* adds no
+    statement on top of it - including `media_types`, which since T6 reads a second table and does
+    it in the same clause.
     """
     with query_counter.watching(engine):
         repository.run(ItemQuery(user=world.everyone, limit=10, **build(world)))
-    assert len(query_counter) <= 19, query_counter.report()
+    assert len(query_counter) <= 20, query_counter.report()
 
 
 # ------------------------------------------------------------------------------------------
