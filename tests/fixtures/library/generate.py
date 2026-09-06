@@ -40,10 +40,20 @@ MINIMUM_BODY = 512
 #: twice produces the same items" untestable. 2026-01-01T00:00:00Z.
 FIXED_MTIME_NS = 1_767_225_600_000_000_000
 
-#: How far past that instant a file's own time may land. A year, so that every date in the tree
-#: reads as an ordinary 2026 date, and so that ~100 files over ~31.5 million seconds practically
+#: How far **before** that instant a file's own time may land. A year, so that every date in the
+#: tree reads as an ordinary date, and so that ~100 files over ~31.5 million seconds practically
 #: never land on the same one - `test_every_file_carries_its_own_instant` is what says they did
 #: not, rather than this comment.
+#:
+#: **Before, and that direction is the whole of a defect this had on 2026-09-06**, the day the
+#: spread was introduced. It ran *forwards* from `FIXED_MTIME_NS`, which is 2026-01-01, so on any
+#: day inside that year part of the tree was stamped in the **future** - 17 files of 78 when it was
+#: measured. A reference server clamps a future modification time to the moment of its scan, so
+#: those items came back carrying a wall clock rather than the fixed instant they were given: the
+#: exact non-reproducibility the per-file stamp was written to remove, re-entering through the one
+#: door nobody had looked at. It was also a fixture that changed with the **calendar** - the set of
+#: future files shrinks by one every few days - so two runs on two days disagreed for no reason
+#: either server owned.
 MTIME_SPREAD_SECONDS = 365 * 24 * 3600
 
 
@@ -68,7 +78,9 @@ def mtime_ns_for(key: str) -> int:
     """
     digest = hashlib.sha256(key.encode("utf-8")).digest()
     offset = int.from_bytes(digest[:6], "big") % MTIME_SPREAD_SECONDS
-    return FIXED_MTIME_NS + offset * 1_000_000_000
+    # **Subtracted, never added.** See `MTIME_SPREAD_SECONDS`: a tree stamped into the future is a
+    # tree a reference server re-stamps with its own clock, which is the thing this function is for.
+    return FIXED_MTIME_NS - offset * 1_000_000_000
 
 
 @dataclass(frozen=True)

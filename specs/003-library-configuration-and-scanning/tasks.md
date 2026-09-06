@@ -1381,6 +1381,20 @@ here, and they are two different shapes rather than one rule missed
 Neither is a defect this list can settle: both are 003's rule about what a season *is*, and the
 measurement is here so that the next person deciding does not have to stand a reference up again.
 
+**And the spread runs backwards, from the same day and found by measuring the fixture rather than
+the code.** It ran forwards from `FIXED_MTIME_NS` — 2026-01-01 — over a year, so on the day it
+landed **17 of the fixture's 78 files were dated in the future**. A reference server clamps a
+future modification time to the moment of its scan `[probe: by hand against a single-use instance,
+Jellyfin 10.11.11, 2026-09-06]`, so those items answered a wall clock instead of the fixed instant
+they were given: the exact non-reproducibility the per-file stamp had just been written to remove,
+re-entering through the one door nobody had looked at. It was also a fixture that changed with the
+**calendar** — the set of future files shrinks by one every few days — so two runs on two days
+disagreed for no reason either server owned.
+
+`test_no_file_is_stamped_in_the_future` is the guard that was missing, and it is the one test in
+that file which reads the wall clock on purpose: what it catches is precisely a relationship
+between the fixture and *now*. It reddens when the spread is turned around again.
+
 **The fixture stamps a fixed instant on every file rather than one on the whole tree, from
 2026-09-06.** Both generators stamped `FIXED_MTIME_NS` on everything, for a good reason —
 §3.8 makes `(size, mtime_ns)` the change signal, so a tree built at the current time makes *"the
