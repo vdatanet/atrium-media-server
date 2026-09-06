@@ -92,7 +92,13 @@ BINARIES = ("ffmpeg", "ffprobe")
 #: instant. Nothing about the bytes moved, which is exactly why this number has to: a cached tree
 #: from before the change is byte-identical and carries the old uniform times, so without a bump
 #: the cache would be read and the change would silently not apply.
-GENERATOR_VERSION = 5
+#:
+#: 6: 2026-09-06, hours later. The spread runs **backwards** from the fixed instant. Forwards, it
+#: put 17 of 78 files in the future of the day the suite ran, and a reference server clamps a
+#: future modification time to the moment of its scan - so those items answered a wall clock
+#: instead of the instant they were given (behaviours §2.29). Same reason for the bump: the bytes
+#: are identical and only the times moved.
+GENERATOR_VERSION = 6
 
 #: Where a cached tree lands, unless the environment names somewhere else. A digest directory
 #: under it holds one build.

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import ast
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -112,7 +113,7 @@ def test_every_file_carries_a_fixed_modification_time(tmp_path: Path) -> None:
     stamps = {path.stat().st_mtime_ns for path in root.rglob("*") if path.is_file()}
     assert stamps
     assert all(
-        FIXED_MTIME_NS <= one < FIXED_MTIME_NS + MTIME_SPREAD_SECONDS * 1_000_000_000
+        FIXED_MTIME_NS - MTIME_SPREAD_SECONDS * 1_000_000_000 < one <= FIXED_MTIME_NS
         for one in stamps
     )
 
@@ -130,6 +131,28 @@ def test_two_builds_stamp_the_same_times(tmp_path: Path) -> None:
         for path in second.rglob("*")
         if path.is_file()
     }
+
+
+def test_no_file_is_stamped_in_the_future(tmp_path: Path) -> None:
+    """The property the spread's *direction* exists for, and the one nothing asserted.
+
+    **A tree stamped into the future is a tree a reference server re-stamps with its own clock.**
+    Measured on 2026-09-06, the day the per-file spread landed: it ran forwards from
+    `FIXED_MTIME_NS`, 17 of the fixture's 78 files were therefore dated later than the day the
+    suite was run, and a reference server answered `DateCreated` for those items with **the moment
+    of its scan** - the exact non-reproducibility the per-file stamp was written to remove. It was
+    also a fixture that changed with the calendar: the set of future files shrinks by one every few
+    days, so two runs on two days disagreed for no reason either server owned.
+
+    Asserted against the wall clock deliberately, which is the one test in this file that reads it:
+    the failure this catches is precisely a relationship between the fixture and *now*.
+    """
+    root = build_fixture_library(tmp_path / "library").base
+    now = time.time()
+    ahead = sorted(
+        path.name for path in root.rglob("*") if path.is_file() and path.stat().st_mtime > now
+    )
+    assert not ahead, f"{len(ahead)} files are stamped in the future: {ahead[:5]}"
 
 
 def test_every_file_carries_its_own_instant(tmp_path: Path) -> None:

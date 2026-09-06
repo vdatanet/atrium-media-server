@@ -1016,9 +1016,18 @@ modification time, a creation time and the moment of a scan are indistinguishabl
 taken from it would have confirmed whatever it was asked to. The probe stamps five paths years
 apart for exactly that reason, and the marks are what every row above is measured against.
 
-> **The generators stamp a fixed instant per *file* from 2026-09-06**, keyed on its path, which
-> keeps the change signal exactly as testable and makes a date ordering over the fixture **total on
-> both servers** — where one shared instant made it one tie on each, and a window over it, which is
+> **A modification time in the future is answered with the moment of the scan.** Measured the same
+> day, by accident and then on purpose: a fixture whose files were stamped up to a year ahead had
+> 17 of 78 dated later than the day the run happened, and every one of those items came back
+> carrying the scan instant to sub-second precision rather than its file's time — the same value a
+> container gets. So the rule above holds for a file the server considers to be in the past, and a
+> future one is clamped. Nothing in this project needs a future date; what the reading is worth is
+> that a fixture which drifts into the future stops being reproducible without anything about
+> either server changing, which is how it was found.
+>
+> **The generators stamp a fixed instant per *file* from 2026-09-06**, keyed on its path and
+> running **backwards** from the fixed instant for the reason just given, which keeps the change
+> signal exactly as testable and makes a date ordering over the fixture **total on both servers** — where one shared instant made it one tie on each, and a window over it, which is
 > what `/Items/Latest` is, held whichever rows each server's tie-break happened to favour. The
 > probe goes on marking its five paths: what it needs is not distinct times but *known* ones, and a
 > directory and a second film part stamped years away are how the three candidate sources are told
