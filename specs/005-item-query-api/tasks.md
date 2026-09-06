@@ -1142,9 +1142,22 @@ bare `GET /Items` answers **6 against 7** because of the playlists folder (behav
 2026-09-06), the same case for a restricted seat is **1 against 2** for that reason, and
 `movies-by-sort-name` is **31 against 32** — the zero-byte film, which is the forty-seventh declared
 difference of AC-2. `Container` 15 is 008's; `TranscodingUrl` 7 wants the shape rule 010's list
-names; `IsHidden` 6 is 002's `is_hidden` default. Genuinely unattributed after all that:
-`GET /Artists#by-name-with-a-limit` answering `TotalRecordCount` **4 against 2**, which is this
-feature's and is the one row of the class worth a measurement of its own.
+names; `IsHidden` 6 is 002's `is_hidden` default. The one row that looked unattributed —
+`GET /Artists#by-name-with-a-limit` answering `TotalRecordCount` **4 against 2** — was measured the
+same day and is **behaviours §5.3 seen on the wire**, both of its consequences at once and nothing
+else. `The Artist` appears twice here, as two items with two identifiers, one per music library;
+and on a tree whose files mostly carry no readable tag the reference's by-name registry has almost
+no credits to make rows from, while this server's artists come from directories and exist
+regardless. §5.3 describes the gap as *"a shorter list of artists to browse"*, which is what a real
+music library shows and the opposite of what this fixture does — the section now says that the
+direction is a property of the library rather than of the gap.
+
+**So the class has no unattributed row left**, and what it has instead is a question §5.3 raises
+and nobody has measured: the two `/Artists` are listing different **populations**, not counting one
+population differently. `Soundless Artist` is a row on the reference and not an item there;
+`Various Artists` is an item on both and a row on neither's terms but this server's. What the
+reference's by-name path lists, exactly, is read from its source in §5.3 and has never been
+measured from outside.
 
 **So the useful count is not 971 or 524.** It is: 003's naming, one cause, carrying the largest part
 of two classes; three deltas already owned by 007, 008 and 002; the playlists folder and the
