@@ -967,7 +967,7 @@ rather than a list of routes somebody remembered.
 Closed line by line at T17, on 2026-08-28.
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
-      twenty-five — has a passing test, by name, in `FEATURE_005` (T17). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* Ten are named at more than one
+      twenty-six — has a passing test, by name, in `FEATURE_005` (T17). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* Ten are named at more than one
       level, once where the rule is proved and once where the route is proved to use it.
 - [x] Every endpoint reaches the conformance level [spec §6](spec.md#6-conformance) declares —
       with the L3 debt stated rather than hidden: `GET /Items` and `GET /Items/{itemId}` carry
@@ -1008,7 +1008,7 @@ and each classified through
 |---|---|---|---|
 | 1 | Twelve properties the two **wide** widths carry and this server did not | C — supply it | **Done 2026-09-03.** Eight travel now (§3.2's wide-width table); `CanDelete` and `DisplayPreferencesId` are below |
 | 2 | `SeasonName` on an episode, both widths | C | **Done 2026-09-03** |
-| 3 | Full-body properties still absent: `Trickplay`, `ProductionLocations`, `AirDays`, the eight by-name counts on a `MusicArtist`, `SeriesStudio`, `CumulativeRunTimeTicks` and a rolled-up `RunTimeTicks` on a music container | C | **Next tranche.** The counts and the rollups are the same aggregate machinery `ChildCount` already uses, and the three constants are one more registry row each |
+| 3 | Full-body properties still absent: `Trickplay`, `ProductionLocations`, `AirDays`, the eight by-name counts on a `MusicArtist`, `SeriesStudio`, `CumulativeRunTimeTicks` and a rolled-up `RunTimeTicks` on a music container | C | **Half done 2026-09-06.** `Trickplay`, `ProductionLocations` and `AirDays` travel (§3.2's per-type wide table, AC-26). The other four turned out not to be one tranche with them — see below |
 | 4 | `HasLyrics` on a track | C, and a judgement | The reference answers `false` bare and `true` beside an `.lrc`, so a constant `false` would be wrong on a real library rather than absent. It needs lyric discovery, which is a feature and not a field |
 | 5 | `CanDelete` on every wide body | A decision, not a measurement | Emitting it advertises a deletion [behaviours §4.3](../../docs/compatibility/behaviours.md) refuses by design |
 | 6 | `DisplayPreferencesId` on every wide body | A derivation | A digest of the reference's own display-preferences key: one value per type, and on a library root the row's own id |
@@ -1016,6 +1016,41 @@ and each classified through
 | 8 | `UserData.UnplayedItemCount` on a `MusicAlbum`, a `MusicArtist` and every view row, where the reference sends none | I — a delta | **007's**, not this feature's: the rollup is `db/item_queries._rolled` and the reference rolls up video containers and not music ones |
 | 9 | `Container` on a movie or an episode nothing could inspect | I — a delta | **008's**: this server infers a container from the path extension where the reference reports only what it read |
 | 10 | `ProductionYear`, `RunTimeTicks` and `AlbumArtist` absent on rows that have them there, and every `Name` difference under it | **003's and 004's**, already declared under AC-2 | It is also what makes a listing's rows misalign, and therefore what most of the sweep's `/Items` and `/Items/Latest` differences are downstream of |
+
+**What cause 3 turned out to be, measured 2026-09-06.** Every item of every type on a single-use
+instance over this repository's own fixture, read at **both** widths
+`[probe: tools/probe_wide_body_constants.py, Jellyfin 10.11.11, 2026-09-06]`. It was written as one
+tranche of seven properties and it is two, and the line between them is not *"full body"*:
+
+| | |
+|---|---|
+| `ProductionLocations` on a `Movie`, `Trickplay` on a `Movie` and an `Episode`, `AirDays` on a `Series` | **Done.** All three are things this server resolves **none of and never will in v1**, so the empty value is a statement it can make truthfully rather than a stand-in for data it failed to fetch |
+| `SeriesStudio`, the nine by-name counts, `CumulativeRunTimeTicks` and `RunTimeTicks` on a music container | **Not done, and not for want of the machinery** |
+
+Three findings hold the second half open, and each is about the *fixture* being unable to tell two
+answers apart rather than about the work being large:
+
+* **`SeriesStudio` is not a constant, though it looks exactly like one here.** The reference answers
+  `""` on all 9 episodes and all 7 seasons — because this fixture's series have no studio. This
+  server **does** resolve studios (`Studios` travels today), so `""` would be a lie the day one is
+  read, and the honest shape is a derivation from the parent series. That is parent-lookup
+  machinery, not a registry row, and the fixture cannot verify the non-empty case at all.
+* **The nine by-name counts answer `0` where a real count would not.** On `The Artist`, whose own
+  `ChildCount` is 2 and `RecursiveItemCount` is 7, the reference answers `AlbumCount: 0`,
+  `SongCount: 0` and seven more zeros. So whatever those properties count, it is not what their
+  names say — implementing them as real counts would **diverge** on this fixture, and implementing
+  them as `0` would replicate a number nobody understands. They need a library with real music
+  before either is defensible.
+* **A music container's `RunTimeTicks` and `CumulativeRunTimeTicks` are both `0` on both servers**,
+  on all 7 albums and all 4 artists, so this fixture cannot tell a rollup from a constant. The
+  aggregate machinery exists (`ContainerAggregates.cumulative_runtime_ticks`) and the emitter turns
+  `0` into `None`, which is why the field is absent rather than zero — but which of the two the
+  reference is sending is unmeasured, and the fixture's tracks have no duration to sum.
+
+**Also read on the same instance, and it belongs to cause 1's neighbours rather than here.**
+`ChildCount` and `RecursiveItemCount` are on a **full body** of every container type — `Folder`,
+`MusicAlbum`, `MusicArtist`, `Season`, `Series` — and on **no list row of any type**, which is what
+§3.2 already says about them being gated.
 
 **Cause 10 is why a grouped count is not a measurement.** Read by row position, the sweep reports
 `Album`, `IndexNumber`, `ParentIndexNumber`, `Artists`, `ArtistItems` and `AlbumArtists` as
