@@ -1,0 +1,53 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Refuse a commit on `main`.
+#
+# AGENTS.md has carried "never commit to `main`" since 001, and twice it has been broken - once
+# before 2026-09-06 and once on it. Both times the thing that caught it was **luck of the same
+# kind**: a push or a pull-request creation failing afterwards, with a message about the wrong
+# thing. Nothing in the repository refused the commit itself, so the rule was a sentence rather
+# than a gate, and both slips left work sitting on the wrong branch until somebody noticed.
+#
+# It is deliberately the smallest hook that closes that: it reads one ref, and it does not look at
+# the change. Everything else this project checks is checked by the suite and by CI, which run on
+# a pull request - and a commit that cannot be pushed as one is the thing they never see.
+#
+# Enable it once per clone, which git cannot do for you:
+#
+#     git config core.hooksPath .githooks
+#
+# The escape hatch is for the one case that is not a mistake - repairing `main` itself, which
+# nobody should be doing without saying so out loud:
+#
+#     ALLOW_COMMIT_ON_MAIN=1 git commit …
+
+set -eu
+
+if [ "${ALLOW_COMMIT_ON_MAIN:-}" = "1" ]; then
+    exit 0
+fi
+
+branch=$(git symbolic-ref --quiet --short HEAD || echo "")
+
+if [ "$branch" = "main" ]; then
+    printf '%s\n' \
+        "refusing a commit on main." \
+        "" \
+        "AGENTS.md: one task, one branch, one pull request. A commit here is not reviewed, not" \
+        "checked by CI, and has twice been noticed only because a later push failed." \
+        "" \
+        "  git checkout -b <type>/<short-name>   # your work moves with you, uncommitted" \
+        "" \
+        "If the commit is already made, it is not lost:" \
+        "" \
+        "  git branch <type>/<short-name> && git reset --hard origin/main" \
+        "" \
+        "To commit on main deliberately - repairing main itself, and nothing else:" \
+        "" \
+        "  ALLOW_COMMIT_ON_MAIN=1 git commit …" \
+        >&2
+    exit 1
+fi
+
+exit 0
