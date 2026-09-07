@@ -124,7 +124,7 @@ say how it will be proven is not finished.
 | [010](010-conformance-harness/) | Conformance harness | **Implemented** | **Implemented** | **Implemented** — fifteen of fifteen tasks, [D-7 taken 2026-09-02](010-conformance-harness/tasks.md) |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Implemented** | **Implemented** | **Implemented** — eleven of eleven tasks, ten of ten criteria, [AC-9 amended 2026-09-04](012-negotiation-inputs/spec.md#5-acceptance-criteria) |
-| [013](013-artist-registry/) | Artist registry | **Draft** | — | — |
+| [013](013-artist-registry/) | Artist registry | **Draft** | **Draft** | — |
 
 **All twelve features that were written before 013 are implemented** — 008 on 2026-08-29 across fourteen tasks,
 011 on 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, 010 on 2026-09-02 across
