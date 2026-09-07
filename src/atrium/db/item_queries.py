@@ -820,7 +820,22 @@ class ItemQueryRepository:
                     for one in sorted(images.get(row.id, []), key=lambda one: one.image_index)
                 ),
                 media_type=media_types.get(row.id),
-                user_data=_rolled(user_data.get(row.id, UserItemData()), rollups.get(row.id)),
+                # **A registry artist gets no subtree `UserData`, and this is the narrow place to
+                # say so.** A container's `UserData` is a statement about what is beneath it, and
+                # a registry artist has nothing beneath it at all - so the rollup was a rollup of
+                # zero and `/Artists` answered `UnplayedItemCount: 0` on every row where the
+                # reference sends nothing, four findings on each of the two routes
+                # `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-07]`.
+                #
+                # **It is here rather than in `_rollups` above, and the first fix was the wrong
+                # one.** That method's numbers carry the container runtime as well, which a music
+                # container's `RunTimeTicks` reads (005 AC-30) and which the reference answers as
+                # `0` on these rows - so dropping the registry artist from the rollup fixed one
+                # difference by making another. What has no subtree statement is the *user data*.
+                user_data=_rolled(
+                    user_data.get(row.id, UserItemData()),
+                    None if _is_a_registry_artist(row) else rollups.get(row.id),
+                ),
                 parent=ancestors.get(row.id, (None, None))[0],
                 grandparent=ancestors.get(row.id, (None, None))[1],
                 container_runtime_ticks=(rollups[row.id][2] if row.id in rollups else None),
@@ -1627,6 +1642,15 @@ def _metadata(row: models.Item) -> ItemMetadata:
         normalization_gain=row.normalization_gain,
         refreshed_at=row.metadata_refreshed_at,
     )
+
+
+def _is_a_registry_artist(row: models.Item) -> bool:
+    """The by-name half of the one type that is two populations (013 section 3.4).
+
+    A `MusicArtist` with a library is the tree item an album hangs off; one without is the registry
+    row a credit names, which hangs off nothing and has nothing hanging off it.
+    """
+    return ItemType(row.type) is ItemType.MUSIC_ARTIST and row.library_id is None
 
 
 def _rolled(stored: UserItemData, rollup: tuple[int, int, int] | None) -> UserItemData:
