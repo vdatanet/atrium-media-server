@@ -2373,11 +2373,19 @@ def test_a_status_difference_stops_before_the_headers_as_well_as_before_the_bodi
 
 
 def test_the_endpoints_come_from_the_surface_and_carry_the_level_it_declares() -> None:
-    """One parser, not a second one: `tools/extract_v1_surface.py`'s own `parse_surface`."""
+    """One parser, not a second one: `tools/extract_v1_surface.py`'s own `parse_surface`.
+
+    **The L3 count is asserted in three places and this is the third**, which is what caught the
+    promotion of 2026-09-07: `tests/conformance/test_routes.py` names the rows,
+    `tests/unit/test_allowlist.py` holds each of them to a case per seat, and this one is where the
+    *run* reads the column. Eight became ten when 013 raised the two artist routes; a count that
+    lived in one place would have let two of the three go stale in silence.
+    """
     endpoints = differential.load_endpoints(REPO_ROOT / "docs" / "compatibility" / "surface.yaml")
     assert len(endpoints) == 59
-    assert sum(1 for endpoint in endpoints if endpoint.level == "L3") == 8
+    assert sum(1 for endpoint in endpoints if endpoint.level == "L3") == 10
     assert differential.Endpoint("GET", "/System/Info/Public", "L3", "001") in endpoints
+    assert differential.Endpoint("GET", "/Artists", "L3", "005") in endpoints
 
 
 def test_every_endpoint_of_the_surface_is_reachable_by_at_least_one_declared_case() -> None:

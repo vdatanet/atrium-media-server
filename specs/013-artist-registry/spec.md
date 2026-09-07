@@ -188,10 +188,17 @@ scan rebuilds it.
 | `GET /Items/{itemId}` on a registry artist | L2 | Golden response: a body with no parent |
 | `GET /Items` filtered by an artist identifier | L2 | Fixture with a performer who is nobody's album artist |
 
-Both artist routes are declared `L2` in the v1 surface today. Raising them to `L3` is this
-feature's to justify or to withdraw at its plan gate: the population they answer is the whole of
-what it changes, and a level that stayed at L2 would leave the change unproven against the server it
-was measured from.
+**Both artist routes were declared `L2` in the v1 surface and are `L3` from 2026-09-07**, which
+is a decision taken with this document rather than deferred to the plan gate. The population they
+answer is the whole of what this feature changes, and a level that stayed at L2 would leave the
+change proven against a fixture and unproven against the server it was measured from.
+
+The promotion arrived payable rather than owed, which is what
+[conformance.md](../../docs/compatibility/conformance.md#l3--differential) asks of one: both routes
+already carry two request cases each, for both seats, so the sweep compares them the day the level
+moves. The declared count goes from **eight to ten**, and the two tests that hold it —
+`tests/conformance/test_routes.py`'s named set and `tests/unit/test_allowlist.py`'s per-identity
+gate — move with it.
 
 Levels are defined in [../../docs/compatibility/conformance.md](../../docs/compatibility/conformance.md).
 

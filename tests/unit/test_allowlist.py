@@ -719,14 +719,15 @@ def test_every_surface_endpoint_has_at_least_one_case() -> None:
 def test_every_l3_row_has_a_case_for_every_identity_it_is_meaningful_for() -> None:
     """*"What the gate changed"* §2, as an assertion.
 
-    Eight rows of `surface.yaml` declare `level: L3` and **nothing has ever checked that a level is
+    Ten rows of `surface.yaml` declare `level: L3` - eight since 010, and the two artist routes
+    since 2026-09-07 - and **nothing has ever checked that a level is
     reached**: the surface validator checks only that the value is one of `L0..L3`, and
     `test_routes.py` reads `feature` and `consumers`. Every feature's definition of done has
     deferred the differential half here. So these eight get their cases first, and a run that asked
     them from one seat would be answering a two-row table with one row — which is what fails here.
     """
     rows = [row for row in SURFACE_ROWS if row["level"] == "L3"]
-    assert len(rows) == 8, "the surface's L3 count moved; this test is what says so"
+    assert len(rows) == 10, "the surface's L3 count moved; this test is what says so"
     for row in rows:
         endpoint = f"{row['method']} {row['path']}"
         cases = allowlist.cases_for(CASES, endpoint)
