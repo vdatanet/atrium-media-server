@@ -548,10 +548,59 @@ def test_the_statement_count_is_what_the_plan_says_it_is(
     `SeriesStudio` and only a full body of two types does, so a page could be told to skip this
     when it holds no season and no episode - and then the count would depend on what the page
     happened to hold, which is exactly the drift the equality here is written to catch. Nineteen
-    became twenty as a decision."""
+    became twenty as a decision.
+
+    **And it stays twenty on 2026-09-07, which is the finding rather than the absence of one.**
+    005's list carried a music container's `RunTimeTicks` as an open cost — *"fetching the subtree
+    rollup for every page that holds a music container"* — and the subtree rollup is the pair of
+    statements above, already unconditional. `with_sums` adds two aggregate columns to a `GROUP BY`
+    that runs on every page either way, so the field arrived for **no statement at all**. A number
+    that had to be argued down would have shown up here; one that did not is worth saying so."""
     with query_counter.watching(engine):
         repository.run(ItemQuery(user=world.everyone, limit=10))
     assert len(query_counter) == 20, query_counter.report()
+
+
+def test_a_page_holding_a_music_container_costs_no_more_than_a_page_of_films(
+    engine: Engine,
+    repository: ItemQueryRepository,
+    world: QueryWorld,
+    query_counter: QueryCounter,
+) -> None:
+    """The price of a music container's `RunTimeTicks`, asserted rather than described.
+
+    005's list priced it as a rollup query per page that holds one, and this is the assertion that
+    says it is not: the two pages cost the same statements, because the rollup those columns ride
+    on runs for the container `UserData` of every page whatever it holds.
+
+    Written as an equality between two pages rather than as a second number, so that a future
+    hydrator which *did* make this conditional fails here — which is the same rule the count above
+    is written under.
+    """
+    with query_counter.watching(engine):
+        repository.run(
+            ItemQuery(
+                user=world.everyone,
+                recursive=True,
+                include_types=frozenset({ItemType.MOVIE}),
+                limit=10,
+            )
+        )
+    films = len(query_counter)
+
+    query_counter.reset()
+    with query_counter.watching(engine):
+        page = repository.run(
+            ItemQuery(
+                user=world.everyone,
+                recursive=True,
+                include_types=frozenset({ItemType.MUSIC_ALBUM, ItemType.MUSIC_ARTIST}),
+                limit=10,
+            )
+        )
+    assert page.items, "a page of no music containers would assert nothing"
+    assert all(one.container_runtime_ticks is not None for one in page.items)
+    assert len(query_counter) == films, query_counter.report()
 
 
 def test_a_page_with_no_files_costs_the_same_as_a_page_of_films(
