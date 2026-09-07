@@ -554,6 +554,82 @@ def test_a_music_artists_counts_are_two_counts_and_seven_zeros(
         assert body[name] == 0, f"{name} counts something v1 models nowhere under an artist"
 
 
+def test_a_music_container_carries_the_runtime_of_its_tracks_on_a_bare_list_row(
+    hydrated: dict[str, HydratedItem], world: QueryWorld
+) -> None:
+    """005's last outstanding wide-body row, and it is a rollup rather than a constant.
+
+    The reference carries `RunTimeTicks` on **7 of 7** albums and **4 of 4** artists of this
+    repository's fixture, all zero because those tracks have no readable duration; on a library
+    with real music the same field is the exact sum of that album's tracks, equal to its
+    `CumulativeRunTimeTicks`, on three albums of three
+    `[probe: tools/probe_real_library_shapes.py, Jellyfin 10.11.11, 2026-09-06]`. This world has
+    durations, so it can assert the half the fixture could not.
+
+    The sum is asserted against the world's own tracks rather than a literal, so a seeded track
+    moves the test with the world.
+    """
+    album = wire(hydrated[world.album], ctx(libraries=libraries_of(world)))
+    on_it = [hydrated[one] for one in world.tracks if hydrated[one].item.parent_id == world.album]
+    assert on_it, "the compilation has tracks, or this asserts nothing"
+    assert album["RunTimeTicks"] == sum(one.metadata.runtime_ticks or 0 for one in on_it)
+
+
+def test_a_music_containers_two_runtimes_agree(
+    hydrated: dict[str, HydratedItem], world: QueryWorld, repository: ItemQueryRepository
+) -> None:
+    """`RunTimeTicks` and `CumulativeRunTimeTicks` are one number on the reference, and two
+    computations here — one riding every page's rollup, one fetched on demand for a full body.
+
+    Asserted on the wire rather than by sharing a line of code, because what has to hold is that a
+    client reading the two properties of one body sees one number.
+    """
+    for item_id in (world.album, world.album_artist):
+        body = wire(
+            hydrated[item_id],
+            ctx(
+                width=Width.FULL,
+                libraries=libraries_of(world),
+                aggregates=repository.aggregates_for([item_id], world.everyone),
+            ),
+        )
+        assert body["RunTimeTicks"] == body["CumulativeRunTimeTicks"]
+
+
+def test_an_artist_rolls_up_through_its_albums(
+    hydrated: dict[str, HydratedItem], world: QueryWorld
+) -> None:
+    """Two levels, which is the shape `_files_under_chain` groups by parent *and* grandparent for.
+
+    An artist's tracks sit under its albums, so a rollup that only counted direct children would
+    answer `0` here and the assertion would pass for the wrong reason - the artist's number has to
+    be at least one album's.
+    """
+    artist = wire(hydrated[world.album_artist], ctx(libraries=libraries_of(world)))
+    album = wire(hydrated[world.album], ctx(libraries=libraries_of(world)))
+    assert artist["RunTimeTicks"] >= album["RunTimeTicks"] > 0
+
+
+def test_a_file_backed_item_keeps_its_own_runtime(
+    hydrated: dict[str, HydratedItem], world: QueryWorld
+) -> None:
+    """The half that must not move: a rollup on a music container is not a rollup everywhere.
+
+    A film's `RunTimeTicks` is the film's, and a `Series` - which `PER_TYPE` also lists - keeps
+    reading its metadata, because what was measured is the two music types and nothing was
+    measured about a series' subtree.
+    """
+    with_a_runtime = next(
+        one for one in world.corpus if hydrated[one].metadata.runtime_ticks is not None
+    )
+    film = wire(hydrated[with_a_runtime], ctx(libraries=libraries_of(world)))
+    assert film["RunTimeTicks"] == hydrated[with_a_runtime].metadata.runtime_ticks
+
+    series = hydrated[world.series[0].id]
+    body = wire(series, ctx(libraries=libraries_of(world)))
+    assert body.get("RunTimeTicks") == series.metadata.runtime_ticks
+
+
 def test_the_tranche_is_on_its_own_types_and_on_no_list_row(
     hydrated: dict[str, HydratedItem], world: QueryWorld, repository: ItemQueryRepository
 ) -> None:

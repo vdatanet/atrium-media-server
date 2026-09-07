@@ -198,6 +198,15 @@ class HydratedItem:
     user_data: UserItemData = field(default_factory=UserItemData)
     parent: Ancestor | None = None
     grandparent: Ancestor | None = None
+    #: The runtime of everything beneath a tree container, and `None` for a file-backed item -
+    #: which has its own. It rides the rollup `_rollups` already runs for the container `UserData`
+    #: of every page, so it is here rather than in `ContainerAggregates`: that record is fetched
+    #: on demand because each of its numbers costs a statement, and this one costs a column.
+    #:
+    #: `0` is a value and not an absence. A music container whose tracks have no readable duration
+    #: answers `0` on the reference, which is what `api/item_dto.py` emits and what the fixture's
+    #: seven albums and four artists all are.
+    container_runtime_ticks: int | None = None
 
     @property
     def id(self) -> str:
@@ -784,6 +793,7 @@ class ItemQueryRepository:
                 user_data=_rolled(user_data.get(row.id, UserItemData()), rollups.get(row.id)),
                 parent=ancestors.get(row.id, (None, None))[0],
                 grandparent=ancestors.get(row.id, (None, None))[1],
+                container_runtime_ticks=(rollups[row.id][2] if row.id in rollups else None),
             )
             for row in rows
         )
@@ -949,8 +959,8 @@ class ItemQueryRepository:
             )
         return linked
 
-    def _rollups(self, rows: Sequence[models.Item], user: User) -> dict[str, tuple[int, int]]:
-        """`(files, played)` beneath every tree container on the page - two statements.
+    def _rollups(self, rows: Sequence[models.Item], user: User) -> dict[str, tuple[int, int, int]]:
+        """`(files, played, runtime)` beneath every tree container on the page - two statements.
 
         The reference reports a container's `UserData` as a statement about its subtree: `Played`
         exactly when nothing visible beneath is left unplayed, and the remainder as
@@ -961,6 +971,18 @@ class ItemQueryRepository:
 
         A `CollectionFolder`'s subtree is its library (the same fast path as scope); everything
         else rolls up through the bounded parent chain.
+
+        **The runtime rides along, and that is the whole price of a music container's
+        `RunTimeTicks`.** 005's list priced it as *"a subtree-rollup query per page that holds a
+        music container"* and the rollup query is already here, on **every** page, unconditionally:
+        `with_sums` adds two aggregate columns to a `GROUP BY` that runs either way, so the field
+        costs no statement at all. What the sum is for is `api/item_dto.py`'s `RunTimeTicks` on a
+        `MusicAlbum` and a `MusicArtist` list row, where the reference answers the exact sum of that
+        container's tracks and this server answered nothing
+        `[probe: tools/probe_real_library_shapes.py, Jellyfin 10.11.11, 2026-09-06]`.
+
+        Reported for every tree container rather than for the two music types, because this method
+        measures a subtree and does not decide who may emit it - that is the registry's, per type.
         """
         containers = [
             row
@@ -975,23 +997,27 @@ class ItemQueryRepository:
             for row in containers
             if ItemType(row.type) is ItemType.COLLECTION_FOLDER and row.library_id
         }
-        counted: dict[str, tuple[int, int]] = {row.id: (0, 0) for row in containers}
+        counted: dict[str, tuple[int, int, int]] = {row.id: (0, 0, 0) for row in containers}
 
-        def accumulate(container_id: str | None, total: int, played: int) -> None:
+        def accumulate(container_id: str | None, total: int, played: int, runtime: int) -> None:
             if container_id in counted:
-                sofar = counted[container_id]
-                counted[container_id] = (sofar[0] + total, sofar[1] + played)
+                files, played_sofar, runtime_sofar = counted[container_id]
+                counted[container_id] = (
+                    files + total,
+                    played_sofar + played,
+                    runtime_sofar + runtime,
+                )
 
-        for level_one, level_two, total, played in self._session.execute(
-            self._files_under_chain(user, chained)
+        for level_one, level_two, total, played, runtime, _latest in self._session.execute(
+            self._files_under_chain(user, chained, with_sums=True)
         ):
-            accumulate(level_one, total, played or 0)
-            accumulate(level_two, total, played or 0)
+            accumulate(level_one, total, played or 0, runtime or 0)
+            accumulate(level_two, total, played or 0, runtime or 0)
 
-        for library_id, total, played in self._session.execute(
-            self._files_under_library(user, sorted(libraries))
+        for library_id, total, played, runtime, _latest in self._session.execute(
+            self._files_under_library(user, sorted(libraries), with_sums=True)
         ):
-            accumulate(libraries.get(library_id), total, played or 0)
+            accumulate(libraries.get(library_id), total, played or 0, runtime or 0)
 
         return counted
 
@@ -1070,6 +1096,13 @@ class ItemQueryRepository:
         direct children, and the two rollup shapes with the sums and the latest date attached.
         On demand rather than in `_hydrate`, because every one of these is a gated field
         (spec section 3.2) and a bare list row never carries them.
+
+        `cumulative_runtime_ticks` is deliberately the same number `_hydrate` already carries as
+        `HydratedItem.container_runtime_ticks`, over the same two rollup shapes: a music container
+        answers both `CumulativeRunTimeTicks` here and `RunTimeTicks` there, and the reference
+        answers them equal. They are computed twice because they are fetched at two different
+        moments - this batch is one a route asked for, that one is every page - and a test asserts
+        the equality on the wire rather than the code sharing a line.
         """
         rows = list(
             self._session.execute(select(models.Item).where(models.Item.id.in_(ids))).scalars()
@@ -1566,7 +1599,7 @@ def _metadata(row: models.Item) -> ItemMetadata:
     )
 
 
-def _rolled(stored: UserItemData, rollup: tuple[int, int] | None) -> UserItemData:
+def _rolled(stored: UserItemData, rollup: tuple[int, int, int] | None) -> UserItemData:
     """A container's user data, restated as a rollup of its subtree.
 
     The favourite flag, the count and the position stay the stored row's - a favourite series is
@@ -1576,7 +1609,7 @@ def _rolled(stored: UserItemData, rollup: tuple[int, int] | None) -> UserItemDat
     """
     if rollup is None:
         return stored
-    total, played = rollup
+    total, played, _runtime = rollup
     return UserItemData(
         is_favorite=stored.is_favorite,
         played=total > 0 and played >= total,

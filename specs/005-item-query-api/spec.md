@@ -108,7 +108,7 @@ registry holds.* `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08
 | Field | Types |
 |---|---|
 | `ProductionYear`, `PremiereDate` | `Movie`, `Series`, `Season`, `Episode`, `MusicAlbum`, `Audio` |
-| `RunTimeTicks` | `Movie`, `Series`, `Episode`, `MusicArtist`, `MusicAlbum`, `Audio` |
+| `RunTimeTicks` | `Movie`, `Series`, `Episode`, `MusicArtist`, `MusicAlbum`, `Audio` — and on the two music types it is the **subtree's** runtime rather than the item's own, see below |
 | `OfficialRating` | `Movie`, `Series` |
 | `CommunityRating` | `Movie`, `Series`, `Episode` |
 | `IndexNumber` | `Season`, `Episode`, `Audio` (track) |
@@ -125,6 +125,22 @@ registry holds.* `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08
 | `Container` | `Movie`, `Episode`, `Audio` — added by 008 |
 | `AirDays` | `Series` — added 2026-09-06, and the one row of that tranche that is not wide-only |
 | `HasSubtitles`, `VideoType` | `Movie`, `Episode` — added by 008 |
+
+> **`RunTimeTicks` on a music container is a rollup, and it is the last row of the tranche above
+> to land** *(2026-09-07)*. A `MusicAlbum` and a `MusicArtist` have no runtime of their own, and
+> the reference carries the property on **7 of 7** albums and **4 of 4** artists of this
+> repository's fixture — all `0`, because those tracks have no readable duration. On a library
+> with real music it is the exact sum of that album's tracks, equal to its
+> `CumulativeRunTimeTicks`, on three albums of three `[probe:
+> tools/probe_real_library_shapes.py, Jellyfin 10.11.11, 2026-09-06]`. So it is emitted as `0`
+> rather than omitted, on the same rule its cumulative twin already follows — and unlike that
+> twin it is on the **bare** row, which is why it is in this table and not in the list below.
+>
+> **It costs no statement, and [005's list](tasks.md) had priced it as one.** The entry reserved
+> it as a decision about *"fetching the subtree rollup for every page that holds a music
+> container"*; that rollup is the pair of statements `_rollups` already runs on **every** page for
+> a container's `UserData`, and the runtime is two aggregate columns on a `GROUP BY` that was
+> running either way. The reserved decision had no cost to decide about.
 
 **Only when a list row asks for them:** `MediaSources`, `MediaStreams`, `Path`, `Etag`,
 `Chapters`, `DateCreated`, `DateLastMediaAdded`, `ProviderIds`, `Tags`, `Taglines`, `ExternalUrls`,
@@ -699,6 +715,14 @@ acceptance map could not name a single one of their twenty-seven tests.)*
     the sum of its tracks, emitted as `0` rather than omitted. None of the ten is on a list row of
     any type, nor on a full body of any other. *(Added 2026-09-06, when a library with real music
     answered what this fixture could not.)*
+
+30. A music container's `RunTimeTicks` is the runtime of its **subtree** — on a `MusicAlbum` the
+    sum of its tracks, on a `MusicArtist` the sum through its albums — emitted as `0` rather than
+    omitted where those tracks have no readable duration, and on the **bare list row** where the
+    ten of AC-29 are wide-only (§3.2). Every other type keeps its own metadata runtime, and a page
+    holding a music container costs no more statements than a page of films. *(Added 2026-09-07:
+    the last row of the tranche, and the one [005's list](tasks.md) had reserved as a cost
+    decision — the rollup it was to pay for already runs on every page.)*
 
 ## 6. Conformance
 

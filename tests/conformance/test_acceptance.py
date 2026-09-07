@@ -676,6 +676,20 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
         # And on the wire, where a client reads them.
         "tests.conformance.test_golden_items:test_the_full_body_per_type",
     ),
+    30: (
+        "tests.unit.test_item_dto:test_a_music_container_carries_the_runtime_of_its_tracks_on_a_bare_list_row",
+        # Two levels, which is what tells a rollup from a count of direct children.
+        "tests.unit.test_item_dto:test_an_artist_rolls_up_through_its_albums",
+        # One number, two computations: the page's rollup and the on-demand batch.
+        "tests.unit.test_item_dto:test_a_music_containers_two_runtimes_agree",
+        # The half that must not move: a rollup on a music container is not a rollup everywhere.
+        "tests.unit.test_item_dto:test_a_file_backed_item_keeps_its_own_runtime",
+        # The price, which is the criterion's second half and the reason the entry could be closed
+        # rather than decided.
+        "tests.unit.test_item_queries:test_a_page_holding_a_music_container_costs_no_more_than_a_page_of_films",
+        # And on the wire, where a client reads it.
+        "tests.conformance.test_golden_items:test_the_list_row_per_type",
+    ),
     28: (
         # The two halves apart, because the rule parted: a rule made uniform in either direction
         # breaks one of them.

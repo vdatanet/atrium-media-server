@@ -967,7 +967,7 @@ rather than a list of routes somebody remembered.
 Closed line by line at T17, on 2026-08-28.
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
-      twenty-nine — has a passing test, by name, in `FEATURE_005` (T17). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* Ten are named at more than one
+      thirty — has a passing test, by name, in `FEATURE_005` (T17). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* Ten are named at more than one
       level, once where the rule is proved and once where the route is proved to use it.
 - [x] Every endpoint reaches the conformance level [spec §6](spec.md#6-conformance) declares —
       with the L3 debt stated rather than hidden: `GET /Items` and `GET /Items/{itemId}` carry
@@ -1008,7 +1008,7 @@ and each classified through
 |---|---|---|---|
 | 1 | Twelve properties the two **wide** widths carry and this server did not | C — supply it | **Done 2026-09-03.** Eight travel now (§3.2's wide-width table); `CanDelete` and `DisplayPreferencesId` are below |
 | 2 | `SeasonName` on an episode, both widths | C | **Done 2026-09-03** |
-| 3 | Full-body properties still absent: `Trickplay`, `ProductionLocations`, `AirDays`, the eight by-name counts on a `MusicArtist`, `SeriesStudio`, `CumulativeRunTimeTicks` and a rolled-up `RunTimeTicks` on a music container | C | **Half done 2026-09-06.** `Trickplay`, `ProductionLocations` and `AirDays` travel (§3.2's per-type wide table, AC-26). The other four turned out not to be one tranche with them — see below |
+| 3 | Full-body properties still absent: `Trickplay`, `ProductionLocations`, `AirDays`, the eight by-name counts on a `MusicArtist`, `SeriesStudio`, `CumulativeRunTimeTicks` and a rolled-up `RunTimeTicks` on a music container | C | **Done: three on 2026-09-06, four more that day, the last on 2026-09-07.** `Trickplay`, `ProductionLocations` and `AirDays` travel (§3.2's per-type wide table, AC-26); the other four turned out not to be one tranche with them and needed a library with real music (AC-29); and the rolled-up `RunTimeTicks` was the only one left, closed for no statement (AC-30) — see below |
 | 4 | `HasLyrics` on a track | C, and a judgement | The reference answers `false` bare and `true` beside an `.lrc`, so a constant `false` would be wrong on a real library rather than absent. It needs lyric discovery, which is a feature and not a field |
 | 5 | `CanDelete` on every wide body | A decision, not a measurement | Emitting it advertises a deletion [behaviours §4.3](../../docs/compatibility/behaviours.md) refuses by design |
 | 6 | `DisplayPreferencesId` on every wide body | A derivation | A digest of the reference's own display-preferences key: one value per type, and on a library root the row's own id |
@@ -1025,7 +1025,7 @@ tranche of seven properties and it is two, and the line between them is not *"fu
 | | |
 |---|---|
 | `ProductionLocations` on a `Movie`, `Trickplay` on a `Movie` and an `Episode`, `AirDays` on a `Series` | **Done.** All three are things this server resolves **none of and never will in v1**, so the empty value is a statement it can make truthfully rather than a stand-in for data it failed to fetch |
-| `SeriesStudio`, the nine by-name counts, `CumulativeRunTimeTicks` and `RunTimeTicks` on a music container | **Not done, and not for want of the machinery** |
+| `SeriesStudio`, the nine by-name counts, `CumulativeRunTimeTicks` and `RunTimeTicks` on a music container | **Done, the first three on 2026-09-06 and the last on 2026-09-07** — it was *"not for want of the machinery"*, and the last one turned out not to want a query either |
 
 **All three were answered on 2026-09-06, on a library with real music** — which is the one thing
 each of them was waiting for `[probe: tools/probe_real_library_shapes.py, Jellyfin 10.11.11,
@@ -1049,13 +1049,26 @@ sitting directly in the artist's directory (004 T9's shape). The seven zeros are
 `ProductionLocations`. And `CumulativeRunTimeTicks` emits `0` on a music container rather than
 dropping it, which is the one line of the four that had been hiding behind an `or None`.
 
-**What is still outstanding from this tranche is one row of a list.** The reference carries
-`RunTimeTicks` on a **bare** `MusicAlbum` and `MusicArtist` list row — 7 of 7 and 4 of 4 on this
-repository's fixture — where this server carries it only where an item has a metadata runtime, so a
-music container's is absent. Supplying it means fetching the subtree rollup for **every page that
-holds a music container**, which is the cost `aggregates_for` exists to avoid: *"a count nobody
-asked for is a count the page paid for anyway"*. That is a decision about a query per page rather
-than a measurement, and it is the only piece of this tranche that has one.
+**What was still outstanding from this tranche was one row of a list, and it landed on
+2026-09-07 — for nothing.** The reference carries `RunTimeTicks` on a **bare** `MusicAlbum` and
+`MusicArtist` list row — 7 of 7 and 4 of 4 on this repository's fixture — where this server carried
+it only where an item has a metadata runtime, so a music container's was absent. This entry priced
+supplying it as fetching the subtree rollup for **every page that holds a music container**, the
+cost `aggregates_for` exists to avoid, and reserved it as a decision about a query per page.
+
+**The price was measured before it was paid, and it is not a query.** `_rollups` already runs that
+rollup on **every** page, unconditionally, for the container `UserData` this server has reported as
+a subtree statement since 2026-08-28 — so `with_sums=True` adds two aggregate columns to a
+`GROUP BY` that was running either way, and the statement count did not move: still twenty, and
+`test_a_page_holding_a_music_container_costs_no_more_than_a_page_of_films` is the assertion that
+keeps it that way rather than a sentence claiming it. The rollup rides `HydratedItem` rather than
+`ContainerAggregates` for exactly that reason: the latter is fetched on demand because each of its
+numbers costs a statement, and this one costs a column.
+
+It reached `/Artists` and `/Artists/AlbumArtists` with it, which the 2026-09-06 sweep had reported
+as four `MISSING_KEY` rows of their own, because a by-name page hydrates through the same method.
+`RunTimeTicks` on a `Series` was deliberately left alone: what was measured is the two music types,
+and nothing has watched the reference roll up a series' subtree. AC-30.
 
 The paragraphs below are what those three looked like before the reading, kept because each names
 the *reason* the fixture could not answer it — and that reason is what will apply to the next field

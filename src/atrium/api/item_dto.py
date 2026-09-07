@@ -638,6 +638,29 @@ def _series_studio(one: HydratedItem) -> str:
     return above.studios[0].name
 
 
+def _run_time_ticks(one: HydratedItem) -> int | None:
+    """A file's own runtime, and a music container's the sum of its tracks'.
+
+    **The last outstanding row of 005's wide-body tranche, and the one that needed a library with
+    real music.** On this repository's fixture every album and every artist answers `0` on both
+    servers, which cannot tell a rollup from a constant; on a library with real music the
+    reference's `RunTimeTicks` was the exact sum of that album's tracks, equal to its
+    `CumulativeRunTimeTicks`, on three albums of three
+    `[probe: tools/probe_real_library_shapes.py, Jellyfin 10.11.11, 2026-09-06]`.
+
+    `0` is emitted rather than dropped, which is the same rule `CumulativeRunTimeTicks` already
+    follows on these two types: the reference carries the property on **7 of 7** albums and
+    **4 of 4** artists of the fixture, all of them zero, and this server carried it on none.
+
+    The value costs no query. It rides the subtree rollup `_rollups` runs for every page's
+    container `UserData`, which is why this reads `HydratedItem` and not `ctx.aggregates` - 005's
+    list priced this field as a rollup query per page, and the rollup was already there.
+    """
+    if one.item.type in MUSIC_CONTAINERS:
+        return one.container_runtime_ticks
+    return one.metadata.runtime_ticks
+
+
 def _aggregate(
     one: HydratedItem, ctx: BuildContext, pick: Callable[[ContainerAggregates], Any]
 ) -> Any:
@@ -771,7 +794,7 @@ EMITTERS: Mapping[str, Callable[[HydratedItem, BuildContext], Any]] = {
     # -- per type --------------------------------------------------------------------------------
     "ProductionYear": lambda one, ctx: one.metadata.production_year,
     "PremiereDate": lambda one, ctx: one.metadata.premiere_date,
-    "RunTimeTicks": lambda one, ctx: one.metadata.runtime_ticks,
+    "RunTimeTicks": lambda one, ctx: _run_time_ticks(one),
     "OfficialRating": lambda one, ctx: one.metadata.official_rating,
     "CommunityRating": lambda one, ctx: one.metadata.community_rating,
     "IndexNumber": lambda one, ctx: one.item.index_number,
