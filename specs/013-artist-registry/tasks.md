@@ -218,7 +218,7 @@ which is why it merges on its own.
 
 ## T8 — What this feature owes three other documents
 
-- [ ] **Changes:**
+- [x] **Changes:**
       - `docs/compatibility/behaviours.md` §5.3 — the gap **closes**, with the date, what closed it
         and what did not: the tree artist is still per library, on both servers.
       - `docs/compatibility/behaviours.md` — a **new** row for the `ChildCount` divergence, with

@@ -3107,6 +3107,43 @@ owner**, with two candidates and neither of them free:
 The measurement is complete either way, which is what this entry is for: whoever decides is not
 paying for a probe run.
 
+### 3.27 `ChildCount` on a registry artist is a stable number that counts nothing — class B, diverged
+
+**Jellyfin does:** answer a `ChildCount` on every by-name artist row — the population `/Artists`
+lists — which is **stable per artist, varies between artists, and matches nothing that artist has**
+`[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11, 2026-09-07]`. Three registry artists,
+each asked twice and each answering the same number twice, against the four counts a reader would
+try:
+
+| artist | `ChildCount` | tracks it performs on | albums it fronts | tracks on albums it fronts | distinct albums of its tracks |
+|---|---|---|---|---|---|
+| `2 In A Room` | **2** | 1 | 0 | 0 | 1 |
+| `5th Dimension, The` | **2** | 1 | 1 | 1 | 1 |
+| `49ers` | **2** | 1 | 0 | 0 | 1 |
+
+All three answer `2` while their contents differ, and no candidate is `2` on all three — nor is any
+sum of them. It is not a constant either: the eleven album-artist rows read in the same run carry
+`1`, `2` and `13`.
+
+**This is not [§3.25](#325-childcount-on-a-library-view-is-a-fresh-random-integer--class-b-diverged).**
+That one is redrawn on every request, which is what makes it unreproducible; this one is the same
+number every time it is asked. The rule behind it is simply **unknown after somebody looked**, which
+is a different thing from unknowable and is why this entry carries the table rather than a shrug.
+
+**Depends on it:** nothing observed. A client rendering it shows a number with no referent; a client
+ignoring it loses nothing. No analysed client reads `ChildCount` on an artist at all.
+
+**Atrium does:** answer the **true** count, which for a registry artist is `0` — it has credits, not
+children, and the reference's own answer to *what is under this row* is zero rows, measured in the
+same run. [§3.0.2](#302-what-is-never-acceptable) leaves two branches, replicate or be correct, and
+**replicate is not available**: a rule nobody knows is guessed at rather than reproduced. Answering
+nothing at all would be the third behaviour that section forbids first.
+
+Recorded rather than excused in `allowlist.yaml`: an allowlist entry excuses a difference **neither**
+server chose, and this one is chosen. It is a divergence with an argument, and the argument is above.
+
+`[013 plan §1 decision 2]`
+
 ## 4. Deliberate exceptions
 
 Every one of them is listed here so it is never mistaken for an oversight — including §4.4, which
@@ -3458,7 +3495,7 @@ implemented it. The three ways out were to implement it late in a feature whose 
 were settled at T17, to delete the row and pretend it had never claimed anything, or to say plainly
 what happens and who closes it. This is the third.
 
-### 5.3 An artist in two music libraries is two rows
+### 5.3 An artist in two music libraries is two rows — **closed 2026-09-07, in the half that was observable**
 
 **Jellyfin does:** hold one server-wide item per artist name — artists are by-name items, like
 genres, with ids derived from the name alone
@@ -3820,3 +3857,26 @@ This list exists so they stop being re-proposed.
 | Richer error bodies than Jellyfin's | Clients parse status codes; a different body shape is a difference they can observe |
 | Numeric ids because they are easier to debug | Breaks §1.4 and every client's id parsing |
 | Accepting whitespace around `=` in the client header, since the intent is obvious | The reference answers `401` (§2.12). No working client sends it, so tolerating it protects nobody — and it lets a client be developed against Atrium and then fail against Jellyfin |
+
+**Closed by [013](../../specs/013-artist-registry/spec.md) on 2026-09-07, and what closed is
+narrower than what this section had named.** The mechanism written here since the day it was
+written was *"a deliberate identity migration"*. The reading of 2026-09-07 found both observable
+halves to be properties of **what two routes list**, needing no identifier 003 had derived to be
+rewritten — so what closed the gap is a **population this server did not have**, not a rewrite of
+one it did.
+
+`/Artists` and `/Artists/AlbumArtists` list a **registry artist**: one row per credited name, keyed
+on the folded name alone, created from the credits themselves and collected when none names it. So
+both halves go at once — an artist credited in two music libraries is **one** row whose identifier
+names neither, and a performer who is nobody's album artist **has** a row, which is the name a
+client rendered and could not follow.
+
+**What did not close, and is not a remainder but a shape both servers have.** The **tree** artist —
+the item an album hangs off — is still keyed per library, so two music libraries holding one artist
+still hold two of those, under two identifiers. That is this section's first consequence, and the
+reference carries it too: `AC/DC` is a tree item there and `AC DC` a registry row, under two
+identifiers, measured in the same run. It is visible through `/Items?includeItemTypes=MusicArtist`
+and through nothing a client browses by, and it is **not** a gap this project is carrying alone.
+
+One divergence came out of the closing and is written down rather than folded in: a registry
+artist's `ChildCount` is [§3.27](#327-childcount-on-a-registry-artist-is-a-stable-number-that-counts-nothing--class-b-diverged).
