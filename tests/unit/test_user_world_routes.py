@@ -97,12 +97,16 @@ async def test_the_views_are_the_visible_libraries_with_their_kinds(
 ) -> None:
     answered = await client.get("/UserViews")
     body = answered.json()
-    assert body["TotalRecordCount"] == 3
+    # Four since 013 T6, and the fourth is a **second music library**: an artist credited in both
+    # is one registry row whose identifier names neither, which is 013 AC-2 and which a world with
+    # one music library could not have failed.
+    assert body["TotalRecordCount"] == 4
     by_name = {one["Name"]: one for one in body["Items"]}
     assert {one["Type"] for one in body["Items"]} == {"CollectionFolder"}
     assert by_name["Films"]["CollectionType"] == "movies"
     assert by_name["Shows"]["CollectionType"] == "tvshows"
     assert by_name["Music"]["CollectionType"] == "music"
+    assert by_name["More Music"]["CollectionType"] == "music"
 
 
 async def test_a_view_row_is_the_wide_shape_with_the_two_nulls(

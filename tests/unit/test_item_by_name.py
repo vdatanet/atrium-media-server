@@ -29,13 +29,17 @@ from atrium.db.item_queries import ALBUM_ARTIST_CREDIT, ItemQueryRepository
 from atrium.domain.items import ItemType
 from atrium.domain.queries import ItemQuery
 from atrium.library import identity
+from atrium.library.identity import for_by_name
 from tests.conftest import QueryCounter, data_dir
 from tests.fixtures.query import (
     ALBUM_ARTIST,
     FIRST_YEAR,
+    FRONTED_ONLY_ARTIST,
+    FRONTED_PERFORMER,
     GENRE_SPELLINGS,
     GUEST_ALBUM_ARTIST,
     RATED,
+    SHARED_ARTIST,
     SOLO_PERFORMER,
     QueryWorld,
     build_query_world,
@@ -133,7 +137,17 @@ def test_artists_lists_the_registry_and_not_the_tree(
     off - asserted here, because listing both populations would answer one artist twice.
     """
     page = repository.run_by_name(ItemType.MUSIC_ARTIST, ItemQuery(user=world.everyone, limit=100))
-    assert set(names(page)) == {ALBUM_ARTIST, GUEST_ALBUM_ARTIST, SOLO_PERFORMER}
+    # Every registry row, both credit kinds: this asks the repository with no credit at all, where
+    # the two routes above it each narrow to their own. Five names, and the two 013 T6 seeded are
+    # the ones that make the narrowing observable - a performer who fronts nothing and a front who
+    # performs on nothing.
+    assert set(names(page)) == {
+        ALBUM_ARTIST,
+        GUEST_ALBUM_ARTIST,
+        SOLO_PERFORMER,
+        FRONTED_ONLY_ARTIST,
+        FRONTED_PERFORMER,
+    }
     assert all(one.item.library_id is None for one in page.items), "the tree artists are not these"
     assert world.album_artist not in {one.id for one in page.items}
 
@@ -328,3 +342,35 @@ def test_a_by_name_query_costs_a_fixed_number_of_statements(
         repository.run_by_name(ItemType.YEAR, ItemQuery(user=world.everyone, limit=100))
         large = len(query_counter)
     assert small == large, query_counter.report()
+
+
+def test_an_artist_in_two_music_libraries_is_one_registry_row(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """**013 AC-2, and the world could not have failed it until T6 seeded a second library.**
+
+    behaviours section 5.3's first consequence is that an artist credited in two music libraries
+    appears **twice** - once per library, each listing that library's albums - because 003 keys a
+    tree artist on `(type, library, folded name)`. That is still true of the tree and is not what
+    013 changes: both rows are there, under two identifiers, and the reference carries the same
+    pair `[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11, 2026-09-07]`.
+
+    What 013 changes is **what `/Artists` lists**: one registry row for the name, keyed on the fold
+    alone, so its identifier names neither library.
+    """
+    tree = repository.run(
+        ItemQuery(user=world.everyone, include_types=frozenset({ItemType.MUSIC_ARTIST}), limit=1000)
+    )
+    of_that_name = [one for one in tree.items if one.item.name == SHARED_ARTIST]
+    libraries = {one.item.library_id for one in of_that_name}
+    assert libraries == {world.music.id, world.more_music.id, None}, (
+        "two tree artists, one per library, and one registry row - which is the pair, stated"
+    )
+
+    listed = repository.run_by_name(
+        ItemType.MUSIC_ARTIST, ItemQuery(user=world.everyone, limit=100)
+    )
+    rows = [one for one in listed.items if one.item.name == SHARED_ARTIST]
+    assert len(rows) == 1, "the listing must not answer one artist once per library"
+    assert rows[0].id == for_by_name(ItemType.MUSIC_ARTIST, SHARED_ARTIST)
+    assert world.music.id not in rows[0].id and world.more_music.id not in rows[0].id

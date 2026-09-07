@@ -88,6 +88,17 @@ MOVIES_LIBRARY_ID = "1" * 32
 SHOWS_LIBRARY_ID = "2" * 32
 MUSIC_LIBRARY_ID = "3" * 32
 
+#: **A second music library**, and the one shape 013 AC-2 cannot be failed on without it: an artist
+#: credited in two of them is **one** registry row, whose identifier names neither. With a single
+#: music library the assertion passes on a world that could not have broken it, and the first
+#: consequence of behaviours section 5.3 - the same artist appearing once per library - has nothing
+#: to show.
+#:
+#: It holds one album by `SHARED_ARTIST`, who is also credited in the first, so the two libraries
+#: each carry a **tree** artist of that name - two rows, two identifiers, as 003 derives them - and
+#: the registry carries one.
+SECOND_MUSIC_LIBRARY_ID = "4" * 32
+
 EVERYONE_ID = "a" * 32
 RESTRICTED_ID = "b" * 32
 NOBODY_ID = "c" * 32
@@ -190,6 +201,27 @@ SOLO_PERFORMER = "Solo Performer"
 GUEST_ALBUM_ARTIST = "The Compilers"
 GUEST_ALBUM = "Another Record"
 
+#: **An album artist no track performs**, and the direction 013 AC-4 could not be failed on.
+#:
+#: `SOLO_PERFORMER` above is the first direction - a performer who is nobody's album artist - and
+#: this is its mirror: a name on an album's `AlbumArtists` and on no track's `Artists` anywhere.
+#: Without it `/Artists/AlbumArtists` is a **subset** of `/Artists` in this world, every assertion
+#: about the two listings passes, and the thing 013 measured on the reference - that the two are
+#: two populations and **neither contains the other** - has no row to show
+#: `[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11, 2026-09-07]`.
+#:
+#: It is an ordinary shape rather than a contrivance: a record fronted by a name whose tracks are
+#: credited to the players. Eleven of the reference's 506 album artists are exactly this.
+FRONTED_ONLY_ARTIST = "The Absent Frontman"
+FRONTED_ALBUM = "Fronted Record"
+FRONTED_PERFORMER = "A Session Player"
+
+#: The artist credited in **both** music libraries, which is 013 AC-2's whole subject. Each library
+#: gets a tree `MusicArtist` of this name - two rows with two identifiers, per library, as 003
+#: derives them - and the registry gets **one**, keyed on the folded name alone.
+SHARED_ARTIST = "Various Artists"
+SECOND_ALBUM = "The Other Record"
+
 
 @dataclass(frozen=True, slots=True)
 class SeriesHandle:
@@ -243,6 +275,10 @@ class QueryWorld:
     movies: Library
     shows: Library
     music: Library
+
+    more_music: Library
+    """A **second** music library, sharing `SHARED_ARTIST` with the first: two tree artists of one
+    name and one registry row (013 AC-2)."""
 
     everyone: User
     """Sees all three libraries."""
@@ -298,6 +334,11 @@ class QueryWorld:
     """A track on that second album **performed by** `ALBUM_ARTIST` and credited to
     `GUEST_ALBUM_ARTIST` as album artist. It is the one item that `artistIds` finds for the first
     artist and `albumArtistIds` does not."""
+
+    fronted_track: str
+    """The one track of `FRONTED_ALBUM`, credited to `FRONTED_PERFORMER` and fronted by
+    `FRONTED_ONLY_ARTIST` - who performs on nothing anywhere, which is 013 AC-4's second
+    direction and the shape this world could not show before T6."""
 
     favourites: tuple[str, ...]
     """Items with `is_favorite` set for `everyone`."""
@@ -371,14 +412,25 @@ def build_query_world(session: OrmSession) -> QueryWorld:
             roots=("/libraries/music",),
         )
     )
+    more_music = libraries.add(
+        Library(
+            id=SECOND_MUSIC_LIBRARY_ID,
+            name="More Music",
+            collection_type=CollectionType.MUSIC,
+            roots=("/libraries/more-music",),
+        )
+    )
 
     everyone, restricted, nobody = _seed_users(users, movies)
-    for library in (movies, shows, music):
+    for library in (movies, shows, music, more_music):
         _add(items, _collection_folder(library))
 
+    _seed_second_music_library(items, metadata, more_music)
     corpus, awkward = _seed_movies(items, metadata, movies)
     series, specials_season, multi_episode, imaged_episode = _seed_shows(items, metadata, shows)
-    album, tracks, album_artist, guest_artist, guest_track = _seed_music(items, metadata, music)
+    album, tracks, album_artist, guest_artist, guest_track, fronted_track = _seed_music(
+        items, metadata, music
+    )
 
     favourites = (corpus[0], album)
     resumable = (corpus[1], corpus[2])
@@ -391,6 +443,7 @@ def build_query_world(session: OrmSession) -> QueryWorld:
         movies=movies,
         shows=shows,
         music=music,
+        more_music=more_music,
         everyone=everyone,
         restricted=restricted,
         nobody=nobody,
@@ -407,6 +460,7 @@ def build_query_world(session: OrmSession) -> QueryWorld:
         album_artist=album_artist,
         guest_artist=guest_artist,
         guest_track=guest_track,
+        fronted_track=fronted_track,
         favourites=favourites,
         resumable=resumable,
         playlists=playlists,
@@ -902,7 +956,7 @@ def _episode_id(library: Library, series_name: str, season: int, episode: int) -
 
 def _seed_music(
     items: ItemRepository, metadata: MetadataRepository, library: Library
-) -> tuple[str, tuple[str, ...], str, str, str]:
+) -> tuple[str, tuple[str, ...], str, str, str, str]:
     """A compilation: one album artist, a different performer on every track.
 
     That shape is what makes it *one* album rather than one per track, and it is the reason
@@ -963,6 +1017,7 @@ def _seed_music(
     )
 
     guest_artist_id, guest_track = _seed_guest_album(items, metadata, library)
+    fronted_track = _seed_fronted_album(items, metadata, library)
 
     tracks: list[str] = []
     for number, performer in enumerate(TRACK_PERFORMERS, start=1):
@@ -995,7 +1050,130 @@ def _seed_music(
             refreshed_at=REFRESHED_AT,
         )
         tracks.append(track.id)
-    return album_id, tuple(tracks), artist_id, guest_artist_id, guest_track
+    return album_id, tuple(tracks), artist_id, guest_artist_id, guest_track, fronted_track
+
+
+def _seed_second_music_library(
+    items: ItemRepository, metadata: MetadataRepository, library: Library
+) -> str:
+    """One album by `SHARED_ARTIST` in a second music library - 013 AC-2's discriminating shape.
+
+    The same artist is credited in both libraries, so 003 derives a **tree** artist per library -
+    two rows, two identifiers, which is behaviours section 5.3's first consequence and is not what
+    013 changes - while the registry keyed on the folded name gets **one** row for both. With a
+    single music library, an assertion that the registry does not duplicate passes on a world that
+    could not have made it duplicate.
+    """
+    artist_id = identity.for_name(ItemType.MUSIC_ARTIST, library.id, SHARED_ARTIST)
+    _add(
+        items,
+        _with_sort_name(
+            Item(
+                id=artist_id,
+                type=ItemType.MUSIC_ARTIST,
+                name=SHARED_ARTIST,
+                library_id=library.id,
+                parent_id=identity.for_library(library.id),
+                date_created=_created(440),
+            )
+        ),
+    )
+    album_id = identity.for_name(ItemType.MUSIC_ALBUM, library.id, SECOND_ALBUM)
+    _add(
+        items,
+        _with_sort_name(
+            Item(
+                id=album_id,
+                type=ItemType.MUSIC_ALBUM,
+                name=SECOND_ALBUM,
+                library_id=library.id,
+                parent_id=artist_id,
+                date_created=_created(441),
+            )
+        ),
+    )
+    relative = f"{SHARED_ARTIST}/{SECOND_ALBUM}/01 Other Track.flac"
+    track = _with_sort_name(
+        Item(
+            id=identity.for_file(ItemType.AUDIO, library.id, relative),
+            type=ItemType.AUDIO,
+            name="Other Track",
+            library_id=library.id,
+            parent_id=album_id,
+            sources=(MediaSource(relative_path=relative, size=300, mtime_ns=MTIME_NS),),
+            index_number=1,
+            parent_index_number=1,
+            date_created=_created(442),
+        )
+    )
+    _add(items, track)
+    metadata.apply(
+        track.id,
+        MetadataChanges(
+            values={Field.ARTISTS: [SHARED_ARTIST], Field.ALBUM_ARTISTS: [SHARED_ARTIST]}
+        ),
+        refreshed_at=REFRESHED_AT,
+    )
+    return track.id
+
+
+def _seed_fronted_album(
+    items: ItemRepository, metadata: MetadataRepository, library: Library
+) -> str:
+    """An album whose album artist performs on nothing - 013 AC-4's other direction.
+
+    Every other artist in this world performs somewhere, so `/Artists/AlbumArtists` is a **subset**
+    of `/Artists` here and the shape 013 measured on the reference has no row to show: the two
+    listings are two populations built from two credit fields, and **neither contains the other**.
+    This is the row that shows it. The album's `AlbumArtists` names a front; its track's `Artists`
+    names a player, and the front appears in no `Artists` anywhere.
+    """
+    album_id = identity.for_name(ItemType.MUSIC_ALBUM, library.id, FRONTED_ALBUM)
+    _add(
+        items,
+        _with_sort_name(
+            Item(
+                id=album_id,
+                type=ItemType.MUSIC_ALBUM,
+                name=FRONTED_ALBUM,
+                library_id=library.id,
+                parent_id=identity.for_library(library.id),
+                date_created=_created(431),
+            )
+        ),
+    )
+    metadata.apply(
+        album_id,
+        MetadataChanges(values={Field.ALBUM_ARTISTS: [FRONTED_ONLY_ARTIST]}),
+        refreshed_at=REFRESHED_AT,
+    )
+
+    relative = f"{FRONTED_ONLY_ARTIST}/{FRONTED_ALBUM}/01 Fronted Track.flac"
+    track = _with_sort_name(
+        Item(
+            id=identity.for_file(ItemType.AUDIO, library.id, relative),
+            type=ItemType.AUDIO,
+            name="Fronted Track",
+            library_id=library.id,
+            parent_id=album_id,
+            sources=(MediaSource(relative_path=relative, size=300, mtime_ns=MTIME_NS),),
+            index_number=1,
+            parent_index_number=1,
+            date_created=_created(432),
+        )
+    )
+    _add(items, track)
+    metadata.apply(
+        track.id,
+        MetadataChanges(
+            values={
+                Field.ARTISTS: [FRONTED_PERFORMER],
+                Field.ALBUM_ARTISTS: [FRONTED_ONLY_ARTIST],
+            }
+        ),
+        refreshed_at=REFRESHED_AT,
+    )
+    return track.id
 
 
 def _seed_guest_album(
