@@ -46,6 +46,19 @@ IRREVERSIBLE = "irreversible"
 #: T2, whose `0007` is the first revision here that touches no schema.
 DATA_ONLY = "data migration"
 
+#: The **third** kind of invisible revision, and it is not a data migration. `schema_of` reads
+#: columns and their nullability; SQLAlchemy's SQLite dialect does not reflect **check
+#: constraints** at all - which is the reason every rebuild in this directory carries a
+#: `copy_from` - so a revision whose whole content is a constraint is invisible here for a reason
+#: that has nothing to do with rows.
+#:
+#: Added by 013 T1, whose `0009` splits a biconditional into two implications and touches no
+#: column. Calling it a data migration would have been the shorter fix and a false one: the
+#: allowance says *what the sweep cannot see*, so a second thing it cannot see needs a second
+#: word rather than a borrowed one. What both have in common is that the revision declares
+#: itself, and "changed nothing" stays a failure everywhere else.
+CONSTRAINT_ONLY = "constraint migration"
+
 
 def revisions() -> list[Script]:
     """Every revision, oldest first."""
@@ -164,10 +177,12 @@ def test_every_revision_applies_and_rolls_back(
 
     move(engine, paths, revision)
     after = schema_of(engine)
-    assert after != before or not after or DATA_ONLY in docstring, (
-        f"{revision} changed nothing. A revision that rewrites rows rather than columns is "
-        f"allowed - it has to declare itself a {DATA_ONLY!r} in its docstring, because this "
-        f"sweep reads the schema and cannot see what it did"
+    invisible = DATA_ONLY in docstring or CONSTRAINT_ONLY in docstring
+    assert after != before or not after or invisible, (
+        f"{revision} changed nothing. A revision that rewrites rows rather than columns, or that "
+        f"changes only a check constraint, is allowed - it has to declare itself a {DATA_ONLY!r} "
+        f"or a {CONSTRAINT_ONLY!r} in its docstring, because this sweep reads the schema and "
+        f"cannot see either"
     )
 
     move(engine, paths, str(previous))
@@ -824,3 +839,74 @@ def test_the_rebuild_empties_every_cascading_child_when_the_guard_is_taken_away(
         assert connection.execute(sa.text("PRAGMA foreign_key_check")).all() == [], (
             "nothing complains, which is the whole problem"
         )
+
+
+# --------------------------------------------------------------------------------------------
+# 0009 — a MusicArtist may have no library, and every credit names a row (013 T1)
+# --------------------------------------------------------------------------------------------
+
+
+def test_0009_splits_the_constraint_without_loosening_either_half(
+    engine: Engine, paths: DataPaths
+) -> None:
+    """The exemption is one type wide, and both directions still bite for everything else.
+
+    A biconditional replaced by two implications is the shape that goes wrong quietly: widen it by
+    a type too many and a film with no library inserts, which is invisible to every query 005
+    scopes by library.
+    """
+    move(engine, paths, "0009")
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text("INSERT INTO libraries (id, name, collection_type) VALUES (:i,'M','music')"),
+            {"i": LIBRARY},
+        )
+
+    insert = (
+        "INSERT INTO items (id, library_id, type, name, sort_name, tags) "
+        "VALUES (:i, :l, :t, 'x', 'x', '[]')"
+    )
+    # The exemption itself: an artist inserts **either way**, which is what 013 is.
+    with engine.begin() as connection:
+        connection.execute(sa.text(insert), {"i": "a" * 32, "l": None, "t": "MusicArtist"})
+        connection.execute(sa.text(insert), {"i": "b" * 32, "l": LIBRARY, "t": "MusicArtist"})
+
+    # And nothing else moved. A genre with a library still fails...
+    with (
+        pytest.raises(IntegrityError, match="ck_items_by_name_has_no_library"),
+        engine.begin() as connection,
+    ):
+        connection.execute(sa.text(insert), {"i": "c" * 32, "l": LIBRARY, "t": "Genre"})
+    # ...and a film without one still fails, on the constraint that now says so by itself.
+    with (
+        pytest.raises(IntegrityError, match="ck_items_in_a_tree_have_a_library"),
+        engine.begin() as connection,
+    ):
+        connection.execute(sa.text(insert), {"i": "d" * 32, "l": None, "t": "Movie"})
+
+
+def test_0009_rolls_back_by_clearing_what_the_biconditional_would_refuse(
+    engine: Engine, paths: DataPaths
+) -> None:
+    """The rollback of a **loosened** constraint has to leave a database the tightened one holds.
+
+    An artist with no library is legal at 0009 and illegal at 0008, so the downgrade deletes it -
+    and this asserts that on a row inserted by hand, because 013 T2 is what will write them for
+    real and a rollback path written after somebody needs it is written too late.
+    """
+    move(engine, paths, "0009")
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text(
+                "INSERT INTO items (id, library_id, type, name, sort_name, tags) "
+                "VALUES (:i, NULL, 'MusicArtist', 'A Guest', 'a guest', '[]')"
+            ),
+            {"i": "a" * 32},
+        )
+    move(engine, paths, "0008")
+
+    with engine.begin() as connection:
+        left = connection.execute(
+            sa.text("SELECT COUNT(*) FROM items WHERE type = 'MusicArtist' AND library_id IS NULL")
+        ).scalar_one()
+    assert left == 0, "a registry row the biconditional refuses cannot survive the rollback"

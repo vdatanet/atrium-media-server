@@ -114,17 +114,17 @@ def test_a_fresh_database_is_brought_to_the_shipped_head(prepared: DataPaths) ->
     moment `0001` landed, which is what it was for: it named the day the assumption expired
     instead of leaving a stale one passing.
 
-    **It has now done that eight times**, at `0002`, `0003`, `0004`, `0005`, `0006`, `0007` and
-    `0008`. The literal below is deliberate and is not to be replaced with a lookup of whatever
+    **It has now done that nine times**, at `0002` through `0008` and at `0009` since 013 T1.
+    The literal below is deliberate and is not to be replaced with a lookup of whatever
     the head happens to be: a test that reads the head from the same place the code does asserts
     that two functions agree, which they always will. This one asserts what this build *ships*,
     and the only way to change it is to notice.
     """
     engine = create_database_engine(prepared)
     try:
-        assert schema.head_revision(schema.alembic_config(prepared)) == "0008"
+        assert schema.head_revision(schema.alembic_config(prepared)) == "0009"
         schema.ensure_current(engine, prepared)
-        assert schema.current_revision(engine) == "0008"
+        assert schema.current_revision(engine) == "0009"
         with engine.connect() as connection:
             tables = set(inspect(connection).get_table_names())
     finally:

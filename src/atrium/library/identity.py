@@ -186,18 +186,38 @@ def fold_by_name(name: str) -> str:
     return unicodedata.normalize("NFC", replaced.strip().rstrip(".")).lower()
 
 
+#: The one type that derives its identity **both** ways, and the only one there will ever be
+#: without a decision of its own: a `MusicArtist` is a tree item the scanner owns, keyed per
+#: library by `for_name`, **and** a registry row keyed server-wide by `for_by_name` (013 §3.4).
+#:
+#: `RULE_OF` above stays total and one-valued deliberately. It answers *"how does the scanner give
+#: this type an identifier"*, which for an artist is still the per-library rule and must stay so -
+#: 013 rewrites no identifier 003 derived. This set answers the different question `for_by_name`
+#: asks, so the two derivations cannot be reached by accident: a caller that wants the registry
+#: row calls the by-name function by name.
+#:
+#: **The reference carries the same pair**, which is why this is not a compromise: an artist there
+#: can be a tree item and a registry row under two identifiers - `AC/DC` in a library against
+#: `AC DC` in its metadata directory `[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11,
+#: 2026-09-07]`.
+ALSO_BY_NAME: frozenset[ItemType] = frozenset({ItemType.MUSIC_ARTIST})
+
+
 def for_by_name(item_type: ItemType, name: str) -> str:
-    """A `Genre`, `MusicGenre`, `Studio`, `Person` or `Year`: its folded name, and nothing else.
+    """A `Genre`, `MusicGenre`, `Studio`, `Person`, `Year` - or a registry `MusicArtist`: its
+    folded name, and nothing else.
 
     **Server-wide on purpose.** No library takes part in the key, so the same genre on films in
     two libraries is one row with one identifier - which is what makes `/Genres` a list of genres
-    rather than a list of genres per library.
+    rather than a list of genres per library. Since 013 an artist joins them, which is what makes
+    `/Artists` a list of artists rather than a list of artists per library.
 
     The type *is* in the key, so a `Genre` and a `MusicGenre` spelled the same are two items. That
     is what keeps `/Genres` and `/MusicGenres` disjoint without either endpoint filtering by
     guesswork (004 plan section 4).
     """
-    _require(item_type, IdentityRule.FROM_FOLDED_NAME)
+    if item_type not in ALSO_BY_NAME:
+        _require(item_type, IdentityRule.FROM_FOLDED_NAME)
     return derive(item_type.value, fold_by_name(name))
 
 
@@ -323,6 +343,7 @@ def _require(item_type: ItemType, rule: IdentityRule) -> None:
 
 
 __all__ = [
+    "ALSO_BY_NAME",
     "RULE_OF",
     "IdentityCollisionError",
     "IdentityRule",
