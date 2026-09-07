@@ -27,8 +27,11 @@ from atrium.server import create_app
 from tests.conftest import data_dir
 from tests.fixtures.query import (
     ALBUM_ARTIST,
+    FRONTED_ONLY_ARTIST,
+    FRONTED_PERFORMER,
     GENRE_SPELLINGS,
     RATED,
+    SOLO_PERFORMER,
     QueryWorld,
     build_query_world,
 )
@@ -83,11 +86,12 @@ async def test_ac5_the_count_is_true_with_and_without_limit(
         ("/Genres", 1),
         ("/MusicGenres", 1),
         ("/Years", RATED),
-        # Three and two since 013: `/Artists` lists the registry rows a **performer** credit
-        # names - which includes the performer who is nobody's album artist, the row that did not
-        # exist before - and `/Artists/AlbumArtists` the ones an album-artist credit names.
-        ("/Artists", 3),
-        ("/Artists/AlbumArtists", 2),
+        # Four and three since 013 T6: `/Artists` lists the registry rows a **performer** credit
+        # names and `/Artists/AlbumArtists` the ones an album-artist credit does, and the two sets
+        # overlap without either containing the other - one performer is nobody's album artist and
+        # one album artist performs on nothing.
+        ("/Artists", 4),
+        ("/Artists/AlbumArtists", 3),
     ):
         bare = await client.get(path)
         limited = await client.get(path, params={"limit": "1"})
@@ -147,13 +151,22 @@ async def test_ac13_the_two_artist_routes_no_longer_coincide(
     routes are two populations - `/Artists` over the performer credit, `/Artists/AlbumArtists`
     over the album-artist one - and **neither contains the other**: an album artist no track names
     is a row there and none here `[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11,
-    2026-09-07]`. This world can only show one of the two directions, because every artist in it
-    performs; the other is 013 T6's fixture gap, and saying so is the honest half of this test.
+    2026-09-07]`. **Both directions are asserted below, and the second needed a fixture**: until
+    013 T6 every artist in this world performed somewhere, so the two listings differed in one
+    direction only and every assertion about them passed while the measured shape had no row to
+    show it.
     """
     every = {one["Id"] for one in (await client.get("/Artists")).json()["Items"]}
     album = {one["Id"] for one in (await client.get("/Artists/AlbumArtists")).json()["Items"]}
-    assert album < every, "the performer who is nobody's album artist is the difference"
-    assert len(every - album) == 1
+    assert every - album == {
+        for_by_name(ItemType.MUSIC_ARTIST, SOLO_PERFORMER),
+        for_by_name(ItemType.MUSIC_ARTIST, FRONTED_PERFORMER),
+    }, "a performer who is nobody's album artist is listed here and not there"
+    assert album - every == {for_by_name(ItemType.MUSIC_ARTIST, FRONTED_ONLY_ARTIST)}, (
+        "and an album artist no track performs is listed there and not here - the direction this "
+        "world could not show until 013 T6 seeded it"
+    )
+    assert album & every, "they overlap, which is what makes neither containing the other a shape"
 
     # `recursive`, because a listing with neither a parent nor it is the account's top-level
     # folders on both servers and answers no filter at all (005 section 3.3, AC-27) - so without

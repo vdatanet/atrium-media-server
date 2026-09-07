@@ -58,12 +58,28 @@ That is the strongest form the plan's argument can take: **replicate is unavaila
 rule is unknown after somebody tried to find it**, rather than because nobody looked. Decision 2
 stands, and the behaviours row T8 writes says so with this table under it.
 
-### 3. The fixture has no performer who is nobody's album artist
+### 3. The fixture has no performer who is nobody's album artist — **and this was wrong**
 
-AC-1's discriminating case is exactly that item, and the query world has not got one: `guest_track`
-is performed by `ALBUM_ARTIST`, who is an album artist elsewhere. Without a new one, AC-1 passes on
-a world that cannot fail it — which is this project's own recurring finding, one feature at a time.
-**T6 seeds it**, and it is the reason T6 exists as a task rather than as a line of T5.
+*As written at this gate:* AC-1's discriminating case is exactly that item, and the query world has
+not got one, because `guest_track` is performed by `ALBUM_ARTIST`, who is an album artist elsewhere.
+
+**It has had one all along.** `SOLO_PERFORMER` is declared in `tests/fixtures/query.py` with a
+comment saying precisely why it is there — *"`SOLO_PERFORMER` is nobody's album artist, so its
+credit row carries a name and a null `artist_item_id`"* — and T2 used it. The gate read one seeded
+shape and generalised from it.
+
+**What was actually missing is the mirror**, and T6 found it by trying to write AC-4's second
+half: an album artist **no track performs**. Without one, `/Artists/AlbumArtists` is a subset of
+`/Artists` in this world, every assertion about the two listings passes, and the thing 013 measured
+on the reference — two populations, *neither containing the other* — has no row to show it. T6
+seeds a record fronted by a name whose track is credited to a session player, which is the shape
+eleven of the reference's 506 album artists have.
+
+**And the second music library was missing too**, which AC-2 needs and nothing had noticed: with
+one music library, *"an artist credited in two of them is one row"* passes on a world that could
+not have made it two. T6 seeds a second, sharing `SHARED_ARTIST` with the first, so the tree
+carries two artists of that name under two identifiers — behaviours §5.3's first consequence,
+which 013 does **not** change and the reference carries too — while the registry carries one.
 
 ---
 
@@ -180,7 +196,7 @@ which is why it merges on its own.
 
 ## T6 — The fixture gains the two shapes it cannot currently fail on
 
-- [ ] **Changes:** `tests/fixtures/query.py` — a performer who is **nobody's** album artist, and a
+- [x] **Changes:** `tests/fixtures/query.py` — a performer who is **nobody's** album artist, and a
       **second music library** sharing one artist name with the first. `GENERATOR_VERSION` moves
       with it if the media world is touched.
 - **Depends on:** —

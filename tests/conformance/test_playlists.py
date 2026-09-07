@@ -863,7 +863,7 @@ async def test_ac7_every_container_expands_and_two_of_them_were_never_named(
         first = landed.index(world.tracks[0])
         assert landed[first : first + len(world.tracks)] == list(world.tracks)
     else:
-        assert set(landed) == set(world.tracks) | {world.guest_track}
+        assert set(landed) == set(world.tracks) | {world.guest_track, world.fronted_track}
 
 
 async def test_the_expansion_lands_where_the_container_was_named(
