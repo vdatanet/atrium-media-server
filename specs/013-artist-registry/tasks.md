@@ -140,13 +140,19 @@ which is why it merges on its own.
 
 ## T3 — The collector, scoped so it can never take a tree artist
 
-- [ ] **Changes:** `src/atrium/db/repositories.py` — `collect_by_name_garbage` gains the credit
+- [x] **Changes:** `src/atrium/db/repositories.py` — `collect_by_name_garbage` gains the credit
       table as a referencing column and is scoped to rows with `library_id IS NULL`.
 - **Depends on:** T2
-- **Verified by:** `pytest tests/unit/test_by_name_items.py` — a collection over a world holding a
+- **Verified by:** `pytest tests/metadata/test_write_path.py` — a collection over a world holding a
   tree artist nothing references **deletes nothing**, and the same collection after a credit is
-  removed takes the registry row. Write the tree-artist assertion **first**: without the scoping it
-  fails, and that failure is the whole reason this is a task.
+  removed takes the registry row.
+
+  **Both assertions were written first and the second failed first**, which is not what this task
+  expected: a `MusicArtist` was in no collectable set at all, so a registry row outlived every
+  credit that made it. The tree-artist assertion passed on the day it was written, so it was
+  **proved to be able to fail**: the scoping was taken out, it failed with *"the collector took a
+  tree item 003 owns"*, and it was put back. An assertion that has never failed is decoration, and
+  this one had to be shown not to be.
 - **Spec reference:** §3.5, AC-8
 
 ## T4 — Visibility: per population, not per type
