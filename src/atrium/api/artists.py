@@ -25,7 +25,7 @@ from atrium.api.deps import require_user
 from atrium.api.item_models import BaseItemDtoQueryResult
 from atrium.api.items import by_name_envelope
 from atrium.compat.guids import WireGuid
-from atrium.db.item_queries import ALBUM_ARTIST_CREDIT
+from atrium.db.item_queries import ALBUM_ARTIST_CREDIT, PERFORMER_CREDIT
 from atrium.domain.items import ItemType
 from atrium.domain.user import User
 
@@ -53,7 +53,12 @@ async def artists(
         caller,
         route="/Artists",
         kind=ItemType.MUSIC_ARTIST,
-        credit=None,
+        # **The performer credit, not every credit.** Measured on the reference: an album artist
+        # no track names as a performer has a row in `/Artists/AlbumArtists` and **none** here -
+        # `a-ha` is named by no track and by one album - so the two listings are two populations
+        # and neither contains the other (013 section 3.2, AC-4)
+        # `[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11, 2026-09-07]`.
+        credit=PERFORMER_CREDIT,
         omit=OMITTED,
         user_id=userId,
         parent_id=parentId,

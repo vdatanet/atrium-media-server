@@ -37,9 +37,10 @@ from atrium.domain.items import CollectionType, Item, ItemType, MediaSource
 from atrium.domain.library import Library
 from atrium.domain.user import User
 from atrium.library import identity
+from atrium.library.identity import for_by_name
 from atrium.server import create_app
 from tests.conftest import data_dir
-from tests.fixtures.query import QueryWorld, build_query_world
+from tests.fixtures.query import ALBUM_ARTIST, QueryWorld, build_query_world
 
 pytestmark = pytest.mark.conformance
 
@@ -834,7 +835,8 @@ async def test_ac7_every_container_expands_and_two_of_them_were_never_named(
         "album": (world.album, list(world.tracks)),
         "series": (series.id, list(series.episodes)),
         "season": (series.seasons[0], None),
-        "artist": (world.album_artist, None),
+        # The **registry** artist, which is the identifier a client has for one (013 §3.3).
+        "artist": (for_by_name(ItemType.MUSIC_ARTIST, ALBUM_ARTIST), None),
         "library-root": (identity.for_library(world.music.id), None),
         "playlist": (world.public_playlist.id, list(world.public_playlist.entries)),
         "empty-playlist": (await a_new_playlist(client), []),

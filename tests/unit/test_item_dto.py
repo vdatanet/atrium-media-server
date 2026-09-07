@@ -48,6 +48,7 @@ from atrium.db.engine import create_database_engine, session_factory
 from atrium.db.item_queries import HydratedItem, ItemQueryRepository, NameLink
 from atrium.domain.items import ItemType
 from atrium.domain.queries import ItemQuery
+from atrium.library.identity import for_by_name
 from atrium.media.decision import EVERY_PERMISSION
 from tests.conftest import data_dir
 from tests.fixtures.query import (
@@ -720,13 +721,24 @@ def test_a_track_carries_its_album_and_the_albums_artist(
     assert body["Artists"] == ["The Compilers"]
 
 
-def test_a_performer_with_no_item_is_a_name_without_an_id(
+def test_a_performer_is_a_name_a_client_can_follow(
     hydrated: dict[str, HydratedItem], world: QueryWorld
 ) -> None:
-    """The revision-0004 shape reaching the wire: behaviours section 5.3's visible half."""
+    """**behaviours section 5.3's visible half, closed** - and this test asserted it open.
+
+    It read *"the revision-0004 shape reaching the wire"* and asserted `ArtistItems` carrying a
+    name and **no id**: a performer who is nobody's album artist, whom a client renders and cannot
+    click. That was the whole of the second consequence, seen from the place a client sees it, and
+    013 T2 is the change that ends it. The id is the registry row's, derived from the folded name.
+
+    `Artists` is unchanged and is asserted beside it, because what 013 must not do is alter what a
+    client **renders**: the same name, now with somewhere to go.
+    """
     body = wire(hydrated[world.tracks[1]], ctx())
     assert body["Artists"] == [SOLO_PERFORMER]
-    assert body["ArtistItems"] == [{"Name": SOLO_PERFORMER}]
+    assert body["ArtistItems"] == [
+        {"Name": SOLO_PERFORMER, "Id": for_by_name(ItemType.MUSIC_ARTIST, SOLO_PERFORMER)}
+    ]
 
 
 def test_a_containers_user_data_is_the_rollup(

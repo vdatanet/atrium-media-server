@@ -686,6 +686,10 @@ class ItemArtist(Base):
     __table_args__ = (
         CheckConstraint("credit IN ('artist', 'album_artist')", name="ck_item_artists_credit"),
         Index("ix_item_artists_artist", "artist_item_id"),
+        # Pattern-driven and not fact-driven: since 013 the two artist routes are two populations
+        # over this table, one per credit kind, and each groups by exactly this pair. Revision
+        # 0010.
+        Index("ix_item_artists_credit_artist", "credit", "artist_item_id"),
     )
 
     item_id: Mapped[str] = mapped_column(
@@ -695,19 +699,18 @@ class ItemArtist(Base):
     position: Mapped[int] = mapped_column(Integer, primary_key=True)
 
     name: Mapped[str] = mapped_column(String, nullable=False)
-    #: A `MusicArtist`, which is a **per-library** row rather than a by-name one - the gap
-    #: recorded in docs/compatibility/behaviours.md section 5.3 - and therefore **nullable**,
-    #: unlike every other link in these tables.
+    #: The **registry** `MusicArtist` this credit names: a by-name row keyed on the folded name,
+    #: created on demand like every other link in these tables and therefore `NOT NULL` like them
+    #: since revision 0010.
     #:
-    #: The others point at by-name rows a refresh creates on demand, so they can never dangle. A
-    #: `MusicArtist` is a tree item the *scanner* owns and it creates one per **album artist**; a
-    #: track's performers are frequently other people, so a credit naming one has a name and no
-    #: item behind it. The name is what a client renders and the link is what makes it clickable:
-    #: this column being nullable is that sentence, in the schema. See revision 0004.
+    #: **It was nullable from 0004 to 0010, and the sentence it carried is what 013 removed.** An
+    #: artist was only ever a tree item the *scanner* owns, created one per album artist, so a
+    #: track's performers - frequently other people - had a name here and no item behind it.
     #:
-    #: **013 T2 is what ends it**, and revision 0009 already made the row it will point at legal:
-    #: a `MusicArtist` with no library. This column is the population's half and moves with it.
-    artist_item_id: Mapped[str | None] = mapped_column(ID, ForeignKey("items.id"), nullable=True)
+    #: It does **not** name the artist an album hangs off. That is the tree artist, it keeps the
+    #: per-library identifier 003 derived, and the two are different rows for one name wherever
+    #: both exist - which is what the reference carries too (013 section 3.4).
+    artist_item_id: Mapped[str] = mapped_column(ID, ForeignKey("items.id"), nullable=False)
 
     item: Mapped[Item] = relationship(
         back_populates="artists", lazy="raise", foreign_keys=[item_id]

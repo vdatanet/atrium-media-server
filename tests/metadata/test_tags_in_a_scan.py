@@ -86,8 +86,12 @@ def test_a_tagged_track_hangs_under_the_album_its_tags_name(tmp_path: Path, engi
 
     by_type = {kind: [item.name for item in items if item.type == kind] for kind in ItemType}
     assert by_type[ItemType.MUSIC_ALBUM] == ["The Real Album"]
-    assert by_type[ItemType.MUSIC_ARTIST] == ["The Real Artist"]
     assert by_type[ItemType.AUDIO] == ["The Real Title"]
+    # **Two rows of one type, and both are named from the tags** - which is the whole point here.
+    # The scan resolves the tree artist from the tag; the credit the same tag wrote makes the
+    # registry row (013 section 3.4). A test that asserted one of them would pass while the other
+    # was named from the directory, which is the seam this module is about.
+    assert by_type[ItemType.MUSIC_ARTIST] == ["The Real Artist", "The Real Artist"]
 
 
 def test_the_same_tree_without_a_reader_resolves_from_its_directories(
@@ -107,8 +111,10 @@ def test_the_same_tree_without_a_reader_resolves_from_its_directories(
 
     by_type = {kind: [item.name for item in items if item.type == kind] for kind in ItemType}
     assert by_type[ItemType.MUSIC_ALBUM] == ["Another Folder"]
-    assert by_type[ItemType.MUSIC_ARTIST] == ["Some Folder"]
     assert by_type[ItemType.AUDIO] == ["First"]
+    # One row here and two above: with no reader there is no credit to make a registry row from,
+    # so the tree artist stands alone. That difference is the seam, stated.
+    assert by_type[ItemType.MUSIC_ARTIST] == ["Some Folder"]
 
 
 def test_an_untagged_track_still_resolves_from_its_path(tmp_path: Path, engine: Engine) -> None:

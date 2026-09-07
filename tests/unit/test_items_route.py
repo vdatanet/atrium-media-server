@@ -37,7 +37,12 @@ from atrium.domain.user import User
 from atrium.library.identity import for_by_name
 from atrium.server import create_app
 from tests.conftest import QueryCounter, data_dir
-from tests.fixtures.query import CORPUS_SIZE, QueryWorld, build_query_world
+from tests.fixtures.query import (
+    ALBUM_ARTIST,
+    CORPUS_SIZE,
+    QueryWorld,
+    build_query_world,
+)
 
 ADMIN_ID = "d" * 32
 
@@ -262,8 +267,15 @@ def _battery(world: QueryWorld) -> list[tuple[str, dict[str, str], Check]]:
                 else None
             ),
         ),
-        ("artistIds", {"artistIds": world.album_artist}, _narrows),
-        ("albumArtistIds", {"albumArtistIds": world.album_artist}, _narrows),
+        # The **registry** identifier, which is what a client has: `/Artists` answers registry
+        # rows and a track's `ArtistItems` carry the same ones (013 section 3.3).
+        # `world.album_artist` is the tree artist an album hangs off, and `parentId` reaches that.
+        ("artistIds", {"artistIds": for_by_name(ItemType.MUSIC_ARTIST, ALBUM_ARTIST)}, _narrows),
+        (
+            "albumArtistIds",
+            {"albumArtistIds": for_by_name(ItemType.MUSIC_ARTIST, ALBUM_ARTIST)},
+            _narrows,
+        ),
         ("albumIds", {"albumIds": world.album}, _narrows),
         (
             "personIds",

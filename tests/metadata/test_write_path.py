@@ -614,14 +614,19 @@ def test_the_item_count_is_what_it_should_be(engine: Engine, library: Library) -
         assert db.execute(select(func.count()).select_from(models.Item)).scalar() == 2
 
 
-def test_a_credit_naming_somebody_who_is_not_an_item_keeps_the_name_and_drops_the_link(
+def test_a_credit_naming_somebody_the_scanner_never_made_still_links(
     engine: Engine, library: Library, tmp_path: Path
 ) -> None:
-    """The consequence of behaviours section 5.3 that nobody had followed down.
+    """**The consequence of behaviours section 5.3 that nobody had followed down, followed all the
+    way and closed** - and this test asserted it open.
 
-    The scanner creates one `MusicArtist` per **album artist**. A track's performers are
-    frequently other people, so a credit naming one has a name and no item behind it. The name is
-    what a client renders; the link is what makes it clickable.
+    It read: the scanner creates one `MusicArtist` per **album artist**, a track's performers are
+    frequently other people, so a credit naming one has a name and no item behind it. Every word
+    of that was true of the tree, and 013 T2 gives the credit a **registry** row instead: a
+    by-name item keyed on the folded name, created here on demand as a genre is.
+
+    So both credits link, and the assertion below is stronger than the one it replaces - it says
+    the two link to the **registry** and not to the tree artist that exists beside them.
     """
     music_root = tmp_path / "music"
     music_root.mkdir()
@@ -662,15 +667,29 @@ def test_a_credit_naming_somebody_who_is_not_an_item_keeps_the_name_and_drops_th
         ),
     )
     links = {one.name: one.artist_item_id for one in rows(engine, models.ItemArtist)}  # type: ignore[attr-defined]
-    assert links == {"The Album Artist": artist_id, "A Guest Performer": None}
+    assert links == {
+        "The Album Artist": for_by_name(ItemType.MUSIC_ARTIST, "The Album Artist"),
+        "A Guest Performer": for_by_name(ItemType.MUSIC_ARTIST, "A Guest Performer"),
+    }
+    assert links["The Album Artist"] != artist_id, (
+        "the tree artist is a different row in a different population, and it is still there"
+    )
 
 
-def test_the_refresh_does_not_invent_a_music_artist(
+def test_the_refresh_invents_a_registry_artist_and_never_a_tree_one(
     engine: Engine, library: Library, tmp_path: Path
 ) -> None:
-    """Creating the missing item here would put a tree item outside the scan that builds the tree,
-    and the next scan - which reconciles what it resolved against what exists - would mark it
-    removed. A row that appears and disappears every other scan."""
+    """**The prohibition this asserted was about the tree, and it still holds.**
+
+    It read: creating the missing item here would put a **tree** item outside the scan that builds
+    the tree, and the next scan - which reconciles what it resolved against what exists - would
+    mark it removed, a row that appears and disappears every other scan. That argument is exactly
+    as true as it was, which is why the assertion below still makes it: no `MusicArtist` **with a
+    library** appears.
+
+    What 013 T2 adds is the row that is not a tree item at all - no library, no parent, nothing
+    beneath it, derivable from the credit that names it - so none of that argument reaches it.
+    """
     music_root = tmp_path / "music"
     music_root.mkdir()
     factory = session_factory(engine)
@@ -688,4 +707,10 @@ def test_the_refresh_does_not_invent_a_music_artist(
             )
         )
     applied(engine, track_id, MetadataChanges(values={Field.ARTISTS: ["Nobody's Album Artist"]}))
-    assert not [one for one in rows(engine, models.Item) if one.type == ItemType.MUSIC_ARTIST]  # type: ignore[attr-defined]
+    artists = [one for one in rows(engine, models.Item) if one.type == ItemType.MUSIC_ARTIST]  # type: ignore[attr-defined]
+    assert not [one for one in artists if one.library_id is not None], (
+        "the refresh must never make a tree item outside the scan that builds the tree"
+    )
+    assert [(one.id, one.name) for one in artists] == [
+        (for_by_name(ItemType.MUSIC_ARTIST, "Nobody's Album Artist"), "Nobody's Album Artist")
+    ]

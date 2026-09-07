@@ -37,6 +37,7 @@ from atrium.domain.items import ItemType
 from atrium.domain.queries import ItemQuery
 from atrium.domain.user import User
 from atrium.library import identity
+from atrium.library.identity import for_by_name
 from tests.conftest import QueryCounter, data_dir
 from tests.fixtures.query import (
     ALBUM_ARTIST,
@@ -387,9 +388,16 @@ def test_the_artist_credits_keep_their_kind(
     assert [(link.name, link.credit) for link in album.artists] == [(ALBUM_ARTIST, "album_artist")]
 
 
-def test_a_track_performer_who_is_nobodys_album_artist_has_no_item(
+def test_a_track_performer_who_is_nobodys_album_artist_has_a_registry_item(
     repository: ItemQueryRepository, world: QueryWorld
 ) -> None:
+    """The hydration half of the same reversal (013 AC-1).
+
+    It asserted `item_id is None`, which was behaviours section 5.3's second consequence as the
+    query layer produced it. Every credited name has a registry row now, so the link is filled -
+    and it is filled with the **registry** identifier rather than a tree one, which is the half
+    that would still be wrong if the writer had reached for `for_name`.
+    """
     page = repository.run(ItemQuery(user=world.everyone, limit=1000))
     solo = next(
         link
@@ -398,7 +406,7 @@ def test_a_track_performer_who_is_nobodys_album_artist_has_no_item(
         for link in one.artists
         if link.name == "Solo Performer"
     )
-    assert solo.item_id is None
+    assert solo.item_id == for_by_name(ItemType.MUSIC_ARTIST, "Solo Performer")
 
 
 def test_an_item_with_nothing_attached_still_hydrates(
@@ -719,3 +727,34 @@ def test_an_unknown_item_is_the_same_refusal(
 ) -> None:
     with pytest.raises(ParentNotFoundError):
         repository.leaf_descendants("0" * 32, world.everyone)
+
+
+def test_a_registry_artist_is_invisible_to_an_account_that_may_not_see_what_credits_it(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """**The leak 013 T2 would open if the visibility clause stayed keyed on the type.**
+
+    Written before the clause moved and asserted to fail first, which is how 009's playlist leak
+    was found: `_by_name_is_referenced` names five types, a `MusicArtist` is not one of them, and
+    a registry artist has no library - so `_library_permitted` exempts it and every account sees
+    every artist. That is not a leak of the tracks; it is a leak of **what is in a library**,
+    which is the one thing a by-name row can disclose.
+
+    The restricted account sees the movies library alone. Every artist in this world is credited
+    by music, so it must reach none of them - while the account that sees everything reaches them.
+    """
+    everyone = repository.run(
+        ItemQuery(user=world.everyone, include_types=frozenset({ItemType.MUSIC_ARTIST}), limit=1000)
+    )
+    registry = [one for one in everyone.items if one.item.library_id is None]
+    assert registry, "013 T2 has not written the registry rows this asserts about"
+
+    restricted = repository.run(
+        ItemQuery(
+            user=world.restricted, include_types=frozenset({ItemType.MUSIC_ARTIST}), limit=1000
+        )
+    )
+    reached = {one.id for one in restricted.items}
+    assert reached.isdisjoint({one.id for one in registry}), (
+        "a registry artist credited only by music reached an account narrowed to films"
+    )

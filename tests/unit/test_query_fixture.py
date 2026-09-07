@@ -29,6 +29,7 @@ from atrium.domain.playstate import MIN_RESUME_DURATION_SECONDS, TICKS_PER_SECON
 from atrium.domain.queries import ItemQuery
 from atrium.domain.user import User
 from atrium.library import identity
+from atrium.library.identity import for_by_name
 from tests.conftest import data_dir
 from tests.fixtures.query import (
     ALBUM_ARTIST,
@@ -231,27 +232,51 @@ def test_every_track_carries_its_own_performer(session: OrmSession, world: Query
     assert len({names[0] for names in performers}) == len(world.tracks)
 
 
-def test_one_performer_is_nobodys_album_artist(session: OrmSession, world: QueryWorld) -> None:
-    """The revision-0004 shape, and the reason `artist_item_id` is nullable: a track's performer
-    who is nobody's album artist has a name a client renders and no item to click through to."""
+def test_one_performer_is_nobodys_album_artist_and_has_a_row_all_the_same(
+    session: OrmSession, world: QueryWorld
+) -> None:
+    """**This asserted the opposite until 013 T2**, and the reversal is the feature.
+
+    It read: *"the revision-0004 shape, and the reason `artist_item_id` is nullable - a track's
+    performer who is nobody's album artist has a name a client renders and no item to click
+    through to"*. That was behaviours section 5.3's second consequence, stated in the fixture the
+    rest of the suite reasons from, and 013 is the change that ends it: every credited name has a
+    **registry** row now, so the name is still what a client renders and the link is always what
+    makes it clickable.
+
+    What has not changed is the world's shape, and it is the half that still needs saying: this
+    performer is nobody's album artist, which is what makes it the discriminating case.
+    """
     credit = next(
         row
         for track in world.tracks
         for row in rows(session, models.ItemArtist, item_id=track, credit="artist")
         if row.name == SOLO_PERFORMER
     )
-    assert credit.artist_item_id is None
+    assert credit.artist_item_id == for_by_name(ItemType.MUSIC_ARTIST, SOLO_PERFORMER)
+    assert not [
+        row
+        for row in rows(session, models.ItemArtist, credit="album_artist")
+        if row.name == SOLO_PERFORMER
+    ], "the performer that discriminates has to be nobody's album artist, or this asserts nothing"
 
 
-def test_the_album_artist_credit_does_point_at_an_item(
+def test_a_credit_names_the_registry_row_and_not_the_tree_artist(
     session: OrmSession, world: QueryWorld
 ) -> None:
-    """The other half of the same sentence: without it, the null above would prove nothing but
-    that the write path never links anything."""
+    """The other half of the same sentence, and it moved with it.
+
+    It asserted that the album-artist credit points at `world.album_artist` - the **tree** item the
+    scanner makes, keyed per library. Since 013 T2 the column names the registry row, which is the
+    right artist in the right population: the tree artist is still there, still the item the album
+    hangs off, and is a **different row** (013 section 3.4).
+    """
     credit = next(
         row for row in rows(session, models.ItemArtist, item_id=world.album, credit="album_artist")
     )
-    assert credit.artist_item_id == world.album_artist
+    assert credit.artist_item_id == for_by_name(ItemType.MUSIC_ARTIST, ALBUM_ARTIST)
+    assert credit.artist_item_id != world.album_artist, "two populations, two rows, one name"
+    assert session.get(models.Item, world.album_artist) is not None, "and the tree one survives"
 
 
 def test_the_rated_films_carry_a_year_and_a_rating(session: OrmSession, world: QueryWorld) -> None:
