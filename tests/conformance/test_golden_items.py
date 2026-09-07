@@ -48,7 +48,7 @@ from atrium.library.identity import for_by_name
 from atrium.server import create_app
 from tests.conformance.golden import assert_golden
 from tests.conformance.test_golden import STATE
-from tests.fixtures.query import QueryWorld, build_query_world
+from tests.fixtures.query import ALBUM_ARTIST, QueryWorld, build_query_world
 
 pytestmark = pytest.mark.conformance
 
@@ -67,11 +67,23 @@ GOLDEN_TYPES = (
     "Season",
     "Episode",
     "MusicArtist",
+    "RegistryArtist",
     "MusicAlbum",
     "Audio",
     "Genre",
 )
-CAPTURED_TYPES = GOLDEN_TYPES[:-1]
+#: The golden types the reference capture can be held against, named rather than sliced off the
+#: end of the tuple above. **It was `GOLDEN_TYPES[:-1]`**, which read as *"all but `Genre`"* and
+#: meant *"all but the last"* - so 013 T7 inserting a type in the middle silently moved which one
+#: was excluded. A list that says what it excludes cannot do that.
+#:
+#: Two are outside the capture and for two different reasons. `Genre` is a by-name row and the
+#: probe sampled no by-name type at all. `RegistryArtist` is not a **type**: it is the second
+#: population of `MusicArtist` (013 section 3.4), and a capture that sampled by type cannot tell
+#: two populations of one apart - so what the reference sends on a registry artist specifically is
+#: unmeasured, and holding this golden against the tree artist's shape would be asserting a
+#: reading nobody took.
+CAPTURED_TYPES = tuple(one for one in GOLDEN_TYPES if one not in {"Genre", "RegistryArtist"})
 
 #: Properties an Atrium golden carries that the capture does not account for: the type and the
 #: property, then the widths it is on and the argument for it. **Every one of these is a property
@@ -136,7 +148,13 @@ def chosen(world: QueryWorld) -> dict[str, str]:
         "Series": first.id,
         "Season": first.seasons[0],
         "Episode": first.episodes[0],
+        # **Two artists, because a `MusicArtist` is two populations since 013.** This one is the
+        # **tree** artist an album hangs off, keyed per library by 003 - the row every golden here
+        # has always captured. `RegistryArtist` below is the other, which is what `/Artists`
+        # answers and what a track's credits name; the wire `Type` on both is `MusicArtist`, and
+        # the key is this file's name rather than a type.
         "MusicArtist": world.album_artist,
+        "RegistryArtist": for_by_name(ItemType.MUSIC_ARTIST, ALBUM_ARTIST),
         "MusicAlbum": world.album,
         "Audio": world.tracks[0],
         "Genre": for_by_name(ItemType.GENRE, "sci-fi"),
@@ -290,15 +308,21 @@ def test_the_reference_capture_parses_to_the_counts_it_states() -> None:
     assert len(always_present(shapes)) == 12
 
 
-def test_the_by_name_golden_is_outside_the_capture_and_says_so() -> None:
-    """`Genre` is the one golden type the anchor cannot speak for, asserted rather than skipped.
+def test_the_goldens_outside_the_capture_are_named_and_say_why() -> None:
+    """Two, and for two different reasons - asserted rather than skipped.
 
-    The probe sampled ten types and no by-name row is among them, so a `Genre` golden has nothing
-    external to be held against - the same L3 debt these files are the down payment on, one type
-    wider. If a regenerated capture grows the column, this fails and the type joins the check.
+    The probe sampled ten types and **no by-name row is among them**, so a `Genre` golden has
+    nothing external to be held against: the same L3 debt these files are the down payment on, one
+    type wider. If a regenerated capture grows the column, this fails and the type joins the check.
+
+    `RegistryArtist` is outside it for a different reason and is **not a type at all**: it is the
+    second population of `MusicArtist` (013 T7), and a capture that sampled by type cannot tell
+    two populations of one apart. What the reference sends on a registry artist specifically is
+    unmeasured, which is a reading somebody can take and this file may not assume.
     """
-    assert set(GOLDEN_TYPES) - set(CAPTURED_TYPES) == {"Genre"}
+    assert set(GOLDEN_TYPES) - set(CAPTURED_TYPES) == {"Genre", "RegistryArtist"}
     assert "Genre" not in reference_shapes()
+    assert "RegistryArtist" not in reference_shapes()
 
 
 @pytest.mark.parametrize("type_name", CAPTURED_TYPES)
