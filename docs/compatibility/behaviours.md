@@ -3528,6 +3528,31 @@ Artists` is an item on **both** servers and a `/Artists` row on neither's terms 
 populations, which is what *"a tree item here rather than a by-name one"* means once it is
 measured rather than read.
 
+**And what a row IS was measured on 2026-09-07, because the counting had measured the sizes and
+not the shape** `[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11, 2026-09-07]`. Four
+readings, on the same library as the 684:
+
+| | reading |
+|---|---|
+| a row that is in no tree listing | **is an item.** `/Items/{id}` answers it as `Type: MusicArtist`, `ParentId: null`, `LocationType: FileSystem`, with a `ChildCount` and a `Path` under the server's **own metadata directory** — `/var/lib/jellyfin/metadata/artists/<Name>`, which is the by-name identity of the source citation seen from outside |
+| the credits | **are the registry.** All **75** distinct credit identifiers carried by `ArtistItems` and `AlbumArtists` on 100 sampled tracks are `/Artists` rows. The row population and the credit population are one |
+| how a row navigates | **not by parent.** `parentId=<a row>` answered **0** rows; `artistIds=<that row>` answered the track it is credited on. A registry artist has no children — it has credits |
+| an item that is no row | **has a row under another identifier**, on two of the three sampled: `AC/DC` has one spelled `AC DC` (the path-invalid substitution of §1.4's neighbour, seen from outside for the first time) and `Al Green` has one spelled identically. The third, `The Alan Parsons Symphonic`, has none |
+
+**So the reference is not immune to this section's first consequence — it hides it.** An artist can
+be a tree item *and* a registry item, with two identifiers, on that server too; what `/Artists`
+lists is only ever the registry, so the duplication never reaches that route. Here it does, because
+`/Artists` lists tree items.
+
+**Which changes what closing this costs.** The two observable halves — the duplicated row and the
+performer with no row — are both properties of **what `/Artists` lists**, and neither needs an
+identifier this project has already derived to be rewritten. The closing mechanism this section has
+named since it was written, *"a deliberate identity migration"*, is therefore larger than the gap:
+what it takes is a by-name artist population of this route's own, keyed on the folded name, fed by
+the credit names `item_artists` already stores beside its nullable link. The tree items stay per
+library, which is the one half no measured setup can observe and which the reference itself carries.
+
+
 **Which way it points is a property of the library, not of the gap.** A real music library, where
 tags are readable and performers are many, shows the shorter list this section describes; a
 structural fixture shows the longer one. Both are this gap, and a report that met only one of them
