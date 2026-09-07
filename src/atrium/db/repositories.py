@@ -1142,6 +1142,11 @@ class MetadataRepository:
         a name and no item behind it. Creating the missing item here would put a tree item outside
         the scan that builds the tree, and the next scan would mark it removed - a row that
         appears and disappears every other scan. Revision 0004 carries the argument.
+
+        **013 T2 is what ends this**, and the schema is already able to carry the end of it:
+        revision 0009 made a `MusicArtist` with no library legal, so the registry row a credit
+        will point at can exist. Nothing here creates one yet - that is a population, and this
+        task shipped the capacity.
         """
         if library_id is None:
             return

@@ -351,10 +351,24 @@ class Item(Base):
         # **user**, and giving it a library would put it under that library's tree and make
         # `_library_permitted` - not ownership - the predicate that decides who sees it
         # (009 plan section 4.1). Revision 0008.
+        # **013 split the biconditional this used to be**, because `MusicArtist` broke it in both
+        # directions on the day it became the first type that is *both*: a tree artist an album
+        # hangs off, keyed per library, and a registry row keyed server-wide by its folded name.
+        # A single expression naming an exemption is one a later reader folds back into a
+        # biconditional, so it is the two implications it always stood for, written apart.
         CheckConstraint(
-            "(library_id IS NULL) = "
-            "(type IN ('Genre', 'MusicGenre', 'Studio', 'Person', 'Year', 'Playlist'))",
+            "type NOT IN ('Genre', 'MusicGenre', 'Studio', 'Person', 'Year', 'Playlist') "
+            "OR library_id IS NULL",
             name="ck_items_by_name_has_no_library",
+        ),
+        # The other direction, and the only exemption there is. A tree item without a library
+        # would be invisible to every query 005 scopes by library; an artist is exempt because
+        # both of its populations are real and the reference carries the same pair
+        # `[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11, 2026-09-07]`.
+        CheckConstraint(
+            "type IN ('Genre', 'MusicGenre', 'Studio', 'Person', 'Year', 'Playlist', "
+            "'MusicArtist') OR library_id IS NOT NULL",
+            name="ck_items_in_a_tree_have_a_library",
         ),
         # Pattern-driven, not fact-driven: 005 orders nearly every list by `sort_name` within a
         # library and a type, and walks children by their number. Named here so a later reader
@@ -690,6 +704,9 @@ class ItemArtist(Base):
     #: track's performers are frequently other people, so a credit naming one has a name and no
     #: item behind it. The name is what a client renders and the link is what makes it clickable:
     #: this column being nullable is that sentence, in the schema. See revision 0004.
+    #:
+    #: **013 T2 is what ends it**, and revision 0009 already made the row it will point at legal:
+    #: a `MusicArtist` with no library. This column is the population's half and moves with it.
     artist_item_id: Mapped[str | None] = mapped_column(ID, ForeignKey("items.id"), nullable=True)
 
     item: Mapped[Item] = relationship(

@@ -381,10 +381,36 @@ def test_a_year_rides_the_same_machinery() -> None:
     assert for_by_name(ItemType.YEAR, "1999") != for_by_name(ItemType.YEAR, "2000")
 
 
-@pytest.mark.parametrize("wrong", [ItemType.MOVIE, ItemType.SERIES, ItemType.MUSIC_ARTIST])
+@pytest.mark.parametrize("wrong", [ItemType.MOVIE, ItemType.SERIES])
 def test_a_type_that_belongs_to_another_rule_is_refused(wrong: ItemType) -> None:
-    """`MusicArtist` especially: it looks like a by-name type, it is one in the reference, and it
-    is per-library here (docs/compatibility/behaviours.md section 5.3). Deriving it this way would
-    produce a perfectly valid identifier for the wrong thing."""
+    """Deriving a type this way would produce a perfectly valid identifier for the wrong thing.
+
+    **`MusicArtist` was in this list until 013 T1 and is not a hole where it was.** It was here
+    for the best reason a test can have - it looks like a by-name type, it is one on the
+    reference, and it was per-library here (behaviours section 5.3) - and 013 is the change that
+    makes it both. The test below is what took its place, and it asserts more than this one did:
+    not merely that the by-name derivation answers, but that the two derivations **differ**.
+    """
     with pytest.raises(ValueError, match="takes its identity from"):
         for_by_name(wrong, "Whatever")
+
+
+def test_an_artist_derives_both_ways_and_the_two_are_different_rows() -> None:
+    """The one type that is both, and the assertion that keeps the pair honest (013 section 3.4).
+
+    A `MusicArtist` is the tree item the scanner owns, keyed per library, **and** the registry row
+    keyed on the folded name alone. If these two ever collided, one population would silently
+    become the other - so the point of this test is the inequality, not either derivation.
+
+    The fold is the same one every by-name row uses, which is what makes `AC/DC` and `AC DC` one
+    registry row here - and two rows on the reference, where the tree item keeps the slash
+    `[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11, 2026-09-07]`.
+    """
+    library = "1" * 32
+    registry = for_by_name(ItemType.MUSIC_ARTIST, "AC/DC")
+    assert registry == for_by_name(ItemType.MUSIC_ARTIST, "AC DC"), "the fold is the by-name fold"
+    assert registry != for_name(ItemType.MUSIC_ARTIST, library, "AC/DC"), (
+        "the tree derivation and the registry one must not meet: one population would become the "
+        "other, and 003's identifiers are the ones that may not move"
+    )
+    assert registry == for_by_name(ItemType.MUSIC_ARTIST, "ac/dc"), "and it folds case, as ever"

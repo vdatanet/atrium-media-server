@@ -67,33 +67,75 @@ a world that cannot fail it — which is this project's own recurring finding, o
 
 ---
 
-## T1 — Revision `0009`: the constraint, the column, the backfill
+## T1 — Revision `0009`: a `MusicArtist` may have no library
 
-- [ ] **Changes:** `src/atrium/db/migrations/versions/0009_artist_registry.py`, and
-      `src/atrium/db/models.py` where the constraint is declared. The biconditional
-      `ck_items_by_name_has_no_library` becomes the two implications it stood for, with the artist
-      type exempted **by name** and no other exemption; `item_artists.artist_item_id` becomes
-      `NOT NULL`, backfilled through `for_by_name`; one index on `item_artists (credit,
-      artist_item_id)`.
+- [x] **Changes:** `src/atrium/db/migrations/versions/0009_artist_registry.py` and
+      `src/atrium/db/models.py` — the biconditional `ck_items_by_name_has_no_library` becomes the
+      two implications it stood for, with the artist type exempted **by name** and no other
+      exemption. `src/atrium/library/identity.py` gains `ALSO_BY_NAME`, which is how `for_by_name`
+      accepts the artist type while `RULE_OF` stays total and one-valued.
 - **Depends on:** —
-- **Verified by:** `pytest tests/db/test_migrations.py` — up and down on a database holding a tree
-  artist, a registry artist and a credit naming each, with the down path asserted to restore both
-  the biconditional and the nullable column. The backfill is asserted to derive the same
-  identifier the writer will, on the same name, without either reading the other.
-- **Spec reference:** §4 of `spec.md`, §4 of `plan.md`
+- **Verified by:** `pytest tests/unit/test_migrations.py tests/unit/test_db_schema.py` — an artist
+  inserts **with** a library and **without** one, while a genre with a library and a film without
+  one both still fail, each on the half that now says so by itself; the rollback deletes what the
+  restored biconditional would refuse; and the shipped head is `0009`.
+- **Spec reference:** §3.4 of `spec.md`, §4 of `plan.md`
 
-## T2 — The registry rows, written from the credits
+### What T1 was, and why it is smaller
 
-- [ ] **Changes:** `src/atrium/metadata/byname.py` — `BY_NAME_FIELD` gains `ARTISTS` and
-      `ALBUM_ARTISTS`, and the comment citing §5.3 as the reason for their absence is replaced by
-      the reading that closed it. `src/atrium/db/repositories.py` — the credit writer calls
-      `ensure_by_name` and stores what it returns, so `_artist_item` stops asking whether the
-      scanner happened to make one.
+**As listed, T1 could not be merged green, and the list's own first line is what says so** — *each
+task is a reviewable change on its own*. Built as written — the constraint, the column to
+`NOT NULL`, the backfill and therefore the writer — it left **33 failures**: twenty
+`NOT NULL constraint failed` from the writer still returning `None` for a performer the scanner
+made no tree artist for, and thirteen more from the world the change moves, six of them the
+`artistIds` and `albumArtistIds` filters, which resolve **tree** identifiers today and would have
+had to resolve registry ones.
+
+So T1 is the **capacity** and T2 is the **population**, which are two reversible ideas rather than
+one: a schema that *allows* a row and a database that *has* one. Nothing observable changes here,
+which is why it merges on its own.
+
+**Three things were found on the way, and two of them nearly shipped silently.**
+
+1. **The `copy_from` was five columns short.** The revision rebuilds `items`, and the first draft
+   of that table was written from memory - a rebuild that would have dropped `end_index_number`,
+   `sort_name`'s default and three more without a word. `tests/unit/test_migrations.py` caught it
+   and **not on this revision**: it failed replaying `0008`, whose own `copy_from` then found a
+   column the database no longer had. The list is copied from `0008` by script now.
+2. **The migration sweep had a third blind spot and one word for two of them.** It reads the
+   schema, so a revision that rewrites rows declares itself a `data migration`; SQLAlchemy's
+   SQLite dialect does not reflect **check constraints** either - the fact every `copy_from` here
+   exists for - so a constraint-only revision is invisible for a different reason. Calling `0009`
+   a data migration would have been the shorter fix and a false one. `CONSTRAINT_ONLY` is the
+   second word, and *"changed nothing"* stays a failure everywhere else.
+3. **The backfill has to repoint every link, not only the null ones**, which is in neither the plan
+   nor this list. The column will name the *registry* row, and a link pointing at a tree artist
+   points at the right artist and the wrong population; leaving those would make `/Artists` list a
+   mixture of the two. It is written down here because T2 is where it lands.
+
+## T2 — The population: the rows, the links, and the column that stops being nullable
+
+- [ ] **Changes:** revision `0010` — every distinct credit name gets a registry row, **every**
+      link is repointed at it, and `item_artists.artist_item_id` becomes `NOT NULL`.
+      `src/atrium/db/repositories.py` — the credit writer calls `ensure_by_name`, and
+      `_artist_item` goes. `src/atrium/metadata/byname.py` — `BY_NAME_FIELD`'s comment citing §5.3
+      as the reason `ARTISTS` and `ALBUM_ARTISTS` are absent from it is replaced by the reading
+      that closed §5.3; **whether the two fields belong in that map is T2's to decide**, because
+      the credit writer has a path of its own and adding them would create each row twice over.
+      One index on `item_artists (credit, artist_item_id)`, which is what the two populations
+      group by.
 - **Depends on:** T1
-- **Verified by:** `pytest tests/unit/test_by_name_items.py tests/library/` — a scan of the query
-  world leaves a row for every distinct folded credit name, two spellings of one name leave one
-  row with the first spelling, and **the tree artists are untouched**: every identifier 003 derived
-  is still there, which is AC-7's first half.
+- **It brings the rest of the world with it, and T1 measured how much.** Thirteen tests assert the
+  world this task changes: two fixture assertions about §5.3's shape, two about a performer with
+  no item, six on the `artistIds`/`albumArtistIds` filters — which resolve tree identifiers today
+  and registry ones after — and the three artist-route ones including AC-13's tripwire. They are
+  **not** collateral to be edited quietly: each is a statement about the gap, and each moves with
+  a reason written where it moves.
+- **Verified by:** `pytest tests/unit/test_migrations.py tests/unit/test_by_name_items.py
+  tests/library/` — the three migration tests T1 wrote and moved here: the backfill gives every
+  credit a row **and repoints the one that had one**, it derives the same identifier `for_by_name`
+  does, and a scan of the query world reproduces exactly what the backfill made. And **the tree
+  artists are untouched**: every identifier 003 derived is still there, which is AC-7's first half.
 - **Spec reference:** §3.1, §3.4, AC-3, AC-7
 
 ## T3 — The collector, scoped so it can never take a tree artist
