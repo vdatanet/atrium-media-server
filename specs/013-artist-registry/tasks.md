@@ -234,8 +234,36 @@ which is why it merges on its own.
 
 ## T9 — Close it
 
-- [ ] **Changes:** the three 013 documents to `Implemented`, `specs/README.md`'s row, and the
-      definition of done below with its counts made true.
+- [~] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_013`, which maps all
+      **eight** criteria to tests by name — **done**. The three 013 documents to `Implemented`,
+      `specs/README.md`'s row and the definition of done's counts — **not done, and deliberately
+      not**: one line of that definition is unticked.
+
+  **What is open is the differential run, and it is open because of a decision rather than an
+  oversight.** Both artist routes were raised from `L2` to `L3` on 2026-09-07, so this is the
+  first closing task in this repository that **cannot tick its conformance line from the fixture
+  alone** — every feature before it deferred the differential half to 010, and
+  [010's own list](../010-conformance-harness/tasks.md) still records that *no `level: L3` row has
+  been shown to reach L3*.
+
+  Marking the documents `Implemented` with that line unticked was tried and undone in the same
+  change. A status word that means *"the tasks are done"* while a criterion of the same document
+  says otherwise is precisely what 010 T15 found in three features and what
+  `test_the_definition_of_done_counts_the_criteria_that_exist` exists to stop.
+
+  **What the run costs, so whoever takes it is not surprised.** A reference instance over the
+  fixture (`--fixture`, one container of the pinned digest, which dies with `SIGILL` on roughly
+  half of its starts on arm64) **and an Atrium under test built by hand** — `tools/README.md`'s
+  four steps: the fixture's libraries by the same names, an administrator, a restricted seat
+  handed in under `ATRIUM_RESTRICTED_*` narrowed to the library `movies_library` picks, and the
+  policy and configuration seeded from the reference's own documents. Then
+  `tools/differential.py --fixture`, and the two artist routes read in its report.
+
+  **What the run is expected to show, which is what makes it worth doing rather than a formality**:
+  `/Artists` and `/Artists/AlbumArtists` comparing as two populations against the reference's own,
+  and one declared difference per registry row - the `ChildCount` of
+  [behaviours §3.27](../../docs/compatibility/behaviours.md), which this feature diverges on with
+  an argument.
 - **Depends on:** T1–T8
 - **Verified by:** `pytest` whole, `ruff`, `ruff format`, `mypy`, and a differential run against a
   single-use reference instance — the two routes are `L3` since 2026-09-07, so this is the first
