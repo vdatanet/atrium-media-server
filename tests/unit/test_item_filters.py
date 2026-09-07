@@ -29,13 +29,28 @@ from atrium.db.item_queries import ItemQueryRepository, QueryPage
 from atrium.domain.items import ItemType
 from atrium.domain.queries import Filter, ItemQuery
 from atrium.library import identity
+from atrium.library.identity import for_by_name
 from tests.conftest import QueryCounter, data_dir
 from tests.fixtures.query import (
+    ALBUM_ARTIST,
     FIRST_YEAR,
     GENRE_SPELLINGS,
+    GUEST_ALBUM_ARTIST,
     QueryWorld,
     build_query_world,
 )
+
+
+def registry(name: str) -> str:
+    """The **registry** artist's identifier for a name, which is what these filters match.
+
+    Since 013 T2 `item_artists.artist_item_id` names the by-name row rather than the tree artist,
+    so a filter is asked with the identifier a client actually has: `/Artists` answers registry
+    rows and a track's `ArtistItems` carry the same ones. The tree artist keeps its own identifier
+    and stays the item an album hangs off - `parentId` is what reaches it, which is a different
+    question and a different test.
+    """
+    return for_by_name(ItemType.MUSIC_ARTIST, name)
 
 
 @pytest.fixture
@@ -91,8 +106,8 @@ PREDICATES: list[tuple[str, Slice]] = [
         "person_ids",
         lambda w: {"person_ids": (identity.for_by_name(ItemType.PERSON, "A Director"),)},
     ),
-    ("artist_ids", lambda w: {"artist_ids": (w.album_artist,)}),
-    ("album_artist_ids", lambda w: {"album_artist_ids": (w.album_artist,)}),
+    ("artist_ids", lambda w: {"artist_ids": (registry(ALBUM_ARTIST),)}),
+    ("album_artist_ids", lambda w: {"album_artist_ids": (registry(ALBUM_ARTIST),)}),
     ("album_ids", lambda w: {"album_ids": (w.album,)}),
     ("years", lambda w: {"years": (FIRST_YEAR,)}),
     ("min_community_rating", lambda w: {"min_community_rating": 8.0}),
@@ -175,10 +190,10 @@ def test_artist_ids_is_the_superset_and_album_artist_ids_the_subset(
     goes untested while looking tested.
     """
     performed = repository.run(
-        ItemQuery(user=world.everyone, artist_ids=(world.album_artist,), limit=1000)
+        ItemQuery(user=world.everyone, artist_ids=(registry(ALBUM_ARTIST),), limit=1000)
     )
     credited = repository.run(
-        ItemQuery(user=world.everyone, album_artist_ids=(world.album_artist,), limit=1000)
+        ItemQuery(user=world.everyone, album_artist_ids=(registry(ALBUM_ARTIST),), limit=1000)
     )
     performed_ids = {one.id for one in performed.items}
     credited_ids = {one.id for one in credited.items}
@@ -194,7 +209,7 @@ def test_the_guest_albums_artist_does_not_own_the_compilation(
     """The other direction of the same distinction, so neither filter can be passing by returning
     everything."""
     credited = repository.run(
-        ItemQuery(user=world.everyone, album_artist_ids=(world.guest_artist,), limit=1000)
+        ItemQuery(user=world.everyone, album_artist_ids=(registry(GUEST_ALBUM_ARTIST),), limit=1000)
     )
     ids = {one.id for one in credited.items}
     assert world.guest_track in ids

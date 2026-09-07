@@ -37,6 +37,7 @@ from atrium.domain.items import ItemType
 from atrium.domain.queries import ItemQuery
 from atrium.domain.user import User
 from atrium.library import identity
+from atrium.library.identity import for_by_name
 from tests.conftest import QueryCounter, data_dir
 from tests.fixtures.query import (
     ALBUM_ARTIST,
@@ -387,9 +388,16 @@ def test_the_artist_credits_keep_their_kind(
     assert [(link.name, link.credit) for link in album.artists] == [(ALBUM_ARTIST, "album_artist")]
 
 
-def test_a_track_performer_who_is_nobodys_album_artist_has_no_item(
+def test_a_track_performer_who_is_nobodys_album_artist_has_a_registry_item(
     repository: ItemQueryRepository, world: QueryWorld
 ) -> None:
+    """The hydration half of the same reversal (013 AC-1).
+
+    It asserted `item_id is None`, which was behaviours section 5.3's second consequence as the
+    query layer produced it. Every credited name has a registry row now, so the link is filled -
+    and it is filled with the **registry** identifier rather than a tree one, which is the half
+    that would still be wrong if the writer had reached for `for_name`.
+    """
     page = repository.run(ItemQuery(user=world.everyone, limit=1000))
     solo = next(
         link
@@ -398,7 +406,7 @@ def test_a_track_performer_who_is_nobodys_album_artist_has_no_item(
         for link in one.artists
         if link.name == "Solo Performer"
     )
-    assert solo.item_id is None
+    assert solo.item_id == for_by_name(ItemType.MUSIC_ARTIST, "Solo Performer")
 
 
 def test_an_item_with_nothing_attached_still_hydrates(

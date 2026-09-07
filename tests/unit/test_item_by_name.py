@@ -36,6 +36,7 @@ from tests.fixtures.query import (
     GENRE_SPELLINGS,
     GUEST_ALBUM_ARTIST,
     RATED,
+    SOLO_PERFORMER,
     QueryWorld,
     build_query_world,
 )
@@ -121,11 +122,20 @@ def test_a_year_row_is_an_item_like_any_other(
     assert [one.item.type for one in page.items] == [ItemType.YEAR]
 
 
-def test_artists_lists_both_music_artists(
+def test_artists_lists_the_registry_and_not_the_tree(
     repository: ItemQueryRepository, world: QueryWorld
 ) -> None:
+    """**It listed the two tree artists and now lists three registry rows** (013 AC-1).
+
+    The third is the performer who is nobody's album artist: a name on a track with nothing behind
+    it until 013 T2, which is behaviours section 5.3's second consequence and the reason this
+    listing was short. The rows are the registry's, so none of them is the item an album hangs
+    off - asserted here, because listing both populations would answer one artist twice.
+    """
     page = repository.run_by_name(ItemType.MUSIC_ARTIST, ItemQuery(user=world.everyone, limit=100))
-    assert set(names(page)) == {ALBUM_ARTIST, GUEST_ALBUM_ARTIST}
+    assert set(names(page)) == {ALBUM_ARTIST, GUEST_ALBUM_ARTIST, SOLO_PERFORMER}
+    assert all(one.item.library_id is None for one in page.items), "the tree artists are not these"
+    assert world.album_artist not in {one.id for one in page.items}
 
 
 # ------------------------------------------------------------------------------------------

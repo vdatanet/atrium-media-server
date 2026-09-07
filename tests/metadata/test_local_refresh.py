@@ -69,8 +69,22 @@ def items(engine: Engine) -> list[models.Item]:
 
 
 def one(engine: Engine, kind: ItemType) -> models.Item:
-    found = [row for row in items(engine) if row.type == kind]
-    assert len(found) == 1, f"expected one {kind}, got {[row.name for row in found]}"
+    """The single item of a type this module's scans produce - **of the tree**.
+
+    A `MusicArtist` is two populations of one type since 013: the tree item the scan resolves from
+    a directory, and the registry row a credit names, keyed on the folded name with no library at
+    all. Every test in this module is about what a **scan** builds, so the tree is what `one`
+    means here - and it says so rather than filtering silently, because a helper that quietly
+    drops half a type is how a later reader concludes the half does not exist.
+
+    `test_a_scan_leaves_a_registry_artist_beside_the_tree_one` is where the other half is asserted.
+    """
+    found = [
+        row
+        for row in items(engine)
+        if row.type == kind and (kind is not ItemType.MUSIC_ARTIST or row.library_id is not None)
+    ]
+    assert len(found) == 1, f"expected one {kind} of the tree, got {[row.name for row in found]}"
     return found[0]
 
 
@@ -278,6 +292,13 @@ def test_a_well_tagged_track_takes_its_album_and_artist_from_its_tags(
 
     assert one(engine, ItemType.MUSIC_ALBUM).name == "The Real Album"
     assert one(engine, ItemType.MUSIC_ARTIST).name == "The Real Artist"
+    # And the other population, once: the credit that named the artist made a registry row too,
+    # with no library, and it is a **different** row from the tree one above (013 section 3.4).
+    registry = [
+        row for row in items(engine) if row.type == ItemType.MUSIC_ARTIST and row.library_id is None
+    ]
+    assert [row.name for row in registry] == ["The Real Artist"]
+    assert registry[0].id != one(engine, ItemType.MUSIC_ARTIST).id
     assert one(engine, ItemType.AUDIO).name == "The Real Title"
 
 

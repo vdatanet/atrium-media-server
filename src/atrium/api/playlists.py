@@ -337,6 +337,13 @@ class _Expander:
         if kind is ItemType.PLAYLIST:
             return _in_playlist_order(self.queries, user, self.playlists.entries(found.id, user))
         if kind is ItemType.MUSIC_ARTIST:
+            # **The link, not the tree**, which is what the reference's forty-two rows were
+            # against a tree walk's forty - and since 013 the identifier a client has for an
+            # artist is the **registry** row's: `/Artists` answers those and a track's
+            # `ArtistItems` carry the same ones. The tree artist an album hangs off is credited by
+            # nothing, so it expands to nothing; what the reference does with one of those is
+            # unmeasured, and a fallback walk invented here would be a third behaviour
+            # (behaviours section 3.0.2) rather than a reading.
             return self._linked(ItemQuery(user=user, artist_ids=(found.id,), count=False))
         if kind is ItemType.MUSIC_GENRE:
             return self._linked(ItemQuery(user=user, genre_ids=(found.id,), count=False))

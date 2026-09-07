@@ -20,10 +20,18 @@ from fastapi import FastAPI
 
 from atrium.api.deps import require_user
 from atrium.config.paths import DataPaths
+from atrium.domain.items import ItemType
 from atrium.domain.user import User
+from atrium.library.identity import for_by_name
 from atrium.server import create_app
 from tests.conftest import data_dir
-from tests.fixtures.query import GENRE_SPELLINGS, RATED, QueryWorld, build_query_world
+from tests.fixtures.query import (
+    ALBUM_ARTIST,
+    GENRE_SPELLINGS,
+    RATED,
+    QueryWorld,
+    build_query_world,
+)
 
 
 @dataclass(frozen=True)
@@ -75,7 +83,10 @@ async def test_ac5_the_count_is_true_with_and_without_limit(
         ("/Genres", 1),
         ("/MusicGenres", 1),
         ("/Years", RATED),
-        ("/Artists", 2),
+        # Three and two since 013: `/Artists` lists the registry rows a **performer** credit
+        # names - which includes the performer who is nobody's album artist, the row that did not
+        # exist before - and `/Artists/AlbumArtists` the ones an album-artist credit names.
+        ("/Artists", 3),
         ("/Artists/AlbumArtists", 2),
     ):
         bare = await client.get(path)
@@ -121,31 +132,35 @@ async def test_artist_rows_carry_no_is_folder(client: httpx.AsyncClient, world: 
         assert row["Type"] == "MusicArtist"
 
 
-async def test_ac13_the_two_artist_routes_coincide_for_the_recorded_reason(
+async def test_ac13_the_two_artist_routes_no_longer_coincide(
     client: httpx.AsyncClient, world: QueryWorld
 ) -> None:
-    """The endpoint half of the credit distinction, as v1 can honestly state it.
+    """**This test was written to fail on this change, and it did.**
 
-    An Atrium `MusicArtist` is a per-library item the scanner creates per *album artist*
-    (behaviours 5.3), so an artist who only performs has a name on every track and no row to
-    list - the strict containment the criterion first imagined has no row to show it. What must
-    still hold: album-credit is a subset of any-credit, and the *item*-level distinction bites
-    through `artistIds`/`albumArtistIds`, measured at T6 and asserted here on the guest track.
+    It ended `assert album == every, "if these ever differ, behaviours 5.3's argument needs
+    rereading"` - a tripwire laid by 005 T14, which had found that *"the strict containment the
+    criterion first imagined has no row to show it"*: an artist who only performed had a name on
+    every track and no row to list. 013 T2 builds that row, so the two listings differ by exactly
+    it, and 005 AC-13 is amended rather than left false (013 T8).
+
+    **What holds now is weaker than a containment and is the measured shape.** The reference's two
+    routes are two populations - `/Artists` over the performer credit, `/Artists/AlbumArtists`
+    over the album-artist one - and **neither contains the other**: an album artist no track names
+    is a row there and none here `[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11,
+    2026-09-07]`. This world can only show one of the two directions, because every artist in it
+    performs; the other is 013 T6's fixture gap, and saying so is the honest half of this test.
     """
     every = {one["Id"] for one in (await client.get("/Artists")).json()["Items"]}
     album = {one["Id"] for one in (await client.get("/Artists/AlbumArtists")).json()["Items"]}
-    assert album <= every
-    assert album == every, "if these ever differ, behaviours 5.3's argument needs rereading"
+    assert album < every, "the performer who is nobody's album artist is the difference"
+    assert len(every - album) == 1
 
     # `recursive`, because a listing with neither a parent nor it is the account's top-level
     # folders on both servers and answers no filter at all (005 section 3.3, AC-27) - so without
     # it this asserts a narrowing neither server performs.
-    performer = await client.get(
-        "/Items", params={"artistIds": world.album_artist, "recursive": "true"}
-    )
-    fronted = await client.get(
-        "/Items", params={"albumArtistIds": world.album_artist, "recursive": "true"}
-    )
+    artist = for_by_name(ItemType.MUSIC_ARTIST, ALBUM_ARTIST)
+    performer = await client.get("/Items", params={"artistIds": artist, "recursive": "true"})
+    fronted = await client.get("/Items", params={"albumArtistIds": artist, "recursive": "true"})
     assert world.guest_track in {one["Id"] for one in performer.json()["Items"]}
     assert world.guest_track not in {one["Id"] for one in fronted.json()["Items"]}
 
@@ -166,7 +181,11 @@ async def test_search_term_and_paging_work_across_the_family(
     client: httpx.AsyncClient, world: QueryWorld
 ) -> None:
     found = await client.get("/Artists", params={"searchTerm": "Various"})
-    assert [one["Id"] for one in found.json()["Items"]] == [world.album_artist]
+    # The registry row, which is what this route answers since 013; `world.album_artist` is the
+    # tree artist of the same name, and it is a different row in a different population.
+    assert [one["Id"] for one in found.json()["Items"]] == [
+        for_by_name(ItemType.MUSIC_ARTIST, ALBUM_ARTIST)
+    ]
 
     paged = await client.get("/Years", params={"startIndex": "2", "limit": "3"})
     body = paged.json()

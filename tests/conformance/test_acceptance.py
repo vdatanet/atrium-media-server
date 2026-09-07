@@ -574,7 +574,7 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
     13: (
         "tests.unit.test_item_by_name:test_any_credit_strictly_contains_the_album_credit",
         "tests.unit.test_item_filters:test_artist_ids_is_the_superset_and_album_artist_ids_the_subset",
-        "tests.unit.test_by_name_routes:test_ac13_the_two_artist_routes_coincide_for_the_recorded_reason",
+        "tests.unit.test_by_name_routes:test_ac13_the_two_artist_routes_no_longer_coincide",
     ),
     14: (
         "tests.unit.test_filters_and_search_routes:test_ac14_the_hint_shape_is_not_the_item_shape",

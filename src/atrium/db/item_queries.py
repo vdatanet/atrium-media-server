@@ -387,11 +387,17 @@ class ItemQueryRepository:
     ) -> QueryPage:
         """The same pipeline with the type pinned (plan section 6.7).
 
-        `credit` is what separates `/Artists` from `/Artists/AlbumArtists`: `None` means any
-        credit and `album_artist` means that one. `MusicArtist` is the odd member of this family -
-        it is a **per-library** row in Atrium rather than a by-name one (behaviours section 5.3),
-        so it is already carried by the ordinary visibility predicate and only needs the credit
-        reading on top.
+        `credit` is what separates `/Artists` from `/Artists/AlbumArtists`, and since 013 the two
+        are **two populations rather than one narrowed**: measured on the reference, an album
+        artist no track names as a performer has a row in the second and none in the first, so
+        neither listing contains the other `[probe: tools/probe_artist_registry.py, Jellyfin
+        10.11.11, 2026-09-07]`. Each is the distinct folded names over its own credit kind.
+
+        **`MusicArtist` is the odd member of this family and is odder since 013**: it is a type
+        with two populations, and only one of them belongs here. A tree artist is the item an
+        album hangs off, carried by the ordinary visibility predicate because it has a library;
+        the **registry** row is what these two routes list, and it is picked out by having none.
+        Listing both would answer one artist twice, once per population.
 
         **The count is always true**, with `limit` and without. The reference disables counting on
         these routes when there is no `limit` and answers `TotalRecordCount: 0` beside a non-empty
@@ -402,6 +408,8 @@ class ItemQueryRepository:
             .where(models.Item.type == kind.value)
             .where(self._visible_to(query.user))
         )
+        if kind is ItemType.MUSIC_ARTIST:
+            statement = statement.where(models.Item.library_id.is_(None))
         for clause in _filters(query):
             statement = statement.where(clause)
         if query.parent_id is not None or credit is not None:
