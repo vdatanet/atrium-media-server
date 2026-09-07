@@ -15,6 +15,13 @@ defines the four levels referenced throughout the specifications, and the machin
 v1 requires **L2 for every endpoint**, and **L3 for the authentication and playback paths** — the
 two places where a wrong server makes a client misbehave rather than merely look wrong.
 
+**A third place joined them on 2026-09-07: the two artist routes.** They are neither
+authentication nor playback, and what puts them here is that
+[013](../../specs/013-artist-registry/spec.md) changes the whole of what they answer — the
+population, not a field of it — after a reading measured this server and the reference to be
+listing two different ones. A level that stayed at L2 would leave that change proven against
+a fixture and unproven against the server it was measured from.
+
 ## L0 — Routed
 
 The cheapest and most mechanical check, and it is generated, not hand-written:
@@ -276,11 +283,14 @@ calling it. Their runners take the **reference** half and report outstanding car
 endpoint, a name, a query, a body, a content type, the **anchors** that fill its path parameters
 and the identities it is meaningful for. AC-3's floor is one case per endpoint — 59 — and 010's own
 gate measured that floor to be *not enough*: both differences it found on `/Items/{itemId}/Similar`
-are invisible to a bare request. **The eight `level: L3` rows of [surface.yaml](surface.yaml) are
+are invisible to a bare request. **The `level: L3` rows of [surface.yaml](surface.yaml) are
 seeded first**, because that column is a required conformance level and nothing has ever checked
 that one is reached — `tools/extract_v1_surface.py` validates only that the value is one of
 `L0..L3`, and every implemented feature's definition of done has deferred the differential half
-here. Each of the eight carries more than one case and names more than one identity.
+here. Each carries more than one case and names more than one identity. **They were eight and
+are ten since 2026-09-07**: the two artist routes were promoted with 013, and they arrived
+already carrying two cases each for both seats, which is what a promotion has to bring rather
+than owe.
 
 **And what the reference makes of the fixture is checked in as well**, as
 [reference-fixture-reading.json](reference-fixture-reading.json): every item of every library the

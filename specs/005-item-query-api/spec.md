@@ -733,7 +733,7 @@ acceptance map could not name a single one of their twenty-seven tests.)*
 | `GET /UserViews` | **L2** | Fixture with a restricted user |
 | Discovery endpoints (§3.7) | **L2** | Golden responses on the fixture |
 | Series navigation (§3.8) | **L2** | Fixture with specials and a missing season |
-| By-name endpoints (§3.9) | **L2** | Including the no-`limit` count case (AC-5) |
+| By-name endpoints (§3.9) | **L2** | Including the no-`limit` count case (AC-5) — **except the two artist routes**, raised to **L3** on 2026-09-07 by [013](../013-artist-registry/spec.md), whose whole subject is the population they answer |
 | `GET /Search/Hints` | **L2** | Golden response; shape distinct from the envelope |
 
 The **casing and unit sweeps** delivered by 001 cover every response model added here — which for

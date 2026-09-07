@@ -180,7 +180,7 @@ def test_009_serves_exactly_its_seven_routes_and_no_eighth(app: FastAPI) -> None
 # The conformance level a row declares (010, and the first reader of the column)
 # --------------------------------------------------------------------------------------------
 
-#: The eight rows of `surface.yaml` that declare `level: L3`, written out rather than counted.
+#: The ten rows of `surface.yaml` that declare `level: L3`, written out rather than counted.
 #:
 #: **Nothing had ever read this column.** `tools/extract_v1_surface.py` validates that the value
 #: is one of `L0..L3` - the vocabulary and not the claim - and this module read `feature` and
@@ -191,9 +191,15 @@ def test_009_serves_exactly_its_seven_routes_and_no_eighth(app: FastAPI) -> None
 #:
 #: L3 is defined in `docs/compatibility/conformance.md` as *"the response is byte-comparable to a
 #: real Jellyfin's, modulo a documented allowlist"*, which only `tools/differential.py` can pay
-#: for. So the eight are named here: a row promoted to L3 has to arrive with the request cases
+#: for. So they are named here: a row promoted to L3 has to arrive with the request cases
 #: that make the claim payable (`tests/unit/test_allowlist.py`), and a row demoted out of it has
 #: to say so here.
+#:
+#: **Eight became ten on 2026-09-07**, and the two are the artist routes. 013 raises them
+#: because the population they answer is the whole of what that feature changes, and a level
+#: that stayed at L2 would leave the change unproven against the server it was measured from.
+#: Both already carry request cases for both seats, which is what made the promotion payable
+#: on the day it was declared rather than owed.
 L3_ENDPOINTS = frozenset(
     {
         ("GET", "/System/Info/Public"),
@@ -204,12 +210,14 @@ L3_ENDPOINTS = frozenset(
         ("GET", "/Audio/{itemId}/stream"),
         ("GET", "/Audio/{itemId}/universal"),
         ("GET", "/Videos/{itemId}/stream"),
+        ("GET", "/Artists"),
+        ("GET", "/Artists/AlbumArtists"),
     }
 )
 
 #: How many rows declare each level. A count in a docstring goes stale; a count in an assertion
 #: fails on the row that moved.
-LEVELS_DECLARED = {"L0": 0, "L1": 1, "L2": 50, "L3": 8}
+LEVELS_DECLARED = {"L0": 0, "L1": 1, "L2": 48, "L3": 10}
 
 
 def test_every_endpoint_declares_a_level_and_the_distribution_is_the_one_recorded() -> None:

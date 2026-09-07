@@ -10,7 +10,7 @@ number on it from outside: `/Artists` answers **684 rows** where the item tree h
 row `[probe: tools/probe_real_library_shapes.py, Jellyfin 10.11.11, 2026-09-06]`.
 
 **That reading measured the sizes and not the shape**, and the shape is what a design turns on.
-This probe asks the four questions the counting left open:
+This probe asks the questions the counting left open:
 
 1. **What is a row that is no item?** Its `Id` is not in the tree listing - so does `/Items/{id}`
    answer it at all, and if it does, what `Type`, `ParentId` and `LocationType` does it carry?
@@ -23,6 +23,12 @@ This probe asks the four questions the counting left open:
    sends after listing artists. A row whose id lists nothing is a row a client cannot follow.
 4. **What is an item that is no row?** 45 of them, and whether they are artists with no credited
    track is the difference between *"two populations"* and *"one population, two filters"*.
+5. **Is `/Artists/AlbumArtists` the same population, narrowed?** Added 2026-09-07 for 013 spec
+   OQ-1: the two routes are one implementation in this project and need not be one there, and a
+   spec that assumed the narrowing would be assuming the shape of the half nobody read.
+6. **What does a registry row's child count count?** 013 spec OQ-2. It answered `2` on a row with
+   no children at all, and a number with no referent is one a later reader implements as a
+   constant.
 
 **It writes nothing and cannot.** Every request is a `GET`, which is why it may be pointed at a
 server somebody owns - the one thing the instance-owning probes in this directory refuse.
@@ -229,6 +235,53 @@ def navigation(server: Any, found: Any, rows: List[Dict[str, Any]], tree_ids: se
     found.observe("artistIds=<that row>", f"{len(also)} tracks")
 
 
+def album_artists(server: Any, found: Any, rows: List[Dict[str, Any]], tree_ids: set) -> None:
+    """Question 5: is `/Artists/AlbumArtists` the same population, narrowed?
+
+    013 spec OQ-1. The 2026-09-07 run measured `/Artists` alone and wrote the narrowing down as an
+    assumption, which is the shape of claim this directory exists to refuse: the two routes are one
+    implementation here and need not be one there.
+    """
+    narrowed = list(
+        server.get("/Artists/AlbumArtists", userId=server.user_id, limit=1000).get("Items", [])
+    )
+    row_ids = {str(one.get("Id")) for one in rows}
+    theirs = {str(one.get("Id")) for one in narrowed}
+    found.observe("/Artists/AlbumArtists rows", len(narrowed))
+    found.observe(
+        "of those, how many are an /Artists row", f"{len(theirs & row_ids)} of {len(theirs)}"
+    )
+    found.observe("how many are a tree item", f"{len(theirs & tree_ids)} of {len(theirs)}")
+
+
+def a_rows_child_count(server: Any, found: Any, rows: List[Dict[str, Any]], tree_ids: set) -> None:
+    """Question 6: what does a registry row's child count count? 013 spec OQ-2.
+
+    Measured against the two things it could plausibly be - the albums credited to that artist, and
+    the tracks - because a number with no referent is one a reader will eventually implement as a
+    constant.
+    """
+    candidates = [one for one in rows if str(one.get("Id")) not in tree_ids][:1]
+    if not candidates:
+        found.note("no registry-only row here, so question 6 has no subject")
+        return
+    identifier = str(candidates[0]["Id"])
+    name = str(candidates[0].get("Name"))[:26]
+    body = body_of(server, identifier)
+    albums = items(
+        server, recursive="true", albumArtistIds=identifier, includeItemTypes="MusicAlbum", limit=50
+    )
+    tracks = items(
+        server, recursive="true", artistIds=identifier, includeItemTypes="Audio", limit=50
+    )
+    found.observe(
+        f"child count of {name!r}",
+        "ChildCount={} against {} albums credited and {} tracks credited".format(
+            None if body is None else body.get("ChildCount"), len(albums), len(tracks)
+        ),
+    )
+
+
 def measure(server: Any, args: argparse.Namespace) -> Any:
     probe = load("_probe")
     found = probe.Probe(
@@ -245,6 +298,8 @@ def measure(server: Any, args: argparse.Namespace) -> Any:
     what_an_item_is(server, found, tree, rows, row_ids)
     credits_are_rows = the_credits(server, found, row_ids)
     navigation(server, found, rows, tree_ids)
+    album_artists(server, found, rows, tree_ids)
+    a_rows_child_count(server, found, rows, tree_ids)
     # Two halves of the expectation this run can settle, and one it cannot: `credits_are_rows is
     # None` means no sampled track carried a credit at all, which is an unanswered question and
     # not a failed one - so the verdict is withheld rather than reported either way.

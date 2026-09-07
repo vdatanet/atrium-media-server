@@ -405,7 +405,7 @@ class Roster:
         self._identities: Dict[Role, Identity] = {}
         # **Kept, and it is not a widening of `Identity`.** One request case sends a body that
         # *is* the seat's own credentials - `POST /Users/AuthenticateByName`, the second of the
-        # eight `level: L3` rows - through the `<identity.password>` substitution T6 declared, and
+        # `level: L3` rows - through the `<identity.password>` substitution T6 declared, and
         # the four fields of `Identity` cannot carry a password. The map is the roster's own and
         # never leaves it except through `credentials_for`; nothing prints it, and `Roster` has no
         # repr that could. `tools/_probe.py`'s `Server.password_used` keeps one for the same
@@ -1042,7 +1042,8 @@ class Endpoint:
 
     The level is carried because nothing has ever checked that one is reached: the surface
     validator checks only that the value is one of `L0..L3`, and the route test reads `feature`
-    and `consumers`. The eight `level: L3` rows are the ones this program is the only thing that
+    and `consumers`. The `level: L3` rows - eight since 010, ten since 013 promoted the two
+    artist routes on 2026-09-07 - are the ones this program is the only thing that
     can pay for, so the report prints the declared level beside what the run actually compared.
     """
 

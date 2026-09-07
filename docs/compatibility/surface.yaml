@@ -159,13 +159,13 @@ endpoints:
     operation: GetArtists
     consumers: [music-client]
     feature: "005"
-    level: L2
+    level: L3
   - path: "/Artists/AlbumArtists"
     method: GET
     operation: GetAlbumArtists
     consumers: [video-client]
     feature: "005"
-    level: L2
+    level: L3
   - path: "/Genres"
     method: GET
     operation: GetGenres
