@@ -1033,6 +1033,9 @@ class MetadataRepository:
             models.ItemGenre.genre_item_id,
             models.ItemStudio.studio_item_id,
             models.ItemPerson.person_item_id,
+            # 013 T3's, and the reason a `MusicArtist` is collectable at all: a registry artist
+            # exists because a credit names it, so the credit table is what keeps it alive.
+            models.ItemArtist.artist_item_id,
         ):
             referenced.update(self._session.execute(select(column)).scalars())
 
@@ -1044,10 +1047,23 @@ class MetadataRepository:
         }
         referenced.update(years)
 
+        # **Keyed on the population and not on the type**, which is the whole of 013 T3. A
+        # `MusicArtist` is two populations: the **registry** row, derivable and collectable like
+        # every other by-name row, and the **tree** artist an album hangs off, which 003 derived
+        # and which no join table references at all. A set keyed on the type would take the second
+        # with the first, and nothing would say so until a listing came back short - a rescan
+        # would then rebuild it, so the symptom is a row that appears and disappears rather than
+        # one that is gone. `library_id IS NULL` is what tells them apart.
         collectable = [
             row_id
             for row_id in self._session.execute(
-                select(models.Item.id).where(models.Item.type.in_([one.value for one in BY_NAME]))
+                select(models.Item.id)
+                .where(models.Item.library_id.is_(None))
+                .where(
+                    models.Item.type.in_(
+                        [one.value for one in BY_NAME] + [ItemType.MUSIC_ARTIST.value]
+                    )
+                )
             ).scalars()
             if row_id not in referenced
         ]

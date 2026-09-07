@@ -714,3 +714,75 @@ def test_the_refresh_invents_a_registry_artist_and_never_a_tree_one(
     assert [(one.id, one.name) for one in artists] == [
         (for_by_name(ItemType.MUSIC_ARTIST, "Nobody's Album Artist"), "Nobody's Album Artist")
     ]
+
+
+def test_the_collector_never_takes_a_tree_artist(engine: Engine, library: Library) -> None:
+    """**Written before the collector learned about artists, and it fails without the scoping.**
+
+    013 T3 puts the registry artist into the collectable set, and a set keyed on the *type* would
+    take the **tree** artist with it - the item an album hangs off, which 003 derived and which no
+    join table references. Nothing would say so until a listing came back short, and a rescan
+    would rebuild it under the same identifier, which is worse: a row that appears and disappears.
+
+    So the collectable set is keyed on the **population**: a `MusicArtist` with a library is 003's
+    and is never collected here, whatever references it.
+    """
+    music_root = Path(str(library.roots[0])).parent / "music-tree"
+    music_root.mkdir(parents=True, exist_ok=True)
+    factory = session_factory(engine)
+    with session_scope(factory) as db:
+        music = config.create(LibraryRepository(db), "Tree Music", "music", (str(music_root),))
+
+    artist_id = for_name(ItemType.MUSIC_ARTIST, music.id, "An Uncredited Artist")
+    with session_scope(factory) as db:
+        ItemRepository(db).add(
+            DomainItem(
+                id=artist_id,
+                type=ItemType.MUSIC_ARTIST,
+                name="An Uncredited Artist",
+                library_id=music.id,
+            )
+        )
+
+    with session_scope(factory) as db:
+        MetadataRepository(db).collect_by_name_garbage()
+
+    survived = [row.id for row in rows(engine, models.Item) if row.type == ItemType.MUSIC_ARTIST]  # type: ignore[attr-defined]
+    assert artist_id in survived, "the collector took a tree item 003 owns"
+
+
+def test_a_registry_artist_no_credit_names_is_collected(engine: Engine, library: Library) -> None:
+    """The other half, and it is why the collector had to learn about artists at all.
+
+    Until 013 T3 a `MusicArtist` was in no collectable set, so a registry row outlived every credit
+    that made it - a listing of artists nobody performs. It is derivable like every other by-name
+    row, so collecting it loses only which spelling came first.
+    """
+    music_root = Path(str(library.roots[0])).parent / "music-registry"
+    music_root.mkdir(parents=True, exist_ok=True)
+    factory = session_factory(engine)
+    with session_scope(factory) as db:
+        music = config.create(LibraryRepository(db), "Registry Music", "music", (str(music_root),))
+    track_id = for_file(ItemType.AUDIO, music.id, "01 - A Track.flac")
+    with session_scope(factory) as db:
+        ItemRepository(db).add(
+            DomainItem(
+                id=track_id,
+                type=ItemType.AUDIO,
+                name="A Track",
+                library_id=music.id,
+                sources=(MediaSource(relative_path="01 - A Track.flac"),),
+            )
+        )
+
+    applied(engine, track_id, MetadataChanges(values={Field.ARTISTS: ["Was Credited Once"]}))
+    applied(engine, track_id, MetadataChanges(values={Field.ARTISTS: ["Is Credited Now"]}))
+
+    with session_scope(factory) as db:
+        assert MetadataRepository(db).collect_by_name_garbage() == 1
+    names = {
+        row.name  # type: ignore[attr-defined]
+        for row in rows(engine, models.Item)
+        if row.type == ItemType.MUSIC_ARTIST  # type: ignore[attr-defined]
+    }
+    assert names == {"Is Credited Now"}
