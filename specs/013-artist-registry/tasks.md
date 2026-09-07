@@ -207,7 +207,7 @@ which is why it merges on its own.
 
 ## T7 — The body, and the goldens
 
-- [ ] **Changes:** `tests/golden/` — the registry artist's list row and full body, regenerated and
+- [x] **Changes:** `tests/golden/` — the registry artist's list row and full body, regenerated and
       **read**. `ChildCount` is `0` on it, which the aggregate machinery answers without being
       asked; `ParentId` is absent.
 - **Depends on:** T5, T6

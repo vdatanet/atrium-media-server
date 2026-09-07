@@ -374,3 +374,37 @@ def test_an_artist_in_two_music_libraries_is_one_registry_row(
     assert len(rows) == 1, "the listing must not answer one artist once per library"
     assert rows[0].id == for_by_name(ItemType.MUSIC_ARTIST, SHARED_ARTIST)
     assert world.music.id not in rows[0].id and world.more_music.id not in rows[0].id
+
+
+def test_a_registry_artist_is_reached_by_credit_and_not_by_parent(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """013 AC-6, and it is a **pair** of assertions rather than one.
+
+    Measured on the reference: asking for the items *under* a registry row answered **zero**, and
+    asking for the tracks *credited to* it answered the track it appears on
+    `[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11, 2026-09-07]`. So a registry artist
+    is never anybody's parent - which is the difference from the tree artist, and the reason the
+    empty half is asserted here rather than left to be noticed.
+    """
+    artist = for_by_name(ItemType.MUSIC_ARTIST, ALBUM_ARTIST)
+
+    beneath = repository.run(ItemQuery(user=world.everyone, parent_id=artist, limit=1000))
+    assert beneath.items == (), "a registry artist has no children; it has credits"
+
+    credited = repository.run(
+        ItemQuery(
+            user=world.everyone,
+            artist_ids=(artist,),
+            include_types=frozenset({ItemType.AUDIO}),
+            limit=1000,
+        )
+    )
+    assert credited.items, "and the credit filter is what reaches its music"
+
+    # The tree artist of the same name is the one that **is** a parent, which is what makes the
+    # assertion above a distinction rather than an emptiness.
+    under_the_tree = repository.run(
+        ItemQuery(user=world.everyone, parent_id=world.album_artist, limit=1000)
+    )
+    assert under_the_tree.items, "the tree artist still holds its albums"
