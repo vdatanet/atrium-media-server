@@ -336,6 +336,64 @@ def a_rows_child_count(server: Any, found: Any, rows: List[Dict[str, Any]], tree
             None if body is None else body.get("ChildCount"), len(albums), len(tracks)
         ),
     )
+    attribute_the_child_count(server, found, rows, tree_ids)
+
+
+def attribute_the_child_count(
+    server: Any, found: Any, rows: List[Dict[str, Any]], tree_ids: set
+) -> None:
+    """What that stable number counts, over more than one artist. 013 plan section 9's owed reading.
+
+    The plan takes the correct branch of behaviours 3.0.2 because the reference's rule is
+    **unattributed**, and an unattributed rule is a claim with a shelf life: it is worth one
+    honest attempt against the candidates a reader would try, so that the divergence this feature
+    declares says *"we looked"* rather than *"we did not know"*.
+
+    Four candidates per artist, and each is a listing this route already supports: the tracks that
+    name it as a performer, the albums that name it as an album artist, the tracks that name it as
+    an album artist, and the distinct albums its performed tracks sit in.
+    """
+    sampled = [one for one in rows if str(one.get("Id")) not in tree_ids][:SAMPLE]
+    if not sampled:
+        found.note("no registry-only row here, so the attribution has no subject")
+        return
+    for one in sampled:
+        identifier = str(one["Id"])
+        performed = items(
+            server,
+            recursive="true",
+            artistIds=identifier,
+            includeItemTypes="Audio",
+            limit=200,
+            fields="AlbumId",
+        )
+        albums = items(
+            server,
+            recursive="true",
+            albumArtistIds=identifier,
+            includeItemTypes="MusicAlbum",
+            limit=200,
+        )
+        on_albums = items(
+            server,
+            recursive="true",
+            albumArtistIds=identifier,
+            includeItemTypes="Audio",
+            limit=200,
+        )
+        body = body_of(server, identifier)
+        distinct_albums = {str(track.get("AlbumId")) for track in performed if track.get("AlbumId")}
+        found.observe(
+            "what {!r}'s ChildCount could be".format(str(one.get("Name"))[:22]),
+            "ChildCount={} | performed {} | albums as album artist {} | tracks as album artist {}"
+            " | distinct albums of its tracks {}".format(
+                None if body is None else body.get("ChildCount"),
+                len(performed),
+                len(albums),
+                len(on_albums),
+                len(distinct_albums),
+            ),
+        )
 
 
 def measure(server: Any, args: argparse.Namespace) -> Any:
