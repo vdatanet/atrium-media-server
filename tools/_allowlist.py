@@ -180,10 +180,20 @@ IDENTITY_PATH_PARAMETER = "userId"
 
 _MEDIA_TYPE = re.compile(r"^[a-z]+/[a-z0-9.+-]+$")
 
-#: **Three kinds, because plan §6.1.1's one kind fills a minority of the path parameters here.**
+#: **Four kinds, because plan §6.1.1's one kind fills a minority of the path parameters here.**
 #:
 #: - `p=listing:<METHOD> <path>#<case>@<position>` — the plan's anchor: the row at that position
 #:   of that declared listing case, resolved against each server just before the case runs.
+#: - `p=named:<METHOD> <path>#<case>@<Name>` — the row of that same listing whose `Name` is this,
+#:   wherever it sits. **Added 2026-09-07, and it is the pairing a position cannot make.** A
+#:   position is the same item on two servers only while their orderings agree, and one of this
+#:   register's listings already disagreed: `audio-by-sort-name@0` was `By One Artist` here and
+#:   `Ninety Six Kilohertz` there, so twelve cases compared two different tracks. A name pairs by
+#:   construction where the two servers agree on one — and where they do not, the anchor resolves
+#:   on neither side and the case is reported unasked with the reason, which is a mis-pairing
+#:   stated instead of a mis-pairing made. It carries the whole rest of the string, spaces
+#:   included, so a name with a comma in it is one this grammar cannot express: `anchors` is a
+#:   comma-separated list before it is anything else.
 #: - `p=response:<METHOD> <path>#<case>@<pointer>` — a value an earlier case's *response* carried
 #:   and no listing does: a created playlist's `Id`, a negotiated media source's `Id`.
 #: - `p=literal:<value>` — a parameter that does not name an item at all. `{container}`,
@@ -191,9 +201,9 @@ _MEDIA_TYPE = re.compile(r"^[a-z]+/[a-z0-9.+-]+$")
 #:   and the same string on both servers; a grammar that could not say so leaves five routes
 #:   unaskable.
 _ANCHOR = re.compile(
-    r"^(?P<parameter>\w+)=(?P<kind>listing|response):"
+    r"^(?P<parameter>\w+)=(?P<kind>listing|named|response):"
     r"(?P<endpoint>(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS) [^#\s]+)"
-    r"#(?P<case>[a-z0-9]+(?:-[a-z0-9]+)*)@(?P<at>\S+)$"
+    r"#(?P<case>[a-z0-9]+(?:-[a-z0-9]+)*)@(?P<at>.+)$"
 )
 
 _LITERAL_ANCHOR = re.compile(r"^(?P<parameter>\w+)=literal:(?P<value>[^,\s]+)$")
@@ -340,10 +350,10 @@ class Anchor:
     """
 
     parameter: str
-    kind: str  # "listing", "response" or "literal"
+    kind: str  # "listing", "named", "response" or "literal"
     endpoint: str  # empty for a literal
     case: str  # empty for a literal
-    at: str  # a row position, a JSON Pointer into a response, or the literal value itself
+    at: str  # a row position, a row's Name, a JSON Pointer, or the literal value itself
 
 
 @dataclass(frozen=True)
@@ -792,7 +802,8 @@ def _anchor(where: str, endpoint: str, text: str) -> Anchor:
     if not parsed:
         raise AllowlistError(
             f"{where}: anchor {text!r} is none of '<parameter>=literal:<value>', "
-            f"'<parameter>=listing:<METHOD> <path>#<case>@<position>' or "
+            f"'<parameter>=listing:<METHOD> <path>#<case>@<position>', "
+            f"'<parameter>=named:<METHOD> <path>#<case>@<Name>' or "
             f"'<parameter>=response:<METHOD> <path>#<case>@<pointer>'"
         )
     anchor = Anchor(
@@ -859,6 +870,12 @@ def check_anchor_orderings(cases: Sequence[RequestCase], entries: Sequence[Entry
     or `unordered` gives it an arbitrary row — and every case anchored on one is then a comparison
     of two different items dressed up as a comparison of one. The register refuses it, which is
     why this is a check over the two files together and not over either alone.
+
+    **A `named:` anchor is deliberately not checked here, and that is the second thing the fourth
+    kind buys.** It says *"the row called this"*, which is the same row wherever the listing puts
+    it — so an ordering the allowlist excuses is no objection to it at all. The check stays keyed
+    on the kind rather than widened, because widening it would refuse the one anchor shape that
+    survives a listing with no ordering.
     """
     for case in cases:
         for anchor in case.anchors:

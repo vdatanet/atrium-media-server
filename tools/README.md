@@ -407,10 +407,21 @@ script and none of them through a route:
 2. **An administrator**, through `UserRepository.add` with a hash from `users.passwords.build`.
 3. **A restricted seat, handed in under `ATRIUM_RESTRICTED_*`** — Atrium cannot make one, which is
    the paragraph above. It must be narrowed to **the same library the reference narrows its own
-   created seat to**, which is `movies_library_id`'s choice: the first `movies` view *with
-   something in it*, so `Films` and not `Movies` on this fixture. Narrowed to the other one, 21 of
-   the restricted seat's cases cannot resolve an anchor and are reported not asked — correctly, and
-   about a seat nobody meant to build.
+   created seat to**, which is `movies_library`'s choice: walking the `movies` views **by name**
+   and taking the first *with something in it*, so `Films` and not `Movies` on this fixture.
+   Narrowed to the other one, 22 of the restricted seat's cases cannot resolve an anchor and are
+   reported not asked — correctly, and about a seat nobody meant to build.
+
+   **This paragraph was right and the code under it was not, until 2026-09-07.** The choice used to
+   be *the first movies view the server listed*, and the two servers do not list them in one order:
+   the reference sorts `/UserViews` by name and Atrium answers in declaration order, so the
+   reference's seat took `Films` and an Atrium seat built to match took `Movies` — and the report of
+   2026-09-06 shows the whole of it, `movies-by-sort-name@0` resolving to `2 Fast 2 Furious (of 16)`
+   here against `Both Subtitle Kinds (of 15)` there, with 22 of that seat's 23 unasked cases
+   reporting an anchor listing that held zero rows on Atrium. Sorting by name is what makes the two
+   hands agree; the run's provenance now carries a line saying which libraries each seat can open on
+   each side, so a run where they part says so instead of reporting it as 22 absences and a
+   difference.
 4. **A policy and a configuration on both accounts, seeded from the reference's own documents.**
    This is the one that is not tidiness. Atrium has **no route that gives an account a policy** —
    `POST /Users/{userId}/Policy` is not in the surface — so an account made by direct database

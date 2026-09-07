@@ -852,6 +852,92 @@ def test_a_one_identity_run_is_a_shorter_loop_and_not_a_different_code_path() ->
         assert case.identities_for(roster.names) == ("administrator", "restricted")
 
 
+class _Views:
+    """`/UserViews` and the one `/Items` probe `movies_library` makes, over a declared world.
+
+    Two servers, one fixture, two view orderings - which is the whole of what this measures.
+    """
+
+    def __init__(self, views: list[tuple[str, str, bool]]) -> None:
+        self.views = views
+
+    def get(self, path: str, **params: object) -> object:
+        if path == "/UserViews":
+            return {
+                "Items": [
+                    {"Id": name.lower(), "Name": name, "CollectionType": kind}
+                    for name, kind, _holds in self.views
+                ]
+            }
+        assert path == "/Items", path
+        holding = {name.lower(): holds for name, _kind, holds in self.views}
+        return {"Items": [{"Id": "x" * 32}] if holding[str(params["parentId"])] else []}
+
+
+#: The composed fixture as each server lists it: the reference sorts `/UserViews` by name and
+#: Atrium answers it in declaration order. Both hold the same three `movies` libraries and the
+#: same empty one, which is why picking "the first with something in it" parted them.
+REFERENCE_VIEWS = [
+    ("Empty", "movies", False),
+    ("Films", "movies", True),
+    ("Movies", "movies", True),
+    ("Music", "music", True),
+]
+ATRIUM_VIEWS = [
+    ("Movies", "movies", True),
+    ("Music", "music", True),
+    ("Films", "movies", True),
+    ("Empty", "movies", False),
+]
+
+
+def test_both_servers_narrow_the_restricted_seat_to_the_same_library() -> None:
+    """**Measured 2026-09-06, in a run's own report, and this is the test that had been missing.**
+
+    The choice is made twice - once per side, by two rosters that do not know about each other -
+    and it was made against two different lists: `/UserViews` comes back sorted by name from the
+    reference and in declaration order from Atrium. So the reference's restricted seat opened
+    `Films` and Atrium's opened `Movies`, `movies-by-sort-name@0` resolved to
+    `2 Fast 2 Furious (of 16)` here against `Both Subtitle Kinds (of 15)` there, and 22 of that
+    seat's 23 unasked cases said the anchor listing held **0 rows on the atrium** - the fixture
+    films, the tracks and the series are all in libraries that seat had not been given.
+
+    Sorting by name is the fix, and the empty library is why it is not simply `[0]`: one of the
+    three `movies` libraries has nothing in it, and a seat narrowed to it can open nothing at all.
+    """
+    ours = differential.movies_library(_Views(ATRIUM_VIEWS), "u" * 32)
+    theirs = differential.movies_library(_Views(REFERENCE_VIEWS), "u" * 32)
+    assert ours == theirs == ("films", "Films")
+
+
+def test_a_run_with_no_movies_library_holding_anything_refuses_rather_than_narrows_to_nothing() -> (
+    None
+):
+    """010 T12's finding, kept: a seat that can open nothing answers a refusal on both servers for
+    the wrong reason, so it is not a narrower reader and the run says so."""
+    with pytest.raises(differential.SeatError, match="with anything in it"):
+        differential.movies_library(_Views([("Empty", "movies", False)]), "u" * 32)
+
+
+def test_the_report_says_what_each_seat_can_open_on_each_side() -> None:
+    """One provenance line, and on an agreeing run it has one thing to say."""
+    directories = {"atrium": _Views(ATRIUM_VIEWS), "reference": _Views(REFERENCE_VIEWS)}
+    line = differential.seat_libraries_line(directories, [_seat("administrator")])
+    assert line == "administrator: Empty, Films, Movies, Music"
+
+
+def test_two_seats_narrowed_to_two_libraries_are_stated_and_not_left_to_the_anchors() -> None:
+    """The cause beside the symptom: without this line a reader sees a seat's comparisons differ
+    and has nothing telling them the two seats were looking at two different libraries."""
+    directories = {
+        "atrium": _Views([("Movies", "movies", True)]),
+        "reference": _Views([("Films", "movies", True)]),
+    }
+    line = differential.seat_libraries_line(directories, [_seat("restricted")])
+    assert "atrium Movies / reference Films" in line
+    assert "THE TWO SIDES PART" in line
+
+
 def test_a_seat_that_already_exists_refuses_the_run_and_names_it() -> None:
     """AC-15's precondition. Delete the `preflight` call in `__enter__` and this fails.
 
@@ -2733,7 +2819,15 @@ def test_a_fixture_run_with_no_runtime_reports_every_fixture_row_outstanding_and
     # listing that names it, and the negotiation of it that is one of this feature's two `level:
     # L3` rows. Its other three cases are about the profile's protocol, which is a property of the
     # binder and not of the file, so they ask on any reachable server and declare no `fixture`.
-    assert len(needing) == 11
+    #
+    # **Twenty-three since 2026-09-07, and the twelve are one decision.** The audio anchor stopped
+    # naming position 0 of a global track listing and started naming `Ninety Six Kilohertz`, which
+    # is one of exactly two tracks the two servers label identically - so the twelve cases that
+    # anchor on it now name a fixture item, the way every other named-item case here does, and
+    # they say so. It is the cost the pairing was bought with: on a run against a server that is
+    # not the fixture those twelve are reported unasked with the reason, where before they
+    # compared whichever track each side happened to sort first.
+    assert len(needing) == 23
     for case in needing:
         assert differential.unmet_needs(case.needs, inputs), case.id
 

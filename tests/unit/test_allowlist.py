@@ -772,6 +772,31 @@ def test_an_anchor_over_an_unordered_listing_is_refused() -> None:
         assert "arbitrary row" in str(raised.value)
 
 
+def test_a_named_anchor_over_an_unordered_listing_is_allowed() -> None:
+    """The other half of the check above, and the second thing the fourth kind buys.
+
+    A `named:` anchor says *"the row called this"*, which is the same row wherever the listing puts
+    it — so an ordering the allowlist excuses is no objection to it. The refusal is kept keyed on
+    the kind rather than widened to every anchor, and this is the test that would fail if somebody
+    widened it: `listing-ordered-by-a-key-with-ties` is the artist sort whose pages lose and repeat
+    rows, and a name still finds one row in it.
+    """
+    cases = allowlist.check_cases(
+        [
+            _case_row(id="listing-ordered-by-a-key-with-ties", query="sortBy=AlbumArtist"),
+            _case_row(
+                id="a-track",
+                endpoint="GET /Audio/{itemId}/stream",
+                anchors=(
+                    "[itemId=named:GET /Items#listing-ordered-by-a-key-with-ties"
+                    "@Ninety Six Kilohertz]"
+                ),
+            ),
+        ]
+    )
+    allowlist.check_anchor_orderings(cases, ENTRIES)
+
+
 def test_the_three_case_ids_the_allowlist_names_are_declared() -> None:
     """The debt T3 and T4 both left, discharged.
 
@@ -863,26 +888,52 @@ def test_an_anchor_names_a_case_this_register_declares() -> None:
     assert "does not declare" in str(raised.value)
 
 
-def test_the_three_anchor_kinds_and_nothing_else() -> None:
-    """Plan §6.1.1 describes one kind and this register needs three.
+def test_the_four_anchor_kinds_and_nothing_else() -> None:
+    """Plan §6.1.1 describes one kind and this register needs four.
 
     `literal` is the one that would look like a shortcut and is not: `{container}`, `{routeFormat}`,
     `{imageType}`, `{imageIndex}` and `{newIndex}` do not name items at all, so no listing and no
     response can fill them, and five routes are unaskable without it.
+
+    `named` is the fourth, added 2026-09-07: a position is the same item on two servers only while
+    their orderings agree, and `audio-by-sort-name@0` did not.
     """
     kinds = {anchor.kind for case in CASES for anchor in case.anchors}
-    assert kinds == {"listing", "response", "literal"}
+    assert kinds == {"listing", "named", "response", "literal"}
 
     for bad in (
         "[itemId=guess:GET /Items#default@0]",
         "[itemId=listing:GET /Items#default@first]",
         "[itemId=response:GET /Items#default@0]",
+        "[itemId=named:GET /Items#default]",
         "[itemId]",
     ):
         with pytest.raises(allowlist.AllowlistError):
             allowlist.check_cases(
                 [_case_row(), _case_row(id="x", endpoint="GET /Items/{itemId}", anchors=bad)]
             )
+
+
+def test_a_named_anchor_carries_the_whole_name_spaces_and_all() -> None:
+    """The name is the rest of the string, because the rows worth naming have spaces in them.
+
+    `Ninety Six Kilohertz` is one of exactly two tracks the two servers label identically over this
+    fixture, and a grammar whose `at` stopped at the first space could not have named it. What it
+    still cannot carry is a comma: `anchors` is a comma-separated list before it is anything else,
+    and the register's own header says so rather than leaving it to be discovered.
+    """
+    [case] = allowlist.check_cases(
+        [
+            _case_row(id="default", endpoint="GET /Items"),
+            _case_row(
+                id="x",
+                endpoint="GET /Audio/{itemId}/stream",
+                anchors="[itemId=named:GET /Items#default@Ninety Six Kilohertz]",
+            ),
+        ]
+    )[1:]
+    [anchor] = case.anchors
+    assert (anchor.kind, anchor.case, anchor.at) == ("named", "default", "Ninety Six Kilohertz")
 
 
 def test_a_case_anchored_on_its_own_endpoint_fails_the_load() -> None:
