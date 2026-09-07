@@ -2401,6 +2401,36 @@ request more, proving the paused report was stored before the silence begins.
    identifiers in hand when it resolves an anchor, and saying *"these two rows are not the same
    item"* costs one line and turns a silent mis-pairing into a stated one.
 
+   **Both remaining doors were opened on 2026-09-07, and one of them was not the door.** The
+   scope call was taken as *"an anchor that names a row by something both servers agree on"*, and
+   the something was measured rather than chosen: crossing
+   `docs/compatibility/reference-fixture-reading.json` with the twenty renamings of
+   `tests/library/test_reference_reading.py` gives the items the two servers label identically -
+   **two tracks** (`Ninety Six Kilohertz`, `Soundless`), 22 films, three series, five albums. So
+   `request-cases.yaml` gains a fourth anchor kind, `named:`, the twelve audio cases take it, and
+   a name neither side has resolves on **neither** side rather than pairing two rows by position.
+   `Ninety Six Kilohertz` is also a file a prober really opens and a 96 kHz source under
+   `music-client-capped-flac`'s 48 kHz cap, so five delivery cases stopped comparing two filler-byte
+   FLACs. The cost is stated where it lands: those twelve declare `needs: [fixture]` now, taking the
+   register's fixture-needing count from eleven to twenty-three.
+
+   **The other door does not exist**, and the same record is what closes it. *"A listing whose
+   order cannot diverge"* asks the two servers to hold the same rows, and over this tree they do
+   not: one file the reference makes an item of and Atrium does not, containers only one side has,
+   50 recorded disagreements in all. No ordering makes position N the same item when the sets
+   differ - only naming a row can pair, which is why the fourth kind is a kind and not a sort key.
+
+   **And under all of it was a bigger mis-pairing than the one this entry is about.** The
+   restricted seat is created by the run on the reference and handed in on Atrium, and the choice
+   *"the first `movies` view with something in it"* is therefore made twice against two lists: the
+   reference sorts `/UserViews` by name, Atrium answers it in declaration order. Measured in the
+   2026-09-06 report: Atrium's seat held `Movies` (16 rows) and the reference's held `Films` (15),
+   `movies-by-sort-name@0` read `2 Fast 2 Furious` against `Both Subtitle Kinds`, and **22 of that
+   seat's 23 unasked cases** said the anchor listing held 0 rows on Atrium - the fixture films, the
+   tracks and the series all live in libraries that seat had not been given. `movies_library` walks
+   the views by name now, and a provenance line says what each seat can open on each side, because
+   sorting is a fix for a run over one fixture and not a guarantee about two servers.
+
 5. **Two of the twenty named comparisons are not comparisons.** behaviours §5.2 and §5.6 need a
    second scan on **both** servers; `POST /Library/Refresh` is the reference's and Principle VI
    keeps it out of the surface, so only the reference half can be taken. Both entries carry that

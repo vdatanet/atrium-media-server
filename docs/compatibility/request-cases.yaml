@@ -52,11 +52,27 @@
 #   anchors       How each path parameter is filled, per server, immediately before the case runs.
 #                 NEVER AN IDENTIFIER: the two servers derive those differently by design
 #                 (behaviours 1.4), so a case carrying one would compare two different items.
-#                 THREE KINDS, where plan 6.1.1 describes one:
+#                 FOUR KINDS, where plan 6.1.1 describes one:
 #                   listing:<METHOD> <path>#<case>@<position>  the row at that position of that
 #                                                              declared listing case - the plan's
 #                                                              anchor, and the only sound one over
 #                                                              a listing whose ordering is total
+#                   named:<METHOD> <path>#<case>@<Name>        the row of that same listing whose
+#                                                              Name is this, wherever it sits. A
+#                                                              POSITION IS NOT AN ITEM: it is the
+#                                                              same row on two servers only while
+#                                                              their orderings agree, and
+#                                                              audio-by-sort-name@0 was `By One
+#                                                              Artist` here and `Ninety Six
+#                                                              Kilohertz` there on 2026-09-05,
+#                                                              so twelve cases compared two
+#                                                              different tracks. A name pairs
+#                                                              where both servers agree on one -
+#                                                              and where they do not, NEITHER side
+#                                                              resolves and the case is reported
+#                                                              unasked, which is the mis-pairing
+#                                                              stated instead of made. It carries
+#                                                              spaces and cannot carry a comma
 #                   response:<METHOD> <path>#<case>@<pointer>  the value at that JSON Pointer of
 #                                                              that declared case's response, for
 #                                                              the things no listing carries: a
@@ -179,7 +195,7 @@ cases:
     anchors: []
     identities: [administrator, restricted]
     needs: []
-    what_it_is_for: "The listing every track anchor indexes, for the three audio delivery routes and the user-data routes the music client calls"
+    what_it_is_for: "The listing every track anchor indexes, for the three audio delivery routes and the user-data routes the music client calls. Its twelve anchors name a ROW and not a position, from 2026-09-07: at position 0 this listing was `By One Artist` on one server and `Ninety Six Kilohertz` on the other, so the twelve compared two different tracks and reported a 500 against a 200 that was Atrium being asked for a filler-byte FLAC. `Ninety Six Kilohertz` is one of the only two tracks the two servers name identically (the other is `Soundless`), it is a file a prober really opens, and it is the item that makes `music-client-capped-flac` mean something: a 96 kHz source under a 48 kHz cap"
 
   - id: fields-mediasources
     endpoint: "GET /Items"
@@ -429,9 +445,9 @@ cases:
     query: "static=true"
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#audio-by-sort-name@0"]
+    anchors: ["itemId=named:GET /Items#audio-by-sort-name@Ninety Six Kilohertz"]
     identities: [administrator, restricted]
-    needs: []
+    needs: [fixture]
     what_it_is_for: "The exact URL both analysed clients build by hand for a direct play; the comparison is status, Content-Type, Content-Length and Accept-Ranges, because spec 6 declines to byte-compare produced media"
 
   - id: no-static
@@ -439,9 +455,9 @@ cases:
     query: ""
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#audio-by-sort-name@0"]
+    anchors: ["itemId=named:GET /Items#audio-by-sort-name@Ninety Six Kilohertz"]
     identities: [administrator, restricted]
-    needs: []
+    needs: [fixture]
     what_it_is_for: "The same route without the flag, which is the branch that decides a remux against a re-encode; a Range header would be the third reading and no field of a case can carry one yet, which T8 owes"
 
   # ------------------------------------------------------------------------------------------
@@ -454,9 +470,9 @@ cases:
     query: "container=mp3&transcodingContainer=mp3&transcodingProtocol=http&audioCodec=mp3&maxStreamingBitrate=192000&playSessionId=atrium-differential"
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#audio-by-sort-name@0"]
+    anchors: ["itemId=named:GET /Items#audio-by-sort-name@Ninety Six Kilohertz"]
     identities: [administrator, restricted]
-    needs: []
+    needs: [fixture]
     what_it_is_for: "The progressive MP3 the music client asks for on every capped quality tier, with the deterministic playSessionId that client sends; its HLS variant has been dormant on the client side since 2026-08-03"
 
   - id: no-parameters
@@ -464,9 +480,9 @@ cases:
     query: ""
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#audio-by-sort-name@0"]
+    anchors: ["itemId=named:GET /Items#audio-by-sort-name@Ninety Six Kilohertz"]
     identities: [administrator, restricted]
-    needs: []
+    needs: [fixture]
     what_it_is_for: "The bare call, where the container is inferred from a URL with no extension - the branch 008 T8 found a faithful profile transcription would have got wrong"
 
   # ------------------------------------------------------------------------------------------
@@ -855,9 +871,9 @@ cases:
     query: ""
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#audio-by-sort-name@0"]
+    anchors: ["itemId=named:GET /Items#audio-by-sort-name@Ninety Six Kilohertz"]
     identities: [restricted]
-    needs: []
+    needs: [fixture]
     what_it_is_for: "The restricted seat alone: a favourite is user data, and the seat the run created is the only account whose data a sweep may change"
 
   - id: unmark
@@ -865,9 +881,9 @@ cases:
     query: ""
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#audio-by-sort-name@0"]
+    anchors: ["itemId=named:GET /Items#audio-by-sort-name@Ninety Six Kilohertz"]
     identities: [restricted]
-    needs: []
+    needs: [fixture]
     what_it_is_for: "The other half of the pair, which is also how the sweep leaves the seat as it found it before it is destroyed"
 
   - id: mark-played
@@ -875,9 +891,9 @@ cases:
     query: ""
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#audio-by-sort-name@0"]
+    anchors: ["itemId=named:GET /Items#audio-by-sort-name@Ninety Six Kilohertz"]
     identities: [restricted]
-    needs: []
+    needs: [fixture]
     what_it_is_for: "The played flag, on the run's own seat; its answer is a whole user-data object rather than a status, which is 007 T9's measured subtraction"
 
   - id: mark-unplayed
@@ -885,9 +901,9 @@ cases:
     query: ""
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#audio-by-sort-name@0"]
+    anchors: ["itemId=named:GET /Items#audio-by-sort-name@Ninety Six Kilohertz"]
     identities: [restricted]
-    needs: []
+    needs: [fixture]
     what_it_is_for: "The other half of the pair, and what puts the aggregate PlayedPercentage 007 T11 found unimplemented back where it was"
 
   - id: report-start
@@ -967,9 +983,9 @@ cases:
     query: "audioCodec=flac&audioSampleRate=48000&playSessionId=atrium-differential"
     body: none
     content_type: none
-    anchors: ["itemId=listing:GET /Items#audio-by-sort-name@0", "container=literal:flac"]
+    anchors: ["itemId=named:GET /Items#audio-by-sort-name@Ninety Six Kilohertz", "container=literal:flac"]
     identities: [administrator, restricted]
-    needs: []
+    needs: [fixture]
     what_it_is_for: "The capped-renderer path the music client's Jellyfin driver takes, which is FLAC where its Emby driver asks for PCM. The container is in the PATH, and a literal anchor is what fills a parameter that names a format rather than an item"
 
   - id: a-container-suffix
@@ -1081,9 +1097,9 @@ cases:
     query: "ids=<anchor.itemId>"
     body: none
     content_type: none
-    anchors: ["playlistId=response:POST /Playlists#create-with-a-name@/Id", "itemId=listing:GET /Items#audio-by-sort-name@0"]
+    anchors: ["playlistId=response:POST /Playlists#create-with-a-name@/Id", "itemId=named:GET /Items#audio-by-sort-name@Ninety Six Kilohertz"]
     identities: [restricted]
-    needs: []
+    needs: [fixture]
     what_it_is_for: "The add. Its `ids` names items in the QUERY rather than in the path, which is the second shape T11's <anchor.itemId> spelling covers. A track and not a film, because the playlist above is created with MediaType Audio"
 
   - id: remove-one-entry
@@ -1091,9 +1107,9 @@ cases:
     query: "entryIds=<anchor.itemId>"
     body: none
     content_type: none
-    anchors: ["playlistId=response:POST /Playlists#create-with-a-name@/Id", "itemId=listing:GET /Items#audio-by-sort-name@0"]
+    anchors: ["playlistId=response:POST /Playlists#create-with-a-name@/Id", "itemId=named:GET /Items#audio-by-sort-name@Ninety Six Kilohertz"]
     identities: [restricted]
-    needs: []
+    needs: [fixture]
     what_it_is_for: "The removal, on the entry the add above made. `entryIds` takes a PlaylistItemId, and 009's gate measured that a PlaylistItemId IS the item's own Id - which is why the same anchor as the add fills it, and why an entry identity the wire does not make cannot be anchored on. An entry that is not there is a silent success on the reference"
 
   - id: move-to-the-front
@@ -1101,9 +1117,9 @@ cases:
     query: ""
     body: none
     content_type: none
-    anchors: ["playlistId=response:POST /Playlists#create-with-a-name@/Id", "itemId=listing:GET /Items#audio-by-sort-name@0", "newIndex=literal:0"]
+    anchors: ["playlistId=response:POST /Playlists#create-with-a-name@/Id", "itemId=named:GET /Items#audio-by-sort-name@Ninety Six Kilohertz", "newIndex=literal:0"]
     identities: [restricted]
-    needs: []
+    needs: [fixture]
     what_it_is_for: "The route whose thirty measured boundary pairs were every one of them wrong in 009's plan - a clamp exactly one position wide and a 500 past it. newIndex is a number the caller chooses; itemId is the entry the add above put there, which is the item's own Id"
 
   - id: delete-a-playlist

@@ -932,15 +932,32 @@ def authenticate(wire: Wire, username: str, password: str, token: str) -> Identi
     )
 
 
-def movies_library_id(directory: Any, user_id: str) -> str:
-    """The one library a restricted seat may open, picked the way the probe already picks it.
+def movies_library(directory: Any, user_id: str) -> Tuple[str, str]:
+    """The one library a restricted seat may open, as `(id, name)`, picked so both sides agree.
 
     `tools/probe_restricted_surface.py` narrows its throwaway account to the `movies` view and
     refuses when there is none, because the measurement needs one item the seat may open and one
     it may not. The same choice here, for the same reason, and the same refusal.
+
+    **In the order the two servers agree on, which is by name - and until 2026-09-07 it was in
+    whatever order each server listed its views.** The two rosters are built independently and
+    neither knows what the other picked, so *"the first `movies` view with something in it"* is a
+    choice made twice against two different lists: the composed fixture has three `movies`
+    libraries, the reference answers `/UserViews` sorted by name and Atrium answers it in
+    declaration order, so the reference's restricted seat opened `Films` and Atrium's opened
+    `Movies`. Measured 2026-09-06, in a run's own report: `movies-by-sort-name@0` resolved to
+    `2 Fast 2 Furious (of 16)` here and `Both Subtitle Kinds (of 15)` there, and **22 of that
+    seat's 23 unasked cases** said *"the anchor listing holds 0 rows on the atrium"* - the fixture
+    films, the tracks and the series are all in libraries Atrium's seat had not been given.
+
+    Sorting by name is the whole fix and it is enough: a library's name comes from the declaration
+    both servers are configured from, so both sides walk the same list. What it is not is a
+    guarantee - two servers configured differently would still part here - which is why the caller
+    puts the chosen name in the report's provenance for a reader to check at a glance.
     """
     views = directory.get("/UserViews", userId=user_id) or {}
     movies = [view for view in views.get("Items", []) if view.get("CollectionType") == "movies"]
+    movies.sort(key=lambda view: str(view.get("Name", "")))
     for view in movies:
         # **And it has to hold something, which 010 T12 found the hard way.** The composed fixture
         # has three `movies` libraries and one of them is deliberately empty (behaviours 5.7's
@@ -951,13 +968,67 @@ def movies_library_id(directory: Any, user_id: str) -> str:
             "/Items", userId=user_id, parentId=str(view["Id"]), recursive="true", limit=1
         )
         if isinstance(listed, dict) and listed.get("Items"):
-            return str(view["Id"])
+            return str(view["Id"]), str(view.get("Name", ""))
     raise SeatError(
         "no movies library with anything in it on this server to restrict the created seat to, "
         "and a seat narrowed to nothing is not a narrower reader - it is an account that can "
         "open nothing, which "
         "answers a refusal on both servers for the wrong reason"
     )
+
+
+def seat_libraries(directory: Any, user_id: str) -> Tuple[str, ...]:
+    """The names of the libraries one seat can open, asked of the server rather than assumed."""
+    views = directory.get("/UserViews", userId=user_id) or {}
+    return tuple(sorted(str(view.get("Name", "")) for view in views.get("Items", [])))
+
+
+def seat_libraries_line(directories: Mapping[str, Any], seats: Sequence[Seat]) -> str:
+    """One provenance line saying what each seat can see on each side, and where they part.
+
+    **Two seats narrowed to two different libraries compare two libraries, and until 2026-09-07
+    nothing said so.** The restricted seat is created by the run on the reference and handed in on
+    Atrium (`tools/README.md` step 3), so the two halves of one narrowing are made by two hands
+    against two servers - and on the composed fixture they parted: Atrium's seat held `Movies` and
+    the reference's held `Films`. The report showed the symptom without the cause -
+    `movies-by-sort-name@0` resolving to `2 Fast 2 Furious (of 16)` here and
+    `Both Subtitle Kinds (of 15)` there - and **22 of that seat's 23 unasked cases** said *"the
+    anchor listing holds 0 rows on the atrium"*, which is the fixture films, the tracks and the
+    series all living in libraries Atrium's seat had not been given.
+
+    Asked of `/UserViews` per seat rather than read off the narrowing, because the narrowing is
+    the half this program controls and the seat is what a case actually meets: a seat handed in
+    already narrowed has no choice here to report.
+    """
+    parts = []
+    parted = False
+    for seat in seats:
+        try:
+            seen = {
+                side: seat_libraries(directories[side], seat.identity(side).user_id)
+                for side in SIDES
+            }
+        except WireError as failure:
+            # A provenance line may not end a run. The sweep asks `/UserViews` of both seats as
+            # declared cases anyway, so a server that cannot answer this one will say so there,
+            # where it is a comparison and not a line of preamble.
+            parts.append(f"{seat.role}: could not be asked ({failure})")
+            continue
+        if len(set(seen.values())) == 1:
+            parts.append(f"{seat.role}: {', '.join(seen['atrium']) or 'none'}")
+            continue
+        parted = True
+        parts.append(
+            f"{seat.role}: atrium {', '.join(seen['atrium']) or 'none'} / reference "
+            f"{', '.join(seen['reference']) or 'none'}"
+        )
+    line = "; ".join(parts)
+    if parted:
+        line += (
+            "  - THE TWO SIDES PART, so every comparison that seat made is between two different "
+            "libraries and not between two servers"
+        )
+    return line
 
 
 # --------------------------------------------------------------------------------------------
@@ -1317,7 +1388,7 @@ class Issuer:
         )
 
     def resolve(self, anchor: Any, seat: Seat, depth: int) -> str:
-        """One anchor, in the three kinds T6 found where plan section 6.1.1 described one."""
+        """One anchor, in the four kinds this register needs where plan section 6.1.1 had one."""
         if anchor.kind == "literal":
             return anchor.at
         if anchor.kind == "response":
@@ -1331,12 +1402,7 @@ class Issuer:
         if anchor.kind == "response":
             return str(pointer_into(answer.body, anchor.at))
         rows = rows_of(answer.body)
-        position = int(anchor.at)
-        if position >= len(rows):
-            raise UnreachableError(
-                f"the anchor listing {anchor.endpoint}#{anchor.case} holds {len(rows)} rows on "
-                f"the {self.side} and the anchor names position {position}"
-            )
+        position = self.position_of(anchor, rows, len(rows))
         row = rows[position]
         if not isinstance(row, dict) or "Id" not in row:
             raise UnreachableError(
@@ -1351,13 +1417,44 @@ class Issuer:
         # measured 2026-09-05). Nothing here decides that the two rows are different items: a name
         # is 003's derivation, so two spellings can be one item and one spelling can be two. What
         # it does is stop the pairing being **silent**, which is the whole of what the report can
-        # honestly do about it.
+        # honestly do about it. A `named:` anchor is recorded the same way and for the opposite
+        # reason: there the names agree by construction and the **positions** are what the reader
+        # wants, since two sides that found the row at two positions are two orderings disagreeing
+        # under an anchor that no longer cares.
         self.anchor_rows[f"{seat.role}|{anchor.endpoint}#{anchor.case}@{anchor.at}"] = {
             "id": str(row["Id"]),
             "name": str(row.get("Name", "")),
             "rows": str(len(rows)),
+            "at": str(position),
+            "kind": str(anchor.kind),
         }
         return str(row["Id"])
+
+    def position_of(self, anchor: Any, rows: Sequence[Any], held: int) -> int:
+        """Which row of the anchor listing this anchor names, in the two ways it can name one.
+
+        **A `named:` anchor that finds nothing is the mis-pairing stated rather than made.** A
+        position always names a row while the listing is long enough, whatever that row holds; a
+        name either finds the row both servers agree about or finds none, and the case is then
+        reported unasked on that side with the reason. That is the whole trade the fourth kind
+        makes: fewer comparisons, and no comparison between two items this run cannot pair.
+        """
+        if anchor.kind == "named":
+            for index, row in enumerate(rows):
+                if isinstance(row, dict) and str(row.get("Name", "")) == anchor.at:
+                    return index
+            raise UnreachableError(
+                f"no row of the anchor listing {anchor.endpoint}#{anchor.case} is named "
+                f"{anchor.at!r} on the {self.side}, out of the {held} it holds - so this server "
+                "has no row the other one's is the pair of"
+            )
+        position = int(anchor.at)
+        if position >= held:
+            raise UnreachableError(
+                f"the anchor listing {anchor.endpoint}#{anchor.case} holds {held} rows on "
+                f"the {self.side} and the anchor names position {position}"
+            )
+        return position
 
     def refuse_an_undeclared_issue(self, anchor: Any, seat: Seat) -> None:
         """A `response:` anchor may not make this run issue a case this seat is not declared for.
@@ -1522,9 +1619,11 @@ class RunReport:
     endpoints: Tuple[Endpoint, ...] = ()
     provenance: Tuple[Tuple[str, str], ...] = ()
     unused_entries: Tuple[Tuple[str, str, str], ...] = ()
-    #: What every `listing:` anchor resolved to on each side. Added 2026-09-06: all 43 listing
-    #: anchors in the register name position `0`, and a position is the same item on two servers
-    #: only while their orderings agree - which one of them already does not.
+    #: What every anchor over a listing resolved to on each side. Added 2026-09-06, when all 43 of
+    #: them named position `0` and a position is the same item on two servers only while their
+    #: orderings agree - which one of them already did not. Twelve name a row's `Name` instead
+    #: since 2026-09-07, and the table carries both kinds: the one that is paired by construction
+    #: and the one that is a position which happens to agree.
     anchors: Tuple[Tuple[str, str, str, str, str], ...] = ()
     #: What went wrong with the RUN rather than with a comparison: a sweep that could not finish,
     #: a seat the teardown could not delete, a reference that stopped answering. **Added on
@@ -3890,37 +3989,45 @@ def _anchor_section(report: RunReport) -> List[str]:
 
     **A position is not an item, and this section is the whole of what a report can honestly say
     about that.** Section 4.2 keeps identifiers out of anchors because the two servers derive them
-    differently by design, and a case carrying one would compare two different items. Every one of
-    the register's listing anchors names position `0` instead - and a position does the same thing
-    the moment the two orderings differ. Measured 2026-09-05: `audio-by-sort-name@0` was
-    `By One Artist` here and `Ninety Six Kilohertz` there, and the twelve cases anchored on it
-    compared two different tracks while reporting a delivery difference.
+    differently by design, and a case carrying one would compare two different items. A `listing:`
+    anchor names a position instead - and a position does the same thing the moment the two
+    orderings differ. Measured 2026-09-05: `audio-by-sort-name@0` was `By One Artist` here and
+    `Ninety Six Kilohertz` there, and the twelve cases anchored on it compared two different tracks
+    while reporting a delivery difference.
 
     The section states, and does not judge. A name difference is not proof of a mis-pairing: 003's
     derivation differs from the reference's whole-filename rule on dozens of rows, so two spellings
     can be one item. What it removes is the silence.
+
+    **From 2026-09-07 a `named:` anchor removes rather more than the silence**, and the table
+    carries both kinds side by side on purpose: the reader can see which anchors are paired by
+    construction and which are still a position that happens to agree.
     """
     if not report.anchors:
         return []
     lines = ["## What each listing anchor resolved to", ""]
     lines.append(
-        "Every listing anchor in `request-cases.yaml` names a **position**, and a position is the "
-        "same item on both servers only while their orderings agree. This table says which row "
-        "each side actually compared. `DIFFERENT` is a difference of **name**, which is not the "
-        "same claim as a different item - 003's name derivation differs from the reference's - so "
-        "a row marked here is a comparison worth reading twice, not a defect."
+        "A `listing:` anchor names a **position**, and a position is the same item on both "
+        "servers only while their orderings agree; a `named:` anchor names a row's `Name`, which "
+        "is the same row wherever each side puts it. This table says which row each side actually "
+        "compared. `DIFFERENT` is a difference of **name**, which is not the same claim as a "
+        "different item - 003's name derivation differs from the reference's - so a row marked "
+        "here is a comparison worth reading twice, not a defect. `paired by name` is the anchor "
+        "that cannot be read twice: the two rows carry one label, and the positions beside them "
+        "say what the ordering was doing underneath."
     )
     lines.append("")
     lines.append("| Anchor | Seat | Atrium | Reference | Name |")
     lines.append("|---|---|---|---|---|")
+    settled = ("same name", "paired by name")
     for anchor, seat, ours, theirs, agreement in report.anchors:
-        marked = f"**{agreement}**" if agreement != "same name" else agreement
+        marked = agreement if agreement in settled else f"**{agreement}**"
         lines.append(f"| `{anchor}` | {seat} | {ours or '—'} | {theirs or '—'} | {marked} |")
     lines.append("")
-    differing = [one for one in report.anchors if one[4] != "same name"]
+    differing = [one for one in report.anchors if one[4] not in settled]
     if differing:
         lines.append(
-            f"**{len(differing)} of {len(report.anchors)} resolved to rows with different names.** "
+            f"**{len(differing)} of {len(report.anchors)} resolved to rows this run cannot pair.** "
             "Every case anchored on one of them compared a pair this run cannot show to be the "
             "same item."
         )
@@ -4357,7 +4464,7 @@ def run(
 def anchor_resolutions(
     issuers: Mapping[str, Issuer],
 ) -> Tuple[Tuple[str, str, str, str, str], ...]:
-    """Every `listing:` anchor this run resolved, with the row each side picked.
+    """Every anchor over a listing this run resolved, of both kinds, with the row each side picked.
 
     `(anchor, seat, ours, theirs, agreement)`. The two sides resolve independently and neither
     knows what the other picked; this is the one place in the program where both are in hand.
@@ -4375,18 +4482,39 @@ def anchor_resolutions(
         seat, anchor = key.split("|", 1)
         here = ours.get(key)
         there = theirs.get(key)
-        rows.append(
-            (
-                anchor,
-                seat,
-                "" if here is None else f"{here['name']} (of {here['rows']})",
-                "" if there is None else f"{there['name']} (of {there['rows']})",
-                "one side only"
-                if here is None or there is None
-                else ("same name" if here["name"] == there["name"] else "DIFFERENT"),
-            )
-        )
+        rows.append((anchor, seat, _resolved(here), _resolved(there), _agreement(here, there)))
     return tuple(rows)
+
+
+def _resolved(row: Optional[Mapping[str, str]]) -> str:
+    """One side's cell: what it picked, and where out of how many it picked it from.
+
+    The position travels beside the name for a `named:` anchor because there it is the only
+    moving part - the names are equal by construction - and beside it for a positional one
+    because a listing that holds a different number of rows is how two orderings come to agree
+    at position 0 by one row rather than by construction.
+    """
+    if row is None:
+        return ""
+    where = (
+        f"row {row['at']} of {row['rows']}" if row.get("kind") == "named" else f"of {row['rows']}"
+    )
+    return f"{row['name']} ({where})"
+
+
+def _agreement(here: Optional[Mapping[str, str]], there: Optional[Mapping[str, str]]) -> str:
+    """The column that is deliberately not a verdict, in the two shapes the kinds give it.
+
+    For a positional anchor it compares the **labels**, which is a statement about spelling and
+    not about identity. For a `named:` anchor the labels are the anchor, so what is left to say
+    is that both sides found it - and `one side only` there is the loud half of the trade: a run
+    that could not pair says so instead of pairing two rows that happen to share a position.
+    """
+    if here is None or there is None:
+        return "one side only"
+    if here.get("kind") == "named":
+        return "paired by name"
+    return "same name" if here["name"] == there["name"] else "DIFFERENT"
 
 
 def unreached(
@@ -4644,7 +4772,7 @@ def _run_against(
             administrators[side],
             roles,
             library_id=(
-                movies_library_id(directories[side], administrators[side].user_id)
+                movies_library(directories[side], administrators[side].user_id)[0]
                 if Role.RESTRICTED in roles and Role.RESTRICTED not in handed[side]
                 else None
             ),
@@ -4712,6 +4840,9 @@ def _run_against(
                 )
                 for role in roles
             ]
+            provenance.append(
+                ("libraries each seat can open", seat_libraries_line(directories, seats))
+            )
             report = run(
                 atrium,
                 reference,

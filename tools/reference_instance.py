@@ -222,7 +222,7 @@ def _measure_seats(instance: Any) -> None:
     print(f"POST /Users/New  {status}, Id={made.get('Id')!r}, keys={len(made)}")
     user_id = str(made.get("Id", ""))
 
-    library = cli.movies_library_id(directory, seat.user_id)
+    library, _name = cli.movies_library(directory, seat.user_id)
     before = directory.get("/Users/" + user_id).get("Policy", {})
     narrowed = cli.restricted_policy(before, library)
     status, _headers, body = directory.post_raw("/Users/" + user_id + "/Policy", body=narrowed)
