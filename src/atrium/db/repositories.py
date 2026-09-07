@@ -60,7 +60,6 @@ from atrium.domain.playstate import UserItemData
 from atrium.domain.session import AccessToken, IssuedToken, Session
 from atrium.domain.sorting import sort_name
 from atrium.domain.user import LibraryAccess, User
-from atrium.library.identity import for_name
 from atrium.metadata.artwork import ImageAssociation, ImageKind, SourceKind
 from atrium.metadata.byname import fold_for_search, genre_type, identity_of, person_type_of
 from atrium.metadata.merge import MetadataChanges
@@ -984,7 +983,6 @@ class MetadataRepository:
         if Field.ARTISTS in values or Field.ALBUM_ARTISTS in values:
             self._write_artists(
                 item_id,
-                row.library_id,
                 _strings(values.get(Field.ARTISTS, [])) if Field.ARTISTS in values else None,
                 _strings(values.get(Field.ALBUM_ARTISTS, []))
                 if Field.ALBUM_ARTISTS in values
@@ -1126,7 +1124,6 @@ class MetadataRepository:
     def _write_artists(
         self,
         item_id: str,
-        library_id: str | None,
         artists: Sequence[str] | None,
         album_artists: Sequence[str] | None,
     ) -> None:
@@ -1143,13 +1140,19 @@ class MetadataRepository:
         the scan that builds the tree, and the next scan would mark it removed - a row that
         appears and disappears every other scan. Revision 0004 carries the argument.
 
-        **013 T2 is what ends this**, and the schema is already able to carry the end of it:
-        revision 0009 made a `MusicArtist` with no library legal, so the registry row a credit
-        will point at can exist. Nothing here creates one yet - that is a population, and this
-        task shipped the capacity.
+        **013 T2 ended it, and the paragraph above is kept because it was right about its own
+        world.** A credit now names a **registry** artist: a by-name row keyed on the folded name,
+        created here on demand exactly as a genre, a studio and a person are, so the link can no
+        longer dangle and revision 0010 made it `NOT NULL` again. What made the old argument true
+        was that the only artist was a *tree* item, and creating one here would have put it
+        outside the scan that builds the tree; a registry row is not a tree item, hangs off
+        nothing and is derivable, so creating it here costs none of that.
+
+        **The tree artist is untouched and is not what this names.** It keeps the per-library
+        identifier 003 derived, it stays the item an album hangs off, and it is a different row
+        from the registry one wherever both exist - the pair the reference carries too
+        `[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11, 2026-09-07]`.
         """
-        if library_id is None:
-            return
         for credit, names in (("artist", artists), ("album_artist", album_artists)):
             if names is None:
                 continue
@@ -1165,14 +1168,9 @@ class MetadataRepository:
                         credit=credit,
                         position=position,
                         name=name,
-                        artist_item_id=self._artist_item(library_id, name),
+                        artist_item_id=self.ensure_by_name(ItemType.MUSIC_ARTIST, name),
                     )
                 )
-
-    def _artist_item(self, library_id: str, name: str) -> str | None:
-        """The `MusicArtist` this credit links to, or `None` when the scanner made no such item."""
-        artist_id = for_name(ItemType.MUSIC_ARTIST, library_id, name)
-        return artist_id if self._session.get(models.Item, artist_id) is not None else None
 
     def _write_images(self, item_id: str, images: object) -> None:
         """Dimensions and tag are **never** null here, which the schema also enforces: 005 emits

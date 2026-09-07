@@ -598,9 +598,19 @@ class ItemQueryRepository:
         `CASE` over the type rather than one clause: three have a join table, `Year` is referenced
         by a **column**, and `Person` and `Studio` have tables of their own.
         """
+        registry_artist = (models.Item.type == ItemType.MUSIC_ARTIST.value) & (
+            models.Item.library_id.is_(None)
+        )
         return or_(
-            models.Item.type.not_in([one.value for one in BY_NAME]),
+            models.Item.type.not_in([one.value for one in BY_NAME]) & ~registry_artist,
             *((models.Item.type == kind.value) & self._referenced(kind, user) for kind in BY_NAME),
+            # **The artist is two populations of one type, and this is the security half.** A tree
+            # artist is decided by its library, above; a registry artist has none, so
+            # `_library_permitted` exempts it and without this branch every account would see
+            # every artist - which is not a leak of the tracks but a leak of *what is in a
+            # library*, the one thing a by-name row can disclose. It is keyed on the population
+            # and not on the type, because the type is both.
+            registry_artist & self._referenced(ItemType.MUSIC_ARTIST, user),
         )
 
     def _referenced(self, kind: ItemType, user: User) -> Any:
@@ -621,7 +631,12 @@ class ItemQueryRepository:
                 .correlate(models.Item.__table__)
                 .exists()
             )
-        link, column = _LINK_OF[kind]
+        if kind is ItemType.MUSIC_ARTIST:
+            # Not in `_LINK_OF`: that map is the four strictly by-name kinds, and an artist is
+            # reached through the credit table whose own column names the registry row.
+            link, column = models.ItemArtist, "artist_item_id"
+        else:
+            link, column = _LINK_OF[kind]
         return (
             select(link.item_id)
             .where(link.item_id == item.c.id)
@@ -714,6 +729,13 @@ class ItemQueryRepository:
         )
         return or_(
             models.Item.type.not_in([one.value for one in EARN_THEIR_PLACE]),
+            # **A registry artist earns its place by being credited, not by holding anything.**
+            # It is a `MusicArtist`, so it is in `EARN_THEIR_PLACE`, and it has no descendants at
+            # all - it hangs off nothing and nothing hangs off it (013 section 3.3). Without this
+            # branch every registry row is invisible everywhere, which is how 013 T2 first found
+            # that this clause and `_by_name_is_referenced` are the same question asked of two
+            # populations of one type. What decides a registry artist is the other clause.
+            models.Item.library_id.is_(None),
             beneath.exists(),
         )
 

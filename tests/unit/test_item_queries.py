@@ -719,3 +719,34 @@ def test_an_unknown_item_is_the_same_refusal(
 ) -> None:
     with pytest.raises(ParentNotFoundError):
         repository.leaf_descendants("0" * 32, world.everyone)
+
+
+def test_a_registry_artist_is_invisible_to_an_account_that_may_not_see_what_credits_it(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """**The leak 013 T2 would open if the visibility clause stayed keyed on the type.**
+
+    Written before the clause moved and asserted to fail first, which is how 009's playlist leak
+    was found: `_by_name_is_referenced` names five types, a `MusicArtist` is not one of them, and
+    a registry artist has no library - so `_library_permitted` exempts it and every account sees
+    every artist. That is not a leak of the tracks; it is a leak of **what is in a library**,
+    which is the one thing a by-name row can disclose.
+
+    The restricted account sees the movies library alone. Every artist in this world is credited
+    by music, so it must reach none of them - while the account that sees everything reaches them.
+    """
+    everyone = repository.run(
+        ItemQuery(user=world.everyone, include_types=frozenset({ItemType.MUSIC_ARTIST}), limit=1000)
+    )
+    registry = [one for one in everyone.items if one.item.library_id is None]
+    assert registry, "013 T2 has not written the registry rows this asserts about"
+
+    restricted = repository.run(
+        ItemQuery(
+            user=world.restricted, include_types=frozenset({ItemType.MUSIC_ARTIST}), limit=1000
+        )
+    )
+    reached = {one.id for one in restricted.items}
+    assert reached.isdisjoint({one.id for one in registry}), (
+        "a registry artist credited only by music reached an account narrowed to films"
+    )
