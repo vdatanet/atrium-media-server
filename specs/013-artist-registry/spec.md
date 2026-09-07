@@ -83,7 +83,7 @@ it as an item of the same type as a tree artist, with:
 | type | the artist type — the same one the tree artist carries |
 | parent | **none**. A registry artist hangs off nothing: it has credits, not a place in a tree |
 | location | the ordinary one; nothing marks it as a different kind of thing |
-| child count | present, and **it counts neither of the two things it could**: `2` on a row credited on one track and no album. The shape [behaviours §3.25](../../docs/compatibility/behaviours.md) records elsewhere — a number that is not a count — and [OQ-2](#7-open-questions) is now what this server answers rather than what that one means |
+| child count | present, **stable, and not a count**: `2` on a row credited on one track and no album, answering `2` again when asked a second time. So it is not [behaviours §3.25](../../docs/compatibility/behaviours.md)'s random number either — it is a number whose rule this reading could not attribute, and [OQ-2](#7-open-questions) is what this server answers instead |
 | path | the server's **own metadata directory**, named after the artist — which is §5.3's source citation seen from outside for the first time |
 
 The last row is the reference's identity rule made visible: its by-name identity is derived from a
@@ -104,12 +104,20 @@ on that library, 519 of the rows being names no tree artist carries, and **every
 distinct credit identifiers on 100 sampled tracks is one of those rows** — the credits and the
 listing are one population.
 
-`/Artists/AlbumArtists` lists **nearly** that population narrowed to the album-artist credit, and
-the word is measured rather than hedged: **506** rows, of which **495 are `/Artists` rows and 11
-are not**. So it is the registry narrowed, with eleven rows that listing does not carry — a shape
-this feature reproduces as the narrowing and states the residue of, rather than reproducing a
-residue nobody has explained ([OQ-1](#7-open-questions)). Narrowing by credit is what this server
-already does with its own two routes ([005 §3.9](../005-item-query-api/spec.md)).
+`/Artists/AlbumArtists` lists **the names credited as album artists**, and it is **not a subset**
+of the listing above. Measured: **506** rows, of which **495 are `/Artists` rows and eleven are
+not** — and the eleven are what says which of the two readings of that residue is right. `a-ha`,
+spelled there with a U+2010 rather than a hyphen-minus, is named as a performer by **no track** and
+as an album artist by **one album**.
+
+**So the two routes are two populations built from two credit fields, and neither contains the
+other.** A track names its performers and an album names its album artists, and the two spellings
+need not agree: the eleven are `Hall & Oates` against the pair the tracks name, `a-ha` against
+`a-ha` in another hyphen, `The B-52s`, a diacritic and a CJK name. Ten of the eleven are registry
+artists and one is a tree artist.
+
+This server already keeps the two credits apart on every track it scans, so reproducing two
+populations costs it the column it has rather than a second store.
 
 **One row per name is the fold's doing and not a de-duplication step.** Two credits spelling one
 artist two ways are one row, and the row's display name is the first spelling seen — the rule this
@@ -165,10 +173,13 @@ scan rebuilds it.
    library.
 3. Two credits spelling one artist two ways — differing in case, or in a character a filename
    cannot carry — are **one row**, whose display name is the first spelling seen.
-4. `/Artists/AlbumArtists` answers that same population narrowed to the album-artist credit, and
-   answers no row for a performer who is nobody's album artist. It is a **subset** of what
-   `/Artists` answers, which is the reference's shape on 495 of its 506 rows and the residue of
-   eleven is [OQ-1](#7-open-questions).
+4. `/Artists/AlbumArtists` answers **one row per distinct folded album-artist credit name**, and
+   answers no row for a performer who is nobody's album artist. It is **not a subset** of what
+   `/Artists` answers and must not be implemented as one: an album artist no track names as a
+   performer has a row there and none here, which is 11 of 506 rows on the library this was
+   measured on.
+   *(Restated 2026-09-07 at the plan gate, which measured the residue this criterion had assumed
+   away: as drafted it called the listing a subset, and one request showed it is not.)*
 5. A row's identifier answers `GET /Items/{itemId}` as an artist with **no parent**, and the same
    identifier is the one every credit on every track carries for that name.
 6. Asking for the albums and tracks **credited to** a row's identifier answers that artist's music;
@@ -206,8 +217,8 @@ Levels are defined in [../../docs/compatibility/conformance.md](../../docs/compa
 
 | # | Question | Blocks | Resolved by |
 |---|---|---|---|
-| OQ-1 | **Answered in part, and it opened a smaller one.** `/Artists/AlbumArtists` is the registry narrowed by credit — 495 of its 506 rows are `/Artists` rows — and **eleven are not**. What those eleven are is unmeasured, and whether this feature reproduces them or states them as a divergence is its own decision | AC-4 | Reading the eleven by identifier: what they are credited on, and whether `/Artists` omits them by paging, by visibility, or by a rule |
-| OQ-2 | **Answered, and it moves the question here.** A registry artist's child count is **not a count**: `2` on a row credited on one track and no album, which is the shape [behaviours §3.25](../../docs/compatibility/behaviours.md) records elsewhere. What this server should answer instead — the real count, or nothing — is 013's, and a number reproduced faithfully would be a random one | AC-5's body | A decision at the plan gate, not a further reading |
+| OQ-1 | **Answered and closed at the plan gate.** The two routes are two populations, built from the two credit fields, and neither contains the other: `a-ha` is named as a performer by no track and as an album artist by one album. AC-4 is restated, and §3.2 says so | — | Closed 2026-09-07 `[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11, 2026-09-07]` |
+| OQ-2 | **Answered and decided at the plan gate.** The number is **stable** — `2` twice — so it is not §3.25's random one; its rule is unattributed, so replicating it is not available; and answering nothing would be [§3.0.2](../../docs/compatibility/behaviours.md#302-what-is-never-acceptable)'s forbidden third behaviour. This server answers the true count, `0`, which is what the reference's own *"what is under this row"* answers | AC-5's body | Closed 2026-09-07; the divergence is [plan §1](plan.md) decision 2 and owes behaviours a row |
 | OQ-3 | What does a registry artist answer for images, and what does a client render where a tree artist has a folder image and a registry row has no directory? | Whether AC-5's body is complete | A reading of a registry row's image tags on a library whose artists have artwork |
 | OQ-4 | What user data does a registry artist carry, and is its played state a statement about its subtree the way a container's is? | Nothing yet | A reading; the fixture can produce the state once the population exists |
 | OQ-5 | Does the reference order `/Artists` by the same key as its other by-name listings, and does its count behave the way [behaviours §3.1](../../docs/compatibility/behaviours.md) records for the by-name family? | AC-1's envelope | The differential, once the population is comparable |

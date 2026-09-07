@@ -253,6 +253,49 @@ def album_artists(server: Any, found: Any, rows: List[Dict[str, Any]], tree_ids:
     )
     found.observe("how many are a tree item", f"{len(theirs & tree_ids)} of {len(theirs)}")
 
+    # **The residue, named rather than counted**, which is what 013's plan gate owes OQ-1. A
+    # narrowing with a residue nobody has looked at is a narrowing this project would implement as
+    # a subset and then find eleven rows short of - so each one is printed with its name, whether
+    # `/Artists` carries its folded name under some other identifier, and whether it is a tree
+    # item. Eleven bodies, bounded by the listing that found them.
+    residue = [one for one in narrowed if str(one.get("Id")) not in row_ids]
+    if not residue:
+        found.note("every /Artists/AlbumArtists row is an /Artists row, so OQ-1 has no residue")
+        return
+    keys = {as_a_key(str(one.get("Name", ""))) for one in rows}
+    for one in residue[:12]:
+        name = str(one.get("Name", ""))
+        found.observe(
+            f"album artist that is no /Artists row: {name[:26]!r}",
+            "a row carries its folded name: {}; a tree item: {}; {}".format(
+                as_a_key(name) in keys,
+                str(one.get("Id")) in tree_ids,
+                summarise(body_of(server, str(one["Id"]))),
+            ),
+        )
+
+    # **Two requests that decide between the two readings of that residue**, and the plan gate
+    # cannot choose without them. Either `/Artists` is a superset that lost eleven rows to some
+    # rule, or the two routes are built from **two different credit fields** - the performers a
+    # track names and the album artists an album names - whose spellings need not agree, which is
+    # what a residue of `a-ha` spelled with U+2010 rather than a hyphen-minus, and of
+    # `Hall & Oates`, looks like. An album artist
+    # credited on albums and on no track's performer list is the second reading and nothing else.
+    subject = residue[0]
+    identifier = str(subject["Id"])
+    as_performer = items(
+        server, recursive="true", artistIds=identifier, includeItemTypes="Audio", limit=5
+    )
+    as_album_artist = items(
+        server, recursive="true", albumArtistIds=identifier, includeItemTypes="MusicAlbum", limit=5
+    )
+    found.observe(
+        "the residue is a different credit field, not a lost row",
+        "{!r}: {} tracks name it as a performer, {} albums name it as an album artist".format(
+            str(subject.get("Name"))[:26], len(as_performer), len(as_album_artist)
+        ),
+    )
+
 
 def a_rows_child_count(server: Any, found: Any, rows: List[Dict[str, Any]], tree_ids: set) -> None:
     """Question 6: what does a registry row's child count count? 013 spec OQ-2.
@@ -273,6 +316,19 @@ def a_rows_child_count(server: Any, found: Any, rows: List[Dict[str, Any]], tree
     )
     tracks = items(
         server, recursive="true", artistIds=identifier, includeItemTypes="Audio", limit=50
+    )
+    # **Asked twice, because a number that is not a count has two shapes and they need opposite
+    # treatment.** behaviours 3.25 records a `/UserViews` `ChildCount` as a fresh random integer
+    # per request; a stable number that counts nothing is a different thing entirely. 013's plan
+    # gate cannot choose between replicating and correcting without knowing which this is, and
+    # behaviours 3.0.2 forbids the third option of inventing an absence.
+    again = body_of(server, identifier)
+    found.observe(
+        f"child count of {name!r}, asked twice",
+        "{} then {}".format(
+            None if body is None else body.get("ChildCount"),
+            None if again is None else again.get("ChildCount"),
+        ),
     )
     found.observe(
         f"child count of {name!r}",
