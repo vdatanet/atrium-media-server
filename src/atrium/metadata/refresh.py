@@ -457,6 +457,8 @@ def _path_values(item: Item) -> dict[Field, object]:
     never being able to replace a filename.
     """
     values: dict[Field, object] = {Field.NAME: item.name}
+    if item.production_year is not None:
+        values[Field.YEAR] = item.production_year
     if item.index_number is not None:
         values[Field.INDEX_NUMBER] = item.index_number
     if item.parent_index_number is not None:

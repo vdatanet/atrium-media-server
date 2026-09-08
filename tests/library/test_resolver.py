@@ -194,6 +194,26 @@ def test_a_series_named_with_digits_keeps_its_title(fixture_library: BuiltFixtur
     assert "24" in named(resolved(fixture_library, "tvshows").items, ItemType.SERIES)
 
 
+def test_the_year_the_parser_finds_reaches_the_item(fixture_library: BuiltFixture) -> None:
+    """**Spec section 3.3 says title *and year*, and only the title was arriving.**
+
+    `parse_movie` extracted both from the day it was written, and `_movies` built the item from
+    `film.name` alone - so `items.production_year` was a column the DTO reads, `/Years` lists from
+    and the `years=` filter matches on, written only by an `.nfo`. A sweep against the reference,
+    whose films carry the year of their own names, reported the property missing on 66 rows across
+    three routes `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`.
+
+    Asserted on the fixture's own films rather than on a constructed name, because what broke was
+    the wiring between two pieces that were each correct.
+    """
+    films = resolved(fixture_library, "movies").of_type(ItemType.MOVIE)
+    dated = {film.name: film.production_year for film in films if film.production_year is not None}
+
+    assert dated, "no film carried a year, and the fixture names several with one"
+    assert dated.get("The Matrix") == 1999
+    assert all(1900 <= year <= 2099 for year in dated.values())
+
+
 def test_the_music_fixture_resolves_three_levels(fixture_library: BuiltFixture) -> None:
     resolution = resolved(fixture_library, "music")
     assert named(resolution.items, ItemType.MUSIC_ARTIST) >= {"The Artist", "Various Artists"}

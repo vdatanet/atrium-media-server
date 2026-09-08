@@ -241,11 +241,36 @@ def test_a_sparse_sidecar_leaves_the_rest_to_the_next_source(
 
 
 def test_a_film_with_no_sidecar_keeps_its_path_derived_name(engine: Engine, tmp_path: Path) -> None:
-    """The path source is last, not absent."""
+    """The path source is last, not absent.
+
+    **And the year travels with the name**, which it did not until 2026-09-08: the scanner parsed
+    both and carried only the title, so this film ended up with a name of `The Matrix` and no
+    `ProductionYear` at all - a column the DTO reads, `/Years` lists from and the `years=` filter
+    matches on, written only by an `.nfo`. The reference answers the year of a film's own name, and
+    a sweep reported the property missing on 66 rows across three routes
+    `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`.
+    """
     root = tmp_path / "films"
     a_film(root, "The Matrix (1999)")
     scanned(engine, a_library(engine, root, "movies"))
-    assert one(engine, ItemType.MOVIE).name == "The Matrix"
+
+    film = one(engine, ItemType.MOVIE)
+    assert film.name == "The Matrix"
+    assert film.production_year == 1999
+
+
+def test_a_sidecars_year_beats_the_one_in_the_filename(engine: Engine, tmp_path: Path) -> None:
+    """The year is a **path-derived** value and enters where the name enters, so it obeys the same
+    precedence: last word, never first. A year that outranked a sidecar's would be the filename
+    winning for one field and losing for every other, which is the shape of an inconsistency
+    nobody could explain from the outside."""
+    root = tmp_path / "films"
+    a_film(root, "Some Careless Filename (2015)", sidecar="movie-full.nfo")
+    scanned(engine, a_library(engine, root, "movies"))
+
+    film = one(engine, ItemType.MOVIE)
+    assert film.name == "The Fixture"
+    assert film.production_year == 1999, "the sidecar's year, not the filename's"
 
 
 def test_a_malformed_sidecar_warns_and_the_item_still_resolves(

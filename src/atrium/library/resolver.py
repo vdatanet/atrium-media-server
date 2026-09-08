@@ -153,6 +153,18 @@ def _movies(library: Library, parent: Item, candidates: list[Candidate]) -> list
                 ),
                 type=ItemType.MOVIE,
                 name=film.name,
+                # **The year the parser already found, which nothing carried until 2026-09-08.**
+                # 003 section 3.3 says title *and year* are extracted from the name, and
+                # `parse_movie` extracts both - the title reached the item and the year was
+                # dropped one line from where it was computed, so `items.production_year` was a
+                # column read by the DTO, by `/Years` and by the `years=` filter and written only
+                # by an `.nfo`. A sweep against the reference, whose films carry the year of their
+                # own names, reported it missing on 66 rows across three routes
+                # `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`.
+                #
+                # It enters where the name enters, so it behaves like the name: a path-derived
+                # value that a sidecar or a provider replaces later (`metadata/refresh.py`).
+                production_year=film.year,
                 library_id=library.id,
                 parent_id=parent.id,
                 sources=tuple(_source(by_path[path]) for path in film.parts),

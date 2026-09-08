@@ -2261,6 +2261,35 @@ about the run.
 aggregate the reference sends there and this server does not, on a route where 005 gates it. It is
 the one row of this triage that is neither the harness's, nor 003's naming, nor a stream field.
 
+### The 2026-09-08 run, triaged — the harness is out of the way and `GET /Items` is read
+
+**910 differences, and the two largest causes of that route are columns nothing writes.** The run
+of 2026-09-08 is the first with all four of `tools/README.md`'s build steps done, which is what the
+entry above said to do `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`:
+
+| | 2026-09-07 | 2026-09-08 |
+|---|---|---|
+| differences | 1231 | **910** |
+| the three user routes | 307 | **22** |
+| `GET /Items/Latest` | 116 | **81** |
+
+Two harness defects came out of it before any of it was about this server: the `/Items/Latest`
+reading that #337 got wrong twice, and a **named comparison that put files back with the clock**,
+which made every file a run touched the newest thing in the library on the reference and left the
+tree drifted for the next run.
+
+**`GET /Items` — 315 findings, read by cause:**
+
+| what | how many | whose |
+|---|---|---|
+| `ProductionYear` absent | 34 here, **66 across three routes** | 003's. The parse extracts the year, `_movies` built the item from the name alone, and `items.production_year` was read by the DTO, `/Years` and the `years=` filter and written only by an `.nfo`. **Fixed 2026-09-08** |
+| `RunTimeTicks` absent | 30 here, **52 across three routes** | 003's, and **the same shape**: the scan probes every media file and stores the duration in `media_probes`, and nothing puts it on the item, which is where the DTO reads it. `items.runtime_ticks` is 0 of 79 rows on a scanned fixture. **Not fixed** |
+| `Name`, and every field on a row it misaligns | 44 `Name`, and most of the rest of the route | 003 §3.5's known divergence and **OQ-8, still open**: the reference names an untagged file after its whole name, digits included, and a film in its own folder after the folder whole. This fixture's music is untagged silence, which is exactly the library where that is visible — and because `Name` feeds `SortName` feeds the order, one naming difference reports as shape what is content |
+| `HasLyrics`, `PremiereDate`, `AlbumArtist`, `AlbumPrimaryImageTag` on audio rows | 54 | 005's list-row tranche, per field and per type |
+
+**What has no owner yet** is the audio tranche's four fields. `RunTimeTicks` and OQ-8 have one each
+and neither is done.
+
 ### The L3 debt is eight-tenths paid, and 013's closing task paid it
 
 **This list said *"no `level: L3` row has been shown to reach L3"* from the day it was written**,
