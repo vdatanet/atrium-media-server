@@ -124,18 +124,24 @@ say how it will be proven is not finished.
 | [010](010-conformance-harness/) | Conformance harness | **Implemented** | **Implemented** | **Implemented** — fifteen of fifteen tasks, [D-7 taken 2026-09-02](010-conformance-harness/tasks.md) |
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Implemented** | **Implemented** | **Implemented** — eleven of eleven tasks, ten of ten criteria, [AC-9 amended 2026-09-04](012-negotiation-inputs/spec.md#5-acceptance-criteria) |
-| [013](013-artist-registry/) | Artist registry | **Draft** | **Draft** | **Draft** — eight of nine tasks, eight of eight criteria mapped in `FEATURE_013`, and [behaviours §5.3](../docs/compatibility/behaviours.md) closed in the half that was observable. **T9 is open on one line**: the two artist routes are `L3`, so this is the first closing task here that cannot tick its conformance from the fixture alone |
+| [013](013-artist-registry/) | Artist registry | **Implemented** | **Implemented** | **Implemented** — nine of nine tasks, eight of eight criteria, and **the first feature here whose closing task proved a `level: L3` row against a real Jellyfin** rather than deferring it |
 
-**All twelve features that were written before 013 are implemented** — 008 on 2026-08-29 across fourteen tasks,
-011 on 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, 010 on 2026-09-02 across
-fifteen, and **012 on 2026-09-04 across eleven**, which left no feature `Accepted` and
-unbuilt and no draft anywhere in this directory until **013 was drafted on 2026-09-07** — the first feature here that closes an accepted gap rather than adding a surface, and one
-whose subject shrank before it was written: [behaviours
-§5.3](../docs/compatibility/behaviours.md#53-an-artist-in-two-music-libraries-is-two-rows)
-had named *"a deliberate identity migration"* as its closing mechanism since it was
-written, and a reading taken from outside on 2026-09-07 found both of its observable halves
-to be properties of what two routes list, needing no identifier this project has already
-derived to be rewritten. **What `Implemented` means for 012 is eleven
+**All thirteen features are implemented** — 008 on 2026-08-29 across fourteen tasks, 011 on
+2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, 010 on 2026-09-02 across fifteen,
+012 on 2026-09-04 across eleven, and **013 on 2026-09-08 across nine**, which leaves no feature
+`Accepted` and unbuilt and no draft anywhere in this directory.
+
+**013 is the first feature here that closes an accepted gap rather than adding a surface**, and
+the first whose closing task proved a `level: L3` row **against a real Jellyfin** instead of
+deferring it — twelve differences on its two routes and not one of them a population. Its subject
+shrank before it was written: [behaviours
+§5.3](../docs/compatibility/behaviours.md#53-an-artist-in-two-music-libraries-is-two-rows--closed-2026-09-07-in-the-half-that-was-observable)
+had named *"a deliberate identity migration"* as its closing mechanism since the day it was
+written, and a reading taken from outside on 2026-09-07 found both of its observable halves to be
+properties of what two routes list, needing no identifier this project has already derived to be
+rewritten. What it does **not** close is recorded there rather than inside its status word: the
+tree artist is still keyed per library, and `IsFolder` on an `/Artists` row cannot be reproduced
+because of it. **What `Implemented` means for 012 is eleven
 of eleven tasks and ten of ten criteria and nothing wider**: what it hands on — an ordinal no
 member has, still the one shape the defect procedure forbids ([behaviours
 §3.26](../docs/compatibility/behaviours.md)), the two-request concurrency nobody has measured

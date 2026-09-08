@@ -1,9 +1,10 @@
 ---
 feature: 013-artist-registry
 title: Artist registry
-status: Draft
+status: Implemented
 created: 2026-09-07
-updated: 2026-09-07
+updated: 2026-09-08
+implemented: 2026-09-08
 depends_on: [003, 004, 005]
 ---
 
@@ -219,9 +220,9 @@ Levels are defined in [../../docs/compatibility/conformance.md](../../docs/compa
 |---|---|---|---|
 | OQ-1 | **Answered and closed at the plan gate.** The two routes are two populations, built from the two credit fields, and neither contains the other: `a-ha` is named as a performer by no track and as an album artist by one album. AC-4 is restated, and §3.2 says so | — | Closed 2026-09-07 `[probe: tools/probe_artist_registry.py, Jellyfin 10.11.11, 2026-09-07]` |
 | OQ-2 | **Answered and decided at the plan gate.** The number is **stable** — `2` twice — so it is not §3.25's random one; its rule is unattributed, so replicating it is not available; and answering nothing would be [§3.0.2](../../docs/compatibility/behaviours.md#302-what-is-never-acceptable)'s forbidden third behaviour. This server answers the true count, `0`, which is what the reference's own *"what is under this row"* answers | AC-5's body | Closed 2026-09-07; the divergence is [plan §1](plan.md) decision 2 and owes behaviours a row |
-| OQ-3 | What does a registry artist answer for images, and what does a client render where a tree artist has a folder image and a registry row has no directory? | Whether AC-5's body is complete | A reading of a registry row's image tags on a library whose artists have artwork |
-| OQ-4 | What user data does a registry artist carry, and is its played state a statement about its subtree the way a container's is? | Nothing yet | A reading; the fixture can produce the state once the population exists |
-| OQ-5 | Does the reference order `/Artists` by the same key as its other by-name listings, and does its count behave the way [behaviours §3.1](../../docs/compatibility/behaviours.md) records for the by-name family? | AC-1's envelope | The differential, once the population is comparable |
+| OQ-3 | **Open, and it blocks nothing.** What does a registry artist answer for images, and what does a client render where a tree artist has a folder image and a registry row has no directory? The differential raised no image finding on either route, so nothing observed is wrong today — what is unmeasured is the case this repository's fixture has not got: an artist with artwork | Nothing. AC-5 is proven on the body's shape, and an image tag is 006's surface | A reading of a registry row's image tags on a library whose artists have artwork |
+| OQ-4 | **Answered by the differential run, and it found a defect.** A registry artist carries **no** subtree statement: it has nothing beneath it, so `UnplayedItemCount` and the played rollup do not apply. This server sent `UnplayedItemCount: 0` on every row where the reference sends nothing — four findings on each artist route — and the rollup now stops at the population rather than the type | — | Closed 2026-09-07 `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-07]` |
+| OQ-5 | **Answered by the same run: the order and the count agree.** Neither route produced a `LENGTH` or an `ORDER` finding against the reference's own listing, on either seat and with a limit and without — so the ordering key and the by-name count behaviour of [§3.1](../../docs/compatibility/behaviours.md) are already what this server does, and no clause was needed for either | — | Closed 2026-09-07, same run |
 
 ## 8. References
 
