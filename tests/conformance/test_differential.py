@@ -30,6 +30,7 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import os
 import re
 import shutil
 import socket
@@ -3351,3 +3352,34 @@ def test_the_login_case_is_issued_on_a_device_of_its_own() -> None:
 
     assert seen[0] == wire.device
     assert seen[1] != wire.device, "the login was sent on the device it would have logged out"
+
+
+def test_a_file_put_back_by_a_named_row_carries_the_time_it_was_found_with(tmp_path: Path) -> None:
+    """**A restore that forgets the modification time is not a restore.**
+
+    Three named comparisons change files under the fixture tree and put them back in a `finally`:
+    the series emptied of every episode, the replaced poster and the latent file. Until
+    2026-09-08 all three put back the bytes and let the clock write the time, and an item's
+    `DateCreated` is its file's modification time on both servers (behaviours section 2.29) - so
+    each of those files became **the newest thing in the library** on the reference, which is the
+    only side with a route that rescans.
+
+    It reached the report as two rows of `/Items/Latest` in swapped positions, read as a
+    `DateCreated` divergence between the two servers and belonging to neither
+    `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`. And it outlived the
+    run: the tree is reused, so every later run started from a fixture four files had drifted in.
+    """
+    file = tmp_path / "An Old Transfer (1985).avi"
+    file.write_bytes(b"the bytes the fixture stamped")
+    stamped = 1_600_000_000_000_000_000  # 2020-09-13T12:26:40Z, nothing like a wall clock
+    os.utime(file, ns=(stamped, stamped))
+
+    payload, when = differential.as_found(file)
+    file.write_bytes(b"what a named comparison writes while it measures")
+
+    differential.put_back(file, payload, when)
+
+    assert file.read_bytes() == payload
+    assert file.stat().st_mtime_ns == stamped, (
+        "the time is data here: a file put back with the clock is the newest item in the library"
+    )

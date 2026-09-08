@@ -466,6 +466,18 @@ answered, which is the same sentence as *"it is a file and not an endpoint"*. An
 would be one Jellyfin does not have, and an extension a client can discover is still a delta
 (Principle I).
 
+**A run puts back what it changed, the modification time included.** Three named comparisons
+change files under the fixture tree — the series emptied of every episode, the replaced poster,
+the latent file — and each restores them in a `finally`. Until 2026-09-08 all three restored the
+bytes and let the clock write the time, which is not a restore: an item's `DateCreated` is its
+file's modification time on both servers ([behaviours §2.29](../docs/compatibility/behaviours.md)),
+so each touched file became **the newest thing in the library** on the reference, which is the only
+side with a route that rescans. It reached the report as two rows of `/Items/Latest` in swapped
+positions and read as a `DateCreated` divergence belonging to neither server
+`[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`. It also outlived the
+run, because the tree is reused: every later run started from a fixture four files had drifted in.
+`as_found` and `put_back` are the pair, and a test holds them.
+
 **A run that dies still writes its report.** The report is the deliverable, so losing one already
 made is the failure this program must not have — and on the first complete sweep, 2026-09-03, it
 had it: 64 comparisons were measured, the reference then died, and the roster teardown raised on a
