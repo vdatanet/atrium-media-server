@@ -5,7 +5,7 @@ status: Implemented
 created: 2026-08-26
 updated: 2026-08-27
 accepted: 2026-08-26
-amended: 2026-08-27 by T1 - sections 3.2, 3.5 and the open questions; by T4 - section 3.7; by T5 - section 3.6; by T7 - sections 3.1 and 3.6 and OQ-2; by T11 - section 3.3 and OQ-4; by T12 - section 3.4; by T18 - section 3.8; by T19 - section 3.6 and OQ-2's limit; by T20 - sections 3.8 and 7; by 004's T7 - OQ-8
+amended: 2026-08-27 by T1 - sections 3.2, 3.5 and the open questions; by T4 - section 3.7; by T5 - section 3.6; by T7 - sections 3.1 and 3.6 and OQ-2; by T11 - section 3.3 and OQ-4; by T12 - section 3.4; by T18 - section 3.8; by T19 - section 3.6 and OQ-2's limit; by T20 - sections 3.8 and 7; by 004's T7 - OQ-8; 2026-09-08 by 010's differential run - section 3.10 and AC-18, the durations nothing carried onto the item
 implemented: 2026-08-27
 depends_on: []
 ---
@@ -484,6 +484,31 @@ from the first implementation until 2026-09-06: every item of a library was stam
 library was scanned last* rather than *which file is newest* (005 owns that listing). There is no
 migration — the value derives from a file that is still there, so the first rescan corrects it.
 
+### 3.10 Durations
+
+**A file-backed item's runtime is what opening the file measured, and nothing else says it.** The
+reference reads a film's or a track's duration from the container and takes no `<runtime>` an
+`.nfo` offers for such an item, which is why `metadata/merge.py` discards one
+`[source: MediaBrowser.Providers/Manager/MetadataService.cs @ v10.11.11]`.
+
+| Item | Its runtime is |
+|---|---|
+| `Movie`, `Episode`, `Audio` — anything backed by a file | the duration the inspection measured (§3.8) |
+| A multi-part item | the duration of the part its path names, which is its first source — **not** the sum |
+| `MusicAlbum`, `MusicArtist` | the sum of what hangs under it, computed per response and never stored (005 §3.2) |
+| `Series`, `Season` | whatever metadata resolved, if anything: no file, and no rollup on the wire |
+
+The inspection is stored per file (§3.8), so this column is written by every scan and not only by
+an insert: a re-encoded file whose duration changed moves it, exactly as §3.9's date moves.
+
+It was missing from the first implementation until 2026-09-08. The scan opened every file and
+stored what it found, and nothing carried the duration onto the item, where the wire reads it —
+`items.runtime_ticks` was set on **0 of 79** rows of a scanned fixture, and a differential run
+reported the property absent on every film, episode and track: 52 findings across three routes
+`[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`. There is no migration,
+for §3.9's reason: the value derives from a file that is still there, so the first rescan
+corrects it.
+
 ## 4. Data the feature owns
 
 | State | Observable as (via 005) | Lifetime |
@@ -529,6 +554,10 @@ migration — the value derives from a file that is still there, so the first re
     stored, editing it moves no identifier, and declaring one twice is refused (§3.6). *(Added
     2026-09-06 with the reversal, which no test could have caught: every fixture world in this
     suite pins its library identifiers, so nothing here had ever built one twice.)*
+18. An item backed by a file carries **the duration its inspection measured** — the first part's,
+    for a multi-part item — and no container carries one the scan wrote (§3.10). *(Added 2026-09-08
+    with the section, from a differential run that found the measured duration and the column the
+    wire reads had never been joined.)*
 
 ## 6. Conformance
 

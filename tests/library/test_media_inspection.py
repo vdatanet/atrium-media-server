@@ -161,6 +161,63 @@ def test_every_scanned_file_has_an_inspection_keyed_the_way_its_source_is(
         )
 
 
+@pytest.mark.ffmpeg
+def test_a_films_duration_reaches_its_item_and_no_container_gets_one(
+    session: OrmSession, media_files: BuiltMedia, tmp_path: Path
+) -> None:
+    """**The measured duration and the column the wire reads it from were never joined.**
+
+    The scan opened every file and stored what it found in `media_probes`; nothing carried the
+    duration onto the item, which is where `api/item_dto.py` reads `RunTimeTicks`. On a scanned
+    fixture `items.runtime_ticks` was set on 0 of 79 rows, and the reference answered a duration
+    on every film, episode and track where this server answered nothing - 52 findings across three
+    routes `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`.
+
+    Both halves are asserted, because writing the column unconditionally would be the other
+    defect: a container's runtime is a rollup on the wire for music and an `.nfo`'s for a series,
+    and a scan handing back the `None` a container carries would erase it on every pass.
+    """
+    tree = media_files.copy_into(tmp_path / "tree")
+    library = a_library(session, tree.movies_root, CollectionType.MOVIES)
+    scan(library, session)
+
+    probes = MediaProbeRepository(session)
+    items = ItemRepository(session).by_library(library.id)
+    refused = refused_films()
+
+    films = [one for one in items.values() if one.type is ItemType.MOVIE and one.sources]
+    assert films, "no film was scanned, so nothing below means anything"
+    inspected = [one for one in films if one.relative_path not in refused]
+    assert inspected, "every film was refused, so the duration below asserts nothing"
+
+    for film in inspected:
+        assert film.relative_path is not None
+        stored = probes.get(library.id, film.relative_path)
+        assert stored is not None
+        assert film.runtime_ticks == stored.runtime_ticks, (
+            f"{film.relative_path} carries a duration its own inspection does not"
+        )
+        assert film.runtime_ticks, "a film of real media with no duration at all"
+
+    for one in items.values():
+        if not one.is_file_backed:
+            assert one.runtime_ticks is None, f"{one.type} is a container and was given a duration"
+
+
+def test_a_film_the_prober_refused_carries_no_duration(
+    session: OrmSession, fixture_library: BuiltFixture
+) -> None:
+    """No inspection is no duration, and not a zero: a film nothing could open has an unknown
+    length, and `0` would be a claim about it."""
+    built = fixture_library.of("movies")
+    library = a_library(session, built.root, CollectionType.MOVIES)
+    scan(library, session, prober=not_media)
+
+    films = [one for one in ItemRepository(session).by_library(library.id).values() if one.sources]
+    assert films, "the fixture library resolved no file-backed item"
+    assert all(one.runtime_ticks is None for one in films)
+
+
 # ------------------------------------------------------------------------------------------
 # When the prober refuses
 # ------------------------------------------------------------------------------------------

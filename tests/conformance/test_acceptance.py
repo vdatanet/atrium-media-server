@@ -383,6 +383,12 @@ FEATURE_003: dict[int, tuple[str, ...]] = {
         "tests.library.test_config:test_renaming_a_library_keeps_every_identifier",
         "tests.library.test_config:test_moving_a_root_keeps_every_identifier",
     ),
+    18: (
+        # The join that was never made: the duration the inspection measured, and the column the
+        # wire reads it from. Both halves - a file-backed item carries it, a container does not.
+        "tests.library.test_media_inspection:test_a_films_duration_reaches_its_item_and_no_container_gets_one",
+        "tests.library.test_media_inspection:test_a_film_the_prober_refused_carries_no_duration",
+    ),
 }
 
 #: Feature directory -> its map. Adding 003 was one entry here and one dictionary above, which is

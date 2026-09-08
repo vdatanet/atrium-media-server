@@ -573,6 +573,7 @@ def _item(row: models.Item, sources: list[models.ItemSource]) -> Item:
             for one in sorted(sources, key=lambda one: one.part_index)
         ),
         production_year=row.production_year,
+        runtime_ticks=row.runtime_ticks,
         index_number=row.index_number,
         parent_index_number=row.parent_index_number,
         end_index_number=row.end_index_number,
@@ -680,6 +681,10 @@ class ItemRepository:
                 # and to 004's refresh after that, and a scan that rewrote it every time would
                 # undo a sidecar's year on every pass.
                 production_year=item.production_year,
+                # **The duration the inspection measured**, and only for a file-backed item: a
+                # container's runtime is a rollup on the wire (music) or a metadata value (a
+                # series), and neither is the scanner's to write. 003 section 3.10.
+                runtime_ticks=item.runtime_ticks if item.is_file_backed else None,
                 index_number=item.index_number,
                 parent_index_number=item.parent_index_number,
                 end_index_number=item.end_index_number,
@@ -716,6 +721,13 @@ class ItemRepository:
             row.name = item.name
             row.sort_name = item.sort_name
             row.name_folded = fold_for_search(item.name)
+        if item.is_file_backed:
+            # **Written on every scan, like `date_created` below and for the same reason**: it
+            # describes the file rather than the moment the item was first seen, so a re-encoded
+            # file whose duration changed has to move the column. Guarded by `is_file_backed`
+            # because a container's runtime in this column is 004's - an `.nfo` on a series - and
+            # a scan handing back the `None` a container carries would erase it every time.
+            row.runtime_ticks = item.runtime_ticks
         row.index_number = item.index_number
         row.parent_index_number = item.parent_index_number
         row.end_index_number = item.end_index_number
@@ -1873,6 +1885,22 @@ class MediaProbeRepository:
             self._streams(library_id, relative_path),
             self._external_streams(library_id, relative_path),
         )
+
+    def runtimes(self, library_id: str) -> dict[str, int | None]:
+        """Every stored duration in this library, by path. One query, no streams, no renumbering.
+
+        **What a scan needs and `get` is the wrong shape for.** A file-backed item's
+        `RunTimeTicks` is the duration the inspection measured, and the scan writes it onto every
+        item it keeps - which through `get` would be one query and one stream join per file, for a
+        single integer. Nothing else here reads a probe in bulk, which is why this is the only
+        such method.
+        """
+        rows = self._session.execute(
+            select(models.MediaProbe.relative_path, models.MediaProbe.runtime_ticks).where(
+                models.MediaProbe.library_id == library_id
+            )
+        )
+        return {row.relative_path: row.runtime_ticks for row in rows}
 
     def external_signal(
         self, library_id: str, relative_path: str
