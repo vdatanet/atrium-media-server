@@ -441,6 +441,19 @@ script and none of them through a route:
    per-body figure; this is what it comes to across a whole sweep, and it is the difference between
    a report a reader can triage and one whose largest single cause is the harness.
 
+   **And the same sweep with this step done, 2026-09-08: 942 differences, 22 of them on the three
+   user routes.** The account stopped being the largest single cause of the report, and what the
+   run then said about `/Items/Latest` was a defect of this server's own — a `ChildCount` merged
+   the day before that was absent on every ungrouped row and the wrong number on every grouped one
+   `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`. That is the whole
+   argument for the step: 307 findings about the harness are 307 rows a reader has to walk past
+   before reaching the one that was about the server.
+
+   The documents are read off the reference itself and never composed by hand: the administrator's
+   from `GET /Users/Me`, a stock account's from a throwaway created and destroyed on the instance
+   the run stands up, and the seat's is that stock policy through `differential.py`'s own
+   `restricted_policy`, so the two hands cannot drift.
+
 None of the four is a defect and none is in scope for 010 (spec §2); they are what the missing
 management surface costs a run, written down so the next one does not rediscover them.
 

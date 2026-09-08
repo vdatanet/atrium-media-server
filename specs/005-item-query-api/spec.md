@@ -154,15 +154,24 @@ registry holds.* `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08
 > `[probe: tools/probe_latest_row_width.py, Jellyfin 10.11.11, 2026-09-08]`. Nothing else gated
 > travels: no `RecursiveItemCount`, no `Overview`, no `SortName`.
 >
-> **It is a real count and not [§3.25](../../docs/compatibility/behaviours.md)'s number** —
-> `Movie=0` on a film, which has no children at all, and `12` and `10` on two albums — so this
-> server answers it rather than excusing it. `/UserViews` is the precedent for a route being wider
-> than its width says, and there the extra property is not a count; here it is.
+> **`ChildCount` here is not a child count, and it is not a field.** It is **the size of the group
+> the row stands for**: a row that stands only for itself carries `0` — every film does — and a
+> grouped row carries how many of that container's items the latest query gathered, which is not
+> what the container holds. `Second Album` answers `1` on this route and `2` on its full body
+> `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`. The reference writes
+> it over the built row after the field registry has run, so `fields` neither adds it nor keeps it
+> out `[source: Jellyfin.Api/Controllers/UserLibraryController.cs:569-580 @ v10.11.11]`.
 >
-> It was found by the sweep rather than by a reading: 35 of that route's 116 differences on
-> 2026-09-07 were this one property `[probe: tools/differential.py --fixture, Jellyfin 10.11.11,
-> 2026-09-07]`, and the test that held this server to the narrow shape was asserting **its own**
-> shape with no citation behind it.
+> So it is a **measured number and not [§3.25](../../docs/compatibility/behaviours.md)'s** — every
+> value is derived from something — while still not being the count its name suggests.
+> `/UserViews` is the precedent for a route being wider than its width says.
+>
+> It was found by the sweep rather than by a reading, and **corrected by the next sweep**: 35 of
+> that route's 116 differences on 2026-09-07 were this one property, and the first correction —
+> which added it as a field and read it as the container's own count — was absent on every
+> ungrouped row and wrong on every grouped one, which the run of 2026-09-08 said
+> `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`. The test that held
+> this server to the narrow shape had been asserting **its own** shape with no citation behind it.
 
 > **Four properties arrived after this table was written**, and the note beside "where this field
 > set comes from" is why they need a line rather than a silent edit. `Container`, `VideoType`,
