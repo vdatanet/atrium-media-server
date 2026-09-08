@@ -2238,6 +2238,29 @@ Six lists fed into this one ([005](../005-item-query-api/tasks.md#what-this-feat
 [011](../011-subtitle-delivery/tasks.md#what-this-feature-owes-the-next-ones)) and this is what
 comes back out. It is written here rather than in AGENTS.md so it cannot go stale.
 
+### The 2026-09-07 run, triaged — and its largest single cause is the harness
+
+**1231 differences, and a quarter of them are how the Atrium side was built.** The run of
+2026-09-07 is the first complete sweep since a great deal moved, and reading it by cause rather
+than by count is what this entry is for `[probe: tools/differential.py --fixture, Jellyfin
+10.11.11, 2026-09-07]`:
+
+| where | how many | whose |
+|---|---|---|
+| the three user routes | **307** | **the harness's own setup.** 132 under `Policy`, 99 under the user document, 60 under `Configuration` — `tools/README.md` step 4 predicts every one of them: Atrium has no route that gives an account a policy, so an account made by direct database access answers 11 of the reference's 42 policy properties and an empty configuration. That side was built without step 4 |
+| `POST`/`GET /Items/{itemId}/PlaybackInfo` | 280 | 008's media-stream fields — `DisplayTitle`, `IsAVC`, `TimeBase`, `Level`, `BitRate` and their neighbours |
+| the three item listings | 520 | mostly **row misalignment**: 471 of the run's findings hang off a positional pointer, and 61 are `Name` itself, which is 003's derivation against the reference's whole-filename rule. 005's list already records that reading these by row position reports as shape what is content |
+| everything else | 124 | including 35 `ChildCount` on `/Items/Latest` alone, and 26 `UnplayedItemCount` of which 8 were 013's and are fixed |
+
+**So the number to act on is not 1231.** Re-running with step 4 done removes 307 of it before
+anything is read, and joining the listings item by item rather than by position is what tells the
+rest of `Name`'s consequences from its own. Neither is a code change to either server: both are
+about the run.
+
+**What has no owner yet** is the 35 `ChildCount` findings on `/Items/Latest` — a container
+aggregate the reference sends there and this server does not, on a route where 005 gates it. It is
+the one row of this triage that is neither the harness's, nor 003's naming, nor a stream field.
+
 ### The L3 debt is eight-tenths paid, and 013's closing task paid it
 
 **This list said *"no `level: L3` row has been shown to reach L3"* from the day it was written**,
