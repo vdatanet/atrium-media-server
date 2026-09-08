@@ -281,6 +281,17 @@ def scan(
         report=report,
     )
 
+    # **What the inspection measured, put where the wire reads it.** `RunTimeTicks` on a
+    # file-backed item is the duration of its file, and until 2026-09-08 the scan stored that
+    # duration in `media_probes` and nothing carried it onto the item - so `items.runtime_ticks`
+    # was set on 0 of 79 rows of a scanned fixture, and the reference answered a duration on every
+    # film, episode and track where this server answered nothing: 52 findings across three routes
+    # `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`.
+    #
+    # Read in bulk after the inspection above and before the write below, so a file opened by this
+    # scan and a file opened by an earlier one are the same case.
+    durations = MediaProbeRepository(session).runtimes(library.id)
+
     now = utc_now()
     added = updated = unchanged = 0
     returning: list[str] = []
@@ -293,6 +304,7 @@ def scan(
         report(Phase.WRITING, written, len(ordered))
         before = existing.get(item.id)
         created = _created_at(item, before, now)
+        item = replace(item, runtime_ticks=_runtime_of(item, durations))
         if before is None:
             repository.add(replace(item, date_created=created, date_modified=now))
             added += 1
@@ -869,6 +881,17 @@ def _created_at(item: Item, before: Item | None, now: datetime) -> datetime | No
     return now if before is None else before.date_created
 
 
+def _runtime_of(item: Item, durations: Mapping[str, int | None]) -> int | None:
+    """The duration stored for this item's own file, or `None` where it has none.
+
+    A container has no file and keeps `None`: its runtime is a rollup on the wire for music and
+    004's to resolve for a series, and neither is the scanner's. A multi-part film takes part
+    one's, which is the file `relative_path` already names.
+    """
+    path = item.relative_path
+    return durations.get(path) if path is not None else None
+
+
 def _differs(before: Item, after: Item, *, names_are_the_scanners: bool = True) -> bool:
     """Whether a rescan found anything worth writing.
 
@@ -889,6 +912,10 @@ def _differs(before: Item, after: Item, *, names_are_the_scanners: bool = True) 
         or before.index_number != after.index_number
         or before.parent_index_number != after.parent_index_number
         or before.end_index_number != after.end_index_number
+        # A re-encode usually moves a source's `(size, mtime_ns)` too, so this rarely decides on
+        # its own - but the first scan after 2026-09-08 is exactly the case where it does, every
+        # item's stored duration having been `None`.
+        or before.runtime_ticks != after.runtime_ticks
         or before.sources != after.sources
     )
 

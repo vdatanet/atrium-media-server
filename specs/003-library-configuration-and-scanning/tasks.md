@@ -1312,7 +1312,7 @@ said `Implemented` would make the gate record a state that no longer existed.
 ## Definition of done
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) has a passing
-      test — all seventeen, by name, in `FEATURE_003` (T21). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)*
+      test — all eighteen, by name, in `FEATURE_003` (T21). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)*
 - [x] The naming corpus passes in full, **carries no `xfail` marker**, and every row states the
       reason it exists. Checked rather than assumed: `AWAITING` is empty, which is what
       `test_no_row_is_parked_behind_an_xfail` asserts.

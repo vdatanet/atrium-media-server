@@ -284,6 +284,18 @@ class Item:
     nothing else speaks.
     """
 
+    runtime_ticks: int | None = None
+    """How long this item's own file is, from the inspection that opened it.
+
+    **Not a path-derived value and not a metadata one.** A film's or a track's duration comes from
+    probing the file, which is why `metadata/merge.py` discards a runtime an `.nfo` supplies for a
+    file-backed item - so this is filled by `library/scan.py` from what the inspection stored, and
+    is `None` on every container, whose runtime is a rollup on the wire or 004's to resolve.
+
+    A multi-part film carries **part one's**, the file its identity and its `DateCreated` already
+    come from `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`.
+    """
+
     index_number: int | None = None
     """Episode number, or track number."""
 

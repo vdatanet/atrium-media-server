@@ -2283,12 +2283,12 @@ tree drifted for the next run.
 | what | how many | whose |
 |---|---|---|
 | `ProductionYear` absent | 34 here, **66 across three routes** | 003's. The parse extracts the year, `_movies` built the item from the name alone, and `items.production_year` was read by the DTO, `/Years` and the `years=` filter and written only by an `.nfo`. **Fixed 2026-09-08** |
-| `RunTimeTicks` absent | 30 here, **52 across three routes** | 003's, and **the same shape**: the scan probes every media file and stores the duration in `media_probes`, and nothing puts it on the item, which is where the DTO reads it. `items.runtime_ticks` is 0 of 79 rows on a scanned fixture. **Not fixed** |
+| `RunTimeTicks` absent | 30 here, **52 across three routes** | 003's, and **the same shape**: the scan probes every media file and stores the duration in `media_probes`, and nothing puts it on the item, which is where the DTO reads it. `items.runtime_ticks` was 0 of 79 rows on a scanned fixture. **Fixed 2026-09-08**, with 003 §3.10 and AC-18 |
 | `Name`, and every field on a row it misaligns | 44 `Name`, and most of the rest of the route | 003 §3.5's known divergence and **OQ-8, still open**: the reference names an untagged file after its whole name, digits included, and a film in its own folder after the folder whole. This fixture's music is untagged silence, which is exactly the library where that is visible — and because `Name` feeds `SortName` feeds the order, one naming difference reports as shape what is content |
 | `HasLyrics`, `PremiereDate`, `AlbumArtist`, `AlbumPrimaryImageTag` on audio rows | 54 | 005's list-row tranche, per field and per type |
 
-**What has no owner yet** is the audio tranche's four fields. `RunTimeTicks` and OQ-8 have one each
-and neither is done.
+**What has no owner yet** is the audio tranche's four fields. OQ-8 has one and is not done: it is
+also the cause that multiplies every other, because `Name` feeds `SortName` feeds the order.
 
 ### The L3 debt is eight-tenths paid, and 013's closing task paid it
 
