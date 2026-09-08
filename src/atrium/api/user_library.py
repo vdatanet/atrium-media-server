@@ -142,6 +142,12 @@ def _always_its_container(one: HydratedItem) -> bool:
     return one.item.type is ItemType.AUDIO
 
 
+#: The one property a `/Items/Latest` row carries that a list row does not (005 §3.7, measured
+#: 2026-09-08). Named rather than spelled inline so the route reads as what it is: a list row plus
+#: exactly this.
+CHILD_COUNT = "ChildCount"
+
+
 @router.get("/Items/Latest")
 async def latest_media(
     request: Request,
@@ -232,19 +238,30 @@ async def latest_media(
 
         ordered = [containers.get(key, first) for key, first in chosen]
 
+        # **A Latest row is a list row plus `ChildCount`, and nothing else** - a third width on
+        # this one route, measured 2026-09-08 against a list row and a full body of the same item:
+        # 21 properties against 20 and 55, and the one extra is this
+        # `[probe: tools/probe_latest_row_width.py, Jellyfin 10.11.11, 2026-09-08]`. It is a real
+        # count rather than behaviours 3.25's number - `Movie=0` on a film, which has no children,
+        # and 12 and 10 on two albums - so it is answered truthfully rather than excused.
+        #
+        # Added to the resolved fields rather than given a fourth `Width`: the emitter and
+        # `aggregates_context` both key on `fields`, so this is the same door a client asking for
+        # the property comes through, and a fourth width would be a new shape for one name.
+        latest_fields = asked_fields | {CHILD_COUNT}
         context = BuildContext(
             server_id=state.server_id,
             policy=policy_of(target),
             access=access_of(target),
             width=Width.LIST_ROW,
-            fields=asked_fields,
+            fields=latest_fields,
             enable_user_data=enableUserData,
             enable_images=enableImages,
             image_type_limit=imageTypeLimit,
             enable_image_types=frozenset(split_csv(enableImageTypes)) or None,
             libraries=library_context(LibraryRepository(opened)),
             aggregates=aggregates_context(
-                repository, ordered, target, asked_fields, Width.LIST_ROW
+                repository, ordered, target, latest_fields, Width.LIST_ROW
             ),
         )
         built = build_dtos(ordered, context)
