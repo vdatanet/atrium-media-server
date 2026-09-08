@@ -3103,6 +3103,32 @@ def _fixture_tree(instances: Instances) -> Path:
     return Path(instances.fixture_root)
 
 
+def as_found(path: Path) -> Tuple[bytes, int]:
+    """A file's bytes **and** its modification time, which is what putting it back means.
+
+    **The two travel together because the modification time is data here, not metadata.** An
+    item's `DateCreated` is its file's modification time on both servers (behaviours section
+    2.29), and `GET /Items/Latest` is a window over that order - so a row that puts a file back
+    with the wall clock has not restored the tree, it has made that file the newest thing in the
+    library, on the reference, for every reading after it and for every later run over the same
+    tree.
+
+    Measured on 2026-09-08, which is how this was found: the sweep reported a `Series` row and a
+    film in swapped positions on `/Items/Latest`, and the cause was this - four episode files put
+    back at 12:14:52 that the fixture stamps in 2025
+    `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`. Only the reference
+    saw it, because only the reference has a route that rescans.
+    """
+    return path.read_bytes(), path.stat().st_mtime_ns
+
+
+def put_back(path: Path, payload: bytes, mtime_ns: int) -> None:
+    """Restore what `as_found` took, both halves - see it for why the time is one of them."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+    os.utime(path, ns=(mtime_ns, mtime_ns))
+
+
 def named_container_that_lost_every_file(
     instances: Instances, identities: Sequence[Seat]
 ) -> NamedResult:
@@ -3132,9 +3158,9 @@ def named_container_that_lost_every_file(
             f"no episode files under {tree}/Shows/The Series: this row empties a container on "
             "disk, and the tree it was pointed at does not hold one"
         )
-    saved = [(path, path.read_bytes()) for path in emptied]
+    saved = [(path, *as_found(path)) for path in emptied]
     try:
-        for path, _ in saved:
+        for path, _payload, _when in saved:
             path.unlink()
         reference_rescan(held)
         after = directory.get("/Items/" + str(series["Id"]), userId=user_id)
@@ -3150,9 +3176,8 @@ def named_container_that_lost_every_file(
             if str(row.get("Id")) == str(series["Id"])
         ]
     finally:
-        for path, payload in saved:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(payload)
+        for path, payload, when in saved:
+            put_back(path, payload, when)
         with contextlib.suppress(NamedError, WireError):
             reference_rescan(held)
     raise NamedError(
@@ -3178,7 +3203,7 @@ def named_replaced_poster_default_rescan(
     if not posters:
         raise NamedError(f"no poster beside the planted film under {tree}")
     poster = posters[0]
-    original = poster.read_bytes()
+    original, original_time = as_found(poster)
     before_tag = (film.get("ImageTags") or {}).get("Primary")
     before = held.request("GET", "/Items/" + str(film["Id"]) + "/Images/Primary")
     try:
@@ -3191,7 +3216,7 @@ def named_replaced_poster_default_rescan(
         after_tag = (again.get("ImageTags") or {}).get("Primary")
         after = held.request("GET", "/Items/" + str(film["Id"]) + "/Images/Primary")
     finally:
-        poster.write_bytes(original)
+        put_back(poster, original, original_time)
         with contextlib.suppress(NamedError, WireError):
             reference_rescan(held)
     raise NamedError(
@@ -3477,7 +3502,7 @@ def named_on_demand_probe_heals_the_listing(
             "has answered it"
         )
 
-    saved = latent.read_bytes()
+    saved, saved_time = as_found(latent)
     try:
         latent.write_bytes(donor.read_bytes())
         listed = {
@@ -3489,7 +3514,7 @@ def named_on_demand_probe_heals_the_listing(
             side: annotation(seats[side], str(films[side]["Id"]), users[side]) for side in SIDES
         }
     finally:
-        latent.write_bytes(saved)
+        put_back(latent, saved, saved_time)
 
     def said(one: Tuple[Any, ...]) -> str:
         return f"{one[0]} stream(s), RunTimeTicks={one[1]!r}, Size={one[2]!r}, item={one[3]!r}"
