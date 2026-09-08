@@ -572,6 +572,7 @@ def _item(row: models.Item, sources: list[models.ItemSource]) -> Item:
             MediaSource(relative_path=one.relative_path, size=one.size, mtime_ns=one.mtime_ns)
             for one in sorted(sources, key=lambda one: one.part_index)
         ),
+        production_year=row.production_year,
         index_number=row.index_number,
         parent_index_number=row.parent_index_number,
         end_index_number=row.end_index_number,
@@ -674,6 +675,11 @@ class ItemRepository:
                 # invisible to `searchTerm` and `nameStartsWith`, silently, while the item itself
                 # looks perfectly correct in every list. Found by 005 T6.
                 name_folded=fold_for_search(item.name),
+                # Written here and **not** in `update`, for the reason that method gives about
+                # `name`: a path-derived value belongs to the scanner when the item is created
+                # and to 004's refresh after that, and a scan that rewrote it every time would
+                # undo a sidecar's year on every pass.
+                production_year=item.production_year,
                 index_number=item.index_number,
                 parent_index_number=item.parent_index_number,
                 end_index_number=item.end_index_number,
@@ -1701,8 +1707,12 @@ class ImageRepository:
 #: `[source: MediaBrowser.Providers/Manager/MetadataService.cs:849-861 @ v10.11.11]`. Reporting
 #: them here would make a filename-derived name a value a default refresh must not overwrite, and
 #: AC-1 - "a film with a full `.nfo` resolves entirely from it" - would be unreachable.
+#: `Field.YEAR` joined them on 2026-09-08, with the year itself: it is derived from the same name
+#: by the same parse and written to `items.production_year` by the same `add`, so leaving it out
+#: would make a filename's year a value a sidecar could not replace - a filename winning for one
+#: field and losing for every other, which is an inconsistency nobody could explain from outside.
 _THE_SCANNER_OWNS: frozenset[Field] = frozenset(
-    {Field.NAME, Field.INDEX_NUMBER, Field.PARENT_INDEX_NUMBER}
+    {Field.NAME, Field.YEAR, Field.INDEX_NUMBER, Field.PARENT_INDEX_NUMBER}
 )
 
 #: Which column each scalar field is stored in. A field absent from here is stored some other way -

@@ -275,6 +275,15 @@ class Item:
     Ordered: part one first, and the order is what a player joins them in.
     """
 
+    production_year: int | None = None
+    """The year the item's own name carries, where it carries one [spec section 3.3].
+
+    A **path-derived** value, like the name beside it: the scanner writes it when it creates the
+    item and 004 owns it after that, through `metadata/refresh.py`'s path source - so a `.nfo`
+    saying 1999 replaces a filename saying 1998, and a filename is still the last word when
+    nothing else speaks.
+    """
+
     index_number: int | None = None
     """Episode number, or track number."""
 
