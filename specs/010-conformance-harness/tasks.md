@@ -7,7 +7,7 @@ created: 2026-09-02
 updated: 2026-09-02
 implemented: 2026-09-02
 amended: 2026-09-02 — **D-6 is taken, and this list records the decision rather than the reservation.** The four readings of *"What the gate changed"* §3 — behaviours §5.2, behaviours §5.6, 005 §7 OQ-7 and 007's paused-session ticker — join spec §3.10 as named comparisons, so **§3.10 is twenty rows and AC-16 counts twenty**. The spec is amended and dated in its frontmatter the way D-3's was. T5 loses the `outstanding:` section it was to give the register, T12 grows from four runner shapes to six, and the definition of done counts twenty. Behaviours §5.2 keeps its `⚠️ UNVERIFIED` marker: a §3.10 row is an owner and a method, not the reading that discharges it. `status` stays `Draft` — this list's own gate is a separate act.
-closing_review: 2026-09-02 — **all fifteen tasks are done, D-7 is taken, and 010 is `Implemented`.** T15 wrote the acceptance map, the ignored-parameter report (D-5) and the first reader of `surface.yaml`'s `level` column, and found the class its three predecessors found: a criterion with no test at all (AC-11, mapped to *"CI, unchanged"* and asserted nowhere), a criterion half with no test (AC-7's citation, the mechanism Principle II rests on), and a criterion whose own measurement contradicts it — **AC-2**, which claimed the two servers produce *"the same item count and the same structure"* where the comparison declares **forty-seven differences**, every one of them owned by 003 or 004 and therefore outside this feature by §2. Amending it was **D-7**, reserved for its owner below and **taken on 2026-09-02, the recommendation accepted**: AC-2 states the comparison that exists and runs, the spec is amended and dated the way D-3's and D-6's were, and the status line moves in all six documents. **What `Implemented` means here is stated rather than assumed**: the fifteen tasks are done and the eighteen criteria are proven by tests that assert what the criterion says — not that the harness has swept everything. Six of the twenty named comparisons are still outstanding with their owners, no `level: L3` row has been shown to reach L3, and both are on the owes list rather than inside the status word.
+closing_review: 2026-09-02 — **all fifteen tasks are done, D-7 is taken, and 010 is `Implemented`.** T15 wrote the acceptance map, the ignored-parameter report (D-5) and the first reader of `surface.yaml`'s `level` column, and found the class its three predecessors found: a criterion with no test at all (AC-11, mapped to *"CI, unchanged"* and asserted nowhere), a criterion half with no test (AC-7's citation, the mechanism Principle II rests on), and a criterion whose own measurement contradicts it — **AC-2**, which claimed the two servers produce *"the same item count and the same structure"* where the comparison declares **forty-seven differences**, every one of them owned by 003 or 004 and therefore outside this feature by §2. Amending it was **D-7**, reserved for its owner below and **taken on 2026-09-02, the recommendation accepted**: AC-2 states the comparison that exists and runs, the spec is amended and dated the way D-3's and D-6's were, and the status line moves in all six documents. **What `Implemented` means here is stated rather than assumed**: the fifteen tasks are done and the eighteen criteria are proven by tests that assert what the criterion says — not that the harness has swept everything. Six of the twenty named comparisons are still outstanding with their owners, no `level: L3` row has been shown to reach L3, and both are on the owes list rather than inside the status word. **The second half of that sentence stopped being true on 2026-09-07** and is left standing because a closing review records what was so on the day it was written: a complete sweep against a real pair now shows **eight of the ten declared rows** reaching L3 from both seats - see the owes list, which is where a claim that moves is corrected.
 plan_status_required: Accepted
 plan_status_actual: Implemented
 ---
@@ -2237,6 +2237,29 @@ Six lists fed into this one ([005](../005-item-query-api/tasks.md#what-this-feat
 [009](../009-playlists/tasks.md#what-this-feature-owes-the-next-ones),
 [011](../011-subtitle-delivery/tasks.md#what-this-feature-owes-the-next-ones)) and this is what
 comes back out. It is written here rather than in AGENTS.md so it cannot go stale.
+
+### The L3 debt is eight-tenths paid, and 013's closing task paid it
+
+**This list said *"no `level: L3` row has been shown to reach L3"* from the day it was written**,
+and §4.3's claim was machinery in and reading unpaid. A complete sweep against a real pair on
+2026-09-07 records **eight of the ten declared rows compared from both seats**
+`[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-07]` — ten rather than eight
+because 013 raised the two artist routes, and it is that feature's closing task that took the run,
+this one having only ever built the machine.
+
+**The two that are not are `GET /Audio/{itemId}/stream` and `GET /Audio/{itemId}/universal`**, which
+the report marks `partly` — the administrator alone — and the reason belongs here rather than to
+008. The restricted seat is narrowed to one **movies** library, by `movies_library`'s choice and for
+`tools/probe_restricted_surface.py`'s reason: the measurement needs one item the seat may open and
+one it may not. A movies-only seat can reach no audio at all, so its three audio listings answer
+zero rows and every audio-anchored case is unaskable for it — which is 14 of the run's 18 unasked
+cases, reported correctly and about a seat nobody meant to build that way.
+
+**What that seat is narrowed to is a decision this feature owns and has not taken.** Narrowing it
+to a movies library *and* a music one would let both rows compare from both seats and would keep
+what the narrowing is for, since four libraries would still be closed to it. It would also move
+every restricted comparison in the sweep, which is why it is a decision rather than a fix, and why
+the report says `partly` with the seat's libraries on its own provenance line instead.
 
 **To 003, and it is the largest.** **A running Atrium cannot be given a library.**
 `atrium.library.config.create` and `atrium.library.scan.scan` have no caller in `src/` or `tools/` —

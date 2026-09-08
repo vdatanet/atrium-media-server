@@ -172,10 +172,21 @@ has gone away fails too. A status line that overstates the work is the one thing
 to prevent in others, which is why the flip waited for the decision and why the word is bounded:
 **010 is `Implemented` on 2026-09-02** — fifteen of fifteen tasks, eighteen of eighteen criteria —
 and that is not a claim that the harness has swept everything. Six of the twenty named comparisons
-are outstanding with their owners, two of them because Atrium has no library-refresh route to make
-them comparisons at all, and **no `level: L3` row has been shown to reach L3**: no complete sweep of
-the 84 request cases against a real pair is recorded anywhere. Both are on 010's own owes list, and
-the forty-seven differences stay 003's and 004's to decide.
+were outstanding with their owners, two of them because Atrium has no library-refresh route to make
+them comparisons at all, and **no `level: L3` row had been shown to reach L3**: no complete sweep of
+the 84 request cases against a real pair was recorded anywhere. Both were on 010's own owes list,
+and the forty-seven differences stay 003's and 004's to decide.
+
+**The L3 half of that moved on 2026-09-07, and it took 013's closing task to move it.**
+`surface.yaml` declares ten `level: L3` rows since the two artist routes were raised, and a
+complete sweep against a real pair now records **eight of them compared from both seats**
+`[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-07]`. The remaining two are
+`GET /Audio/{itemId}/stream` and `GET /Audio/{itemId}/universal`, which the report marks **partly**
+— the administrator alone. The reason is not the routes: the restricted seat is narrowed to one
+**movies** library, by the same choice `tools/probe_restricted_surface.py` makes and for the same
+reason, so every audio-anchored case is unaskable for it and its three audio listings answer zero
+rows. What that seat is narrowed to is 010's to decide, and until it does the two rows are proven
+from one seat and the report says which.
 
 **The second reason is the one that decides how the tooling is judged.** A disposable instance
 takes every writing measurement off a server somebody uses. The convention says a probe that writes

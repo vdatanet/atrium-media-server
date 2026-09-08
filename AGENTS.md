@@ -126,11 +126,15 @@ criterion now states the comparison that exists and runs — the reference's rea
 Atrium's scan of the same tree compared against it in the default job, every difference declared
 with its reason and its owning feature, an undeclared difference failing and a declared one that has
 gone away failing too. **What `Implemented` means there is fifteen of fifteen tasks and eighteen of
-eighteen criteria, and nothing wider**: six of the twenty named comparisons are still outstanding
-with their owners, no `level: L3` row has been shown to reach L3, and the forty-seven differences
+eighteen criteria, and nothing wider**: six of the twenty named comparisons were still outstanding
+with their owners, no `level: L3` row had been shown to reach L3, and the forty-seven differences
 are 003's and 004's to decide — all of it on
 [010's owes list](specs/010-conformance-harness/tasks.md#what-this-feature-owes-the-next-ones)
-rather than inside the status word. 010 also found two differences in **implemented** features, both left to their
+rather than inside the status word. **The L3 half moved on 2026-09-07**, and by another
+feature's closing task rather than by 010's: a complete sweep against a real pair records eight of
+the ten declared rows compared from both seats, with the two audio routes proven from the
+administrator alone because the restricted seat is narrowed to a movies library and can reach no
+audio at all `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-07]`. 010 also found two differences in **implemented** features, both left to their
 owners: a seat with all three playback permissions denied negotiated `SupportsTranscoding: true`
 here and `false` there (008's, behaviours §2.21 — **answered on 2026-09-02**, and the gate that was
 missing was not the one the report named), and Atrium's `is_hidden` default answers a
