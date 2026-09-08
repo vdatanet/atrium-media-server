@@ -3878,5 +3878,24 @@ reference carries it too: `AC/DC` is a tree item there and `AC DC` a registry ro
 identifiers, measured in the same run. It is visible through `/Items?includeItemTypes=MusicArtist`
 and through nothing a client browses by, and it is **not** a gap this project is carrying alone.
 
-One divergence came out of the closing and is written down rather than folded in: a registry
-artist's `ChildCount` is [§3.27](#327-childcount-on-a-registry-artist-is-a-stable-number-that-counts-nothing--class-b-diverged).
+Two divergences came out of the closing and are written down rather than folded in.
+
+A registry artist's `ChildCount` is
+[§3.27](#327-childcount-on-a-registry-artist-is-a-stable-number-that-counts-nothing--class-b-diverged).
+
+**And `IsFolder` on an `/Artists` row is a consequence of the half that stayed open**, measured
+2026-09-08 `[probe: tools/probe_by_name_row_shape.py, Jellyfin 10.11.11, 2026-09-08]`. It is
+present on such a row **exactly when that row is also an item of the library tree** — 165 of 684
+rows carry it, all 165 are tree items, and every tree-backed row has it: a perfect correlation in
+both directions, which is neither the route's rule nor the type's and is what two readings of this
+property had been disagreeing about. This library's `/Artists` omits it on most rows; a reference
+instance over this repository's own fixture sent it on **every** row, because over that tree every
+artist has a directory. One rule, two libraries.
+
+Atrium cannot reproduce it, and the reason is the first consequence above rather than anything 013
+chose: on the reference one artist is **one item** that may appear in both listings under one
+identifier, which is what makes *"this row is also a tree item"* a question about a row. Here the
+two populations are two rows with two identifiers by construction, so an `/Artists` row is never a
+tree item and can never carry the flag. Closing it means the identity migration this section
+stopped naming as its mechanism — so it is recorded here, against the consequence that owns it,
+rather than as a defect of the routes.

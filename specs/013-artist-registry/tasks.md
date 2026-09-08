@@ -277,10 +277,22 @@ which is why it merges on its own.
 
   Both are **new and belong to 013**, and neither is the gap this feature closed:
 
-  * **`IsFolder`** is in 005's `OMITTED` for these two routes, on a measurement of 2026-08-28 —
-    *"the two artist routes no `IsFolder`"*. This run says the reference sends `true`. One of the
-    two readings is of a different population or a different server, and which is a question for
-    whoever takes it.
+  * **`IsFolder` was measured on 2026-09-08 and both readings were right**
+    `[probe: tools/probe_by_name_row_shape.py, Jellyfin 10.11.11, 2026-09-08]`. It is on an
+    `/Artists` row **exactly when that row is also an item of the library tree**: 165 of 684 rows
+    carry it, all 165 are tree items, and every tree-backed row has it — a perfect correlation in
+    both directions. So it is neither the route's rule (005's `OMITTED`) nor the by-name row's
+    (005 §3.2's sentence), and the two disagreeing readings are **one rule seen on two
+    libraries**: this one's artists are mostly registry-only, and over the fixture every artist
+    has a directory.
+
+    **Atrium cannot reproduce it, and not because of anything 013 chose.** On the reference one
+    artist is one *item* that may appear in both listings under one identifier, which is what
+    makes *"this row is also a tree item"* a question about a row at all. Here the two populations
+    are two rows with two identifiers by construction — [behaviours §5.3](../../docs/compatibility/behaviours.md)'s
+    first consequence, the half 013 does **not** close — so an `/Artists` row is never a tree item.
+    It is recorded there, against the consequence that owns it, rather than as a defect of these
+    routes.
   * **`UnplayedItemCount` was 013's own defect and is fixed in this change.** A container's
     `UserData` is a statement about its subtree here, and a registry artist has no subtree at all -
     nothing hangs off it and it hangs off nothing - so the rollup was a rollup of zero and the
