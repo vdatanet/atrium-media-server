@@ -432,6 +432,14 @@ script and none of them through a route:
    account was made* rather than about this server. Seed both through `atrium.users.policy.split`,
    which is the reader that route would use, and the report measures the server again.
 
+   **The price of skipping it is a quarter of the run, measured on 2026-09-07.** A sweep whose
+   Atrium side did steps 1 to 3 and not this one answered **1231 differences, of which 307 are on
+   the three user routes** — 132 under `Policy`, 99 under the user document and 60 under
+   `Configuration` — and every one of them is about how that account was made
+   `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-07]`. The 15 above is the
+   per-body figure; this is what it comes to across a whole sweep, and it is the difference between
+   a report a reader can triage and one whose largest single cause is the harness.
+
 None of the four is a defect and none is in scope for 010 (spec §2); they are what the missing
 management surface costs a run, written down so the next one does not rediscover them.
 
