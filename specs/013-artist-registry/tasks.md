@@ -234,13 +234,74 @@ which is why it merges on its own.
 
 ## T9 — Close it
 
-- [ ] **Changes:** the three 013 documents to `Implemented`, `specs/README.md`'s row, and the
-      definition of done below with its counts made true.
-- **Depends on:** T1–T8
-- **Verified by:** `pytest` whole, `ruff`, `ruff format`, `mypy`, and a differential run against a
-  single-use reference instance — the two routes are `L3` since 2026-09-07, so this is the first
-  feature whose closing task cannot tick its conformance line from the fixture alone.
-- **Spec reference:** §6
+- [x] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_013`, which maps all
+      **eight** criteria to tests by name — **done**. The three 013 documents to `Implemented`,
+      `specs/README.md`'s row and the definition of done's counts — **not done, and deliberately
+      not**: one line of that definition is unticked.
+
+  **What is open is the differential run, and it is open because of a decision rather than an
+  oversight.** Both artist routes were raised from `L2` to `L3` on 2026-09-07, so this is the
+  first closing task in this repository that **cannot tick its conformance line from the fixture
+  alone** — every feature before it deferred the differential half to 010, and
+  [010's own list](../010-conformance-harness/tasks.md) still records that *no `level: L3` row has
+  been shown to reach L3*.
+
+  Marking the documents `Implemented` with that line unticked was tried and undone in the same
+  change. A status word that means *"the tasks are done"* while a criterion of the same document
+  says otherwise is precisely what 010 T15 found in three features and what
+  `test_the_definition_of_done_counts_the_criteria_that_exist` exists to stop.
+
+  **What the run costs, so whoever takes it is not surprised.** A reference instance over the
+  fixture (`--fixture`, one container of the pinned digest, which dies with `SIGILL` on roughly
+  half of its starts on arm64) **and an Atrium under test built by hand** — `tools/README.md`'s
+  four steps: the fixture's libraries by the same names, an administrator, a restricted seat
+  handed in under `ATRIUM_RESTRICTED_*` narrowed to the library `movies_library` picks, and the
+  policy and configuration seeded from the reference's own documents. Then
+  `tools/differential.py --fixture`, and the two artist routes read in its report.
+
+  **The run was taken on 2026-09-07 and the conformance line is ticked.** It cost what this
+  paragraph said it would: the `--fixture` run's own instance died with `SIGILL` and **refused to
+  fall back** on another server, which is the protection 012 T10 bought; an instance stood up by
+  hand makes **one** library where the fixture declares six, so `movies_library` found no movies
+  library with anything in it and the run refused a seat narrowed to nothing; and the six have to
+  be passed to `reference_instance.py --library` from the same declaration the fixture uses.
+
+  **What it found on the two routes is twelve differences and not one of them is a population.**
+  No `LENGTH`, no `ORDER`, no row that one server has and the other has not: `/Artists` and
+  `/Artists/AlbumArtists` answer the reference's own rows. Two fields differ, four findings each:
+
+  | class | pointer | here | there |
+  |---|---|---|---|
+  | `MISSING_KEY` | `/Items/0/IsFolder` | absent | `true` |
+  | `EXTRA_KEY` | `/Items/*/UserData/UnplayedItemCount` | `0` | absent |
+
+  Both are **new and belong to 013**, and neither is the gap this feature closed:
+
+  * **`IsFolder`** is in 005's `OMITTED` for these two routes, on a measurement of 2026-08-28 —
+    *"the two artist routes no `IsFolder`"*. This run says the reference sends `true`. One of the
+    two readings is of a different population or a different server, and which is a question for
+    whoever takes it.
+  * **`UnplayedItemCount` was 013's own defect and is fixed in this change.** A container's
+    `UserData` is a statement about its subtree here, and a registry artist has no subtree at all -
+    nothing hangs off it and it hangs off nothing - so the rollup was a rollup of zero and the
+    emitter sent `0` where the reference sends nothing. `_rolled` was reading the **type**
+    where it meant the **population**, which is the same mistake the visibility clause and the
+    collector each made once, and a test asserts the distinction both ways: no subtree count on a
+    registry artist, and the tree artist still rolling up.
+
+    **The first fix was wrong and the suite caught it, not the reasoning.** Dropping registry
+    artists from `_rollups` altogether looked right and broke something else: those numbers carry
+    the container **runtime** as well, which a music container's `RunTimeTicks` reads (005 AC-30)
+    and which the reference answers as `0` on these very rows — so it would have fixed one
+    difference by making another. The test that caught it is the one written the same day to fix
+    the *price* of that field. What has no subtree statement is the user data alone, so that is
+    the one line that changed.
+
+  **And two things this run confirms that were built for it today**: the named anchor pairs
+  `Ninety Six Kilohertz` at **row 3 here and row 0 there** — the two orderings genuinely disagree
+  and the anchor no longer cares — and the restricted seat's `movies-by-sort-name@0` resolves to
+  `Both Subtitle Kinds (of 15)` on **both** sides where the 2026-09-06 report had two different
+  libraries. That seat's unasked cases went from 23 to 16.
 
 ---
 

@@ -1744,6 +1744,57 @@ FEATURE_012: dict[int, tuple[str, ...]] = {
 }
 
 
+#: 013's eight, and the feature that closed an accepted gap rather than adding a surface.
+#:
+#: **Two of them are named at more than one level for the reason 004 recorded**: a correct rule and
+#: a rule the caller actually uses are two claims. AC-1 and AC-4 are proved at the repository and
+#: again on the wire, because what the two routes list is the whole of what this feature changes.
+#:
+#: **AC-7 is the one that had to be proved by things this feature did not write.** It says the
+#: library tree does not move, so its tests are 003's identity suite and the recorded reading of
+#: the reference - the two places that would notice an identifier changing - rather than anything
+#: 013 added for itself.
+FEATURE_013: dict[int, tuple[str, ...]] = {
+    1: (
+        "tests.unit.test_item_by_name:test_artists_lists_the_registry_and_not_the_tree",
+        # The performer who is nobody's album artist, at the level a client sees it.
+        "tests.unit.test_item_dto:test_a_performer_is_a_name_a_client_can_follow",
+        "tests.unit.test_item_queries:test_a_track_performer_who_is_nobodys_album_artist_has_a_registry_item",
+        "tests.unit.test_by_name_routes:test_ac5_the_count_is_true_with_and_without_limit",
+    ),
+    2: ("tests.unit.test_item_by_name:test_an_artist_in_two_music_libraries_is_one_registry_row",),
+    3: (
+        "tests.unit.test_query_fixture:test_a_credit_names_the_registry_row_and_not_the_tree_artist",
+        "tests.library.test_identity:test_an_artist_derives_both_ways_and_the_two_are_different_rows",
+    ),
+    4: (
+        "tests.unit.test_by_name_routes:test_ac13_the_two_artist_routes_no_longer_coincide",
+        "tests.unit.test_item_filters:test_artist_ids_is_the_superset_and_album_artist_ids_the_subset",
+    ),
+    5: (
+        "tests.unit.test_query_fixture:test_one_performer_is_nobodys_album_artist_and_has_a_row_all_the_same",
+        # And on the wire, where a client reads it: no parent, and ChildCount 0.
+        "tests.conformance.test_golden_items:test_the_full_body_per_type",
+    ),
+    6: (
+        "tests.unit.test_item_by_name:test_a_registry_artist_is_reached_by_credit_and_not_by_parent",
+        "tests.unit.test_items_route:test_every_parameter_changes_the_answer_and_survives_mangled_casing",
+    ),
+    7: (
+        # Proved by what this feature did not write: 003's identity suite, and the recorded reading
+        # of the reference, whose fifty declared differences are the tree.
+        "tests.library.test_identity:test_an_artist_derives_both_ways_and_the_two_are_different_rows",
+        "tests.library.test_reference_reading:test_atriums_scan_of_the_fixture_matches_the_recorded_reference_reading",
+        "tests.metadata.test_write_path:test_the_refresh_invents_a_registry_artist_and_never_a_tree_one",
+        "tests.metadata.test_write_path:test_the_collector_never_takes_a_tree_artist",
+    ),
+    8: (
+        "tests.metadata.test_write_path:test_a_registry_artist_no_credit_names_is_collected",
+        "tests.metadata.test_write_path:test_a_recreated_row_has_the_same_identifier",
+    ),
+}
+
+
 FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "001-server-identity-and-discovery": FEATURE_001,
     "002-authentication-users-and-sessions": FEATURE_002,
@@ -1757,6 +1808,7 @@ FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "010-conformance-harness": FEATURE_010,
     "011-subtitle-delivery": FEATURE_011,
     "012-negotiation-inputs": FEATURE_012,
+    "013-artist-registry": FEATURE_013,
 }
 
 

@@ -408,3 +408,28 @@ def test_a_registry_artist_is_reached_by_credit_and_not_by_parent(
         ItemQuery(user=world.everyone, parent_id=world.album_artist, limit=1000)
     )
     assert under_the_tree.items, "the tree artist still holds its albums"
+
+
+def test_a_registry_artist_carries_no_subtree_user_data(
+    repository: ItemQueryRepository, world: QueryWorld
+) -> None:
+    """**Found by the differential run of 2026-09-07 and it is 013's own defect, not a divergence.**
+
+    A container's `UserData` is a statement about its subtree here - `Played` exactly when nothing
+    beneath is left unplayed, and the remainder as `UnplayedItemCount`. A registry artist has no
+    subtree at all: nothing hangs off it and it hangs off nothing. The rollup was therefore a
+    rollup of zero, and every `/Artists` row carried `UnplayedItemCount: 0` where the reference
+    sends nothing - four findings on each of the two routes.
+
+    The container test read the **type** where it meant the **population**, which is the same
+    mistake the visibility clause and the collector each made once.
+    """
+    page = repository.run_by_name(ItemType.MUSIC_ARTIST, ItemQuery(user=world.everyone, limit=100))
+    assert page.items, "no registry artists, so this asserts nothing"
+    for one in page.items:
+        assert one.user_data.total_count is None, f"{one.item.name} answered a subtree count"
+        assert one.user_data.unplayed_count is None
+
+    # And the tree artist still rolls up, which is what makes the assertion above a distinction.
+    tree = repository.run(ItemQuery(user=world.everyone, ids=(world.album_artist,), limit=1))
+    assert tree.items[0].user_data.total_count is not None
