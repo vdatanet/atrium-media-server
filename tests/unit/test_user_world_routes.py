@@ -290,10 +290,34 @@ async def test_an_unknown_parent_is_the_problem_details_404(
     assert answered.json()["title"] == "Not Found"
 
 
-async def test_latest_rows_are_list_rows(client: httpx.AsyncClient, world: QueryWorld) -> None:
-    """The narrow shape: nothing gated leaks, and the always set travels - including the null."""
+async def test_latest_rows_are_a_list_row_plus_child_count(
+    client: httpx.AsyncClient, world: QueryWorld
+) -> None:
+    """**A third width, and this test used to assert the wrong one.**
+
+    It was `test_latest_rows_are_list_rows` and read *"the narrow shape: nothing gated leaks"* -
+    a statement about **this** server with no citation, which nobody had checked against the
+    reference. The sweep of 2026-09-07 raised 35 `ChildCount` findings on this route, and a
+    reading of one item three ways settled it: a Latest row is a list row **plus `ChildCount`**,
+    21 properties against a list row's 20 and a full body's 55
+    `[probe: tools/probe_latest_row_width.py, Jellyfin 10.11.11, 2026-09-08]`.
+
+    It is a **real count** rather than behaviours 3.25's number - `Movie=0` on a film, which has no
+    children at all, and 12 and 10 on two albums - so this server answers it truthfully.
+
+    The rest of the narrow shape is asserted as it was: everything else gated still stays out, and
+    a row that started carrying `Overview` would be this route drifting toward a full body.
+    """
     answered = await client.get("/Items/Latest", params={"limit": "3"})
     for row in answered.json():
         assert "Overview" not in row and "SortName" not in row
+        assert "RecursiveItemCount" not in row, "one property wider, not the whole aggregate set"
         assert row["ChannelId"] is None
         assert row["UserData"]["Key"] == row["Id"]
+
+    # A container among them, so the count is asserted where it counts something.
+    grouped = await client.get("/Items/Latest", params={"limit": "20"})
+    albums = [row for row in grouped.json() if row["Type"] == "MusicAlbum"]
+    assert albums, "no container in Latest, so ChildCount asserts nothing here"
+    for album in albums:
+        assert album["ChildCount"] > 0

@@ -148,6 +148,22 @@ registry holds.* `[probe: tools/probe_item_shapes.py, Jellyfin 10.11.11, 2026-08
 **`SortName`, `Overview`, `Genres`, `GenreItems`, `Studios`, `People`,
 `PrimaryImageAspectRatio`**, `Width`, `Height`, `IsHD`. `[spec: ItemFields]`
 
+> **`/Items/Latest` is a third width, and one property wide** *(2026-09-08)*. Its rows are the
+> narrow shape above **plus `ChildCount`** — 21 properties against a list row's 20 and a full
+> body's 55, read on one item three ways
+> `[probe: tools/probe_latest_row_width.py, Jellyfin 10.11.11, 2026-09-08]`. Nothing else gated
+> travels: no `RecursiveItemCount`, no `Overview`, no `SortName`.
+>
+> **It is a real count and not [§3.25](../../docs/compatibility/behaviours.md)'s number** —
+> `Movie=0` on a film, which has no children at all, and `12` and `10` on two albums — so this
+> server answers it rather than excusing it. `/UserViews` is the precedent for a route being wider
+> than its width says, and there the extra property is not a count; here it is.
+>
+> It was found by the sweep rather than by a reading: 35 of that route's 116 differences on
+> 2026-09-07 were this one property `[probe: tools/differential.py --fixture, Jellyfin 10.11.11,
+> 2026-09-07]`, and the test that held this server to the narrow shape was asserting **its own**
+> shape with no citation behind it.
+
 > **Four properties arrived after this table was written**, and the note beside "where this field
 > set comes from" is why they need a line rather than a silent edit. `Container`, `VideoType`,
 > `HasSubtitles` and `IsHD` were all measured on the wire at T1 and all deliberately left out: no
