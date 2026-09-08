@@ -1,9 +1,10 @@
 ---
 feature: 013-artist-registry
 title: Artist registry — implementation plan
-status: Draft
+status: Implemented
 created: 2026-09-07
-updated: 2026-09-07
+updated: 2026-09-08
+implemented: 2026-09-08
 spec_status_required: Accepted
 ---
 

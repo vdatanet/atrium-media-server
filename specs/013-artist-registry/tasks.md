@@ -1,9 +1,10 @@
 ---
 feature: 013-artist-registry
 title: Artist registry — tasks
-status: Draft
+status: Implemented
 created: 2026-09-07
-updated: 2026-09-07
+updated: 2026-09-08
+implemented: 2026-09-08
 plan_status_required: Accepted
 ---
 
@@ -321,13 +322,28 @@ which is why it merges on its own.
 
 The feature is done when **all** of these hold:
 
-- [ ] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all **eight** —
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all **eight** —
       has a passing test, by name, in `FEATURE_013`.
-- [ ] Both artist routes reach **L3**, proven by a differential run and not by the fixture alone.
-- [ ] `docs/compatibility/surface.yaml` is unchanged in its rows and carries the two levels raised
+- [x] Both artist routes reach **L3**, proven by a differential run and not by the fixture alone.
+      **Taken 2026-09-07**, and this is the first closing task in this repository that could not
+      tick this line from the fixture: twelve differences on the two routes and **not one of them
+      a population** — no `LENGTH`, no `ORDER`, no row one server has and the other has not.
+- [x] `docs/compatibility/surface.yaml` is unchanged in its rows and carries the two levels raised
       on 2026-09-07: no route is added or removed by this feature.
-- [ ] Anything learned during implementation is back in `spec.md`, in the same change.
-- [ ] The `ChildCount` divergence is in `behaviours.md` with its provenance and its argument, and
-      §5.3 records what closed and what did not.
-- [ ] 005 AC-13 is amended rather than left false, and its acceptance-map entry moves with it.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+- [x] Anything learned during implementation is back in `spec.md`, in the same change. **Two open
+      questions closed by the run** — a registry artist carries no subtree user data (OQ-4, and it
+      was a defect of this feature), and the order and count of both listings already agree
+      (OQ-5). OQ-3 stays open and blocks nothing: no image finding was raised, and what is
+      unmeasured is a case this repository's fixture has not got.
+- [x] The `ChildCount` divergence is in `behaviours.md` with its provenance and its argument, and
+      §5.3 records what closed and what did not — together with `IsFolder`, which the run raised
+      and a probe then explained as a consequence of the half §5.3 keeps.
+- [x] 005 AC-13 is amended rather than left false, and its acceptance-map entry moves with it.
+- [x] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+
+**What `Implemented` means here, stated rather than assumed.** Nine tasks done, eight criteria
+proven by tests that assert what the criterion says, and the two artist routes compared against a
+real Jellyfin. It does **not** mean behaviours §5.3 has no consequence left: the tree artist is
+still keyed per library, `IsFolder` on an `/Artists` row cannot be reproduced because of it, and
+both are recorded there rather than inside this status word. Closing either means the identity
+migration this feature measured its way out of needing.
