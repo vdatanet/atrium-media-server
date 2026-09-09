@@ -222,9 +222,9 @@ def _measure_seats(instance: Any) -> None:
     print(f"POST /Users/New  {status}, Id={made.get('Id')!r}, keys={len(made)}")
     user_id = str(made.get("Id", ""))
 
-    library, _name = cli.movies_library(directory, seat.user_id)
+    narrowing = cli.seat_narrowing(directory, seat.user_id)
     before = directory.get("/Users/" + user_id).get("Policy", {})
-    narrowed = cli.restricted_policy(before, library)
+    narrowed = cli.restricted_policy(before, [identifier for identifier, _name in narrowing])
     status, _headers, body = directory.post_raw("/Users/" + user_id + "/Policy", body=narrowed)
     after = directory.get("/Users/" + user_id).get("Policy", {})
     untouched = after.get("AuthenticationProviderId") == before.get("AuthenticationProviderId")
@@ -260,7 +260,7 @@ def _measure_seats(instance: Any) -> None:
         directory,
         seat,
         [cli.Role.ADMINISTRATOR, cli.Role.RESTRICTED, cli.Role.PLAYBACK_DENIED],
-        library_id=library,
+        library_ids=[identifier for identifier, _name in narrowing],
         sign_in=cli.sign_in_against(instance.url),
     )
     with roster:

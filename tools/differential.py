@@ -82,7 +82,18 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Callable, Dict, Iterator, List, Mapping, Optional, Sequence, Tuple
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+)
 
 # --------------------------------------------------------------------------------------------
 # The three seats
@@ -306,8 +317,18 @@ def preflight(directory: Directory, roles: Sequence[Role]) -> None:
     )
 
 
-def restricted_policy(policy: Mapping[str, Any], library_id: str) -> Dict[str, Any]:
-    """The restricted seat's policy: the account's own, narrowed to one library.
+def restricted_policy(policy: Mapping[str, Any], library_ids: Sequence[str]) -> Dict[str, Any]:
+    """The restricted seat's policy: the account's own, narrowed to a few libraries.
+
+    **One of each collection type from 2026-09-09, where it was one `movies` library before.**
+    A seat that can open only films cannot be asked anything about a track or an episode, and 14
+    of one run's 18 unasked cases said exactly that - eleven wanting audio and three wanting a
+    series `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`. Two of them
+    are `level: L3` rows of the v1 gate, so the narrowing was what kept
+    `GET /Audio/{itemId}/stream` and `/universal` at *partly, the administrator alone*.
+
+    What the narrowing has to keep is the property `seat_narrowing` picks for: **an item the seat
+    may open and an item it may not**. Three libraries of six leaves that intact.
 
     **Read then mutate, never a fresh object.** `POST /Users/{userId}/Policy` takes a whole
     `UserPolicy`, of which only `AuthenticationProviderId` and `PasswordResetProviderId` are
@@ -317,7 +338,7 @@ def restricted_policy(policy: Mapping[str, Any], library_id: str) -> Dict[str, A
     """
     narrowed = dict(policy)
     narrowed[ENABLE_ALL_FOLDERS] = False
-    narrowed[ENABLED_FOLDERS] = [library_id]
+    narrowed[ENABLED_FOLDERS] = list(library_ids)
     return narrowed
 
 
@@ -335,9 +356,9 @@ def playback_denied_policy(policy: Mapping[str, Any]) -> Dict[str, Any]:
     return denied
 
 
-POLICY_OF: Dict[Role, Callable[[Mapping[str, Any], Optional[str]], Dict[str, Any]]] = {
-    Role.RESTRICTED: lambda policy, library_id: restricted_policy(policy, str(library_id)),
-    Role.PLAYBACK_DENIED: lambda policy, _library_id: playback_denied_policy(policy),
+POLICY_OF: Dict[Role, Callable[[Mapping[str, Any], Sequence[str]], Dict[str, Any]]] = {
+    Role.RESTRICTED: lambda policy, library_ids: restricted_policy(policy, library_ids or ()),
+    Role.PLAYBACK_DENIED: lambda policy, _library_ids: playback_denied_policy(policy),
 }
 
 
@@ -363,7 +384,7 @@ class Roster:
         directory: Directory,
         administrator: Identity,
         roles: Sequence[Role],
-        library_id: Optional[str] = None,
+        library_ids: Sequence[str] = (),
         sign_in: Optional[SignIn] = None,
         make_password: Optional[Callable[[], str]] = None,
         handed: Optional[Mapping[Role, Tuple[str, str]]] = None,
@@ -387,7 +408,7 @@ class Roster:
         self.roles: Tuple[Role, ...] = tuple(seen)
         self._directory = directory
         self._administrator = administrator
-        self._library_id = library_id
+        self._library_ids = tuple(library_ids)
         self._sign_in = sign_in
         self._make_password = make_password or (lambda: secrets.token_hex(16))
         #: Seats this roster signs in as rather than creating, by role. **Added by 010 T12, and it
@@ -502,10 +523,10 @@ class Roster:
         of which 12 of 23 reads answer differently to somebody else - green, and about one row of
         a two-row table.
         """
-        if Role.RESTRICTED in self.creates and not self._library_id:
+        if Role.RESTRICTED in self.creates and not self._library_ids:
             raise SeatError(
-                "the restricted seat is a reader narrower than the library, so it needs the "
-                "identifier of the one library it may open, and none was given. A run that "
+                "the restricted seat is a reader narrower than the server, so it needs the "
+                "identifiers of the libraries it may open, and none was given. A run that "
                 "cannot seat an identity it was asked for stops rather than proceeding with "
                 "fewer"
             )
@@ -549,7 +570,7 @@ class Roster:
         )
 
         current = self._directory.get("/Users/" + user_id).get("Policy", {})
-        policy = POLICY_OF[role](current, self._library_id)
+        policy = POLICY_OF[role](current, self._library_ids)
         status, _headers, body = self._directory.post_raw(
             "/Users/" + user_id + "/Policy", body=policy
         )
@@ -932,49 +953,115 @@ def authenticate(wire: Wire, username: str, password: str, token: str) -> Identi
     )
 
 
-def movies_library(directory: Any, user_id: str) -> Tuple[str, str]:
-    """The one library a restricted seat may open, as `(id, name)`, picked so both sides agree.
+#: One library of each of these, in this order, is what a created restricted seat may open.
+#: **Three rather than one from 2026-09-09**, and the order is the report's: a seat that could open
+#: only films could not be asked anything about a track or an episode, and 14 of a run's 18 unasked
+#: cases said exactly that - eleven wanting audio, three wanting a series. Two of the eleven are
+#: `level: L3` rows of the v1 gate.
+SEAT_COLLECTION_TYPES: Tuple[str, ...] = ("movies", "music", "tvshows")
 
-    `tools/probe_restricted_surface.py` narrows its throwaway account to the `movies` view and
-    refuses when there is none, because the measurement needs one item the seat may open and one
-    it may not. The same choice here, for the same reason, and the same refusal.
+#: How many rows of a candidate library are read to answer both questions at once - does it hold
+#: anything, and does it hold a row the register names. One request per candidate either way.
+SEAT_SAMPLE = 200
 
-    **In the order the two servers agree on, which is by name - and until 2026-09-07 it was in
-    whatever order each server listed its views.** The two rosters are built independently and
-    neither knows what the other picked, so *"the first `movies` view with something in it"* is a
-    choice made twice against two different lists: the composed fixture has three `movies`
-    libraries, the reference answers `/UserViews` sorted by name and Atrium answers it in
-    declaration order, so the reference's restricted seat opened `Films` and Atrium's opened
-    `Movies`. Measured 2026-09-06, in a run's own report: `movies-by-sort-name@0` resolved to
+
+def named_anchor_rows(cases: Iterable[Any]) -> frozenset:
+    """Every row the register names **by name** rather than by position.
+
+    These are the rows a seat has to be able to reach, and they are why `seat_narrowing` takes a
+    hint at all: `Ninety Six Kilohertz` is the track six delivery cases anchor on, and it lives in
+    the fixture's *decodable* music library while the silent one sorts before it.
+    """
+    return frozenset(
+        anchor.at
+        for case in cases
+        for anchor in case.anchors
+        if anchor.kind == "named" and anchor.at
+    )
+
+
+def seat_narrowing(
+    directory: Any, user_id: str, wanted: Iterable[str] = ()
+) -> Tuple[Tuple[str, str], ...]:
+    """The libraries a restricted seat may open, as `(id, name)`, picked so both sides agree.
+
+    **One of each collection type, each the first by name with something in it.** Both halves of
+    that sentence are load-bearing and each was learned from a run:
+
+    **By name**, because the two rosters are built independently and neither knows what the other
+    picked - so *"the first `movies` view"* is a choice made twice against two different lists. The
+    composed fixture has three `movies` libraries, the reference answers `/UserViews` sorted by
+    name and Atrium answers it in declaration order, so until 2026-09-07 the reference's seat
+    opened `Films` and Atrium's opened `Movies`: `movies-by-sort-name@0` resolved to
     `2 Fast 2 Furious (of 16)` here and `Both Subtitle Kinds (of 15)` there, and **22 of that
-    seat's 23 unasked cases** said *"the anchor listing holds 0 rows on the atrium"* - the fixture
-    films, the tracks and the series are all in libraries Atrium's seat had not been given.
+    seat's 23 unasked cases** reported an anchor listing holding zero rows. A library's name comes
+    from the declaration both servers are configured from, so sorting by it is what makes the two
+    hands agree. It is not a guarantee - two servers configured differently still part - which is
+    why the caller puts the chosen names in the report's provenance.
 
-    Sorting by name is the whole fix and it is enough: a library's name comes from the declaration
-    both servers are configured from, so both sides walk the same list. What it is not is a
-    guarantee - two servers configured differently would still part here - which is why the caller
-    puts the chosen name in the report's provenance for a reader to check at a glance.
+    **With something in it**, which 010 T12 found the hard way: the composed fixture has an empty
+    `movies` library on purpose (behaviours section 5.7's named comparison), and taking the first
+    one narrowed the reader to a library holding nothing - a seat that can open nothing, which
+    answers a refusal on both servers for the wrong reason.
+
+    **A type with no library of its own is not a refusal.** A server holding only films seats a
+    reader who may open films, and the cases wanting a track report *not asked* with the reason
+    they already have. What is refused is a seat that would open **nothing**, which is the same
+    refusal this function has always made and for the same reason.
+
+    **And `wanted` breaks the tie towards a library the register can actually anchor in**, which
+    is the half a first reading of "one of each type" misses. Six delivery cases anchor on the
+    track `Ninety Six Kilohertz`, and it lives in the fixture's *decodable* music library while
+    the silent one sorts before it by name - so the seat opened `Music`, the anchor named a row it
+    could not see, and the two `level: L3` audio rows stayed unasked for a reason that had nothing
+    to do with the count of libraries `[probe: tools/differential.py --fixture, Jellyfin 10.11.11,
+    2026-09-09]`. Passing the register's named rows in makes the choice express the requirement -
+    *a seat that can be asked what the register declares* - rather than an accident of naming, and
+    it stays deterministic on both sides because both read the same register and the same names.
+
+    `tools/probe_restricted_surface.py` still narrows its own throwaway account to one `movies`
+    library, and deliberately: it measures how much of the surface answers differently to a
+    narrower reader (010 section 3.9), and one library is enough to be narrower. This function
+    seats a reader that has to be **asked every declared case**, which is a different requirement
+    of the same account.
     """
     views = directory.get("/UserViews", userId=user_id) or {}
-    movies = [view for view in views.get("Items", []) if view.get("CollectionType") == "movies"]
-    movies.sort(key=lambda view: str(view.get("Name", "")))
-    for view in movies:
-        # **And it has to hold something, which 010 T12 found the hard way.** The composed fixture
-        # has three `movies` libraries and one of them is deliberately empty (behaviours 5.7's
-        # named comparison), so taking the first one narrowed the reader to a library with nothing
-        # in it - a seat that can open nothing, which is exactly the refusal for the wrong reason
-        # this function was written to avoid.
-        listed = directory.get(
-            "/Items", userId=user_id, parentId=str(view["Id"]), recursive="true", limit=1
+    rows = views.get("Items", []) if isinstance(views, dict) else []
+    names = frozenset(wanted)
+    chosen: List[Tuple[str, str]] = []
+    for kind in SEAT_COLLECTION_TYPES:
+        here = sorted(
+            (view for view in rows if view.get("CollectionType") == kind),
+            key=lambda view: str(view.get("Name", "")),
         )
-        if isinstance(listed, dict) and listed.get("Items"):
-            return str(view["Id"]), str(view.get("Name", ""))
-    raise SeatError(
-        "no movies library with anything in it on this server to restrict the created seat to, "
-        "and a seat narrowed to nothing is not a narrower reader - it is an account that can "
-        "open nothing, which "
-        "answers a refusal on both servers for the wrong reason"
-    )
+        holding: List[Tuple[str, str]] = []
+        for view in here:
+            listed = directory.get(
+                "/Items",
+                userId=user_id,
+                parentId=str(view["Id"]),
+                recursive="true",
+                limit=SEAT_SAMPLE,
+            )
+            items = listed.get("Items", []) if isinstance(listed, dict) else []
+            if not items:
+                continue
+            here_names = {str(one.get("Name", "")) for one in items}
+            if names & here_names:
+                # This library holds a row the register names, so it is the one the seat needs.
+                holding = [(str(view["Id"]), str(view.get("Name", "")))]
+                break
+            if not holding:
+                holding = [(str(view["Id"]), str(view.get("Name", "")))]
+        chosen.extend(holding)
+    if not chosen:
+        raise SeatError(
+            "no library with anything in it on this server to restrict the created seat to, and "
+            "a seat narrowed to nothing is not a narrower reader - it is an account that can "
+            "open nothing, which "
+            "answers a refusal on both servers for the wrong reason"
+        )
+    return tuple(chosen)
 
 
 def seat_libraries(directory: Any, user_id: str) -> Tuple[str, ...]:
@@ -4797,10 +4884,17 @@ def _run_against(
             directories[side],
             administrators[side],
             roles,
-            library_id=(
-                movies_library(directories[side], administrators[side].user_id)[0]
+            library_ids=(
+                tuple(
+                    identifier
+                    for identifier, _name in seat_narrowing(
+                        directories[side],
+                        administrators[side].user_id,
+                        named_anchor_rows(cases),
+                    )
+                )
                 if Role.RESTRICTED in roles and Role.RESTRICTED not in handed[side]
-                else None
+                else ()
             ),
             sign_in=sign_in_against(url, timeout=args.timeout),
             handed=handed[side],

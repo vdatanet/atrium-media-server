@@ -2290,28 +2290,43 @@ tree drifted for the next run.
 **What has no owner yet** is the audio tranche's four fields. OQ-8 has one and is not done: it is
 also the cause that multiplies every other, because `Name` feeds `SortName` feeds the order.
 
-### The L3 debt is eight-tenths paid, and 013's closing task paid it
+### The L3 debt is paid — ten of ten, and the last two took a decision
 
 **This list said *"no `level: L3` row has been shown to reach L3"* from the day it was written**,
 and §4.3's claim was machinery in and reading unpaid. A complete sweep against a real pair on
-2026-09-07 records **eight of the ten declared rows compared from both seats**
+2026-09-07 recorded **eight of the ten declared rows compared from both seats**
 `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-07]` — ten rather than eight
 because 013 raised the two artist routes, and it is that feature's closing task that took the run,
 this one having only ever built the machine.
 
-**The two that are not are `GET /Audio/{itemId}/stream` and `GET /Audio/{itemId}/universal`**, which
-the report marks `partly` — the administrator alone — and the reason belongs here rather than to
-008. The restricted seat is narrowed to one **movies** library, by `movies_library`'s choice and for
-`tools/probe_restricted_surface.py`'s reason: the measurement needs one item the seat may open and
-one it may not. A movies-only seat can reach no audio at all, so its three audio listings answer
-zero rows and every audio-anchored case is unaskable for it — which is 14 of the run's 18 unasked
-cases, reported correctly and about a seat nobody meant to build that way.
+**The last two were `GET /Audio/{itemId}/stream` and `GET /Audio/{itemId}/universal`**, marked
+`partly` — the administrator alone — and the reason was this feature's rather than 008's: the
+restricted seat was narrowed to one **movies** library, and a movies-only seat can reach no audio
+at all, so its audio listings answered zero rows and every audio-anchored case was unaskable for
+it. That was **14 of that run's 18 unasked cases**, reported correctly and about a seat nobody
+meant to build that way.
 
-**What that seat is narrowed to is a decision this feature owns and has not taken.** Narrowing it
-to a movies library *and* a music one would let both rows compare from both seats and would keep
-what the narrowing is for, since four libraries would still be closed to it. It would also move
-every restricted comparison in the sweep, which is why it is a decision rather than a fix, and why
-the report says `partly` with the seat's libraries on its own provenance line instead.
+**Decided 2026-09-09: one library of each collection type.** The seat now opens one `movies`, one
+`music` and one `tvshows` library, which keeps what the narrowing is for — an item it may open and
+an item it may not, three of six — and lets every declared case be asked of it. A sweep the same
+day records **ten of ten compared from both seats**, and the run's unasked cases fall from 18 to 4:
+`{playlistId}`, which has no anchor, on each seat; `rename-a-playlist`, which is a declaration; and
+`replace-configuration`, which is the handed-seat rule
+`[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-09]`.
+
+**One of each type was not enough on its own, and the reason is worth keeping.** Six delivery cases
+anchor on the track `Ninety Six Kilohertz`, which lives in the fixture's *decodable* music library
+while the silent one sorts before it by name — so a seat picked by name alone opened `Music`, the
+anchor named a row it could not see, and ten cases stayed unasked for a reason that had nothing to
+do with how many libraries the seat had. `seat_narrowing` now takes the register's **named** rows
+and lets one break the tie within a type, which makes the choice express the requirement — *a seat
+that can be asked what the register declares* — rather than an accident of naming. It stays
+deterministic on both sides because both read the same register and the same library names.
+
+`tools/probe_restricted_surface.py` still narrows its own throwaway account to one `movies`
+library, deliberately: it measures how much of the surface answers differently to a **narrower
+reader** (§3.9), and one library is enough to be narrower. The two accounts answer two different
+questions about the same shape.
 
 **To 003, and it is the largest.** **A running Atrium cannot be given a library.**
 `atrium.library.config.create` and `atrium.library.scan.scan` have no caller in `src/` or `tools/` —

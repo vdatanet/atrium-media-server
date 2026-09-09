@@ -815,7 +815,7 @@ def _roster(directory: FakeDirectory, *roles: Any, library: str = LIBRARY) -> An
         directory,
         _administrator(),
         roles or (differential.Role.ADMINISTRATOR, differential.Role.RESTRICTED),
-        library_id=library,
+        library_ids=(library,) if library else (),
         sign_in=_sign_in(directory),
     )
 
@@ -854,12 +854,12 @@ def test_a_one_identity_run_is_a_shorter_loop_and_not_a_different_code_path() ->
 
 
 class _Views:
-    """`/UserViews` and the one `/Items` probe `movies_library` makes, over a declared world.
+    """`/UserViews` and the `/Items` probe `seat_narrowing` makes, over a declared world.
 
     Two servers, one fixture, two view orderings - which is the whole of what this measures.
     """
 
-    def __init__(self, views: list[tuple[str, str, bool]]) -> None:
+    def __init__(self, views: list[tuple[str, str, list[str]]]) -> None:
         self.views = views
 
     def get(self, path: str, **params: object) -> object:
@@ -871,28 +871,39 @@ class _Views:
                 ]
             }
         assert path == "/Items", path
-        holding = {name.lower(): holds for name, _kind, holds in self.views}
-        return {"Items": [{"Id": "x" * 32}] if holding[str(params["parentId"])] else []}
+        held = {name.lower(): rows for name, _kind, rows in self.views}
+        rows = held[str(params["parentId"])]
+        if not rows:
+            return {"Items": []}
+        return {"Items": [{"Id": "x" * 32, "Name": one} for one in rows]}
 
 
 #: The composed fixture as each server lists it: the reference sorts `/UserViews` by name and
 #: Atrium answers it in declaration order. Both hold the same three `movies` libraries and the
-#: same empty one, which is why picking "the first with something in it" parted them.
+#: same empty one, which is why picking "the first with something in it" parted them - and one
+#: library of each collection type, which is what the seat is narrowed to from 2026-09-09.
+#: The row names each library holds, so a candidate can be asked both questions at once: does it
+#: hold anything, and does it hold a row the register names. `Ninety Six Kilohertz` is in `Tunes`
+#: on this fixture and the silent `Music` sorts before it, which is the tie `wanted` breaks.
 REFERENCE_VIEWS = [
-    ("Empty", "movies", False),
-    ("Films", "movies", True),
-    ("Movies", "movies", True),
-    ("Music", "music", True),
+    ("Empty", "movies", []),
+    ("Films", "movies", ["Both Subtitle Kinds"]),
+    ("Movies", "movies", ["2 Fast 2 Furious"]),
+    ("Music", "music", ["01 - Opening"]),
+    ("Shows", "tvshows", ["Pilot"]),
+    ("Tunes", "music", ["Ninety Six Kilohertz"]),
 ]
 ATRIUM_VIEWS = [
-    ("Movies", "movies", True),
-    ("Music", "music", True),
-    ("Films", "movies", True),
-    ("Empty", "movies", False),
+    ("Movies", "movies", ["2 Fast 2 Furious"]),
+    ("Shows", "tvshows", ["Pilot"]),
+    ("Music", "music", ["Opening"]),
+    ("Films", "movies", ["Both Subtitle Kinds"]),
+    ("Tunes", "music", ["Ninety Six Kilohertz"]),
+    ("Empty", "movies", []),
 ]
 
 
-def test_both_servers_narrow_the_restricted_seat_to_the_same_library() -> None:
+def test_both_servers_narrow_the_restricted_seat_to_the_same_libraries() -> None:
     """**Measured 2026-09-06, in a run's own report, and this is the test that had been missing.**
 
     The choice is made twice - once per side, by two rosters that do not know about each other -
@@ -905,26 +916,57 @@ def test_both_servers_narrow_the_restricted_seat_to_the_same_library() -> None:
 
     Sorting by name is the fix, and the empty library is why it is not simply `[0]`: one of the
     three `movies` libraries has nothing in it, and a seat narrowed to it can open nothing at all.
+
+    **And it is three libraries from 2026-09-09**, one of each collection type, which is the other
+    half of what this asserts: the same three, in the same order, from two different orderings.
     """
-    ours = differential.movies_library(_Views(ATRIUM_VIEWS), "u" * 32)
-    theirs = differential.movies_library(_Views(REFERENCE_VIEWS), "u" * 32)
-    assert ours == theirs == ("films", "Films")
+    ours = differential.seat_narrowing(_Views(ATRIUM_VIEWS), "u" * 32)
+    theirs = differential.seat_narrowing(_Views(REFERENCE_VIEWS), "u" * 32)
+    assert ours == theirs == (("films", "Films"), ("music", "Music"), ("shows", "Shows"))
 
 
-def test_a_run_with_no_movies_library_holding_anything_refuses_rather_than_narrows_to_nothing() -> (
-    None
-):
+def test_a_row_the_register_names_decides_which_library_of_its_type_the_seat_gets() -> None:
+    """**One of each type was not enough, and the run of 2026-09-09 said so.**
+
+    Six delivery cases anchor on the track `Ninety Six Kilohertz`, which lives in the fixture's
+    decodable music library while the silent `Music` sorts before it by name. So a seat picked by
+    name alone opened `Music`, the anchor named a row it could not see, and ten cases - the two
+    `level: L3` audio rows among them - stayed unasked for a reason that had nothing to do with
+    how many libraries the seat had.
+
+    Passing the register's named rows in makes the choice express the requirement: a seat that can
+    be asked what the register declares.
+    """
+    wanted = ["Ninety Six Kilohertz"]
+    ours = differential.seat_narrowing(_Views(ATRIUM_VIEWS), "u" * 32, wanted)
+    theirs = differential.seat_narrowing(_Views(REFERENCE_VIEWS), "u" * 32, wanted)
+    assert ours == theirs == (("films", "Films"), ("tunes", "Tunes"), ("shows", "Shows"))
+
+
+def test_a_run_with_no_library_holding_anything_refuses_rather_than_narrows_to_nothing() -> None:
     """010 T12's finding, kept: a seat that can open nothing answers a refusal on both servers for
     the wrong reason, so it is not a narrower reader and the run says so."""
     with pytest.raises(differential.SeatError, match="with anything in it"):
-        differential.movies_library(_Views([("Empty", "movies", False)]), "u" * 32)
+        differential.seat_narrowing(_Views([("Empty", "movies", [])]), "u" * 32)
+
+
+def test_a_server_missing_a_collection_type_seats_the_reader_it_can() -> None:
+    """**A type with no library is not a refusal**, and the distinction is the whole of why this
+    test exists beside the one above.
+
+    A server holding only films seats a reader who may open films; the cases wanting a track then
+    report *not asked* with the reason the register already gives them. Refusing the run instead
+    would make a library nobody has to have into a precondition of measuring anything.
+    """
+    only_films = [("Empty", "movies", []), ("Films", "movies", ["Both Subtitle Kinds"])]
+    assert differential.seat_narrowing(_Views(only_films), "u" * 32) == (("films", "Films"),)
 
 
 def test_the_report_says_what_each_seat_can_open_on_each_side() -> None:
     """One provenance line, and on an agreeing run it has one thing to say."""
     directories = {"atrium": _Views(ATRIUM_VIEWS), "reference": _Views(REFERENCE_VIEWS)}
     line = differential.seat_libraries_line(directories, [_seat("administrator")])
-    assert line == "administrator: Empty, Films, Movies, Music"
+    assert line == "administrator: Empty, Films, Movies, Music, Shows, Tunes"
 
 
 def test_two_seats_narrowed_to_two_libraries_are_stated_and_not_left_to_the_anchors() -> None:
