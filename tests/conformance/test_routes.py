@@ -31,6 +31,8 @@ must not get a 404 here.
 from __future__ import annotations
 
 import importlib.util
+import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -477,3 +479,60 @@ def test_the_table_keeps_a_parameter_exactly_as_it_arrived() -> None:
     assert table.canonicalise("/users/AbCdEf/items") == "/Users/AbCdEf/Items"
     assert table.canonicalise("/USERS/AbCdEf/ITEMS/") == "/Users/AbCdEf/Items"
     assert table.methods_for("/users/AbCdEf/items") == {"GET"}
+
+
+# --------------------------------------------------------------------------------------------
+# L2 for every endpoint (docs/compatibility/conformance.md's half of the v1 gate)
+# --------------------------------------------------------------------------------------------
+
+
+def _matcher(path: str) -> re.Pattern[str]:
+    """A surface path as a regular expression, with `{name}` standing for one segment.
+
+    A parameter never spans a `/`: `/Items/{itemId}/Images/{imageType}` must not match
+    `/Items/a/Images/Primary/0`, which is a different declared row.
+    """
+    return re.compile(
+        "^"
+        + re.sub(r"\{[^}]+\}", "[^/]+", re.escape(path).replace("\\{", "{").replace("\\}", "}"))
+        + "$"
+    )
+
+
+def endpoints_exercised(requests: Iterable[tuple[str, str]]) -> frozenset[tuple[str, str]]:
+    """Which declared endpoints a set of `(METHOD, raw path)` requests reached. A pure function."""
+    declared = [(entry["method"], entry["path"]) for entry in surface_endpoints()]
+    matchers = {(method, path): _matcher(path) for method, path in declared}
+    return frozenset(
+        (method, path)
+        for method, path in declared
+        if any(
+            asked == method and matchers[(method, path)].match(where) for asked, where in requests
+        )
+    )
+
+
+def test_the_matcher_does_not_let_a_parameter_swallow_a_segment() -> None:
+    """The one way this check could pass while measuring nothing: a pattern loose enough that
+    every request matches every row. `/Items/{itemId}/Images/{imageType}` and the row below it
+    differ by exactly one segment, and a `.*` here would make the pair indistinguishable."""
+    narrow = _matcher("/Items/{itemId}/Images/{imageType}")
+    assert narrow.match("/Items/abc/Images/Primary")
+    assert not narrow.match("/Items/abc/Images/Primary/0")
+    assert not narrow.match("/Items/abc/Images")
+
+
+def test_the_coverage_function_notices_an_endpoint_nothing_asked() -> None:
+    """**The guard on the guard.** `pytest_sessionfinish` reports what this function does not
+    return, so a function that returned every declared endpoint whatever it was handed would make
+    the v1 gate's L2 half a check that cannot fail - which is the shape this repository audits
+    for.
+
+    Asserted both ways: a request reaches its own row and nothing else's.
+    """
+    declared = surface_paths()
+    assert endpoints_exercised([]) == frozenset(), "no requests reached every endpoint"
+
+    one = ("GET", "/System/Info/Public")
+    assert one in declared, "the surface no longer declares the row this test is written against"
+    assert endpoints_exercised([one]) == frozenset({one})

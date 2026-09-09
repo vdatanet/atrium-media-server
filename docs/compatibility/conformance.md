@@ -15,6 +15,20 @@ defines the four levels referenced throughout the specifications, and the machin
 v1 requires **L2 for every endpoint**, and **L3 for the authentication and playback paths** — the
 two places where a wrong server makes a client misbehave rather than merely look wrong.
 
+**Both halves are checked from 2026-09-09, and until then neither was.** The `level` column was
+read for its vocabulary and its distribution and never for the claim, while each feature's
+definition of done ticked *"every endpoint reaches the conformance level spec §6 declares"* in
+prose — so a row could be declared, served, and asked by no test at all with nothing to say so.
+
+* **L3** is paid by `tools/differential.py`, and a run of 2026-09-09 records **ten of ten**
+  declared rows compared from both seats `[probe: tools/differential.py --fixture, Jellyfin
+  10.11.11, 2026-09-09]`.
+* **L2's floor** is now an assertion: `tests/conformance/test_routes.py` records every request the
+  suite issues through an Atrium application and fails on a declared endpoint nothing asked. The
+  whole suite reaches **59 of 59** over 473 distinct requests. It is a floor rather than the whole
+  claim — a request reaching a route does not make its values right — and what it rules out is the
+  failure it exists for: an endpoint whose level nobody paid for.
+
 **A third place joined them on 2026-09-07: the two artist routes.** They are neither
 authentication nor playback, and what puts them here is that
 [013](../../specs/013-artist-registry/spec.md) changes the whole of what they answer — the

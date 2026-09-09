@@ -45,6 +45,20 @@ from tests.fixtures.media import (
 )
 from tests.fixtures.media_world import ScannedMediaWorld, build_scanned_media_world
 
+#: Whether this session ran the whole suite, so the route-coverage assertion knows whether its
+#: measurement means anything. A filtered run exercises fewer routes by design and must skip
+#: rather than fail - the alternative is a check nobody can run a subset of the suite beside.
+#:
+#: **Filtered means `-k` and `-m` too**, which is the half a first version missed: those narrow a
+#: run without naming a path, so a condition that read only `config.args` let the assertion fire
+#: over a measurement of a single test.
+WHOLE_SUITE: pytest.StashKey[bool] = pytest.StashKey()
+
+#: Endpoints the run declared and never asked, filled by the session hook and printed by the
+#: terminal summary - so the reason a green suite turned red is a list of names rather than an
+#: exit code.
+UNEXERCISED: pytest.StashKey[tuple[str, ...]] = pytest.StashKey()
+
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption(
@@ -57,8 +71,56 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """**`v1 requires L2 for every endpoint`, checked at the end of the run and nowhere else.**
+
+    `docs/compatibility/conformance.md` states that as the v1 gate and Principle VIII defines a
+    behaviour as done *"when a test asserts it at the HTTP boundary"* — but the `level` column of
+    `surface.yaml` was read for its vocabulary and its distribution, never for the claim, and each
+    feature's definition of done ticked *"every endpoint reaches the conformance level spec §6
+    declares"* in prose. A row could be declared, served, and asked by no test at all.
+
+    **A session hook rather than a test, and that is the finding rather than a preference.** It
+    was written as a test first and it failed with twelve endpoints untouched — the session
+    routes, the delivery ones, the subtitle ones and the user-data ones — every one of them in a
+    module that sorts *after* `test_routes.py`. A check over what the whole suite did cannot run
+    while the suite is still running; the ordering would decide the answer.
+
+    This is the floor of the claim and not the whole of it: L2 is *are the values right for a
+    known library*, and a request reaching a route does not make its values right. What it rules
+    out is the failure it exists for — an endpoint nothing asks, whose level nobody paid for.
+    """
+    if not session.config.stash.get(WHOLE_SUITE, False) or exitstatus not in (0, None):
+        return
+    from tests.conformance.test_routes import endpoints_exercised, surface_paths
+
+    missing = sorted(
+        f"{method} {path}" for method, path in surface_paths() - endpoints_exercised(EXERCISED)
+    )
+    if not missing:
+        return
+    session.config.stash[UNEXERCISED] = tuple(missing)
+    session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
 def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
     """Say what was rewritten, so nobody discovers it in a diff after pushing."""
+    unexercised = terminalreporter.config.stash.get(UNEXERCISED, ())
+    if unexercised:
+        terminalreporter.write_line("")
+        terminalreporter.write_line(
+            f"L2 coverage: {len(unexercised)} endpoint(s) declared in surface.yaml and asked by "
+            "no test",
+            red=True,
+            bold=True,
+        )
+        for one in unexercised:
+            terminalreporter.write_line(f"  {one}")
+        terminalreporter.write_line(
+            "A level is a claim about what a test proves, so an endpoint nothing requests has "
+            "none - either it is exercised, or its row leaves the file (Principle VI)."
+        )
+
     rewritten = terminalreporter.config.stash.get(REWRITTEN, set())
     if not rewritten:
         return
@@ -71,6 +133,55 @@ def pytest_terminal_summary(terminalreporter: pytest.TerminalReporter) -> None:
     terminalreporter.write_line(
         "Read the diff before committing. Each of these is a statement about what a client "
         "receives, and a change to one is a change to the contract."
+    )
+
+
+#: Every `(METHOD, raw path)` the suite issued through an Atrium application, filled by the
+#: recorder below and read by `tests/conformance/test_routes.py`'s coverage assertion.
+#:
+#: **The raw path and not the matched route**, which is a correction and not a preference: an
+#: earlier version of this recorder read `request.scope["route"].path` from inside a middleware
+#: and silently missed every streaming route - it reported `GET /Audio/{itemId}/universal` as
+#: never exercised while fourteen tests were exercising it. Recording the scope on the way in
+#: sees every request whatever the response does, and resolving it against `surface.yaml`'s
+#: patterns afterwards is a pure function of two files.
+EXERCISED: set[tuple[str, str]] = set()
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Record every request the suite makes, wherever the application was built.
+
+    Wrapping `atrium.server.create_app` rather than the `client` fixture is what makes this
+    complete: seven modules build an application of their own - the media worlds, the subtitle
+    worlds, the playback ones - and a recorder attached to one fixture would have measured the
+    tests that happen to use that fixture rather than the suite.
+    """
+    original = server.create_app
+
+    def recording(*args: object, **kwargs: object) -> FastAPI:
+        app = original(*args, **kwargs)  # type: ignore[arg-type]
+        inner = app.__class__.__call__
+
+        async def seen(self: object, scope: dict, receive: object, send: object) -> None:
+            if scope.get("type") == "http":
+                EXERCISED.add((str(scope.get("method", "")), str(scope.get("path", ""))))
+            await inner(self, scope, receive, send)
+
+        app.__class__ = type("Recorded", (app.__class__,), {"__call__": seen})
+        return app
+
+    server.create_app = recording  # type: ignore[assignment]
+    # **Every way of running less than the suite, not just the obvious one.** Naming paths is the
+    # one a reader thinks of; `-k` and `-m` narrow a run without touching them, and a coverage
+    # assertion that fired under `pytest tests/ -k something` would be asserting over a
+    # measurement of one test.
+    whole = not config.args or [Path(one).name for one in config.args] == ["tests"]
+    config.stash[WHOLE_SUITE] = bool(
+        whole
+        and not getattr(config.option, "keyword", "")
+        and not getattr(config.option, "markexpr", "")
+        and not getattr(config.option, "deselect", None)
+        and not getattr(config.option, "last_failed", False)
     )
 
 
