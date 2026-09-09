@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -719,6 +720,29 @@ def test_a_track_carries_its_album_and_the_albums_artist(
     assert body["AlbumArtist"] == ALBUM_ARTIST
     assert [pair["Name"] for pair in body["AlbumArtists"]] == [ALBUM_ARTIST]
     assert body["Artists"] == ["The Compilers"]
+
+
+def test_a_track_with_no_date_carries_no_premiere_date(
+    hydrated: dict[str, HydratedItem], world: QueryWorld
+) -> None:
+    """**behaviours section 3.28, and the shape it argues for.**
+
+    The reference answers `PremiereDate: 0001-01-01T00:00:00.0000000Z` on an audio row - .NET's
+    zero date, on 10 of 12 tracks of this repository's fixture and on none of the two whose files
+    it could not probe, so the value arrives with its audio inspection rather than from anything
+    anybody wrote `[probe: tools/probe_music_row_tranche.py, Jellyfin 10.11.11, 2026-09-08]`.
+
+    This server omits the property instead, which is section 1.7's rule for every other value
+    nothing set. Both halves are here because a criterion that only asserted the absence would
+    pass on a server that had lost the field altogether. 005 AC-31.
+    """
+    track = hydrated[world.tracks[0]]
+    assert track.metadata.premiere_date is None, "the fixture already dates this track"
+    assert "PremiereDate" not in wire(track, ctx())
+
+    a_date = datetime(2001, 2, 3, 4, 5, 6, tzinfo=UTC)
+    dated = replace(track, metadata=replace(track.metadata, premiere_date=a_date))
+    assert wire(dated, ctx())["PremiereDate"] == "2001-02-03T04:05:06.0000000Z"
 
 
 def test_a_tracks_album_artist_is_its_own_credit_and_not_the_albums(

@@ -758,6 +758,12 @@ acceptance map could not name a single one of their twenty-seven tests.)*
     holding a music container costs no more statements than a page of films. *(Added 2026-09-07:
     the last row of the tranche, and the one [005's list](tasks.md) had reserved as a cost
     decision — the rollup it was to pay for already runs on every page.)*
+31. An `Audio` row carries **no `PremiereDate`** where nothing resolved a date, and the date where
+    something did — rather than the reference's `0001-01-01T00:00:00.0000000Z`, which is .NET's
+    zero date and arrives with its audio inspection rather than from anything anybody wrote
+    ([behaviours §3.28](../../docs/compatibility/behaviours.md)). *(Added 2026-09-09 with the
+    behaviour: the shape was already this server's and the argument for it was not written, which
+    is what a differential run's 20 findings on the property had no answer to.)*
 
 ## 6. Conformance
 
