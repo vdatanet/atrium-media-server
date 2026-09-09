@@ -2290,6 +2290,37 @@ tree drifted for the next run.
 **What has no owner yet** is the audio tranche's four fields. OQ-8 has one and is not done: it is
 also the cause that multiplies every other, because `Name` feeds `SortName` feeds the order.
 
+### The L2 half of the gate is checked, and until 2026-09-09 nothing checked it
+
+[conformance.md](../../docs/compatibility/conformance.md) states the v1 gate as *"L2 for every
+endpoint, and L3 for the authentication and playback paths"*, and Principle VIII defines a
+behaviour as done *"when a test asserts it at the HTTP boundary"*. The `level` column of
+`surface.yaml` was read for its **vocabulary** and its **distribution** — `test_routes.py` asserts
+both — and never for the claim, while each feature's definition of done ticked *"every endpoint
+reaches the conformance level spec §6 declares"* in prose. So a row could be declared, served, and
+asked by no test at all, and nothing would say so.
+
+`tests/conftest.py` now records every request the suite issues through an Atrium application, and
+`pytest_sessionfinish` fails the run on a declared endpoint nothing asked. The whole suite reaches
+**59 of 59** over 473 distinct requests.
+
+**Two things it found about itself, and both are the entry rather than trivia.**
+
+The first: it was written as a **test** and failed with twelve endpoints untouched — the session
+routes, the delivery ones, the subtitle ones, the user-data ones — every one of them in a module
+that sorts *after* `test_routes.py`. A check over what the whole suite did cannot run while the
+suite is still running; the ordering would decide the answer. It is a session hook for that
+reason.
+
+The second: the first recorder read `request.scope["route"]` from inside a middleware and silently
+missed every **streaming** route, reporting `GET /Audio/{itemId}/universal` as never exercised
+while fourteen tests were exercising it. Recording the scope on the way in sees every request
+whatever the response does.
+
+**What it is not** is the whole of L2, which is *are the values right for a known library*: a
+request reaching a route does not make its values right. It is the floor — an endpoint whose level
+nobody paid for — and the floor is what was missing.
+
 ### The L3 debt is paid — ten of ten, and the last two took a decision
 
 **This list said *"no `level: L3` row has been shown to reach L3"* from the day it was written**,
