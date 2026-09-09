@@ -410,11 +410,24 @@ script and none of them through a route:
    names and the two `/UserViews` no longer line up.
 2. **An administrator**, through `UserRepository.add` with a hash from `users.passwords.build`.
 3. **A restricted seat, handed in under `ATRIUM_RESTRICTED_*`** — Atrium cannot make one, which is
-   the paragraph above. It must be narrowed to **the same library the reference narrows its own
-   created seat to**, which is `movies_library`'s choice: walking the `movies` views **by name**
-   and taking the first *with something in it*, so `Films` and not `Movies` on this fixture.
-   Narrowed to the other one, 22 of the restricted seat's cases cannot resolve an anchor and are
+   the paragraph above. It must be narrowed to **the same libraries the reference narrows its own
+   created seat to**, which is `seat_narrowing`'s choice: **one library of each collection type**,
+   walking each type's views **by name** and taking the first *with something in it* — `Films`,
+   `Music` and `Shows` on this fixture, not `Movies`, `Tunes` or `Empty`.
+   Narrowed to the wrong ones, 22 of the restricted seat's cases cannot resolve an anchor and are
    reported not asked — correctly, and about a seat nobody meant to build.
+
+   **Three libraries rather than one from 2026-09-09, and that was a scope decision.** A seat that
+   can open only films cannot be asked anything about a track or an episode: of one run's 18
+   unasked cases, **14 were this** — eleven wanting audio, three wanting a series
+   `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-08]`. Two of the eleven are
+   the `level: L3` rows `GET /Audio/{itemId}/stream` and `/universal`, which
+   [conformance.md](../docs/compatibility/conformance.md) puts on the v1 gate and which the
+   narrowing alone was keeping at *partly, the administrator alone*. What the seat has to keep is
+   an item it may open and an item it may not, and three libraries of six leaves that intact.
+   `tools/probe_restricted_surface.py` still narrows its own account to one, deliberately: it
+   measures how much of the surface answers differently to a narrower reader, and one library is
+   enough to be narrower.
 
    **This paragraph was right and the code under it was not, until 2026-09-07.** The choice used to
    be *the first movies view the server listed*, and the two servers do not list them in one order:
