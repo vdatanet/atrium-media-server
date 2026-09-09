@@ -721,6 +721,30 @@ def test_a_track_carries_its_album_and_the_albums_artist(
     assert body["Artists"] == ["The Compilers"]
 
 
+def test_a_tracks_album_artist_is_its_own_credit_and_not_the_albums(
+    hydrated: dict[str, HydratedItem], world: QueryWorld
+) -> None:
+    """**Written on the track, read off the album, so neither row carried it.**
+
+    `MetadataRepository.set_artists` writes a track's `album_artist` credits onto the track - a
+    tag names them, and the tag is in the track's own file - and `_album_artist_links` asked the
+    album above it. The test beside this one could not see the difference: the world seeds
+    `Field.ALBUM_ARTISTS` on the album *and* on every track, so both readings passed while a
+    scanned library answered `[]` on the two rows the reference answers a name for
+    `[probe: tools/probe_music_row_tranche.py, Jellyfin 10.11.11, 2026-09-08]`.
+
+    So the album's credits are taken away here, which is the shape a real scan produces: nothing
+    gives an album a credit of its own today.
+    """
+    track = hydrated[world.tracks[0]]
+    assert track.parent is not None
+    orphaned = replace(track, parent=replace(track.parent, artists=()))
+
+    body = wire(orphaned, ctx())
+    assert body["AlbumArtist"] == ALBUM_ARTIST
+    assert [pair["Name"] for pair in body["AlbumArtists"]] == [ALBUM_ARTIST]
+
+
 def test_a_performer_is_a_name_a_client_can_follow(
     hydrated: dict[str, HydratedItem], world: QueryWorld
 ) -> None:

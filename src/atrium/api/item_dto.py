@@ -472,13 +472,21 @@ def _tag_of(ancestor: Ancestor | None, kind: ImageKind) -> str | None:
 
 
 def _album_artist_links(one: HydratedItem) -> tuple[Any, ...]:
-    """The album-artist credits: an album's own, a track's from the album above it."""
-    if one.item.type is ItemType.MUSIC_ALBUM:
-        links = one.artists
-    elif one.item.type is ItemType.AUDIO and one.parent is not None:
-        links = one.parent.artists
-    else:
-        links = ()
+    """The album-artist credits of this row, which for a track are **its own**.
+
+    **Read here and written there, until 2026-09-08.** This asked the album above a track for its
+    credits, and `MetadataRepository.set_artists` writes a track's `album_artist` credits onto the
+    track - so on a fixture where two tracks carry real tags, `item_artists` held both credits and
+    the wire carried neither: `AlbumArtists` was `[]` and `AlbumArtist` absent on the two rows the
+    reference answers `The Artist` and `Soundless Artist` for
+    `[probe: tools/probe_music_row_tranche.py, Jellyfin 10.11.11, 2026-09-08]`.
+
+    **No fallback to the album, deliberately.** The reference answers an album artist on a track
+    exactly where that track's own tags name one - 2 of 12 on that fixture, and `[]` on the ten
+    whose names come from their directories, whose albums are named the same way. A track
+    inheriting from its container would answer where the reference does not.
+    """
+    links = one.artists if one.item.type in (ItemType.MUSIC_ALBUM, ItemType.AUDIO) else ()
     return tuple(link for link in links if link.credit == "album_artist")
 
 

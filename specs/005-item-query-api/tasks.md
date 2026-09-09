@@ -1070,6 +1070,24 @@ as four `MISSING_KEY` rows of their own, because a by-name page hydrates through
 `RunTimeTicks` on a `Series` was deliberately left alone: what was measured is the two music types,
 and nothing has watched the reference roll up a series' subtree. AC-30.
 
+**What the audio tranche turned out to be, measured 2026-09-08 — four questions under one name.**
+The 2026-09-08 sweep left 54 findings on four properties of an `Audio` row, and reading them off
+both servers **joined by name** rather than by row position says that three of the four are not
+what the count suggested `[probe: tools/probe_music_row_tranche.py, Jellyfin 10.11.11, 2026-09-08]`:
+
+| Property | What the reference actually does | Whose |
+|---|---|---|
+| `AlbumArtist` on a **track** | **2 of 12 rows** — exactly the two whose files carry real tags; the ten named by their directories carry `Artists: []` and no album artist at all, so the reference does **not** derive a credit from a directory any more than this server does | **Done 2026-09-08.** This server *held* both credits and sent neither: `set_artists` writes a track's `album_artist` credit onto the track and `_album_artist_links` asked the album above it. Written here, read there |
+| `AlbumArtist` on an **album** | 2 of 7 albums, the same two, from their tracks' tags | Open, and 004's: nothing gives an album a credit of its own. It cannot be the directory — that would answer on all seven where the reference answers two |
+| `HasLyrics` | on **12 of 12**, `true` on the one track with an `.lrc` beside it | Unchanged: cause 4 above, and still *"lyric discovery, which is a feature and not a field"* |
+| `PremiereDate` | on **10 of 12**, and every value is `0001-01-01T00:00:00.0000000Z` — .NET's zero date. The two without it are the two files the reference could not probe | **Needs a decision.** A zero date is not a date anybody wrote; reproducing it is Principle I applied to a default that leaked, and omitting it is a field this server never sends. Nothing in this repository records it either way |
+| `AlbumPrimaryImageTag` | 2 of 12 — the two tracks whose album has a primary image | **006's**: album artwork beside the tracks, which this server does not associate |
+
+**The lesson is the reading and not any of the five rows.** A positional report over two listings
+whose orders differ names a property on a row that is not the row it measured: `AlbumArtist` looked
+like six findings about directories and is one defect about two tagged files, and the three
+properties beside it belong to three different features.
+
 The paragraphs below are what those three looked like before the reading, kept because each names
 the *reason* the fixture could not answer it — and that reason is what will apply to the next field
 of the same shape:
