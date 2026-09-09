@@ -967,7 +967,7 @@ rather than a list of routes somebody remembered.
 Closed line by line at T17, on 2026-08-28.
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
-      thirty — has a passing test, by name, in `FEATURE_005` (T17). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* Ten are named at more than one
+      thirty-one — has a passing test, by name, in `FEATURE_005` (T17). *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)* Ten are named at more than one
       level, once where the rule is proved and once where the route is proved to use it.
 - [x] Every endpoint reaches the conformance level [spec §6](spec.md#6-conformance) declares —
       with the L3 debt stated rather than hidden: `GET /Items` and `GET /Items/{itemId}` carry
@@ -1080,7 +1080,7 @@ what the count suggested `[probe: tools/probe_music_row_tranche.py, Jellyfin 10.
 | `AlbumArtist` on a **track** | **2 of 12 rows** — exactly the two whose files carry real tags; the ten named by their directories carry `Artists: []` and no album artist at all, so the reference does **not** derive a credit from a directory any more than this server does | **Done 2026-09-08.** This server *held* both credits and sent neither: `set_artists` writes a track's `album_artist` credit onto the track and `_album_artist_links` asked the album above it. Written here, read there |
 | `AlbumArtist` on an **album** | 2 of 7 albums, the same two, from their tracks' tags | Open, and 004's: nothing gives an album a credit of its own. It cannot be the directory — that would answer on all seven where the reference answers two |
 | `HasLyrics` | on **12 of 12**, `true` on the one track with an `.lrc` beside it | Unchanged: cause 4 above, and still *"lyric discovery, which is a feature and not a field"* |
-| `PremiereDate` | on **10 of 12**, and every value is `0001-01-01T00:00:00.0000000Z` — .NET's zero date. The two without it are the two files the reference could not probe | **Needs a decision.** A zero date is not a date anybody wrote; reproducing it is Principle I applied to a default that leaked, and omitting it is a field this server never sends. Nothing in this repository records it either way |
+| `PremiereDate` | on **10 of 12**, and every value is `0001-01-01T00:00:00.0000000Z` — .NET's zero date. The two without it are the two files the reference could not probe, so the value arrives with the audio inspection rather than from anything anybody wrote | **Decided 2026-09-09: diverge, argued.** [behaviours §3.28](../../docs/compatibility/behaviours.md) and AC-31. The shape was already this server's — send the date where something resolved one — and what it lacked was the argument. Recorded rather than excused, so the sweep goes on reporting the 20 findings with somewhere to send a reader |
 | `AlbumPrimaryImageTag` | 2 of 12 — the two tracks whose album has a primary image | **006's**: album artwork beside the tracks, which this server does not associate |
 
 **The lesson is the reading and not any of the five rows.** A positional report over two listings

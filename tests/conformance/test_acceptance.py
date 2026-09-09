@@ -696,6 +696,11 @@ FEATURE_005: dict[int, tuple[str, ...]] = {
         # And on the wire, where a client reads it.
         "tests.conformance.test_golden_items:test_the_list_row_per_type",
     ),
+    31: (
+        # The absence and its opposite: a criterion that only asserted the missing property would
+        # pass on a server that had lost the field.
+        "tests.unit.test_item_dto:test_a_track_with_no_date_carries_no_premiere_date",
+    ),
     28: (
         # The two halves apart, because the rule parted: a rule made uniform in either direction
         # breaks one of them.

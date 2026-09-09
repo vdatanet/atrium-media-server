@@ -3144,6 +3144,55 @@ server chose, and this one is chosen. It is a divergence with an argument, and t
 
 `[013 plan §1 decision 2]`
 
+### 3.28 `PremiereDate` on a track is .NET's zero date — class B, diverged
+
+**Jellyfin does:** answer an `Audio` row with
+`"PremiereDate": "0001-01-01T00:00:00.0000000Z"` — `DateTime.MinValue`, the value a .NET
+`DateTime` holds when nothing set it. Measured on this repository's own fixture, whose music is
+untagged: **10 of 12 tracks**, every one of them the same string, and the property absent on
+exactly the two tracks whose files the reference could not probe
+`[probe: tools/probe_music_row_tranche.py, Jellyfin 10.11.11, 2026-09-08]`.
+
+**That correlation is the whole of what is known about it.** The property does not track whether
+anything supplied a date — nothing did, for any of the twelve — it tracks whether the audio
+inspection ran. So the zero date arrives with the inspection, carrying the default its own struct
+starts at, and a track nothing opened has no property at all rather than a zero.
+
+**Depends on it:** nothing that a correct answer would break. A client that renders a release date
+must already treat year 1 as *no date* — otherwise every untagged track in every library reads as
+released in the year 1, which is not a thing any client shows — so the only compensation that
+exists for this value is *treat it as absent*, and an absent property gives exactly that.
+[§3.0](#30-how-the-decision-is-made)'s first escape hatch for class B, the same one §3.23 and
+§3.25 went through: every plausible compensation is defect-tolerant.
+
+The ordering half says the same. `sortBy=PremiereDate` over a library of untagged music is one
+enormous tie on the reference, because one value repeated is no order at all; it is the same tie
+here, arrived at by having no value rather than by having one value everywhere.
+
+**Atrium does: diverge — send the date where something resolved one, and nothing where nothing
+did.** That is what this server already answered, so this entry is the argument it was missing
+rather than a change to it. [§3.0.2](#302-what-is-never-acceptable) leaves two branches, replicate
+or be correct, and this is the correct one: a track with no date has no date, and omitting a
+property is what [§1.7](#17-a-null-property-is-absent-everywhere-by-one-setting) does with every other value nothing set.
+
+**Replicating it faithfully is more than a constant, which is worth stating because a constant is
+what it looks like.** The reference sends the zero date on the tracks it opened and omits it on the
+ones it could not, so a replica would have to key a date on whether **its own** prober succeeded —
+reproducing an artefact of another server's inspection pipeline, and answering differently
+depending on which files the local ffmpeg happened to accept. That is a worse kind of
+unreproducibility than the one it would be copying.
+
+Class **B** — the request succeeds and carries something wrong — decided through the escape hatch
+rather than against it. No upstream issue is known, so §3.0.1's tie-break 2 reads *not judged*.
+
+Recorded rather than excused in `allowlist.yaml`, for
+[§3.27](#327-childcount-on-a-registry-artist-is-a-stable-number-that-counts-nothing--class-b-diverged)'s
+reason: an allowlist entry excuses a difference **neither** server chose, and this one is chosen.
+The sweep goes on reporting the 20 `MISSING_KEY` findings it produces, and this is what a reader
+who meets them is meant to find.
+
+[005 §5 criterion 31](../../specs/005-item-query-api/spec.md#5-acceptance-criteria)
+
 ## 4. Deliberate exceptions
 
 Every one of them is listed here so it is never mistaken for an oversight — including §4.4, which
