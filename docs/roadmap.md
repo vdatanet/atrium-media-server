@@ -92,6 +92,7 @@ priority order: each feature is testable the moment it lands, and each unlocks t
 | **010** | Conformance harness | The L0–L3 machinery as a deliverable, not a by-product | all |
 | **011** | Subtitle delivery | Text subtitle tracks announced, negotiated, and served — embedded and beside the media | 008 |
 | **012** | Negotiation inputs | A negotiation answer a client can act on: a source nothing has opened, and a delivery protocol spelled a way the comparison does not match | 003, 008 |
+| **013** | Artist registry | `/Artists` answers one row per credit name, server-wide — a second population of one type, beside the tree artist an album hangs off | 003, 004, 005 |
 
 **008 is one feature, not two.** Transcoding lives inside it rather than in a directory of its own,
 because it is not a separate capability a client can ask for: it is the third branch of a single
@@ -179,14 +180,34 @@ and the forty-seven differences stay 003's and 004's to decide.
 
 **The L3 half of that moved on 2026-09-07, and it took 013's closing task to move it.**
 `surface.yaml` declares ten `level: L3` rows since the two artist routes were raised, and a
-complete sweep against a real pair now records **eight of them compared from both seats**
-`[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-07]`. The remaining two are
-`GET /Audio/{itemId}/stream` and `GET /Audio/{itemId}/universal`, which the report marks **partly**
-— the administrator alone. The reason is not the routes: the restricted seat is narrowed to one
-**movies** library, by the same choice `tools/probe_restricted_surface.py` makes and for the same
-reason, so every audio-anchored case is unaskable for it and its three audio listings answer zero
-rows. What that seat is narrowed to is 010's to decide, and until it does the two rows are proven
-from one seat and the report says which.
+complete sweep against a real pair recorded **eight of them compared from both seats**
+`[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-07]`. The remaining two were
+`GET /Audio/{itemId}/stream` and `GET /Audio/{itemId}/universal`, marked **partly** — the
+administrator alone — and the reason was not the routes: the restricted seat was narrowed to one
+**movies** library, so every audio-anchored case was unaskable for it and its audio listings
+answered zero rows.
+
+**Both halves of the gate are checked from 2026-09-09, and until then neither was.**
+[conformance.md](compatibility/conformance.md) has always stated it — *"v1 requires **L2 for every
+endpoint**, and **L3 for the authentication and playback paths**"* — and that sentence had no
+check behind it on either side.
+
+* **L3: ten of ten.** The seat now opens **one library of each collection type**, which was 010's
+  decision to take and is taken; a sweep the same day records every declared row compared from
+  both seats, and the run's unasked cases fall from 18 to 4
+  `[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-09]`.
+* **L2: 59 of 59.** The `level` column had been read for its vocabulary and its distribution and
+  never for the claim, while each feature's definition of done ticked *"every endpoint reaches the
+  conformance level spec §6 declares"* in prose — so a row could be declared, served, and asked by
+  no test at all. The suite now records every request it issues and fails the run on an endpoint
+  nothing asked. It is the **floor** of L2 rather than the whole of it: a request reaching a route
+  does not make its values right.
+
+**What that does and does not settle.** It settles that no endpoint's level is a claim nobody paid
+for, which is what the gate was written to prevent. It settles nothing about the 863 differences a
+sweep still reports — those belong to the features that own their endpoints, through
+[behaviours §3.0](compatibility/behaviours.md), and the largest single block of them is 008's
+media-stream fields on `PlaybackInfo`.
 
 **The second reason is the one that decides how the tooling is judged.** A disposable instance
 takes every writing measurement off a server somebody uses. The convention says a probe that writes
