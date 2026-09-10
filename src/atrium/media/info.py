@@ -55,6 +55,7 @@ from atrium.domain.media import (
     StreamKind,
     narrow_to_single,
 )
+from atrium.media import stream_titles
 
 #: .NET counts 100-nanosecond ticks from 0001-01-01; the Unix epoch is this far along.
 TICKS_AT_UNIX_EPOCH = 621_355_968_000_000_000
@@ -117,6 +118,21 @@ class MediaStream(AtriumModel):
     video_range: str = UNKNOWN_RANGE
     video_range_type: str = UNKNOWN_RANGE
     audio_spatial_format: str = NO_SPATIAL_FORMAT
+    #: **The five labels a client renders a track list from**, and which of them a stream carries
+    #: is decided by its kind rather than by its contents: audio and subtitle carry `Default` and
+    #: `External`, a subtitle carries three more, and a video carries none
+    #: `[source: Jellyfin.Server.Implementations/Item/MediaStreamRepository.cs:156-167 @
+    #: v10.11.11]`. `media/stream_titles.py` owns the table and the reason - a stream carries
+    #: exactly the labels its own branch of `DisplayTitle` can read.
+    localized_undefined: str | None = None
+    localized_default: str | None = None
+    localized_forced: str | None = None
+    localized_external: str | None = None
+    localized_hearing_impaired: str | None = None
+    #: What a client shows for this stream: `240p H264 SDR`, `AAC - Stereo - Default`,
+    #: `Drawn Cues - Spanish - Hearing Impaired - Forced - PGSSUB`. Composed from the stream's own
+    #: fields and the five above, and `None` on a kind the reference gives no title to.
+    display_title: str | None = None
     is_interlaced: bool = False
     channel_layout: str | None = None
     bit_rate: int | None = None
@@ -462,6 +478,7 @@ def stream_of(stream: InspectedStream, root: str | None = None) -> MediaStream:
     """One stored stream as the wire shape."""
     average = _frame_rate(stream.average_framerate)
     real = _frame_rate(stream.framerate)
+    labels = stream_titles.localized_labels(stream.kind)
     return MediaStream(
         codec=stream.codec,
         codec_tag=stream.codec_tag,
@@ -476,6 +493,14 @@ def stream_of(stream: InspectedStream, root: str | None = None) -> MediaStream:
             UNKNOWN_RANGE if stream.video_range_type is None else stream.video_range_type.value
         ),
         audio_spatial_format=_spatial_format(stream),
+        # **Which of the five a stream carries is decided by its kind**, so they arrive as a
+        # mapping rather than as five conditionals - `stream_titles` owns the rule and the reason.
+        localized_undefined=labels.get("localized_undefined"),
+        localized_default=labels.get("localized_default"),
+        localized_forced=labels.get("localized_forced"),
+        localized_external=labels.get("localized_external"),
+        localized_hearing_impaired=labels.get("localized_hearing_impaired"),
+        display_title=stream_titles.display_title(stream),
         is_interlaced=stream.is_interlaced,
         channel_layout=stream.channel_layout,
         bit_rate=stream.bitrate,

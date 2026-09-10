@@ -1302,6 +1302,36 @@ The feature is done when **all** of these hold:
 Every row is a place where a request answered here and a request answered there differ on purpose,
 or where nothing has yet compared them:
 
+### The negotiation's stream fields, read 2026-09-10
+
+`PlaybackInfo` is the largest single block a sweep reports — **242 findings on 2026-09-09**, every
+one a property of a `MediaStream` — and this is what reading them found
+`[probe: tools/probe_playback_stream_fields.py, Jellyfin 10.11.11, 2026-09-10]`.
+
+**`DisplayTitle` and the five `Localized*` labels were two causes and are one — 112 of the 242,
+and done.** The labels are the vocabulary the title is composed from, which is why a video carries
+none of them: its branch of the composition reads none. `media/stream_titles.py` owns both.
+
+**What is left is not the shape the wire model suggested, and this is the correction.** It looked
+like `Level`, `Width`, `Height` and `BitRate` were stored by the inspection and missing from the
+model — the *written here, read there* shape three defects of 2026-09-08 had. They are not. Asked
+of `ffprobe` directly, on the fixture file all four of those findings hang off:
+
+    video h264  level=13  w=320 h=240  bit_rate=None  time_base='1/1000' is_avc='true' nal='4' refs=None
+    audio aac   level=None w=None h=None bit_rate=None time_base='1/1000'
+    subtitle    level=None w=None h=None bit_rate=None time_base='1/1000'
+
+So the fields that **are** stored already agree — a video's `Level`, `Width` and `Height` match the
+reference exactly. What differs splits in two, and neither half is a wiring mistake:
+
+| | |
+|---|---|
+| **Three fields `ffprobe` reports and nothing keeps** — `IsAVC`, `TimeBase`, `NalLengthSize` | An inspection change, a migration and three model fields. `TimeBase` moves per file (`1/1000`, `1/12800`, `1/48000`), so it is no constant |
+| **Values the reference defaults or derives** — `Level: 0` on audio and subtitle, `Width: 0`/`Height: 0` on a text subtitle, `RefFrames: 1` on video, and a video `BitRate` where `ffprobe` reports none | Reproducing a default is a decision and not a wiring fix, and the `BitRate` one is a **derivation** whose source nobody has read yet: the reference answers `117861` for a stream `ffprobe` gives no bitrate for |
+
+`Score`, `DefaultSubtitleStreamIndex` and `ColorRange` are one each, and `ColorRange` points the
+other way: this server sends it and the reference does not.
+
 * **The progressive-remux sizing divergence.** A remux whose size is knowable answers
   `Content-Length` and honours `Range` here; the reference answers chunked with
   `Accept-Ranges: none`
