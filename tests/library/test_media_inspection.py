@@ -26,7 +26,7 @@ from atrium.db.engine import create_database_engine, session_factory
 from atrium.db.repositories import ItemRepository, LibraryRepository, MediaProbeRepository
 from atrium.domain.items import CollectionType, ItemType
 from atrium.domain.library import Library
-from atrium.domain.media import MediaInspection
+from atrium.domain.media import MediaInspection, StreamKind
 from atrium.library.scan import scan
 from atrium.media.probe import ProberUnavailableError, UnreadableMediaError
 from tests.conftest import data_dir, not_media
@@ -308,3 +308,56 @@ def test_the_stub_prober_is_what_a_library_of_dummy_bytes_deserves(
     asserting against inspections nobody produced."""
     with pytest.raises(UnreadableMediaError):
         not_media(Path("anything"))
+
+
+@pytest.mark.ffmpeg
+def test_the_three_fields_ffprobe_reports_and_nothing_kept_survive_storage(
+    session: OrmSession, media_files: BuiltMedia, tmp_path: Path
+) -> None:
+    """**`IsAVC`, `TimeBase` and `NalLengthSize`, from the tool to the row and back.**
+
+    These were the only three of `PlaybackInfo`'s 242 findings that the tool reports and this
+    server kept nowhere `[probe: tools/probe_playback_stream_fields.py, Jellyfin 10.11.11,
+    2026-09-10]`. A test on the prober alone would pass with the columns missing, and one on the
+    columns alone would pass with the prober returning nothing - so this reads them back through
+    storage, which is where a revision could drop them.
+
+    `TimeBase` is asserted as *present and per stream* rather than against a literal: it is a
+    property of the file, and the fixture's own three files answer `1/1000`, `1/12800` and
+    `1/48000`. `RefFrames` is deliberately not here - ffprobe 9.0.1 reports no `refs` at all, and
+    this suite runs against more than one build of the tool.
+    """
+    tree = media_files.copy_into(tmp_path / "tree")
+    library = a_library(session, tree.movies_root, CollectionType.MOVIES)
+    scan(library, session)
+
+    probes = MediaProbeRepository(session)
+    items = ItemRepository(session).by_library(library.id)
+    refused = refused_films()
+    read = [
+        probes.get(library.id, one.relative_path)
+        for one in items.values()
+        if one.type is ItemType.MOVIE and one.relative_path and one.relative_path not in refused
+    ]
+    streams = [stream for inspection in read if inspection for stream in inspection.streams]
+    assert streams, "no stream survived the scan, so nothing below means anything"
+
+    for stream in streams:
+        assert stream.time_base, f"{stream.kind} stream carries no time base"
+
+    # **`any` and not `all`, and the difference is a fact about containers rather than a hedge.**
+    # `is_avc` and `nal_length_size` describe how an AVC bitstream is framed inside its container,
+    # and only the mp4 family and Matroska frame it that way - the same h264 in an mpegts or an
+    # avi reports neither. The media world holds all of those on purpose, so `all` here would
+    # assert that ffprobe says something it has no reason to say.
+    video = [one for one in streams if one.kind is StreamKind.VIDEO]
+    assert video, "the media world has no video stream"
+    assert any(one.is_avc for one in video), "no video stream reported is_avc at all"
+    assert any(one.nal_length_size for one in video), "no video stream reported a NAL length"
+
+    others = [one for one in streams if one.kind is not StreamKind.VIDEO]
+    assert others, "the media world has no audio or subtitle stream"
+    assert not any(one.is_avc for one in others), (
+        "ffprobe says nothing about is_avc for these, and the reference answers false rather "
+        "than unknown - so this server must too"
+    )

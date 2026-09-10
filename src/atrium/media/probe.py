@@ -362,7 +362,23 @@ def _stream(raw: Mapping[str, Any]) -> InspectedStream:
         ref_frames=_positive(raw.get("refs")),
         is_interlaced=_is_interlaced(raw.get("field_order")),
         is_anamorphic=_is_anamorphic(raw) if is_video else None,
+        time_base=_text(raw.get("time_base")),
+        nal_length_size=_text(raw.get("nal_length_size")),
+        # **A string on the way in and a boolean on the way out**, which is the tool's spelling
+        # rather than a coercion of convenience: `ffprobe` reports `is_avc` as `"true"`/`"false"`,
+        # and the reference deserialises it into a non-nullable `bool` - so a stream the tool says
+        # nothing about is `false` there and `false` here
+        # `[source: MediaBrowser.MediaEncoding/Probing/MediaStreamInfo.cs:235 @ v10.11.11]`.
+        is_avc=_flag(raw.get("is_avc")),
     )
+
+
+def _flag(value: Any) -> bool:
+    """`ffprobe`'s `"true"`/`"false"`, and `False` for anything else including absence."""
+    if isinstance(value, bool):
+        return value
+    text = _text(value)
+    return text is not None and text.strip().casefold() == "true"
 
 
 def _kind(value: Any) -> StreamKind:

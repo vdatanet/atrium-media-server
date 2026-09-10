@@ -939,6 +939,17 @@ class MediaStreamRow(Base):
     #: Null on anything but video, where the question does not arise.
     is_anamorphic: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 
+    #: The stream's own time base, as the exact rational the container states. **A column and not
+    #: a constant**: three files of this repository's fixture answer `1/1000`, `1/12800` and
+    #: `1/48000` `[probe: tools/probe_playback_stream_fields.py, Jellyfin 10.11.11, 2026-09-10]`.
+    time_base: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: How many bytes an AVC length prefix takes, as a string because that is what it is on the
+    #: wire and because nothing computes with it.
+    nal_length_size: Mapped[str | None] = mapped_column(String, nullable=True)
+    #: Never null: the reference's own field is a non-nullable `bool` filled from `ffprobe`'s
+    #: `is_avc`, so a stream the tool says nothing about is `false` rather than unknown.
+    is_avc: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+
     probe: Mapped[MediaProbe] = relationship(back_populates="streams", lazy="raise")
 
 
@@ -1006,6 +1017,14 @@ class MediaExternalStreamRow(Base):
     is_hearing_impaired: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=false()
     )
+
+    #: The sidecar's own time base. **A column here as well as on `media_streams`**, because a
+    #: subtitle beside the media is a stream a client sees like any other and the reference
+    #: answers a `TimeBase` for it - `ffprobe` reports `1/1000` for an `.srt`
+    #: `[probe: tools/probe_playback_stream_fields.py, Jellyfin 10.11.11, 2026-09-10]`. The other
+    #: two of that tranche are not here: `nal_length_size` and `is_avc` are properties of an AVC
+    #: bitstream, and this table holds subtitles.
+    time_base: Mapped[str | None] = mapped_column(String, nullable=True)
 
     #: When the sidecar was inspected. Required and read back, for the reason
     #: `media_probes.probed_at` is: revision 0005 exists because two columns that were written and
