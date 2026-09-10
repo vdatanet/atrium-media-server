@@ -138,6 +138,12 @@ class MediaStream(AtriumModel):
     bit_rate: int | None = None
     bit_depth: int | None = None
     ref_frames: int | None = None
+    #: How many bytes an AVC length prefix takes, as the string the container states.
+    nal_length_size: str | None = None
+    #: **Always on the wire, `false` where nothing said otherwise.** The reference fills its own
+    #: field from `ffprobe`'s `is_avc` into a non-nullable `bool`, so an audio or subtitle stream
+    #: carries `false` there rather than nothing - which is what this reproduces.
+    is_avc: bool = False
     channels: int | None = None
     sample_rate: int | None = None
     is_default: bool = False
@@ -153,6 +159,9 @@ class MediaStream(AtriumModel):
     real_frame_rate: int | float | None = None
     reference_frame_rate: int | float | None = None
     profile: str | None = None
+    #: The stream's own time base, and **per file rather than per server**: three files of this
+    #: repository's fixture answer `1/1000`, `1/12800` and `1/48000`.
+    time_base: str | None = None
     type: str
     aspect_ratio: str | None = None
     index: int
@@ -506,6 +515,8 @@ def stream_of(stream: InspectedStream, root: str | None = None) -> MediaStream:
         bit_rate=stream.bitrate,
         bit_depth=stream.bit_depth,
         ref_frames=stream.ref_frames,
+        nal_length_size=stream.nal_length_size,
+        is_avc=stream.is_avc,
         channels=stream.channels,
         sample_rate=stream.sample_rate,
         is_default=stream.is_default,
@@ -517,6 +528,7 @@ def stream_of(stream: InspectedStream, root: str | None = None) -> MediaStream:
         real_frame_rate=real,
         reference_frame_rate=_reference_frame_rate(average, real),
         profile=stream.profile,
+        time_base=stream.time_base,
         type=stream.kind.value.capitalize(),
         aspect_ratio=stream.aspect_ratio,
         index=stream.index,

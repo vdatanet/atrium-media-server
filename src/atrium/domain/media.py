@@ -188,6 +188,24 @@ class InspectedStream:
 
     ref_frames: int | None = None
     is_interlaced: bool = False
+
+    time_base: str | None = None
+    """The stream's time base as an exact rational, `1/1000`. **Per file and not per server**:
+    the fixture's own media answers `1/1000`, `1/12800` and `1/48000` on three files
+    `[probe: tools/probe_playback_stream_fields.py, Jellyfin 10.11.11, 2026-09-10]`, so it is read
+    and never assumed."""
+
+    nal_length_size: str | None = None
+    """How many bytes an AVC length prefix takes, as the string the container states - `4`. A
+    string here because it is one on the wire, and because it is a property of the bitstream
+    rather than a number anything computes with."""
+
+    is_avc: bool = False
+    """**`False` where nothing said otherwise, and that is the reference's shape rather than a
+    guess.** Its own `MediaStreamInfo.IsAvc` is a non-nullable `bool` deserialised from `ffprobe`'s
+    `is_avc`, so a stream the tool says nothing about arrives `false` and reaches the wire as
+    `false` - which is what an audio and a subtitle stream carry there
+    `[source: MediaBrowser.MediaEncoding/Probing/MediaStreamInfo.cs:235 @ v10.11.11]`."""
     is_anamorphic: bool | None = None
 
     def __post_init__(self) -> None:

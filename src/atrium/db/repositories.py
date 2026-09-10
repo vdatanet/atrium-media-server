@@ -1797,6 +1797,9 @@ def _stream(row: models.MediaStreamRow) -> InspectedStream:
         ref_frames=row.ref_frames,
         is_interlaced=row.is_interlaced,
         is_anamorphic=row.is_anamorphic,
+        time_base=row.time_base,
+        nal_length_size=row.nal_length_size,
+        is_avc=row.is_avc,
     )
 
 
@@ -1848,6 +1851,7 @@ def _external_stream(row: models.MediaExternalStreamRow) -> InspectedStream:
         is_forced=row.is_forced,
         is_hearing_impaired=row.is_hearing_impaired,
         is_external=True,
+        time_base=row.time_base,
     )
 
 
@@ -2007,6 +2011,9 @@ class MediaProbeRepository:
                     ref_frames=one.ref_frames,
                     is_interlaced=one.is_interlaced,
                     is_anamorphic=one.is_anamorphic,
+                    time_base=one.time_base,
+                    nal_length_size=one.nal_length_size,
+                    is_avc=one.is_avc,
                 )
             )
         self._session.flush()
@@ -2059,6 +2066,7 @@ class MediaProbeRepository:
                         is_default=one.is_default,
                         is_forced=one.is_forced,
                         is_hearing_impaired=one.is_hearing_impaired,
+                        time_base=one.time_base,
                         probed_at=utc_now(),
                     )
                 )
