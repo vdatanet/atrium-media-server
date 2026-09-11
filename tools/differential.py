@@ -805,15 +805,20 @@ class Wire:
         `"$"` message is asked for at all, and a JSON encoder would turn it into a valid document.
         """
         target = self.prefix + path + (("?" + encode_query(query)) if query else "")
-        headers = {
-            "Accept": "application/json",
-            "X-Emby-Authorization": (
-                f'MediaBrowser Client="{CLIENT}", Device="{CLIENT}", '
-                f'DeviceId="{self.device}", Version="{CLIENT_VERSION}"'
-            ),
-        }
+        # **`Authorization`, with the token inside it.** This client spoke `X-Emby-Authorization`
+        # and `X-Emby-Token`, which every Jellyfin took until 12.0.0 retired both - `400` on
+        # `AuthenticateByName` and `401` everywhere else, measured 2026-09-11. It is not a 12-only
+        # spelling: 10.11.11 answers `200` to either, so one header serves both and this is not a
+        # fork. **It is not only plumbing**, either: this client issues the compared cases too, so
+        # the header it chooses is part of what a run measures - which is the argument for sending
+        # the one form both servers accept rather than the one only the older takes.
+        credentials = (
+            f'MediaBrowser Client="{CLIENT}", Device="{CLIENT}", '
+            f'DeviceId="{self.device}", Version="{CLIENT_VERSION}"'
+        )
         if self.token:
-            headers["X-Emby-Token"] = self.token
+            credentials += f', Token="{self.token}"'
+        headers = {"Accept": "application/json", "Authorization": credentials}
         if content_type:
             headers["Content-Type"] = content_type
         connection: Any

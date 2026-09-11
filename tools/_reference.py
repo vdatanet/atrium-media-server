@@ -309,19 +309,25 @@ class Api:
             + path
             + (("?" + urllib.parse.urlencode(clean, doseq=True)) if clean else "")
         )
-        headers = {
-            "Accept": "application/json",
-            "X-Emby-Authorization": (
-                'MediaBrowser Client="atrium-reference", Device="atrium-reference", '
-                'DeviceId="atrium-reference-0000", Version="0.1"'
-            ),
-        }
+        # **`Authorization`, and the token inside it, because Jellyfin 12 accepts nothing else.**
+        # This client spoke `X-Emby-Authorization` with the token in `X-Emby-Token` beside it,
+        # which both servers took until 12.0.0 retired the pair: measured 2026-09-11, the old
+        # header answers `400` on `AuthenticateByName` there and the old token header `401` on
+        # everything else, so the wizard created an administrator that could not then sign in and
+        # no 12.0.0 instance could be stood up at all. The modern spelling is not a 12-only form -
+        # 10.11.11 answers `200` to both, and its whole startup sequence drives on this one - so
+        # this is one header for both versions rather than a fork.
+        credentials = (
+            'MediaBrowser Client="atrium-reference", Device="atrium-reference", '
+            'DeviceId="atrium-reference-0000", Version="0.1"'
+        )
+        if self.token:
+            credentials += f', Token="{self.token}"'
+        headers = {"Accept": "application/json", "Authorization": credentials}
         payload: Optional[bytes] = None
         if body is not None:
             payload = json.dumps(body).encode("utf-8")
             headers["Content-Type"] = "application/json"
-        if self.token:
-            headers["X-Emby-Token"] = self.token
         connection: Any
         if self.scheme == "https":
             connection = http.client.HTTPSConnection(self.host, self.port, timeout=self.timeout)
