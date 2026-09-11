@@ -2235,7 +2235,10 @@ def test_a_body_with_no_content_type_reaches_the_wire_without_one() -> None:
         http.client.HTTPConnection = original  # type: ignore[misc]
 
     assert "Content-Type" not in sent["headers"]
-    assert sent["headers"]["X-Emby-Token"] == "t"
+    # The token rides inside `Authorization` since 2026-09-11: Jellyfin 12.0.0 answers `401` to
+    # `X-Emby-Token` and this client sends neither that header nor its older sibling any more.
+    assert sent["headers"]["Authorization"].endswith(', Token="t"')
+    assert "X-Emby-Token" not in sent["headers"]
     assert sent["body"] == b"{}"
     assert answer.status == 400
 
