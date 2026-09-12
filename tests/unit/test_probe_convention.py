@@ -827,3 +827,62 @@ def test_two_accounts_do_not_share_one_device() -> None:
     assert module.device_for("administrator") != module.device_for("throwaway")
     assert module.device_for("administrator") == module.device_for("administrator")
     assert module.device_for("administrator").startswith(module.DEVICE_ID)
+
+
+def test_the_credential_rides_inside_one_authorization_header() -> None:
+    """The pair this client used to send is gated behind a flag, and 12.0.0 has retired it.
+
+    `X-Emby-Authorization` and `X-Emby-Token` are the **fallback** on the reference and never the
+    mechanism: `AuthorizationContext` reads `Token` out of the parsed `Authorization` header first
+    and reaches for either sibling only when `EnableLegacyAuthorization` is on
+    `[source: Jellyfin.Server.Implementations/Security/AuthorizationContext.cs:80-101, 229-237 @
+    v10.11.11]`. Against a server with the flag off the old spellings answer `400` on
+    `/Users/AuthenticateByName` and `401` everywhere else
+    `[probe: manual requests via tools/_probe.py, Jellyfin 12.0.0, 2026-09-12]`.
+
+    `tools/_reference.py` and `tools/differential.py` moved on 2026-09-11 and are asserted where
+    they are wired. This is the third client and the one all 70 `probe_*.py` scripts speak, so the
+    property is asserted here rather than left to whichever probe is run next.
+    """
+    module = load_probe_module()
+    server = module.Server.__new__(module.Server)
+    server.device_id = "atrium-probe-test"
+
+    unauthenticated = server.authorization()
+    assert unauthenticated.startswith("MediaBrowser ")
+    assert 'DeviceId="atrium-probe-test"' in unauthenticated
+    assert "Token=" not in unauthenticated, (
+        "A probe that holds no token must send none: `send_token=False` is how 002's probes ask "
+        "whether a route requires a credential at all."
+    )
+
+    assert server.authorization("abc").endswith(', Token="abc"')
+
+
+def test_no_tool_sends_a_retired_authorization_header() -> None:
+    """The sweep that would have caught this one before a server was upgraded underneath it.
+
+    `_probe.py` sent the retired pair from 002 until 2026-09-12, and nothing failed: the servers it
+    was pointed at had `EnableLegacyAuthorization` on, so the fallback answered and the mechanism
+    was never exercised. A header a test only reads when it breaks is a header nobody has checked,
+    which is why this asserts the *plumbing* rather than any one probe's run.
+
+    `probe_auth_mechanisms.py` is the exception and has to be: 002's whole subject is which
+    spellings authenticate, so it names every one of them on purpose.
+    """
+    module = load_probe_module()
+    retired = ("X-Emby-Authorization", "X-Emby-Token", "X-MediaBrowser-Token")
+    allowed = {"probe_auth_mechanisms.py"}
+
+    offenders = {
+        tool.name: sorted(one for one in retired if f'"{one}"' in tool.read_text(encoding="utf-8"))
+        for tool in tools()
+        if tool.name not in allowed
+    }
+    offenders = {name: found for name, found in offenders.items() if found}
+    assert not offenders, (
+        f"{offenders} send a header the reference gates behind `EnableLegacyAuthorization` and "
+        f"12.0.0 answers `400`/`401` to. The credential belongs inside `Authorization`, which "
+        f"both versions accept: use `_probe.Server.authorization()`."
+    )
+    assert module.Server.authorization  # the replacement exists under the name the message gives
