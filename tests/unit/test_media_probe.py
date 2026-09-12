@@ -44,9 +44,12 @@ from atrium.domain.media import (
     VideoRangeType,
 )
 from atrium.media.probe import (
+    ESTIMATED_AUDIO_BITRATES,
     InspectionError,
     ProberUnavailableError,
     UnreadableMediaError,
+    _executable,
+    _run_json,
     inspect,
 )
 from tests.conftest import data_dir
@@ -189,18 +192,61 @@ def test_the_matroska_placeholder_codec_tag_is_not_stored(media_files: BuiltMedi
 
 
 @pytest.mark.ffmpeg
-def test_a_matroska_stream_reports_no_bitrate_of_its_own(media_files: BuiltMedia) -> None:
-    """Why the column is nullable, asserted rather than asserted-in-a-comment.
+def test_a_matroska_stream_reports_no_bitrate_and_both_fallbacks_give_it_one(
+    media_files: BuiltMedia,
+) -> None:
+    """The two halves of `BitRate` on one real file, which is what makes this the `ffmpeg` test.
 
-    The same encoder settings produce a per-stream bitrate in mp4 and none in Matroska, which has
-    no field for one. A schema that required it would refuse an ordinary library.
+    **The tool still reports none**, which is why the column is nullable and was this test's whole
+    subject until 2026-09-12: the same encoder settings produce a per-stream bitrate in mp4 and
+    none in Matroska, which has no field for one.
+
+    **What is stored is no longer none**, because the reference derives it and now so does this
+    server — and the same file exercises two different fallbacks at once, which no constructed
+    input can prove happens in practice:
+
+        video   no bit_rate, no BPS tag        -> the CONTAINER's, 116464
+        audio   no bit_rate, not eligible for
+                the container inside a video
+                file, DURATION unparseable     -> the ESTIMATE, aac at 2 channels = 192000
+
+    The audio half is the sharper of the two: it is `192000` **because the item is a video**, and
+    the identical stream inside an audio file would take the container's 116464 instead.
     """
+    raw = _run_json(_executable("ffprobe"), media_files.path_of(TWO_PARTER_FIRST))
+    reported = [one.get("bit_rate") for one in raw["streams"]]
+    assert reported == [None, None], (
+        "Matroska has no per-stream bitrate field; the column is nullable"
+    )
+
     in_mp4 = inspect(media_files.path_of(DIRECT_PLAY))
     in_matroska = inspect(media_files.path_of(TWO_PARTER_FIRST))
 
     assert in_mp4.video is not None and in_mp4.video.bitrate is not None
-    assert all(one.bitrate is None for one in in_matroska.streams)
     assert in_matroska.bitrate is not None, "the file as a whole still has one"
+    assert in_matroska.video is not None and in_matroska.video.bitrate == in_matroska.bitrate
+    assert in_matroska.audio is not None
+    assert in_matroska.audio.bitrate == ESTIMATED_AUDIO_BITRATES["aac"][0]
+
+
+@pytest.mark.ffmpeg
+def test_the_same_matroska_read_as_an_audio_item_answers_a_different_bitrate(
+    media_files: BuiltMedia,
+) -> None:
+    """`is_audio` is a parameter and not a reading, and this is the evidence on a real file.
+
+    One file, two answers for its audio stream: inside a video item the container's bitrate is the
+    film's and the reference estimates instead, and inside an audio item the container's bitrate
+    essentially *is* the stream's and the reference uses it.
+    """
+    path = media_files.path_of(TWO_PARTER_FIRST)
+    as_video = inspect(path)
+    as_audio = inspect(path, is_audio=True)
+
+    assert as_video.audio is not None and as_audio.audio is not None
+    assert as_video.audio.bitrate == ESTIMATED_AUDIO_BITRATES["aac"][0]
+    assert as_audio.audio.bitrate == as_audio.bitrate
+    assert as_video.audio.bitrate != as_audio.audio.bitrate
 
 
 @pytest.mark.ffmpeg

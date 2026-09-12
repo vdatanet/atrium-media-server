@@ -284,7 +284,7 @@ TEST_USER = User(id="a" * 32, name="joan", is_administrator=True)
 FAST_PASSWORDS = "[passwords]\nmemory_cost = 8\ntime_cost = 1\nparallelism = 1\n"
 
 
-def not_media(path: Path) -> MediaInspection:
+def not_media(path: Path, *, is_audio: bool = False) -> MediaInspection:
     """The prober the 003 and 004 fixture libraries scan with, and the truth about them.
 
     `tests/fixtures/library/generate.py` says it in its own words - "these are not decodable

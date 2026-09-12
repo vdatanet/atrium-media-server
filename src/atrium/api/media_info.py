@@ -61,6 +61,7 @@ import asyncio
 from collections.abc import Mapping
 from dataclasses import replace
 from enum import Enum
+from functools import partial
 from pathlib import Path
 from typing import Annotated, ClassVar
 
@@ -79,7 +80,7 @@ from atrium.compat.ticks import WireTicks
 from atrium.db.engine import session_scope
 from atrium.db.item_queries import HydratedItem, ItemQueryRepository
 from atrium.db.repositories import LibraryRepository, SessionRepository, UserRepository
-from atrium.domain.items import Item
+from atrium.domain.items import MEDIA_TYPE_OF, Item
 from atrium.domain.media import MediaInspection
 from atrium.domain.queries import ItemQuery
 from atrium.domain.user import User
@@ -680,8 +681,14 @@ async def _opened(
     for index, part in enumerate(item.sources):
         if probes[index] is not None:
             continue
+        # The item's own kind, which is what `media/probe.py:inspect` cannot derive from a file
+        # and what decides where an audio stream with no stated bitrate gets one.
         opened_now = await asyncio.to_thread(
-            inspection.opened, Path(f"{root.rstrip('/')}/{part.relative_path}")
+            partial(
+                inspection.opened,
+                Path(f"{root.rstrip('/')}/{part.relative_path}"),
+                is_audio=MEDIA_TYPE_OF.get(item.type) == "Audio",
+            )
         )
         if opened_now is not None:
             probes[index] = opened_now

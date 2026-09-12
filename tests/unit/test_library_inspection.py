@@ -254,7 +254,7 @@ def test_the_kind_that_is_asked_for_is_the_items_and_not_the_files() -> None:
 
 def test_opening_answers_what_the_prober_found() -> None:
     found = an_inspection(*VIDEO)
-    assert inspection.opened(Path("/films/A Film.mkv"), lambda _: found) is found
+    assert inspection.opened(Path("/films/A Film.mkv"), lambda _, **__: found) is found
 
 
 @pytest.mark.parametrize(
@@ -270,7 +270,7 @@ def test_opening_answers_none_for_either_failure(failure: Exception) -> None:
     (003 section 3.7): there a missing prober stops the phase for the whole library.
     """
 
-    def refuses(path: Path) -> MediaInspection:
+    def refuses(path: Path, *, is_audio: bool = False) -> MediaInspection:
         raise failure
 
     assert inspection.opened(Path("/films/A Film.mkv"), refuses) is None
