@@ -179,7 +179,11 @@ def fetch(
         url += "?" + urllib.parse.urlencode(params)
     headers = {"Accept": accept}
     if server.token:
-        headers["X-Emby-Token"] = server.token
+        # The credential inside `Authorization`, which is the mechanism on both versions of the
+        # reference - the old header is a fallback behind `EnableLegacyAuthorization` and 12.0.0
+        # answers `401` to it. This request is issued directly only because `Accept` is the
+        # subject; the credential is still the shared client's.
+        headers["Authorization"] = server.authorization(server.token)
     # S310: the URL is the operator's own server, given on the command line or in .env.
     request = urllib.request.Request(url, headers=headers, method="GET")  # noqa: S310
     try:

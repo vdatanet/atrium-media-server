@@ -68,7 +68,9 @@ def request(server: Server, path: str, accept: str) -> tuple[int, str, bytes]:
     url = server.base + path
     headers = {"Accept": accept}
     if server.token:
-        headers["X-Emby-Token"] = server.token
+        # See `probe_image_formats.py`: `Accept` is the subject, the credential is not, and it
+        # rides inside `Authorization` because that is what both reference versions accept.
+        headers["Authorization"] = server.authorization(server.token)
     # S310: the URL is the operator's own server, given on the command line or in .env.
     req = urllib.request.Request(url, headers=headers, method="GET")  # noqa: S310
     try:

@@ -165,7 +165,10 @@ def _credential_battery(server: Server, probe: Probe, address: Address) -> list[
         cases = (
             ("header token", {}, True),
             ("no token at all", {}, False),
-            ("unknown token", {"X-Emby-Token": UNKNOWN_TOKEN}, False),
+            # An unknown credential in the header the reference actually reads: sent through
+            # `X-Emby-Token` it would measure "a retired header is ignored" on 12.0.0 rather than
+            # "this token is not known", which is the question.
+            ("unknown token", {"Authorization": server.authorization(UNKNOWN_TOKEN)}, False),
         )
         answers = {}
         for case, headers, send in cases:

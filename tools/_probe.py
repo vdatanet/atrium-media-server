@@ -308,6 +308,49 @@ class Server:
         # only: nothing prints it, and `Server` has no repr that could.
         self.password_used: str | None = None
 
+    # -- credentials -------------------------------------------------------------------------
+
+    def authorization(self, token: str | None = None) -> str:
+        """The `Authorization` header value this probe sends, with `Token=` when it holds one.
+
+        **One header carries the whole credential**, which is the reference's own canonical
+        mechanism rather than a convenience: `AuthorizationContext` reads `Token` out of the
+        parsed `Authorization` header first, and only falls back to the `X-Emby-Token` and
+        `X-MediaBrowser-Token` headers when the server has `EnableLegacyAuthorization` switched
+        on `[source: Jellyfin.Server.Implementations/Security/AuthorizationContext.cs:80-101,
+        229-237 @ v10.11.11]`. The same flag gates `X-Emby-Authorization`, which is why the pair
+        this client used to send was never the mechanism - it was the fallback, and it worked
+        only because the servers it was pointed at had the flag on.
+
+        **The third client to make this move, and the one that reaches the live server.**
+        `tools/_reference.py` and `tools/differential.py` made it on 2026-09-11, because a
+        12.0.0 instance could not be stood up at all without it. This file is what all 70
+        `probe_*.py` scripts speak, so until now step 3 of
+        [conformance.md's bump procedure](../docs/compatibility/conformance.md) - *re-run every
+        probe script under `tools/`* - had no working client for a 12.0.0 server, and neither
+        did any probe pointed at an operator's server that had been upgraded underneath it.
+
+        Measured against one that had: `X-Emby-Authorization` answers `400` on
+        `/Users/AuthenticateByName` and `X-Emby-Token` answers `401` on `/Users/Me`, where one
+        `Authorization` header carrying the same components answers `200` to both
+        `[probe: manual requests via tools/_probe.py, Jellyfin 12.0.0, 2026-09-12]`. It is not a
+        12-only spelling and not a fork: 10.11.11 answers `200` to either, so one header serves
+        both versions.
+
+        **A probe that sends no token still sends no header**, which is unchanged and load-bearing:
+        `send_token=False` is how a probe asks whether a route requires a credential at all, and
+        002's answer is not the obvious one.
+        """
+        parts = [
+            f'Client="{CLIENT}"',
+            f'Device="{CLIENT}"',
+            f'DeviceId="{self.device_id}"',
+            f'Version="{VERSION}"',
+        ]
+        if token:
+            parts.append(f'Token="{token}"')
+        return "MediaBrowser " + ", ".join(parts)
+
     # -- request plumbing --------------------------------------------------------------------
 
     def _request(
@@ -329,7 +372,7 @@ class Server:
 
         headers = {"Accept": "application/json"}
         if self.token and send_token:
-            headers["X-Emby-Token"] = self.token
+            headers["Authorization"] = self.authorization(self.token)
         if extra_headers:
             headers.update(extra_headers)
 
@@ -420,7 +463,7 @@ class Server:
         url = self.base + path_and_query
         headers = {}
         if self.token and send_token:
-            headers["X-Emby-Token"] = self.token
+            headers["Authorization"] = self.authorization(self.token)
         if extra_headers:
             headers.update(extra_headers)
         request = urllib.request.Request(url, headers=headers, method="GET")  # noqa: S310
@@ -492,12 +535,7 @@ class Server:
             "POST",
             "/Users/AuthenticateByName",
             body={"Username": username, "Pw": password or ""},
-            extra_headers={
-                "X-Emby-Authorization": (
-                    f'MediaBrowser Client="{CLIENT}", Device="{CLIENT}", '
-                    f'DeviceId="{self.device_id}", Version="{VERSION}"'
-                )
-            },
+            extra_headers={"Authorization": self.authorization()},
         )
         self.token = result["AccessToken"]
         self.user_id = result["User"]["Id"]
