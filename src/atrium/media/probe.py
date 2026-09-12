@@ -370,13 +370,23 @@ def _stream(
         codec=_codec(kind, _text(raw.get("codec_name"))),
         codec_tag=_codec_tag(raw),
         profile=_text(raw.get("profile")),
-        # Passed through as reported, negative sentinel included: the reference stores this
-        # number unexamined, and an unknown level that became null here would be a different
-        # answer from the one a client already gets.
-        level=_integer(raw.get("level")),
+        # **Zero and not null when the tool says nothing**, which is not a default anybody chose:
+        # the reference's probing DTO holds `Level` as a NON-nullable `int` and the common
+        # `MediaStream` initialiser assigns it before any per-kind branch runs, so an absent
+        # `level` deserialises to `0` and every stream carries one `[source:
+        # MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:709 and
+        # MediaStreamInfo.cs:172 @ v10.11.11]`. A value the tool does report is passed through
+        # unexamined, negative sentinel included.
+        level=_zeroed(raw.get("level")),
         bit_depth=_bit_depth(raw),
-        width=_integer(raw.get("width")),
-        height=_integer(raw.get("height")),
+        # **Zero for a video or a subtitle and absent for anything else**, which is the same
+        # non-nullable `int` one branch further in: the reference assigns `Width`/`Height` in its
+        # subtitle and video branches only, so a text subtitle carries `0` and an audio stream
+        # carries nothing at all `[source: ProbeResultNormalizer.cs:776-777, 823-824 and
+        # MediaStreamInfo.cs:95, 109 @ v10.11.11]`. Measured on the wire the same way
+        # `[probe: tools/probe_playback_stream_fields.py, Jellyfin 12.0.0, 2026-09-12]`.
+        width=_framed(raw.get("width"), kind),
+        height=_framed(raw.get("height"), kind),
         aspect_ratio=_text(raw.get("display_aspect_ratio")),
         framerate=_rate(raw.get("r_frame_rate")),
         average_framerate=_rate(raw.get("avg_frame_rate")),
@@ -669,6 +679,28 @@ def _positive(value: Any) -> int | None:
     """A count, where zero means "not stated" rather than zero of them."""
     number = _integer(value)
     return number if number is not None and number > 0 else None
+
+
+#: The two stream kinds whose branch assigns a frame size in the reference. Anything else keeps
+#: nothing, which is a different answer from `0` and the one an audio stream gives.
+FRAMED_KINDS = (StreamKind.VIDEO, StreamKind.SUBTITLE)
+
+
+def _zeroed(value: Any) -> int:
+    """A whole number, with **zero** where the tool reported nothing.
+
+    The shape a non-nullable `int` gives a field the JSON does not carry. It is not a default in
+    the sense of a value somebody picked: it is what deserialising an absent property into an
+    `int` produces, and reproducing it is the difference between `Level: 0` and `Level: null` on
+    every audio and subtitle stream of every item.
+    """
+    found = _integer(value)
+    return 0 if found is None else found
+
+
+def _framed(value: Any, kind: StreamKind) -> int | None:
+    """`_zeroed` for the kinds the reference frames, and nothing for the rest."""
+    return _zeroed(value) if kind in FRAMED_KINDS else _integer(value)
 
 
 def _rate(value: Any) -> str | None:

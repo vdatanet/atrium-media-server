@@ -1331,12 +1331,16 @@ reference exactly. What differs splits in two, and neither half is a wiring mist
 
 **The tranche was read on 2026-09-12, and "defaults" was the wrong word for all of it.**
 
-* **`Level: 0`, `Width: 0`, `Height: 0` are not defaults anybody chose.** The reference's probing
-  DTO holds them as **non-nullable `int`** and assigns them unconditionally — `Level` in the common
-  `MediaStream` initialiser, `Width`/`Height` in the **subtitle** and **video** branches only
-  `[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:709, 776-777, 823-824 and
-  MediaStreamInfo.cs:95, 109, 172 @ v10.11.11]`. Absent from `ffprobe` becomes `0`. **Still owed**,
-  and it is a coercion at inspection time plus regenerated goldens, not a decision.
+* **`Level: 0`, `Width: 0`, `Height: 0` are not defaults anybody chose — and are paid**,
+  `media/probe.py:_zeroed` and `_framed`, 2026-09-12. The reference's probing DTO holds them as
+  **non-nullable `int`** and assigns them unconditionally — `Level` in the common `MediaStream`
+  initialiser so every kind gets one, `Width`/`Height` in the **subtitle** and **video** branches
+  only so an audio stream gets neither `[source:
+  MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:709, 776-777, 823-824 and
+  MediaStreamInfo.cs:95, 109, 172 @ v10.11.11]`. Revision 0012 adds the three to the sidecar table
+  — a subtitle beside the media goes through the **same** probing pipeline
+  (`MediaInfoResolver.cs:314-344`) — and **backfills** the main one, which 0011 could not: the
+  value is `0` because nothing was read, so no file has to be opened to supply it.
 * **The earlier reading of this row was half wrong and the correction is measured.** It recorded
   `Width`/`Height` as emitted on *every* stream kind with `0` where they do not apply. They are
   **absent** on an audio stream — the audio branch assigns neither — and `0` only on a text
@@ -1351,6 +1355,13 @@ reference exactly. What differs splits in two, and neither half is a wiring mist
   audio *file*), then the `BPS` tag and `NUMBER_OF_BYTES` over `DURATION`, then a table keyed on
   codec and channels (an audio stream inside a **video** file only)
   `[source: ProbeResultNormalizer.cs:969-1018, 251-257, 317-363 @ v10.11.11]`.
+
+**And the fixture world was recording a wire shape no library produces.** `tests/fixtures/query.py`
+builds `InspectedStream` directly and never calls `media/probe.py:_stream`, so its goldens carried
+`Level: null` on every audio stream where a scanned library carries `Level: 0`. It now applies the
+same coercion through `probe.py`'s own helpers rather than a second copy of the rule, and the three
+goldens gained ten properties and lost none. **The same gap is still open for `BitRate`**: that
+world states its bitrates, so nothing there exercises the four fallbacks.
 
 **Two things `BitRate` leaves owed**, neither of them blocking:
 
