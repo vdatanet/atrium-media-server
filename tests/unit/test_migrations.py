@@ -910,3 +910,63 @@ def test_0009_rolls_back_by_clearing_what_the_biconditional_would_refuse(
             sa.text("SELECT COUNT(*) FROM items WHERE type = 'MusicArtist' AND library_id IS NULL")
         ).scalar_one()
     assert left == 0, "a registry row the biconditional refuses cannot survive the rollback"
+
+
+def test_0012_backfills_the_zero_exactly_where_the_coercion_puts_it(
+    engine: Engine, paths: DataPaths
+) -> None:
+    """The one revision in this tranche that **can** backfill, and it is narrowed the same way.
+
+    0011 said *"no backfill, and none is possible"* and that was true of it: `time_base`,
+    `nal_length_size` and `is_avc` come from opening the file. These do not — the value is `0`
+    precisely **because** nothing was read, so a row holding `NULL` already holds every fact the
+    backfill needs and leaving it would answer `Level: null` until somebody happened to rescan.
+
+    The narrowing is the whole test: `level` on every kind, `width`/`height` on the two the
+    reference frames, and an audio row keeping `NULL` — which is a different answer from `0` and
+    the one the reference gives.
+    """
+    move(engine, paths, "0011")
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text("INSERT INTO libraries (id, name, collection_type) VALUES (:i,'F','movies')"),
+            {"i": LIBRARY},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO media_probes (library_id, relative_path, size, mtime_ns, container,"
+                " format_names, probed_at) VALUES (:l, 'A Film.mkv', 1, 1, 'mkv', 'matroska,webm',"
+                " '2026-09-12 00:00:00.000000+00:00')"
+            ),
+            {"l": LIBRARY},
+        )
+        for index, kind in enumerate(("video", "audio", "subtitle", "data")):
+            connection.execute(
+                sa.text(
+                    "INSERT INTO media_streams (library_id, relative_path, stream_index, type)"
+                    " VALUES (:l, 'A Film.mkv', :i, :t)"
+                ),
+                {"l": LIBRARY, "i": index, "t": kind},
+            )
+        # One row that already states a size, to prove the backfill touches only the empty ones.
+        connection.execute(
+            sa.text(
+                "UPDATE media_streams SET width = 1920, height = 1080, level = 41"
+                " WHERE type = 'video'"
+            )
+        )
+
+    move(engine, paths, "0012")
+
+    with engine.begin() as connection:
+        found = {
+            row[0]: (row[1], row[2], row[3])
+            for row in connection.execute(
+                sa.text("SELECT type, level, width, height FROM media_streams")
+            )
+        }
+
+    assert found["video"] == (41, 1920, 1080), "a stated value must survive the backfill untouched"
+    assert found["subtitle"] == (0, 0, 0), "a text subtitle is zero on all three"
+    assert found["audio"] == (0, None, None), "audio gets a level and no frame size"
+    assert found["data"] == (0, None, None), "the initialiser runs before every branch"

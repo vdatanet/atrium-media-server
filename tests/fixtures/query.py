@@ -58,6 +58,7 @@ from atrium.domain.media import (
 from atrium.domain.sorting import sort_name
 from atrium.domain.user import LibraryAccess, User
 from atrium.library import identity
+from atrium.media.probe import _framed, _zeroed
 from atrium.metadata.artwork import ImageAssociation, ImageKind, SourceKind
 from atrium.metadata.merge import MetadataChanges
 from atrium.metadata.model import Field, PersonCredit, PersonKind
@@ -476,8 +477,33 @@ def build_query_world(session: OrmSession) -> QueryWorld:
 # Inspections
 # ------------------------------------------------------------------------------------------
 
+
+def as_inspected(*streams: InspectedStream) -> tuple[InspectedStream, ...]:
+    """The coercion a real inspection applies, applied to a world that builds its streams by hand.
+
+    **Without it these goldens record a wire shape no library produces.** `media/probe.py:_stream`
+    turns an absent `level` into `0` on every stream and an absent frame size into `0` on a video
+    or a subtitle, because the reference's probing DTO holds all three as non-nullable `int`s
+    (008, 2026-09-12). This world never calls that function - it constructs `InspectedStream`
+    directly - so before this helper its audio streams carried `Level: null` where a scanned
+    library carries `Level: 0`, and the golden files said so.
+
+    `probe.py`'s own helpers rather than a second copy of the rule: a fixture that restated it
+    would be free to drift from the thing it is meant to stand in for.
+    """
+    return tuple(
+        replace(
+            one,
+            level=_zeroed(one.level),
+            width=_framed(one.width, one.kind),
+            height=_framed(one.height, one.kind),
+        )
+        for one in streams
+    )
+
+
 #: What a film in this world turns out to contain: high definition, and subtitled.
-FILM_STREAMS = (
+FILM_STREAMS = as_inspected(
     InspectedStream(
         index=0,
         kind=StreamKind.VIDEO,
@@ -514,7 +540,7 @@ FILM_STREAMS = (
 
 #: And an episode: standard definition, no subtitle - so both conditional properties are proven
 #: absent on one golden and present on another rather than only ever one way round.
-EPISODE_STREAMS = (
+EPISODE_STREAMS = as_inspected(
     InspectedStream(
         index=0,
         kind=StreamKind.VIDEO,
@@ -546,7 +572,7 @@ EPISODE_STREAMS = (
     ),
 )
 
-TRACK_STREAMS = (
+TRACK_STREAMS = as_inspected(
     InspectedStream(
         index=0,
         kind=StreamKind.AUDIO,

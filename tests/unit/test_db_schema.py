@@ -123,9 +123,9 @@ def test_a_fresh_database_is_brought_to_the_shipped_head(prepared: DataPaths) ->
     """
     engine = create_database_engine(prepared)
     try:
-        assert schema.head_revision(schema.alembic_config(prepared)) == "0011"
+        assert schema.head_revision(schema.alembic_config(prepared)) == "0012"
         schema.ensure_current(engine, prepared)
-        assert schema.current_revision(engine) == "0011"
+        assert schema.current_revision(engine) == "0012"
         with engine.connect() as connection:
             tables = set(inspect(connection).get_table_names())
     finally:

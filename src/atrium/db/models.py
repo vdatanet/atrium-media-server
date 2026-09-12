@@ -1026,6 +1026,18 @@ class MediaExternalStreamRow(Base):
     #: bitstream, and this table holds subtitles.
     time_base: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    #: The three the reference's non-nullable ints produce, and a sidecar gets them for the same
+    #: reason it gets a `time_base`: `MediaInfoResolver` runs the file through the **same**
+    #: probing pipeline and then merges the path's metadata over the answer `[source:
+    #: MediaBrowser.Providers/MediaInfo/MediaInfoResolver.cs:314-344 @ v10.11.11]`, so a subtitle
+    #: beside the media goes through the subtitle branch like an embedded one.
+    #:
+    #: `width` and `height` are **not** always zero here: a drawn sidecar carries a real frame
+    #: size where a text one carries `0`, which is the same split an embedded subtitle shows.
+    level: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     #: When the sidecar was inspected. Required and read back, for the reason
     #: `media_probes.probed_at` is: revision 0005 exists because two columns that were written and
     #: never read looked empty on every refresh.

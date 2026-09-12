@@ -1852,6 +1852,9 @@ def _external_stream(row: models.MediaExternalStreamRow) -> InspectedStream:
         is_hearing_impaired=row.is_hearing_impaired,
         is_external=True,
         time_base=row.time_base,
+        level=row.level,
+        width=row.width,
+        height=row.height,
     )
 
 
@@ -2067,6 +2070,9 @@ class MediaProbeRepository:
                         is_forced=one.is_forced,
                         is_hearing_impaired=one.is_hearing_impaired,
                         time_base=one.time_base,
+                        level=one.level,
+                        width=one.width,
+                        height=one.height,
                         probed_at=utc_now(),
                     )
                 )
