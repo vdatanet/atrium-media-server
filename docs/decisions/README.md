@@ -17,3 +17,4 @@ optional; a decision without visible alternatives is a preference.
 | [0006](0006-password-hashing.md) | Password hashing — Argon2id | Accepted |
 | [0007](0007-a-container-runtime-for-the-reference-instance.md) | A container runtime for the reference instance | Accepted |
 | [0008](0008-exporting-the-specifications.md) | Exporting the specifications, and what a second implementation may inherit | Accepted |
+| [0009](0009-a-document-that-contracts-is-not-a-surface-that-shrank.md) | A document that contracts is not a surface that shrank | Proposed |
