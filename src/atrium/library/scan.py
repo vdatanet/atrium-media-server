@@ -70,12 +70,13 @@ from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
+from typing import Protocol
 
 from sqlalchemy.orm import Session as OrmSession
 
 from atrium.compat.dates import utc_now
 from atrium.db.repositories import ItemRepository, MediaProbeRepository, MetadataRepository
-from atrium.domain.items import IN_THE_TREE, PARENT_OF, Item, ItemType
+from atrium.domain.items import IN_THE_TREE, MEDIA_TYPE_OF, PARENT_OF, Item, ItemType
 from atrium.domain.library import Library
 from atrium.domain.media import DiscoveredSubtitles, InspectedStream, MediaInspection
 from atrium.library.identity import ensure_unique
@@ -95,11 +96,21 @@ from atrium.metadata.tags import MemoisedSource, TagSource
 #: `confirm_removals`, which is a decision somebody makes rather than a threshold nobody notices.
 DEFAULT_REMOVAL_THRESHOLD = 0.25
 
+
 #: What a scan calls to find out what is inside a media file. A seam rather than a direct call,
 #: because the hundreds of dummy-byte files in the 003 and 004 fixtures are not media and every one
 #: of them would cost a process launch and a refusal - so those suites pass a stub and keep their
 #: speed, while a real server gets the real prober by default.
-MediaProber = Callable[[Path], MediaInspection]
+class MediaProber(Protocol):
+    """What a scan calls to find out what is inside a media file.
+
+    `is_audio` is the **item's** kind, which `media/probe.py:inspect` needs and cannot derive: it
+    decides where an audio stream with no stated bitrate gets one from. Keyword-only and defaulted
+    so that a fake which does not care about it stays a two-line function.
+    """
+
+    def __call__(self, path: Path, *, is_audio: bool = False) -> MediaInspection: ...
+
 
 #: What a scan calls to find out what is inside a file beside the media. A second seam for the
 #: same reason as the first: the 003 and 004 fixtures place `.srt` files that are dummy bytes.
@@ -270,6 +281,16 @@ def scan(
     # is `MediaProbeRepository.current`'s whole reason for existing, and it is deliberately not
     # `unchanged_paths`: those compare against `item_sources`, which is in step with the disk long
     # before any probe row exists, so reusing them would leave a library permanently uninspected.
+    # **Which files belong to an audio item, by source and not by item.** `media/probe.py:inspect`
+    # needs the *item's* kind to decide where an audio stream with no stated bitrate gets one, and
+    # a multi-part item has one path per source - so `Item.relative_path`, which is source zero's,
+    # would call every part after the first a video file.
+    audio_paths = frozenset(
+        source.relative_path
+        for item in kept.values()
+        if MEDIA_TYPE_OF.get(item.type) == "Audio"
+        for source in item.sources
+    )
     inspected, uninspected = _inspect_media(
         library,
         session,
@@ -279,6 +300,7 @@ def scan(
         subtitle_prober or inspect_subtitle,
         deep=deep,
         report=report,
+        audio_paths=audio_paths,
     )
 
     # **What the inspection measured, put where the wire reads it.** `RunTimeTicks` on a
@@ -389,6 +411,7 @@ def _inspect_media(
     *,
     deep: bool,
     report: _Reporter,
+    audio_paths: AbstractSet[str],
 ) -> tuple[int, tuple[Uninspected, ...]]:
     """Open every media file whose stored inspection no longer describes it, and store what it says.
 
@@ -432,7 +455,10 @@ def _inspect_media(
                 probes.put(
                     library.id,
                     candidate.relative_path,
-                    prober(_absolute(roots, candidate.relative_path)),
+                    prober(
+                        _absolute(roots, candidate.relative_path),
+                        is_audio=candidate.relative_path in audio_paths,
+                    ),
                 )
             if not sidecars_are_current:
                 probes.put_external(

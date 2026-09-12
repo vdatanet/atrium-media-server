@@ -37,6 +37,7 @@ import shutil
 import subprocess
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 from atrium.compat import ticks
@@ -96,6 +97,30 @@ RENAMED_SUBTITLE_CODECS = {
     "hdmv_pgs_subtitle": "PGSSUB",
 }
 
+#: What the reference substitutes for an audio stream whose bitrate nothing states, keyed on the
+#: codec and then on the channel count. `[source:
+#: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs GetEstimatedAudioBitrate @
+#: v10.11.11]`
+#:
+#: **Two thresholds and a hole between them.** The reference switches on `<= 2` and `>= 5` and
+#: returns nothing in between, so a 3- or 4-channel stream takes no estimate at all - and a codec
+#: outside these six takes none either. Reproduced rather than smoothed: filling the hole would
+#: answer a bitrate the reference leaves empty, which is a different wire shape and not a tidier
+#: one.
+ESTIMATED_AUDIO_BITRATES: dict[str, tuple[int, int]] = {
+    "aac": (192_000, 320_000),
+    "mp3": (192_000, 320_000),
+    "ac3": (192_000, 640_000),
+    "eac3": (192_000, 640_000),
+    "flac": (960_000, 2_880_000),
+    "alac": (960_000, 2_880_000),
+}
+
+#: The suffix the reference prefers on the three bitrate tags before the bare name. Matroska writes
+#: `BPS-eng` beside `BPS` on a track tagged with a language, and the reference reads the suffixed
+#: one first. Same source, `GetBPSFromTags` and its two siblings.
+TAG_LANGUAGE_SUFFIX = "-eng"
+
 #: The handler names a muxer writes when nobody named the track. The reference falls back to
 #: `handler_name` for a missing stream title and skips exactly these, which is why an mp4 audio
 #: track is untitled rather than called "SoundHandler". Same source.
@@ -127,11 +152,19 @@ class UnreadableMediaError(InspectionError):
     """
 
 
-def inspect(path: Path, ffprobe: str = FFPROBE) -> MediaInspection:
+def inspect(path: Path, ffprobe: str = FFPROBE, *, is_audio: bool = False) -> MediaInspection:
     """Open `path` and describe it. Raises `InspectionError` when it cannot be described.
 
     The change signal is read here, from the same file and in the same breath as its contents, so
     that a stored inspection can never be attributed to bytes it did not read.
+
+    **`is_audio` is the item's kind and not the file's**, which is the reference's own parameter -
+    `GetMediaInfo(..., bool isAudio, ...)` - and it is a parameter there for the same reason it is
+    one here: it cannot be derived from the streams. An audio file carrying cover art has a video
+    stream, and the reference reclassifies that stream as `EmbeddedImage` before anything reads it
+    `[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:797-804 @ v10.11.11]`;
+    this server has no such stream kind, so `any(kind is VIDEO)` would call every tagged mp3 a
+    video file. What it changes is `_bitrate`, and only for audio streams.
     """
     executable = _executable(ffprobe)
     stat = _stat(path)
@@ -144,7 +177,11 @@ def inspect(path: Path, ffprobe: str = FFPROBE) -> MediaInspection:
     if format_names is None:
         raise UnreadableMediaError(f"{path} has no container format")
 
-    streams = tuple(_stream(one) for one in parsed.get("streams", ()) if isinstance(one, Mapping))
+    streams = tuple(
+        _stream(one, container, is_audio=is_audio)
+        for one in parsed.get("streams", ())
+        if isinstance(one, Mapping)
+    )
     has_video = any(one.kind is StreamKind.VIDEO for one in streams)
 
     return MediaInspection(
@@ -315,7 +352,12 @@ def _could_be_webm(streams: Sequence[InspectedStream]) -> bool:
 # --------------------------------------------------------------------------------------------
 
 
-def _stream(raw: Mapping[str, Any]) -> InspectedStream:
+def _stream(
+    raw: Mapping[str, Any],
+    container: Mapping[str, Any] = MappingProxyType({}),
+    *,
+    is_audio: bool = False,
+) -> InspectedStream:
     kind = _kind(raw.get("codec_type"))
     tags = _mapping(raw.get("tags"))
     disposition = _mapping(raw.get("disposition"))
@@ -347,7 +389,7 @@ def _stream(raw: Mapping[str, Any]) -> InspectedStream:
         is_forced=bool(disposition.get("forced")),
         is_hearing_impaired=bool(disposition.get("hearing_impaired")),
         is_external=False,
-        bitrate=_integer(raw.get("bit_rate")),
+        bitrate=_bitrate(raw, kind, container, is_audio=is_audio),
         video_range=_range(transfer) if is_video else None,
         video_range_type=_range_type(transfer) if is_video else None,
         color_range=_text(raw.get("color_range")),
@@ -379,6 +421,103 @@ def _flag(value: Any) -> bool:
         return value
     text = _text(value)
     return text is not None and text.strip().casefold() == "true"
+
+
+def _tag(tags: Mapping[str, Any], name: str) -> str | None:
+    """One of the reference's language-suffixed tags, read the way the reference reads it.
+
+    **Two lookups and both case-insensitive.** The suffixed spelling wins over the bare one, which
+    is `??` in the source; and every stream tag is rebuilt into an `OrdinalIgnoreCase` dictionary
+    before any of this runs `[source:
+    MediaBrowser.MediaEncoding/Probing/FFProbeHelpers.cs:32 @ v10.11.11]`, which matters here
+    because these three tags are Matroska's own and it writes them upper case.
+    """
+    folded = {str(key).lower(): value for key, value in tags.items()}
+    for key in (name + TAG_LANGUAGE_SUFFIX, name):
+        found = _text(folded.get(key.lower()))
+        if found is not None:
+            return found
+    return None
+
+
+def _tag_seconds(tags: Mapping[str, Any]) -> float | None:
+    """The `DURATION` tag as seconds, parsed as the timespan the reference parses it as.
+
+    `TimeSpan.TryParse` takes `[d.]hh:mm:ss[.fffffff]`, and Matroska writes nine fractional digits
+    where .NET accepts seven - so a value this rejects is one the reference rejects too, and the
+    stream keeps no bitrate rather than gaining one this server invented.
+    """
+    text = _tag(tags, "DURATION")
+    if text is None:
+        return None
+    head, _, fraction = text.partition(".")
+    if fraction and (len(fraction) > 7 or not fraction.isdigit()):
+        return None
+    parts = head.split(":")
+    if len(parts) != 3 or not all(one.strip().isdigit() for one in parts):
+        return None
+    hours, minutes, seconds = (int(one) for one in parts)
+    if minutes > 59 or seconds > 59:
+        return None
+    whole = hours * 3600 + minutes * 60 + seconds
+    return whole + (int(fraction) / 10 ** len(fraction) if fraction else 0.0)
+
+
+def _bitrate(
+    raw: Mapping[str, Any],
+    kind: StreamKind,
+    container: Mapping[str, Any],
+    *,
+    is_audio: bool,
+) -> int | None:
+    """What the reference answers for `BitRate`, which is four fallbacks and not one reading.
+
+    Before 2026-09-12 this server stored `bit_rate` and nothing else, so every stream the tool
+    reports no bitrate for carried none - 'a video `BitRate` where `ffprobe` reports none' on
+    008's owes list, and the reference answering `117861` for such a stream. The derivation is
+    `[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:969-1018, 251-257 @
+    v10.11.11]`:
+
+    1. the stream's own `bit_rate`;
+    2. the **container's**, for a video stream always and an audio stream only inside an audio
+       file - which is what `is_audio` decides and why it had to become a parameter;
+    3. the `BPS` tag, then `NUMBER_OF_BYTES` over `DURATION` - audio and video streams only;
+    4. a table keyed on codec and channels, for an audio stream inside a **video** file only.
+
+    **Steps 2 and 4 are the same question answered opposite ways, and that is the design rather
+    than an inconsistency.** An audio file's container bitrate essentially *is* its audio stream's,
+    so the reference uses it; a video file's is not, so it estimates instead. The reference spells
+    this by putting step 4 inside its `else (!isAudio)` branch and gating step 2 on `isAudio`.
+    """
+    stated = _integer(raw.get("bit_rate")) or 0
+    if stated == 0 and (kind is StreamKind.VIDEO or (is_audio and kind is StreamKind.AUDIO)):
+        stated = _integer(container.get("bit_rate")) or stated
+    if stated > 0:
+        return stated
+
+    if kind in (StreamKind.AUDIO, StreamKind.VIDEO):
+        tags = _mapping(raw.get("tags"))
+        bps = _integer(_tag(tags, "BPS"))
+        if bps is not None and bps > 0:
+            return bps
+        seconds = _tag_seconds(tags)
+        measured = _integer(_tag(tags, "NUMBER_OF_BYTES"))
+        if seconds is not None and seconds >= 1 and measured is not None:
+            # **Rounded half to even, because `Convert.ToInt32` is** - truncation would answer one
+            # less than the reference on any file whose division lands above `.5`.
+            derived = round(measured * 8 / seconds)
+            if derived > 0:
+                return derived
+
+    if not is_audio and kind is StreamKind.AUDIO:
+        estimate = ESTIMATED_AUDIO_BITRATES.get((_text(raw.get("codec_name")) or "").lower())
+        channels = _integer(raw.get("channels"))
+        if estimate is not None and channels is not None:
+            if channels <= 2:
+                return estimate[0]
+            if channels >= 5:
+                return estimate[1]
+    return None
 
 
 def _kind(value: Any) -> StreamKind:

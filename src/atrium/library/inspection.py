@@ -93,7 +93,9 @@ def wanted(
     return all(one.kind is not kind for one in found.streams)
 
 
-def opened(path: Path, prober: MediaProber = inspect) -> MediaInspection | None:
+def opened(
+    path: Path, prober: MediaProber = inspect, *, is_audio: bool = False
+) -> MediaInspection | None:
     """Open one file now, or `None` when it cannot be opened. Never raises.
 
     Touches no session and no ORM object, because it is what the route runs in a thread (012 plan
@@ -107,7 +109,7 @@ def opened(path: Path, prober: MediaProber = inspect) -> MediaInspection | None:
     is logged as the operator's problem it is.
     """
     try:
-        return prober(path)
+        return prober(path, is_audio=is_audio)
     except InspectionError:
         return None
 

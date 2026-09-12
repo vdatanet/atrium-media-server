@@ -262,7 +262,7 @@ def test_a_missing_prober_stops_the_phase_instead_of_condemning_every_file(
     built = fixture_library.of("movies")
     library = a_library(session, built.root, CollectionType.MOVIES)
 
-    def missing(path: Path) -> MediaInspection:
+    def missing(path: Path, *, is_audio: bool = False) -> MediaInspection:
         raise ProberUnavailableError("ffprobe is not on PATH")
 
     report = scan(library, session, prober=missing)

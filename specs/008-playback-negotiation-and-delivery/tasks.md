@@ -1327,7 +1327,52 @@ reference exactly. What differs splits in two, and neither half is a wiring mist
 | | |
 |---|---|
 | **Three fields `ffprobe` reports and nothing keeps** — `IsAVC`, `TimeBase`, `NalLengthSize` | An inspection change, a migration and three model fields. `TimeBase` moves per file (`1/1000`, `1/12800`, `1/48000`), so it is no constant |
-| **Values the reference defaults or derives** — `Level: 0` on audio and subtitle, `Width: 0`/`Height: 0` on a text subtitle, `RefFrames: 1` on video, and a video `BitRate` where `ffprobe` reports none | Reproducing a default is a decision and not a wiring fix, and the `BitRate` one is a **derivation** whose source nobody has read yet: the reference answers `117861` for a stream `ffprobe` gives no bitrate for |
+| **Values the reference defaults or derives** — `Level: 0` on audio and subtitle, `Width: 0`/`Height: 0` on a text subtitle, `RefFrames: 1` on video, and a video `BitRate` where `ffprobe` reports none | ~~Reproducing a default is a decision and not a wiring fix~~ — **read on 2026-09-12, and three of the four are one mechanism rather than four decisions.** See below |
+
+**The tranche was read on 2026-09-12, and "defaults" was the wrong word for all of it.**
+
+* **`Level: 0`, `Width: 0`, `Height: 0` are not defaults anybody chose.** The reference's probing
+  DTO holds them as **non-nullable `int`** and assigns them unconditionally — `Level` in the common
+  `MediaStream` initialiser, `Width`/`Height` in the **subtitle** and **video** branches only
+  `[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:709, 776-777, 823-824 and
+  MediaStreamInfo.cs:95, 109, 172 @ v10.11.11]`. Absent from `ffprobe` becomes `0`. **Still owed**,
+  and it is a coercion at inspection time plus regenerated goldens, not a decision.
+* **The earlier reading of this row was half wrong and the correction is measured.** It recorded
+  `Width`/`Height` as emitted on *every* stream kind with `0` where they do not apply. They are
+  **absent** on an audio stream — the audio branch assigns neither — and `0` only on a text
+  subtitle `[probe: tools/probe_playback_stream_fields.py, Jellyfin 12.0.0, 2026-09-12]`. The
+  probe tested key *presence*, which cannot tell `null` from absent.
+* **`RefFrames: 1` is not a default at all.** It is guarded by `if (Refs > 0)` (`:894`) and read
+  straight from `ffprobe`'s `refs`. `media/probe.py` already extracts it; ffprobe 9.0.1 does not
+  report the field, so it is empty wherever that build inspects. **An inspection-tool version
+  difference, not a defect, and nothing is owed.**
+* **`BitRate` is four fallbacks and it is paid** — `media/probe.py:_bitrate`, 2026-09-12. The
+  stream's own, then the **container's** (a video stream always; an audio stream only inside an
+  audio *file*), then the `BPS` tag and `NUMBER_OF_BYTES` over `DURATION`, then a table keyed on
+  codec and channels (an audio stream inside a **video** file only)
+  `[source: ProbeResultNormalizer.cs:969-1018, 251-257, 317-363 @ v10.11.11]`.
+
+**Two things `BitRate` leaves owed**, neither of them blocking:
+
+* **The fourth fallback is unconfirmed against a running reference.** `NUMBER_OF_BYTES` and
+  `DURATION` are Matroska's tags, and Matroska writes the duration with **nine** fractional digits
+  where `TimeSpan.TryParse` accepts seven — so the reference should read the tag, fail to parse it,
+  and leave the stream with no bitrate on exactly the files the branch exists for. Reproduced
+  faithfully and **not measured**: the fixture matrix cannot ask it, because its Matroska files
+  carry `DURATION` and neither `NUMBER_OF_BYTES` nor `BPS`. Confirming it needs a Matroska muxed
+  with all three.
+* **`is_audio` became a parameter, and it had to.** It is the *item's* kind, which no reading of
+  the streams can give: an audio file carrying cover art has a video stream, and the reference
+  reclassifies that stream as `EmbeddedImage` before anything reads it (`:797-804`). **This server
+  has no `EmbeddedImage` stream kind**, which is a second, wider difference this tranche did not
+  create and does not close — every tagged mp3 reports a video stream here where the reference
+  reports an embedded image.
+
+**And one finding that belongs to nobody in this row.** The reference rebuilds **every** stream tag
+into an `OrdinalIgnoreCase` dictionary before reading one
+`[source: MediaBrowser.MediaEncoding/Probing/FFProbeHelpers.cs:32 @ v10.11.11]`. `media/probe.py`
+reads `language` and `handler_name` case-sensitively, so a container spelling either in another
+case answers differently here. `_bitrate`'s own three tags are folded; the other two are not.
 
 `Score`, `DefaultSubtitleStreamIndex` and `ColorRange` are one each, and `ColorRange` points the
 other way: this server sends it and the reference does not.

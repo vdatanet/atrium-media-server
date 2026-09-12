@@ -2053,7 +2053,7 @@ async def test_the_route_yields_while_a_file_is_being_opened(
     entered = threading.Event()
     release = threading.Event()
 
-    def blocking(path: Path, prober: Any = None) -> None:
+    def blocking(path: Path, prober: Any = None, *, is_audio: bool = False) -> None:
         entered.set()
         assert release.wait(timeout=10), "the second request never answered: the loop was blocked"
         return None
