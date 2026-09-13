@@ -4,6 +4,7 @@ title: First-time setup
 status: Draft
 created: 2026-09-13
 updated: 2026-09-13
+amended: 2026-09-13 at the spec gate - OQ-1 decided (the setup window is open to a loopback address only, by changing the reference's first branch and nothing else) and OQ-2 decided (the first account is always MyJellyfinUser); sections 3.1, 3.2 and 3.8, AC-2, AC-5 and AC-10 amended; OQ-11 raised by the first answer
 depends_on: [001, 002, 003]
 ---
 
@@ -43,7 +44,7 @@ Jellyfin resolves exactly this with a separate authorisation policy, *first-time
 elevated*, which it declares on the startup operations and on the library-structure operations and
 on nothing that creates a second user `[spec: GetFirstUser, UpdateStartupUser, CompleteWizard,
 GetVirtualFolders, AddVirtualFolder, the security requirement declared on each]`. While setup is
-unfinished, that policy admits any caller `[source:
+unfinished, that policy admits any caller on the reference `[source:
 Jellyfin.Api/Auth/FirstTimeSetupPolicy/FirstTimeSetupHandler.cs:29-32 @ v10.11.11]`.
 
 **So the first administrator can only arrive through these operations**, and that is the whole
@@ -97,22 +98,53 @@ this feature it answers what it says (§3.1).
 
 ### 3.1 The setup window
 
-The first-time-setup operations of §3.2 to §3.6 are **open to any caller while setup is unfinished**
-— with a token, without one, and from any address — and **require an administrator once it is
-finished** `[source: Jellyfin.Api/Auth/FirstTimeSetupPolicy/FirstTimeSetupHandler.cs:29-47 @
-v10.11.11]`. Both controllers carry the policy whole `[source: Jellyfin.Api/Controllers/StartupController.cs:19,
-LibraryStructureController.cs:30]`, and it is the variant that **requires an administrator** —
-registered with no arguments, whose default is `requireAdmin: true` `[source:
-Jellyfin.Server/Extensions/ApiServiceCollectionExtensions.cs:77 and
+**The reference** opens the first-time-setup operations of §3.2 to §3.6 **to any caller while setup
+is unfinished** — with a token, without one, and from any address — and **requires an administrator
+once it is finished** `[source: Jellyfin.Api/Auth/FirstTimeSetupPolicy/FirstTimeSetupHandler.cs:29-47
+@ v10.11.11]`. Both controllers carry the policy whole `[source:
+Jellyfin.Api/Controllers/StartupController.cs:19, LibraryStructureController.cs:30]`, and it is the
+variant that **requires an administrator** — registered with no arguments, whose default is
+`requireAdmin: true` `[source: Jellyfin.Server/Extensions/ApiServiceCollectionExtensions.cs:77 and
 Jellyfin.Api/Auth/FirstTimeSetupPolicy/FirstTimeSetupRequirement.cs:15]`, where its sibling
-`FirstTimeSetupOrDefault` passes `false`:
+`FirstTimeSetupOrDefault` passes `false`.
 
-| Setup | Caller | Outcome |
-|---|---|---|
-| unfinished | anyone, authenticated or not | admitted |
-| finished | an administrator | admitted |
-| finished | an authenticated non-administrator | refused, `403` |
-| finished | no token | refused, `401` |
+**This server opens the window to this machine only** — a deliberate exception, decided on
+2026-09-13 and argued in [behaviours §4.6](../../docs/compatibility/behaviours.md). The reference's
+decision is three branches in order; this server changes **the first one and nothing else**:
+
+```
+reference     setup unfinished                                  -> admit
+this server   setup unfinished  AND  the caller is this machine  -> admit
+then, both    the caller is an administrator                    -> admit
+              the caller is not                                 -> refuse
+```
+
+So a caller from elsewhere during setup is not refused by anything new. It falls through to the
+branches the reference already takes once setup is finished, and **no refusal is invented**:
+
+| Setup | Caller is | Caller | Outcome |
+|---|---|---|---|
+| unfinished | **this machine** | anyone, authenticated or not | admitted |
+| unfinished | elsewhere | an administrator | admitted |
+| unfinished | elsewhere | an authenticated non-administrator | refused, `403` |
+| unfinished | elsewhere | no token | refused, `401` |
+| finished | anywhere | an administrator | admitted |
+| finished | anywhere | an authenticated non-administrator | refused, `403` |
+| finished | anywhere | no token | refused, `401` |
+
+**"This machine" means a loopback address, and only that.** A request that reaches the server
+through one of the machine's network addresses is from elsewhere even when it was sent from the same
+machine — so a client on the server that addresses it by its LAN address is refused during setup.
+This is stricter than the reference's own notion of a *local network*, which admits a whole subnet
+and is what [behaviours §4.5](../../docs/compatibility/behaviours.md) is about; the two must not be
+confused, and the loopback rule is the one decided.
+
+**The address is the one the request arrived from, as this server determines it**, which is not
+always the machine that originated it: a reverse proxy on the same machine that does **not** pass
+on the original client's address makes every request it forwards look local, and would reopen the
+window to the network behind it. How the address is determined, and what an operator running
+behind such a proxy has to configure, is OQ-11 — and it decides whether this rule is worth what it
+says.
 
 `POST /Library/Refresh` is **not** a first-time-setup operation: it requires an administrator in
 both states `[spec: RefreshLibrary, the security requirement declared on it]`. It lives in a
@@ -125,10 +157,9 @@ its own until afterwards.
 serves: `StartupWizardCompleted` on `GET /System/Info/Public` is `false` until §3.4 runs and `true`
 from then on, and **survives a restart**. It never goes back.
 
-> ⚠️ **The window is open to the whole network**, and this is the sharpest thing in the feature. The
-> reference admits any caller from any address until setup completes, and a server listening on
-> every interface — which is the default this server ships — can therefore be claimed by whoever
-> reaches it first. Reproducing that is OQ-1, and it is not decided here.
+**Why it is not reproduced.** The reference's window is open to the whole network, and a server
+listening on every interface — the default this server ships — could be claimed by whoever reaches
+it first, between starting it and setting it up. That was OQ-1 and is closed.
 
 The exact bodies of the `401` and the `403` are OQ-4.
 
@@ -147,7 +178,7 @@ The account it creates:
 
 | Property | Value |
 |---|---|
-| Name | the name of the operating-system account the server runs as, or `MyJellyfinUser` where that name is empty or not a valid username `[source: UserManager.cs:711-715]` — see OQ-2 |
+| Name | **always `MyJellyfinUser`**. The reference uses the name of the operating-system account the server runs as, and falls back to `MyJellyfinUser` only where that name is empty or not a valid username `[source: UserManager.cs:711-715]`; this server always takes the fallback — a deliberate exception decided on 2026-09-13 ([behaviours §4.7](../../docs/compatibility/behaviours.md)), and not an invented name, because it is the reference's own |
 | Administrator | yes `[source: UserManager.cs:720]` |
 | May delete content, may control other users' sessions | yes `[source: UserManager.cs:721-722]` |
 | Hidden from the sign-in screen | yes — which is why `GET /Users/Public` answers `[]` on a server nobody has configured ([002 §3.4](../002-authentication-users-and-sessions/spec.md)) |
@@ -318,14 +349,26 @@ It does four things:
 
 | Command | Does | Refuses when |
 |---|---|---|
-| **setup** | Given a name and a password: §3.2, then §3.3, then §3.4. Prints the administrator's name | setup is already finished — reported as such, never attempted |
+| **setup** | Given a name and a password: §3.2, then §3.3, then §3.4. Prints the administrator's name | setup is already finished — reported as such, never attempted; **or the server is not addressed on this machine** — see below |
 | **library add** | Given a name, a type and one or more paths: §3.6. Prints the name the library **ended up with**, which §3.6 says need not be the one asked for | the server refuses it — the refusal is printed |
 | **library list** | §3.5, one line per library: name, type, paths | the server refuses it |
 | **library scan** | §3.7 | the server refuses it |
 
+**Setup runs on the server's own machine.** §3.1 admits an unauthenticated caller during setup only
+from a loopback address, so **setup** is run on the machine the server runs on — directly, or
+through a tunnel that arrives there — against a loopback address. Pointed anywhere else it would be
+refused `401` by §3.2 with nothing to say why, so the client does not send it: having learned from
+`StartupWizardCompleted` that setup is unfinished, and given an address that is not a loopback
+address, it stops **before any setup operation** and says that setup has to be run on the server's
+machine. **That check is a courtesy and decides nothing**: the server's rule is the one that admits
+or refuses, and a request the client believed local but the server does not — a tunnel whose far end
+reaches the server by a network address — is refused by the server and the refusal is printed like
+any other. Once setup is finished the restriction is gone, and the other three commands work from
+anywhere with an administrator's credentials.
+
 **Signing in.** Before setup is finished, `library add` and `library list` need no credentials
-(§3.1). After it, they and `library scan` sign in as an administrator. Whether the client keeps a
-token between invocations, and where, is OQ-9.
+**from this machine** (§3.1). After it, they and `library scan` sign in as an administrator, from
+anywhere. Whether the client keeps a token between invocations, and where, is OQ-9.
 
 **What it guarantees an operator**, whatever the command:
 
@@ -352,14 +395,17 @@ What a client can observe change, and what survives a restart:
 1. On a server nobody has set up, `StartupWizardCompleted` is `false`; after `POST /Startup/Complete`
    it is `true`, and it is still `true` after the server restarts.
 2. `GET /Startup/User` on a server with no account creates exactly one, an administrator hidden from
-   `GET /Users/Public`, and answers its name; a second call creates nothing more.
+   `GET /Users/Public`, and answers its name, which is `MyJellyfinUser` **whatever operating-system
+   account the server runs as**; a second call creates nothing more.
 3. `POST /Startup/User` on a server with no account answers `404`; with an empty or whitespace
    `Password` it answers `400`; otherwise it sets the password, renames the account when `Name`
    differs ignoring case, and the account then signs in with that name and password.
 4. `POST /Startup/Complete` succeeds with no password set and no library, and closes the window.
-5. While setup is unfinished, §3.2 to §3.6 admit a caller carrying no token; once finished they
-   refuse a caller with no token `401` and an authenticated non-administrator `403`, and admit an
-   administrator.
+5. While setup is unfinished, §3.2 to §3.6 admit a caller carrying no token **from a loopback
+   address**, and treat a caller from any other address as they treat every caller once setup is
+   finished: an administrator is admitted, an authenticated non-administrator refused `403`, and a
+   caller with no token refused `401`. A client on the server's own machine that addresses it by a
+   network address is a caller from elsewhere.
 6. `POST /Library/Refresh` refuses a caller with no token `401` and a non-administrator `403` in both
    states, and admits an administrator.
 7. `POST /Library/VirtualFolders` with an accepted type and existing paths adds a library that
@@ -372,11 +418,12 @@ What a client can observe change, and what survives a restart:
    scan** end to end against a fresh server, and a run of it issues only the operations §3.8 names —
    asserted by recording every request it makes, not by reading its source.
 10. The client exits non-zero and prints the server's status and reason on every refusal, refuses
-    **setup** on a server whose setup is finished without calling §3.2 to §3.4, and prints no
-    password in any output.
+    **setup** on a server whose setup is finished without calling §3.2 to §3.4, refuses **setup**
+    given a non-loopback address while setup is unfinished without calling §3.2 to §3.4 and says it
+    must run on the server's machine, and prints no password in any output.
 
 *Criteria 5, 7 and 8 have halves an open question can move — the refusal bodies (OQ-4), the
-duplicate name (OQ-3) and the types (OQ-6). Each is written against the reference's measured or
+duplicate name (OQ-3), the types (OQ-6) and how a request's address is determined (OQ-11). Each is written against the reference's measured or
 read behaviour and is amended at the gate that answers it, not quietly.*
 
 ## 6. Conformance
@@ -398,7 +445,10 @@ Levels are defined in [../../docs/compatibility/conformance.md](../../docs/compa
 
 ## 7. Open questions
 
-**This feature opens with its questions unanswered and no measurements of its own**, like 011 and
+**Two of the ten were decisions and both were taken on 2026-09-13**, OQ-1 and OQ-2; answering OQ-1
+raised OQ-11. The rest are readings or decisions for the plan gate.
+
+**This feature opened with its questions unanswered and no measurements of its own**, like 011 and
 012. Every one is answered at the gate by a reading, and **there is exactly one place those readings
 can be taken**: the single-use reference instance. The operator's server has finished setup and
 cannot be put back, and it is no longer the pinned version; the instance starts unconfigured, runs
@@ -407,8 +457,8 @@ the pinned version, and is destroyed with everything it wrote — which makes a 
 
 | # | Question | Blocks | Resolved by |
 |---|---|---|---|
-| OQ-1 | **Is the setup window open to the network, as the reference's is, or to this machine only?** The reference admits any caller from any address until setup finishes (§3.1), and this server listens on every interface by default — so a fresh server can be claimed by whoever reaches it first. Reproducing it is faithful; narrowing it is a divergence that no client on the same machine would notice and a client on another machine would | §3.1's access rule, AC-5 | A [behaviours §3.0](../../docs/compatibility/behaviours.md#30-how-the-decision-is-made) decision, recorded before the plan. It is a security decision and is not taken by this document |
-| OQ-2 | **What is the first account called?** The reference names it after the operating-system account the server runs as — which it then tells any unauthenticated caller through §3.2 — or `MyJellyfinUser`. Reproducing the first discloses a local username; using only the second is a smaller divergence | §3.2's name, AC-2's answer | A decision, recorded with OQ-1 |
+| OQ-1 | ~~Is the setup window open to the network, as the reference's is, or to this machine only?~~ **Decided on 2026-09-13: this machine only**, meaning a loopback address and not the local network. Implemented as the smallest possible change to the reference's decision — only its first branch gains *"and the caller is this machine"* — so a caller from elsewhere falls through to refusals the reference already makes and none is invented (§3.1) | — | Closed. [behaviours §4.6](../../docs/compatibility/behaviours.md); AC-5 and AC-10 amended. What it depends on to be worth what it says is OQ-11 |
+| OQ-2 | ~~What is the first account called?~~ **Decided on 2026-09-13: always `MyJellyfinUser`**, the reference's own fallback, and never the operating-system account the server runs as (§3.2) | — | Closed. [behaviours §4.7](../../docs/compatibility/behaviours.md); AC-2 amended |
 | OQ-3 | **Is a name already in use numbered, as the reference does, or refused?** A `204` for a request that did something other than it asked is a class-B shape, and a client that reads §3.5 afterwards is unaffected either way | §3.6, AC-7's second half | A behaviours §3.0 decision |
 | OQ-4 | **What are the refusal bodies** — the `400`s, the `404`, and §3.1's `401` and `403` — on these routes? The messages are read from the source; the envelope they travel in is not measured on any of them | Every error table in §3, AC-3, AC-5, AC-6, AC-7 | A reading against the single-use instance |
 | OQ-5 | **What do the edges answer** — a rename to an invalid name or to one another account holds, and a second `POST /Startup/Complete` by an administrator? | §3.3's and §3.4's unverified rows | A reading against the single-use instance |
@@ -417,6 +467,7 @@ the pinned version, and is destroyed with everything it wrote — which makes a 
 | OQ-8 | **Is a scan waited for?** Whether `POST /Library/Refresh` and `refreshLibrary=true` answer when the scan starts or when it ends, and what `RefreshProgress` and `RefreshStatus` say meanwhile | §3.5's refresh rows, §3.7, what **library scan** can promise | A reading against the single-use instance over the repository's fixture |
 | OQ-9 | **How does the client come by a password and keep a session?** A prompt, the environment, a file only its owner can read; and whether a token outlives one invocation | §3.8's signing-in paragraph | A decision at the plan gate — it is about the client, and the reference has nothing to say |
 | OQ-10 | **L3 for the setup sequence?** The instance already runs it, so a differential over it is a comparison and no machinery | §6 | A decision at the plan gate |
+| OQ-11 | **How does this server know the address a request came from, and what must an operator behind a reverse proxy do?** OQ-1's rule is only as good as that address. A proxy on the same machine forwards every request from a loopback address, so unless the original client's address is passed on **and believed**, the window reopens to the whole network behind it — and believing a passed-on address from anyone *other* than such a proxy would let a remote caller claim to be local. Today the answer is a default of a component the server is built on rather than a decision this project took, and a rule a security property rests on cannot be a default nobody chose | §3.1's meaning of *this machine*, AC-5 | A decision at the plan gate, asserted by a test that sends a request claiming a loopback origin from elsewhere and is refused, and one arriving through a local proxy that passes the address on and is refused |
 
 ## 8. References
 

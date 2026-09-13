@@ -3249,7 +3249,9 @@ stays after its 2026-08-28 withdrawal because the record of an exception outlive
 **Ordered by scope rather than by number**, the way §1 and §2 are. §4.5 comes first because it is
 the only entry here that is about neither a field nor a route but about **every route that takes a
 token**, and a reader who meets it after three entries each about one field or one route will read
-it as a fourth of those. The numbers are stable identifiers; the order is an argument.
+it as a fourth of those. §4.6 follows it for the same reason at a smaller size: it gates five
+routes and a state rather than one field. The numbers are stable identifiers; the order is an
+argument.
 
 ### 4.5 `EnableRemoteAccess` is not enforced, on any route
 
@@ -3360,6 +3362,58 @@ v1 does not have* was the reason the whole set was accepted, and this flag gates
 It left [§5](#5-accepted-gaps-in-v1)'s policy row on 2026-09-05 for that reason: a gap is something
 not done yet, and this is not.
 
+### 4.6 The first-time-setup window is open to this machine, not to the network — **decided 2026-09-13, not yet implemented**
+
+**Scope second, after §4.5, because it is about five routes and a state rather than a field.** It
+gates `GET` and `POST /Startup/User`, `POST /Startup/Complete`, and `GET` and `POST
+/Library/VirtualFolders` — every operation [014](../../specs/014-first-time-setup/spec.md) serves
+under the first-time-setup policy — and only while setup is unfinished.
+
+**Jellyfin does:** admit **any** caller to those operations until setup completes — with a token or
+without one, and from any address — and require an administrator afterwards
+`[source: Jellyfin.Api/Auth/FirstTimeSetupPolicy/FirstTimeSetupHandler.cs:29-47 @ v10.11.11]`. So a
+server that has been started and not yet set up can have its administrator created, named and given
+a password, and libraries added to it, by whoever reaches it first.
+
+**Depends on it:** a first-run wizard run from another machine — a browser on a laptop pointed at a
+server in a cupboard. That is how the reference's own web wizard is usually reached, and it is why
+the window is open: the wizard has to be reachable before any account exists to sign in with. **This
+server does not serve that wizard** ([roadmap](../roadmap.md#out-of-scope-and-why)), and its
+first-run path is a command-line client run on the server's machine
+([014 §3.8](../../specs/014-first-time-setup/spec.md)) — so the case the openness exists for is not
+one this server has.
+
+**Atrium does: admit a caller during setup only from a loopback address.** It is the smallest change
+to the reference's decision that says it. The reference decides in three branches — *setup
+unfinished → admit*, then *administrator → admit*, then refuse — and this server adds *and the caller
+is this machine* to **the first branch and nothing else**. A caller from elsewhere during setup is
+therefore not refused by anything new: it falls through to the branches the reference already takes
+once setup is finished — an administrator admitted, an authenticated non-administrator `403`, no
+token `401`. **No status is invented**, which is the difference from [§4.3](#43-delete-itemsitemid-refuses-to-delete-media),
+where the reference had no refusal to copy.
+
+**"This machine" is a loopback address, and it is narrower than the reference's *local network*.**
+[§4.5](#45-enableremoteaccess-is-not-enforced-on-any-route) is about the reference's notion of its own
+local network, which admits a subnet. This is not that. A request that reaches the server through
+one of the machine's network addresses is from elsewhere, even when it was sent from the same
+machine.
+
+**Argued from consequence, like §4.3, and not from "no client can tell".** A client can tell: a
+wizard run from another machine is refused. The cost of diverging is that first-time setup has to be
+run on the server's machine or through a tunnel that arrives there. The cost of not diverging is a
+fresh server, listening on every interface as this one does by default, whose administrator is
+created by the first stranger on the network to send three requests. The operator then finds an
+administrator they did not create, with a password they do not know, on their own server — and has
+no supported way back in: this server offers no password reset, so short of editing its store by
+hand, the only remedy is to start it again from nothing.
+
+**What it depends on to mean what it says is not decided here.** A reverse proxy on the same
+machine forwards every request from a loopback address, so unless the original client's address is
+passed on and believed only from such a proxy, the window reopens to everything behind it. That is
+014's OQ-11, for the plan gate.
+
+[014 §5 criterion 5](../../specs/014-first-time-setup/spec.md#5-acceptance-criteria)
+
 ### 4.1 Atrium identifies as Jellyfin on the fields clients parse
 
 `ProductName: "Jellyfin Server"` and a real `10.11.x` version string. Full reasoning in
@@ -3428,6 +3482,36 @@ user may not have backed up. The cost of diverging is a delete button that fails
 of not diverging is a bug in a new server destroying somebody's library. Revisited when there is a
 trash with a retention window to delete into. Specified in
 [009 §3.6](../../specs/009-playlists/spec.md).
+
+### 4.7 The first account is always `MyJellyfinUser` — **decided 2026-09-13, not yet implemented**
+
+**Jellyfin does:** name the account `GET /Startup/User` creates after the **operating-system account
+the server process runs as**, and fall back to `MyJellyfinUser` only where that name is empty or not
+a valid username `[source: Jellyfin.Server.Implementations/Users/UserManager.cs:711-715 @
+v10.11.11]` — and then answer that name to the caller, who during setup needs no token
+([§4.6](#46-the-first-time-setup-window-is-open-to-this-machine-not-to-the-network--decided-2026-09-13-not-yet-implemented)).
+
+**Depends on it:** almost nothing. Every unattended setup renames the account in the very next
+request — `POST /Startup/User` takes the name the operator chose — and the reference's own web wizard
+does the same. The default is observable only between those two requests, or where an operator sends
+no name.
+
+**Atrium does: always `MyJellyfinUser`**, whatever account the process runs as. Two reasons, and
+the smaller is the one it sounds like:
+
+* **It is deterministic.** The reference's answer is a property of the machine rather than the
+  server — a container, a service account and a developer's own login give three different names for
+  the same server — so a test of this route, and a comparison of two servers, cannot be written
+  against it. `MyJellyfinUser` is one string everywhere.
+* **It discloses nothing.** The reference tells an unauthenticated caller the name of a local
+  account on the host. §4.6 already narrows that caller to one on the same machine, who can usually
+  find the name another way — which is why this is the smaller reason, not the larger.
+
+**It is not an invented name.** It is the reference's own value, taken on every host rather than on
+the hosts whose account name fails its test — so a client that recognises the fallback is unaffected,
+and there is no string here the reference never sends.
+
+[014 §5 criterion 2](../../specs/014-first-time-setup/spec.md#5-acceptance-criteria)
 
 ### 4.4 Non-ASCII characters are sent as themselves, not as `\uXXXX` — **withdrawn 2026-08-28**
 
