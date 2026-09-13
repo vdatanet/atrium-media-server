@@ -1261,7 +1261,7 @@ family so the count moves with §3.7 rather than with a list somebody remembered
 The feature is done when **all** of these hold:
 
 - [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all
-      thirty-four — has a passing test, by name, in `FEATURE_008`. *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now.)*
+      thirty-five — has a passing test, by name, in `FEATURE_008`. *(Count corrected on 2026-09-05 by the 2026-09-04 audit's C9, which found it stale in 10 of the 12 features: this is a live claim about §5, not a record of the tick — 007 T13's precedent, and it is held by a test now. Moved to thirty-five on 2026-09-13 by AC-35, `ColorRange`.)*
 - [x] Every endpoint reaches the level [spec §6](spec.md#6-conformance) declares: the four L3
       routes carry goldens (per profile class, per constraint class, headers and the range
       matrix), and transcoded output is asserted against the profile it was negotiated for —
@@ -1385,8 +1385,31 @@ into an `OrdinalIgnoreCase` dictionary before reading one
 reads `language` and `handler_name` case-sensitively, so a container spelling either in another
 case answers differently here. `_bitrate`'s own three tags are folded; the other two are not.
 
-`Score`, `DefaultSubtitleStreamIndex` and `ColorRange` are one each, and `ColorRange` points the
-other way: this server sends it and the reference does not.
+~~`Score`, `DefaultSubtitleStreamIndex` and `ColorRange` are one each, and `ColorRange` points the
+other way: this server sends it and the reference does not.~~ **Read on 2026-09-13, and none of the
+three is owed — they are declared.** Reading the source before building found that all three were
+decisions rather than wiring, and two of them had already been taken:
+
+* **`Score` and `DefaultSubtitleStreamIndex` are one mechanism, and an accepted gap since
+  2026-08-29.** The reference sets both in `SetDefaultSubtitleStreamIndex`, the index and then the
+  scores one line later, over the streams a user's subtitle **mode** selected
+  `[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:417-423 @ v10.11.11]`. Both
+  are functions of per-user settings [011 §2](../011-subtitle-delivery/spec.md) excluded knowingly
+  — including the point that a new reference user's mode is `Default` and not `None`, measured then.
+  [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)'s row named the
+  index and not the score; it names both now. **Decided on 2026-09-13 not to reopen it**: closing
+  these is a per-user feature — five modes, a language list, a remembered choice — and that is a
+  scope change to v1.
+* **`ColorRange` is a reference defect, and diverging from it is recorded.** The reference reads it
+  at inspection and stores the stream through an entity with no column for it, so it emits it
+  nowhere. [behaviours §3.29](../../docs/compatibility/behaviours.md) — class C, supplied — and
+  [AC-35](spec.md#5-acceptance-criteria), whose first test fails if the field is dropped to match.
+  **Decided on 2026-09-13.**
+
+**That closes the 242.** Every finding the 2026-09-09 sweep counted on `PlaybackInfo`'s streams is
+now paid, or declared with its argument: the labels and title, the three kept fields, the four
+`BitRate` fallbacks, the non-nullable zeroes, `RefFrames` as a tool-version difference, and these
+three. A sweep will go on reporting the declared ones.
 
 * **The progressive-remux sizing divergence.** A remux whose size is knowable answers
   `Content-Length` and honours `Range` here; the reference answers chunked with

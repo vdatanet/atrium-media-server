@@ -492,3 +492,34 @@ def test_the_item_level_streams_are_part_zeros_alone() -> None:
     first = an_inspection("mkv", a_video())
     second = an_inspection("mkv", a_video(index=0), InspectedStream(index=1, kind=StreamKind.AUDIO))
     assert [one.index for one in item_streams([first, second])] == [0]
+
+
+def test_ac35_a_video_stream_carries_the_colour_range_the_file_states() -> None:
+    """**A property the reference reads and then loses, sent here on purpose.**
+
+    The reference fills `ColorRange` from `ffprobe` at inspection time
+    `[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:899-901 @ v10.11.11]`
+    and then stores the stream through an entity that has no column for it — `ColorPrimaries`,
+    `ColorSpace` and `ColorTransfer` are there and `ColorRange` is not `[source:
+    src/Jellyfin.Database/Jellyfin.Database.Implementations/Entities/MediaStreamInfo.cs:75-79 @
+    v10.11.11]`. Every later read comes from that table, so the reference never emits it.
+
+    Behaviours §3.29 decides it: class C, *"omits something"*, whose default is to supply the
+    field, and no client can have built anything a correct value breaks. So this asserts the
+    divergence is **kept** — a change that dropped the field to match the reference would fail
+    here rather than pass the sweep quietly.
+    """
+    wire = stream_of(a_video(color_range="tv")).model_dump_json()
+    assert '"ColorRange":"tv"' in wire
+
+
+def test_ac35_a_stream_that_states_no_colour_range_carries_none() -> None:
+    """The other half: supplying the field is not inventing one.
+
+    A stream the file says nothing about has no `ColorRange`, by the same null suppression every
+    other unset property gets — so the divergence is exactly *"the value the file states"*, and an
+    audio or a subtitle stream is not handed a range it never had.
+    """
+    assert '"ColorRange"' not in stream_of(a_video()).model_dump_json()
+    audio = InspectedStream(index=1, kind=StreamKind.AUDIO, codec="aac")
+    assert '"ColorRange"' not in stream_of(audio).model_dump_json()
