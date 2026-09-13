@@ -28,12 +28,14 @@ Both reasons collapse into a single design rule, stated in the [constitution](do
 
 ## Status
 
-**All twelve features are implemented.** 001 through 009 are done — identity and discovery,
+**All thirteen v1 features are implemented.** 001 through 009 are done — identity and discovery,
 authentication and sessions, scanning, metadata, the item query API, images, user data and
 playstate, as of 2026-08-29 playback negotiation and delivery, and as of 2026-09-01 playlists —
 011 (subtitle delivery) landed on 2026-08-31, 010 (the conformance harness) on 2026-09-02 across
 fifteen tasks and one amended acceptance criterion, and 012 (negotiation inputs) on 2026-09-04
-across eleven tasks and one more. **No draft is left and no feature is unbuilt.** What each
+across eleven tasks and one more, and 013 (the artist registry) on 2026-09-08. **No feature is
+unbuilt, and one draft is open: [014](specs/014-first-time-setup/spec.md), v2's first slice**,
+because until it lands nothing creates the first account on a fresh server. What each
 implemented feature still owes is written at the end of its own task list rather than here, so it
 cannot go stale inside a status word. The [status table](specs/README.md) is the authority; this
 paragraph is not.

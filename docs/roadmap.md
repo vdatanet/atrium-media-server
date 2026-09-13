@@ -93,6 +93,7 @@ priority order: each feature is testable the moment it lands, and each unlocks t
 | **011** | Subtitle delivery | Text subtitle tracks announced, negotiated, and served — embedded and beside the media | 008 |
 | **012** | Negotiation inputs | A negotiation answer a client can act on: a source nothing has opened, and a delivery protocol spelled a way the comparison does not match | 003, 008 |
 | **013** | Artist registry | `/Artists` answers one row per credit name, server-wide — a second population of one type, beside the tree artist an album hangs off | 003, 004, 005 |
+| **014** | First-time setup | v2's first slice: a fresh server reaches a first administrator and a first library from a terminal, over Jellyfin's own first-time-setup operations and nothing else | 001, 002, 003 |
 
 **008 is one feature, not two.** Transcoding lives inside it rather than in a directory of its own,
 because it is not a separate capability a client can ask for: it is the third branch of a single
