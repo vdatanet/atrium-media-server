@@ -12,10 +12,12 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**All twelve features are implemented. There is no unbuilt feature and no draft**, which has not
+**All thirteen v1 features are implemented and there is no unbuilt feature**, which has not
 been true before: what comes next is a decision about scope rather than the next unticked task,
 and the standing work is on the *"what this feature owes the next ones"* lists at the end of each
-task file.
+task file. **The first scope decision is taken — v2 is open, as
+[014](specs/014-first-time-setup/spec.md), in `Draft`** — because a fresh server is one nobody can
+sign in to. Principle III applies to it in full: no plan until its spec is accepted.
 **[008](specs/008-playback-negotiation-and-delivery/)
 landed on 2026-08-29 across fourteen tasks**, spec, plan and tasks all accepted the same day and
 every one of the fourteen finding something the documents had wrong. Playback is therefore in: the

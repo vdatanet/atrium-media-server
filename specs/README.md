@@ -125,11 +125,17 @@ say how it will be proven is not finished.
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Implemented** | **Implemented** | **Implemented** — eleven of eleven tasks, ten of ten criteria, [AC-9 amended 2026-09-04](012-negotiation-inputs/spec.md#5-acceptance-criteria) |
 | [013](013-artist-registry/) | Artist registry | **Implemented** | **Implemented** | **Implemented** — nine of nine tasks, eight of eight criteria, and **the first feature here whose closing task proved a `level: L3` row against a real Jellyfin** rather than deferring it |
+| [014](014-first-time-setup/) | First-time setup | **Draft** — ten open questions, answered at a measurement gate on the single-use reference instance | — | — |
 
 **All thirteen features are implemented** — 008 on 2026-08-29 across fourteen tasks, 011 on
 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, 010 on 2026-09-02 across fifteen,
 012 on 2026-09-04 across eleven, and **013 on 2026-09-08 across nine**, which leaves no feature
-`Accepted` and unbuilt and no draft anywhere in this directory.
+`Accepted` and unbuilt. **One draft exists, and it is the first of v2**: 014, opened on 2026-09-13
+because a server started from scratch is one nobody can sign in to — nothing the server answers,
+reads or offers creates even the first account, so every account in this repository's history was
+written by a test. It opens with ten questions and no measurements, like 011 and 012, and the gate
+that answers them is on the single-use reference instance, the only Jellyfin whose first-time
+setup is still unrun.
 
 **013 is the first feature here that closes an accepted gap rather than adding a surface**, and
 the first whose closing task proved a `level: L3` row **against a real Jellyfin** instead of
