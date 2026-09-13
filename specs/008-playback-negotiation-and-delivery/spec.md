@@ -1138,6 +1138,12 @@ themselves are unchanged; what was missing was a §5 that claims them.)*
     rows of that table are not refusals and are asserted elsewhere — a user denied
     `EnableMediaPlayback` is answered the negotiation unchanged (AC-31), and a profile that can
     play nothing is `200` with the flags down and no `ErrorCode` (AC-5).
+35. A video stream carries **the `ColorRange` its file states**, and a stream whose file states none
+    carries no such property — where the reference reads the value at inspection and then stores
+    the stream through an entity with no column for it, so it emits `ColorRange` nowhere
+    ([behaviours §3.29](../../docs/compatibility/behaviours.md)). *(Added 2026-09-13 with the
+    behaviour: this server already sent the value and the argument for sending it was not written,
+    which is what a differential run's `ColorRange` finding on `PlaybackInfo` had no answer to.)*
 
 ## 6. Conformance
 

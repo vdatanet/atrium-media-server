@@ -1155,6 +1155,12 @@ FEATURE_008: dict[int, tuple[str, ...]] = {
         "tests.conformance.test_playback_info:test_an_unknown_item_is_the_same_404_as_the_item_route",
         "tests.conformance.test_playback_info:test_a_request_with_no_token_is_the_empty_401",
     ),
+    # A divergence kept on purpose, so both halves are named: the value is sent where the file
+    # states one, and nothing is invented where it does not (behaviours section 3.29).
+    35: (
+        "tests.unit.test_media_info:test_ac35_a_video_stream_carries_the_colour_range_the_file_states",
+        "tests.unit.test_media_info:test_ac35_a_stream_that_states_no_colour_range_carries_none",
+    ),
 }
 
 

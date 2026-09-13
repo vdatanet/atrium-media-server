@@ -3193,6 +3193,54 @@ who meets them is meant to find.
 
 [005 §5 criterion 31](../../specs/005-item-query-api/spec.md#5-acceptance-criteria)
 
+### 3.29 `ColorRange` is read at inspection and lost at storage — class C, supplied
+
+**Jellyfin does:** read a video stream's colour range and then throw it away. The probing
+normaliser fills `ColorRange` from `ffprobe`'s `color_range` like any of its siblings
+`[source: MediaBrowser.MediaEncoding/Probing/ProbeResultNormalizer.cs:899-901 @ v10.11.11]`, and
+the stream is then written through a database entity that has columns for `ColorPrimaries`,
+`ColorSpace` and `ColorTransfer` and **none for `ColorRange`**
+`[source: src/Jellyfin.Database/Jellyfin.Database.Implementations/Entities/MediaStreamInfo.cs:75-79
+@ v10.11.11]`. The mapping in both directions skips it too
+`[source: Jellyfin.Server.Implementations/Item/MediaStreamRepository.cs:141-143, 210-212 @
+v10.11.11]`. Every read after inspection comes from that table, so no response the reference sends
+carries the property — `PlaybackInfo` included, which is where a sweep counted it, one of 26
+findings it shares with `Score` and `DefaultSubtitleStreamIndex`
+`[probe: tools/differential.py --fixture, Jellyfin 10.11.11, 2026-09-09]`.
+
+**It is not a decision anybody made, and the shape of the code says so.** The three siblings sit
+beside it in the normaliser, in the entity and in both mappings; one of four was left out of two of
+the three places. A property removed on purpose is removed from the model it is read into, and this
+one is still read into it.
+
+**Depends on it:** nothing a correct answer breaks. The property is absent, so the only thing a
+client can have built is *treat it as absent* — and a client that never reads it is unaffected
+when it appears, while a client that does read it receives the value the file states. There is no
+wrong value to compensate for, because there is no value. That is
+[§3.0](#30-how-the-decision-is-made)'s class C exactly, whose default is to supply the field.
+
+**Atrium does: supply it — the range the file states on a video stream, and nothing where the file
+states none.** That is what this server already sent, so this entry is the argument it was missing
+rather than a change to it, which is [§3.28](#328-premieredate-on-a-track-is-nets-zero-date--class-b-diverged)'s
+situation from the other side. Nothing is invented: an audio or subtitle stream, and a video stream
+whose file is silent, carry no `ColorRange`, by [§1.7](#17-a-null-property-is-absent-everywhere-by-one-setting)'s
+null suppression.
+
+**Replicating it would be code written to remove a correct value**, which
+[§3.0.0](#300-replication-is-not-free-and-for-this-project-it-is-not-the-lazy-option) is about:
+the field is in the model, inspection fills it, and matching the reference would mean suppressing it
+on the way out for no client's benefit.
+
+Class **C** — the reference omits something — decided at the default. No upstream issue is known;
+the omission reads as an oversight in a storage migration and would be a small patch to the entity
+and its two mappings.
+
+Recorded here rather than excused in `allowlist.yaml`, for §3.27's reason: an allowlist entry
+excuses a difference neither server chose, and this one is chosen. A sweep goes on reporting the
+`ColorRange` finding on `PlaybackInfo`, and this is what a reader who meets it is meant to find.
+
+[008 §5 criterion 35](../../specs/008-playback-negotiation-and-delivery/spec.md#5-acceptance-criteria)
+
 ## 4. Deliberate exceptions
 
 Every one of them is listed here so it is never mistaken for an oversight — including §4.4, which
@@ -3441,7 +3489,7 @@ undocumented bug.
 | **No playlists folder** ([009 §3.2](../../specs/009-playlists/spec.md), [005 §3.3](../../specs/005-item-query-api/spec.md)) | One row missing from a bare `GET /Items`, always. The reference keeps a **`ManualPlaylistsFolder`** named `Playlists` beside the library views — `CollectionType: playlists`, `IsFolder: true`, a real directory at `/config/data/playlists`, and the `ParentId` of every playlist it holds. It is **not** in `/UserViews` and it **is** in the root listing, on a stock server with no playlists at all `[probe: tools/probe_playlists_folder.py, Jellyfin 10.11.11, 2026-09-06]`. Atrium models no container above 009's playlists, so a client browsing the root sees one folder fewer and cannot walk to a playlist; every route that *reads* a playlist is unaffected. Its `ChildCount` is the reference's random number (§3.25) — 6 with no children and 9 with one | Modelling it is a new item type, an identity rule and a parent for every playlist, and **neither analysed client navigates to it**: both reach playlists through `/Playlists/{id}/Items` and the playlist routes. Principle VI is what holds this shut — the surface is what those clients read — so the mechanism that closes it is a client that reads the folder, not a decision anybody is putting off |
 | **Image decoration parameters ignored** ([006 §3.2](../../specs/006-images/spec.md)) | `percentPlayed`, `blur`, `foregroundLayer` have no effect | Implement if the differential shows a client sending them |
 | **No subtitle burn-in** ([011 §2](../../specs/011-subtitle-delivery/spec.md#2-scope)) | A track whose negotiated delivery method is `Encode` is announced as burned in and is not: the reference paints those cues into the frames it produces and Atrium produces the same frames without them. It is not a rare branch — `Encode` is the reference's per-stream answer for **every** track no declared subtitle profile fits, which is every image track under a text profile and every track for a profile that declares nothing `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]` — and naming such a track costs the source its direct play on both servers, so the client is pushed onto the transcode that then carries nothing. A client whose profile names a subtitle format it can take never reaches it | A text-rendering stack — fonts, ASS positioning, shaping — and a second filter path, which is the exclusion row the [roadmap](../roadmap.md#out-of-scope-and-why) has carried since before 001. *This row is what was left of "no subtitle delivery at all" when [011](../../specs/011-subtitle-delivery/spec.md) closed the rest of it on 2026-08-31: the manifest announces every text track, the sidecars are found and served, and `Encode` is the one answer this server says and does not do. 011 T12 narrowed the row rather than deleting it, because 011 §2 and §7's OQ-5 both call this gap "already recorded" and deleting it would have made two accepted documents false* |
-| **No per-user subtitle preference, so no default subtitle track is proposed** ([011 §2, §3.3](../../specs/011-subtitle-delivery/spec.md)) | A negotiation that names no subtitle index answers `DefaultSubtitleStreamIndex` absent, where a stock reference proposes a track. It is the reference's own answer for a user whose subtitle mode is `None` — but a *new* reference user's mode is `Default`, not `None` `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]` | The two user settings the choice is a function of: a subtitle mode with five values and a language preference list. Both are a per-user feature, which is what 011 §2 excludes; a client that names the track it wants is unaffected, and both analysed clients name it |
+| **No per-user subtitle preference, so no default subtitle track is proposed and no subtitle stream is scored** ([011 §2, §3.3](../../specs/011-subtitle-delivery/spec.md)) | A negotiation that names no subtitle index answers `DefaultSubtitleStreamIndex` absent, where a stock reference proposes a track. It is the reference's own answer for a user whose subtitle mode is `None` — but a *new* reference user's mode is `Default`, not `None` `[probe: tools/probe_subtitle_negotiation.py, Jellyfin 10.11.11, 2026-08-29]`. **`Score` on a subtitle stream is the same gap and not a second one**: the reference sets it in the same function, one line after the default index, over the streams the same mode selected, so where no mode is kept no stream is scored `[source: Emby.Server.Implementations/Library/MediaSourceManager.cs:417-423 @ v10.11.11]`. *(`Score` added to this row on 2026-09-13: a sweep counts the two separately, and the row named only one of them.)* | The two user settings the choice is a function of: a subtitle mode with five values and a language preference list. Both are a per-user feature, which is what 011 §2 excludes; a client that names the track it wants is unaffected, and both analysed clients name it |
 | **`Path`-derived identifiers differ from the reference's** ([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters)) | Nothing — ids are opaque | Not a gap to close; a deliberate design choice |
 | **A container that has lost every file is still returned** ([003 §3.8](../../specs/003-library-configuration-and-scanning/spec.md#38-scanning-and-change-detection)) | An empty series or album in a library, with nothing under it — **and a stock reference returns one too**, measured on 2026-09-02 `[probe: tools/differential.py --named container-that-lost-every-file, Jellyfin 10.11.11, 2026-09-02]`, which is what this row had assumed the other way round since it was written | A query-time filter in 005: a container with no visible children is not offered. See §5.2 — which is now a **measured parity** rather than a gap, and whether the filter is still worth its predicate is 005's call |
 | **No loudness scan** ([004 §3.3](../../specs/004-metadata-resolution/spec.md#33-embedded-tags)) | On a server whose operator enabled the reference's opt-in scan, `NormalizationGain` absent where it would have a computed value. Tag-carried gains are unaffected | 008, which brings the decoder the scan needs. See §5.4 |
