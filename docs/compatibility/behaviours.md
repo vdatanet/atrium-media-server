@@ -3241,6 +3241,58 @@ excuses a difference neither server chose, and this one is chosen. A sweep goes 
 
 [008 §5 criterion 35](../../specs/008-playback-negotiation-and-delivery/spec.md#5-acceptance-criteria)
 
+### 3.30 A library name already in use is numbered, not refused — class B, replicated — **decided 2026-09-13, not yet implemented**
+
+**Jellyfin does:** add the library anyway, under a new name, and answer `204`. `POST
+/Library/VirtualFolders` with a `name` another library already has does not refuse: it appends a
+number and tries again until the name is free, and **the first number is `2`** — the count starts at
+one and is incremented before it is used, and the reference's own comment says *"first numbered
+name will be 2"* — so `Movies` becomes `Movies2`, then `Movies3`
+`[source: Emby.Server.Implementations/Library/LibraryManager.cs:3036-3044 @ v10.11.11]`. Nothing
+separates the name from the number.
+
+**The name is cleaned before it is compared**, in a fixed order that is itself observable:
+
+1. an empty or whitespace name is refused `400` — checked on the name **as sent**
+   `[source: LibraryManager.cs:3027-3030]`;
+2. the name is trimmed;
+3. every character of a fixed set is replaced by a space — `"`, `<`, `>`, `|`, `:`, `*`, `?`, `\`,
+   `/`, the null character and the control characters 1 to 31
+   `[source: Emby.Server.Implementations/IO/ManagedFileSystem.cs:21-28, 305-334 @ v10.11.11]`.
+
+The set is the reference's own list and **does not depend on the host's operating system**, so it is
+specifiable exactly. The order has two consequences a reader would not guess: a name that ends in a
+replaced character keeps the space it becomes, because trimming already happened — `Movies?` is
+`Movies ` and does not collide with `Movies` — and a name made only of replaced characters passes
+step 1 and becomes spaces.
+
+**What decides a collision is not a rule the reference states.** It is whether a directory of that
+name already exists on the reference's host, so `movies` collides with `Movies` where the host's
+filesystem ignores case and not where it does not. The pinned reference runs on a filesystem that
+does not ignore case, and **the pinned reference is the one this server reproduces**: names collide
+exactly, case included. That is what [014](../../specs/014-first-time-setup/spec.md)'s OQ-5 confirms
+by a reading on the single-use instance, rather than inferred from the platform.
+
+**Depends on it:** a caller that adds a library and treats `204` as *"added"* — which is every
+unattended setup, and any script that adds libraries to a server that may already have one of that
+name. A refusal is not something any of them can have met from a Jellyfin, so it is not something
+any of them handles.
+
+**Atrium does: the same** — number from `2`, clean in that order, compare exactly, answer `204`.
+014's command-line client prints **the name the library ended up with** rather than the one it was
+asked for ([014 §3.8](../../specs/014-first-time-setup/spec.md)), so an operator is told what a
+client of the reference is not.
+
+The class is **B**: the request succeeds and does something other than it said. §3.0's default for
+class B is to replicate, and neither escape hatch applies — a compensation for a numbered name is
+reading the list back, which a refusal would break rather than make unnecessary, and a caller that
+depended on the `204` has nothing to fall back on if it becomes a `4xx`. Diverging would turn that
+`204` into a refusal, which changes a value every caller already reads — its status — and that is
+the fourth and dangerous shape in [§3.0.3](#303-the-shape-of-a-safe-divergence). No upstream issue
+is known.
+
+[014 §5 criterion 7](../../specs/014-first-time-setup/spec.md#5-acceptance-criteria)
+
 ## 4. Deliberate exceptions
 
 Every one of them is listed here so it is never mistaken for an oversight — including §4.4, which
