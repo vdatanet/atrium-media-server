@@ -4,7 +4,7 @@ title: First-time setup
 status: Draft
 created: 2026-09-13
 updated: 2026-09-13
-amended: 2026-09-13 at the spec gate - OQ-1 decided (the setup window is open to a loopback address only, by changing the reference's first branch and nothing else) and OQ-2 decided (the first account is always MyJellyfinUser); sections 3.1, 3.2 and 3.8, AC-2, AC-5 and AC-10 amended; OQ-11 raised by the first answer
+amended: 2026-09-13 at the spec gate - OQ-1 decided (the setup window is open to a loopback address only, by changing the reference's first branch and nothing else) and OQ-2 decided (the first account is always MyJellyfinUser); sections 3.1, 3.2 and 3.8, AC-2, AC-5 and AC-10 amended; OQ-11 raised by the first answer. And the same day, OQ-3 decided (a library name already in use is numbered as the reference numbers it); section 3.6 amended and section 3.6.2 added for the order a name is cleaned in; AC-7 amended; OQ-5 widened to confirm that names compare with case
 depends_on: [001, 002, 003]
 ---
 
@@ -272,7 +272,7 @@ and whether it changes anything, is ⚠️ UNVERIFIED (OQ-5).
 
 | Part | Name | Required | Type | Notes |
 |---|---|---|---|---|
-| query | `name` | yes | string | Trimmed and made a valid file name before use `[source: Emby.Server.Implementations/Library/LibraryManager.cs:3032 @ v10.11.11]` |
+| query | `name` | yes | string | Cleaned before use, in the order §3.6.2 gives `[source: Emby.Server.Implementations/Library/LibraryManager.cs:3027-3032 @ v10.11.11]` |
 | query | `collectionType` | no | string | `[spec: CollectionTypeOptions]` declares eight values; which of them this server accepts is §3.6.1 |
 | query | `paths` | no | string, comma-separated | Each must be a directory that exists **on the server** |
 | query | `refreshLibrary` | no | boolean, default `false` | Whether adding the library also scans it |
@@ -280,8 +280,8 @@ and whether it changes anything, is ⚠️ UNVERIFIED (OQ-5).
 
 **Response — 204**, no body. The library appears in §3.5 and, once scanned, in a client's views.
 
-**Two behaviours that are not what the operation's name suggests**, both reproduced unless OQ-3
-decides otherwise:
+**Two behaviours that are not what the operation's name suggests**, both reproduced — the first
+decided on 2026-09-13 as OQ-3, and argued in [behaviours §3.30](../../docs/compatibility/behaviours.md):
 
 - **A name already in use is not refused.** The reference appends a number and adds the library under
   the new name, and still answers `204`. **The first number is `2`**, with nothing between the name
@@ -290,10 +290,11 @@ decides otherwise:
   2"* `[source: LibraryManager.cs:3036-3044]`. The name a caller asked for is therefore not
   necessarily the name the library has, and §3.5 is how a caller finds out.
 
-  **Whether `movies` collides with `Movies` is the reference's host filesystem's answer, not a
-  rule.** The collision is decided by whether a directory of that name exists, so it is
-  case-sensitive where the host's filesystem is and not where it is not — the pinned reference
-  instance runs on a case-sensitive one. OQ-3 decides which this server reproduces.
+  **Names collide exactly, case included.** On the reference a collision is whether a directory of
+  that name already exists, so it follows the host's filesystem rather than a rule — and the pinned
+  reference runs on one that does not ignore case. That pinned instance is what this server
+  reproduces, so `movies` and `Movies` are two libraries; OQ-5 confirms it by a reading rather than
+  from the platform.
 - **A path is checked, a name is not.** A path that does not exist refuses the whole request; a name
   that collides does not.
 
@@ -316,6 +317,24 @@ homevideos, boxsets, books, mixed]`, and an omitted type is its own case.
 **`movies`, `tvshows` and `music` are accepted.** What the other five and an omitted type answer is
 OQ-6, and it is not decided here: refusing them is a shape the reference never answers for a legal
 value, and accepting one creates a library this server will scan into nothing.
+
+#### 3.6.2 How a name is cleaned
+
+In this order, each step on the result of the one before:
+
+1. **Refused if empty or whitespace** — `400`, and checked on the name **as sent**
+   `[source: LibraryManager.cs:3027-3030]`.
+2. **Trimmed** `[source: LibraryManager.cs:3032]`.
+3. **Every character of a fixed set replaced by a space**: `"`, `<`, `>`, `|`, `:`, `*`, `?`, `\`,
+   `/`, the null character and the control characters 1 to 31
+   `[source: Emby.Server.Implementations/IO/ManagedFileSystem.cs:21-28, 305-334 @ v10.11.11]`. The
+   set is the reference's own list and does not depend on the host.
+4. **Compared exactly** against every library's name, and numbered from `2` while it collides.
+
+The order is observable in two places. Trimming comes before replacement, so a replaced character at
+either end stays as a space — `Movies?` becomes `Movies ` and does not collide with `Movies`. And the
+emptiness check comes before both, so a name made only of replaced characters is accepted and
+becomes spaces.
 
 ### 3.7 `POST /Library/Refresh` — `RefreshLibrary`
 
@@ -410,7 +429,8 @@ What a client can observe change, and what survives a restart:
    states, and admits an administrator.
 7. `POST /Library/VirtualFolders` with an accepted type and existing paths adds a library that
    `GET /Library/VirtualFolders` then lists with that name, type and paths; a name already in use is
-   added under that name followed by `2` (then `3`) and answers `204`; a missing name and a path that
+   added under that name followed by `2` (then `3`) and answers `204`, where names are compared exactly,
+   case included, after §3.6.2's trimming and replacement; a missing name and a path that
    does not exist each answer `400` and add nothing.
 8. A library added with `refreshLibrary=true`, or scanned through `POST /Library/Refresh`, is
    browsable by an unmodified Jellyfin client signed in as the first account.
@@ -445,8 +465,8 @@ Levels are defined in [../../docs/compatibility/conformance.md](../../docs/compa
 
 ## 7. Open questions
 
-**Two of the ten were decisions and both were taken on 2026-09-13**, OQ-1 and OQ-2; answering OQ-1
-raised OQ-11. The rest are readings or decisions for the plan gate.
+**Three of the ten were decisions and all three were taken on 2026-09-13** — OQ-1, OQ-2 and OQ-3;
+answering OQ-1 raised OQ-11. The rest are readings, or decisions for the plan gate.
 
 **This feature opened with its questions unanswered and no measurements of its own**, like 011 and
 012. Every one is answered at the gate by a reading, and **there is exactly one place those readings
@@ -459,9 +479,9 @@ the pinned version, and is destroyed with everything it wrote — which makes a 
 |---|---|---|---|
 | OQ-1 | ~~Is the setup window open to the network, as the reference's is, or to this machine only?~~ **Decided on 2026-09-13: this machine only**, meaning a loopback address and not the local network. Implemented as the smallest possible change to the reference's decision — only its first branch gains *"and the caller is this machine"* — so a caller from elsewhere falls through to refusals the reference already makes and none is invented (§3.1) | — | Closed. [behaviours §4.6](../../docs/compatibility/behaviours.md); AC-5 and AC-10 amended. What it depends on to be worth what it says is OQ-11 |
 | OQ-2 | ~~What is the first account called?~~ **Decided on 2026-09-13: always `MyJellyfinUser`**, the reference's own fallback, and never the operating-system account the server runs as (§3.2) | — | Closed. [behaviours §4.7](../../docs/compatibility/behaviours.md); AC-2 amended |
-| OQ-3 | **Is a name already in use numbered, as the reference does, or refused?** A `204` for a request that did something other than it asked is a class-B shape, and a client that reads §3.5 afterwards is unaffected either way | §3.6, AC-7's second half | A behaviours §3.0 decision |
+| OQ-3 | ~~Is a name already in use numbered, as the reference does, or refused?~~ **Decided on 2026-09-13: numbered, as the reference does** — from `2`, with no separator, after the name is cleaned in §3.6.2's order, and compared exactly. Class B, replicated: a caller that treats `204` as *"added"* has never met a refusal from a Jellyfin (§3.6) | — | Closed. [behaviours §3.30](../../docs/compatibility/behaviours.md); AC-7 amended. Whether names compare with case is confirmed by OQ-5 |
 | OQ-4 | **What are the refusal bodies** — the `400`s, the `404`, and §3.1's `401` and `403` — on these routes? The messages are read from the source; the envelope they travel in is not measured on any of them | Every error table in §3, AC-3, AC-5, AC-6, AC-7 | A reading against the single-use instance |
-| OQ-5 | **What do the edges answer** — a rename to an invalid name or to one another account holds, and a second `POST /Startup/Complete` by an administrator? | §3.3's and §3.4's unverified rows | A reading against the single-use instance |
+| OQ-5 | **What do the edges answer** — a rename to an invalid name or to one another account holds, a second `POST /Startup/Complete` by an administrator, and **whether a library named `movies` collides with an existing `Movies`** on the pinned instance, which §3.6 states as *no* from the platform it runs on? | §3.3's and §3.4's unverified rows | A reading against the single-use instance |
 | OQ-6 | **What does a library carry and accept that this server cannot scan into?** Five of the eight declared types, an omitted type, `LibraryOptions` on the way in and on the way out, and `PrimaryImageItemId` | §3.5's unverified rows, §3.6.1, AC-7 | A reading of what the reference answers for each, then a decision per type |
 | OQ-7 | **Does a setup that skips `POST /Startup/Configuration` leave a server clients accept?** It sets a server name and a metadata language; this server already has a name | Whether §2's out-of-scope row stands | A reading: set the instance up without it and sign a client in |
 | OQ-8 | **Is a scan waited for?** Whether `POST /Library/Refresh` and `refreshLibrary=true` answer when the scan starts or when it ends, and what `RefreshProgress` and `RefreshStatus` say meanwhile | §3.5's refresh rows, §3.7, what **library scan** can promise | A reading against the single-use instance over the repository's fixture |
