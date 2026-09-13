@@ -447,6 +447,13 @@ class InstanceSpec:
     #: sweep removes anything a killed run left.
     auto_remove: bool = True
     server_name: str = "atrium-reference"
+    #: **Whether the instance is set up at all.** On by default, because every run before 014's
+    #: measurement wanted a server it could sign in to. Off, `__enter__` stops once the API answers:
+    #: no first-time setup, no library, no scan and **no account** - `administrator` stays `None` -
+    #: which is the one state 014's questions are about and the one no server anybody owns is still
+    #: in. The destruction is unchanged, so a run that writes an account into the window is still
+    #: a run whose writes die with the container.
+    configure: bool = True
     ready_timeout: float = 180.0
     scan_timeout: float = 900.0
     poll: float = 1.0
@@ -550,8 +557,9 @@ class ReferenceInstance:
         try:
             self._start(runtime)
             self._wait_for_api()
-            self._configure()
-            self._wait_for_scan()
+            if self.spec.configure:
+                self._configure()
+                self._wait_for_scan()
         except BaseException:
             # A half-started instance is not a smaller instance. Whatever exists is destroyed
             # here, so the reason that reaches the caller does not also leave a container running

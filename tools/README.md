@@ -99,6 +99,7 @@ Specified in [specs/010 §3.5](../specs/010-conformance-harness/spec.md).
 | [`probe_bare_items.py`](probe_bare_items.py) | What **is** a bare `GET /Items` — and which of the parameters a client sends can change it? | 005 §3.3, AC-27 | yes, and **only to an instance it creates and destroys** |
 | [`probe_wide_body_constants.py`](probe_wide_body_constants.py) | Which properties does a **full body** carry that a list row does not, and for which types — and which of them are constants a server may replicate rather than values this fixture cannot produce? | 005 §3.2, AC-26 | yes, and **only to an instance it creates and destroys** |
 | [`probe_date_created.py`](probe_date_created.py) | Where does the reference get an item's `DateCreated` from — the file's modification time, its directory's, or the moment of the scan — and does it follow the file across a rescan? | behaviours §2.29; 003 §3.9, AC-16 | yes, and **only to an instance it creates and destroys** |
+| [`probe_first_time_setup.py`](probe_first_time_setup.py) | What does a Jellyfin answer while its first-time setup is unrun, and just after? The refusal envelopes, the edges, the library types it cannot scan, a setup that skips its configuration step, and whether a scan is waited for | 014 §7, OQ-4 to OQ-8 | yes, and **only to an instance it starts unconfigured and destroys** |
 | [`probe_public_users.py`](probe_public_users.py) | Does `/Users/Public` answer an empty list when every account is hidden from the login screen? | 010 §3.5, AC-9; reference-target §2; behaviours §2.2 | yes, and **only to an instance it creates and destroys** |
 | [`probe_local_address.py`](probe_local_address.py) | Does `LocalAddress` advertise the HTTPS scheme and port once a certificate is configured, on a request that came in over HTTP? | 010 §3.5, AC-9; reference-target §2; behaviours §2.3, §4.2; 001 §3.4 | yes, and **only to an instance it creates and destroys** |
 | [`probe_user_views_parent.py`](probe_user_views_parent.py) | What does a `/UserViews` row carry in `ParentId`, and on which rows? | behaviours §1.7; 005 §3.2 and notes/item-shapes.md §6 | yes, and **only to an instance it creates and destroys** |
@@ -158,10 +159,16 @@ python3 tools/probe_progressive_production.py --allow-writes
 python3 tools/probe_session_filters.py --allow-writes
 ```
 
-**Five probes are not in the list above because they take no server at all**, and each refuses one
-that is offered: `probe_reference_scan.py`, `probe_public_users.py`, `probe_local_address.py`,
-`probe_user_views_parent.py` and `probe_system_info_permission.py` stand up a single-use instance
-of the pinned version, ask it their question and destroy it. Each needs a container runtime and
+**Eleven probes are not in the list above because they take no server at all**, and each refuses
+one that is offered: `probe_bare_items.py`, `probe_content_type_gate.py`, `probe_date_created.py`,
+`probe_first_time_setup.py`, `probe_local_address.py`, `probe_playlists_folder.py`,
+`probe_public_users.py`, `probe_reference_scan.py`, `probe_system_info_permission.py`,
+`probe_user_views_parent.py` and `probe_wide_body_constants.py` stand up a single-use instance of
+the pinned version, ask it their question and destroy it. *(This paragraph said five until
+2026-09-13, while five more had been written; counted from the scripts that both start an instance
+and refuse a server argument.)* `probe_first_time_setup.py` is the only one that asks **before the
+instance is configured** — no first-time setup, no library and no account — which is
+`InstanceSpec(configure=False)`. Each needs a container runtime and
 nothing else:
 
 ```bash
