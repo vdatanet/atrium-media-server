@@ -174,7 +174,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
   trust list to an address that has already been resolved. `LocalAddress` (001) is unchanged under
   the default list, asserted by 001's existing tests staying green.
 - **Spec reference:** §3.1, AC-5; plan §6.1
-- **Done** (2026-09-14). **Trusted is not believed, and plan §6.1 said it was.** Its condition
+- **Done** (2026-09-14, [PR #365](https://github.com/vdatanet/atrium-media-server/pull/365)). **Trusted is not believed, and plan §6.1 said it was.** Its condition
   admitted a loopback request carrying a forwarding header whenever the peer was a trusted proxy,
   *"so the header was consumed"* — but uvicorn's resolver reads `X-Forwarded-For` alone, so a
   declared proxy naming its client in `X-Real-IP` or `Forwarded` leaves every request at its own
