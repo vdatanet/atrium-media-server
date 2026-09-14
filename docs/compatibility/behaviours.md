@@ -3270,8 +3270,9 @@ step 1 and becomes spaces.
 name already exists on the reference's host, so `movies` collides with `Movies` where the host's
 filesystem ignores case and not where it does not. The pinned reference runs on a filesystem that
 does not ignore case, and **the pinned reference is the one this server reproduces**: names collide
-exactly, case included. That is what [014](../../specs/014-first-time-setup/spec.md)'s OQ-5 confirms
-by a reading on the single-use instance, rather than inferred from the platform.
+exactly, case included. **Measured, not only inferred from the platform**: on a single-use instance
+of the pinned version, `Movies` added twice became `Movies` and `Movies2`, `movies` added beside them
+stayed `movies`, and `Movies?` became `Movies ` `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`.
 
 **Depends on it:** a caller that adds a library and treats `204` as *"added"* — which is every
 unattended setup, and any script that adds libraries to a server that may already have one of that
@@ -3542,6 +3543,8 @@ the server process runs as**, and fall back to `MyJellyfinUser` only where that 
 a valid username `[source: Jellyfin.Server.Implementations/Users/UserManager.cs:711-715 @
 v10.11.11]` — and then answer that name to the caller, who during setup needs no token
 ([§4.6](#46-the-first-time-setup-window-is-open-to-this-machine-not-to-the-network--decided-2026-09-13-not-yet-implemented)).
+**On the pinned image that name is `root`**: its process runs as the superuser, and the first
+unauthenticated request of its setup is answered `{"Name":"root"}` `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`.
 
 **Depends on it:** almost nothing. Every unattended setup renames the account in the very next
 request — `POST /Startup/User` takes the name the operator chose — and the reference's own web wizard

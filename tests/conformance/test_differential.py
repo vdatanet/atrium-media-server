@@ -2720,6 +2720,28 @@ def test_the_wizard_reads_the_first_user_before_it_renames_one(tmp_path: Path) -
     ]
 
 
+def test_an_instance_that_is_not_configured_is_left_before_its_first_time_setup(
+    tmp_path: Path,
+) -> None:
+    """`configure=False` stops once the API answers, and sends nothing that would set it up.
+
+    014's questions are about a server whose first-time setup has **not** run, and the only such
+    Jellyfin a run can reach is one it has just started. So the property is the absence of every
+    request that would change that state - a first-time-setup operation, a library, a scan task,
+    a sign-in - and not merely the absence of the one this test would think of first. The
+    destruction is asserted beside it, because an instance nobody configured is still one whose
+    container has to go.
+    """
+    made, runtime, api = _instance(tmp_path, configure=False)
+    with made:
+        assert made.administrator is None, "no account exists to hand a caller"
+
+    touched = [call for call in api.calls if call[1] != "/System/Info/Public"]
+    assert touched == [], f"an unconfigured instance was sent {touched}"
+    assert api.calls, "the API was never asked whether it was ready"
+    assert any(args[:1] == ("rm",) for args in runtime.calls), "the container was not destroyed"
+
+
 def test_a_wizard_that_refuses_destroys_the_instance_and_names_what_it_answered(
     tmp_path: Path,
 ) -> None:
