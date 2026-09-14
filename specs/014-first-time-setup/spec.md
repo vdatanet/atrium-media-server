@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-09-13
 updated: 2026-09-14
 accepted: 2026-09-14
-amended: 2026-09-13 at the spec gate - OQ-1 decided (the setup window is open to a loopback address only, by changing the reference's first branch and nothing else) and OQ-2 decided (the first account is always MyJellyfinUser); sections 3.1, 3.2 and 3.8, AC-2, AC-5 and AC-10 amended; OQ-11 raised by the first answer. And the same day, OQ-3 decided (a library name already in use is numbered as the reference numbers it); section 3.6 amended and section 3.6.2 added for the order a name is cleaned in; AC-7 amended; OQ-5 widened to confirm that names compare with case. And the same day, at the measurement gate, OQ-4, OQ-5, OQ-7 and OQ-8 answered and OQ-6 half answered by tools/probe_first_time_setup.py on an instance started unconfigured; two claims made from the source withdrawn (the missing-path body, and the empty-name refusal's origin); sections 3.1, 3.3 to 3.7 and 3.8 amended; AC-3, AC-4, AC-5, AC-7 and AC-8 amended; OQ-12 and OQ-13 raised. And the same day, OQ-6 decided (every library type answered and stored as the reference does, a library of a type this server cannot scan staying empty as an accepted gap) and OQ-12 decided (library scan does not wait); sections 3.6, 3.6.1, 3.7 and 3.8 amended; AC-7 and AC-9 amended. And on 2026-09-14 at the plan gate, OQ-9, OQ-11 and OQ-13 decided by the operator and OQ-10 decided by the plan (L2, L3 owed), and a server that held accounts before this feature is set up; sections 3.1, 3.5, 3.6, 3.8 and 6 amended; AC-1, AC-5, AC-7 and AC-10 amended
+amended: 2026-09-13 at the spec gate - OQ-1 decided (the setup window is open to a loopback address only, by changing the reference's first branch and nothing else) and OQ-2 decided (the first account is always MyJellyfinUser); sections 3.1, 3.2 and 3.8, AC-2, AC-5 and AC-10 amended; OQ-11 raised by the first answer. And the same day, OQ-3 decided (a library name already in use is numbered as the reference numbers it); section 3.6 amended and section 3.6.2 added for the order a name is cleaned in; AC-7 amended; OQ-5 widened to confirm that names compare with case. And the same day, at the measurement gate, OQ-4, OQ-5, OQ-7 and OQ-8 answered and OQ-6 half answered by tools/probe_first_time_setup.py on an instance started unconfigured; two claims made from the source withdrawn (the missing-path body, and the empty-name refusal's origin); sections 3.1, 3.3 to 3.7 and 3.8 amended; AC-3, AC-4, AC-5, AC-7 and AC-8 amended; OQ-12 and OQ-13 raised. And the same day, OQ-6 decided (every library type answered and stored as the reference does, a library of a type this server cannot scan staying empty as an accepted gap) and OQ-12 decided (library scan does not wait); sections 3.6, 3.6.1, 3.7 and 3.8 amended; AC-7 and AC-9 amended. And on 2026-09-14 at the plan gate, OQ-9, OQ-11 and OQ-13 decided by the operator and OQ-10 decided by the plan (L2, L3 owed), and a server that held accounts before this feature is set up; sections 3.1, 3.5, 3.6, 3.8 and 6 amended; AC-1, AC-5, AC-7 and AC-10 amended. And the same day, by T1's second walk on an unconfigured instance, section 3.5's CollectionType, PrimaryImageItemId and RefreshProgress rows amended (the second withdrawn as worded) and section 3.6.1 amended with what the reference's scan puts in libraries of the types this server does not scan and with every library being a view; AC-7 amended; and the operator's four decisions on those readings taken the same day - a path given twice kept once, no path making a library with none, nested and relative paths refused (behaviours 3.31), the body's PathInfos used when the query names no paths (OQ-13 amended), PrimaryImageItemId never sent (behaviours 5), and each library keeping its own ItemId (behaviours 3.32); sections 3.5 and 3.6 and AC-7 amended again
 depends_on: [001, 002, 003]
 ---
 
@@ -275,11 +275,11 @@ administrator is answered `204` again and a caller with no token `401` with an e
 |---|---|---|
 | `Name` | string | The library's name, as §3.6 settled it |
 | `Locations` | array of string | The library's paths |
-| `CollectionType` | string | The type the library was added with. **No value where none was given — and no value where the one given is not a type the reference declares** (§3.6.1) `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]` |
-| `ItemId` | string | The library's own identifier, the one a client browses by |
+| `CollectionType` | string | The type the library was added with. **No value where none was given — and no value where the one given is not a type the reference declares** (§3.6.1) `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. "No value" is **absent from the row**, never `null`: 19 rows read raw, and the four with no type carried no `CollectionType` key at all `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]` |
+| `ItemId` | string | The library's own identifier, the one a client browses by. **Except on the reference for two libraries whose names differ only in case**: `Movies` and `movies` were listed with **one** `ItemId`, `movies`'s view's, while `Movies`'s own view has another `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`, because the listing finds a library's folder by comparing its path ignoring case `[source: Emby.Server.Implementations/Library/LibraryManager.cs:1319 @ v10.11.11]`. **This server does not reproduce it: each library keeps its own `ItemId`**, the one its view carries — decided on 2026-09-14 and argued in [behaviours §3.32](../../docs/compatibility/behaviours.md) |
 | `LibraryOptions` | object | The reference sends **37 properties** on every library read, whatever its type `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. **This server sends one, `PathInfos`** — an entry per path, carrying that `Path` — because it is the one property it honours; the other 36 are an accepted gap ([behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)). Decided on 2026-09-14 as OQ-13 |
-| `PrimaryImageItemId` | string | No value on every library read, none of which had artwork `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]` |
-| `RefreshProgress`, `RefreshStatus` | number, string | **They show some scans and not others**, read once a second `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. While a library added with `refreshLibrary=true` was scanned, its row read `Active` with a partial, fractional progress — `10` in one run, `10.666…` in another — then `Idle` and no value once it finished. **While `POST /Library/Refresh`'s scan ran, the row read `Idle` throughout.** So the row can tell a caller a scan it started by adding the library has finished, and cannot tell it about a scan §3.7 started — which shows only on the server's scheduled-task list |
+| `PrimaryImageItemId` | string | No value on every library read during setup, before any scan had finished `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. **Not "none of which had artwork", as this row said until 2026-09-14**: once scanned, the three libraries over the tree's films carried their **own `ItemId`** here, and every other row carried no key `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]` — the reference states it when the library folder has a primary image `[source: Emby.Server.Implementations/Library/LibraryManager.cs:1322-1327 @ v10.11.11]`, and a library folder's image is one it generates from the images of what the scan found `[source: Emby.Server.Implementations/Images/CollectionFolderImageProvider.cs:21-40 @ v10.11.11]`. **This server never sends it**, because it generates no library image — decided on 2026-09-14, an accepted gap in [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) |
+| `RefreshProgress`, `RefreshStatus` | number, string | `RefreshStatus` is on every row; **`RefreshProgress` is absent from a row that is not scanning**, never `null` `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`. **They show some scans and not others**, read once a second `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. While a library added with `refreshLibrary=true` was scanned, its row read `Active` with a partial, fractional progress — `10` in one run, `10.666…` in another — then `Idle` and no value once it finished. **While `POST /Library/Refresh`'s scan ran, the row read `Idle` throughout.** So the row can tell a caller a scan it started by adding the library has finished, and cannot tell it about a scan §3.7 started — which shows only on the server's scheduled-task list |
 
 **Error responses:** the refusals of §3.1 once setup is finished.
 
@@ -293,9 +293,9 @@ administrator is answered `204` again and a caller with no token `401` with an e
 |---|---|---|---|---|
 | query | `name` | yes | string | Cleaned before use, in the order §3.6.2 gives `[source: Emby.Server.Implementations/Library/LibraryManager.cs:3027-3032 @ v10.11.11]` |
 | query | `collectionType` | no | string | `[spec: CollectionTypeOptions]` declares eight values; which of them this server accepts is §3.6.1 |
-| query | `paths` | no | string, comma-separated | Each must be a directory that exists **on the server** |
+| query | `paths` | no | string, comma-separated | Each must be an absolute path to a directory that exists **on the server**, and no two may be one inside the other; a path given more than once counts once. Absent, the body's `PathInfos` stand in, under the same rules; absent there too, the library is added with **no paths** (see below) |
 | query | `refreshLibrary` | no | boolean, default `false` | Whether adding the library also scans it |
-| body | `LibraryOptions` | no | object | `[spec: AddVirtualFolderDto]`. Accepted, and **nothing in it is applied** — the paths come from `paths` (OQ-13) |
+| body | `LibraryOptions` | no | object | `[spec: AddVirtualFolderDto]`. Accepted, and **only its `PathInfos` is applied** — each entry's `Path`, and only when the query carries no `paths`, as on the reference `[source: Jellyfin.Api/Controllers/LibraryStructureController.cs:84-91 @ v10.11.11]` `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`. Nothing else in it is applied (OQ-13, amended 2026-09-14) |
 
 **Response — 204**, no body. The library appears in §3.5 and, once scanned, in a client's views.
 
@@ -328,13 +328,32 @@ decided on 2026-09-13 as OQ-3, and argued in [behaviours §3.30](../../docs/comp
 - **A path is checked, a name is not.** A path that does not exist refuses the whole request; a name
   that collides does not.
 
+**Which paths, and where this server departs from the reference.** The reference checks each path
+for being a directory and for nothing else, so two paths one inside the other, the same path twice,
+a relative path that names a directory from its working directory, and no path at all each answer
+`204` and are listed as given `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`. Decided on 2026-09-14:
+
+- **a path given more than once is kept once**, and answered `204`;
+- **no path at all adds a library with no paths** — listed with empty `Locations`, and empty for
+  the same reason §3.6.1's unscannable types are: there is nothing for a scan to admit;
+- **two paths one inside the other, or a relative path, are refused** with the missing path's own
+  `400` and add no library — a deliberate divergence, argued in
+  [behaviours §3.31](../../docs/compatibility/behaviours.md): nested paths would give a file under
+  the inner one two identifiers on this server, and a relative path means whatever the server's
+  working directory happens to be.
+
 **Error responses**
 
 | Condition | Status | Body |
 |---|---|---|
 | `name` missing, empty or whitespace | `400` | **problem details with an `errors` map keyed `name`** — [behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one)'s *malformed value the model binder rejected*. It is refused by validation of a required parameter **before the route runs**, so the library manager's own emptiness check `[source: LibraryManager.cs:3027-3030]` is not what answers: a name of spaces is refused the same way `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]` |
 | a path that does not exist on the server | `400` | `text/plain`, the fixed `Error processing request.` — §1.11's *controller that refused the request itself*. **The message the source builds, `The specified path does not exist: <path>.` `[source: LibraryManager.cs:3049-3053]`, is not sent** `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]` |
+| a path that is not absolute, whether or not it names a directory from somewhere | `400` | the same `Error processing request.`. **This server only**: the reference answers `204` for one that names a directory from its working directory `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]` ([behaviours §3.31](../../docs/compatibility/behaviours.md)) |
+| two paths, one inside the other | `400` | the same `Error processing request.`. **This server only**: the reference answers `204` and lists both `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]` ([behaviours §3.31](../../docs/compatibility/behaviours.md)) |
 | setup finished, caller not an administrator | §3.1 | §3.1 |
+
+The paths these rows read are the query's `paths`, or the body's `PathInfos` when the query carries
+none.
 
 #### 3.6.1 Which library types
 
@@ -367,7 +386,21 @@ type, or of none, is listed by §3.5, survives a restart and a scan, and has not
 shortfall and not a choice, recorded as an accepted gap in
 [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1); **003's set of three
 stays the set this server scans**, and what widens is only the set a library can be created with.
-What the reference's scan puts in a library of no type was not read.
+
+**What the reference's scan puts there was read on 2026-09-14**, over one film file per library and
+once a refresh had gone idle: a `MusicVideo` in `musicvideos`, a `Video` in `homevideos`, a `Movie`
+in `mixed`, in the library with no type and in `photos`, and **nothing** in `boxsets` or `books`
+`[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`. So of the seven cases the reference leaves two empty over a film, and this server leaves
+all seven — the size of the accepted gap, and not a change to it.
+
+**Every library is a view, whatever its type and whatever it holds.** On the reference each of the
+seven is a `CollectionFolder` in the first account's `/UserViews` — and so is each of the seven
+added over an empty directory — and **its `CollectionType` there is not always the one §3.5 lists**:
+`musicvideos`, `homevideos`, `boxsets` and `books` carry their type, while `mixed`, an omitted type
+and `photos` carry **no `CollectionType` key**, so a `mixed` library is `mixed` in §3.5 and untyped
+as a view `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`. Its `ChildCount` there is behaviours §3.25's random number, read twice and
+mostly different. This server offers each library as a view the same way, with the same
+`CollectionType`, and has nothing under any library of a type it does not scan, or of none.
 
 #### 3.6.2 How a name is cleaned
 
@@ -501,12 +534,18 @@ What a client can observe change, and what survives a restart:
 7. `POST /Library/VirtualFolders` with existing paths answers `204` and adds a library that
    `GET /Library/VirtualFolders` then lists with that name and paths, **whatever `collectionType`
    it carries**: one of `movies`, `tvshows` and `music`, or one of the five other declared types, is
-   listed with that type, and an omitted type or `photos` is listed with none. A library of a type
-   other than those three, or of none, has no item added to it by a scan. A name already in use is
+   listed with that type, and an omitted type or `photos` is listed with none. Every library is
+   offered in `/UserViews` as a view, carrying its type there except for `mixed`, an omitted type
+   and `photos`, which carry none. A library of a type other than those three, or of none, has no
+   item added to it by a scan. A name already in use is
    added under that name followed by `2` (then `3`) and answers `204`, where names are compared exactly,
    case included, after §3.6.2's trimming and replacement; an empty or whitespace name answers the
-   validation `400` keyed `name`, a path that does not exist answers `400` with
-   `Error processing request.`, and neither adds a library. Each listed library's `LibraryOptions`
+   validation `400` keyed `name`, and a path that does not exist, a path that is not absolute, or
+   two paths one inside the other answer `400` with `Error processing request.` — and none of them
+   adds a library. A path given more than once is listed once; with no `paths` in the query the
+   body's `LibraryOptions.PathInfos` are the paths, under the same rules, and with neither the
+   library is added and listed with no paths. Each listed library carries its own `ItemId` — two
+   whose names differ only in case included — and no `PrimaryImageItemId`, and its `LibraryOptions`
    carries its paths as `PathInfos` and no other property.
 8. A library added with `refreshLibrary=true`, or scanned through `POST /Library/Refresh`, is
    browsable by an unmodified Jellyfin client signed in as the first account **once the scan the
@@ -525,7 +564,9 @@ What a client can observe change, and what survives a restart:
 *Criteria 3, 4, 5, 7 and 8 were amended on 2026-09-13 by the reading that answered OQ-4, OQ-5 and
 OQ-8, and criteria 7 and 9 the same day by the decisions that closed OQ-6 and OQ-12. Criteria 1, 5,
 7 and 10 were amended on 2026-09-14 at the plan gate, by the decisions that closed OQ-9, OQ-11 and
-OQ-13 and by the rule for a server that held accounts before this feature.*
+OQ-13 and by the rule for a server that held accounts before this feature. Criterion 7 was amended
+again the same day by T1's reading of `/UserViews` over libraries this server does not scan, and a
+third time by the operator's decisions on T1's path, body, image and identifier readings.*
 
 ## 6. Conformance
 
@@ -583,7 +624,7 @@ the pinned version, and is destroyed with everything it wrote — which makes a 
 | OQ-10 | ~~L3 for the setup sequence?~~ **Decided on 2026-09-14: L2, with L3 owed** to the change that lets the harness start this server on nothing (§6) | — | Closed. §6 amended; [plan §8](plan.md#8-testing-strategy) |
 | OQ-11 | ~~How does this server know the address a request came from, and what must an operator behind a reverse proxy do?~~ **Decided on 2026-09-14: a forwarded address is believed only from a proxy declared in the server's configuration, by default this machine's loopback address; a loopback request carrying a forwarded address the server did not believe is from elsewhere; a same-machine proxy that forwards nothing cannot be detected, and setup is finished before one is put in front** (§3.1) | — | Closed. §3.1, AC-5 amended; [plan §6.1](plan.md#6-algorithms) |
 | OQ-12 | ~~Should `library scan` wait for the scan to finish?~~ **Decided on 2026-09-13: no.** It reports that a scan was started and exits, and the scheduled-task list stays outside this feature's surface (§3.7, §3.8). What was weighed: OQ-8 found the two scans differ. A scan started by **adding** a library shows on its row (§3.5), so a client can wait for that one with an operation this feature already serves. A scan started by `POST /Library/Refresh` does not: its `204` is sent as it starts and the row reads `Idle` throughout, and the one place it shows is the server's scheduled-task list, which is not an operation 014 serves. So **library scan** either reports *"a scan was started"* — which is what §3.8 now says — or this feature serves one more of Jellyfin's operations to let it wait | — | Closed. §3.7 and §3.8, AC-9 amended |
-| OQ-13 | ~~What does this server state in `LibraryOptions`?~~ **Decided on 2026-09-14: `PathInfos` only**, the one property this server honours; the other 36 are an accepted gap, and the body sent to §3.6 is accepted with nothing in it applied (§3.5, §3.6) | — | Closed. §3.5, §3.6, AC-7 amended; [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) |
+| OQ-13 | ~~What does this server state in `LibraryOptions`?~~ **Decided on 2026-09-14: `PathInfos` only**, the one property this server honours; the other 36 are an accepted gap, and the body sent to §3.6 is accepted with nothing in it applied (§3.5, §3.6). **Amended on 2026-09-14** by T1's reading that the reference applies the body's `PathInfos` when the query names no paths, and the operator's decision to do the same: that one property is applied, and nothing else is | — | Closed. §3.5, §3.6, AC-7 amended; [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) |
 
 ## 8. References
 

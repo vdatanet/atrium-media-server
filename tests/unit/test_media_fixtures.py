@@ -71,7 +71,7 @@ from tests.fixtures.media import (
     subtitle_packet_seconds,
 )
 from tests.fixtures.media_world import ScannedMediaWorld
-from tests.fixtures.reference_tree import MEDIA_SUBTREE
+from tests.fixtures.reference_tree import MEDIA_SUBTREE, SETUP_FILM, SETUP_SUBTREE
 from tests.fixtures.reference_tree import build as build_reference_tree
 from tests.fixtures.reference_tree import is_complete as reference_tree_is_complete
 from tests.fixtures.reference_tree import libraries as reference_libraries
@@ -831,7 +831,8 @@ def test_the_composed_trees_own_reuse_check_asks_about_files_too(tmp_path: Path)
 
     Both halves of the composition, because a check covering only the 003 tree would be satisfied
     by a tree whose media subtree had gone, and the media world is what the decodable libraries
-    are made of.
+    are made of. And since 014's T1 a third part, the directories no declared library is given and
+    `tools/probe_first_time_setup.py` gives libraries of its own.
     """
     root = build_reference_tree(tmp_path / "tree")
     assert reference_tree_is_complete(root)
@@ -845,6 +846,13 @@ def test_the_composed_trees_own_reuse_check_asks_about_files_too(tmp_path: Path)
     entry = next(one for one in library.entries if not one.path.endswith("/"))
     (root / library.name).joinpath(*entry.path.split("/")).unlink()
     assert not reference_tree_is_complete(root), "the 003 tree is the other half"
+
+    build_reference_tree(root)
+    (root / SETUP_SUBTREE.name / "books" / SETUP_FILM).unlink()
+    assert not reference_tree_is_complete(root), (
+        "014's directories are a third part: a tree without them stands an instance up whose "
+        "setup probe would read a library over nothing and call it a library over one film"
+    )
 
 
 def test_the_mount_preserves_each_files_fixed_time(tmp_path: Path) -> None:

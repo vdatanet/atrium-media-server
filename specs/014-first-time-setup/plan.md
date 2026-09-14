@@ -128,7 +128,7 @@ pyproject.toml                     changed   [project.scripts] atrium-admin
 | `db/models.py`, migration `0013` | changed / new | §4 |
 | `db/repositories.py` | changed | `UserRepository.first()` in insertion order; `rename(user_id, name)` refusing a name `name_normalised` already holds; `LibraryRepository.names()` |
 | `domain/items.py`, `domain/library.py` | changed | §4 |
-| `library/config.py` | changed | `settle_name(requested, taken)` in §3.6.2's order; `create` accepts any `CollectionType` or `None` |
+| `library/config.py` | changed | `settle_name(requested, taken)` in §3.6.2's order; `create` accepts any `CollectionType` or `None`, and **no roots** — `_require_roots` keeps refusing nested ones (§6.6, amended 2026-09-14) |
 | `library/identity.py` | changed | `for_library_configuration` with `None` — **every existing library's identifier unchanged**, asserted (§8) |
 | `library/scanner.py` | new | §6.5 |
 | `users/first_account.py` | new | §6.3 and §6.4 |
@@ -328,9 +328,11 @@ combining mark and a connector.
 - `stop()` sets a flag the progress sink checks; the sink raises, the library's transaction rolls
   back, and the next start rescans it.
 - A library whose type is not in `SCANNED_TYPES`, or is `None`, is handed to `scan()` like any
-  other, and the walker admits no candidate for it. Whether its `CollectionFolder` row is created —
-  and so whether it appears in `/UserViews` — is a reading taken before the code that creates it
-  (§9's second row).
+  other, and the walker admits no candidate for it. **Its `CollectionFolder` row is created like
+  any other's, so it appears in `/UserViews`** — on the reference every library of every type is a
+  view, over one film or over nothing `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]` — and the view's `CollectionType` is the stored
+  type except for `MIXED` and `None`, which emit no key: `mixed` is a type of the library listing
+  and not of a view. *(Amended by T1, 2026-09-14: this bullet left the row to that reading.)*
 
 `refreshLibrary=false` starts nothing. The reference scanned such a library anyway and the spec
 records that the trigger was not isolated (§3.6); starting an unrequested scan here would be
@@ -341,14 +343,30 @@ inventing a trigger nobody measured.
 1. Validation `400` keyed `name` for a missing, empty or whitespace name — FastAPI's own required
    `Query` with a whitespace validator, so the existing handler produces §1.11's map.
 2. `collectionType`: one of the eight → that member; absent or anything else → `None`.
-3. `paths` split on `,`; each must be an existing directory, else `controller_error`. **Relative
-   and nested paths are refused the same way** — 003's `create` already refuses them, and a refusal
-   in the shape the reference uses for a bad path is the least surprising one; neither was measured
-   on the reference, and §9 carries it.
+3. **The paths.** `paths` split on `,`; when the query carries no `paths`, each
+   `LibraryOptions.PathInfos[].Path` of the body instead. Then, in this order, each refusal
+   `controller_error` and adding nothing: a path that is not absolute (`normalise_root`'s own
+   check); a path that is not an existing directory; and two that are one inside the other
+   (`_require_roots`' check). A path given more than once is stored once, which `create` already
+   does for two spellings of one directory (`test_the_same_root_twice_is_one_root`). None at all is not a refusal: the library is created with no
+   roots. *(Amended 2026-09-14.)* This step said relative and nested paths were refused *"on 003's
+   grounds, neither measured"*; **T1 measured them and the reference refuses neither** — a relative
+   path that names a directory from `/`, two nested paths, the same path twice and no `paths` at
+   all each answer `204` and are listed as given, and with no `paths` the body's `PathInfos` become
+   the library's paths `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`. **The operator decided the same day**: the duplicate kept once, no
+   path an empty library, the body's paths used, and the nested and relative refusals kept as a
+   divergence ([behaviours §3.31](../../docs/compatibility/behaviours.md)). `create` therefore
+   accepts an empty tuple of roots, which 003's `_require_roots` refuses today, and keeps refusing
+   nested ones (T5).
 4. `settle_name(name, LibraryRepository.names())` — trim, replace, number from `2`, exact compare.
 5. `library.config.create` in one transaction, then `scanner.request({id}, ADDED)` if
    `refreshLibrary`.
-6. `204`. The body is parsed and nothing in it is applied (OQ-13).
+6. `204`. The body is parsed, and nothing in it is applied **except the `PathInfos` step 3 reads
+   when the query has no `paths`** — OQ-13 as amended on 2026-09-14, on the reference's own
+   behaviour. A listed library carries no `PrimaryImageItemId` (an accepted gap, behaviours §5), and
+   its `ItemId` is its own even beside a library whose name differs only in case, where the
+   reference's listing gives both one ([behaviours §3.32](../../docs/compatibility/behaviours.md)) —
+   which `for_library`'s derivation from the library's own identifier already guarantees.
 
 ### 6.7 The client
 
@@ -402,7 +420,7 @@ argument.
 | AC-4 | `test_startup.py` — complete with no password and no library; a second complete as administrator |
 | AC-5 | `tests/conformance/test_setup_window.py` — §3.1's seven rows as a parametrised table over the five setup routes; the LAN-address-from-this-machine case; a loopback peer with an untrusted `X-Forwarded-For`; a trusted proxy forwarding a remote address; a trusted proxy forwarding loopback |
 | AC-6 | `tests/conformance/test_library_structure.py` — `POST /Library/Refresh` `401`/`403` in both states, admitted as administrator |
-| AC-7 | `test_library_structure.py` — every row of §3.6.1's table stored and listed; `Movies` twice, `movies`, `Movies?`; the validation `400`; the missing-path `400`; no library added by either; `LibraryOptions` carrying `PathInfos` and nothing else; `tests/unit/test_library_naming.py` for `settle_name`; `tests/unit/test_library_identity.py` asserting every existing fixture library's identifier is unchanged |
+| AC-7 | `test_library_structure.py` — every row of §3.6.1's table stored and listed; `Movies` twice, `movies`, `Movies?`; the validation `400`; the missing-path, relative-path and nested-paths `400`s; no library added by any of them; a path given twice listed once; no `paths` and no body paths listed with none; the body's `PathInfos` used when `paths` is absent and ignored when it is present; `Movies` and `movies` listed with two `ItemId`s; no row carrying `PrimaryImageItemId`; `LibraryOptions` carrying `PathInfos` and nothing else; `tests/unit/test_library_naming.py` for `settle_name`; `tests/unit/test_library_identity.py` asserting every existing fixture library's identifier is unchanged |
 | AC-8 | `tests/library/test_scanner.py` — add with `refreshLibrary=true` over the generated fixture tree, `await scanner.idle()`, then `/UserViews` and `/Items` as the first account; the same through `POST /Library/Refresh`; the `204` measured to return before `idle()` resolves |
 | AC-9 | `tests/cli/test_end_to_end.py` — the four commands against a fresh app through a recording transport at `127.0.0.1`; the recorded `(method, path)` set equal to §3.8's list; `library scan` recording exactly one request |
 | AC-10 | `tests/cli/test_refusals.py` — a finished server, a LAN address, a refusal per command, the sentinel-password sweep; `tests/unit/test_import_directions.py` gaining `atrium.cli` |
@@ -422,9 +440,9 @@ belongs to the change that teaches `tools/differential.py` to stand its own Atri
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | **A scan's single transaction holds SQLite's write lock for minutes**, and a sign-in (which writes `last_login_date`) or a playstate flush waits past the busy timeout and fails | High on a real library | High: the server looks broken during every scan | The scanner's task measures a sign-in and a progress report during a scan of the fixture tree. If either fails, the mitigation is a commit per scan phase inside `scanner.py`'s session handling — **not** a change to `scan()`'s contract, which its tests depend on — and the plan is amended with the measurement |
-| A library of an unscannable type is in `/UserViews` on the reference and not here, or the reverse | Medium | Low: a view row more or fewer | The task list's first task is a reading on the single-use instance: `/UserViews` for such libraries and for one with no type, before any code decides the `CollectionFolder` |
-| `CollectionType` in `VirtualFolderInfo` is JSON `null` on the reference where §1.7 predicts absence | Low | Low | The same reading takes the raw key set rather than `dict.get` |
-| Relative, nested or duplicate paths are answered differently by the reference | Medium | Low: an edge no client sends | The same reading takes the three; a difference goes back into spec §3.6 |
+| A library of an unscannable type is in `/UserViews` on the reference and not here, or the reverse | Medium | Low: a view row more or fewer | The task list's first task is a reading on the single-use instance: `/UserViews` for such libraries and for one with no type, before any code decides the `CollectionFolder`. **Read on 2026-09-14: every library is a view** (§6.5) |
+| `CollectionType` in `VirtualFolderInfo` is JSON `null` on the reference where §1.7 predicts absence | Low | Low | The same reading takes the raw key set rather than `dict.get`. **Read on 2026-09-14: absent, as §1.7 predicts, and `PrimaryImageItemId` and `RefreshProgress` likewise** |
+| Relative, nested or duplicate paths are answered differently by the reference | Medium | Low: an edge no client sends | The same reading takes the three; a difference goes back into spec §3.6. **Read on 2026-09-14, and all three are answered differently: `204`, where §6.6 refused.** Decided by the operator the same day: the duplicate kept once, nested and relative refused as a divergence (§6.6) |
 | A proxy on the same machine forwards no address | Low for an operator following the documentation | High: the window is open to the proxy's network until setup finishes | Documented beside `trusted_proxies` and in the client's refusal text; §6.1 says it cannot be detected |
 | Widening `CollectionType` reaches code that matched on three values with an `else` | Medium | Medium: an unscannable library resolved as music (`resolver.py:120-125` today) | `SCANNED_TYPES` keys every scan-side map, and a test scans a `books` library over a music tree and asserts no item |
 | The `\w` difference admits or refuses a username the reference would not | Low | Low | §6.4's explicit category test |
@@ -452,6 +470,11 @@ was not isolated, and a trigger nobody can name is not one this server should in
 **All 37 `LibraryOptions` properties at the reference's defaults** (OQ-13). Identical in shape, and
 every property but the paths would state a behaviour this server does not have — Principle VI's
 plausible-looking stub. Rejected by the operator on 2026-09-14 in favour of the honoured subset.
+
+**Accepting nested and relative paths as the reference does** (T1's reading). Nested roots give a
+file under the inner one two identifiers here, because an item's identifier hashes its path relative
+to its root, and a relative path names whatever the working directory is. Rejected by the operator
+on 2026-09-14 in favour of refusing both ([behaviours §3.31](../../docs/compatibility/behaviours.md)).
 
 **Trusting only the TCP peer** (OQ-11). A proxy on the same machine would make every request local
 and open the window to its whole network. **Keeping uvicorn's default and documenting it** leaves a

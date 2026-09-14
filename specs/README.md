@@ -125,7 +125,7 @@ say how it will be proven is not finished.
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Implemented** | **Implemented** | **Implemented** — eleven of eleven tasks, ten of ten criteria, [AC-9 amended 2026-09-04](012-negotiation-inputs/spec.md#5-acceptance-criteria) |
 | [013](013-artist-registry/) | Artist registry | **Implemented** | **Implemented** | **Implemented** — nine of nine tasks, eight of eight criteria, and **the first feature here whose closing task proved a `level: L3` row against a real Jellyfin** rather than deferring it |
-| [014](014-first-time-setup/) | First-time setup | **Accepted** 2026-09-14 — OQ-1 to OQ-3, OQ-6 and OQ-12 decided and OQ-4 to OQ-8 measured on 2026-09-13; OQ-9 to OQ-11 and OQ-13 closed at the plan gate, no question open | **Accepted** 2026-09-14 | **In review** — [ten tasks](014-first-time-setup/tasks.md), five findings against the plan at their gate |
+| [014](014-first-time-setup/) | First-time setup | **Accepted** 2026-09-14 — OQ-1 to OQ-3, OQ-6 and OQ-12 decided and OQ-4 to OQ-8 measured on 2026-09-13; OQ-9 to OQ-11 and OQ-13 closed at the plan gate, no question open | **Accepted** 2026-09-14 | **Accepted** 2026-09-14 — [ten tasks](014-first-time-setup/tasks.md), five findings against the plan at their gate |
 
 **All thirteen features are implemented** — 008 on 2026-08-29 across fourteen tasks, 011 on
 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, 010 on 2026-09-02 across fifteen,
@@ -136,7 +136,7 @@ reads or offers creates even the first account, so every account in this reposit
 written by a test. It opened with ten questions and no measurements, like 011 and 012; its five
 readings were taken on the single-use reference instance, the only Jellyfin whose first-time setup
 is still unrun, and its five operator decisions beside them, all before it was accepted. **Its plan
-was accepted on 2026-09-14 and its task list is in review**: the four questions the spec left to it are closed, and a fifth nobody had asked — a
+was accepted on 2026-09-14, and so was its task list**: the four questions the spec left to it are closed, and a fifth nobody had asked — a
 server holding accounts from before the feature would have opened its setup window on upgrade — was
 decided with them.
 
