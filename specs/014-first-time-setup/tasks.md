@@ -72,7 +72,7 @@ nothing; `GET /Library/VirtualFolders` is a read and names both seats. The count
 
 ## T1 — The readings the plan could not take from a desk
 
-- [ ] **Changes:** `tools/probe_first_time_setup.py` gains a second walk on the same unconfigured
+- [x] **Changes:** `tools/probe_first_time_setup.py` gains a second walk on the same unconfigured
       instance, after the first finishes, and `notes/first-time-setup-readings.md` records it. It
       reads:
       1. **`/UserViews` as the first account**, after a refresh has gone idle, for one library of
@@ -94,6 +94,21 @@ nothing; `GET /Library/VirtualFolders` is a read and names both seats. The count
   this task lands**. A run that cannot look (the instance does not answer) is retried on that exit
   alone, as on 2026-09-13.
 - **Spec reference:** §3.5, §3.6, §3.6.1, §3.3; plan §9 rows two to four
+- **Done** (2026-09-14, [PR #363](https://github.com/vdatanet/atrium-media-server/pull/363)).
+  **Plan §6.6's refusals were the reference's in neither case they named**, and three readings
+  were not what the documents assumed. Every library of every type is a view — over one film or
+  over nothing — and `mixed` is a type of the listing and not of the view. The reference refuses
+  nested paths, a path given twice, a relative path that names a directory, and no path at all
+  with nothing: each is `204`, and with no `paths` the body's `PathInfos` — which OQ-13 had
+  ignored — become the paths. `PrimaryImageItemId` is not "no value because no artwork" but the
+  library's own id once a scan has generated it an image. And the listing gives `Movies` and
+  `movies` one `ItemId`, found by reading raw keys rather than asked for. Plan §6.4's inference —
+  a refused rename leaves the password — held. **Four decisions, all the operator's, the same
+  day**: duplicate kept once and no path an empty library, nested and relative refused
+  (behaviours §3.31), the body's `PathInfos` used (OQ-13 amended), `PrimaryImageItemId` never sent
+  (behaviours §5), each library its own `ItemId` (behaviours §3.32). The fixture tree gained
+  `FirstTimeSetup/`, through the 003 generator. Readings and the trail in
+  [the note](notes/first-time-setup-readings.md).
 
 ## T2 — Six rows in the surface, and nothing served
 
@@ -161,8 +176,10 @@ nothing; `GET /Library/VirtualFolders` is a read and names both seats. The count
       `collection_type: CollectionType | None`. Revision `0013` and `db/models.py`.
       `library/identity.py` — a declaration with no type. `library/walker.py`,
       `library/resolver.py` and `PRODUCED_BY` keyed on `SCANNED_TYPES`, with no `else` that means
-      music. `library/config.py` — `settle_name`, and `create` accepting any member or `None`. The
-      `CollectionFolder` for an unscannable library as T1 found it.
+      music. `library/config.py` — `settle_name`, and `create` accepting any member or `None`
+      **and no roots at all**, which `_require_roots` refuses today, while it keeps refusing two
+      roots one inside the other (T1's decision A). The `CollectionFolder` for an unscannable
+      library as T1 found it: created like any other's, so every library is a view.
 - **Depends on:** T1
 - **Verified by:**
   - `pytest tests/unit/test_migrations.py` — the generic walk, plus
@@ -173,6 +190,9 @@ nothing; `GET /Library/VirtualFolders` is a read and names both seats. The count
     from the code under test.
   - `pytest tests/unit/test_library_naming.py` — §3.6.2's four steps and the two observable
     consequences of their order; numbering from `2`; `movies` beside `Movies`.
+  - `pytest tests/library/test_config.py` — `test_a_library_with_no_roots_is_refused` becomes a
+    test that `create` with no roots stores a library with none; `test_a_root_inside_another_root_is_refused`
+    and `test_the_same_root_twice_is_one_root` stay green unchanged.
   - `pytest tests/library/test_scan.py` — a `books` library over the music fixture tree scans to no
     item (and fails today, where the resolver's `else` makes music of it); a library with no type
     likewise.
@@ -204,9 +224,13 @@ nothing; `GET /Library/VirtualFolders` is a read and names both seats. The count
 - **Depends on:** T4, T6
 - **Verified by:**
   - `pytest tests/conformance/test_library_structure.py` — AC-6; AC-7 over every row of §3.6.1's
-    table, `Movies` twice, `movies`, `Movies?`, the validation `400`, the path refusals T1 settled,
-    no library added by a refusal, `LibraryOptions` with exactly one key; the body's
-    `LibraryOptions` changing nothing.
+    table, `Movies` twice, `movies`, `Movies?`, the validation `400`; the path rules T1's decisions
+    settled — a path given twice listed once, no `paths` and no body paths added and listed with
+    none, the body's `PathInfos` used when `paths` is absent and ignored when it is present, a
+    relative path and two nested paths each `400` `Error processing request.` and adding no
+    library; `Movies` and `movies` listed with two different `ItemId`s, each its own view's; no
+    listed row carrying `PrimaryImageItemId`; `LibraryOptions` with exactly one key; every body
+    property other than `PathInfos` changing nothing.
   - `pytest tests/conformance/test_setup_window.py` — the seven rows over these three routes, and
     `POST /Library/Refresh` refused `401` to a local caller with no token **during** setup.
   - `pytest tests/library/test_scanner.py::test_ac8_*` — added with `refreshLibrary=true`, then
@@ -235,8 +259,8 @@ nothing; `GET /Library/VirtualFolders` is a read and names both seats. The count
 ## T9 — What this feature owes other documents
 
 - [ ] **Changes:**
-  - `docs/compatibility/behaviours.md` — §4.6, §4.7 and §3.30 lose *"not yet implemented"*; the two
-    §5 rows 014 added lose it too.
+  - `docs/compatibility/behaviours.md` — §4.6, §4.7, §3.30, §3.31 and §3.32 lose *"not yet
+    implemented"*; the three §5 rows 014 added lose it too.
   - `specs/001-server-identity-and-discovery/spec.md` — OQ-3's row points at 014 §2.1 as where it
     was answered.
   - `docs/architecture.md` — the module table gains `cli/` and `library/scanner.py`, and §5's

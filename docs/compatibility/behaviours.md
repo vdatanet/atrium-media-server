@@ -3294,6 +3294,79 @@ is known.
 
 [014 §5 criterion 7](../../specs/014-first-time-setup/spec.md#5-acceptance-criteria)
 
+### 3.31 A nested or relative library path is refused, where the reference adds it — class B, diverged — **decided 2026-09-14, not yet implemented**
+
+**Jellyfin does:** check each path of `POST /Library/VirtualFolders` with a bare directory test and
+nothing else `[source: Emby.Server.Implementations/Library/LibraryManager.cs:3046-3054, 3196-3199 @
+v10.11.11]`, so four requests a reader might expect to be refused answer `204` and add a library
+`[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`:
+
+- **two paths, one inside the other**, are both listed, and the scan that follows finds the inner
+  directory's film once;
+- **the same path twice** is listed twice, and its film is found once;
+- **a relative path** is accepted when it names a directory from the process's working directory —
+  `fixture/…` on an instance whose image declares none — and listed as given, relative; one that
+  names no directory from there is refused like a path that does not exist;
+- **no path at all**, in the query or the body, adds a library with no locations; and with no
+  `paths` in the query, the body's `LibraryOptions.PathInfos` become the library's paths
+  `[source: Jellyfin.Api/Controllers/LibraryStructureController.cs:84-91 @ v10.11.11]`.
+
+**Depends on it:** nobody this project can name. The only caller of the route that either analysed
+client or this repository has is **014's own command-line client** ([014 §3.8](../../specs/014-first-time-setup/spec.md)),
+which is written against this server.
+
+**Atrium does: two of the four as the reference does, and refuses the other two.** A path given
+twice is kept **once** and answered `204`, and a request with no path adds a library with **no
+roots** — an empty library, which is what [014 §3.6.1](../../specs/014-first-time-setup/spec.md)
+already makes of a type this server cannot scan. With no `paths`, the body's `PathInfos` stand in
+and meet the same rules. **Two nested paths, or a relative one, are refused** `400` `text/plain`
+`Error processing request.` — the shape the reference itself answers for a path that does not
+exist ([§1.11](#111-there-are-four-error-shapes-not-one)) — and add no library.
+
+The argument, one per refusal:
+
+- **Nested roots break this server's identity.** An item's identifier here hashes its path relative
+  to its library root (003), so a file under the inner of two nested roots is found twice, under
+  two relative paths and therefore under **two identifiers** — two items for one film, each with its
+  own favourites and resume position. The reference's identifier hashes the absolute path, which is
+  why it found the film once; this server cannot, and 003 already refuses nested roots for exactly
+  this reason.
+- **A relative path means whatever the server's working directory happens to be.** The reference
+  resolves it against its process's, which an operator does not choose and a service manager
+  changes, so the same request names a different directory — or none — depending on how the
+  server was started.
+
+The class is **B**, and diverging from a `204` to a `400` is [§3.0.3](#303-the-shape-of-a-safe-divergence)'s
+fourth and dangerous shape, which is why the refusal is narrow: it is the reference's own refusal
+shape for a path, it applies to two inputs no caller this project knows sends, and it makes no
+library where the reference would have made one this server would then scan wrongly. The duplicate
+is not refused because keeping it once loses nothing the reference kept. Decided by the operator on
+2026-09-14 on T1's reading. No upstream issue is known.
+
+[014 §5 criterion 7](../../specs/014-first-time-setup/spec.md#5-acceptance-criteria)
+
+### 3.32 Two libraries whose names differ in case share one `ItemId` in the listing — class B, diverged — **decided 2026-09-14, not yet implemented**
+
+**Jellyfin does:** list `Movies` and `movies` — two libraries, since names collide exactly
+([§3.30](#330-a-library-name-already-in-use-is-numbered-not-refused--class-b-replicated--decided-2026-09-13-not-yet-implemented)) —
+with **one** `ItemId` in `GET /Library/VirtualFolders`, `movies`'s, while `Movies`'s own view in
+`/UserViews` carries another `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`. The listing finds each library's folder by comparing its path
+**ignoring case** and takes the first match
+`[source: Emby.Server.Implementations/Library/LibraryManager.cs:1319 @ v10.11.11]`, so a client
+that browses `Movies` by the identifier the listing gives it is shown `movies`.
+
+**Depends on it:** nobody can. Atrium's identifiers are not the reference's for any item
+([§1.4](#14-item-identifiers-are-32-lowercase-hex-characters), and §5's row for path-derived
+identifiers), so no client holds the shared value from one server and expects it from the other,
+and a client that browses by it is shown the wrong library on the reference — there is no
+compensation to protect, only a wrong answer to copy.
+
+**Atrium does: each library keeps its own `ItemId`**, the one its view carries. Class B through
+§3.0's second escape hatch: no compensation is possible for a listing that names the wrong
+library. Decided by the operator on 2026-09-14 on T1's reading. No upstream issue is known.
+
+[014 §5 criterion 7](../../specs/014-first-time-setup/spec.md#5-acceptance-criteria)
+
 ## 4. Deliberate exceptions
 
 Every one of them is listed here so it is never mistaken for an oversight — including §4.4, which
@@ -3643,7 +3716,8 @@ undocumented bug.
 | **A playlist item carries no `Path`** ([009 §4](../../specs/009-playlists/spec.md)) | A `Playlist` item fetched with `fields=Path` has none, and its two date fields are its store's rather than a directory's. The reference builds a playlist as a directory under its data path and reports it `[probe: tools/probe_playlist_creation.py, Jellyfin 10.11.11, 2026-08-31]` | Nothing to close: v1's playlists are not files, and reporting a path no file backs would be the worse answer. Visible only to a client that asks for `Path` by name, and neither analysed client does |
 | **A non-administrator cannot rename their own playlist** ([009 §3.8](../../specs/009-playlists/spec.md)) | The music client's rename button answers `403` for every user who is not an administrator — which is what a stock reference server answers too, because the route that client calls is declared elevated `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-08-31]`. This is a reproduced gap, not an introduced one: the reference's own working rename for an owner is `POST /Playlists/{playlistId}`, which no analysed client calls | `UpdatePlaylist` entering the surface, on the day a client is measured calling it. Principle VI keeps it out until then, and 009 §2 records what the exclusion costs |
 | **The rename applies `Name` and nothing else, and refuses every item that is not a playlist** ([009 §3.8](../../specs/009-playlists/spec.md)) | A client that edits a playlist's overview, rating, year, genres or tags through `POST /Items/{itemId}` finds them unchanged, and the same request against a film, an episode, a track or a by-name row is `403` where the reference applies the body. Measured: a whole posted body changes `Overview`, `ForcedSortName`, `OfficialRating`, `CustomRating`, `ProductionYear`, `Genres` and `Tags` on the reference, while `Path` and `IsFolder` are computed and ignored on both `[probe: tools/probe_playlist_rename.py, Jellyfin 10.11.11, 2026-09-01]`. Neither analysed client posts anything but a changed `Name` | Item metadata editing entering the surface with a named consumer — which is more than a route: 004 T10 measured the scan and the refresh already fighting over `Item.name`, so an edited field needs somewhere to live that the next scan does not overwrite. Until then a refusal is the honest answer and a partial apply would be Principle VI's plausible-looking stub |
-| **A library's `LibraryOptions` carries its paths and nothing else** ([014 §3.5](../../specs/014-first-time-setup/spec.md)) — **decided 2026-09-14, not yet implemented** | `GET /Library/VirtualFolders` answers `LibraryOptions` with one property, `PathInfos`, where the reference sends 37 on every library read `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`; and the `LibraryOptions` body of `POST /Library/VirtualFolders` is accepted with nothing in it applied. No analysed client reads the listing; 014's own command-line client reads the name, type and paths | Each property enters with the behaviour it describes — a property is stated only by the change that makes it true, because stating the other 36 at the reference's defaults would describe features this server does not have |
+| **A library's `LibraryOptions` carries its paths and nothing else** ([014 §3.5](../../specs/014-first-time-setup/spec.md)) — **decided 2026-09-14, not yet implemented** | `GET /Library/VirtualFolders` answers `LibraryOptions` with one property, `PathInfos`, where the reference sends 37 on every library read `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`; and the `LibraryOptions` body of `POST /Library/VirtualFolders` is accepted with nothing in it applied **except its `PathInfos`, which are the library's paths when the query names none** — as on the reference `[source: Jellyfin.Api/Controllers/LibraryStructureController.cs:84-91 @ v10.11.11]` `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`, amended 2026-09-14. No analysed client reads the listing; 014's own command-line client reads the name, type and paths | Each property enters with the behaviour it describes — a property is stated only by the change that makes it true, because stating the other 36 at the reference's defaults would describe features this server does not have |
+| **A library row carries no `PrimaryImageItemId`** ([014 §3.5](../../specs/014-first-time-setup/spec.md)) — **decided 2026-09-14, not yet implemented** | `GET /Library/VirtualFolders` never sends the property, where the reference sends the library's own `ItemId` once it has an image — which it generates for a library folder from the images of what its scan found `[source: Emby.Server.Implementations/Library/LibraryManager.cs:1322-1327, Emby.Server.Implementations/Images/CollectionFolderImageProvider.cs:21-40 @ v10.11.11]` `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`. A client that draws a library's picture from it draws none. No analysed client reads the listing | Library images generated by this server: the property is stated by the change that makes the image it names exist |
 | **A library of a type this server cannot scan is created, and stays empty** ([014 §3.6.1](../../specs/014-first-time-setup/spec.md)) — **decided 2026-09-13, not yet implemented** | `POST /Library/VirtualFolders` answers `204` for `musicvideos`, `homevideos`, `boxsets`, `books` and `mixed`, for an omitted type and for the undeclared `photos` — the last two stored with no type — exactly as the reference answers them `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. The library is listed and survives a scan with nothing in it, where the reference scans at least `homevideos`, `musicvideos` and `books` with resolvers of their own `[source: Emby.Server.Implementations/Library/Resolvers/Movies/MovieResolver.cs:32-39, Emby.Server.Implementations/Library/Resolvers/Books/BookResolver.cs:24-29 @ v10.11.11]`. Refusing the type instead was weighed and rejected: it turns a `204` every unattended setup reads into a refusal none of them has met, the dangerous fourth shape of [§3.0.3](#303-the-shape-of-a-safe-divergence) | Each type's resolution rules, in the change that brings it into the roadmap's **Media types** row. Until then 003's three types are the set that is scanned, and 014's **library list** prints the type each library was stored with |
 | **A multi-part film answers one media source per part** ([008 §3.1](../../specs/008-playback-negotiation-and-delivery/spec.md#31-media-sources)) | Two sources on one item, where the reference answers one source, a `PartCount` and a separate route for the rest | Not a gap to close on its own: it follows from 003 §3.3 modelling the parts as one item's sources, and closing it means changing that model or adding `GET /Videos/{id}/AdditionalParts` to the surface |
 

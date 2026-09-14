@@ -212,17 +212,34 @@ AuthenticateByName with the new password                       401
   reading taken before any scan had finished; a scanned library whose films have images carries its
   own id, because the reference generates the library folder a collage
   `[source: Emby.Server.Implementations/Images/CollectionFolderImageProvider.cs:21-40 @ v10.11.11]`.
-  The row is amended with the reading; what this server answers is put to the operator.
+  The row is amended with the reading, and what this server answers was put to the operator (C
+  below).
 - **Plan §6.6's path refusals are contradicted by every case but one.** Nested paths, a doubled
   path, a relative path that resolves and no `paths` at all are `204` on the reference, where §6.6
   refused them on 003's grounds; and with no `paths` the body's `PathInfos` becomes the library's
-  paths, where spec §3.6 and OQ-13 say nothing in the body is applied. **Neither is amended: both
-  are put to the operator**, and plan §6.6 says so beside the steps.
+  paths, where spec §3.6 and OQ-13 say nothing in the body is applied. **Neither was amended by the
+  reading: both were put to the operator** (A and B below).
 - **A listing `ItemId` two libraries share**, found by reading the key set rather than asked for:
   the listing finds a library's folder by its path compared ignoring case
   `[source: Emby.Server.Implementations/Library/LibraryManager.cs:1319 @ v10.11.11]`, so `Movies`
   beside `movies` is listed with `movies`'s. Spec §3.5's `ItemId` row records it; whether this server
-  reproduces it is put to the operator.
+  reproduces it was put to the operator (D below).
+
+### What the operator decided on them, 2026-09-14
+
+Four readings changed something a later task would have to decide, so they went to the operator
+with options and a recommendation before anything was amended, and came back the same day:
+
+| | The reading | Recommended | Decided |
+|---|---|---|---|
+| **A** | Nested, doubled, resolvable-relative and absent paths are all `204` on the reference | Refuse nested, relative and absent | **Mixed**: a doubled path is kept once and `204`; no path adds a library with none — an empty library, as OQ-6 already makes; nested and relative are refused `400` `Error processing request.` and add nothing — [behaviours §3.31](../../../docs/compatibility/behaviours.md), a divergence |
+| **B** | With no `paths`, the body's `PathInfos` become the paths | Use them, and nothing else of the body | **As recommended**: OQ-13 amended, and the paths meet A's rules |
+| **C** | `PrimaryImageItemId` is the library's own id once a scan gave it an image | Never send it | **As recommended**: an accepted gap in [behaviours §5](../../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1), closed by library images this server generates |
+| **D** | `Movies` and `movies` share one listing `ItemId` | Each keeps its own | **As recommended**: a reference defect not reproduced, [behaviours §3.32](../../../docs/compatibility/behaviours.md) |
+
+Carried into spec §3.5, §3.6, AC-7 (extended, the count staying ten) and OQ-13's row; plan §3's
+module table, §6.6, §8's AC-7 row, §9 and §10; and tasks T5 (`create` accepting no roots, the
+nesting refusal kept), T7's verification and T9's list of entries to mark implemented.
 
 ### What the second walk does not say
 
