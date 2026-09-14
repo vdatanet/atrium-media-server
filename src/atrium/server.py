@@ -61,6 +61,7 @@ from atrium.api import (
 )
 from atrium.api import sessions as session_routes
 from atrium.api.playstate import record_stop
+from atrium.compat.client_address import ClientAddressMiddleware
 from atrium.compat.content_type import ContentTypeGateMiddleware
 from atrium.compat.errors import EXCEPTION_HANDLERS
 from atrium.compat.middleware import ResponseHeadersMiddleware
@@ -323,6 +324,12 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     app.add_middleware(ContentProfileMiddleware)
     app.add_middleware(ReadinessMiddleware, readiness=readiness)
     app.add_middleware(ResponseHeadersMiddleware)
+    # Outermost of all: the address a request is from, resolved from the operator's trusted
+    # proxies before any layer or route reads `request.client` or the scheme. It used to be
+    # uvicorn's, applied around the application where no test could see it, and 014's setup
+    # window rests on it now - so it is here, and `main` turns uvicorn's copy off. 014 plan
+    # section 6.1.
+    app.add_middleware(ClientAddressMiddleware, trusted_proxies=settings.network.trusted_proxies)
 
     for router in ROUTERS:
         app.include_router(router)
@@ -382,6 +389,10 @@ def main(argv: list[str] | None = None) -> int:
         port=settings.network.port,
         # Atrium stamps its own; uvicorn's would be replaced anyway, so do not spend the bytes.
         server_header=False,
+        # The application resolves the client address itself, from `network.trusted_proxies`
+        # (compat/client_address.py). uvicorn's own pass would apply a second trust list - its
+        # default, or `FORWARDED_ALLOW_IPS` - to an address that has already been resolved.
+        proxy_headers=False,
         log_config=None,
     )
     return 0

@@ -176,10 +176,14 @@ state file this build creates. Its absence is how a file written before this fea
 # compat/client_address.py
 class ClientAddressMiddleware:            # wraps ProxyHeadersMiddleware; stores scope["state"]["peer"]
     def __init__(self, app: ASGIApp, trusted_proxies: Sequence[str]) -> None: ...
+class Peer(NamedTuple): host: str | None; trusted: bool   # trusted by the resolver's own matching
 FORWARDING_HEADERS: Final = ("x-forwarded-for", "forwarded", "x-real-ip")
+def is_loopback(host: str | None) -> bool: ...
 def is_this_machine(request: Request) -> bool: ...
     # loopback (IPv4, IPv6, and IPv4-mapped IPv6) AND no forwarding header the resolution did not
-    # consume - a header present while the peer was not a trusted proxy means "not believed"
+    # consume - a header present while the peer was not a trusted proxy means "not believed", and
+    # so does `forwarded` or `x-real-ip` without `x-forwarded-for`, which it never reads
+    # (amended at T3, 2026-09-14); no recorded peer means not this machine
 
 # api/deps.py
 async def require_setup_or_administrator(request: Request) -> User | None: ...
@@ -253,15 +257,32 @@ exactly as uvicorn handed it over, then delegates to `ProxyHeadersMiddleware(tru
 settings.network.trusted_proxies)`, which replaces `scope["client"]` with the forwarded address only
 when the peer is trusted. `is_this_machine` then admits only if the resolved address is loopback
 **and** one of two holds: no forwarding header is present, or the recorded peer was a trusted proxy
-(so the header was consumed and the loopback address is the originating client's). A loopback peer
-that is *not* trusted and carries a forwarding header is a proxy the operator did not declare, and
-is refused as from elsewhere.
+**and one of the headers is `X-Forwarded-For`** (so the header was consumed and the loopback address
+is the originating client's). A loopback peer that is *not* trusted and carries a forwarding header
+is a proxy the operator did not declare, and is refused as from elsewhere.
+
+*(Amended at T3, 2026-09-14.)* This paragraph first said *"or the recorded peer was a trusted proxy"*
+alone, and gave as its reason that the header was then consumed. **That reason is true of one header
+in three**: `ProxyHeadersMiddleware` reads `X-Forwarded-For` for the address and never `Forwarded` or
+`X-Real-IP` `[verified against the locked uvicorn 0.52.4, 2026-09-14]`. A declared proxy on this
+machine that names its client in `X-Real-IP` alone — a common way to configure one — leaves every
+request at its own loopback address, and the first wording would have admitted all of them to the
+window. That is spec §3.1's *"a forwarded address the server did not believe"*, so the condition now
+asks for the header the resolution applied. Whether the peer was trusted is decided by the
+resolver's own trust object, recorded before it runs, so the two cannot disagree about a network or
+`"*"`.
 
 **What this cannot see**, and the operator documentation says so beside `trusted_proxies`: a proxy
 on the same machine that forwards nothing. Its requests are indistinguishable from a local client's,
 so setup has to be finished before such a proxy is put in front. `LocalAddress` (001) and the
 authentication remote address (002) read `request.client` today and keep reading it: this change
 makes the address they already get explicit, and with the default list it is the same address.
+**And the same scheme**: `X-Forwarded-Proto` is believed from `127.0.0.1` alone before and after,
+which is the one input `LocalAddress` reads under `use_request_host` — asserted at T3 over
+`create_app`. The one thing an install loses is uvicorn's `FORWARDED_ALLOW_IPS` environment
+variable, which `uvicorn.run` read when it resolved the address and nothing reads now; this server
+never documented it, its configuration is a file (§2), and `trusted_proxies` is its replacement
+*(T3, 2026-09-14)*.
 
 ### 6.2 A state file written before this feature
 

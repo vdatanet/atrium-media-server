@@ -203,3 +203,25 @@ def test_a_broken_data_directory_exits_with_a_reason(
     error = capsys.readouterr().err
     assert error.startswith("atrium:")
     assert "Traceback" not in error
+
+
+def test_uvicorn_does_not_resolve_the_client_address_a_second_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """014 T3: the application resolves the address itself, from `network.trusted_proxies`.
+
+    uvicorn's own pass is on unless it is turned off, and it would apply a second trust list - its
+    default, or `FORWARDED_ALLOW_IPS` - to an address that has already been resolved: a request
+    forwarded through a declared proxy from `127.0.0.1` would have its header believed twice.
+    """
+    import uvicorn
+
+    called: dict[str, object] = {}
+
+    def run(app: object, **kwargs: object) -> None:
+        called.update(kwargs)
+
+    monkeypatch.setattr(uvicorn, "run", run)
+
+    assert main(["--data-dir", str(data_dir(tmp_path / "atrium").root)]) == 0
+    assert called["proxy_headers"] is False
