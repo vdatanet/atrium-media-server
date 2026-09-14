@@ -106,7 +106,7 @@ src/atrium/
 │   ├── items.py                 changed   CollectionType gains five members; SCANNED_TYPES
 │   └── library.py               changed   collection_type: CollectionType | None
 ├── library/
-│   ├── config.py                changed   settle_name; any declared type, or none
+│   ├── config.py                changed   settle_name; any declared type, or none; create_with_view
 │   ├── identity.py              changed   a declaration with no type
 │   └── scanner.py               new       the in-process worker, its state, coalescing
 ├── users/
@@ -128,13 +128,13 @@ pyproject.toml                     changed   [project.scripts] atrium-admin
 | `db/models.py`, migration `0013` | changed / new | §4 |
 | `db/repositories.py` | changed | `UserRepository.first()` in insertion order; `rename(user_id, name) -> bool`, answering `False` and writing nothing for a name another account's `name_normalised` already holds; `count()`, which §6.2's rule logs *(added at T4, 2026-09-14)*; `LibraryRepository.names()` |
 | `domain/items.py`, `domain/library.py` | changed | §4 |
-| `library/config.py` | changed | `settle_name(requested, taken)` in §3.6.2's order; `create` accepts any `CollectionType` or `None`, and **no roots** — `_require_roots` keeps refusing nested ones (§6.6, amended 2026-09-14). **`create` stores the name exactly as given** *(T5, 2026-09-14)*: it stripped it, which would have stored `Movies?`'s settled `Movies ` as `Movies` |
+| `library/config.py` | changed | `settle_name(requested, taken)` in §3.6.2's order; `create` accepts any `CollectionType` or `None`, and **no roots** — `_require_roots` keeps refusing nested ones (§6.6, amended 2026-09-14). **`create` stores the name exactly as given** *(T5, 2026-09-14)*: it stripped it, which would have stored `Movies?`'s settled `Movies ` as `Movies`. **`create_with_view(session, name, collection_type, roots)`** creates the library **and its `CollectionFolder`** inside the caller's transaction, the folder being the resolver's own over no candidates, so the scan after it finds that row unchanged *(operator decision, 2026-09-14; added at T6)* |
 | `library/identity.py` | changed | `for_library_configuration` with `None` — **every existing library's identifier unchanged**, asserted (§8). `None` hashes an empty part where the type goes, and the name is hashed **as given** rather than stripped *(T5, 2026-09-14)*: stripped, `Movies ` over `Movies`'s roots derived `Movies`'s identifier and was refused as a second copy of it |
 | `library/walker.py`, `library/resolver.py` | changed | `extensions_for` and the dispatch keyed on `SCANNED_TYPES`, no `else`; `produced_by` in `domain/items.py` answers the folder alone for any other type *(not drawn until T5, 2026-09-14: §4 named them in prose)* |
 | `api/items.py`, `api/item_dto.py` | changed | `view_collection_type`: the `CollectionType` a view carries — none for `MIXED` and for no type (§6.5) *(T5, 2026-09-14; the tree outgrew its acceptance by this row)* |
 | `library/scanner.py` | new | §6.5 |
 | `users/first_account.py` | new | §6.3 and §6.4 |
-| `server.py` | changed | Two routers before `items.router`; `ClientAddressMiddleware` wrapping uvicorn's `ProxyHeadersMiddleware`, outside every layer that reads the address; the scanner started and stopped in the lifespan; `uvicorn.run(..., proxy_headers=False)` so the resolution is not applied twice. `pyproject.toml` gains `[project.scripts] atrium-admin = "atrium.cli.commands:main"` |
+| `server.py` | changed | Two routers before `items.router`; `ClientAddressMiddleware` wrapping uvicorn's `ProxyHeadersMiddleware`, outside every layer that reads the address; the scanner on `app.state`, started by its first request and stopped in the lifespan (gate finding 1); `uvicorn.run(..., proxy_headers=False)` so the resolution is not applied twice. `pyproject.toml` gains `[project.scripts] atrium-admin = "atrium.cli.commands:main"` |
 
 **No new runtime dependency.** The client uses `httpx`, which the server already depends on, and
 `argparse` and `getpass` from the standard library. `ProxyHeadersMiddleware` is imported from
@@ -215,13 +215,19 @@ def update_first_account(sessions, passwords: Passwords, update: StartupUserUpda
 # library/config.py
 REPLACED_IN_NAMES: Final[frozenset[str]]        # §3.6.2 step 3
 def settle_name(requested: str, taken: Collection[str]) -> str: ...
+def create_with_view(session: Session, name: str, collection_type: CollectionType | str | None,
+                     roots: tuple[str, ...] | list[str], *, case_sensitive_identity: bool = False,
+                     ) -> Library: ...          # the library and its CollectionFolder; never commits
+                                                # (operator decision, 2026-09-14; T6)
 
 # library/scanner.py
 class ScanTrigger(Enum): ADDED = "added"; REFRESH = "refresh"
 @dataclass(frozen=True)
 class LibraryRefresh: status: Literal["Idle", "Active"]; progress: float | None
 class Scanner:
-    def __init__(self, sessions: sessionmaker, settings: Settings, paths: DataPaths) -> None: ...
+    def __init__(self, sessions: sessionmaker, settings: Settings, paths: DataPaths, *,
+                 prober: MediaProber | None = None, subtitle_prober: SubtitleProber | None = None,
+                 ) -> None: ...                 # both handed to scan() unchanged (T6)
     def request(self, library_ids: Collection[str] | None, trigger: ScanTrigger) -> None: ...
     def refresh_state(self, library_id: str) -> LibraryRefresh: ...
     async def stop(self) -> None: ...           # the lifespan stops it; nothing starts it there
@@ -372,7 +378,12 @@ so the content-type gate answers it before the route runs; a body without `Passw
   `ScanTrigger.ADDED` is scanning that library**, and `Idle` with no progress otherwise — the
   reference's own asymmetry (§3.5), which a client can wait on and Atrium's own client does not.
 - `stop()` sets a flag the progress sink checks; the sink raises, the library's transaction rolls
-  back, and the next start rescans it.
+  back, and the next start rescans it. *(T6, 2026-09-14.)* **What the sink raises is a
+  `BaseException`**: `scan()` calls its sink through a reporter that catches `Exception`, disables
+  the sink and lets the scan finish, so a stop raised as an `Exception` would have been logged as a
+  broken progress bar and committed. And **one library asked for by both triggers before its pass
+  starts is scanned once as `ADDED`**, since that is the request a client may be waiting on through
+  the row.
 - A library whose type is not in `SCANNED_TYPES`, or is `None`, is handed to `scan()` like any
   other, and the walker admits no candidate for it. **Its `CollectionFolder` row is created like
   any other's, so it appears in `/UserViews`** — on the reference every library of every type is a
@@ -385,6 +396,13 @@ so the content-type gate answers it before the route runs; a body without `Passw
   configured (`RootUnreadableError`), so such a library never gets its folder and is in no
   `/UserViews` — against spec §3.6.1's *"every library is a view"*, and the reference's view of a
   pathless library was not read. Left to T6 and T7 with the question, not decided at T5.
+  **Decided by the operator on 2026-09-14: a library's `CollectionFolder` is created when the
+  library is created, not only when it is scanned** — `config.create_with_view`, in the one
+  transaction that creates the library — so every library, with no roots, of a type this server
+  does not scan, or not yet scanned, is in `/UserViews` at once, as on the reference; a later scan
+  finds the folder unchanged and neither duplicates nor re-identifies it. **And the worker skips a
+  library with no roots silently**, logging no `ScanRefusedError`, on every pass *(operator
+  decision, 2026-09-14; implemented at T6)*.
 
 `refreshLibrary=false` starts nothing. The reference scanned such a library anyway and the spec
 records that the trigger was not isolated (§3.6); starting an unrequested scan here would be
@@ -415,7 +433,9 @@ inventing a trigger nobody measured.
    and `\t \n \v \f \r U+0085` — and not Python's, which also takes U+001C to U+001F *(T5,
    2026-09-14, read and not measured)*; step 1's validator should use the same rule. `create` then
    stores the settled name as given.
-5. `library.config.create` in one transaction, then `scanner.request({id}, ADDED)` if
+5. `library.config.create_with_view` in one transaction — the library and its `CollectionFolder`
+   together, so it is a view before any scan *(operator decision, 2026-09-14)* — then
+   `scanner.request({id}, ADDED)` if
    `refreshLibrary`.
 6. `204`. The body is parsed, and nothing in it is applied **except the `PathInfos` step 3 reads
    when the query has no `paths`** — OQ-13 as amended on 2026-09-14, on the reference's own

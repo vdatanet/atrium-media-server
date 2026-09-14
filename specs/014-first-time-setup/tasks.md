@@ -302,8 +302,11 @@ when the list goes, all six are counted against the file. Plan §8 amended.
 ## T7 — Listing, adding and refreshing libraries
 
 - [ ] **Changes:** `api/library_structure.py` — the three routes, `VirtualFolderInfo` with
-      `LibraryOptions` carrying `PathInfos` only, and the key presence T1 read. `server.py` — the
-      router. `test_routes.py` — `INTERIM_014` gains the three paths.
+      `LibraryOptions` carrying `PathInfos` only, and the key presence T1 read. **`POST
+      /Library/VirtualFolders` creates the library through `library.config.create_with_view`**, so
+      its `CollectionFolder` exists before any scan *(operator decision, 2026-09-14; the helper
+      landed in T6)*. `server.py` — the router. `test_routes.py` — `INTERIM_014` gains the three
+      paths.
 - **Depends on:** T4, T6
 - **Verified by:**
   - `pytest tests/conformance/test_library_structure.py` — AC-6; AC-7 over every row of §3.6.1's
@@ -311,7 +314,10 @@ when the list goes, all six are counted against the file. Plan §8 amended.
     settled — a path given twice listed once, no `paths` and no body paths added and listed with
     none, the body's `PathInfos` used when `paths` is absent and ignored when it is present, a
     relative path and two nested paths each `400` `Error processing request.` and adding no
-    library; `Movies` and `movies` listed with two different `ItemId`s, each its own view's; no
+    library; **every library added with `refreshLibrary=false` — of a scanned type, an unscanned
+    type, no type, and no paths — in the first account's `/UserViews` with no scan having run**,
+    with the `CollectionType` key T5 settled *(operator decision, 2026-09-14)*;
+    `Movies` and `movies` listed with two different `ItemId`s, each its own view's; no
     listed row carrying `PrimaryImageItemId`; `LibraryOptions` with exactly one key; every body
     property other than `PathInfos` changing nothing.
   - `pytest tests/conformance/test_setup_window.py` — the seven rows over these three routes, and

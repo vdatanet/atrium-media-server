@@ -43,10 +43,14 @@ from dataclasses import replace
 from pathlib import PurePath
 from typing import Final
 
-from atrium.db.repositories import LibraryRepository
+from sqlalchemy.orm import Session as OrmSession
+
+from atrium.compat.dates import utc_now
+from atrium.db.repositories import ItemRepository, LibraryRepository
 from atrium.domain.items import CollectionType
 from atrium.domain.library import Library
 from atrium.library.identity import for_library, for_library_configuration
+from atrium.library.resolver import resolve
 
 
 class LibraryAlreadyDeclaredError(ValueError):
@@ -116,6 +120,44 @@ def create(
         )
     stored = repository.add(library)
     return replace(stored, item_id=for_library(stored.id))
+
+
+def create_with_view(
+    session: OrmSession,
+    name: str,
+    collection_type: CollectionType | str | None,
+    roots: tuple[str, ...] | list[str],
+    *,
+    case_sensitive_identity: bool = False,
+) -> Library:
+    """Declare a library **and write its `CollectionFolder`**, inside the caller's transaction.
+
+    The folder is what makes a library a view, and until 014 T6 only a scan wrote it - so a library
+    with no roots, which a scan refuses, was in no `/UserViews`, and every other library was absent
+    from them until its first scan had finished. **Decided by the operator on 2026-09-14: a
+    library's folder is created when the library is**, so every library is a view the moment it
+    exists, as on the reference (014 spec section 3.6.1, plan section 6.5).
+
+    The folder is the resolver's own - `resolve` over no candidates, which answers the library's
+    folder and nothing else - so the identifier, the name and the sort name are the ones a scan
+    derives, and the scan that follows finds the row already there and **unchanged**: it neither
+    writes a second folder nor re-identifies this one. Its creation date is the moment it was
+    written, which is what a scan stamps on a container it creates.
+
+    Never commits, like `scan`: the library and its folder are one unit of work because the caller
+    opened one, and a refusal from either rolls back both.
+    """
+    library = create(
+        LibraryRepository(session),
+        name,
+        collection_type,
+        roots,
+        case_sensitive_identity=case_sensitive_identity,
+    )
+    (folder,) = resolve(library, ()).items
+    now = utc_now()
+    ItemRepository(session).add(replace(folder, date_created=now, date_modified=now))
+    return library
 
 
 def update(
@@ -298,6 +340,7 @@ __all__ = [
     "FrozenAtCreationError",
     "LibraryAlreadyDeclaredError",
     "create",
+    "create_with_view",
     "normalise_root",
     "settle_name",
     "update",
