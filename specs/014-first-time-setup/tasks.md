@@ -348,7 +348,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
     browsed through `/UserViews` and `/Items` as the first account; the same through
     `POST /Library/Refresh`; each `204` returned before `idle()` resolves.
 - **Spec reference:** §3.5–§3.7; AC-5–AC-8
-- **Done** (2026-09-14). **The whole suite failed with every test passing, on a route the new tests
+- **Done** (2026-09-14, [PR #369](https://github.com/vdatanet/atrium-media-server/pull/369)). **The whole suite failed with every test passing, on a route the new tests
   asked in nearly every case.** `GET /Library/VirtualFolders` was *"asked by no test"* because the L2
   recorder wraps `atrium.server.create_app` in `pytest_configure`, after `conftest.py` has bound the
   original name — so nothing sent to the shared `app` fixture is recorded, T4's window tests
