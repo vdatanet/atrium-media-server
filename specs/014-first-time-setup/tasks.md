@@ -1,9 +1,10 @@
 ---
 feature: 014-first-time-setup
 title: First-time setup — tasks
-status: In review
+status: Accepted
 created: 2026-09-14
 updated: 2026-09-14
+accepted: 2026-09-14
 plan_status_required: Accepted
 ---
 
