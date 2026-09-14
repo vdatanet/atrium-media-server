@@ -3781,9 +3781,9 @@ taken, and what it removes is not a doubt about Atrium but a difference nobody h
 servers agree here.**
 
 **The comparison is still outstanding as a comparison**, and that is a separate sentence.
-`POST /Library/Refresh` is the reference's route and is not in
-[surface.yaml](api-surface-v1.md) — Principle VI keeps an endpoint out until a client is measured
-calling it — so Atrium cannot be asked for a second scan over the wire at all, and 010's report
+`POST /Library/Refresh` is the reference's route, and Atrium serves it nowhere — it has been a
+row of [surface.yaml](api-surface-v1.md) since 014 T2 on 2026-09-14, and no implemented feature
+serves it yet — so Atrium cannot be asked for a second scan over the wire at all, and 010's report
 names the row outstanding with that reason on every run. What is measured above is the half that
 was unmeasurable before, and it is the half this entry was about.
 

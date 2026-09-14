@@ -89,14 +89,21 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     This is the floor of the claim and not the whole of it: L2 is *are the values right for a
     known library*, and a request reaching a route does not make its values right. What it rules
     out is the failure it exists for — an endpoint nothing asks, whose level nobody paid for.
+
+    **Only rows that are served are counted**, decided by the operator on 2026-09-14 when 014 T2
+    put six rows in `surface.yaml` before any of their routes: counted over the whole file, the
+    suite failed on six endpoints no implemented feature serves. A route of an unimplemented
+    feature cannot have paid for L2 — there is nothing to ask — and the sentence above is about a
+    row *declared, served, and asked by no test*. So the set is `IMPLEMENTED_FEATURES`' rows plus
+    `INTERIM_014`: a 014 route that lands in the interim list must be asked from that change on,
+    and at 014 T10 the list goes and every row is counted against the file.
+    `test_routes.py::unasked_endpoints` is the computation, tested there without a session.
     """
     if not session.config.stash.get(WHOLE_SUITE, False) or exitstatus not in (0, None):
         return
-    from tests.conformance.test_routes import endpoints_exercised, surface_paths
+    from tests.conformance.test_routes import unasked_endpoints
 
-    missing = sorted(
-        f"{method} {path}" for method, path in surface_paths() - endpoints_exercised(EXERCISED)
-    )
+    missing = unasked_endpoints(EXERCISED)
     if not missing:
         return
     session.config.stash[UNEXERCISED] = tuple(missing)

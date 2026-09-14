@@ -2428,7 +2428,7 @@ def test_the_endpoints_come_from_the_surface_and_carry_the_level_it_declares() -
     lived in one place would have let two of the three go stale in silence.
     """
     endpoints = differential.load_endpoints(REPO_ROOT / "docs" / "compatibility" / "surface.yaml")
-    assert len(endpoints) == 59
+    assert len(endpoints) == 65
     assert sum(1 for endpoint in endpoints if endpoint.level == "L3") == 10
     assert differential.Endpoint("GET", "/System/Info/Public", "L3", "001") in endpoints
     assert differential.Endpoint("GET", "/Artists", "L3", "005") in endpoints

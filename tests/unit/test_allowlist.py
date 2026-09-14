@@ -259,7 +259,7 @@ def test_every_endpoint_named_is_a_row_of_the_surface() -> None:
         method = re.match(r"^\s+method:\s*(\w+)\s*$", line)
         if method and path:
             rows.add(f"{method.group(1)} {path}")
-    assert len(rows) == 59, "the surface parser and the surface file disagree"
+    assert len(rows) == 65, "the surface parser and the surface file disagree"
 
     named = {entry.endpoint for entry in ENTRIES if entry.endpoint != "*"}
     assert named <= rows, sorted(named - rows)
@@ -653,6 +653,13 @@ THE_RUNS_OWN_ACCOUNT = (
     "POST /Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}",
     "DELETE /Items/{itemId}",
     "POST /Items/{itemId}",
+    # 014's five, which write when admitted and are refusals to the restricted seat on a server
+    # whose setup is finished - so that seat alone is what writes nothing (014 tasks, finding 5).
+    "GET /Startup/User",
+    "POST /Startup/User",
+    "POST /Startup/Complete",
+    "POST /Library/VirtualFolders",
+    "POST /Library/Refresh",
 )
 
 CONTENT_TYPE_ROUTES = (
@@ -703,14 +710,14 @@ def _case_row(**overrides: str) -> dict[str, str]:
 
 def test_the_shipped_request_cases_load() -> None:
     """The floor. Every other test here is about what the loader refuses."""
-    assert len(CASES) > 59
+    assert len(CASES) > 65
     assert CASES[0].endpoint == "GET /System/Info/Public", "the eight L3 rows come first"
 
 
 def test_every_surface_endpoint_has_at_least_one_case() -> None:
-    """AC-3's floor, and it fails on the sixtieth endpoint the day one is added with no case."""
+    """AC-3's floor, and it fails on the sixty-sixth endpoint the day one is added with no case."""
     surface = {f"{row['method']} {row['path']}" for row in SURFACE_ROWS}
-    assert len(surface) == 59, "the surface parser and the surface file disagree"
+    assert len(surface) == 65, "the surface parser and the surface file disagree"
     declared = {case.endpoint for case in CASES}
     assert surface - declared == set(), sorted(surface - declared)
     assert declared - surface == set(), sorted(declared - surface)

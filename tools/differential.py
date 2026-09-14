@@ -3179,10 +3179,10 @@ def reference_rescan(wire: Wire, timeout: float = RESCAN_TIMEOUT) -> str:
 #: the reference's `POST /Library/Refresh` has no Atrium counterpart, so the second scan can be
 #: asked of one server and not of the other.
 NO_SECOND_SCAN = (
-    "Atrium exposes no library-refresh route - `POST /Library/Refresh` is not in "
-    "docs/compatibility/surface.yaml and has no named consumer (Principle VI) - so the second "
-    "scan this row compares can be asked of the reference and not of Atrium. The instance was "
-    "necessary and is not sufficient"
+    "Atrium serves no library-refresh route - `POST /Library/Refresh` is a row of "
+    "docs/compatibility/surface.yaml since 014 T2 and no implemented feature serves it yet - so "
+    "the second scan this row compares can be asked of the reference and not of Atrium. The "
+    "instance was necessary and is not sufficient"
 )
 
 

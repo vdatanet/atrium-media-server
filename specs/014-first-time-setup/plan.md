@@ -405,7 +405,12 @@ inventing a trigger nobody measured.
 rows, so routes that land before the feature closes are held in an `INTERIM_014` list, and
 `LEVELS_DECLARED` gains six `L2`; and `test_allowlist.py` requires a request case for every surface
 row and counts the rows, so six cases — five of them refusals asked as the restricted seat, which
-write nothing — arrive with the six rows.
+write nothing — arrive with the six rows. **A third was found by T2 on 2026-09-14**: the suite's L2
+coverage check failed a run on any row no test request reached, over the whole file, so six rows
+with no route made the suite red with every test passing. The operator decided the same day that
+it counts **served** rows only — the implemented features' plus `INTERIM_014` — so a route is owed
+a request from the change that adds it to the interim list, and from T10 every row is counted
+against the file ([tasks, gate finding 6](tasks.md#6-the-l2-coverage-check-counted-rows-nothing-serves)).
 
 **Every new route is tested through the ASGI transport with an explicit `client=` address**, because
 `httpx.ASGITransport` defaults to `127.0.0.1` and the shared fixture uses `192.168.1.50`: a test that
