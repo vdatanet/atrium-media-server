@@ -390,7 +390,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
   - `pytest tests/unit/test_import_directions.py` — and it fails when `import atrium.db` is added
     to `atrium/cli/client.py`, tried once and reverted.
 - **Spec reference:** §3.8; AC-9, AC-10; plan §6.7
-- **Done** (2026-09-14). **The criterion's own count could not be recorded by any client that
+- **Done** (2026-09-14, [PR #370](https://github.com/vdatanet/atrium-media-server/pull/370)). **The criterion's own count could not be recorded by any client that
   signs in.** AC-9 said `library scan` issues *"exactly one request"*, written on 2026-09-13 with
   OQ-12 to say nothing is sent to learn whether the scan finished; OQ-9, decided the next day, has a
   command that needs a token sign in again, and `POST /Library/Refresh` always needs one. The
