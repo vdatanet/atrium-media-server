@@ -209,7 +209,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
   - `pytest tests/conformance/test_setup_window.py` — §3.1's seven rows over the three routes, each
     with an explicit `client=`; a helper that **requires** the address argument.
 - **Spec reference:** §2.1, §3.1–§3.4; AC-1–AC-5; plan §6.1–§6.4
-- **Done** (2026-09-14). **The test the task asked for could not see the order it was written
+- **Done** (2026-09-14, [PR #366](https://github.com/vdatanet/atrium-media-server/pull/366)). **The test the task asked for could not see the order it was written
   about.** Plan §6.4 puts the rename before the password so that a refused rename keeps the
   password, and it does — but the update is one transaction here, so a refusal rolls back whatever
   was written before it, and swapping the two stays green; the test goes red only when the password
@@ -218,7 +218,8 @@ when the list goes, all six are counted against the file. Plan §8 amended.
   final line feed, so `joan\n` is a valid name there and here, read and not measured; and a request
   with **no body** never reaches the blank-password step — the body is required, declared as on
   the three reporting routes whose `415` behaviours §1.11 measured, so the content-type gate answers
-  it. Plan §6.4 amended with all three, and §3 and §5 with what the carried-over rule needed to be
+  it. And the race §6.3 settles moved out of the route into `read_first_account`, because a route
+  module imports no `sqlalchemy`. Plan §6.4 amended with all three, and §3 and §5 with what the carried-over rule needed to be
   written at all: the data directory and an account count (`carry_over_setup`,
   `UserRepository.count`), and a `Password` that may be `None`. **"Each case fails if the key check
   is removed" is true of no single removal**: running the rule on every file reds the mid-setup
