@@ -1,9 +1,10 @@
 ---
 feature: 014-first-time-setup
 title: First-time setup — implementation plan
-status: In review
+status: Accepted
 created: 2026-09-14
 updated: 2026-09-14
+accepted: 2026-09-14
 spec_status_required: Accepted
 ---
 
@@ -207,8 +208,7 @@ class Scanner:
     def __init__(self, sessions: sessionmaker, settings: Settings, paths: DataPaths) -> None: ...
     def request(self, library_ids: Collection[str] | None, trigger: ScanTrigger) -> None: ...
     def refresh_state(self, library_id: str) -> LibraryRefresh: ...
-    async def run(self) -> None: ...            # the lifespan's task
-    async def stop(self) -> None: ...
+    async def stop(self) -> None: ...           # the lifespan stops it; nothing starts it there
     async def idle(self) -> None: ...           # for tests; the client never sees it
 
 # api/library_structure.py
@@ -246,7 +246,7 @@ def main() -> None: ...
 | Step | Test | Outcome |
 |---|---|---|
 | 1 | `not state.startup_wizard_completed and is_this_machine(request)` | admit, **before any token is read** — the reference admits a caller with a bad token too |
-| 2 | otherwise | `await require_administrator(...)` — the existing `401`, empty `403`, and the 25-byte `403` for a disabled account |
+| 2 | otherwise | `await require_user(request)`, then the administrator check inline raising `EmptyForbiddenError` — the existing `401`, empty `403`, and the 25-byte `403` for a disabled account. **Not a `Depends` on `require_administrator`**: its own `Depends(require_user)` is solved before this dependency's body, and would refuse a local caller with no token before step 1 ran *(amended at the task gate, 2026-09-14)* |
 
 **Resolution, in the order the layers see a request.** `ClientAddressMiddleware` records the peer
 exactly as uvicorn handed it over, then delegates to `ProxyHeadersMiddleware(trusted_hosts=
@@ -310,7 +310,11 @@ combining mark and a connector.
 **One worker, one library at a time, one transaction per library.**
 
 - `request(ids, trigger)` adds the ids (every library for `None`) to a pending set and wakes the
-  worker. It never blocks and never raises, which is what lets both routes answer at once.
+  worker — **starting it on the running loop if this is the first request**. It never blocks and
+  never raises, which is what lets both routes answer at once. *(Amended at the task gate,
+  2026-09-14: the worker was the lifespan's task, and the transport every test here uses runs no
+  lifespan, so AC-8's tests would have waited on a worker nobody started. A server that is never
+  asked to scan now runs no scanning task.)*
 - The worker takes the whole pending set, and for each library opens a session, runs `scan()` in
   `asyncio.to_thread` with the providers built from `settings.providers` and a `ProgressSink` that
   records progress, and commits. A `ScanRefusedError` is logged at WARNING with the library's name
@@ -377,6 +381,13 @@ inventing a trigger nobody measured.
 | The client is pointed at a server that is not Atrium or Jellyfin | `GET /System/Info/Public` fails or lacks `ProductName` | exit `1`, printing what answered | — |
 
 ## 8. Testing strategy
+
+**Two things the suite counts move with the surface, and neither was here until the task gate**
+(2026-09-14): `test_routes.py` asserts that what is served **equals** the implemented features'
+rows, so routes that land before the feature closes are held in an `INTERIM_014` list, and
+`LEVELS_DECLARED` gains six `L2`; and `test_allowlist.py` requires a request case for every surface
+row and counts the rows, so six cases — five of them refusals asked as the restricted seat, which
+write nothing — arrive with the six rows.
 
 **Every new route is tested through the ASGI transport with an explicit `client=` address**, because
 `httpx.ASGITransport` defaults to `127.0.0.1` and the shared fixture uses `192.168.1.50`: a test that
