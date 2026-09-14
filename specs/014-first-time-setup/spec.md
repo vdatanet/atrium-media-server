@@ -1,9 +1,10 @@
 ---
 feature: 014-first-time-setup
 title: First-time setup
-status: Draft
+status: Accepted
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-14
+accepted: 2026-09-14
 amended: 2026-09-13 at the spec gate - OQ-1 decided (the setup window is open to a loopback address only, by changing the reference's first branch and nothing else) and OQ-2 decided (the first account is always MyJellyfinUser); sections 3.1, 3.2 and 3.8, AC-2, AC-5 and AC-10 amended; OQ-11 raised by the first answer. And the same day, OQ-3 decided (a library name already in use is numbered as the reference numbers it); section 3.6 amended and section 3.6.2 added for the order a name is cleaned in; AC-7 amended; OQ-5 widened to confirm that names compare with case. And the same day, at the measurement gate, OQ-4, OQ-5, OQ-7 and OQ-8 answered and OQ-6 half answered by tools/probe_first_time_setup.py on an instance started unconfigured; two claims made from the source withdrawn (the missing-path body, and the empty-name refusal's origin); sections 3.1, 3.3 to 3.7 and 3.8 amended; AC-3, AC-4, AC-5, AC-7 and AC-8 amended; OQ-12 and OQ-13 raised. And the same day, OQ-6 decided (every library type answered and stored as the reference does, a library of a type this server cannot scan staying empty as an accepted gap) and OQ-12 decided (library scan does not wait); sections 3.6, 3.6.1, 3.7 and 3.8 amended; AC-7 and AC-9 amended
 depends_on: [001, 002, 003]
 ---

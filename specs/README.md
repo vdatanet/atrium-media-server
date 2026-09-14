@@ -125,17 +125,18 @@ say how it will be proven is not finished.
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Implemented** | **Implemented** | **Implemented** — eleven of eleven tasks, ten of ten criteria, [AC-9 amended 2026-09-04](012-negotiation-inputs/spec.md#5-acceptance-criteria) |
 | [013](013-artist-registry/) | Artist registry | **Implemented** | **Implemented** | **Implemented** — nine of nine tasks, eight of eight criteria, and **the first feature here whose closing task proved a `level: L3` row against a real Jellyfin** rather than deferring it |
-| [014](014-first-time-setup/) | First-time setup | **Draft** — four open questions, all for the plan gate: OQ-1 to OQ-3, OQ-6 and OQ-12 decided and OQ-4 to OQ-8 measured on 2026-09-13, leaving none for the operator | — | — |
+| [014](014-first-time-setup/) | First-time setup | **Accepted** 2026-09-14 — OQ-1 to OQ-3, OQ-6 and OQ-12 decided and OQ-4 to OQ-8 measured on 2026-09-13; four questions left for the plan gate (OQ-9, OQ-10, OQ-11, OQ-13) | — | — |
 
 **All thirteen features are implemented** — 008 on 2026-08-29 across fourteen tasks, 011 on
 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, 010 on 2026-09-02 across fifteen,
 012 on 2026-09-04 across eleven, and **013 on 2026-09-08 across nine**, which leaves no feature
-`Accepted` and unbuilt. **One draft exists, and it is the first of v2**: 014, opened on 2026-09-13
+`Accepted` and unbuilt among v1's. **The first of v2 is 014**, opened on 2026-09-13 and accepted on 2026-09-14,
 because a server started from scratch is one nobody can sign in to — nothing the server answers,
 reads or offers creates even the first account, so every account in this repository's history was
-written by a test. It opens with ten questions and no measurements, like 011 and 012, and the gate
-that answers them is on the single-use reference instance, the only Jellyfin whose first-time
-setup is still unrun.
+written by a test. It opened with ten questions and no measurements, like 011 and 012; its five
+readings were taken on the single-use reference instance, the only Jellyfin whose first-time setup
+is still unrun, and its five operator decisions beside them, all before it was accepted. Four
+questions are left, and all four belong to its plan.
 
 **013 is the first feature here that closes an accepted gap rather than adding a surface**, and
 the first whose closing task proved a `level: L3` row **against a real Jellyfin** instead of
