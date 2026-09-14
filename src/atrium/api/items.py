@@ -60,7 +60,7 @@ from atrium.db.item_queries import (
     ParentNotFoundError,
 )
 from atrium.db.repositories import LibraryRepository, PlaylistRepository, UserRepository
-from atrium.domain.items import ItemType
+from atrium.domain.items import CollectionType, ItemType
 from atrium.domain.playlists import may_delete
 from atrium.domain.queries import Filter, ItemQuery, SortBy, SortOrder
 from atrium.domain.user import User
@@ -278,10 +278,26 @@ def library_context(libraries: LibraryRepository) -> dict[str, LibraryContext]:
     of libraries at most (plan section 10 argued the same about `/UserViews`)."""
     return {
         library.id: LibraryContext(
-            collection_type=library.collection_type.value, roots=tuple(library.roots)
+            collection_type=view_collection_type(library.collection_type),
+            roots=tuple(library.roots),
         )
         for library in libraries.all()
     }
+
+
+def view_collection_type(collection_type: CollectionType | None) -> str | None:
+    """The `CollectionType` a library's view carries: the type it was created with, except none
+    for `mixed` and for a library with no type.
+
+    Read on the reference, where each of the seven cases 014 creates is a `CollectionFolder` in
+    `/UserViews` and `mixed`, an omitted type and `photos` carry no `CollectionType` key there -
+    so `mixed` is a type of the library listing and not of the view
+    `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]` (014 spec section
+    3.6.1, plan section 6.5). The listing states the stored type, and does not read this.
+    """
+    if collection_type is None or collection_type is CollectionType.MIXED:
+        return None
+    return collection_type.value
 
 
 def aggregates_context(
@@ -691,4 +707,5 @@ __all__ = [
     "router",
     "split_csv",
     "update_item",
+    "view_collection_type",
 ]

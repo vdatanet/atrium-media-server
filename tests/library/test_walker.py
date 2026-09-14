@@ -18,12 +18,13 @@ from pathlib import Path
 
 import pytest
 
-from atrium.domain.items import CollectionType
+from atrium.domain.items import SCANNED_TYPES, CollectionType
 from atrium.library.walker import (
     AUDIO_EXTENSIONS,
     EXTENSIONS,
     VIDEO_EXTENSIONS,
     Skip,
+    extensions_for,
     found,
     is_extra,
     settle,
@@ -106,6 +107,25 @@ def test_the_measured_extensions_are_all_honoured() -> None:
 def test_the_video_and_audio_lists_do_not_overlap() -> None:
     """Measured: the lists do not fall back to one another. An overlap would be the fallback."""
     assert not VIDEO_EXTENSIONS & AUDIO_EXTENSIONS
+
+
+def test_the_extension_lists_are_keyed_on_the_scanned_types_exactly() -> None:
+    """014 plan section 4: every scan-side map is keyed on `SCANNED_TYPES`, and no wider."""
+    assert set(EXTENSIONS) == SCANNED_TYPES
+    for kind in SCANNED_TYPES:
+        assert extensions_for(kind) == EXTENSIONS[kind]
+
+
+@pytest.mark.parametrize("collection_type", [*sorted(set(CollectionType) - SCANNED_TYPES), None])
+def test_a_library_this_server_does_not_scan_admits_no_file(
+    fixture_library: BuiltFixture, collection_type: CollectionType | None
+) -> None:
+    """Walked over the music fixture - every file walked past for its extension, none admitted,
+    and no fallback to another type's list (014 spec section 3.6.1)."""
+    assert extensions_for(collection_type) == frozenset()
+    result = walk(fixture_library.of("music").root, collection_type)
+    assert result.candidates == ()
+    assert Skip.EXTENSION in result.reasons()
 
 
 def test_mp3_is_music_only() -> None:

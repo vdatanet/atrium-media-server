@@ -128,8 +128,10 @@ pyproject.toml                     changed   [project.scripts] atrium-admin
 | `db/models.py`, migration `0013` | changed / new | §4 |
 | `db/repositories.py` | changed | `UserRepository.first()` in insertion order; `rename(user_id, name) -> bool`, answering `False` and writing nothing for a name another account's `name_normalised` already holds; `count()`, which §6.2's rule logs *(added at T4, 2026-09-14)*; `LibraryRepository.names()` |
 | `domain/items.py`, `domain/library.py` | changed | §4 |
-| `library/config.py` | changed | `settle_name(requested, taken)` in §3.6.2's order; `create` accepts any `CollectionType` or `None`, and **no roots** — `_require_roots` keeps refusing nested ones (§6.6, amended 2026-09-14) |
-| `library/identity.py` | changed | `for_library_configuration` with `None` — **every existing library's identifier unchanged**, asserted (§8) |
+| `library/config.py` | changed | `settle_name(requested, taken)` in §3.6.2's order; `create` accepts any `CollectionType` or `None`, and **no roots** — `_require_roots` keeps refusing nested ones (§6.6, amended 2026-09-14). **`create` stores the name exactly as given** *(T5, 2026-09-14)*: it stripped it, which would have stored `Movies?`'s settled `Movies ` as `Movies` |
+| `library/identity.py` | changed | `for_library_configuration` with `None` — **every existing library's identifier unchanged**, asserted (§8). `None` hashes an empty part where the type goes, and the name is hashed **as given** rather than stripped *(T5, 2026-09-14)*: stripped, `Movies ` over `Movies`'s roots derived `Movies`'s identifier and was refused as a second copy of it |
+| `library/walker.py`, `library/resolver.py` | changed | `extensions_for` and the dispatch keyed on `SCANNED_TYPES`, no `else`; `produced_by` in `domain/items.py` answers the folder alone for any other type *(not drawn until T5, 2026-09-14: §4 named them in prose)* |
+| `api/items.py`, `api/item_dto.py` | changed | `view_collection_type`: the `CollectionType` a view carries — none for `MIXED` and for no type (§6.5) *(T5, 2026-09-14; the tree outgrew its acceptance by this row)* |
 | `library/scanner.py` | new | §6.5 |
 | `users/first_account.py` | new | §6.3 and §6.4 |
 | `server.py` | changed | Two routers before `items.router`; `ClientAddressMiddleware` wrapping uvicorn's `ProxyHeadersMiddleware`, outside every layer that reads the address; the scanner started and stopped in the lifespan; `uvicorn.run(..., proxy_headers=False)` so the resolution is not applied twice. `pyproject.toml` gains `[project.scripts] atrium-admin = "atrium.cli.commands:main"` |
@@ -152,6 +154,15 @@ mode. `library_roots` references it with `ON DELETE CASCADE` and foreign keys ar
 runs with them suspended for its duration and verified with `PRAGMA foreign_key_check` before
 commit. **Downgrade refuses** if any row holds a type outside the three or none, naming the rows,
 rather than deleting a library an operator created.
+
+*(Amended at T5, 2026-09-14.)* **Three tables reference `libraries` with `ON DELETE CASCADE`, not
+one** — `library_roots`, `items` and `media_probes` — so a rebuild with foreign keys enforced would
+empty every library of every row, items and their six child tables included. The suspension and the
+orphan check are `db/schema.py`'s `migration_connection`, which every migration already runs
+through; the revision **also refuses a populated rebuild on a connection that enforces them** and
+runs `foreign_key_check` itself, because one test harness (`test_migration_0003.py`'s rollback)
+downgraded through a plain `begin()` and would have lost its film to 0013 in silence. That harness
+now uses `migration_connection`.
 
 **Nothing about users changes in the schema.** The first account is an ordinary row: administrator,
 hidden, content deletion enabled, and `EnableRemoteControlOfOtherUsers` in `policy_extra`
@@ -368,6 +379,12 @@ so the content-type gate answers it before the route runs; a body without `Passw
   view, over one film or over nothing `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]` — and the view's `CollectionType` is the stored
   type except for `MIXED` and `None`, which emit no key: `mixed` is a type of the library listing
   and not of a view. *(Amended by T1, 2026-09-14: this bullet left the row to that reading.)*
+  *(T5, 2026-09-14.)* The folder is the resolver's, written by `scan()` as for every library, and
+  the key's absence is `api/items.py:view_collection_type` feeding `LibraryContext`. **Not covered
+  by this bullet: a library with no roots.** `scan()`'s guard one refuses a library with no roots
+  configured (`RootUnreadableError`), so such a library never gets its folder and is in no
+  `/UserViews` — against spec §3.6.1's *"every library is a view"*, and the reference's view of a
+  pathless library was not read. Left to T6 and T7 with the question, not decided at T5.
 
 `refreshLibrary=false` starts nothing. The reference scanned such a library anyway and the spec
 records that the trigger was not isolated (§3.6); starting an unrequested scan here would be
@@ -394,6 +411,10 @@ inventing a trigger nobody measured.
    accepts an empty tuple of roots, which 003's `_require_roots` refuses today, and keeps refusing
    nested ones (T5).
 4. `settle_name(name, LibraryRepository.names())` — trim, replace, number from `2`, exact compare.
+   The trim and the emptiness check use the platform's whitespace rule — the separator categories
+   and `\t \n \v \f \r U+0085` — and not Python's, which also takes U+001C to U+001F *(T5,
+   2026-09-14, read and not measured)*; step 1's validator should use the same rule. `create` then
+   stores the settled name as given.
 5. `library.config.create` in one transaction, then `scanner.request({id}, ADDED)` if
    `refreshLibrary`.
 6. `204`. The body is parsed, and nothing in it is applied **except the `PathInfos` step 3 reads

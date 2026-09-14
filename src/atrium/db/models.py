@@ -282,18 +282,20 @@ class Library(Base):
 
     __tablename__ = "libraries"
     __table_args__ = (
-        # The three collection types of 003 spec section 3.1, in the schema rather than only in
-        # the resolver. A row with a fourth would be a library nothing knows how to scan, and it
-        # would be written long before anything noticed.
+        # The eight collection types the reference declares, or none (014 spec section 3.6.1,
+        # revision 0013), in the schema rather than only in the domain. Three were here until
+        # 014: a library of another type is now created and stays empty, and what the check still
+        # refuses is a ninth spelling - `photos` is stored as no type, never as itself.
         CheckConstraint(
-            "collection_type IN ('movies', 'tvshows', 'music')",
+            "collection_type IS NULL OR collection_type IN ('movies', 'tvshows', 'music', "
+            "'musicvideos', 'homevideos', 'boxsets', 'books', 'mixed')",
             name="ck_libraries_collection_type",
         ),
     )
 
     id: Mapped[str] = mapped_column(ID, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    collection_type: Mapped[str] = mapped_column(String, nullable=False)
+    collection_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
     case_sensitive_identity: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()

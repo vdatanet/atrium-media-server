@@ -24,21 +24,26 @@ class Library:
     """One configured library. Frozen, like everything a repository hands out."""
 
     id: str
-    """**Allocated once and stored, not derived.** A library is the one thing in 003 that has no
-    stable fact to derive from: its name can be edited and its roots can move, and deriving from
-    either would change every identifier underneath on an edit an operator thinks is cosmetic.
+    """**Derived once from the declaration, then stored** - by
+    `library.identity.for_library_configuration`.
 
-    The consequence is worth stating: *deleting* a library and creating another one with the same
-    name and roots is not the same library, and every item under it gets a new identifier. Editing
-    a library is free; recreating one is not.
+    This said *"allocated, not derived"* until 2026-09-14, which stopped being true on 2026-09-06
+    (003 spec section 3.6, AC-17): a library recreated from the same declaration is the same
+    library. What survived is that the derivation happens once, so editing a name or moving a root
+    afterwards changes no identifier.
     """
 
     name: str
-    collection_type: CollectionType
+    collection_type: CollectionType | None
+    """Any of the eight declared types, or `None` for a library created with none - which is also
+    what an undeclared type such as `photos` is stored as (014 spec section 3.6.1). Only
+    `SCANNED_TYPES` are scanned; every library is a view whatever this holds."""
 
     roots: tuple[str, ...] = ()
     """Absolute paths. A library may have several - the reference had one with two in the OQ-1
-    measurement - and everything an item stores is relative to one of them.
+    measurement - and everything an item stores is relative to one of them. **Or none**, since 014:
+    a library added with no path is a library with no roots, listed and empty (014 spec section
+    3.6).
     """
 
     case_sensitive_identity: bool = False

@@ -63,7 +63,10 @@ class Width(Enum):
 class LibraryContext:
     """What a response needs to know about a library: its declared kind, and where it lives."""
 
-    collection_type: str
+    collection_type: str | None
+    """The `CollectionType` its **view** carries, which is not always the one it was created with:
+    `None` - so the key is absent - for a `mixed` library and an untyped one (014 spec section
+    3.6.1). `api/items.py:library_context` is where that is decided."""
     roots: tuple[str, ...] = ()
 
 

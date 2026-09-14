@@ -114,8 +114,9 @@ def test_a_fresh_database_is_brought_to_the_shipped_head(prepared: DataPaths) ->
     moment `0001` landed, which is what it was for: it named the day the assumption expired
     instead of leaving a stale one passing.
 
-    **It has now done that eleven times**, at `0002` through `0008`, at `0009` and `0010` since
-    013, and at `0011` for the three stream fields `ffprobe` reports and nothing kept.
+    **It has now done that twelve times**, at `0002` through `0008`, at `0009` and `0010` since
+    013, at `0011` for the three stream fields `ffprobe` reports and nothing kept, at `0012` for
+    the zero a non-nullable int leaves behind, and at `0013` for a library of any declared type.
     The literal below is deliberate and is not to be replaced with a lookup of whatever
     the head happens to be: a test that reads the head from the same place the code does asserts
     that two functions agree, which they always will. This one asserts what this build *ships*,
@@ -123,9 +124,9 @@ def test_a_fresh_database_is_brought_to_the_shipped_head(prepared: DataPaths) ->
     """
     engine = create_database_engine(prepared)
     try:
-        assert schema.head_revision(schema.alembic_config(prepared)) == "0012"
+        assert schema.head_revision(schema.alembic_config(prepared)) == "0013"
         schema.ensure_current(engine, prepared)
-        assert schema.current_revision(engine) == "0012"
+        assert schema.current_revision(engine) == "0013"
         with engine.connect() as connection:
             tables = set(inspect(connection).get_table_names())
     finally:

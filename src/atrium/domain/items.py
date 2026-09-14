@@ -63,11 +63,36 @@ class CollectionType(StrEnum):
 
     Not a hint. It selects which resolution rules apply, and `PRODUCED_BY` below is the whole of
     what "a file under a `music` root is never resolved as a movie" means.
+
+    **Eight members, and three of them are scanned** (014 spec section 3.6.1). The reference
+    declares eight `[spec: CollectionTypeOptions]` and a library may be created with any of them,
+    or with none - which is `None` wherever a type is held, never a ninth member, and which is also
+    what the undeclared `photos` is stored as. The five 014 added are created, listed and offered
+    as views, and nothing is ever resolved under them: `SCANNED_TYPES` is the set every scan-side
+    mapping is keyed on, so a type outside it reaches no resolver branch rather than an `else`.
     """
 
     MOVIES = "movies"
     TVSHOWS = "tvshows"
     MUSIC = "music"
+    # 014's five: declared by the reference, accepted at creation, scanned by nothing here.
+    MUSICVIDEOS = "musicvideos"
+    HOMEVIDEOS = "homevideos"
+    BOXSETS = "boxsets"
+    BOOKS = "books"
+    MIXED = "mixed"
+
+
+#: The collection types this server scans - 003's three, and still only those (014 spec section
+#: 3.6.1: *"what widens is only the set a library can be created with"*).
+#:
+#: `walker.EXTENSIONS`, the resolver's dispatch and `PRODUCED_BY` are keyed on exactly this set, and
+#: a test holds each of them to it. A library of any other type, or of none, walks to no candidate,
+#: resolves to its own `CollectionFolder` and nothing else, and is an accepted gap in
+#: docs/compatibility/behaviours.md section 5 rather than a library resolved by the wrong rules.
+SCANNED_TYPES: frozenset[CollectionType] = frozenset(
+    {CollectionType.MOVIES, CollectionType.TVSHOWS, CollectionType.MUSIC}
+)
 
 
 #: The types that exist because a *file* does, and therefore the only ones that carry sources.
@@ -188,6 +213,10 @@ MEDIA_TYPE_OF: Mapping[ItemType, str] = {
 #:
 #: Total over `IN_THE_TREE`. A by-name row is created by a refresh finding a genre on an item, not
 #: by a resolver looking at a file, so no collection type produces one.
+#:
+#: **Keyed on `SCANNED_TYPES` and nothing wider.** A library of a type this server does not scan
+#: produces its `CollectionFolder` alone, which is `produced_by` below rather than five more rows
+#: here: a row per unscanned type would read as five resolution rules that do not exist.
 PRODUCED_BY: Mapping[CollectionType, frozenset[ItemType]] = {
     CollectionType.MOVIES: frozenset({ItemType.COLLECTION_FOLDER, ItemType.MOVIE}),
     CollectionType.TVSHOWS: frozenset(
@@ -202,6 +231,22 @@ PRODUCED_BY: Mapping[CollectionType, frozenset[ItemType]] = {
         }
     ),
 }
+
+#: What a library of a type outside `SCANNED_TYPES`, or of none, may produce: itself.
+ONLY_THE_LIBRARY: frozenset[ItemType] = frozenset({ItemType.COLLECTION_FOLDER})
+
+
+def produced_by(collection_type: CollectionType | None) -> frozenset[ItemType]:
+    """`PRODUCED_BY` for a scanned type, and only the library's own folder for any other or none.
+
+    Every library is a view whatever its type (014 spec section 3.6.1), so the folder is the one
+    type every library produces - and for the five unscanned types and an untyped library it is the
+    only one, which is what makes "a `books` library over a tree of tracks holds no track" a
+    refusal the resolver enforces rather than a branch it happens not to take.
+    """
+    if collection_type is None or collection_type not in SCANNED_TYPES:
+        return ONLY_THE_LIBRARY
+    return PRODUCED_BY[collection_type]
 
 
 @dataclass(frozen=True, slots=True)
@@ -361,11 +406,14 @@ __all__ = [
     "FILE_BACKED",
     "IN_THE_TREE",
     "MEDIA_TYPE_OF",
+    "ONLY_THE_LIBRARY",
     "PARENT_OF",
     "PRODUCED_BY",
+    "SCANNED_TYPES",
     "USER_CREATED",
     "CollectionType",
     "Item",
     "ItemType",
     "MediaSource",
+    "produced_by",
 ]

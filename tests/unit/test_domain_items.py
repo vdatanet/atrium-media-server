@@ -18,13 +18,16 @@ from atrium.domain.items import (
     FILE_BACKED,
     IN_THE_TREE,
     MEDIA_TYPE_OF,
+    ONLY_THE_LIBRARY,
     PARENT_OF,
     PRODUCED_BY,
+    SCANNED_TYPES,
     USER_CREATED,
     CollectionType,
     Item,
     ItemType,
     MediaSource,
+    produced_by,
 )
 
 
@@ -169,7 +172,7 @@ def test_the_leaves_of_the_hierarchy_are_exactly_the_file_backed_types() -> None
     assert IN_THE_TREE - parents - {ItemType.COLLECTION_FOLDER} == FILE_BACKED
 
 
-@pytest.mark.parametrize("collection_type", list(CollectionType))
+@pytest.mark.parametrize("collection_type", sorted(SCANNED_TYPES))
 def test_a_collection_type_produces_only_its_own_types(collection_type: CollectionType) -> None:
     """Spec section 3.1: a file under a music root is never resolved as a movie."""
     produced = PRODUCED_BY[collection_type]
@@ -191,12 +194,49 @@ def test_every_type_in_the_tree_is_produced_by_some_collection_type() -> None:
 
 def test_no_type_is_produced_by_two_collection_types_except_the_library() -> None:
     """Anything else shared would make a resolver's dispatch ambiguous."""
-    for one in CollectionType:
-        for other in CollectionType:
+    for one in SCANNED_TYPES:
+        for other in SCANNED_TYPES:
             if one is other:
                 continue
             shared = PRODUCED_BY[one] & PRODUCED_BY[other]
             assert shared == {ItemType.COLLECTION_FOLDER}, f"{one} and {other} share {shared}"
+
+
+def test_the_collection_types_are_the_references_eight_and_three_are_scanned() -> None:
+    """014 spec section 3.6.1: a library may be created with any of the reference's eight
+    `[spec: CollectionTypeOptions]`, and 003's three are still the only ones scanned.
+
+    **`PRODUCED_BY` is keyed on the scanned set exactly.** A row for an unscanned type would be a
+    resolution rule nothing implements; a scanned type with no row would be a `KeyError` mid-scan.
+    """
+    assert {one.value for one in CollectionType} == {
+        "movies",
+        "tvshows",
+        "music",
+        "musicvideos",
+        "homevideos",
+        "boxsets",
+        "books",
+        "mixed",
+    }
+    assert "photos" not in {one.value for one in CollectionType}, "stored as no type, 3.6.1"
+    assert {one.value for one in SCANNED_TYPES} == {"movies", "tvshows", "music"}
+    assert set(PRODUCED_BY) == SCANNED_TYPES
+
+
+@pytest.mark.parametrize("collection_type", [*sorted(set(CollectionType) - SCANNED_TYPES), None])
+def test_an_unscanned_library_produces_itself_and_nothing_else(
+    collection_type: CollectionType | None,
+) -> None:
+    """Every library is a view whatever its type, and one this server does not scan holds nothing
+    (014 spec section 3.6.1) - so its folder is the one type it produces, and no `else` makes it
+    music."""
+    assert produced_by(collection_type) == ONLY_THE_LIBRARY == {ItemType.COLLECTION_FOLDER}
+
+
+@pytest.mark.parametrize("collection_type", sorted(SCANNED_TYPES))
+def test_a_scanned_library_produces_what_its_row_says(collection_type: CollectionType) -> None:
+    assert produced_by(collection_type) == PRODUCED_BY[collection_type]
 
 
 def test_the_type_values_are_the_references_spellings() -> None:

@@ -266,8 +266,17 @@ def for_season(series_id: str, season_number: int | None) -> str:
     )
 
 
+#: The part a declaration with **no type** puts where a type goes. Empty, and that is the whole
+#: argument for it: no member of `CollectionType` is spelled `""`, so no key a typed declaration
+#: has ever produced has this part, and the parts are NUL-joined, so no typed key can be spelled
+#: into one. What it must not do is move an existing identifier - and it moves none, because a typed
+#: declaration's key is exactly what it was (014 plan section 3; `test_library_identity.py` holds a
+#: committed table of them).
+NO_TYPE = ""
+
+
 def for_library_configuration(
-    collection_type: str,
+    collection_type: str | None,
     name: str,
     roots: Iterable[str],
     *,
@@ -296,11 +305,19 @@ def for_library_configuration(
     the same library, and its items keep the identifiers a client cached. That is a reversal of a
     decision taken when OQ-2 closed, taken deliberately on 2026-09-06 and argued in
     [003 §3.6](../../../specs/003-library-configuration-and-scanning/spec.md), AC-17.
+
+    **`collection_type` may be `None`** since 014, for a library declared with no type, and it
+    hashes `NO_TYPE` in the type's place. The roots may be empty too, which adds no part.
+
+    **The name is hashed as given.** It was stripped here until 2026-09-14, which made `Movies`
+    and `Movies ` one declaration - and 014's naming makes them two libraries, because a replaced
+    character at the end of a name stays a space (014 spec section 3.6.2). Every name no caller
+    padded hashes exactly as it did, which is every declaration this repository makes.
     """
     return derive(
         "Library",
-        CollectionType(collection_type).value,
-        name.strip(),
+        NO_TYPE if collection_type is None else CollectionType(collection_type).value,
+        name,
         "1" if case_sensitive else "0",
         *sorted(roots),
     )
@@ -344,6 +361,7 @@ def _require(item_type: ItemType, rule: IdentityRule) -> None:
 
 __all__ = [
     "ALSO_BY_NAME",
+    "NO_TYPE",
     "RULE_OF",
     "IdentityCollisionError",
     "IdentityRule",
