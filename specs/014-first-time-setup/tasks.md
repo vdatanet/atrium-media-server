@@ -373,14 +373,16 @@ when the list goes, all six are counted against the file. Plan §8 amended.
 
 ## T8 — The client
 
-- [ ] **Changes:** `src/atrium/cli/` and `pyproject.toml`'s `atrium-admin`.
+- [x] **Changes:** `src/atrium/cli/` and `pyproject.toml`'s `atrium-admin`.
       `tests/unit/test_import_directions.py` gains the rule that `atrium.cli` imports nothing from
       `atrium` outside itself, and nothing outside it imports `atrium.cli`.
 - **Depends on:** T7
 - **Verified by:**
   - `pytest tests/cli/test_end_to_end.py` — AC-9: the four commands against a fresh app through a
     recording transport at `127.0.0.1`, the recorded `(method, path)` set equal to §3.8's, and
-    `library scan` recording exactly one request.
+    `library scan` recording `POST /Library/Refresh` once and last, after the public read and the
+    sign-in *(amended at T8, 2026-09-14: "exactly one request", which AC-9 said too and no command
+    that signs in can record — spec §5, plan §6.7)*.
   - `pytest tests/cli/test_refusals.py` — AC-10: a finished server; a LAN address during setup,
     refused with no setup operation recorded; a server refusal per command, printed with its status
     and reason and exit `1`; no `--password` option exists; a sentinel password absent from stdout,
@@ -388,6 +390,32 @@ when the list goes, all six are counted against the file. Plan §8 amended.
   - `pytest tests/unit/test_import_directions.py` — and it fails when `import atrium.db` is added
     to `atrium/cli/client.py`, tried once and reverted.
 - **Spec reference:** §3.8; AC-9, AC-10; plan §6.7
+- **Done** (2026-09-14). **The criterion's own count could not be recorded by any client that
+  signs in.** AC-9 said `library scan` issues *"exactly one request"*, written on 2026-09-13 with
+  OQ-12 to say nothing is sent to learn whether the scan finished; OQ-9, decided the next day, has a
+  command that needs a token sign in again, and `POST /Library/Refresh` always needs one. The
+  command sends three — the public read, the sign-in, the refresh — and AC-9, plan §8 and this
+  task's Verified-by were amended to the refresh once and last, the decided behaviour of both
+  questions unchanged. Four things plan §6.7 left open, pinned there with the date: **the printed
+  name is the one name the listing after the add holds and the listing before it lacked**, because
+  matching by paths and type fails in the case the spec makes ordinary — `Movies` added twice over
+  one directory is two rows differing only in name — so `library add` is three operations; loopback
+  is decided **from the address as written**, a literal address or `localhost`, and no name is
+  looked up; every command reads `/System/Info/Public` first, `library scan` included, so no
+  password is sent to an address with no `ProductName`; and a refusal's reason is the problem
+  details' `title` **with its `errors` map**, or the status line's own reason for the empty `401` and
+  `403`. One more the plan did not say: **argparse accepts any unique prefix of an option**, so
+  `--password secret` would have reached `--password-stdin` and left the password as a positional
+  argument — every parser sets `allow_abbrev=False`, asserted off the parsers and by trying four
+  spellings on each command. A wrong password at sign-in is `401 Error processing request.`, not an
+  empty `401`. The sentinel sweep covers six runs, two of them refusals, and every recorded request's
+  address, headers, body and answer. Tried and reverted, each red: `import atrium.db` in
+  `cli/client.py` and `import atrium.cli.client` in `server.py` (the import rule, both directions),
+  one subparser allowed to abbreviate, a `--password` option, setup's finished check and its loopback
+  check removed, every name taken as loopback, a listing sent after the refresh, the password
+  written to output or into a query, the asked name printed instead of the settled one, a device per
+  invocation, signing in during setup from loopback, the refusal body ignored, `refreshLibrary=false`,
+  the public read skipped, and the standard-input line stripped of more than its line ending.
 
 ## T9 — What this feature owes other documents
 

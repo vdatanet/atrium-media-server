@@ -553,8 +553,8 @@ What a client can observe change, and what survives a restart:
 9. The command-line client performs **setup**, **library add**, **library list** and **library
    scan** end to end against a fresh server, and a run of it issues only the operations §3.8 names —
    asserted by recording every request it makes, not by reading its source. **library scan** issues
-   exactly one request, `POST /Library/Refresh`, and exits zero on its `204` reporting that a scan was
-   started.
+   `POST /Library/Refresh` exactly once, after reading whether the server answers and signing in,
+   and nothing after it; it exits zero on its `204` reporting that a scan was started.
 10. The client exits non-zero and prints the server's status and reason on every refusal, refuses
     **setup** on a server whose setup is finished without calling §3.2 to §3.4, refuses **setup**
     given a non-loopback address while setup is unfinished without calling §3.2 to §3.4 and says it
@@ -566,7 +566,12 @@ OQ-8, and criteria 7 and 9 the same day by the decisions that closed OQ-6 and OQ
 7 and 10 were amended on 2026-09-14 at the plan gate, by the decisions that closed OQ-9, OQ-11 and
 OQ-13 and by the rule for a server that held accounts before this feature. Criterion 7 was amended
 again the same day by T1's reading of `/UserViews` over libraries this server does not scan, and a
-third time by the operator's decisions on T1's path, body, image and identifier readings.*
+third time by the operator's decisions on T1's path, body, image and identifier readings.
+Criterion 9 was amended on 2026-09-14 by T8: it said **library scan** issues *"exactly one request"*,
+written with OQ-12 to say that nothing is issued to learn whether the scan finished — and OQ-9,
+decided the day after, has every command that needs a token sign in again, which `POST
+/Library/Refresh` always does (§3.7). No run could issue one request and sign in; the criterion now
+states the three the command sends, with the one it was written about still exactly once and last.*
 
 ## 6. Conformance
 

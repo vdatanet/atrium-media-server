@@ -52,6 +52,10 @@ dependencies = [
 # module fails the build, and a broken one is worse than none.
 [project.scripts]
 atrium = "atrium.server:main"
+# 014 T8: the command-line client, a second program rather than a subcommand of the server's, so
+# the server's entry point never imports it (014 plan section 10). It needs no dependency of its
+# own: httpx is the server's already, and the rest is the standard library.
+atrium-admin = "atrium.cli.commands:main"
 
 [dependency-groups]
 dev = [

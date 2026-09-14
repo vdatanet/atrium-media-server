@@ -479,3 +479,117 @@ def test_an_image_module_knows_nothing_about_http_or_sql(module: Path) -> None:
         f"about HTTP (006 plan section 3): a header, a status code or a query parameter belongs "
         f"in atrium/api/images.py, and a statement belongs in a repository."
     )
+
+
+# ------------------------------------------------------------------------------------------
+# `cli/` is a client, and the server does not know it exists
+# ------------------------------------------------------------------------------------------
+
+#: 014 spec section 3.8: the client *"reads and writes no file and no store belonging to the
+#: server"*, and that is a property the feature tests rather than asserts. The recording tests in
+#: `tests/cli/` prove what it sends; this proves what it cannot reach for. A module under
+#: `atrium/cli/` that imported `atrium.db` or `atrium.config` would work, pass every one of those
+#: tests, and have a side door into the store the roadmap's constraint forbids - so **nothing of
+#: `atrium` outside `atrium.cli` is importable from it at all**, not only the store. And the other
+#: direction, which plan section 10 gives as the reason the client is a second program: the
+#: server's entry point never imports the client.
+CLIENT = PACKAGE / "cli"
+
+
+def atrium_imports(module: Path) -> set[str]:
+    """Every `atrium` module this one imports, spelled absolutely, relative forms resolved."""
+    package = module.relative_to(PACKAGE.parent).with_suffix("").parts[:-1]
+    return atrium_imports_in(module.read_text(encoding="utf-8"), package)
+
+
+def atrium_imports_in(source: str, package: tuple[str, ...]) -> set[str]:
+    """The same over source text, as if it sat in `package` (`("atrium", "cli")`).
+
+    `from X import Y` names both `X` and `X.Y`, since `Y` may be a module; **except when `X` is a
+    package the statement only reaches through** - `from atrium import cli`, `from .. import
+    server` - where `X` alone would make every such line look like an import of `atrium` itself.
+    """
+    found: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            found |= {alias.name for alias in node.names if alias.name.split(".")[0] == "atrium"}
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                base = list(package[: len(package) - (node.level - 1)])
+                target = ".".join([*base, *([node.module] if node.module else [])])
+            else:
+                target = node.module or ""
+            if target.split(".")[0] != "atrium":
+                continue
+            named = {f"{target}.{alias.name}" for alias in node.names}
+            found |= named if target == "atrium" or not node.module else named | {target}
+    return found
+
+
+def _inside_the_client(name: str) -> bool:
+    return name == "atrium.cli" or name.startswith("atrium.cli.")
+
+
+def client_modules() -> list[Path]:
+    return sorted(CLIENT.rglob("*.py"))
+
+
+def test_there_are_client_modules_to_check() -> None:
+    """A renamed package would otherwise make the sweep below pass over nothing."""
+    assert {path.name for path in client_modules()} >= {"client.py", "commands.py", "__main__.py"}
+
+
+@pytest.mark.parametrize("module", client_modules(), ids=lambda path: path.name)
+def test_the_client_imports_nothing_of_the_server(module: Path) -> None:
+    reached = sorted(name for name in atrium_imports(module) if not _inside_the_client(name))
+    assert not reached, (
+        f"atrium/cli/{module.name} imports {reached}. The client reaches the server through the "
+        f"operations a client has and nothing else (014 spec section 3.8): any part of `atrium` "
+        f"outside `atrium.cli` - the store, the configuration, even the version string - is a "
+        f"way in that the API does not give it."
+    )
+
+
+@pytest.mark.parametrize(
+    "module",
+    [path for path in package_modules() if not path.is_relative_to(CLIENT)],
+    ids=lambda path: path.relative_to(PACKAGE).as_posix(),
+)
+def test_nothing_outside_the_client_imports_it(module: Path) -> None:
+    reached = sorted(name for name in atrium_imports(module) if _inside_the_client(name))
+    assert not reached, (
+        f"atrium/{module.relative_to(PACKAGE).as_posix()} imports {reached}. The server does not "
+        f"know the client exists (014 plan section 10): two programs, and neither entry point "
+        f"imports the other."
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "package", "outside_the_client"),
+    [
+        ("import atrium.db", ("atrium", "cli"), ["atrium.db"]),
+        ("import atrium", ("atrium", "cli"), ["atrium"]),
+        ("from atrium.db import engine", ("atrium", "cli"), ["atrium.db", "atrium.db.engine"]),
+        ("from atrium import __version__", ("atrium", "cli"), ["atrium.__version__"]),
+        ("from .. import server", ("atrium", "cli"), ["atrium.server"]),
+        ("from ..db import models", ("atrium", "cli"), ["atrium.db", "atrium.db.models"]),
+        ("from . import commands", ("atrium", "cli"), []),
+        ("from atrium.cli.client import AdminClient", ("atrium", "cli"), []),
+        ("import httpx", ("atrium", "cli"), []),
+    ],
+)
+def test_the_import_reader_sees_every_spelling(
+    source: str, package: tuple[str, ...], outside_the_client: list[str]
+) -> None:
+    """The sweeps above are only as good as what this reads, so each spelling is asked of it."""
+    found = atrium_imports_in(source, package)
+    assert sorted(name for name in found if not _inside_the_client(name)) == outside_the_client
+
+
+@pytest.mark.parametrize(
+    "source",
+    ["import atrium.cli", "from atrium import cli", "from . import cli", "from .cli import client"],
+)
+def test_the_import_reader_sees_a_server_module_naming_the_client(source: str) -> None:
+    """From the server's side: a module directly under `atrium/`, like `server.py`."""
+    assert any(_inside_the_client(one) for one in atrium_imports_in(source, ("atrium",)))
