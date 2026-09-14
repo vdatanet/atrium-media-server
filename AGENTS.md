@@ -12,13 +12,16 @@ Guidance for anyone — human or agent — making changes in this repository.
 
 ## Where the project is
 
-**All thirteen v1 features are implemented and there is no unbuilt feature**, which has not
-been true before: what comes next is a decision about scope rather than the next unticked task,
-and the standing work is on the *"what this feature owes the next ones"* lists at the end of each
-task file. **The first scope decision is taken — v2 is open, as
+**All thirteen v1 features are implemented**, and from 2026-09-04 to 2026-09-13 there was no
+unbuilt feature at all: what came next was a decision about scope rather than the next unticked
+task, and the standing work is on the *"what this feature owes the next ones"* lists at the end of
+each task file. **The first scope decision is taken — v2 is open, as
 [014](specs/014-first-time-setup/spec.md), whose spec was accepted on 2026-09-14** — because a fresh
-server was one nobody could sign in to. Principle III applies to it in full: its plan was accepted on
-2026-09-14 and so was its task list.
+server was one nobody could sign in to. Principle III applied to it in full: its plan was accepted on
+2026-09-14 and so was its task list, and **all ten of its tasks were done the same day**. It is
+still `Accepted` rather than `Implemented`, because one line of its definition of done is not a task
+anybody here can take: an unmodified Jellyfin client signing in to a server set up by
+`atrium-admin`, which the operator takes with their own apps.
 **[008](specs/008-playback-negotiation-and-delivery/)
 landed on 2026-08-29 across fourteen tasks**, spec, plan and tasks all accepted the same day and
 every one of the fourteen finding something the documents had wrong. Playback is therefore in: the
@@ -164,7 +167,7 @@ indexes, `ImageTags` emittable from `item_images` alone, and the artist **credit
 |---|---|
 | Which features have a spec, a plan, tasks? | [`specs/README.md`](specs/README.md) — the status table |
 | Which tasks are done? | The feature's `tasks.md`. Finished ones are `[x]` and carry a **Done** note saying what the task got wrong |
-| What is next? | The first unticked task in the lowest-numbered feature — and as of 2026-09-04 there is none, so it is the *"what this feature owes the next ones"* list at the end of each `tasks.md`, and a scope decision |
+| What is next? | The first unticked task in the lowest-numbered feature — from 2026-09-04 to 2026-09-13 there was none, and since 014's ten tasks were done on 2026-09-14 there is none again: what is open is 014's one unticked definition-of-done line (the operator's sign-in with a real Jellyfin client), the *"what this feature owes the next ones"* list at the end of each `tasks.md`, and the next scope decision |
 
 The **Done** notes are worth reading before starting the next task. Most of them record something
 the task statement or the plan asserted that turned out to be false, and the same class of mistake

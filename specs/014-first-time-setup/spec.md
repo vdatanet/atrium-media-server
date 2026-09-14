@@ -22,10 +22,14 @@ command-line client that has no other way into the server. After it, any unmodif
 can sign in and browse.
 
 It is the first slice of [v2](../../docs/roadmap.md#v2--the-management-cli), and the smallest one
-that makes the server usable at all. **Today nothing creates even the first account**: no operation
-the server answers, no file it reads and no command it offers brings a user or a library into
-existence, so a server started from scratch is one nobody can sign in to. Every account and every
-library in this repository's history was written by a test.
+that makes the server usable at all. **When this document was written, nothing created even the
+first account**: no operation the server answered, no file it read and no command it offered
+brought a user or a library into existence, so a server started from scratch was one nobody could
+sign in to, and every account and every library in this repository's history had been written by a
+test. *(Written in the present tense until 2026-09-14, when 014's tasks were complete and a hand run
+took a fresh server to a first administrator and a first scanned library through the client alone —
+tasks T10. An unmodified Jellyfin client signing in to one is the operator's to take, and is the
+definition of done's one open line.)*
 
 ## 2. Scope
 

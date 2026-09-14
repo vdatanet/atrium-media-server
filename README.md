@@ -34,8 +34,12 @@ playstate, as of 2026-08-29 playback negotiation and delivery, and as of 2026-09
 011 (subtitle delivery) landed on 2026-08-31, 010 (the conformance harness) on 2026-09-02 across
 fifteen tasks and one amended acceptance criterion, and 012 (negotiation inputs) on 2026-09-04
 across eleven tasks and one more, and 013 (the artist registry) on 2026-09-08. **No v1 feature is
-unbuilt, and v2's first slice is open: [014](specs/014-first-time-setup/spec.md), its spec accepted on 2026-09-14**,
-because before it nothing created the first account on a fresh server. What each
+unbuilt, and v2's first slice is built: [014](specs/014-first-time-setup/spec.md)'s ten tasks were
+complete on 2026-09-14**, because before it nothing created the first account on a fresh server. A
+server started on an empty data directory now reaches a first administrator and a first scanned
+library through `atrium-admin` alone, run by hand at the HTTP level that day; 014 stays `Accepted`
+until the operator signs in to such a server with an unmodified Jellyfin app, the one line of its
+definition of done left open. What each
 implemented feature still owes is written at the end of its own task list rather than here, so it
 cannot go stale inside a status word. The [status table](specs/README.md) is the authority; this
 paragraph is not.
