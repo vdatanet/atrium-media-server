@@ -552,6 +552,12 @@ class LibraryRepository:
         )
         return [_library(row, self._roots(row.id)) for row in rows]
 
+    def names(self) -> list[str]:
+        """Every library's name, exactly as stored - what a new library's name is settled against
+        (014 plan section 6.6 step 4). One statement, where `all` reads every library's roots too.
+        """
+        return list(self._session.execute(select(models.Library.name)).scalars())
+
     def add(self, library: Library) -> Library:
         """Domain object in, domain object out. The flag arrives here once and never again."""
         row = models.Library(

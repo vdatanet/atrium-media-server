@@ -323,7 +323,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
 
 ## T7 — Listing, adding and refreshing libraries
 
-- [ ] **Changes:** `api/library_structure.py` — the three routes, `VirtualFolderInfo` with
+- [x] **Changes:** `api/library_structure.py` — the three routes, `VirtualFolderInfo` with
       `LibraryOptions` carrying `PathInfos` only, and the key presence T1 read. **`POST
       /Library/VirtualFolders` creates the library through `library.config.create_with_view`**, so
       its `CollectionFolder` exists before any scan *(operator decision, 2026-09-14; the helper
@@ -348,6 +348,28 @@ when the list goes, all six are counted against the file. Plan §8 amended.
     browsed through `/UserViews` and `/Items` as the first account; the same through
     `POST /Library/Refresh`; each `204` returned before `idle()` resolves.
 - **Spec reference:** §3.5–§3.7; AC-5–AC-8
+- **Done** (2026-09-14). **The whole suite failed with every test passing, on a route the new tests
+  asked in nearly every case.** `GET /Library/VirtualFolders` was *"asked by no test"* because the L2
+  recorder wraps `atrium.server.create_app` in `pytest_configure`, after `conftest.py` has bound the
+  original name — so nothing sent to the shared `app` fixture is recorded, T4's window tests
+  included, and T7's module only counts because it builds its server through the attribute. Handed
+  on rather than fixed here. Two more the plan did not say. **Plan §6.6 step 1 would have sent
+  two wrong sentences**: a required `Query` makes an absent name `The value 'None' is not valid.`
+  and an empty one `The value '' is not valid.`, where the reference's binder answers all three
+  cases as one — so `name` is optional, as the pinned document declares it, and the route raises
+  the refusal keyed `name` with `The name field is required.`, read and not measured because the
+  reading elided it (plan §6.6 amended). And **every row of `surface.yaml` is now served**, so
+  `test_routes.py`'s check that an unserved row is not counted had no row left to use; it puts the
+  interim list back without `POST /Library/Refresh` for its own length. `settle_name`'s whitespace
+  test is public as `config.is_blank` and `_require_roots` as `require_roots`, `LibraryRepository`
+  gained `names()`, `collectionType` is matched ignoring case, and an empty `paths=` falls back to
+  the body. Four documents said Atrium serves no library-refresh route — `conformance.md`,
+  behaviours, the roadmap and `NO_SECOND_SCAN` — and now say the runners were not taught to ask it.
+  Tried and reverted, each red: the name tested with `str.isspace`, a relative path admitted, the
+  nesting check or the existence check skipped, the body's paths dropped or preferred to the
+  query's, `PrimaryImageItemId` sent, `RefreshProgress` on an idle row, the type matched exactly,
+  `create` without the view, the name not settled, the refresh behind the setup window,
+  `refreshLibrary` ignored, and either route awaiting `idle()` before its `204`.
 
 ## T8 — The client
 
@@ -418,7 +440,10 @@ The feature is done when **all** of these hold:
 
 - **L3 for the six routes** (spec §6, OQ-10): the change that teaches `tools/differential.py` to
   start an Atrium on an empty data directory — which `atrium-admin` is what makes possible without a
-  write to the store — and then compares the setup sequence against the reference's.
+  write to the store — and then compares the setup sequence against the reference's. The same change
+  can teach 010's two `rescan` runners to ask Atrium for the second scan: they ask the reference
+  alone, because they were written when Atrium served no `POST /Library/Refresh`, and it has served
+  one since T7.
 - **The restricted seat** the differential needs is still built by hand, because a second account is
   `POST /Users/New` and the next slice (spec §2).
 - **Bounding the scan's write lock** (plan §9 row one, accepted as a residual risk on 2026-09-14):

@@ -289,8 +289,10 @@ the run carries on to the other twenty-one; and a row that *ran* and measured so
 cites does not predict is an untriaged difference, which keeps the run from being called clean
 exactly as a sweep finding does. Two rows are **not** runnable as comparisons at all today and say
 so every run: *the library changed underneath a rescan* needs a second scan on both servers, and
-Atrium serves no library-refresh route — `POST /Library/Refresh` has been a row of
-[surface.yaml](surface.yaml) since 014 T2 on 2026-09-14, and no implemented feature serves it yet. Their runners take the **reference** half and report outstanding carrying it.
+no runner asks Atrium for one — `POST /Library/Refresh` has been a row of
+[surface.yaml](surface.yaml) since 014 T2 and served since 014 T7, both on 2026-09-14, and the two
+runners were written when Atrium served no library-refresh route and have not been taught to ask
+it. Their runners take the **reference** half and report outstanding carrying it.
 
 **What the sweep sends is checked in too**, as [request-cases.yaml](request-cases.yaml): per
 endpoint, a name, a query, a body, a content type, the **anchors** that fill its path parameters

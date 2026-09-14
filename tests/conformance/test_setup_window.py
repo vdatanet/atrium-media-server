@@ -11,11 +11,16 @@ The applications are built by `create_app`, through the `app` fixture, because `
 answers "not local" for a request the address middleware never saw: an application assembled by
 hand would refuse every local caller and make the admitted rows unreachable.
 
-T7 adds the three library routes to the same table.
+**Five routes share the window, and a sixth does not.** The three startup routes (014 T4) and the
+two library-structure routes (T7) are one table; `POST /Library/Refresh` requires an administrator
+in both states (spec section 3.1, AC-6), so its rows are written apart - and the one that tells the
+two policies apart is a caller on this machine with no token during setup, admitted by the table
+and refused `401` by the refresh.
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -52,6 +57,7 @@ async def ask(
     token: str | None = None,
     json: Any = None,
     headers: dict[str, str] | None = None,
+    params: dict[str, str] | None = None,
 ) -> httpx.Response:
     """One request to `app` from `peer`. The peer is required and never defaulted."""
     sent = dict(headers or {})
@@ -59,7 +65,7 @@ async def ask(
         sent["X-Emby-Token"] = token
     transport = httpx.ASGITransport(app=app, client=(peer, 51234))
     async with httpx.AsyncClient(transport=transport, base_url="http://atrium:8096") as opened:
-        return await opened.request(method, path, json=json, headers=sent)
+        return await opened.request(method, path, json=json, headers=sent, params=params)
 
 
 def make_account(app: FastAPI, name: str, *, administrator: bool) -> User:
@@ -105,24 +111,32 @@ class Route:
     body: Any = None
 
 
-#: The three startup routes, each with the answer it gives a caller the window admits. The
+#: The five setup routes, each with the answer it gives a caller the window admits. The
 #: accounts below exist, so `POST /Startup/User` has an account to update and the read creates
-#: nothing; the update names the first account by its own name, so nothing is renamed.
+#: nothing; the update names the first account by its own name, so nothing is renamed. The add
+#: names no path and asks for no scan, so an admitted one is an empty library and starts nothing.
 ROUTES = (
     Route("GET", "/Startup/User", 200),
     Route("POST", "/Startup/User", 204, {"Name": "Admin", "Password": "a new password"}),
     Route("POST", "/Startup/Complete", 204),
+    Route("GET", "/Library/VirtualFolders", 200),
+    Route("POST", "/Library/VirtualFolders?name=Window", 204),
 )
 
 CALLERS = ("no token", "unknown token", "non-administrator", "administrator")
 
 
 @pytest.fixture
-def world(app: FastAPI) -> FastAPI:
-    """An administrator inserted first - so it is the first account - and a non-administrator."""
+async def world(app: FastAPI) -> AsyncIterator[FastAPI]:
+    """An administrator inserted first - so it is the first account - and a non-administrator.
+
+    The scanner is stopped afterwards, because an admitted refresh starts its worker and a test
+    must not leave a task behind it.
+    """
     make_account(app, "Admin", administrator=True)
     make_account(app, "Viewer", administrator=False)
-    return app
+    yield app
+    await app.state.scanner.stop()
 
 
 async def credential(app: FastAPI, caller: str) -> str | None:
@@ -289,3 +303,41 @@ async def test_a_remote_peer_claiming_loopback_is_elsewhere(world: FastAPI) -> N
         world, REMOTE, "GET", "/Startup/User", headers={"X-Forwarded-For": LOOPBACK}
     )
     assert_refused_empty(answered, 401)
+
+
+# --------------------------------------------------------------------------------------------
+# POST /Library/Refresh is not a setup operation
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("caller", ["no token", "unknown token"])
+async def test_refresh_refuses_this_machine_with_no_token_401_during_setup(
+    world: FastAPI, caller: str
+) -> None:
+    """The row that tells the two policies apart: the window admits this caller on the five routes
+    above and the refresh refuses it, measured **during** setup on the reference
+    `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]` (spec section 3.7)."""
+    token = await credential(world, caller)
+    answered = await ask(world, LOOPBACK, "POST", "/Library/Refresh", token=token)
+    assert_refused_empty(answered, 401)
+    assert world.state.server_state.startup_wizard_completed is False
+    assert world.state.scanner._worker is None, "a refused refresh starts nothing"
+
+
+async def test_refresh_refuses_this_machine_as_a_non_administrator_403_during_setup(
+    world: FastAPI,
+) -> None:
+    token = await credential(world, "non-administrator")
+    answered = await ask(world, LOOPBACK, "POST", "/Library/Refresh", token=token)
+    assert_refused_empty(answered, 403)
+    assert world.state.scanner._worker is None
+
+
+@pytest.mark.parametrize("peer", [LOOPBACK, ELSEWHERE])
+async def test_refresh_admits_an_administrator_during_setup_from_anywhere(
+    world: FastAPI, peer: str
+) -> None:
+    token = await credential(world, "administrator")
+    answered = await ask(world, peer, "POST", "/Library/Refresh", token=token)
+    assert answered.status_code == 204, answered.content
+    assert answered.content == b""

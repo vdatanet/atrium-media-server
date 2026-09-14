@@ -42,6 +42,7 @@ from atrium.api import (
     images,
     instant_mix,
     items,
+    library_structure,
     localization,
     media_info,
     playlists,
@@ -135,6 +136,7 @@ ROUTERS = (
     # 014's first-time setup. Literal paths nothing else owns, placed with the rest before
     # `items.router` so the rule above has no exception to remember.
     startup.router,
+    library_structure.router,
     items.router,
 )
 

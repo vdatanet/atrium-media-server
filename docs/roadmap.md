@@ -174,7 +174,7 @@ has gone away fails too. A status line that overstates the work is the one thing
 to prevent in others, which is why the flip waited for the decision and why the word is bounded:
 **010 is `Implemented` on 2026-09-02** — fifteen of fifteen tasks, eighteen of eighteen criteria —
 and that is not a claim that the harness has swept everything. Six of the twenty named comparisons
-were outstanding with their owners, two of them because Atrium has no library-refresh route to make
+were outstanding with their owners, two of them because Atrium had no library-refresh route to make
 them comparisons at all, and **no `level: L3` row had been shown to reach L3**: no complete sweep of
 the 84 request cases against a real pair was recorded anywhere. Both were on 010's own owes list,
 and the forty-seven differences stay 003's and 004's to decide.

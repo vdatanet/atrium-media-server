@@ -489,3 +489,142 @@ async def test_the_providers_are_built_from_the_providers_settings(
         reasons = [one.enabled() for one in providers]
         assert all(isinstance(reason, str) for reason in reasons)
     assert sorted(closed) == sorted(one.name for one in providers)
+
+
+# ------------------------------------------------------------------------------------------
+# AC-8: through the routes, browsed as the first account
+# ------------------------------------------------------------------------------------------
+
+
+async def _fresh_server(tmp_path: Path) -> Any:
+    """A server nobody has set up, whose scanner is handed the fixture tree's prober, and the
+    first account's token - read into existence, given a password, signed in from this machine."""
+    from atrium.users.first_account import FIRST_ACCOUNT_NAME
+    from tests.conformance.test_setup_window import LOOPBACK, PASSWORD, ask, token_for
+
+    app = create_app(data_dir(tmp_path / "server"))
+    app.state.readiness.mark_ready()
+    app.state.scanner = Scanner(
+        app.state.sessions, app.state.settings, app.state.paths, prober=not_media
+    )
+    assert (await ask(app, LOOPBACK, "GET", "/Startup/User")).status_code == 200
+    updated = await ask(app, LOOPBACK, "POST", "/Startup/User", json={"Password": PASSWORD})
+    assert updated.status_code == 204, updated.content
+    return app, await token_for(app, LOOPBACK, FIRST_ACCOUNT_NAME)
+
+
+async def _browsable_films(app: Any, token: str, name: str) -> tuple[bool, int]:
+    """Whether the first account sees the library as a view, and how many films `/Items` finds
+    under it - both as an unmodified client asks, from elsewhere, with the token."""
+    from tests.conformance.test_setup_window import ELSEWHERE, ask
+
+    viewed = await ask(app, ELSEWHERE, "GET", "/UserViews", token=token)
+    assert viewed.status_code == 200, viewed.content
+    ids = [row["Id"] for row in viewed.json()["Items"] if row["Name"] == name]
+    if not ids:
+        return False, 0
+    films = await ask(
+        app,
+        ELSEWHERE,
+        "GET",
+        "/Items",
+        token=token,
+        params={"parentId": ids[0], "recursive": "true", "includeItemTypes": "Movie"},
+    )
+    assert films.status_code == 200, films.content
+    return True, int(films.json()["TotalRecordCount"])
+
+
+def _films_stored(app: Any) -> int:
+    with session_scope(app.state.sessions) as db:
+        (library,) = LibraryRepository(db).all()
+        stored = ItemRepository(db).by_library(library.id)
+    return sum(1 for one in stored.values() if one.type is ItemType.MOVIE)
+
+
+async def test_ac8_a_library_added_with_refresh_is_browsable_once_its_scan_has_finished(
+    tmp_path: Path, fixture_library: BuiltFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`refreshLibrary=true`: the `204` arrives while the scan it started is held, `idle()` has not
+    resolved, and nothing is browsable yet; once the scan is let go and has finished, the first
+    account browses every film the scan stored (014 spec section 3.6, AC-8)."""
+    from tests.conformance.test_setup_window import LOOPBACK, ask
+
+    app, token = await _fresh_server(tmp_path)
+    scanner: Scanner = app.state.scanner
+    gate = Gate()
+    wrap_scan(monkeypatch, before=lambda _: gate.hold())
+    try:
+        answered = await ask(
+            app,
+            LOOPBACK,
+            "POST",
+            "/Library/VirtualFolders",
+            params={
+                "name": "Movies",
+                "collectionType": "movies",
+                "paths": str(fixture_library.of("movies").root),
+                "refreshLibrary": "true",
+            },
+        )
+        assert answered.status_code == 204, answered.content
+        idle = asyncio.ensure_future(scanner.idle())
+        await gate.wait_reached()
+        assert not idle.done(), "the 204 was sent before the scan it started had finished"
+        assert await _browsable_films(app, token, "Movies") == (True, 0)
+
+        gate.released.set()
+        await asyncio.wait_for(idle, PATIENCE)
+
+        stored = _films_stored(app)
+        assert stored > 0
+        assert await _browsable_films(app, token, "Movies") == (True, stored)
+    finally:
+        gate.released.set()
+        await scanner.stop()
+
+
+async def test_ac8_a_library_scanned_through_refresh_is_browsable_once_the_scan_has_finished(
+    tmp_path: Path, fixture_library: BuiltFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Added with `refreshLibrary=false` - a view with nothing in it, and no scan started - then
+    `POST /Library/Refresh` as the first account, an administrator: its `204` arrives while the
+    scan is held, and the films are browsable once the scan has finished (spec section 3.7)."""
+    from tests.conformance.test_setup_window import ELSEWHERE, LOOPBACK, ask
+
+    app, token = await _fresh_server(tmp_path)
+    scanner: Scanner = app.state.scanner
+    gate = Gate()
+    wrap_scan(monkeypatch, before=lambda _: gate.hold())
+    try:
+        added = await ask(
+            app,
+            LOOPBACK,
+            "POST",
+            "/Library/VirtualFolders",
+            params={
+                "name": "Movies",
+                "collectionType": "movies",
+                "paths": str(fixture_library.of("movies").root),
+            },
+        )
+        assert added.status_code == 204, added.content
+        assert scanner._worker is None, "refreshLibrary=false starts no scan"
+        assert await _browsable_films(app, token, "Movies") == (True, 0)
+
+        answered = await ask(app, ELSEWHERE, "POST", "/Library/Refresh", token=token)
+        assert answered.status_code == 204, answered.content
+        idle = asyncio.ensure_future(scanner.idle())
+        await gate.wait_reached()
+        assert not idle.done(), "the 204 was sent before the scan it started had finished"
+        assert await _browsable_films(app, token, "Movies") == (True, 0)
+
+        gate.released.set()
+        await asyncio.wait_for(idle, PATIENCE)
+
+        stored = _films_stored(app)
+        assert stored > 0
+        assert await _browsable_films(app, token, "Movies") == (True, stored)
+    finally:
+        gate.released.set()
+        await scanner.stop()
