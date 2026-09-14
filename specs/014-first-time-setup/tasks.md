@@ -257,7 +257,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
     likewise.
   - `mypy` — clean, which is the proof every match on the old three was found.
 - **Spec reference:** §3.6, §3.6.1, §3.6.2; AC-7
-- **Done** (2026-09-14, PR pending). **`create` stripped the name, and the strip undid the one
+- **Done** (2026-09-14, [PR #367](https://github.com/vdatanet/atrium-media-server/pull/367)). **`create` stripped the name, and the strip undid the one
   step of §3.6.2's order a client can see**: `Movies?` settles to `Movies `, which `create` stored
   as `Movies` — and the identity key stripped it too, so `Movies ` over `Movies`'s roots derived
   `Movies`'s identifier and would have been refused as a second copy of a library the reference
