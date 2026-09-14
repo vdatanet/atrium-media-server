@@ -301,7 +301,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
     per-phase commits changed nothing; **accepted as a residual risk by the operator on
     2026-09-14**, with the readings in plan §9 and the bound on the owes list below.
 - **Spec reference:** §3.5, §3.6, §3.7; AC-8; plan §6.5, §9 row one
-- **Done** (2026-09-14). **The mitigation the plan prescribed could not reach the lock it was for.**
+- **Done** (2026-09-14, [PR #368](https://github.com/vdatanet/atrium-media-server/pull/368)). **The mitigation the plan prescribed could not reach the lock it was for.**
   Paused after 9 of the music library's 18 rows, a sign-in and a progress report each failed
   `database is locked` after 5.4 s — and a `GET /System/Info/Public` sent alongside waited 5.40 s
   too, because both routes write on the event loop and the engine sets no busy timeout. Per-phase
