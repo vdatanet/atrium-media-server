@@ -63,10 +63,18 @@ IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007", "008
 #: 014 arrives across two route-bearing tasks - the three startup routes (T4) and the three
 #: library routes (T7) - and its six rows reached `surface.yaml` at T2, before either, so the
 #: exact-set check below has to stay meaningful in between: the routes that have landed are listed
-#: here. **Empty at T2**, which is the proof that adding the rows served nothing. It is deleted at
-#: T10, when `"014"` joins the set above - the eighth of these lists, after the seven that went the
-#: same way (014 tasks, gate finding 3).
-INTERIM_014: frozenset[tuple[str, str]] = frozenset()
+#: here. **Empty at T2**, which is the proof that adding the rows served nothing; **T4 added the
+#: three startup routes**, each asked by `test_startup.py` and `test_setup_window.py` in the same
+#: change, because the L2 coverage hook counts what this list serves (014 tasks, gate finding 6).
+#: It is deleted at T10, when `"014"` joins the set above - the eighth of these lists, after the
+#: seven that went the same way (014 tasks, gate finding 3).
+INTERIM_014: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("GET", "/Startup/User"),
+        ("POST", "/Startup/User"),
+        ("POST", "/Startup/Complete"),
+    }
+)
 
 
 def _load_surface_parser() -> Any:

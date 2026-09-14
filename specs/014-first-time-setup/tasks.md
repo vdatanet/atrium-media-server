@@ -189,7 +189,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
 
 ## T4 — The first account and the window
 
-- [ ] **Changes:** `config/state.py` — `setup_recorded`, and the carried-over rule run in
+- [x] **Changes:** `config/state.py` — `setup_recorded`, and the carried-over rule run in
       `create_app` after `ensure_current` (plan §6.2). `db/repositories.py` —
       `UserRepository.first()` ordered by `rowid`, and `rename`. `users/first_account.py`.
       `api/deps.py` — `require_setup_or_administrator` as gate finding 2 shapes it.
@@ -209,6 +209,24 @@ when the list goes, all six are counted against the file. Plan §8 amended.
   - `pytest tests/conformance/test_setup_window.py` — §3.1's seven rows over the three routes, each
     with an explicit `client=`; a helper that **requires** the address argument.
 - **Spec reference:** §2.1, §3.1–§3.4; AC-1–AC-5; plan §6.1–§6.4
+- **Done** (2026-09-14). **The test the task asked for could not see the order it was written
+  about.** Plan §6.4 puts the rename before the password so that a refused rename keeps the
+  password, and it does — but the update is one transaction here, so a refusal rolls back whatever
+  was written before it, and swapping the two stays green; the test goes red only when the password
+  is committed ahead of the rename, which is the reference's own shape of two saves. Two more the
+  plan did not say: the reference's username rule closes on an anchor that also matches before a
+  final line feed, so `joan\n` is a valid name there and here, read and not measured; and a request
+  with **no body** never reaches the blank-password step — the body is required, declared as on
+  the three reporting routes whose `415` behaviours §1.11 measured, so the content-type gate answers
+  it. Plan §6.4 amended with all three, and §3 and §5 with what the carried-over rule needed to be
+  written at all: the data directory and an account count (`carry_over_setup`,
+  `UserRepository.count`), and a `Password` that may be `None`. **"Each case fails if the key check
+  is removed" is true of no single removal**: running the rule on every file reds the mid-setup
+  restart, in the unit test and in `test_startup.py`, and the no-account case; running it on none
+  reds the with-accounts case, in both places, and the no-account case. Every case is red under one
+  of the two, tried and reverted, as were dropping the locality clause
+  (18 window and startup tests red), dropping the unfinished clause (10), a transliterated `\w`
+  pattern (4 username cases) and setting the flag before the file is saved (the `500` case).
 
 ## T5 — A library of any declared type, and a name that is settled
 

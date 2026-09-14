@@ -49,6 +49,7 @@ from atrium.api import (
     resume,
     search,
     similar,
+    startup,
     subtitles,
     system,
     tv_shows,
@@ -75,14 +76,14 @@ from atrium.compat.responses import AtriumJSONResponse
 from atrium.compat.routing import RelaxedPathMiddleware, RouteTable
 from atrium.config.paths import ConfigurationError, DataPaths, resolve_data_dir
 from atrium.config.settings import load as load_settings
-from atrium.config.state import load_or_create
+from atrium.config.state import carry_over_setup, load_or_create
 from atrium.db.engine import (
     create_database_engine,
     session_factory,
     session_scope,
     verify_connection,
 )
-from atrium.db.repositories import SessionRepository, UserDataRepository
+from atrium.db.repositories import SessionRepository, UserDataRepository, UserRepository
 from atrium.db.schema import ensure_current
 from atrium.lifecycle import Readiness, ReadinessMiddleware
 from atrium.media.ffmpeg import ProductionLedger
@@ -130,6 +131,9 @@ ROUTERS = (
     dynamic_hls.router,
     hls_segment.router,
     subtitles.router,
+    # 014's first-time setup. Literal paths nothing else owns, placed with the rest before
+    # `items.router` so the rule above has no exception to remember.
+    startup.router,
     items.router,
 )
 
@@ -152,6 +156,15 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     verify_connection(engine, resolved)
     ensure_current(engine, resolved)
     sessions = session_factory(engine)
+
+    # A state file written before first-time setup existed, on a server that already holds
+    # accounts, is a server that is set up: without this its setup window would open on upgrade
+    # and any process on the machine could set the first account's password. Here and not in
+    # `load_or_create`, because it counts a table only a current schema is trusted to hold, and
+    # once - the rule writes the key that stops it running again. 014 plan section 6.2.
+    with session_scope(sessions) as opened:
+        accounts = UserRepository(opened).count()
+    carry_over_setup(resolved, state, accounts)
 
     # Argon2id's dummy record is hashed here, once, rather than on the first login that needs it.
     # It is what an unknown username is verified against, and a record built lazily would make the
