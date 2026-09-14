@@ -157,7 +157,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
 
 ## T3 — The address a request is from
 
-- [ ] **Changes:** `config/settings.py` — `NetworkSettings.trusted_proxies: list[str] =
+- [x] **Changes:** `config/settings.py` — `NetworkSettings.trusted_proxies: list[str] =
       ["127.0.0.1"]`, with the comment an operator reads: what it is, and that a proxy on this
       machine that forwards no address cannot be told from a local client, so setup is finished
       before one is put in front. `compat/client_address.py` — `ClientAddressMiddleware` and
@@ -174,6 +174,18 @@ when the list goes, all six are counted against the file. Plan §8 amended.
   trust list to an address that has already been resolved. `LocalAddress` (001) is unchanged under
   the default list, asserted by 001's existing tests staying green.
 - **Spec reference:** §3.1, AC-5; plan §6.1
+- **Done** (2026-09-14). **Trusted is not believed, and plan §6.1 said it was.** Its condition
+  admitted a loopback request carrying a forwarding header whenever the peer was a trusted proxy,
+  *"so the header was consumed"* — but uvicorn's resolver reads `X-Forwarded-For` alone, so a
+  declared proxy naming its client in `X-Real-IP` or `Forwarded` leaves every request at its own
+  loopback address, and would have opened the window to everything behind it. The condition now
+  asks for the header the resolution applied, which is spec §3.1's *"did not believe"*; plan §5
+  and §6.1 amended. Two more the plan did not say: `ipaddress` calls `::ffff:127.0.0.1` loopback
+  only from Python 3.13, so the mapped form is unwrapped by hand for the 3.12 floor; and
+  `FORWARDED_ALLOW_IPS`, which `uvicorn.run` read, is read by nothing now. The scheme is unchanged
+  under the default list, asserted through `LocalAddress` under `use_request_host` over
+  `create_app`. Removing the untrusted clause, the `X-Forwarded-For` clause, the middleware in
+  `create_app` and `proxy_headers=False` each went red, tried and reverted.
 
 ## T4 — The first account and the window
 

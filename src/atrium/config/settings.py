@@ -48,6 +48,22 @@ class NetworkSettings(BaseModel):
     #: Derive the advertised address from each request's own host and scheme.
     use_request_host: bool = False
 
+    #: The reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` this server believes.
+    #: Addresses (`"10.0.0.2"`, `"::1"`) or networks (`"10.0.0.0/24"`); `"*"` believes anyone,
+    #: which is only right when nothing but the proxy can reach this port. A request from an
+    #: address listed here is treated as coming from the address the proxy forwarded; from any
+    #: other address the headers are ignored. The default is this machine's IPv4 loopback address
+    #: and nothing else, which is what the server believed before this setting existed.
+    #:
+    #: **It decides who may set the server up** (014 spec section 3.1): until setup is finished,
+    #: only a request from this machine is admitted without an administrator's token, and a
+    #: request that arrives from loopback carrying a forwarded address this server did not
+    #: believe - through a proxy not listed here - counts as from elsewhere. **What it cannot see
+    #: is a proxy on this machine that forwards no address at all**: every request it passes on
+    #: looks like a local client, and the setup window would be open to whatever is behind it. So
+    #: finish setup before putting such a proxy in front of the server.
+    trusted_proxies: list[str] = Field(default_factory=lambda: ["127.0.0.1"])
+
 
 class PasswordSettings(BaseModel):
     """What verifying a password costs, per ADR-0006.
