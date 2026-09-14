@@ -244,8 +244,9 @@ class AddVirtualFolderDto(AtriumModel):         # the optional body; LibraryOpti
     library_options: LibraryOptionsIn | None
 
 # cli/client.py
-class AdminClient:
-    def __init__(self, base_url: str, *, transport: httpx.AsyncBaseTransport | None = None) -> None: ...
+class AdminClient:                              # an async context manager (T8)
+    def __init__(self, base_url: str, *, transport: httpx.AsyncBaseTransport | None = None,
+                 host_name: str | None = None) -> None: ...   # host_name: the DeviceId's (T8)
     async def public_info(self) -> PublicInfo: ...
     async def sign_in(self, username: str, password: str) -> None: ...
     async def first_user(self) -> str: ...
@@ -254,9 +255,19 @@ class AdminClient:
     async def add_library(self, name: str, kind: str | None, paths: Sequence[str]) -> None: ...
     async def libraries(self) -> list[LibraryRow]: ...
     async def refresh(self) -> None: ...
-class Refused(Exception): status: int; reason: str
+class Refused(Exception): method: str; path: str; status: int; reason: str
+class UnreachableError(Exception): ...          # nothing answered -> exit 1 (T8)
+class UnexpectedAnswerError(Exception): ...     # a success not shaped as declared, a
+                                                # /System/Info/Public with no ProductName -> exit 1
+def device_id(host_name: str | None = None) -> str: ...     # atrium-admin-<host name>
+def reason_of(response: httpx.Response) -> str: ...
 
 # cli/commands.py
+class LocalRefusalError(Exception): ...         # -> exit 2, before what it refuses is sent (T8)
+def is_loopback_host(host: str) -> bool: ...    # as written; no name is looked up (T8)
+def password_reader(from_stdin: bool, stdin: TextIO, stderr: TextIO) -> Callable[[], str]: ...
+def settled_names(before: list[LibraryRow], after: list[LibraryRow], kind: str | None
+                  ) -> list[str]: ...           # 6.7's rule for the printed name (T8)
 async def run(argv: Sequence[str], *, stdin: TextIO, stdout: TextIO, stderr: TextIO,
               transport: httpx.AsyncBaseTransport | None = None) -> int: ...
 def main() -> None: ...
@@ -479,6 +490,56 @@ inventing a trigger nobody measured.
   the plain text — and exits `1`; a local refusal exits `2`; success exits `0`. No output path
   receives the password, asserted by feeding a sentinel password and scanning every stream.
 
+*(Amended at T8, 2026-09-14.)* What the bullets above left open, pinned where the client is written:
+
+- **The printed name of `library add` is the one name the listing after the add holds and the
+  listing before it did not.** So the command is three operations of §3.8's — `GET`, `POST`, `GET
+  /Library/VirtualFolders` — and not one. Matching by paths and type, the other rule the gate
+  weighed, is wrong in the case the spec makes ordinary: two libraries may share paths and type,
+  and `Movies` added twice over one directory is two rows that differ only in name. Numbering makes
+  the settled name one the earlier listing cannot hold, whatever else the rows share. Only another
+  administrator adding a library between the two reads gives more than one new name; the candidates
+  are then narrowed to the type sent where that leaves any, and whatever remains is printed, one per
+  line, with a note on stderr, rather than guessed between — the add itself succeeded, so it exits
+  `0`. `settled_names` is the rule, tested alone for the case no request sequence stages on demand.
+- **`--server` is required on every command and has no default**, and must be an `http://` or
+  `https://` address with a host; anything else is argparse's own refusal, exit `2`.
+- **Loopback is decided from the address as written**: a literal IPv4 or IPv6 loopback address, the
+  IPv4-mapped form included, or the name `localhost` (any case, a trailing dot allowed). **No name is
+  looked up** — a courtesy check that resolved names would answer differently from one resolver to
+  the next, and the server's rule decides anyway. `setup` refuses a finished server and, while
+  setup is unfinished, any other address, each after the one `GET /System/Info/Public` and before
+  any setup operation, exit `2`; the second refusal names the loopback address it would work at and
+  says a reverse proxy on the server's machine does not make its callers local (§9's row).
+- **Every command reads `GET /System/Info/Public` first**, `library scan` included, which is what
+  lets the client refuse — exit `1`, nothing further sent — an address where nothing answers or whose
+  answer has no `ProductName`, **before a password is sent to it**.
+- **Who signs in.** `setup` never does. `library add` and `library list` sign in only when the
+  window would not admit them — setup finished, or the address not loopback — and need
+  `--username` then (exit `2` without it, after the public read); `library scan` always signs in and
+  requires `--username`, because §3.7 needs an administrator in both states.
+- **The password source is decided before any request**: `--password-stdin` reads one line and
+  removes its line ending and nothing else; without it a terminal is asked through `getpass`
+  (prompting on stderr); with neither, exit `2` and nothing sent. The line is read only once a
+  password is needed, so a command refused before then asks for none. **Every parser sets
+  `allow_abbrev=False`**: argparse otherwise accepts any unique prefix, so `--password secret` would
+  have reached `--password-stdin` and left `secret` as a positional argument.
+- **The reason printed** is the problem details' `title` — followed by its `errors` map as
+  `key: message` when there is one, so the validation `400` says `name: The name field is required.`
+  rather than only that validation failed — a JSON bare string, the first line of a `text/*` body,
+  or, for the empty `401` and `403`, the status line's own reason (`401 Unauthorized`). The line is
+  `atrium-admin: <METHOD> <path> was refused: <status> <reason>`, naming the operation because
+  `setup` sends three.
+- **A path holding a comma is refused locally**, exit `2`: `paths` is one comma-separated value.
+- **Output.** `setup` prints the administrator's name and `library add` the settled name, each alone
+  on its line, so either can be read by a script; `library list` prints a line per library of
+  tab-separated name, type (`-` for none) and paths; `library scan` prints a sentence saying a scan
+  was started and is not waited for.
+- **`library scan` is three requests, not one** — the public read, the sign-in and `POST
+  /Library/Refresh` — which is why AC-9's *"exactly one request"* was amended the same day (spec §5).
+  What the criterion was written for, on 2026-09-13 with OQ-12, is that nothing is issued to learn
+  whether the scan finished; the sign-in it cannot do without was decided a day later, by OQ-9.
+
 ## 7. Failure handling
 
 | Failure | Detection | Response | Recovery |
@@ -522,7 +583,7 @@ argument.
 | AC-6 | `tests/conformance/test_library_structure.py` — `POST /Library/Refresh` `401`/`403` in both states, admitted as administrator |
 | AC-7 | `test_library_structure.py` — every row of §3.6.1's table stored and listed; `Movies` twice, `movies`, `Movies?`; the validation `400`; the missing-path, relative-path and nested-paths `400`s; no library added by any of them; a path given twice listed once; no `paths` and no body paths listed with none; the body's `PathInfos` used when `paths` is absent and ignored when it is present; `Movies` and `movies` listed with two `ItemId`s; no row carrying `PrimaryImageItemId`; `LibraryOptions` carrying `PathInfos` and nothing else; `tests/unit/test_library_naming.py` for `settle_name`; `tests/unit/test_library_identity.py` asserting every existing fixture library's identifier is unchanged |
 | AC-8 | `tests/library/test_scanner.py` — add with `refreshLibrary=true` over the generated fixture tree, `await scanner.idle()`, then `/UserViews` and `/Items` as the first account; the same through `POST /Library/Refresh`; the `204` measured to return before `idle()` resolves |
-| AC-9 | `tests/cli/test_end_to_end.py` — the four commands against a fresh app through a recording transport at `127.0.0.1`; the recorded `(method, path)` set equal to §3.8's list; `library scan` recording exactly one request |
+| AC-9 | `tests/cli/test_end_to_end.py` — the four commands against a fresh app through a recording transport at `127.0.0.1`; the recorded `(method, path)` set equal to §3.8's list; `library scan` recording `POST /Library/Refresh` once and last, after the public read and the sign-in *(T8, 2026-09-14: this row said "exactly one request", which no command that signs in can record — §6.7)* |
 | AC-10 | `tests/cli/test_refusals.py` — a finished server, a LAN address, a refusal per command, the sentinel-password sweep; `tests/unit/test_import_directions.py` gaining `atrium.cli` |
 
 **Migration `0013`** joins `tests/unit/test_migrations.py`'s generic walk and gains
