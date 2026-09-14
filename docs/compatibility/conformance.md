@@ -289,13 +289,12 @@ the run carries on to the other twenty-one; and a row that *ran* and measured so
 cites does not predict is an untriaged difference, which keeps the run from being called clean
 exactly as a sweep finding does. Two rows are **not** runnable as comparisons at all today and say
 so every run: *the library changed underneath a rescan* needs a second scan on both servers, and
-Atrium has no library-refresh route — `POST /Library/Refresh` is the reference's and is not in
-[surface.yaml](surface.yaml), because Principle VI keeps an endpoint out until a client is measured
-calling it. Their runners take the **reference** half and report outstanding carrying it.
+Atrium serves no library-refresh route — `POST /Library/Refresh` has been a row of
+[surface.yaml](surface.yaml) since 014 T2 on 2026-09-14, and no implemented feature serves it yet. Their runners take the **reference** half and report outstanding carrying it.
 
 **What the sweep sends is checked in too**, as [request-cases.yaml](request-cases.yaml): per
 endpoint, a name, a query, a body, a content type, the **anchors** that fill its path parameters
-and the identities it is meaningful for. AC-3's floor is one case per endpoint — 59 — and 010's own
+and the identities it is meaningful for. AC-3's floor is one case per endpoint — 65 — and 010's own
 gate measured that floor to be *not enough*: both differences it found on `/Items/{itemId}/Similar`
 are invisible to a bare request. **The `level: L3` rows of [surface.yaml](surface.yaml) are
 seeded first**, because that column is a required conformance level and nothing has ever checked

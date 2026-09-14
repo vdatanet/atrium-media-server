@@ -60,6 +60,14 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 #: `test_acceptance.py`'s map instead.
 IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007", "008", "009", "011"})
 
+#: 014 arrives across two route-bearing tasks - the three startup routes (T4) and the three
+#: library routes (T7) - and its six rows reached `surface.yaml` at T2, before either, so the
+#: exact-set check below has to stay meaningful in between: the routes that have landed are listed
+#: here. **Empty at T2**, which is the proof that adding the rows served nothing. It is deleted at
+#: T10, when `"014"` joins the set above - the eighth of these lists, after the seven that went the
+#: same way (014 tasks, gate finding 3).
+INTERIM_014: frozenset[tuple[str, str]] = frozenset()
+
 
 def _load_surface_parser() -> Any:
     """Reuse the parser the surface validator already has, rather than write a second one.
@@ -138,10 +146,11 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
 
     002 arrived across two tasks, 005 across seven, 006 across five, 007 across three, 008 across
     eight, 011 across two and 009 across six, and for the changes between them this set was
-    accompanied by an explicit list of the individual routes that had landed. **All seven lists
-    are gone**: `INTERIM_009` was the last of them, deleted at 009 T14 in the change that put
+    accompanied by an explicit list of the individual routes that had landed. **All seven of those
+    lists are gone**: `INTERIM_009` was the last of them, deleted at 009 T14 in the change that put
     `"009"` in the set above, and what it was holding open - the seven playlist routes of
     `surface.yaml` - is now counted against the file rather than against a list here.
+    `INTERIM_014` above is the eighth, and it goes the same way at 014 T10.
 
     **One route 008 serves is knowingly narrower than the reference's**, and it is recorded here
     because nothing else in this file would say so: `/Audio/{itemId}/universal` with
@@ -152,7 +161,17 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     playlist pair is a surface decision under AGENTS.md's "Adding an endpoint" procedure, and it
     is on 008's list of what it owes the features after it.
     """
-    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES)
+    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES) | INTERIM_014
+
+
+def test_the_interim_list_names_routes_the_surface_file_really_has(app: FastAPI) -> None:
+    """An interim entry is a route that has landed early, not a route invented here.
+
+    Without this, a typo in `INTERIM_014` would widen the check above by exactly the string it
+    misspelled and nothing would notice until the list was deleted.
+    """
+    assert surface_paths(frozenset({"014"})) >= INTERIM_014
+    assert documented_paths(app) >= INTERIM_014
 
 
 def test_009_serves_exactly_its_seven_routes_and_no_eighth(app: FastAPI) -> None:
@@ -218,8 +237,8 @@ L3_ENDPOINTS = frozenset(
 )
 
 #: How many rows declare each level. A count in a docstring goes stale; a count in an assertion
-#: fails on the row that moved.
-LEVELS_DECLARED = {"L0": 0, "L1": 1, "L2": 48, "L3": 10}
+#: fails on the row that moved. L2 was 48 until 014 T2 added its six rows.
+LEVELS_DECLARED = {"L0": 0, "L1": 1, "L2": 54, "L3": 10}
 
 
 def test_every_endpoint_declares_a_level_and_the_distribution_is_the_one_recorded() -> None:
@@ -512,6 +531,25 @@ def endpoints_exercised(requests: Iterable[tuple[str, str]]) -> frozenset[tuple[
     )
 
 
+def served_rows() -> frozenset[tuple[str, str]]:
+    """The rows a route answers for: the implemented features' and whatever 014 has landed."""
+    return surface_paths(IMPLEMENTED_FEATURES) | INTERIM_014
+
+
+def unasked_endpoints(
+    requests: Iterable[tuple[str, str]], served: frozenset[tuple[str, str]] | None = None
+) -> tuple[str, ...]:
+    """The served rows no request reached, as `"METHOD /path"`, sorted - what the session fails on.
+
+    A declared row nothing serves is not reported: it cannot have paid for L2 because there is
+    nothing to ask (the operator's decision of 2026-09-14, recorded in `tests/conftest.py`).
+    """
+    rows = served_rows() if served is None else served
+    return tuple(
+        sorted(f"{method} {path}" for method, path in rows - endpoints_exercised(requests))
+    )
+
+
 def test_the_matcher_does_not_let_a_parameter_swallow_a_segment() -> None:
     """The one way this check could pass while measuring nothing: a pattern loose enough that
     every request matches every row. `/Items/{itemId}/Images/{imageType}` and the row below it
@@ -536,3 +574,23 @@ def test_the_coverage_function_notices_an_endpoint_nothing_asked() -> None:
     one = ("GET", "/System/Info/Public")
     assert one in declared, "the surface no longer declares the row this test is written against"
     assert endpoints_exercised([one]) == frozenset({one})
+
+
+def test_the_coverage_check_counts_served_rows_and_not_declared_ones() -> None:
+    """**The scoping, proven without a session.** A row declared in `surface.yaml` whose feature
+    serves nothing is not reported however little asks it; a served row nothing asked is. Both
+    halves, because a scope that dropped every row would pass the first alone.
+    """
+    declared_not_served = ("POST", "/Library/Refresh")
+    assert declared_not_served in surface_paths()
+    assert declared_not_served not in served_rows(), "014 T4/T7 landed it; pick another row"
+
+    one = ("GET", "/System/Info/Public")
+    assert "GET /System/Info/Public" in unasked_endpoints([])
+    assert "POST /Library/Refresh" not in unasked_endpoints([])
+
+    everything_served = [(method, path) for method, path in served_rows() if "{" not in path]
+    assert "GET /System/Info/Public" not in unasked_endpoints(everything_served)
+    assert unasked_endpoints([one], served=frozenset({one, declared_not_served})) == (
+        "POST /Library/Refresh",
+    ), "a row handed in as served is counted whatever the file says about its feature"

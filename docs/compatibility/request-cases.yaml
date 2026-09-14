@@ -3,19 +3,20 @@
 # Read with specs/010-conformance-harness/spec.md sections 3.2 and 3.9, with plan sections 4.3 and
 # 6.1.1, and with docs/compatibility/surface.yaml, which is the list of endpoints this file must
 # cover. tests/unit/test_allowlist.py reads the surface through the surface validator's own parser
-# and fails on the sixtieth endpoint the day one is added with no case.
+# and fails on the sixty-sixth endpoint the day one is added with no case.
 #
-# AC-3's floor is ONE CASE PER ENDPOINT - 59 - and 010's own gate measured that floor to be not
+# AC-3's floor is ONE CASE PER ENDPOINT - 65 - and 010's own gate measured that floor to be not
 # enough: both differences that gate found on /Items/{itemId}/Similar are invisible to a bare
 # request, one of them appearing only when `limit` is sent and only for one seed type. So the file
 # is the floor, plus the eight L3 rows seeded first, plus the requests the two analysed clients are
-# documented as sending, and it grows by measurement rather than by combinatorics - 764 query
-# parameters are declared across these 59 operations, which is what makes "one case per parameter"
-# not a plan.
+# documented as sending, and it grows by measurement rather than by combinatorics - 768 query
+# parameters are declared across these 65 operations, 764 of them on the 59 there were before 014,
+# which is what makes "one case per parameter" not a plan.
 #
 # THE EIGHT L3 ROWS COME FIRST, and they are the only rows in this repository whose DECLARED
-# conformance level nothing has ever checked. surface.yaml carries a `level` on all 59 rows - one
-# L1, 50 L2, eight L3 - and L3 is defined in conformance.md as "the response is byte-comparable to
+# conformance level nothing has ever checked. surface.yaml carries a `level` on all 65 rows - one
+# L1, 54 L2 and ten L3, the L3 rows eight when this was written and ten since 013 promoted the two
+# artist routes - and L3 is defined in conformance.md as "the response is byte-comparable to
 # a real Jellyfin's, modulo a documented allowlist", proven by the differential harness and by
 # nothing else. tools/extract_v1_surface.py validates only that the value is one of L0..L3;
 # tests/conformance/test_routes.py reads `feature` and `consumers` and never `level`. Meanwhile
@@ -104,7 +105,9 @@
 # could reach before T9 is an operator's own account. Spec 3.5 asks a writing probe to remove what
 # it made; this asks the sweep not to make it on somebody else's account in the first place. The
 # one exception is the playlist rename, which the reference declares administrator-only, so it
-# runs as the administrator over a playlist the restricted seat made.
+# runs as the administrator over a playlist the restricted seat made. 014's five setup writes name
+# `restricted` alone under the same rule and write nothing even to that seat: asked of a server
+# whose setup is finished, each is refused to a non-administrator.
 
 cases:
 
@@ -510,7 +513,7 @@ cases:
     what_it_is_for: "static=true on a container the source is not, which 008's gate measured to be the original bytes behind a lying label rather than an error - a claim the spec's error table had made up"
 
   # ==========================================================================================
-  # THE FLOOR: the other 51 endpoints of surface.yaml, in the file's own order, plus the cases
+  # THE FLOOR: the other 57 endpoints of surface.yaml, in the file's own order, plus the cases
   # the two analysed clients are documented as sending and the four the register owes.
   # ==========================================================================================
 
@@ -1141,3 +1144,75 @@ cases:
     identities: [administrator]
     needs: []
     what_it_is_for: "The one write that names the administrator: the reference declares this controller elevated, so the seat that owns the playlist is refused 403 on a stock server. The body carries Genres, Tags and ProviderIds because the reference refuses one that omits them"
+
+  # --- 014 ----------------------------------------------------------------------------------
+  #
+  # SIX ROWS AND FIVE REFUSALS, added by 014 T2 before any of the routes is served. Five of these
+  # operations write when they are admitted - the first account, its name and password, the
+  # setup window, a library, a scan - and against a reference whose setup is finished every one
+  # of them refuses an authenticated non-administrator with an empty 403 (014 section 3.1)
+  # [probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]. So those five name
+  # the restricted seat ALONE, where the answer is a refusal and nothing is written, and each is
+  # a bare request, which is the AC-3 floor and all a refusal needs. The sixth is a read and names
+  # both seats: the administrator's answer is the library list, and the restricted seat's is the
+  # same refusal.
+
+  - id: first-account-refused
+    endpoint: "GET /Startup/User"
+    query: ""
+    body: none
+    content_type: none
+    anchors: []
+    identities: [restricted]
+    needs: []
+    what_it_is_for: "The restricted seat alone, because this read CREATES the first account on a server that has none; once setup is finished it is refused to a non-administrator, which is the answer a sweep can ask without writing anything (014 section 3.2)"
+
+  - id: first-account-update-refused
+    endpoint: "POST /Startup/User"
+    query: ""
+    body: none
+    content_type: none
+    anchors: []
+    identities: [restricted]
+    needs: []
+    what_it_is_for: "The restricted seat alone: admitted, this renames the first account and replaces its password, and asked as the administrator it would do that to whatever account .env points at. The refusal needs no body, so the case sends none (014 section 3.3)"
+
+  - id: complete-refused
+    endpoint: "POST /Startup/Complete"
+    query: ""
+    body: none
+    content_type: none
+    anchors: []
+    identities: [restricted]
+    needs: []
+    what_it_is_for: "The restricted seat alone: a second completion is harmless to an administrator of a finished server, but admitted on one whose setup is unfinished it closes the window for good, and the non-administrator's refusal is what the policy answers once the window is closed (014 section 3.4)"
+
+  - id: libraries
+    endpoint: "GET /Library/VirtualFolders"
+    query: ""
+    body: none
+    content_type: none
+    anchors: []
+    identities: [administrator, restricted]
+    needs: []
+    what_it_is_for: "The one read of the six, so both seats: the administrator is answered every library with its paths and a LibraryOptions of 37 properties there and one here, and the restricted seat the same policy refusal as the five writes (014 section 3.5)"
+
+  - id: add-refused
+    endpoint: "POST /Library/VirtualFolders"
+    query: ""
+    body: none
+    content_type: none
+    anchors: []
+    identities: [restricted]
+    needs: []
+    what_it_is_for: "The restricted seat alone: admitted, this adds a library - with no path at all it adds one with none - so the only request a sweep may send is the one the policy refuses, and it names no library at all (014 section 3.6)"
+
+  - id: scan-refused
+    endpoint: "POST /Library/Refresh"
+    query: ""
+    body: none
+    content_type: none
+    anchors: []
+    identities: [restricted]
+    needs: []
+    what_it_is_for: "The restricted seat alone: admitted, this starts a scan of every library on the server under test, and it is the one operation of the six that requires an administrator whether or not setup is finished, under an elevation policy of its own rather than the setup window's - measured on its own route for that reason (014 section 3.7)"

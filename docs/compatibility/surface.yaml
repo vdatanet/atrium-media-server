@@ -8,6 +8,8 @@
 #
 # consumers: the real clients observed calling this endpoint. An empty list means the
 #            endpoint is included by design; see the Notes column in the prose document.
+#            `atrium-admin` is this project's own command-line client (014), which calls
+#            exactly the rows that name it.
 # level:     required conformance level, defined in docs/compatibility/conformance.md
 # feature:   the specs/ directory that owns it
 
@@ -373,4 +375,45 @@ endpoints:
     operation: UpdateItem
     consumers: [music-client]
     feature: "009"
+    level: L2
+  # Added by 014 T2 on 2026-09-14, the first rows of v2 and the first whose consumer is this
+  # project's own client rather than an analysed one: a fresh server has no administrator, and
+  # these are the operations the reference sets itself up through with nobody at a keyboard - 014
+  # section 2.0. Listed before any of them is served, which is AGENTS.md's order for adding an
+  # endpoint; test_routes.py's INTERIM_014 holds each open as it lands.
+  - path: "/Startup/User"
+    method: GET
+    operation: GetFirstUser
+    consumers: [atrium-admin]
+    feature: "014"
+    level: L2
+  - path: "/Startup/User"
+    method: POST
+    operation: UpdateStartupUser
+    consumers: [atrium-admin]
+    feature: "014"
+    level: L2
+  - path: "/Startup/Complete"
+    method: POST
+    operation: CompleteWizard
+    consumers: [atrium-admin]
+    feature: "014"
+    level: L2
+  - path: "/Library/VirtualFolders"
+    method: GET
+    operation: GetVirtualFolders
+    consumers: [atrium-admin]
+    feature: "014"
+    level: L2
+  - path: "/Library/VirtualFolders"
+    method: POST
+    operation: AddVirtualFolder
+    consumers: [atrium-admin]
+    feature: "014"
+    level: L2
+  - path: "/Library/Refresh"
+    method: POST
+    operation: RefreshLibrary
+    consumers: [atrium-admin]
+    feature: "014"
     level: L2

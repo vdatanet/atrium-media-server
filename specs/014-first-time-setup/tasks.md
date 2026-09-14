@@ -16,7 +16,9 @@ Ordered. Each task is a reviewable change on its own, and states how you know it
 
 **Five things, and every one is a sentence of the plan that the code it describes would not let
 stand.** The plan was read against the modules it names before a task was written, and each finding
-below is amended into [plan.md](plan.md) in the same change as this list.
+below is amended into [plan.md](plan.md) in the same change as this list. **A sixth was found by T2
+running the whole suite**, and it is recorded here beside them because it changes what T4 and T7
+must do.
 
 ### 1. The test transport never starts the scanner the plan put in the lifespan
 
@@ -68,6 +70,21 @@ restricted seat — `GET` and `POST /Startup/User`, `POST /Startup/Complete`, `P
 /Library/VirtualFolders` and `POST /Library/Refresh` — so those name `restricted` alone and write
 nothing; `GET /Library/VirtualFolders` is a read and names both seats. The count becomes 65.
 
+### 6. The L2 coverage check counted rows nothing serves
+
+`pytest_sessionfinish` fails a whole-suite run on any `surface.yaml` row no test request reached
+(`tests/conftest.py`), and it read **every** row of the file. With T2's six rows in and no route
+served, the suite passed every test and still exited `1`: *"6 endpoint(s) declared in surface.yaml
+and asked by no test"*. No feature had added rows ahead of its routes since that check landed on
+2026-09-09, so nothing had met it.
+
+**The operator decided on 2026-09-14 to count served rows only** — `surface_paths(IMPLEMENTED_FEATURES)`
+plus `INTERIM_014` — because a route of an unimplemented feature cannot have paid for L2, and the
+check's own docstring is about a row *declared, served, and asked by no test*. The computation is
+`test_routes.py::unasked_endpoints`, tested without a session. **So T4 and T7 must request every
+path they add to `INTERIM_014`** in a test of the same change, or the suite goes red; and at T10,
+when the list goes, all six are counted against the file. Plan §8 amended.
+
 ---
 
 ## T1 — The readings the plan could not take from a desk
@@ -112,7 +129,7 @@ nothing; `GET /Library/VirtualFolders` is a read and names both seats. The count
 
 ## T2 — Six rows in the surface, and nothing served
 
-- [ ] **Changes:** `docs/compatibility/surface.yaml` gains `GET /Startup/User`, `POST /Startup/User`,
+- [x] **Changes:** `docs/compatibility/surface.yaml` gains `GET /Startup/User`, `POST /Startup/User`,
       `POST /Startup/Complete`, `GET /Library/VirtualFolders`, `POST /Library/VirtualFolders` and
       `POST /Library/Refresh`, `feature: "014"`, `level: L2`, `consumers: [atrium-admin]`.
       `docs/compatibility/api-surface-v1.md` gains a section for them, with the reason for each and
@@ -126,6 +143,17 @@ nothing; `GET /Library/VirtualFolders` is a read and names both seats. The count
   `pytest tests/conformance/test_routes.py` — green, which proves nothing is served ahead of the
   interim list; and it fails if `LEVELS_DECLARED` is left at `48`.
 - **Spec reference:** §2.0, §6
+- **Done** (2026-09-14). **Every test passed and the suite still failed**: the L2 coverage check
+  counted all 65 rows, so six nobody serves made the run red — gate finding 6, decided by the
+  operator the same day, and the check now counts served rows. Two counts the gate had not listed
+  moved with the surface: `test_differential.py` asserts the endpoint count too, and
+  `request-cases.yaml`'s floor section and its 764 declared query parameters (768 over 65). Three
+  documents said `POST /Library/Refresh` *"is not in surface.yaml"* — `conformance.md`,
+  behaviours, and the `NO_SECOND_SCAN` reason `tools/differential.py` prints — and now say it is a
+  row no implemented feature serves. The five refusals joined `THE_RUNS_OWN_ACCOUNT`, so
+  *restricted alone* is asserted rather than written. And `api-surface-v1.md` and `README.md` said
+  58 where the file had 59. Removing any one of the six cases, leaving `LEVELS_DECLARED` at `48`,
+  and serving nothing behind an interim entry each went red, tried and reverted.
 
 ## T3 — The address a request is from
 

@@ -1,11 +1,11 @@
 # The v1 API surface
 
-**Last verified: 2026-09-01. Every path and method below was checked to exist in the Jellyfin
+**Last verified: 2026-09-14. Every path and method below was checked to exist in the Jellyfin
 10.11.11 OpenAPI document; the `Operation` column is that document's `operationId`.**
 
-Jellyfin exposes **322 paths**. v1 of Atrium serves **58**. This document explains which 58, and —
-more importantly — *how that set was chosen*, because Principle VI forbids adding an endpoint
-without a named consumer.
+Jellyfin exposes **322 paths**. v1 of Atrium serves **59**, and v2's first slice adds **6** (§9.1)
+for **65** in all. This document explains which, and — more importantly — *how that set was
+chosen*, because Principle VI forbids adding an endpoint without a named consumer.
 
 ## 1. How this set was derived
 
@@ -44,6 +44,7 @@ the `music-client`/`video-client` tags in [surface.yaml](surface.yaml) are uncha
 | **M** | Called by music-client |
 | **V** | Called by video-client |
 | **D** | Not observed in either client; included by design, with the reason given |
+| **A** | Called by `atrium-admin`, this project's own command-line client ([014](../../specs/014-first-time-setup/spec.md)) — the named consumer of §9.1's six v2 rows, and of nothing in v1 |
 
 ## 2. Identity and discovery
 
@@ -263,6 +264,32 @@ All three answer `204` — for an unknown `ItemId` too. Jellyfin's `Progress` do
 `MediaSourceId` (Emby's does), and a play is counted at `Start`, not at the end
 (behaviours §2.19). `[probe: tools/probe_playstate.py, Jellyfin 10.11.11, 2026-08-28]`
 
+## 9.1 First-time setup and libraries
+
+Added by 014 T2 on 2026-09-14, and the first rows of
+[v2](../roadmap.md#v2--the-management-cli) rather than of v1: **a fresh server has no administrator,
+and nothing it served until now could make one**. Creating a user requires an administrator; the
+reference resolves that with a policy — *first-time setup or elevated* — declared on the startup
+and library-structure operations and on nothing that creates a second user, and this repository
+already sets the reference up through exactly these calls with nobody at a keyboard. The whole
+argument is [014 §2.0](../../specs/014-first-time-setup/spec.md#20-why-these-operations-and-why-they-are-not-a-side-door).
+None of the six is served yet: the rows come before the routes.
+
+| Method | Path | Operation | Used by | Notes |
+|---|---|---|---|---|
+| GET | `/Startup/User` | `GetFirstUser` | A | **The only thing in the reference that creates the first account**, which is why an unattended setup calls it first; a read that writes ([014 §3.2](../../specs/014-first-time-setup/spec.md)) |
+| POST | `/Startup/User` | `UpdateStartupUser` | A | Gives the first account its name and password. It updates and never creates, so it answers `404` until the read above has run ([014 §3.3](../../specs/014-first-time-setup/spec.md)) |
+| POST | `/Startup/Complete` | `CompleteWizard` | A | Closes the setup window, after which the four operations beside it require an administrator and `StartupWizardCompleted` reads `true` ([014 §3.4](../../specs/014-first-time-setup/spec.md)) |
+| GET | `/Library/VirtualFolders` | `GetVirtualFolders` | A | Every library with its paths — how the client confirms what it added, and the one read of the six ([014 §3.5](../../specs/014-first-time-setup/spec.md)) |
+| POST | `/Library/VirtualFolders` | `AddVirtualFolder` | A | **The first library**, without which an account that signs in has nothing to browse ([014 §3.6](../../specs/014-first-time-setup/spec.md)) |
+| POST | `/Library/Refresh` | `RefreshLibrary` | A | Scans every library. Not a setup operation — it requires an administrator in both states — and in because a library added without a scan has to be scannable from the same client ([014 §3.7](../../specs/014-first-time-setup/spec.md)) |
+
+The roadmap's v2 table names the three library operations and **not** the three startup ones; 014
+§2.0 is the argument for adding them, under the roadmap's own rule that an endpoint enters with its
+provenance. `GET`/`POST /Startup/Configuration` and `POST /Startup/RemoteAccess` stay out: a setup
+that omits them leaves a server its first account signs in to and browses
+`[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`.
+
 ## 10. Deliberately excluded from v1
 
 Each of these is a real Jellyfin capability that Atrium does not serve in v1. They are listed so
@@ -288,7 +315,7 @@ Growing the surface is a roadmap decision, not something an implementer does opp
 ## 11. Keeping this table honest
 
 The tables above have a machine-readable companion, [`surface.yaml`](surface.yaml), carrying the
-same 58 entries with their consumers, owning feature and required conformance level.
+same 65 entries with their consumers, owning feature and required conformance level.
 
 ```bash
 python3 tools/extract_v1_surface.py --spec reference/openapi.json --print-summary
