@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from tests.fixtures.library.generate import build as build_fixture_library
-from tests.fixtures.library.manifest import LIBRARIES
+from tests.fixtures.library.manifest import LIBRARIES, Entry, Kind, Library
 from tests.fixtures.media import (
     MOVIES_ROOT,
     MUSIC_ROOT,
@@ -68,6 +68,34 @@ EMPTY_LIBRARY = "Empty"
 #: `movies` is named so that the reference is not asked to run a music scanner over an empty
 #: directory, which would be a difference between the two servers about nothing.
 EMPTY_COLLECTION_TYPE = "movies"
+
+#: **Directories no library of this module is given, for 014's probe to give libraries of its
+#: own.** `tools/probe_first_time_setup.py` adds a library of each type this server cannot scan
+#: and reads what `/UserViews` makes of it, and a library over `Empty` answers that question about
+#: nothing: whether a view is offered can turn on whether its scan found something. So each
+#: directory holds one film, and each is its own directory, because two libraries over one path
+#: would be one item in two places and the reading would be of that instead (014 tasks, T1).
+#:
+#: Written through the 003 generator rather than copied from anywhere, so every file is the
+#: generator's filler under its declared name and carries the generator's fixed instant for its
+#: path - the property `test_the_mount_preserves_each_files_fixed_time` holds for the whole mount.
+SETUP_FILM = "A Film Alone (2014).mkv"
+SETUP_TYPES = ("musicvideos", "homevideos", "boxsets", "books", "mixed", "omitted", "photos")
+SETUP_SUBTREE = Library(
+    name="FirstTimeSetup",
+    collection_type="",
+    entries=(
+        *(
+            Entry(f"{kind}/{SETUP_FILM}", Kind.MEDIA, f"one film under a library typed {kind}")
+            for kind in SETUP_TYPES
+        ),
+        Entry(f"relative/{SETUP_FILM}", Kind.MEDIA, "a library whose path is given relative"),
+        Entry(f"twice/{SETUP_FILM}", Kind.MEDIA, "a library given this one path twice"),
+        Entry(f"body/{SETUP_FILM}", Kind.MEDIA, "a library whose path is in the body alone"),
+        Entry("outer/The Outer Film (2015).mkv", Kind.MEDIA, "the outer of two nested paths"),
+        Entry("outer/inner/The Inner Film (2016).mkv", Kind.MEDIA, "the inner of those two"),
+    ),
+)
 
 
 class ReferenceLibrary(NamedTuple):
@@ -156,6 +184,7 @@ def build(destination: Path) -> Path:
     build_fixture_library(destination)
     build_media_files().copy_into(destination / MEDIA_SUBTREE)
     (destination / EMPTY_LIBRARY).mkdir(parents=True, exist_ok=True)
+    build_fixture_library(destination, (SETUP_SUBTREE,))
     return destination
 
 
@@ -172,7 +201,7 @@ def is_complete(destination: Path) -> bool:
     a library that is not the declared one, and the comparison then measures the gap in the
     fixture rather than the gap between the servers.
     """
-    for library in LIBRARIES:
+    for library in (*LIBRARIES, SETUP_SUBTREE):
         root = destination / library.name
         for entry in library.entries:
             # A trailing slash declares a directory that stays empty, which `generate._write`

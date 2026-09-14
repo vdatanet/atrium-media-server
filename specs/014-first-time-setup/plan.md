@@ -328,9 +328,11 @@ combining mark and a connector.
 - `stop()` sets a flag the progress sink checks; the sink raises, the library's transaction rolls
   back, and the next start rescans it.
 - A library whose type is not in `SCANNED_TYPES`, or is `None`, is handed to `scan()` like any
-  other, and the walker admits no candidate for it. Whether its `CollectionFolder` row is created —
-  and so whether it appears in `/UserViews` — is a reading taken before the code that creates it
-  (§9's second row).
+  other, and the walker admits no candidate for it. **Its `CollectionFolder` row is created like
+  any other's, so it appears in `/UserViews`** — on the reference every library of every type is a
+  view, over one film or over nothing `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]` — and the view's `CollectionType` is the stored
+  type except for `MIXED` and `None`, which emit no key: `mixed` is a type of the library listing
+  and not of a view. *(Amended by T1, 2026-09-14: this bullet left the row to that reading.)*
 
 `refreshLibrary=false` starts nothing. The reference scanned such a library anyway and the spec
 records that the trigger was not isolated (§3.6); starting an unrequested scan here would be
@@ -344,11 +346,19 @@ inventing a trigger nobody measured.
 3. `paths` split on `,`; each must be an existing directory, else `controller_error`. **Relative
    and nested paths are refused the same way** — 003's `create` already refuses them, and a refusal
    in the shape the reference uses for a bad path is the least surprising one; neither was measured
-   on the reference, and §9 carries it.
+   on the reference, and §9 carries it. **T1 measured them on 2026-09-14 and the reference refuses
+   neither**: a relative path that names a directory from `/`, two nested
+   paths, the same path twice and no `paths` at all each answer `204` and are listed as given —
+   and with no `paths` the body's `PathInfos` becomes the library's paths `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`. Only a
+   relative path that names no directory is refused, as a missing path is. **This step's refusals
+   are put to the operator and are not written until that decision is taken**
+   ([the readings](notes/first-time-setup-readings.md)).
 4. `settle_name(name, LibraryRepository.names())` — trim, replace, number from `2`, exact compare.
 5. `library.config.create` in one transaction, then `scanner.request({id}, ADDED)` if
    `refreshLibrary`.
-6. `204`. The body is parsed and nothing in it is applied (OQ-13).
+6. `204`. The body is parsed and nothing in it is applied (OQ-13). **On the reference its
+   `PathInfos` is applied when `paths` is absent** (step 3, T1), which is put to the operator with
+   step 3's refusals.
 
 ### 6.7 The client
 
@@ -422,9 +432,9 @@ belongs to the change that teaches `tools/differential.py` to stand its own Atri
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | **A scan's single transaction holds SQLite's write lock for minutes**, and a sign-in (which writes `last_login_date`) or a playstate flush waits past the busy timeout and fails | High on a real library | High: the server looks broken during every scan | The scanner's task measures a sign-in and a progress report during a scan of the fixture tree. If either fails, the mitigation is a commit per scan phase inside `scanner.py`'s session handling — **not** a change to `scan()`'s contract, which its tests depend on — and the plan is amended with the measurement |
-| A library of an unscannable type is in `/UserViews` on the reference and not here, or the reverse | Medium | Low: a view row more or fewer | The task list's first task is a reading on the single-use instance: `/UserViews` for such libraries and for one with no type, before any code decides the `CollectionFolder` |
-| `CollectionType` in `VirtualFolderInfo` is JSON `null` on the reference where §1.7 predicts absence | Low | Low | The same reading takes the raw key set rather than `dict.get` |
-| Relative, nested or duplicate paths are answered differently by the reference | Medium | Low: an edge no client sends | The same reading takes the three; a difference goes back into spec §3.6 |
+| A library of an unscannable type is in `/UserViews` on the reference and not here, or the reverse | Medium | Low: a view row more or fewer | The task list's first task is a reading on the single-use instance: `/UserViews` for such libraries and for one with no type, before any code decides the `CollectionFolder`. **Read on 2026-09-14: every library is a view** (§6.5) |
+| `CollectionType` in `VirtualFolderInfo` is JSON `null` on the reference where §1.7 predicts absence | Low | Low | The same reading takes the raw key set rather than `dict.get`. **Read on 2026-09-14: absent, as §1.7 predicts, and `PrimaryImageItemId` and `RefreshProgress` likewise** |
+| Relative, nested or duplicate paths are answered differently by the reference | Medium | Low: an edge no client sends | The same reading takes the three; a difference goes back into spec §3.6. **Read on 2026-09-14, and all three are answered differently: `204`, where §6.6 refuses** — put to the operator (§6.6) |
 | A proxy on the same machine forwards no address | Low for an operator following the documentation | High: the window is open to the proxy's network until setup finishes | Documented beside `trusted_proxies` and in the client's refusal text; §6.1 says it cannot be detected |
 | Widening `CollectionType` reaches code that matched on three values with an `else` | Medium | Medium: an unscannable library resolved as music (`resolver.py:120-125` today) | `SCANNED_TYPES` keys every scan-side map, and a test scans a `books` library over a music tree and asserts no item |
 | The `\w` difference admits or refuses a username the reference would not | Low | Low | §6.4's explicit category test |

@@ -5,7 +5,7 @@ status: Accepted
 created: 2026-09-13
 updated: 2026-09-14
 accepted: 2026-09-14
-amended: 2026-09-13 at the spec gate - OQ-1 decided (the setup window is open to a loopback address only, by changing the reference's first branch and nothing else) and OQ-2 decided (the first account is always MyJellyfinUser); sections 3.1, 3.2 and 3.8, AC-2, AC-5 and AC-10 amended; OQ-11 raised by the first answer. And the same day, OQ-3 decided (a library name already in use is numbered as the reference numbers it); section 3.6 amended and section 3.6.2 added for the order a name is cleaned in; AC-7 amended; OQ-5 widened to confirm that names compare with case. And the same day, at the measurement gate, OQ-4, OQ-5, OQ-7 and OQ-8 answered and OQ-6 half answered by tools/probe_first_time_setup.py on an instance started unconfigured; two claims made from the source withdrawn (the missing-path body, and the empty-name refusal's origin); sections 3.1, 3.3 to 3.7 and 3.8 amended; AC-3, AC-4, AC-5, AC-7 and AC-8 amended; OQ-12 and OQ-13 raised. And the same day, OQ-6 decided (every library type answered and stored as the reference does, a library of a type this server cannot scan staying empty as an accepted gap) and OQ-12 decided (library scan does not wait); sections 3.6, 3.6.1, 3.7 and 3.8 amended; AC-7 and AC-9 amended. And on 2026-09-14 at the plan gate, OQ-9, OQ-11 and OQ-13 decided by the operator and OQ-10 decided by the plan (L2, L3 owed), and a server that held accounts before this feature is set up; sections 3.1, 3.5, 3.6, 3.8 and 6 amended; AC-1, AC-5, AC-7 and AC-10 amended
+amended: 2026-09-13 at the spec gate - OQ-1 decided (the setup window is open to a loopback address only, by changing the reference's first branch and nothing else) and OQ-2 decided (the first account is always MyJellyfinUser); sections 3.1, 3.2 and 3.8, AC-2, AC-5 and AC-10 amended; OQ-11 raised by the first answer. And the same day, OQ-3 decided (a library name already in use is numbered as the reference numbers it); section 3.6 amended and section 3.6.2 added for the order a name is cleaned in; AC-7 amended; OQ-5 widened to confirm that names compare with case. And the same day, at the measurement gate, OQ-4, OQ-5, OQ-7 and OQ-8 answered and OQ-6 half answered by tools/probe_first_time_setup.py on an instance started unconfigured; two claims made from the source withdrawn (the missing-path body, and the empty-name refusal's origin); sections 3.1, 3.3 to 3.7 and 3.8 amended; AC-3, AC-4, AC-5, AC-7 and AC-8 amended; OQ-12 and OQ-13 raised. And the same day, OQ-6 decided (every library type answered and stored as the reference does, a library of a type this server cannot scan staying empty as an accepted gap) and OQ-12 decided (library scan does not wait); sections 3.6, 3.6.1, 3.7 and 3.8 amended; AC-7 and AC-9 amended. And on 2026-09-14 at the plan gate, OQ-9, OQ-11 and OQ-13 decided by the operator and OQ-10 decided by the plan (L2, L3 owed), and a server that held accounts before this feature is set up; sections 3.1, 3.5, 3.6, 3.8 and 6 amended; AC-1, AC-5, AC-7 and AC-10 amended. And the same day, by T1's second walk on an unconfigured instance, section 3.5's CollectionType, PrimaryImageItemId and RefreshProgress rows amended (the second withdrawn as worded) and section 3.6.1 amended with what the reference's scan puts in libraries of the types this server does not scan and with every library being a view; AC-7 amended; the paths AddVirtualFolder accepts, the body's PathInfos, PrimaryImageItemId's value and one listing ItemId shared by two libraries put to the operator
 depends_on: [001, 002, 003]
 ---
 
@@ -275,11 +275,11 @@ administrator is answered `204` again and a caller with no token `401` with an e
 |---|---|---|
 | `Name` | string | The library's name, as §3.6 settled it |
 | `Locations` | array of string | The library's paths |
-| `CollectionType` | string | The type the library was added with. **No value where none was given — and no value where the one given is not a type the reference declares** (§3.6.1) `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]` |
-| `ItemId` | string | The library's own identifier, the one a client browses by |
+| `CollectionType` | string | The type the library was added with. **No value where none was given — and no value where the one given is not a type the reference declares** (§3.6.1) `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. "No value" is **absent from the row**, never `null`: 19 rows read raw, and the four with no type carried no `CollectionType` key at all `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]` |
+| `ItemId` | string | The library's own identifier, the one a client browses by. **Except on the reference for two libraries whose names differ only in case**: `Movies` and `movies` were listed with **one** `ItemId`, `movies`'s view's, while `Movies`'s own view has another `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`, because the listing finds a library's folder by comparing its path ignoring case `[source: Emby.Server.Implementations/Library/LibraryManager.cs:1319 @ v10.11.11]`. **Whether this server reproduces that is put to the operator** (2026-09-14) |
 | `LibraryOptions` | object | The reference sends **37 properties** on every library read, whatever its type `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. **This server sends one, `PathInfos`** — an entry per path, carrying that `Path` — because it is the one property it honours; the other 36 are an accepted gap ([behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)). Decided on 2026-09-14 as OQ-13 |
-| `PrimaryImageItemId` | string | No value on every library read, none of which had artwork `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]` |
-| `RefreshProgress`, `RefreshStatus` | number, string | **They show some scans and not others**, read once a second `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. While a library added with `refreshLibrary=true` was scanned, its row read `Active` with a partial, fractional progress — `10` in one run, `10.666…` in another — then `Idle` and no value once it finished. **While `POST /Library/Refresh`'s scan ran, the row read `Idle` throughout.** So the row can tell a caller a scan it started by adding the library has finished, and cannot tell it about a scan §3.7 started — which shows only on the server's scheduled-task list |
+| `PrimaryImageItemId` | string | No value on every library read during setup, before any scan had finished `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. **Not "none of which had artwork", as this row said until 2026-09-14**: once scanned, the three libraries over the tree's films carried their **own `ItemId`** here, and every other row carried no key `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]` — the reference states it when the library folder has a primary image `[source: Emby.Server.Implementations/Library/LibraryManager.cs:1322-1327 @ v10.11.11]`, and a library folder's image is one it generates from the images of what the scan found `[source: Emby.Server.Implementations/Images/CollectionFolderImageProvider.cs:21-40 @ v10.11.11]`. **What this server answers here is put to the operator** (2026-09-14): it generates no library image |
+| `RefreshProgress`, `RefreshStatus` | number, string | `RefreshStatus` is on every row; **`RefreshProgress` is absent from a row that is not scanning**, never `null` `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`. **They show some scans and not others**, read once a second `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. While a library added with `refreshLibrary=true` was scanned, its row read `Active` with a partial, fractional progress — `10` in one run, `10.666…` in another — then `Idle` and no value once it finished. **While `POST /Library/Refresh`'s scan ran, the row read `Idle` throughout.** So the row can tell a caller a scan it started by adding the library has finished, and cannot tell it about a scan §3.7 started — which shows only on the server's scheduled-task list |
 
 **Error responses:** the refusals of §3.1 once setup is finished.
 
@@ -367,7 +367,21 @@ type, or of none, is listed by §3.5, survives a restart and a scan, and has not
 shortfall and not a choice, recorded as an accepted gap in
 [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1); **003's set of three
 stays the set this server scans**, and what widens is only the set a library can be created with.
-What the reference's scan puts in a library of no type was not read.
+
+**What the reference's scan puts there was read on 2026-09-14**, over one film file per library and
+once a refresh had gone idle: a `MusicVideo` in `musicvideos`, a `Video` in `homevideos`, a `Movie`
+in `mixed`, in the library with no type and in `photos`, and **nothing** in `boxsets` or `books`
+`[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`. So of the seven cases the reference leaves two empty over a film, and this server leaves
+all seven — the size of the accepted gap, and not a change to it.
+
+**Every library is a view, whatever its type and whatever it holds.** On the reference each of the
+seven is a `CollectionFolder` in the first account's `/UserViews` — and so is each of the seven
+added over an empty directory — and **its `CollectionType` there is not always the one §3.5 lists**:
+`musicvideos`, `homevideos`, `boxsets` and `books` carry their type, while `mixed`, an omitted type
+and `photos` carry **no `CollectionType` key**, so a `mixed` library is `mixed` in §3.5 and untyped
+as a view `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`. Its `ChildCount` there is behaviours §3.25's random number, read twice and
+mostly different. This server offers each library as a view the same way, with the same
+`CollectionType`, and has nothing under any library of a type it does not scan, or of none.
 
 #### 3.6.2 How a name is cleaned
 
@@ -501,8 +515,10 @@ What a client can observe change, and what survives a restart:
 7. `POST /Library/VirtualFolders` with existing paths answers `204` and adds a library that
    `GET /Library/VirtualFolders` then lists with that name and paths, **whatever `collectionType`
    it carries**: one of `movies`, `tvshows` and `music`, or one of the five other declared types, is
-   listed with that type, and an omitted type or `photos` is listed with none. A library of a type
-   other than those three, or of none, has no item added to it by a scan. A name already in use is
+   listed with that type, and an omitted type or `photos` is listed with none. Every library is
+   offered in `/UserViews` as a view, carrying its type there except for `mixed`, an omitted type
+   and `photos`, which carry none. A library of a type other than those three, or of none, has no
+   item added to it by a scan. A name already in use is
    added under that name followed by `2` (then `3`) and answers `204`, where names are compared exactly,
    case included, after §3.6.2's trimming and replacement; an empty or whitespace name answers the
    validation `400` keyed `name`, a path that does not exist answers `400` with
@@ -525,7 +541,8 @@ What a client can observe change, and what survives a restart:
 *Criteria 3, 4, 5, 7 and 8 were amended on 2026-09-13 by the reading that answered OQ-4, OQ-5 and
 OQ-8, and criteria 7 and 9 the same day by the decisions that closed OQ-6 and OQ-12. Criteria 1, 5,
 7 and 10 were amended on 2026-09-14 at the plan gate, by the decisions that closed OQ-9, OQ-11 and
-OQ-13 and by the rule for a server that held accounts before this feature.*
+OQ-13 and by the rule for a server that held accounts before this feature. Criterion 7 was amended
+again the same day by T1's reading of `/UserViews` over libraries this server does not scan.*
 
 ## 6. Conformance
 
