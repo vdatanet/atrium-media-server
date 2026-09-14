@@ -85,6 +85,7 @@ persisted `StartupWizardCompleted` that nothing sets (001), and an empty-bodied 
 src/atrium/
 ├── api/
 │   ├── deps.py                  changed   require_setup_or_administrator
+│   ├── items.py, item_dto.py    changed   view_collection_type (T5)
 │   ├── startup.py               new       GET/POST /Startup/User, POST /Startup/Complete
 │   └── library_structure.py     new       GET/POST /Library/VirtualFolders, POST /Library/Refresh
 ├── cli/
@@ -108,6 +109,7 @@ src/atrium/
 ├── library/
 │   ├── config.py                changed   settle_name; any declared type, or none; create_with_view
 │   ├── identity.py              changed   a declaration with no type
+│   ├── resolver.py, walker.py   changed   keyed on SCANNED_TYPES, no else (T5)
 │   └── scanner.py               new       the in-process worker, its state, coalescing
 ├── users/
 │   └── first_account.py         new       create-if-none, the username rule, update
@@ -115,6 +117,16 @@ src/atrium/
                                            proxy_headers=False
 pyproject.toml                     changed   [project.scripts] atrium-admin
 ```
+
+**Two lines of that tree were not in it when this plan was accepted**, and are drawn on 2026-09-14
+by T9 in 001's style for a tree that outgrew its acceptance rather than as a silent edit. Every
+module this feature **created** — the ten `git log --diff-filter=A` finds under `src/` between the
+plan's acceptance and T8, `cli/`'s four files, `compat/client_address.py`, `api/startup.py`,
+`api/library_structure.py`, `users/first_account.py`, `library/scanner.py` and migration `0013` —
+was drawn from the start. What was not drawn is four modules T5 **changed**: `library/walker.py` and
+`library/resolver.py`, which §4 named in prose, and `api/items.py` and `api/item_dto.py`, which it
+did not name at all. Both pairs gained rows in the table below at T5; the tree is brought level with
+the table here.
 
 | Module | Change | Responsibility |
 |---|---|---|

@@ -419,7 +419,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
 
 ## T9 — What this feature owes other documents
 
-- [ ] **Changes:**
+- [x] **Changes:**
   - `docs/compatibility/behaviours.md` — §4.6, §4.7, §3.30, §3.31 and §3.32 lose *"not yet
     implemented"*; the three §5 rows 014 added lose it too.
   - `specs/001-server-identity-and-discovery/spec.md` — OQ-3's row points at 014 §2.1 as where it
@@ -434,6 +434,31 @@ when the list goes, all six are counted against the file. Plan §8 amended.
 - **Verified by:** `pytest tests/conformance/test_acceptance.py tests/unit/test_allowlist.py` green,
   and every relative link and anchor in the touched files resolving.
 - **Spec reference:** §2.1, §8
+- **Done** (2026-09-14, [PR #371](https://github.com/vdatanet/atrium-media-server/pull/371)). **The list named five documents, and five more held a claim T4 to T8 had made false.** Every behaviours
+  entry was implemented as recorded — §3.30 to §3.32, §4.6, §4.7 and the three §5 rows each read
+  against the code and its tests before the marker went, and each now names the test that asserts
+  it — but the list did not name the others:
+  `api-surface-v1.md` §9.1 said *"none of the six is served yet"*; `specs/README.md`, `README.md`
+  and `AGENTS.md` each said a fresh server is one nobody can sign in to, in the present tense; and
+  010's owes list said *"a running Atrium cannot be given a library"*, which `atrium-admin library
+  add` answers in the half about loading and not in the half about a `--fixture` run standing one
+  up — so the item is marked answered in that half and points at this feature's L3 item. Two more
+  the list did not say. **Removing the marker renames two anchors** behaviours links to itself —
+  §3.30 from §3.32 and §4.6 from §4.7 — and both links move with it. And **the plan's §3 tree drew
+  every module this feature created** — the ten `git log --diff-filter=A` finds under `src/` — but
+  not four T5 changed and the table below it names: `library/walker.py`, `library/resolver.py`,
+  `api/items.py` and `api/item_dto.py`, drawn now with 001's sentence. The rest is what the list
+  asked: 001's OQ-3 moves to that spec's resolved table pointing at §2.1; `architecture.md` gains a
+  `cli/` row and layout line and names the scanner, the client address and the first account in
+  their packages' rows, and §5 says a scan runs inside the process, with plan §9's residual write
+  lock in its readings; `tools/README.md` gives the eight commands that arrange the Atrium half of a
+  `--fixture` run — the six libraries added **before** `setup`, because the window admits a loopback
+  caller with no password — and keeps the restricted seat and the policy seeding hand-built; and
+  the roadmap's v2 table marks what landed, with a paragraph on the slice and what is left of v2.
+  **Left for T10**, because they are this feature's own accepted documents and the flip rewrites
+  them: spec §1's *"today nothing creates even the first account"* and plan §1's *"no route creates
+  a user"*. Every relative link and anchor in the twelve touched files resolves, checked with GitHub's
+  slug rules by a script that fails a planted bad anchor and a missing file.
 
 ## T10 — Close it
 

@@ -131,9 +131,9 @@ say how it will be proven is not finished.
 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, 010 on 2026-09-02 across fifteen,
 012 on 2026-09-04 across eleven, and **013 on 2026-09-08 across nine**, which leaves no feature
 `Accepted` and unbuilt among v1's. **The first of v2 is 014**, opened on 2026-09-13 and accepted on 2026-09-14,
-because a server started from scratch is one nobody can sign in to — nothing the server answers,
-reads or offers creates even the first account, so every account in this repository's history was
-written by a test. It opened with ten questions and no measurements, like 011 and 012; its five
+because a server started from scratch was one nobody could sign in to — nothing the server
+answered, read or offered created even the first account, so every account in this repository's
+history until then had been written by a test. It opened with ten questions and no measurements, like 011 and 012; its five
 readings were taken on the single-use reference instance, the only Jellyfin whose first-time setup
 is still unrun, and its five operator decisions beside them, all before it was accepted. **Its plan
 was accepted on 2026-09-14, and so was its task list**: the four questions the spec left to it are closed, and a fifth nobody had asked — a
