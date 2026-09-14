@@ -124,9 +124,9 @@ pyproject.toml                     changed   [project.scripts] atrium-admin
 | `cli/` | new | The client. **Imports nothing from `atrium` outside `atrium.cli`**, asserted by `tests/unit/test_import_directions.py` |
 | `compat/client_address.py` | new | An ASGI middleware that keeps the peer as it arrived beside the address uvicorn's `ProxyHeadersMiddleware` resolves, and `is_this_machine(request)` |
 | `config/settings.py` | changed | `NetworkSettings.trusted_proxies: list[str]`, default `["127.0.0.1"]` — uvicorn's own default, so an existing install resolves addresses exactly as it did |
-| `config/state.py` | changed | `setup_carried_over(state, has_accounts)` and the key that marks a state file as written by this feature or later (§6.2) |
+| `config/state.py` | changed | `carry_over_setup(paths, state, accounts)` and the key that marks a state file as written by this feature or later (§6.2). *(Named `setup_carried_over(state, has_accounts)` until T4, 2026-09-14: the rule saves the file and logs the count, so it takes the data directory and a number rather than a flag.)* |
 | `db/models.py`, migration `0013` | changed / new | §4 |
-| `db/repositories.py` | changed | `UserRepository.first()` in insertion order; `rename(user_id, name)` refusing a name `name_normalised` already holds; `LibraryRepository.names()` |
+| `db/repositories.py` | changed | `UserRepository.first()` in insertion order; `rename(user_id, name) -> bool`, answering `False` and writing nothing for a name another account's `name_normalised` already holds; `count()`, which §6.2's rule logs *(added at T4, 2026-09-14)*; `LibraryRepository.names()` |
 | `domain/items.py`, `domain/library.py` | changed | §4 |
 | `library/config.py` | changed | `settle_name(requested, taken)` in §3.6.2's order; `create` accepts any `CollectionType` or `None`, and **no roots** — `_require_roots` keeps refusing nested ones (§6.6, amended 2026-09-14) |
 | `library/identity.py` | changed | `for_library_configuration` with `None` — **every existing library's identifier unchanged**, asserted (§8) |
@@ -192,8 +192,9 @@ async def require_setup_or_administrator(request: Request) -> User | None: ...
 # users/first_account.py
 FIRST_ACCOUNT_NAME: Final = "MyJellyfinUser"
 def ensure_first_account(repository: UserRepository) -> User: ...
+def read_first_account(sessions: sessionmaker) -> User: ...   # §6.3's retry; a route module imports no sqlalchemy (T4)
 def is_valid_username(name: str) -> bool: ...
-class StartupUserUpdate(NamedTuple): name: str | None; password: str
+class StartupUserUpdate(NamedTuple): name: str | None; password: str | None   # None: the key was absent (T4)
 class NoAccountError(LookupError): ...          # -> 404 problem details
 class EmptyPasswordError(ValueError): ...       # -> 400 "Password must not be empty"
 class InvalidUsernameError(ValueError): ...     # -> 400 Error processing request.
@@ -325,6 +326,19 @@ leading or trailing whitespace, and every character a word character, space, `-`
 edges** — .NET admits the connector-punctuation and non-spacing-mark categories whole — so the rule
 is written as an explicit Unicode-category test, not a transliterated pattern, and tested on a
 combining mark and a connector.
+
+*(Amended at T4, 2026-09-14.)* Three things the paragraphs above did not say. **A single final
+line feed after an otherwise valid name is admitted**: the rule's end anchor matches before a
+string's final line feed as well as at its end, so *"no trailing whitespace"* is true of every
+character but that one — read from the rule and the anchor's meaning, not measured. **The order is
+not the only thing keeping the password**: the whole update is one transaction here, where the
+reference saves the rename and the password separately, so a refusal writes nothing whatever order
+the writes are in — the order still decides which refusal a request that fails twice receives, and
+reversing it goes red only if the password is committed ahead of the rename. And **a request with
+no body at all is not step 2's refusal**: the body is declared required, as on the three reporting
+routes whose `415` behaviours §1.11 measured `[source: Jellyfin.Api/Controllers/StartupController.cs:132 @ v10.11.11]`,
+so the content-type gate answers it before the route runs; a body without `Password`, or with it
+`null`, is step 2.
 
 ### 6.5 The scanner
 

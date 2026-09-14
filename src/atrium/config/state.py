@@ -56,6 +56,15 @@ class ServerState(BaseModel):
     #: Parsed leniently and always stored aware. This file is the server's own, not the wire, so
     #: it is written in plain ISO 8601 rather than the reference's seven-digit format.
     created: Annotated[datetime, BeforeValidator(from_wire)]
+    #: Written `true` by every file a build with first-time setup writes. **Its value is not what
+    #: is read**: its *absence* from a file is how a file written before 014 is recognised, so
+    #: `carry_over_setup` asks whether the key arrived rather than what it says (014 plan
+    #: section 6.2).
+    setup_recorded: bool = False
+
+
+#: The key whose absence marks a state file written before first-time setup existed.
+SETUP_RECORDED = "setup_recorded"
 
 
 def _write_atomically(path: Path, payload: str) -> None:
@@ -100,7 +109,7 @@ def load_or_create(paths: DataPaths) -> ServerState:
     path = paths.state_file
 
     if not path.is_file():
-        state = ServerState(server_id=new_id(), created=utc_now())
+        state = ServerState(server_id=new_id(), created=utc_now(), setup_recorded=True)
         save(paths, state)
         logger.info("first start: this server's identity is %s", state.server_id)
         return state
@@ -128,4 +137,30 @@ def load_or_create(paths: DataPaths) -> ServerState:
         ) from exc
 
 
-__all__ = ["ServerState", "load_or_create", "save"]
+def carry_over_setup(paths: DataPaths, state: ServerState, accounts: int) -> None:
+    """Record setup as finished on a server that held accounts before first-time setup existed.
+
+    **Once, and only for a file this build did not write** (014 spec section 3.1, plan section
+    6.2). Every account such a server holds was written by hand while `StartupWizardCompleted`
+    read `false`, so without this its setup window would open on upgrade and any process on the
+    machine could set the first account's password. A file carrying the key - which every file
+    this build creates does - is left alone whatever it says, which is what keeps a server
+    restarted in the middle of its own setup, with an account and the flag still `false`, open.
+
+    Run by the application factory **after** the database is known current, because `accounts`
+    is a count of a table only a current schema is trusted to hold.
+    """
+    if SETUP_RECORDED in state.model_fields_set:
+        return
+    if accounts and not state.startup_wizard_completed:
+        logger.warning(
+            "this server held %d account(s) before first-time setup existed: recording its setup "
+            "as finished, so the setup window stays closed",
+            accounts,
+        )
+        state.startup_wizard_completed = True
+    state.setup_recorded = True
+    save(paths, state)
+
+
+__all__ = ["SETUP_RECORDED", "ServerState", "carry_over_setup", "load_or_create", "save"]

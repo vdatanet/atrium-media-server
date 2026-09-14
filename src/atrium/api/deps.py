@@ -50,6 +50,7 @@ from sqlalchemy.orm import sessionmaker
 from starlette.requests import Request
 
 from atrium.compat.auth import extract_token
+from atrium.compat.client_address import is_this_machine
 from atrium.compat.errors import EmptyForbiddenError, ForbiddenError, UnauthenticatedError
 from atrium.config.paths import DataPaths
 from atrium.config.settings import Settings
@@ -173,6 +174,35 @@ async def require_administrator(
     return caller
 
 
+async def require_setup_or_administrator(request: Request) -> User | None:
+    """014's setup window: this machine during setup, or an administrator (spec section 3.1).
+
+    The reference's first-time-setup policy in three branches with the first narrowed, which is
+    behaviours section 4.6:
+
+    1. setup unfinished **and** the request is from this machine - admitted, **before any token is
+       read**, because the reference admits a caller with a bad token too;
+    2. otherwise `require_user`, so a missing or unknown token is the empty `401` and a disabled
+       account the 25-byte `403` it already sends;
+    3. and an account that is not an administrator is the empty `403` - the same object
+       `require_administrator` raises.
+
+    **It takes only the request, and that is the whole design.** Declared as a dependency on
+    `require_administrator`, its own `Depends(require_user)` would be solved before this body ran
+    and refuse a local caller with no token before step 1 was asked (014 tasks, gate finding 2), so
+    steps 2 and 3 are called here rather than declared.
+
+    `None` only for step 1: a route behind this admits a caller it knows nothing about, and must
+    not assume one.
+    """
+    if not get_state(request).startup_wizard_completed and is_this_machine(request):
+        return None
+    caller = await require_user(request)
+    if not caller.is_administrator:
+        raise EmptyForbiddenError("the route is administrator-only once setup is finished")
+    return caller
+
+
 __all__ = [
     "get_authenticator",
     "get_passwords",
@@ -182,5 +212,6 @@ __all__ = [
     "get_settings",
     "get_state",
     "require_administrator",
+    "require_setup_or_administrator",
     "require_user",
 ]

@@ -13,7 +13,13 @@ import pytest
 
 from atrium.compat.guids import CANONICAL
 from atrium.config.paths import ConfigurationError, DataPaths
-from atrium.config.state import ServerState, load_or_create, save
+from atrium.config.state import (
+    SETUP_RECORDED,
+    ServerState,
+    carry_over_setup,
+    load_or_create,
+    save,
+)
 
 
 @pytest.fixture
@@ -186,3 +192,78 @@ def test_a_naive_created_is_read_as_utc(paths: DataPaths) -> None:
         {"server_id": "0" * 32, "created": "2026-01-01T00:00:00", "startup_wizard_completed": True}
     )
     assert state.created == datetime(2026, 1, 1, tzinfo=UTC)
+
+
+# --------------------------------------------------------------------------------------------
+# 014: a state file written before first-time setup existed (plan section 6.2)
+# --------------------------------------------------------------------------------------------
+
+
+def _written_before_setup_existed(paths: DataPaths) -> ServerState:
+    """A state file as every build before 014 wrote it: no `setup_recorded` key at all."""
+    load_or_create(paths)
+    raw = json.loads(paths.state_file.read_text(encoding="utf-8"))
+    raw.pop(SETUP_RECORDED)
+    raw["startup_wizard_completed"] = False
+    paths.state_file.write_text(json.dumps(raw), encoding="utf-8")
+    return load_or_create(paths)
+
+
+def _on_disk(paths: DataPaths) -> dict[str, object]:
+    written: dict[str, object] = json.loads(paths.state_file.read_text(encoding="utf-8"))
+    return written
+
+
+def test_a_file_this_build_creates_carries_the_key(paths: DataPaths) -> None:
+    """The premise of the three below: absence can only mean an older build wrote the file."""
+    load_or_create(paths)
+    assert _on_disk(paths)[SETUP_RECORDED] is True
+
+
+def test_an_old_file_on_a_server_with_accounts_is_recorded_as_set_up(
+    paths: DataPaths, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Its window would otherwise open on upgrade, and the first account's password with it."""
+    state = _written_before_setup_existed(paths)
+
+    with caplog.at_level(logging.WARNING, logger="atrium.config.state"):
+        carry_over_setup(paths, state, accounts=2)
+
+    assert state.startup_wizard_completed is True
+    assert state.setup_recorded is True
+    assert _on_disk(paths)["startup_wizard_completed"] is True
+    assert _on_disk(paths)[SETUP_RECORDED] is True
+    assert load_or_create(paths).startup_wizard_completed is True
+    warned = [record for record in caplog.records if record.levelno == logging.WARNING]
+    assert len(warned) == 1
+    assert "2 account(s)" in warned[0].getMessage()
+
+
+def test_an_old_file_on_a_server_with_no_account_stays_unfinished(
+    paths: DataPaths, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Nobody can sign in to it anyway - and the key is written, so the rule never runs again."""
+    state = _written_before_setup_existed(paths)
+
+    with caplog.at_level(logging.WARNING, logger="atrium.config.state"):
+        carry_over_setup(paths, state, accounts=0)
+
+    assert state.startup_wizard_completed is False
+    assert _on_disk(paths)["startup_wizard_completed"] is False
+    assert _on_disk(paths)[SETUP_RECORDED] is True
+    assert not [record for record in caplog.records if record.levelno == logging.WARNING]
+
+    # Recorded once: an account arriving afterwards - `GET /Startup/User` - closes nothing.
+    carry_over_setup(paths, load_or_create(paths), accounts=1)
+    assert load_or_create(paths).startup_wizard_completed is False
+
+
+def test_a_file_this_build_wrote_is_left_open_mid_setup(paths: DataPaths) -> None:
+    """A restart between creating the first account and closing the window keeps it open."""
+    state = load_or_create(paths)
+    assert state.startup_wizard_completed is False
+
+    carry_over_setup(paths, load_or_create(paths), accounts=1)
+
+    assert load_or_create(paths).startup_wizard_completed is False
+    assert _on_disk(paths)["startup_wizard_completed"] is False

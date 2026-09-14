@@ -30,7 +30,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import CursorResult, delete, func, select, update
+from sqlalchemy import CursorResult, delete, func, select, text, update
 from sqlalchemy.orm import Session as OrmSession
 
 from atrium.compat.dates import utc_now
@@ -173,6 +173,46 @@ class UserRepository:
     def all(self) -> list[User]:
         rows = self._session.execute(select(models.User).order_by(models.User.name)).scalars()
         return [_user(row) for row in rows]
+
+    def first(self) -> User | None:
+        """The account inserted first, which is what first-time setup calls *the* first account.
+
+        **By `rowid`**, the order SQLite inserted rows in: the identifier is random and the name
+        can be renamed, so neither orders anything. The reference's own query has no ordering at
+        all, and on a server holding one account the two agree (014 plan section 4).
+        """
+        row = self._session.execute(
+            select(models.User).order_by(text("users.rowid")).limit(1)
+        ).scalar_one_or_none()
+        return _user(row) if row is not None else None
+
+    def count(self) -> int:
+        """How many accounts exist - what 014's carried-over setup rule logs and decides on."""
+        return int(
+            self._session.execute(select(func.count()).select_from(models.User)).scalar_one()
+        )
+
+    def rename(self, user_id: str, name: str) -> bool:
+        """Give an account a new name, or say it is taken and write nothing.
+
+        Taken means **another** account already holds the normalised form, so renaming an
+        account to a different spelling of its own name is not refused. The unique index on
+        `name_normalised` would refuse it anyway; asking first is what lets the caller answer
+        before anything else in its transaction has been written (014 plan section 6.4).
+        """
+        normalised = normalise_name(name)
+        holder = self._session.execute(
+            select(models.User.id).where(
+                models.User.name_normalised == normalised, models.User.id != user_id
+            )
+        ).first()
+        if holder is not None:
+            return False
+        row = self._require(user_id)
+        row.name = name
+        row.name_normalised = normalised
+        self._session.flush()
+        return True
 
     def visible_on_login_screens(self) -> list[User]:
         """What `/Users/Public` lists. An installation where every user is hidden returns none,
