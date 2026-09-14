@@ -143,7 +143,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
   `pytest tests/conformance/test_routes.py` — green, which proves nothing is served ahead of the
   interim list; and it fails if `LEVELS_DECLARED` is left at `48`.
 - **Spec reference:** §2.0, §6
-- **Done** (2026-09-14). **Every test passed and the suite still failed**: the L2 coverage check
+- **Done** (2026-09-14, [PR #364](https://github.com/vdatanet/atrium-media-server/pull/364)). **Every test passed and the suite still failed**: the L2 coverage check
   counted all 65 rows, so six nobody serves made the run red — gate finding 6, decided by the
   operator the same day, and the check now counts served rows. Two counts the gate had not listed
   moved with the surface: `test_differential.py` asserts the endpoint count too, and
