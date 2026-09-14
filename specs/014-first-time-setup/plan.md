@@ -106,7 +106,7 @@ src/atrium/
 │   ├── items.py                 changed   CollectionType gains five members; SCANNED_TYPES
 │   └── library.py               changed   collection_type: CollectionType | None
 ├── library/
-│   ├── config.py                changed   settle_name; any declared type, or none
+│   ├── config.py                changed   settle_name; any declared type, or none; create_with_view
 │   ├── identity.py              changed   a declaration with no type
 │   └── scanner.py               new       the in-process worker, its state, coalescing
 ├── users/
@@ -128,13 +128,13 @@ pyproject.toml                     changed   [project.scripts] atrium-admin
 | `db/models.py`, migration `0013` | changed / new | §4 |
 | `db/repositories.py` | changed | `UserRepository.first()` in insertion order; `rename(user_id, name) -> bool`, answering `False` and writing nothing for a name another account's `name_normalised` already holds; `count()`, which §6.2's rule logs *(added at T4, 2026-09-14)*; `LibraryRepository.names()` |
 | `domain/items.py`, `domain/library.py` | changed | §4 |
-| `library/config.py` | changed | `settle_name(requested, taken)` in §3.6.2's order; `create` accepts any `CollectionType` or `None`, and **no roots** — `_require_roots` keeps refusing nested ones (§6.6, amended 2026-09-14). **`create` stores the name exactly as given** *(T5, 2026-09-14)*: it stripped it, which would have stored `Movies?`'s settled `Movies ` as `Movies` |
+| `library/config.py` | changed | `settle_name(requested, taken)` in §3.6.2's order; `create` accepts any `CollectionType` or `None`, and **no roots** — `_require_roots` keeps refusing nested ones (§6.6, amended 2026-09-14). **`create` stores the name exactly as given** *(T5, 2026-09-14)*: it stripped it, which would have stored `Movies?`'s settled `Movies ` as `Movies`. **`create_with_view(session, name, collection_type, roots)`** creates the library **and its `CollectionFolder`** inside the caller's transaction, the folder being the resolver's own over no candidates, so the scan after it finds that row unchanged *(operator decision, 2026-09-14; added at T6)* |
 | `library/identity.py` | changed | `for_library_configuration` with `None` — **every existing library's identifier unchanged**, asserted (§8). `None` hashes an empty part where the type goes, and the name is hashed **as given** rather than stripped *(T5, 2026-09-14)*: stripped, `Movies ` over `Movies`'s roots derived `Movies`'s identifier and was refused as a second copy of it |
 | `library/walker.py`, `library/resolver.py` | changed | `extensions_for` and the dispatch keyed on `SCANNED_TYPES`, no `else`; `produced_by` in `domain/items.py` answers the folder alone for any other type *(not drawn until T5, 2026-09-14: §4 named them in prose)* |
 | `api/items.py`, `api/item_dto.py` | changed | `view_collection_type`: the `CollectionType` a view carries — none for `MIXED` and for no type (§6.5) *(T5, 2026-09-14; the tree outgrew its acceptance by this row)* |
 | `library/scanner.py` | new | §6.5 |
 | `users/first_account.py` | new | §6.3 and §6.4 |
-| `server.py` | changed | Two routers before `items.router`; `ClientAddressMiddleware` wrapping uvicorn's `ProxyHeadersMiddleware`, outside every layer that reads the address; the scanner started and stopped in the lifespan; `uvicorn.run(..., proxy_headers=False)` so the resolution is not applied twice. `pyproject.toml` gains `[project.scripts] atrium-admin = "atrium.cli.commands:main"` |
+| `server.py` | changed | Two routers before `items.router`; `ClientAddressMiddleware` wrapping uvicorn's `ProxyHeadersMiddleware`, outside every layer that reads the address; the scanner on `app.state`, started by its first request and stopped in the lifespan (gate finding 1); `uvicorn.run(..., proxy_headers=False)` so the resolution is not applied twice. `pyproject.toml` gains `[project.scripts] atrium-admin = "atrium.cli.commands:main"` |
 
 **No new runtime dependency.** The client uses `httpx`, which the server already depends on, and
 `argparse` and `getpass` from the standard library. `ProxyHeadersMiddleware` is imported from
@@ -215,13 +215,19 @@ def update_first_account(sessions, passwords: Passwords, update: StartupUserUpda
 # library/config.py
 REPLACED_IN_NAMES: Final[frozenset[str]]        # §3.6.2 step 3
 def settle_name(requested: str, taken: Collection[str]) -> str: ...
+def create_with_view(session: Session, name: str, collection_type: CollectionType | str | None,
+                     roots: tuple[str, ...] | list[str], *, case_sensitive_identity: bool = False,
+                     ) -> Library: ...          # the library and its CollectionFolder; never commits
+                                                # (operator decision, 2026-09-14; T6)
 
 # library/scanner.py
 class ScanTrigger(Enum): ADDED = "added"; REFRESH = "refresh"
 @dataclass(frozen=True)
 class LibraryRefresh: status: Literal["Idle", "Active"]; progress: float | None
 class Scanner:
-    def __init__(self, sessions: sessionmaker, settings: Settings, paths: DataPaths) -> None: ...
+    def __init__(self, sessions: sessionmaker, settings: Settings, paths: DataPaths, *,
+                 prober: MediaProber | None = None, subtitle_prober: SubtitleProber | None = None,
+                 ) -> None: ...                 # both handed to scan() unchanged (T6)
     def request(self, library_ids: Collection[str] | None, trigger: ScanTrigger) -> None: ...
     def refresh_state(self, library_id: str) -> LibraryRefresh: ...
     async def stop(self) -> None: ...           # the lifespan stops it; nothing starts it there
@@ -371,8 +377,16 @@ so the content-type gate answers it before the route runs; a body without `Passw
 - `refresh_state(id)` answers `Active` with the recorded progress **only while a pass started by
   `ScanTrigger.ADDED` is scanning that library**, and `Idle` with no progress otherwise — the
   reference's own asymmetry (§3.5), which a client can wait on and Atrium's own client does not.
+- **The transaction holds SQLite's write lock from its first write to its commit**, and a request
+  that writes meanwhile waits the busy timeout and fails — measured at T6, and accepted as a
+  residual risk by the operator on 2026-09-14 (§9's first row). No commit is made inside a scan.
 - `stop()` sets a flag the progress sink checks; the sink raises, the library's transaction rolls
-  back, and the next start rescans it.
+  back, and the next start rescans it. *(T6, 2026-09-14.)* **What the sink raises is a
+  `BaseException`**: `scan()` calls its sink through a reporter that catches `Exception`, disables
+  the sink and lets the scan finish, so a stop raised as an `Exception` would have been logged as a
+  broken progress bar and committed. And **one library asked for by both triggers before its pass
+  starts is scanned once as `ADDED`**, since that is the request a client may be waiting on through
+  the row.
 - A library whose type is not in `SCANNED_TYPES`, or is `None`, is handed to `scan()` like any
   other, and the walker admits no candidate for it. **Its `CollectionFolder` row is created like
   any other's, so it appears in `/UserViews`** — on the reference every library of every type is a
@@ -385,6 +399,13 @@ so the content-type gate answers it before the route runs; a body without `Passw
   configured (`RootUnreadableError`), so such a library never gets its folder and is in no
   `/UserViews` — against spec §3.6.1's *"every library is a view"*, and the reference's view of a
   pathless library was not read. Left to T6 and T7 with the question, not decided at T5.
+  **Decided by the operator on 2026-09-14: a library's `CollectionFolder` is created when the
+  library is created, not only when it is scanned** — `config.create_with_view`, in the one
+  transaction that creates the library — so every library, with no roots, of a type this server
+  does not scan, or not yet scanned, is in `/UserViews` at once, as on the reference; a later scan
+  finds the folder unchanged and neither duplicates nor re-identifies it. **And the worker skips a
+  library with no roots silently**, logging no `ScanRefusedError`, on every pass *(operator
+  decision, 2026-09-14; implemented at T6)*.
 
 `refreshLibrary=false` starts nothing. The reference scanned such a library anyway and the spec
 records that the trigger was not isolated (§3.6); starting an unrequested scan here would be
@@ -415,7 +436,9 @@ inventing a trigger nobody measured.
    and `\t \n \v \f \r U+0085` — and not Python's, which also takes U+001C to U+001F *(T5,
    2026-09-14, read and not measured)*; step 1's validator should use the same rule. `create` then
    stores the settled name as given.
-5. `library.config.create` in one transaction, then `scanner.request({id}, ADDED)` if
+5. `library.config.create_with_view` in one transaction — the library and its `CollectionFolder`
+   together, so it is a view before any scan *(operator decision, 2026-09-14)* — then
+   `scanner.request({id}, ADDED)` if
    `refreshLibrary`.
 6. `204`. The body is parsed, and nothing in it is applied **except the `PathInfos` step 3 reads
    when the query has no `paths`** — OQ-13 as amended on 2026-09-14, on the reference's own
@@ -450,7 +473,7 @@ inventing a trigger nobody measured.
 | A root vanishes or empties between add and scan | `ScanRefusedError` | logged; library stays listed and empty | fix the disk, `library scan` |
 | A scan raises unexpectedly | the worker's handler | logged with traceback; pass continues | `library scan` |
 | Server stops mid-scan | `stop()` → sink raises | the library's transaction rolls back | the next scan request rescans it |
-| A write from a request waits behind a scan's transaction | SQLite busy timeout | see §9's first row | measured by the scanner's task |
+| A write from a request waits behind a scan's transaction | SQLite's default 5 s busy timeout | the request fails `database is locked`, and the event loop waits with it (§9's first row) | none inside this feature: measured at T6 and accepted as a residual risk by the operator on 2026-09-14 |
 | Downgrade below `0013` with an unscannable library | the revision's own check | refuses, naming the rows | remove the libraries, or stay |
 | The client is pointed at a server that is not Atrium or Jellyfin | `GET /System/Info/Public` fails or lacks `ProductName` | exit `1`, printing what answered | — |
 
@@ -500,7 +523,7 @@ belongs to the change that teaches `tools/differential.py` to stand its own Atri
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| **A scan's single transaction holds SQLite's write lock for minutes**, and a sign-in (which writes `last_login_date`) or a playstate flush waits past the busy timeout and fails | High on a real library | High: the server looks broken during every scan | The scanner's task measures a sign-in and a progress report during a scan of the fixture tree. If either fails, the mitigation is a commit per scan phase inside `scanner.py`'s session handling — **not** a change to `scan()`'s contract, which its tests depend on — and the plan is amended with the measurement |
+| **A scan's single transaction holds SQLite's write lock for minutes**, and a sign-in (which writes `last_login_date`) or a playstate flush waits past the busy timeout and fails | High on a real library | High: the server looks broken during every scan | **Measured at T6 and accepted as a residual risk by the operator on 2026-09-14.** *The mitigation this row first named — a commit per scan phase inside `scanner.py`, `scan()`'s contract untouched — was tried and removed.* **Method**: the scanner's call to `scan()` over the fixture tree's music library wrapped so the scan thread waits on an event after 9 of its 18 rows are written, its transaction open; then a sign-in and a progress report through the application, each timed (the script was not kept as a test: it takes eleven seconds by construction). **Readings, 2026-09-14**: paused mid-write, the sign-in and the progress report each **fail `database is locked` after 5.4 s** (5.37 s and 5.43 s), and a `GET /System/Info/Public` sent alongside **also waits 5.40 s** — both routes do their database work on the event loop, and the engine sets no busy timeout, so SQLite's default 5 s applies to the whole server. Per-phase commits changed nothing (5.41 s, 5.42 s): the progress sink sees no boundary inside the stretch that holds the lock — the writes and 004's refresh after them report nothing once writing starts — and committing mid-write would make the committed rows look unchanged to the next scan, which would then never refresh them. Paused before the first write: 2 ms and 17 ms. **Unpaused**, the fixture's scan holds the lock for about 35 ms, and four sign-ins and four progress reports issued during it all succeeded, the slowest in 33 ms. **Why it is bounded today**: the lock covers the write and refresh stretch only, not the walk or the resolution; the online providers are unconfigured by default, so the refresh reads local files; and an out-of-process scan — until this feature the only way to scan — holds the same lock. Bounding it is on the task list's owes list |
 | A library of an unscannable type is in `/UserViews` on the reference and not here, or the reverse | Medium | Low: a view row more or fewer | The task list's first task is a reading on the single-use instance: `/UserViews` for such libraries and for one with no type, before any code decides the `CollectionFolder`. **Read on 2026-09-14: every library is a view** (§6.5) |
 | `CollectionType` in `VirtualFolderInfo` is JSON `null` on the reference where §1.7 predicts absence | Low | Low | The same reading takes the raw key set rather than `dict.get`. **Read on 2026-09-14: absent, as §1.7 predicts, and `PrimaryImageItemId` and `RefreshProgress` likewise** |
 | Relative, nested or duplicate paths are answered differently by the reference | Medium | Low: an edge no client sends | The same reading takes the three; a difference goes back into spec §3.6. **Read on 2026-09-14, and all three are answered differently: `204`, where §6.6 refused.** Decided by the operator the same day: the duplicate kept once, nested and relative refused as a divergence (§6.6) |

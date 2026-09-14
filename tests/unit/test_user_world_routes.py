@@ -383,3 +383,51 @@ async def test_a_library_this_server_does_not_scan_is_a_view_with_the_references
     else:
         assert view["CollectionType"] == on_the_view
     assert view["ChildCount"] == 0
+
+
+@pytest.mark.parametrize(
+    ("collection_type", "with_a_root", "on_the_view"),
+    [
+        ("movies", True, "movies"),
+        ("books", True, "books"),
+        ("mixed", True, None),
+        (None, True, None),
+        ("music", False, "music"),
+        (None, False, None),
+    ],
+    ids=["scannable", "unscannable", "mixed", "untyped", "no-roots", "untyped-no-roots"],
+)
+async def test_a_library_is_a_view_the_moment_it_is_created(
+    harness: Harness,
+    client: httpx.AsyncClient,
+    tmp_path: Path,
+    collection_type: str | None,
+    with_a_root: bool,
+    on_the_view: str | None,
+) -> None:
+    """Decided by the operator on 2026-09-14: **a library's `CollectionFolder` is created with the
+    library**, so every library - scannable or not, typed or not, with roots or with none - is in
+    `/UserViews` before anything has scanned it, with the `CollectionType` key T5 settled (014 spec
+    section 3.6.1, plan section 6.5). No scan runs in this test.
+
+    Red with `create` in place of `create_with_view`: the library exists and no view does.
+    """
+    root = tmp_path / "shelf"
+    root.mkdir()
+    (root / "A Film Alone (2014).mkv").write_bytes(b"not media")
+    roots = (str(root),) if with_a_root else ()
+    with harness.app.state.sessions.begin() as opened:
+        library = config.create_with_view(opened, "Shelf", collection_type, roots)
+
+    answered = await client.get("/UserViews")
+
+    rows = [one for one in answered.json()["Items"] if one["Name"] == "Shelf"]
+    assert len(rows) == 1, "a view before any scan"
+    view = rows[0]
+    assert view["Id"] == identity.for_library(library.id).replace("-", "")
+    assert view["Type"] == "CollectionFolder"
+    if on_the_view is None:
+        assert "CollectionType" not in view, "absent, never null"
+    else:
+        assert view["CollectionType"] == on_the_view
+    assert view["ChildCount"] == 0

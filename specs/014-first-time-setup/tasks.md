@@ -284,7 +284,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
 
 ## T6 — The scanner, and the lock it may hold
 
-- [ ] **Changes:** `library/scanner.py` as plan §6.5 describes it with gate finding 1's start;
+- [x] **Changes:** `library/scanner.py` as plan §6.5 describes it with gate finding 1's start;
       providers built from `settings.providers`; `server.py` — the scanner on `app.state` and
       stopped in the lifespan.
 - **Depends on:** T5
@@ -297,13 +297,38 @@ when the list goes, all six are counted against the file. Plan §8 amended.
     report issued while the fixture tree's music library is mid-scan, each timed. If either fails
     or waits past a second, this task commits per scan phase inside the scanner's session handling,
     leaves `scan()`'s contract alone, and amends plan §6.5 and §9 with the numbers.
+    **Outcome**: both failed `database is locked` after 5.4 s with the scan paused mid-write, and
+    per-phase commits changed nothing; **accepted as a residual risk by the operator on
+    2026-09-14**, with the readings in plan §9 and the bound on the owes list below.
 - **Spec reference:** §3.5, §3.6, §3.7; AC-8; plan §6.5, §9 row one
+- **Done** (2026-09-14, [PR #368](https://github.com/vdatanet/atrium-media-server/pull/368)). **The mitigation the plan prescribed could not reach the lock it was for.**
+  Paused after 9 of the music library's 18 rows, a sign-in and a progress report each failed
+  `database is locked` after 5.4 s — and a `GET /System/Info/Public` sent alongside waited 5.40 s
+  too, because both routes write on the event loop and the engine sets no busy timeout. Per-phase
+  commits were tried and removed: the sink sees no boundary inside the writes and 004's refresh,
+  which is the whole stretch holding the lock, and a commit mid-write would leave committed rows
+  that the next scan finds unchanged and never refreshes. Unpaused, the fixture holds the lock for
+  about 35 ms and eight overlapping requests succeeded, the slowest in 33 ms. The operator accepted
+  it as a residual risk the same day (plan §9). Two more the plan did not say: **a stop raised as
+  an `Exception` stops nothing**, because `scan()` calls its sink through a reporter that swallows
+  one and lets the scan commit — the sink raises a `BaseException`; and a library asked for by both
+  triggers before its pass is scanned once as `ADDED`. **Operator decision, 2026-09-14**: a
+  library's `CollectionFolder` is created with it — `config.create_with_view`, which T7's route
+  calls — so every library is a view before any scan and the scan after it finds the folder
+  unchanged; the worker skips a library with no roots silently. Tried and reverted, each red: the
+  stop as an `Exception`, the every-library request not merged into the pending ids, a refresh
+  shown `Active`, the latest trigger winning, a rootless library scanned, an unexpected failure
+  uncaught, a refusal logged with a traceback, no commit, the lifespan not stopping the worker, and
+  the folder not written, or written with another name, sort name or identifier.
 
 ## T7 — Listing, adding and refreshing libraries
 
 - [ ] **Changes:** `api/library_structure.py` — the three routes, `VirtualFolderInfo` with
-      `LibraryOptions` carrying `PathInfos` only, and the key presence T1 read. `server.py` — the
-      router. `test_routes.py` — `INTERIM_014` gains the three paths.
+      `LibraryOptions` carrying `PathInfos` only, and the key presence T1 read. **`POST
+      /Library/VirtualFolders` creates the library through `library.config.create_with_view`**, so
+      its `CollectionFolder` exists before any scan *(operator decision, 2026-09-14; the helper
+      landed in T6)*. `server.py` — the router. `test_routes.py` — `INTERIM_014` gains the three
+      paths.
 - **Depends on:** T4, T6
 - **Verified by:**
   - `pytest tests/conformance/test_library_structure.py` — AC-6; AC-7 over every row of §3.6.1's
@@ -311,7 +336,10 @@ when the list goes, all six are counted against the file. Plan §8 amended.
     settled — a path given twice listed once, no `paths` and no body paths added and listed with
     none, the body's `PathInfos` used when `paths` is absent and ignored when it is present, a
     relative path and two nested paths each `400` `Error processing request.` and adding no
-    library; `Movies` and `movies` listed with two different `ItemId`s, each its own view's; no
+    library; **every library added with `refreshLibrary=false` — of a scanned type, an unscanned
+    type, no type, and no paths — in the first account's `/UserViews` with no scan having run**,
+    with the `CollectionType` key T5 settled *(operator decision, 2026-09-14)*;
+    `Movies` and `movies` listed with two different `ItemId`s, each its own view's; no
     listed row carrying `PrimaryImageItemId`; `LibraryOptions` with exactly one key; every body
     property other than `PathInfos` changing nothing.
   - `pytest tests/conformance/test_setup_window.py` — the seven rows over these three routes, and
@@ -393,5 +421,11 @@ The feature is done when **all** of these hold:
   write to the store — and then compares the setup sequence against the reference's.
 - **The restricted seat** the differential needs is still built by hand, because a second account is
   `POST /Users/New` and the next slice (spec §2).
+- **Bounding the scan's write lock** (plan §9 row one, accepted as a residual risk on 2026-09-14):
+  `scan()`'s contract changed so a scanner can commit per inspected file and run 004's refresh in
+  short transactions (003, 004), and the request side given an explicit busy timeout with route
+  database work moved off the event loop (002, 007). The starting point is T6's readings: paused
+  mid-write, a sign-in and a progress report fail `database is locked` after 5.4 s and an unrelated
+  read waits as long; unpaused, the fixture holds the lock about 35 ms.
 - **What started the scan of a library added with `refreshLibrary=false`** on the reference was not
   isolated (spec §3.6), and this server starts none.

@@ -85,6 +85,7 @@ from atrium.db.engine import (
 )
 from atrium.db.repositories import SessionRepository, UserDataRepository, UserRepository
 from atrium.db.schema import ensure_current
+from atrium.library.scanner import Scanner
 from atrium.lifecycle import Readiness, ReadinessMiddleware
 from atrium.media.ffmpeg import ProductionLedger
 from atrium.media.sessions import TranscodeManager
@@ -224,6 +225,11 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
         segment_keep_seconds=settings.encoding.segment_keep_seconds,
     )
 
+    # The scan worker, which runs inside this process from 014 on (plan section 6.5). Built here and
+    # started by nothing here: its first request starts it, on the loop that request runs on,
+    # because the transport every test uses runs no lifespan. The lifespan below only stops it.
+    scanner = Scanner(sessions, settings, resolved)
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         # Everything slow belongs here, before the gate opens. Today there is nothing slow, and
@@ -257,6 +263,9 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
         try:
             yield
         finally:
+            # First, so a library half-way through its scan rolls back before anything below
+            # flushes or disposes of the connections its transaction is holding.
+            await scanner.stop()
             for task in (flusher, reaper, sweeper):
                 task.cancel()
                 with suppress(asyncio.CancelledError):
@@ -359,6 +368,7 @@ def create_app(paths: DataPaths | None = None) -> FastAPI:
     app.state.passwords = passwords
     app.state.registry = registry
     app.state.playing = playing
+    app.state.scanner = scanner
     app.state.authenticator = authenticator
     app.state.settings = settings
     app.state.server_state = state

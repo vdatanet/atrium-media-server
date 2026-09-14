@@ -20,11 +20,13 @@ from sqlalchemy import Engine
 
 from atrium.db import schema
 from atrium.db.engine import create_database_engine, session_factory, session_scope
-from atrium.db.repositories import LibraryRepository
+from atrium.db.repositories import ItemRepository, LibraryRepository
 from atrium.domain.items import CollectionType, ItemType
 from atrium.library import config
 from atrium.library.identity import for_file, for_library
-from tests.conftest import data_dir
+from atrium.library.scan import scan
+from tests.conftest import data_dir, not_media
+from tests.fixtures.library import BuiltFixture
 
 
 @pytest.fixture
@@ -316,3 +318,69 @@ def test_removing_a_library_removes_it(repositories: LibraryRepository) -> None:
     repositories.remove(library.id)
     assert repositories.by_id(library.id) is None
     assert repositories.all() == []
+
+
+# ------------------------------------------------------------------------------------------
+# A library and its view, created together (014, operator decision 2026-09-14)
+# ------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("kind", "with_roots"),
+    [("music", True), ("books", True), (None, True), ("movies", False)],
+    ids=["scannable", "unscannable", "untyped", "no-roots"],
+)
+def test_a_library_is_created_with_its_folder_and_a_scan_leaves_the_folder_alone(
+    engine: Engine, fixture_library: BuiltFixture, kind: str | None, with_roots: bool
+) -> None:
+    """`create_with_view` writes the one row a scan would have written for the library itself -
+    the same identifier, name and sort name - so the scan after it **neither adds a second folder
+    nor re-identifies this one**: the folder is reported unchanged and keeps its creation date.
+
+    A library with no roots is not scanned by the scanner at all; `scan` itself refuses it, so the
+    folder is all it will ever have, and it is there.
+    """
+    factory = session_factory(engine)
+    roots = (str(fixture_library.of("music").root),) if with_roots else ()
+    with session_scope(factory) as db:
+        library = config.create_with_view(db, "Shelf", kind, roots)
+
+    with session_scope(factory) as db:
+        before = ItemRepository(db).by_library(library.id)
+    assert list(before) == [library.item_id]
+    (folder,) = before.values()
+    assert folder.type is ItemType.COLLECTION_FOLDER
+    assert (folder.name, folder.parent_id) == ("Shelf", None)
+    if not with_roots:
+        return
+
+    with session_scope(factory) as db:
+        report = scan(library, db, prober=not_media)
+    with session_scope(factory) as db:
+        after = ItemRepository(db).by_library(library.id)
+
+    folders = [one for one in after.values() if one.type is ItemType.COLLECTION_FOLDER]
+    assert [one.id for one in folders] == [library.item_id], "one folder, the same identifier"
+    assert folders[0].date_created == folder.date_created
+    assert folders[0].sort_name == folder.sort_name
+    assert report.added == len(after) - 1, "everything but the folder is new"
+    assert report.unchanged == 1, "the folder is the one row the scan found as it left it"
+    assert report.updated == 0
+
+
+def test_a_library_and_its_folder_are_one_unit_of_work(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A folder that cannot be written leaves no library behind it: the caller's transaction holds
+    both, so a failure in the second rolls back the first."""
+    factory = session_factory(engine)
+
+    def refuse(_repository: ItemRepository, _item: object) -> None:
+        raise RuntimeError("the folder could not be written")
+
+    monkeypatch.setattr(ItemRepository, "add", refuse)
+    with pytest.raises(RuntimeError), session_scope(factory) as db:
+        config.create_with_view(db, "Movies", "movies", ("/mnt/films",))
+
+    with session_scope(factory) as db:
+        assert LibraryRepository(db).all() == []
