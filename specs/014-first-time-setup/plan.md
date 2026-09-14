@@ -128,7 +128,7 @@ pyproject.toml                     changed   [project.scripts] atrium-admin
 | `db/models.py`, migration `0013` | changed / new | §4 |
 | `db/repositories.py` | changed | `UserRepository.first()` in insertion order; `rename(user_id, name) -> bool`, answering `False` and writing nothing for a name another account's `name_normalised` already holds; `count()`, which §6.2's rule logs *(added at T4, 2026-09-14)*; `LibraryRepository.names()` |
 | `domain/items.py`, `domain/library.py` | changed | §4 |
-| `library/config.py` | changed | `settle_name(requested, taken)` in §3.6.2's order; `create` accepts any `CollectionType` or `None`, and **no roots** — `_require_roots` keeps refusing nested ones (§6.6, amended 2026-09-14). **`create` stores the name exactly as given** *(T5, 2026-09-14)*: it stripped it, which would have stored `Movies?`'s settled `Movies ` as `Movies`. **`create_with_view(session, name, collection_type, roots)`** creates the library **and its `CollectionFolder`** inside the caller's transaction, the folder being the resolver's own over no candidates, so the scan after it finds that row unchanged *(operator decision, 2026-09-14; added at T6)* |
+| `library/config.py` | changed | `settle_name(requested, taken)` in §3.6.2's order; `create` accepts any `CollectionType` or `None`, and **no roots** — `_require_roots` keeps refusing nested ones (§6.6, amended 2026-09-14). **`create` stores the name exactly as given** *(T5, 2026-09-14)*: it stripped it, which would have stored `Movies?`'s settled `Movies ` as `Movies`. **`create_with_view(session, name, collection_type, roots)`** creates the library **and its `CollectionFolder`** inside the caller's transaction, the folder being the resolver's own over no candidates, so the scan after it finds that row unchanged *(operator decision, 2026-09-14; added at T6)* **Two of its rules public since T7** *(2026-09-14)*: `is_blank`, the platform's whitespace test `settle_name` refuses by, which the route's validation `400` asks too, and `require_roots`, the nesting refusal that was `_require_roots` — asked by the route before it opens a transaction, rather than caught as a `ValueError` around `create`, which would also have turned `LibraryAlreadyDeclaredError` into a refusal nobody measured |
 | `library/identity.py` | changed | `for_library_configuration` with `None` — **every existing library's identifier unchanged**, asserted (§8). `None` hashes an empty part where the type goes, and the name is hashed **as given** rather than stripped *(T5, 2026-09-14)*: stripped, `Movies ` over `Movies`'s roots derived `Movies`'s identifier and was refused as a second copy of it |
 | `library/walker.py`, `library/resolver.py` | changed | `extensions_for` and the dispatch keyed on `SCANNED_TYPES`, no `else`; `produced_by` in `domain/items.py` answers the folder alone for any other type *(not drawn until T5, 2026-09-14: §4 named them in prose)* |
 | `api/items.py`, `api/item_dto.py` | changed | `view_collection_type`: the `CollectionType` a view carries — none for `MIXED` and for no type (§6.5) *(T5, 2026-09-14; the tree outgrew its acceptance by this row)* |
@@ -234,11 +234,14 @@ class Scanner:
     async def idle(self) -> None: ...           # for tests; the client never sees it
 
 # api/library_structure.py
-class VirtualFolderInfo(PascalModel):
-    name: str; locations: list[str]; collection_type: str | None; item_id: str
-    library_options: LibraryOptionsOut; refresh_status: str | None; refresh_progress: float | None
-class LibraryOptionsOut(PascalModel):
-    path_infos: list[PathInfo]                  # OQ-13: what this server honours, and only that
+class VirtualFolderInfo(AtriumModel):           # the reference's declaration order (T7)
+    name: str; locations: list[str]; collection_type: str | None
+    library_options: LibraryOptionsOut; item_id: str
+    refresh_progress: float | None; refresh_status: str     # on every row (T7)
+class LibraryOptionsOut(AtriumModel):
+    path_infos: list[MediaPathInfo]             # OQ-13: what this server honours, and only that
+class AddVirtualFolderDto(AtriumModel):         # the optional body; LibraryOptions.PathInfos only
+    library_options: LibraryOptionsIn | None
 
 # cli/client.py
 class AdminClient:
@@ -413,9 +416,18 @@ inventing a trigger nobody measured.
 
 ### 6.6 `POST /Library/VirtualFolders`
 
-1. Validation `400` keyed `name` for a missing, empty or whitespace name — FastAPI's own required
-   `Query` with a whitespace validator, so the existing handler produces §1.11's map.
-2. `collectionType`: one of the eight → that member; absent or anything else → `None`.
+1. Validation `400` keyed `name` for a missing, empty or whitespace name. *(Amended at T7,
+   2026-09-14.)* **Not FastAPI's own required `Query`**, as this step said: declared required, the
+   framework reports an absent value with an input the handler quotes back as `The value 'None' is
+   not valid.` and an empty one as `The value '' is not valid.` — two sentences where the
+   reference's binder, which turns an empty or whitespace value into no value, answers one. So
+   `name` is declared optional, as the pinned document declares it `[spec: AddVirtualFolder]`, and
+   the route raises the validation error itself, before anything else, keyed `name` with
+   `The name field is required.` — the sentence that binder's required-value refusal carries where
+   §1.11 measured it, on a body property; **on this route the reading elided it**, so it is read
+   and not measured. The test is `config.is_blank`, `settle_name`'s own.
+2. `collectionType`: one of the eight → that member; absent or anything else → `None`. *(T7,
+   2026-09-14.)* Matched ignoring case, as every vocabulary token in a query is (behaviours §1.12).
 3. **The paths.** `paths` split on `,`; when the query carries no `paths`, each
    `LibraryOptions.PathInfos[].Path` of the body instead. Then, in this order, each refusal
    `controller_error` and adding nothing: a path that is not absolute (`normalise_root`'s own
@@ -430,7 +442,11 @@ inventing a trigger nobody measured.
    path an empty library, the body's paths used, and the nested and relative refusals kept as a
    divergence ([behaviours §3.31](../../docs/compatibility/behaviours.md)). `create` therefore
    accepts an empty tuple of roots, which 003's `_require_roots` refuses today, and keeps refusing
-   nested ones (T5).
+   nested ones (T5). *(T7, 2026-09-14.)* `paths` is split the reference's way — on commas, empty
+   entries dropped, each trimmed — and **an empty `paths=` is no `paths`**, so the body's stand in
+   `[source: Jellyfin.Api/Controllers/LibraryStructureController.cs:84-91 @ v10.11.11]`. A
+   `PathInfos` entry with no `Path` is refused as a path that does not exist, which is what the
+   reference's directory test makes of it (read, not measured).
 4. `settle_name(name, LibraryRepository.names())` — trim, replace, number from `2`, exact compare.
    The trim and the emptiness check use the platform's whitespace rule — the separator categories
    and `\t \n \v \f \r U+0085` — and not Python's, which also takes U+001C to U+001F *(T5,

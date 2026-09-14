@@ -87,7 +87,7 @@ def test_the_repository_has_no_way_to_change_the_flag() -> None:
     than the discipline.
     """
     editable = {name for name in vars(LibraryRepository) if not name.startswith("_")}
-    assert editable == {"by_id", "all", "add", "rename", "set_roots", "remove"}
+    assert editable == {"by_id", "all", "names", "add", "rename", "set_roots", "remove"}
     for method in ("rename", "set_roots"):
         annotations = getattr(LibraryRepository, method).__annotations__
         assert "case_sensitive_identity" not in annotations

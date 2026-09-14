@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -65,7 +66,9 @@ IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007", "008
 #: exact-set check below has to stay meaningful in between: the routes that have landed are listed
 #: here. **Empty at T2**, which is the proof that adding the rows served nothing; **T4 added the
 #: three startup routes**, each asked by `test_startup.py` and `test_setup_window.py` in the same
-#: change, because the L2 coverage hook counts what this list serves (014 tasks, gate finding 6).
+#: change, because the L2 coverage hook counts what this list serves (014 tasks, gate finding 6),
+#: **and T7 the three library routes**, asked by `test_library_structure.py`, `test_setup_window.py`
+#: and `tests/library/test_scanner.py`'s AC-8 tests - which leaves no row of the file unserved.
 #: It is deleted at T10, when `"014"` joins the set above - the eighth of these lists, after the
 #: seven that went the same way (014 tasks, gate finding 3).
 INTERIM_014: frozenset[tuple[str, str]] = frozenset(
@@ -73,6 +76,9 @@ INTERIM_014: frozenset[tuple[str, str]] = frozenset(
         ("GET", "/Startup/User"),
         ("POST", "/Startup/User"),
         ("POST", "/Startup/Complete"),
+        ("GET", "/Library/VirtualFolders"),
+        ("POST", "/Library/VirtualFolders"),
+        ("POST", "/Library/Refresh"),
     }
 )
 
@@ -584,14 +590,24 @@ def test_the_coverage_function_notices_an_endpoint_nothing_asked() -> None:
     assert endpoints_exercised([one]) == frozenset({one})
 
 
-def test_the_coverage_check_counts_served_rows_and_not_declared_ones() -> None:
+def test_the_coverage_check_counts_served_rows_and_not_declared_ones(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """**The scoping, proven without a session.** A row declared in `surface.yaml` whose feature
     serves nothing is not reported however little asks it; a served row nothing asked is. Both
     halves, because a scope that dropped every row would pass the first alone.
+
+    **Since 014 T7 the file has no such row**: its six are all on `INTERIM_014`, so every declared
+    row is served. The state before T7 is put back for the length of the test - the interim list
+    without `POST /Library/Refresh` - rather than the half deleted, because the scoping is still
+    what keeps T10's successor honest when the next feature lands its rows ahead of its routes.
     """
     declared_not_served = ("POST", "/Library/Refresh")
+    monkeypatch.setattr(
+        sys.modules[__name__], "INTERIM_014", INTERIM_014 - frozenset({declared_not_served})
+    )
     assert declared_not_served in surface_paths()
-    assert declared_not_served not in served_rows(), "014 T4/T7 landed it; pick another row"
+    assert declared_not_served not in served_rows(), "the interim list was not narrowed"
 
     one = ("GET", "/System/Info/Public")
     assert "GET /System/Info/Public" in unasked_endpoints([])

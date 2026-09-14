@@ -108,7 +108,7 @@ def create(
         roots=cleaned,
         case_sensitive_identity=case_sensitive_identity,
     )
-    _require_roots(library.roots)
+    require_roots(library.roots)
     already = repository.by_id(library.id)
     if already is not None:
         raise LibraryAlreadyDeclaredError(
@@ -204,7 +204,7 @@ def update(
         repository.rename(library_id, name.strip())
     if roots is not None:
         cleaned = tuple(normalise_root(root) for root in roots)
-        _require_roots(cleaned)
+        require_roots(cleaned)
         repository.set_roots(library_id, cleaned)
 
     updated = repository.by_id(library_id)
@@ -233,8 +233,13 @@ def normalise_root(root: str) -> str:
     return str(path)
 
 
-def _require_roots(roots: tuple[str, ...]) -> None:
+def require_roots(roots: tuple[str, ...]) -> None:
     """Refuse two roots one inside the other. **No roots at all is not refused**, since 014.
+
+    Public since 014 T7 (2026-09-14), when it was `_require_roots`: `POST /Library/VirtualFolders`
+    asks it before it opens a transaction, so a nested pair is refused `400` by the rule `create`
+    enforces rather than by a `ValueError` caught around `create`, which would also have turned
+    `LibraryAlreadyDeclaredError` into a refusal nobody measured.
 
     Until 2026-09-14 this refused an empty tuple too, on the grounds that a library with no root
     can never hold anything. That is still true and it is no longer a reason: the reference adds a
@@ -294,6 +299,18 @@ def _is_whitespace(character: str) -> bool:
     return character in _OTHER_WHITESPACE or unicodedata.category(character) in {"Zs", "Zl", "Zp"}
 
 
+def is_blank(text: str | None) -> bool:
+    """Step 1's test: absent, empty, or nothing but the platform's whitespace.
+
+    Public because two places ask it and they must agree: `settle_name` below, and
+    `POST /Library/VirtualFolders`, which answers the validation `400` for the same names before
+    the route does anything else (014 plan section 6.6 step 1). A route borrowing Python's
+    `str.isspace` would refuse `\x1f` where this accepts it - the one difference `_OTHER_WHITESPACE`
+    exists to keep - and the two refusals would no longer be one rule (014 T7, 2026-09-14).
+    """
+    return not text or all(_is_whitespace(character) for character in text)
+
+
 def _trimmed(text: str) -> str:
     start, end = 0, len(text)
     while start < end and _is_whitespace(text[start]):
@@ -321,7 +338,7 @@ def settle_name(requested: str, taken: Collection[str]) -> str:
     `Movies`, because the trim came first; and a name made only of replaced characters passes step
     1 and becomes spaces.
     """
-    if not requested or all(_is_whitespace(character) for character in requested):
+    if is_blank(requested):
         raise ValueError("a library name cannot be empty or whitespace (014 spec section 3.6.2)")
     cleaned = "".join(
         " " if character in REPLACED_IN_NAMES else character for character in _trimmed(requested)
@@ -341,7 +358,9 @@ __all__ = [
     "LibraryAlreadyDeclaredError",
     "create",
     "create_with_view",
+    "is_blank",
     "normalise_root",
+    "require_roots",
     "settle_name",
     "update",
 ]

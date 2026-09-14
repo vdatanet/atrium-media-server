@@ -3175,14 +3175,15 @@ def reference_rescan(wire: Wire, timeout: float = RESCAN_TIMEOUT) -> str:
     raise NamedError(f"the reference's rescan did not finish within {timeout:g}s")
 
 
-#: Why neither `rescan` row is a comparison, measured against `surface.yaml` rather than assumed:
-#: the reference's `POST /Library/Refresh` has no Atrium counterpart, so the second scan can be
-#: asked of one server and not of the other.
+#: Why neither `rescan` row is a comparison: the runners were written when the reference's
+#: `POST /Library/Refresh` had no Atrium counterpart, and they ask the second scan of one server
+#: only. Atrium serves the route since 014 T7 (2026-09-14); teaching the runners to ask it is
+#: 014's owed L3 change, not done here.
 NO_SECOND_SCAN = (
-    "Atrium serves no library-refresh route - `POST /Library/Refresh` is a row of "
-    "docs/compatibility/surface.yaml since 014 T2 and no implemented feature serves it yet - so "
-    "the second scan this row compares can be asked of the reference and not of Atrium. The "
-    "instance was necessary and is not sufficient"
+    "this runner asks only the reference for the second scan - `POST /Library/Refresh` is served "
+    "by Atrium since 014 T7, and the runner has not been taught to ask it - so the second scan "
+    "this row compares is asked of the reference and not of Atrium. The instance was necessary "
+    "and is not sufficient"
 )
 
 
