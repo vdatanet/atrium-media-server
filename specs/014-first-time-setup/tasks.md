@@ -231,7 +231,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
 
 ## T5 — A library of any declared type, and a name that is settled
 
-- [ ] **Changes:** `domain/items.py` — five members and `SCANNED_TYPES`; `domain/library.py` —
+- [x] **Changes:** `domain/items.py` — five members and `SCANNED_TYPES`; `domain/library.py` —
       `collection_type: CollectionType | None`. Revision `0013` and `db/models.py`.
       `library/identity.py` — a declaration with no type. `library/walker.py`,
       `library/resolver.py` and `PRODUCED_BY` keyed on `SCANNED_TYPES`, with no `else` that means
@@ -257,6 +257,30 @@ when the list goes, all six are counted against the file. Plan §8 amended.
     likewise.
   - `mypy` — clean, which is the proof every match on the old three was found.
 - **Spec reference:** §3.6, §3.6.1, §3.6.2; AC-7
+- **Done** (2026-09-14, [PR #367](https://github.com/vdatanet/atrium-media-server/pull/367)). **`create` stripped the name, and the strip undid the one
+  step of §3.6.2's order a client can see**: `Movies?` settles to `Movies `, which `create` stored
+  as `Movies` — and the identity key stripped it too, so `Movies ` over `Movies`'s roots derived
+  `Movies`'s identifier and would have been refused as a second copy of a library the reference
+  adds. The name is now stored and hashed as given; no fixture declaration pads one, and the
+  committed table of thirteen known identifiers holds, through `for_library_configuration` and
+  through `create`. A declaration with no type hashes an empty part where the type goes. Three
+  more the task did not say: `libraries` has **three** cascading children — roots, items and
+  inspections — and `test_migration_0003.py`'s rollback downgraded on a connection enforcing
+  foreign keys, which 0013 would have emptied in silence, so the revision refuses a populated
+  rebuild there and the harness uses `migration_connection`; the reference's trim is the
+  platform's whitespace, not Python's `strip`, which also takes U+001C to U+001F (read, not
+  measured); and **a library with no roots gets no `CollectionFolder`**, because `scan()`'s guard
+  one refuses it, so it is in no `/UserViews` — left to T6 and T7 with the question in plan §6.5.
+  An unscannable library's view is the scan's folder like any other's, its missing
+  `CollectionType` is `api/items.py:view_collection_type`, asserted over `/UserViews` for all six
+  cases. `test_a_library_round_trips` reads back `Movies ` as given. The books and untyped scans
+  were red before the change (`create` refused both). Tried and reverted: the resolver's `else`
+  restored (3 red; the scan test stays green behind the walker, and goes red with the walker
+  falling back to audio as well), the walker falling back (6), `produced_by` falling back to music
+  (6), the name stripped in the key (2) or in `create` (2), no type hashed as `movies` (14), no
+  roots refused (1), the nesting refusal removed (1), trimming with `str.strip` (1), replacing
+  before trimming (3), numbering from 1 (4), a casefolded compare (4), `mixed` kept on the view
+  (1), 0013's foreign-key guard (1), its downgrade refusal (1), its check left at three (2).
 
 ## T6 — The scanner, and the lock it may hold
 

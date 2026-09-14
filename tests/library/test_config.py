@@ -117,10 +117,17 @@ def test_the_flag_really_does_change_every_identifier(repositories: LibraryRepos
 
 
 def test_a_library_round_trips(repositories: LibraryRepository) -> None:
-    library = config.create(repositories, "  Movies  ", "movies", ("/mnt/a", "/mnt/b"))
+    """**The name comes back exactly as it was given**, surrounding space included, since 014 T5.
+
+    This declared `"  Movies  "` and read back `"Movies"` until 2026-09-14. A name is cleaned by
+    `settle_name` now, in 014 spec section 3.6.2's order, and a strip in `create` afterwards would
+    undo the step a client can see: `Movies?` settles to `Movies `, and would have been stored as
+    `Movies`.
+    """
+    library = config.create(repositories, "Movies ", "movies", ("/mnt/a", "/mnt/b"))
     read_back = repositories.by_id(library.id)
     assert read_back is not None
-    assert read_back.name == "Movies"
+    assert read_back.name == "Movies "
     assert read_back.collection_type is CollectionType.MOVIES
     assert read_back.roots == ("/mnt/a", "/mnt/b")
 
@@ -231,9 +238,15 @@ def test_an_empty_root_is_refused() -> None:
         config.normalise_root("   ")
 
 
-def test_a_library_with_no_roots_is_refused(repositories: LibraryRepository) -> None:
-    with pytest.raises(ValueError, match="at least one root"):
-        config.create(repositories, "Movies", "movies", ())
+def test_a_library_with_no_roots_is_stored_with_none(repositories: LibraryRepository) -> None:
+    """Refused until 014 T5. The reference adds a library with no path, and 014 decided to do the
+    same, as an empty library (014 spec section 3.6, behaviours section 3.31) - the nesting refusal
+    below is the half of the old rule that protects identity, and it stays."""
+    library = config.create(repositories, "Movies", "movies", ())
+    read_back = repositories.by_id(library.id)
+    assert read_back is not None
+    assert read_back.roots == ()
+    assert read_back.id == library.id
 
 
 def test_a_root_inside_another_root_is_refused(repositories: LibraryRepository) -> None:
@@ -247,11 +260,50 @@ def test_the_same_root_twice_is_one_root(repositories: LibraryRepository) -> Non
     assert repositories.by_id(library.id).roots == ("/mnt/films",)  # type: ignore[union-attr]
 
 
-def test_a_collection_type_the_resolver_cannot_scan_is_refused(
+@pytest.mark.parametrize(
+    "collection_type", ["musicvideos", "homevideos", "boxsets", "books", "mixed", None]
+)
+def test_a_library_of_a_type_this_server_does_not_scan_is_stored_with_that_type(
+    repositories: LibraryRepository, collection_type: str | None
+) -> None:
+    """Refused until 014 T5, for `books`. Every declared type is created as the reference creates
+    it, and so is a library with none (014 spec section 3.6.1); what is scanned did not widen."""
+    library = config.create(repositories, "Shelf", collection_type, ("/mnt/shelf",))
+    read_back = repositories.by_id(library.id)
+    assert read_back is not None
+    expected = None if collection_type is None else CollectionType(collection_type)
+    assert read_back.collection_type is expected
+
+
+def test_a_type_the_reference_does_not_declare_is_refused(repositories: LibraryRepository) -> None:
+    """`photos` is stored as no type, and that mapping is the route's, taken before the domain sees
+    the value (014 plan section 4) - so the domain still refuses the spelling itself."""
+    with pytest.raises(ValueError):
+        config.create(repositories, "Photos", "photos", ("/mnt/photos",))
+    assert repositories.all() == []
+
+
+def test_a_name_that_settled_to_a_trailing_space_is_its_own_library(
     repositories: LibraryRepository,
 ) -> None:
-    with pytest.raises(ValueError):
-        config.create(repositories, "Books", "books", ("/mnt/books",))
+    """`Movies?` settles to `Movies ` (014 spec section 3.6.2) and is added beside `Movies` over the
+    same roots - the reference's answer. A name stripped by `create` refused it as a second copy."""
+    plain = config.create(repositories, "Movies", "movies", ("/mnt/films",))
+    padded = config.create(
+        repositories, config.settle_name("Movies?", ["Movies"]), "movies", ("/mnt/films",)
+    )
+    assert plain.id != padded.id
+    assert sorted(one.name for one in repositories.all()) == ["Movies", "Movies "]
+
+
+def test_a_library_with_no_type_and_one_with_a_type_are_two_libraries(
+    repositories: LibraryRepository,
+) -> None:
+    """The declaration with no type derives an identifier no typed one does."""
+    typed = config.create(repositories, "Shelf", "movies", ("/mnt/shelf",))
+    untyped = config.create(repositories, "Shelf", None, ("/mnt/shelf",))
+    assert typed.id != untyped.id
+    assert len(repositories.all()) == 2
 
 
 def test_updating_a_library_that_does_not_exist_says_so(repositories: LibraryRepository) -> None:

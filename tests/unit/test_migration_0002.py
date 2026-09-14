@@ -299,11 +299,13 @@ def test_deleting_an_item_takes_its_sources(migrated: Engine) -> None:
 # --------------------------------------------------------------------------------------------
 
 
-def test_a_collection_type_the_resolver_cannot_scan_is_refused(migrated: Engine) -> None:
-    """Spec section 3.1 has three. A fourth would be a library nothing knows how to scan."""
+def test_a_collection_type_the_reference_does_not_declare_is_refused(migrated: Engine) -> None:
+    """Spec section 3.1 had three, and this refused `books` until 014 widened the check to the
+    reference's eight or none (revision 0013, `test_migrations.py` asserts both sides of it).
+    What the schema at head still refuses is a ninth spelling: `photos` is stored as no type."""
     factory = session_factory(migrated)
     with pytest.raises(IntegrityError), session_scope(factory) as db:
-        db.add(a_library(collection_type="books"))
+        db.add(a_library(collection_type="photos"))
 
 
 def test_an_item_type_no_client_knows_is_refused(migrated: Engine) -> None:

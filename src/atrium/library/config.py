@@ -37,8 +37,11 @@ rather than quietly making a duplicate that would find every file twice.
 
 from __future__ import annotations
 
+import unicodedata
+from collections.abc import Collection
 from dataclasses import replace
 from pathlib import PurePath
+from typing import Final
 
 from atrium.db.repositories import LibraryRepository
 from atrium.domain.items import CollectionType
@@ -68,7 +71,7 @@ class FrozenAtCreationError(ValueError):
 def create(
     repository: LibraryRepository,
     name: str,
-    collection_type: CollectionType | str,
+    collection_type: CollectionType | str | None,
     roots: tuple[str, ...] | list[str],
     *,
     case_sensitive_identity: bool = False,
@@ -80,12 +83,23 @@ def create(
     defaults it off - but whether Atrium should treat it as a global decision or a per-library
     fact. Per-library, recorded with the library, and frozen. A server whose operator flipped a
     global switch would rewrite every identifier in every library at once.
+
+    **Any of the eight declared types, or `None`**, and **no roots at all** - both since 014 (spec
+    section 3.6.1 and 3.6). A string that names no member is still refused here: mapping an
+    undeclared type such as `photos` to `None` is the route's decision, taken before the domain sees
+    it (014 plan section 4). Two roots one inside the other are still refused.
+
+    **The name is stored and hashed exactly as given**, and `settle_name` is where a name is
+    cleaned. This stripped it until 2026-09-14, and a strip here undoes the one step of 014's order
+    a client can see: `Movies?` settles to `Movies ` - trimmed first, replaced second - and a strip
+    afterwards would store `Movies` and derive the identifier `Movies` over the same roots already
+    has, refusing as a second copy a library the reference adds (014 spec section 3.6.2).
     """
-    kind = CollectionType(collection_type)
+    kind = None if collection_type is None else CollectionType(collection_type)
     cleaned = tuple(normalise_root(root) for root in roots)
     library = Library(
         id=for_library_configuration(kind, name, cleaned, case_sensitive=case_sensitive_identity),
-        name=name.strip(),
+        name=name,
         collection_type=kind,
         roots=cleaned,
         case_sensitive_identity=case_sensitive_identity,
@@ -95,7 +109,7 @@ def create(
     if already is not None:
         raise LibraryAlreadyDeclaredError(
             f"this declaration is library {already.id} - {already.name!r} of type "
-            f"{already.collection_type.value} over {list(already.roots)}. Since the identifier is "
+            f"{_type_of(already)} over {list(already.roots)}. Since the identifier is "
             f"derived from the declaration, creating it again would be a second copy of one "
             f"library: every file under it found twice, under two identifiers. Edit that library "
             f"with `update`, or declare this one with a different name or different roots."
@@ -139,7 +153,7 @@ def update(
     if collection_type is not None and CollectionType(collection_type) != existing.collection_type:
         raise FrozenAtCreationError(
             f"collection_type is frozen at creation and library {library_id} is "
-            f"{existing.collection_type.value}. It selects which resolution rules apply, so "
+            f"{_type_of(existing)}. It selects which resolution rules apply, so "
             f"changing it re-resolves every file under a different set of rules and gives every "
             f"item a new type and a new identifier. Create a new library and scan it."
         )
@@ -178,8 +192,14 @@ def normalise_root(root: str) -> str:
 
 
 def _require_roots(roots: tuple[str, ...]) -> None:
-    if not roots:
-        raise ValueError("a library needs at least one root; one with none can never hold anything")
+    """Refuse two roots one inside the other. **No roots at all is not refused**, since 014.
+
+    Until 2026-09-14 this refused an empty tuple too, on the grounds that a library with no root
+    can never hold anything. That is still true and it is no longer a reason: the reference adds a
+    library with no path, and 014 decided to do the same, as an empty library - which is what a
+    library of a type this server does not scan already is (014 spec section 3.6, behaviours
+    section 3.31). The nesting refusal is the half that protects identity, and it stays.
+    """
     for one in roots:
         for other in roots:
             if one is not other and _contains(other, one):
@@ -194,10 +214,91 @@ def _contains(outer: str, inner: str) -> bool:
     return PurePath(inner) != PurePath(outer) and PurePath(outer) in PurePath(inner).parents
 
 
+def _type_of(library: Library) -> str:
+    return library.collection_type.value if library.collection_type is not None else "none"
+
+
+# ------------------------------------------------------------------------------------------------
+# The name a library ends up with (014 spec section 3.6.2, behaviours section 3.30)
+# ------------------------------------------------------------------------------------------------
+
+#: Step 3's set: every character replaced by a space. The reference's own fixed list - the five
+#: printable characters, the null character and the control characters 1 to 31, and the four path
+#: characters - which does not depend on the host
+#: `[source: Emby.Server.Implementations/IO/ManagedFileSystem.cs:21-28, 305-334 @ v10.11.11]`.
+#:
+#: The same set `library/identity.py` folds a by-name key with, written out again rather than
+#: imported: that one is an identity rule and this one is a naming rule, and a change to either must
+#: not move the other in silence.
+REPLACED_IN_NAMES: Final[frozenset[str]] = frozenset('"<>|:*?\\/') | {
+    chr(code) for code in range(0x00, 0x20)
+}
+
+#: The first number a name that collides is given. The count starts at one and is incremented
+#: before it is used `[source: Emby.Server.Implementations/Library/LibraryManager.cs:3036-3044 @
+#: v10.11.11]`, so `Movies` becomes `Movies2`.
+FIRST_NUMBER: Final = 2
+
+#: The whitespace outside the separator categories that steps 1 and 2 treat as whitespace. The
+#: reference trims and checks emptiness by the platform's whitespace rule, which is the three
+#: separator categories plus these six. Python's own `str.strip` also takes U+001C to U+001F,
+#: which that rule does not, so the rule is written out rather than borrowed: `\x1fMovies` is
+#: trimmed to itself there, and step 3 then makes it ` Movies` - read from the rule and not
+#: measured, as 014 T4 read the username rule.
+_OTHER_WHITESPACE: Final = frozenset("\t\n\v\f\r\x85")
+
+
+def _is_whitespace(character: str) -> bool:
+    return character in _OTHER_WHITESPACE or unicodedata.category(character) in {"Zs", "Zl", "Zp"}
+
+
+def _trimmed(text: str) -> str:
+    start, end = 0, len(text)
+    while start < end and _is_whitespace(text[start]):
+        start += 1
+    while end > start and _is_whitespace(text[end - 1]):
+        end -= 1
+    return text[start:end]
+
+
+def settle_name(requested: str, taken: Collection[str]) -> str:
+    """The name a library asked for as `requested` is added under, beside libraries named `taken`.
+
+    Spec section 3.6.2's four steps, each on the result of the one before:
+
+    1. **refused** if empty or whitespace, on the name as sent - `ValueError`. The route answers
+       this before it gets here, with the validation `400`; the step is kept so that this function
+       is the order whole, and a caller that forgot the validation meets a refusal rather than a
+       library called nothing;
+    2. **trimmed**;
+    3. every character of `REPLACED_IN_NAMES` **replaced by a space**;
+    4. **compared exactly** - case, and every code point, included - against `taken`, and numbered
+       from `FIRST_NUMBER` with nothing between the name and the number while it collides.
+
+    Two consequences of the order are observable: `Movies?` is `Movies ` and does not collide with
+    `Movies`, because the trim came first; and a name made only of replaced characters passes step
+    1 and becomes spaces.
+    """
+    if not requested or all(_is_whitespace(character) for character in requested):
+        raise ValueError("a library name cannot be empty or whitespace (014 spec section 3.6.2)")
+    cleaned = "".join(
+        " " if character in REPLACED_IN_NAMES else character for character in _trimmed(requested)
+    )
+    names = frozenset(taken)
+    settled, number = cleaned, FIRST_NUMBER - 1
+    while settled in names:
+        number += 1
+        settled = f"{cleaned}{number}"
+    return settled
+
+
 __all__ = [
+    "FIRST_NUMBER",
+    "REPLACED_IN_NAMES",
     "FrozenAtCreationError",
     "LibraryAlreadyDeclaredError",
     "create",
     "normalise_root",
+    "settle_name",
     "update",
 ]

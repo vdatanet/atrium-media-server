@@ -389,8 +389,13 @@ def test_rolling_back_removes_the_rows_0002_has_no_schema_for(
             )
         )
 
+    # **Through `migration_connection`, as the server runs a migration**, since 014 T5. The rollback
+    # passes back through 0013, which rebuilds `libraries` - and on a plain `begin()` foreign keys
+    # are enforced, so that rebuild would cascade the film away with every other row of its
+    # library. 0013 refuses a populated rebuild on such a connection rather than doing it, so this
+    # harness met a refusal where it had been running a migration nobody runs.
     config = schema.alembic_config(paths)
-    with migrated.begin() as connection:
+    with schema.migration_connection(migrated) as connection:
         config.attributes["connection"] = connection
         command.downgrade(config, "0002")
 

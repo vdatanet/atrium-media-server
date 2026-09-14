@@ -13,6 +13,13 @@ left to the dispatch being written correctly: every item this module produces is
 `PRODUCED_BY` before it is returned, so a resolver that grew a wrong branch fails here rather than
 in feature 005 three months later.
 
+**Three types have rules, and no branch means "anything else".** Since 014 a library may be of any
+of the reference's eight types or of none, and only `SCANNED_TYPES` are resolved: the dispatch
+names movies, series and music each, and a library of another type - or of none - resolves to its
+own `CollectionFolder` and nothing more, which is what makes it a view that holds nothing (014 spec
+section 3.6.1). Until 014 music was the dispatch's `else`, so a fourth type would have been
+resolved as music; the check below would have refused the tracks, but only by aborting the scan.
+
 **Sort names are written through the dispatcher**, never by calling the base derivation. `Audio`,
 `Episode` and `Season` replace it entirely, and using one sort-name function for everything is the
 mistake [plan section 9](../../../specs/003-library-configuration-and-scanning/plan.md) rates most
@@ -30,11 +37,11 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from atrium.domain.items import (
-    PRODUCED_BY,
     CollectionType,
     Item,
     ItemType,
     MediaSource,
+    produced_by,
 )
 from atrium.domain.library import Library
 from atrium.domain.sorting import sort_name
@@ -121,8 +128,12 @@ def resolve(
         items += _movies(library, collection_folder, ordered)
     elif library.collection_type is CollectionType.TVSHOWS:
         items += _series(library, collection_folder, ordered, noticed)
-    else:
+    elif library.collection_type is CollectionType.MUSIC:
         items += _music(library, collection_folder, ordered, source)
+    # Every other declared type, and none, has no rule here and resolves to the folder alone. No
+    # `else`: music was one until 014, and a fourth type would have been resolved as music. The
+    # walker admits no candidate under such a library, and a candidate handed in anyway produces
+    # nothing rather than something its type does not produce.
 
     _refuse_foreign_types(library, items)
     return Resolution(
@@ -350,15 +361,19 @@ def _fallback_name(relative_path: str) -> str:
 
 def _refuse_foreign_types(library: Library, items: list[Item]) -> None:
     """Spec section 3.1, enforced rather than trusted to the dispatch above being right."""
-    allowed = PRODUCED_BY[library.collection_type]
+    allowed = produced_by(library.collection_type)
     wrong = {item.type for item in items} - allowed
     if wrong:
         raise ValueError(
-            f"a {library.collection_type.value} library resolved "
-            f"{sorted(one.value for one in wrong)}, which it cannot produce. A file under a "
-            f"{library.collection_type.value} root is never resolved as anything else, whatever "
-            f"it is called (spec section 3.1)."
+            f"{_described(library)} resolved {sorted(one.value for one in wrong)}, which it cannot "
+            f"produce. A file under its root is never resolved as anything else, whatever it is "
+            f"called (spec section 3.1)."
         )
+
+
+def _described(library: Library) -> str:
+    kind = library.collection_type
+    return f"a {kind.value} library" if kind is not None else "a library with no type"
 
 
 __all__ = ["SPECIALS_NAME", "Notice", "Noticed", "Resolution", "resolve"]

@@ -20,11 +20,12 @@ from fastapi import FastAPI
 
 from atrium.api.deps import require_user
 from atrium.config.paths import DataPaths
-from atrium.db.repositories import UserRepository
+from atrium.db.repositories import LibraryRepository, UserRepository
 from atrium.domain.user import User
-from atrium.library import identity
+from atrium.library import config, identity
+from atrium.library.scan import scan
 from atrium.server import create_app
-from tests.conftest import data_dir
+from tests.conftest import data_dir, not_media
 from tests.fixtures.query import QueryWorld, build_query_world
 
 
@@ -333,3 +334,52 @@ async def test_latest_rows_are_a_list_row_plus_child_count(
         assert 0 < album["ChildCount"] <= held.json()["TotalRecordCount"], (
             "the group gathered some of the album's tracks, never more than it holds"
         )
+
+
+@pytest.mark.parametrize(
+    ("collection_type", "on_the_view"),
+    [
+        ("musicvideos", "musicvideos"),
+        ("homevideos", "homevideos"),
+        ("boxsets", "boxsets"),
+        ("books", "books"),
+        ("mixed", None),
+        (None, None),
+    ],
+)
+async def test_a_library_this_server_does_not_scan_is_a_view_with_the_references_type(
+    harness: Harness,
+    client: httpx.AsyncClient,
+    tmp_path: Path,
+    collection_type: str | None,
+    on_the_view: str | None,
+) -> None:
+    """014 spec section 3.6.1 and AC-7, on the route that already serves views: every library is
+    one, whatever its type and whatever it holds, and **`mixed` and an untyped library carry no
+    `CollectionType` key** - `mixed` is a type of the listing and not of the view
+    `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-14]`. (`photos` is stored
+    as no type, so it is the untyped row.)
+
+    Created and scanned like any library - over a film it will not admit - and the scan is what
+    writes the folder the view is, as it is for the three types this server scans.
+    """
+    root = tmp_path / "shelf"
+    root.mkdir()
+    (root / "A Film Alone (2014).mkv").write_bytes(b"not media")
+    with harness.app.state.sessions.begin() as opened:
+        library = config.create(LibraryRepository(opened), "Shelf", collection_type, (str(root),))
+    with harness.app.state.sessions.begin() as opened:
+        scan(library, opened, prober=not_media)
+
+    answered = await client.get("/UserViews")
+
+    rows = [one for one in answered.json()["Items"] if one["Name"] == "Shelf"]
+    assert len(rows) == 1, "every library is a view"
+    view = rows[0]
+    assert view["Id"] == identity.for_library(library.id).replace("-", "")
+    assert view["Type"] == "CollectionFolder"
+    if on_the_view is None:
+        assert "CollectionType" not in view, "absent, never null"
+    else:
+        assert view["CollectionType"] == on_the_view
+    assert view["ChildCount"] == 0

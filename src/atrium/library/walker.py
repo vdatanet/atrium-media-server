@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
 
-from atrium.domain.items import CollectionType
+from atrium.domain.items import SCANNED_TYPES, CollectionType
 from atrium.library.naming.external import SUBTITLE_EXTENSIONS
 
 #: Extensions that become items, per collection type.
@@ -89,11 +89,30 @@ AUDIO_EXTENSIONS = frozenset(
     }
 )
 
+#: The lists above, per collection type.
+#:
+#: **Keyed on `SCANNED_TYPES`, and a type outside it admits nothing** (014 spec section 3.6.1). A
+#: library of one of the five types 014 lets a library be created with, or of none, is walked like
+#: any other - so the report still says why each file produced no item - and every file is walked
+#: past for its extension. There is no fallback list, for the reason there is no fallback between
+#: the lists above: a `books` library over a tree of tracks admitting audio would be a music
+#: library under another name.
 EXTENSIONS: dict[CollectionType, frozenset[str]] = {
     CollectionType.MOVIES: VIDEO_EXTENSIONS,
     CollectionType.TVSHOWS: VIDEO_EXTENSIONS,
     CollectionType.MUSIC: AUDIO_EXTENSIONS,
 }
+
+#: What a library of a type this server does not scan admits.
+NOTHING: frozenset[str] = frozenset()
+
+
+def extensions_for(collection_type: CollectionType | None) -> frozenset[str]:
+    """The extensions that become candidates under `collection_type` - none, outside the three."""
+    if collection_type is None or collection_type not in SCANNED_TYPES:
+        return NOTHING
+    return EXTENSIONS[collection_type]
+
 
 #: A file whose stem ends in one of these is an extra rather than the work (003 spec section 3.4).
 #:
@@ -203,18 +222,18 @@ class WalkResult:
         return counts
 
 
-def walk(root: Path, collection_type: CollectionType) -> WalkResult:
+def walk(root: Path, collection_type: CollectionType | None) -> WalkResult:
     """Both passes: find the candidates, then drop the ones that moved while we looked."""
     return settle(root, found(root, collection_type))
 
 
-def found(root: Path, collection_type: CollectionType) -> WalkResult:
+def found(root: Path, collection_type: CollectionType | None) -> WalkResult:
     """The first pass: traverse, filter, and stat what survives.
 
     Directories are pruned as they are met rather than filtered afterwards, so an excluded tree
     costs one `readdir` rather than a full descent into somebody's photo archive.
     """
-    extensions = EXTENSIONS[collection_type]
+    extensions = extensions_for(collection_type)
     candidates: list[Candidate] = []
     skipped: list[Skipped] = []
     subtitles: list[Candidate] = []
@@ -381,11 +400,13 @@ __all__ = [
     "EXTRA_DIRECTORIES",
     "EXTRA_SUFFIXES",
     "IGNORE_MARKER",
+    "NOTHING",
     "VIDEO_EXTENSIONS",
     "Candidate",
     "Skip",
     "Skipped",
     "WalkResult",
+    "extensions_for",
     "found",
     "is_extra",
     "settle",

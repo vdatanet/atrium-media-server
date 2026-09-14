@@ -522,7 +522,9 @@ def _library(row: models.Library, roots: list[str]) -> Library:
     return Library(
         id=row.id,
         name=row.name,
-        collection_type=CollectionType(row.collection_type),
+        collection_type=(
+            CollectionType(row.collection_type) if row.collection_type is not None else None
+        ),
         roots=tuple(roots),
         case_sensitive_identity=row.case_sensitive_identity,
     )
@@ -555,7 +557,9 @@ class LibraryRepository:
         row = models.Library(
             id=library.id or new_id(),
             name=library.name,
-            collection_type=library.collection_type.value,
+            collection_type=(
+                library.collection_type.value if library.collection_type is not None else None
+            ),
             case_sensitive_identity=library.case_sensitive_identity,
         )
         self._session.add(row)

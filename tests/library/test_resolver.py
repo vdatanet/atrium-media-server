@@ -105,6 +105,28 @@ def test_a_file_under_a_music_root_is_never_a_movie(fixture_library: BuiltFixtur
     assert ItemType.EPISODE not in types
 
 
+@pytest.mark.parametrize("collection_type", ["books", "mixed", None])
+def test_a_library_this_server_does_not_scan_resolves_to_its_folder_alone(
+    fixture_library: BuiltFixture, collection_type: str | None
+) -> None:
+    """**No `else` means music** (014 plan section 4, section 9's fifth row).
+
+    The music fixture's candidates are handed straight to the resolver under a library of a type
+    it has no rules for, past the walker that would admit none of them - so what is asserted is
+    the dispatch itself. Until 014 T5 music was the dispatch's `else`, and this resolved a whole
+    artist, album and track tree under a `books` library.
+    """
+    candidates = walk(fixture_library.of("music").root, CollectionType.MUSIC).candidates
+    assert candidates, "the music fixture has to offer the resolver something to refuse"
+    library = Library(
+        id=LIBRARY_ID,
+        name="Shelf",
+        collection_type=None if collection_type is None else CollectionType(collection_type),
+    )
+    items = resolve(library, candidates).items
+    assert [item.type for item in items] == [ItemType.COLLECTION_FOLDER]
+
+
 def test_a_library_that_produced_a_foreign_type_is_refused() -> None:
     """Enforced rather than trusted to the dispatch being written correctly.
 

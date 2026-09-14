@@ -5,7 +5,7 @@ status: Implemented
 created: 2026-08-26
 updated: 2026-08-27
 accepted: 2026-08-26
-amended: 2026-08-27 by T1 - sections 3.2, 3.5 and the open questions; by T4 - section 3.7; by T5 - section 3.6; by T7 - sections 3.1 and 3.6 and OQ-2; by T11 - section 3.3 and OQ-4; by T12 - section 3.4; by T18 - section 3.8; by T19 - section 3.6 and OQ-2's limit; by T20 - sections 3.8 and 7; by 004's T7 - OQ-8; 2026-09-08 by 010's differential run - section 3.10 and AC-18, the durations nothing carried onto the item
+amended: 2026-08-27 by T1 - sections 3.2, 3.5 and the open questions; by T4 - section 3.7; by T5 - section 3.6; by T7 - sections 3.1 and 3.6 and OQ-2; by T11 - section 3.3 and OQ-4; by T12 - section 3.4; by T18 - section 3.8; by T19 - section 3.6 and OQ-2's limit; by T20 - sections 3.8 and 7; by 004's T7 - OQ-8; 2026-09-08 by 010's differential run - section 3.10 and AC-18, the durations nothing carried onto the item; 2026-09-14 by 014's T5 - a pointer in section 3.1 to the types 014 lets a library be created with
 implemented: 2026-08-27
 depends_on: []
 ---
@@ -53,6 +53,12 @@ library that was never scanned.
 
 An operator configures one or more libraries. Each has a name, one or more root paths, and a
 **collection type** from: `movies`, `tvshows`, `music`.
+
+> **Since [014](../014-first-time-setup/spec.md), these three are the types that are scanned and
+> not the only ones a library can have.** A library may be created with any of the reference's
+> eight types, or with none, and with no root at all; one of another type, or of none, is listed
+> and offered as a view and has nothing added to it by a scan (014 §3.6, §3.6.1). Everything below
+> is about the three. *(Pointer added 2026-09-14 by 014 T5.)*
 
 The collection type is not a hint. It selects which resolution rules apply, and a file under a
 `music` root is never resolved as a movie no matter what it is called. Mixed-content roots are not

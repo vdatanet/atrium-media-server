@@ -86,6 +86,41 @@ def test_a_library_scans_to_items(
     assert any(item.type is ItemType.COLLECTION_FOLDER for item in stored.values())  # type: ignore[union-attr]
 
 
+@pytest.mark.parametrize("collection_type", ["books", None])
+def test_a_library_this_server_does_not_scan_holds_nothing_but_itself(
+    engine: Engine, fixture_library: BuiltFixture, collection_type: str | None
+) -> None:
+    """014 spec section 3.6.1 and AC-7: *"a library of a type other than those three, or of none,
+    has no item added to it by a scan"* - over the **music** fixture tree, so every file under it
+    is one a music library would have made an item of.
+
+    **Its `CollectionFolder` is written like any other library's**, because on the reference every
+    library of every type is a view (plan section 6.5, T1's reading) - so the one row a scan adds is
+    the library itself, and a second scan changes nothing.
+
+    Red before 014 T5 twice over: `create` refused `books` and no type, and past that the
+    resolver's `else` resolved the whole tree as music.
+    """
+    factory = session_factory(engine)
+    with session_scope(factory) as db:
+        library = config.create(
+            LibraryRepository(db),
+            "Shelf",
+            collection_type,
+            (str(fixture_library.of("music").root),),
+        )
+
+    report = scanned(engine, library)
+
+    stored = items_of(engine, library)
+    assert [item.type for item in stored.values()] == [ItemType.COLLECTION_FOLDER]  # type: ignore[attr-defined]
+    assert list(stored) == [library.item_id]
+    assert report.added == 1
+    assert "not a media extension for this collection type" in report.reasons()
+    again = scanned(engine, library)
+    assert (again.added, again.updated, again.unchanged) == (0, 0, 1)
+
+
 def test_the_skipped_files_are_reported_with_their_reasons(
     engine: Engine, fixture_library: BuiltFixture
 ) -> None:

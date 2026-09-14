@@ -970,3 +970,191 @@ def test_0012_backfills_the_zero_exactly_where_the_coercion_puts_it(
     assert found["subtitle"] == (0, 0, 0), "a text subtitle is zero on all three"
     assert found["audio"] == (0, None, None), "audio gets a level and no frame size"
     assert found["data"] == (0, None, None), "the initialiser runs before every branch"
+
+
+# --------------------------------------------------------------------------------------------
+# 0013 — a library of any declared type, or of none (014 T5)
+# --------------------------------------------------------------------------------------------
+
+#: The rows that point at a library, seeded one each so a rebuild that cascaded through any of the
+#: three foreign keys onto `libraries` - roots, items, inspections - shows up as a count, and the
+#: film's source one table further down.
+SECOND_LIBRARY = "2" * 32
+FILM = "f" * 32
+
+
+def seed_two_libraries(engine: Engine) -> None:
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text(
+                "INSERT INTO libraries (id, name, collection_type, case_sensitive_identity) "
+                "VALUES (:a, 'Films', 'movies', 1), (:b, 'Tunes', 'music', 0)"
+            ),
+            {"a": LIBRARY, "b": SECOND_LIBRARY},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO library_roots (library_id, path) "
+                "VALUES (:a, '/mnt/a'), (:a, '/mnt/b'), (:b, '/mnt/music')"
+            ),
+            {"a": LIBRARY, "b": SECOND_LIBRARY},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO items (id, library_id, type, name, sort_name, tags) "
+                "VALUES (:i, :l, 'Movie', 'A Film', 'a film', '[]')"
+            ),
+            {"i": FILM, "l": LIBRARY},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO item_sources (item_id, part_index, relative_path, size, mtime_ns) "
+                "VALUES (:i, 0, 'A Film.mkv', 12, 34)"
+            ),
+            {"i": FILM},
+        )
+        connection.execute(
+            sa.text(
+                "INSERT INTO media_probes (library_id, relative_path, size, mtime_ns, container,"
+                " format_names, probed_at) VALUES (:l, 'A Film.mkv', 12, 34, 'mkv',"
+                " 'matroska,webm', '2026-09-14 00:00:00.000000+00:00')"
+            ),
+            {"l": LIBRARY},
+        )
+
+
+def library_state(engine: Engine) -> dict[str, list[tuple[object, ...]]]:
+    with engine.connect() as connection:
+        return {
+            "libraries": [
+                tuple(row)
+                for row in connection.execute(
+                    sa.text(
+                        "SELECT id, name, collection_type, case_sensitive_identity FROM libraries "
+                        "ORDER BY id"
+                    )
+                )
+            ],
+            "library_roots": [
+                tuple(row)
+                for row in connection.execute(
+                    sa.text("SELECT library_id, path FROM library_roots ORDER BY library_id, path")
+                )
+            ],
+            "items": [
+                tuple(row)
+                for row in connection.execute(sa.text("SELECT id, library_id FROM items"))
+            ],
+            "item_sources": [
+                tuple(row)
+                for row in connection.execute(
+                    sa.text("SELECT item_id, relative_path FROM item_sources")
+                )
+            ],
+            "media_probes": [
+                tuple(row)
+                for row in connection.execute(
+                    sa.text("SELECT library_id, relative_path FROM media_probes")
+                )
+            ],
+        }
+
+
+def test_0013_keeps_every_library_and_its_roots(engine: Engine, paths: DataPaths) -> None:
+    """The rebuild of `libraries` loses nothing, and widens the check exactly as far as it says.
+
+    A rebuild of `libraries` with foreign keys enforced empties three tables and every table under
+    `items` - so this is asserted on rows, with every table that points at a library seeded. Then
+    what 0013 is for: the five declared types and no type insert, and a ninth spelling does not.
+    """
+    move(engine, paths, "0012")
+    seed_two_libraries(engine)
+    before = library_state(engine)
+    assert all(before.values()), "the seed has to put a row in every table it accounts for"
+
+    move(engine, paths, "0013")
+
+    assert library_state(engine) == before, "the rebuild lost or changed a row"
+    with engine.connect() as connection:
+        assert connection.execute(sa.text("PRAGMA foreign_key_check")).all() == []
+
+    insert = "INSERT INTO libraries (id, name, collection_type) VALUES (:i, :n, :t)"
+    kinds = ("musicvideos", "homevideos", "boxsets", "books", "mixed", None)
+    with engine.begin() as connection:
+        for index, kind in enumerate(kinds):
+            connection.execute(
+                sa.text(insert), {"i": f"{index + 3:032d}", "n": str(kind), "t": kind}
+            )
+    with (
+        pytest.raises(IntegrityError, match="ck_libraries_collection_type"),
+        engine.begin() as connection,
+    ):
+        connection.execute(sa.text(insert), {"i": "e" * 32, "n": "Photos", "t": "photos"})
+
+
+def test_0013_refuses_to_rebuild_a_populated_table_with_foreign_keys_enforced(
+    engine: Engine, paths: DataPaths
+) -> None:
+    """The guard 0013 carries itself, made to fire: on a plain `begin()`, where `db/engine.py`
+    enforces foreign keys, the upgrade refuses and every row is still there - where the rebuild it
+    refused would have cascaded every root, item and inspection away in silence."""
+    move(engine, paths, "0012")
+    seed_two_libraries(engine)
+    before = library_state(engine)
+
+    config = schema.alembic_config(paths)
+    with pytest.raises(RuntimeError, match="enforces foreign keys"), engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "0013")
+
+    assert library_state(engine) == before
+    assert schema.current_revision(engine) == "0012"
+
+
+def test_0013_downgrade_refuses_a_library_it_cannot_hold(engine: Engine, paths: DataPaths) -> None:
+    """A library of an unscanned type, or of none, is not derivable - an operator made it - so the
+    rollback names every one and changes nothing, and succeeds once they are gone."""
+    move(engine, paths, "0012")
+    seed_two_libraries(engine)
+    move(engine, paths, "0013")
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text(
+                "INSERT INTO libraries (id, name, collection_type) "
+                "VALUES (:b, 'Shelf', 'books'), (:n, 'Anything', NULL)"
+            ),
+            {"b": "b" * 32, "n": "c" * 32},
+        )
+    before = library_state(engine)
+
+    with pytest.raises(RuntimeError) as refusal:
+        move(engine, paths, "0012")
+
+    message = str(refusal.value)
+    for named in ("Shelf", "b" * 32, "books", "Anything", "c" * 32, "no type"):
+        assert named in message, f"the refusal does not name {named!r}: {message}"
+    assert "Films" not in message and "Tunes" not in message, "it named a library it can hold"
+    assert library_state(engine) == before, "a refused rollback changed something"
+    assert schema.current_revision(engine) == "0013"
+
+    with engine.begin() as connection:
+        connection.execute(
+            sa.text("DELETE FROM libraries WHERE id IN (:b, :n)"), {"b": "b" * 32, "n": "c" * 32}
+        )
+    kept = library_state(engine)
+    move(engine, paths, "0012")
+
+    assert library_state(engine) == kept, "the rollback lost a library it can hold, or its rows"
+    with (
+        pytest.raises(IntegrityError, match="ck_libraries_collection_type"),
+        engine.begin() as connection,
+    ):
+        connection.execute(
+            sa.text("INSERT INTO libraries (id, name, collection_type) VALUES (:i, 'X', 'books')"),
+            {"i": "d" * 32},
+        )
+    with pytest.raises(IntegrityError, match="NOT NULL"), engine.begin() as connection:
+        connection.execute(
+            sa.text("INSERT INTO libraries (id, name, collection_type) VALUES (:i, 'Y', NULL)"),
+            {"i": "d" * 32},
+        )
