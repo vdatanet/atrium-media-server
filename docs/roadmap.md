@@ -247,8 +247,8 @@ API is not a dialect.
 
 | In v2 | Out of v2 |
 |---|---|
-| Users: create, list, update policy, reset password | Anything requiring an endpoint Jellyfin does not have |
-| Libraries: add, rename, remove, list, trigger a scan | Direct database access, direct config-file writes |
+| Users: create, list, update policy, reset password — **the first administrator only, so far: 014** | Anything requiring an endpoint Jellyfin does not have |
+| Libraries: add, rename, remove, list, trigger a scan — **add, list and trigger a scan landed with 014** | Direct database access, direct config-file writes |
 | Server configuration: read and update | A second authentication path for "local" callers |
 | Sessions and playback: list, stop | Interactive full-screen UI — that is v3's problem |
 
@@ -258,6 +258,27 @@ RefreshLibrary, CreateUserByName, UpdateUserPolicy, GetConfiguration, UpdateConf
 serving them is implementing more of Jellyfin, not inventing anything. The v1 endpoint set
 ([api-surface-v1.md](compatibility/api-surface-v1.md)) grows accordingly, under the same rule as
 every other row in it: an endpoint enters the table with its provenance, or it does not enter.
+
+**The first slice landed on 2026-09-14, as [014](../specs/014-first-time-setup/spec.md)**, whose
+[status row](../specs/README.md) is the authority on where it stands. A server started on an empty
+data directory reaches a first administrator and a first scanned library from a terminal, through
+`atrium-admin setup`, `library add`, `library list` and `library scan`, and the served surface grew
+by six rows ([api-surface-v1.md §9.1](compatibility/api-surface-v1.md#91-first-time-setup-and-libraries)):
+the three library operations the table names, and the three startup operations it does not, because
+creating a user requires an administrator and a fresh server has none
+([014 §2.0](../specs/014-first-time-setup/spec.md#20-why-these-operations-and-why-they-are-not-a-side-door)).
+Its authorisation departs from the reference's in one place, and that place is not the table's
+*"second authentication path for local callers"*: the reference's own setup window, open to any
+caller until setup finishes, is open here to this machine only
+([behaviours §4.6](compatibility/behaviours.md#46-the-first-time-setup-window-is-open-to-this-machine-not-to-the-network--decided-2026-09-13-implemented-2026-09-14)).
+And a scan now runs inside the server process, with a write-lock cost that is recorded rather than
+solved ([architecture §5](architecture.md#5-deployment-shape)).
+
+**What is left of v2** is every other cell of the left column: a second account and everything else
+about users — `CreateUserByName`, `UpdateUserPolicy`, a password reset — which is the next slice,
+and the one [010's harness](../tools/README.md#the-differential-harness) still builds a restricted
+seat by hand for; renaming and removing a library and changing its paths; server configuration; and
+sessions and playback.
 
 > **Why this repository, and why now.** The same shape of problem — an administrative surface that
 > needs a scriptable client — is waiting in other applications, and it is worth solving once with

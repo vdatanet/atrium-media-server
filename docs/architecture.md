@@ -41,19 +41,24 @@ about SQL. `compat/` is the only place allowed to care that the wire format is J
 is what makes the PascalCase sweep in [conformance](compatibility/conformance.md) enforceable
 rather than aspirational.
 
+**`cli/` is not in the drawing because it is not in the server.** It sits among the HTTP clients on
+the left, ships in the same package as a second program, and reaches the server only through the
+routes any client could call ([roadmap, v2](roadmap.md#v2--the-management-cli)).
+
 ### Module responsibilities
 
 | Module | Owns | Must not |
 |---|---|---|
 | `api/` | Route registration, request parsing, status codes | Contain business rules or touch the database directly |
-| `compat/` | Serialisation, casing, ticks, dates, GUID formatting, auth header parsing, `Range` handling | Know about specific endpoints |
+| `compat/` | Serialisation, casing, ticks, dates, GUID formatting, auth header parsing, `Range` handling, and the address a request came from — resolved inside the application from a declared list of trusted proxies (`compat/client_address.py`, 014) | Know about specific endpoints |
 | `domain/` | Item types, the item model, user-data semantics, sort normalisation | Perform I/O of any kind |
-| `library/` | Filesystem walking, path resolution, naming rules, identifier derivation, change detection | Fetch from the network |
+| `library/` | Filesystem walking, path resolution, naming rules, identifier derivation, change detection; and since 014 the **scanner** (`library/scanner.py`) — the one worker inside the server that runs scans a route asked for, one library at a time, without the route waiting | Fetch from the network |
 | `metadata/` | Provider interface, local (NFO, tags) and remote (TMDB, MusicBrainz) providers, merge and precedence, response cache | Write to the item table directly |
 | `media/` | `ffprobe` inspection, `MediaSource` construction, `DeviceProfile` evaluation, direct-play and remux decisions, `ffmpeg` process lifecycle | Decide policy about who may play what |
-| `users/` | Accounts, password hashing, tokens, policy, session tracking | Serve HTTP |
+| `users/` | Accounts, password hashing, tokens, policy, session tracking, and the first account the setup operations create and name (`users/first_account.py`, 014) | Serve HTTP |
 | `images/` | Selection, resizing, disk cache, content-hash tags | Fetch remote artwork (that is `metadata/`) |
 | `db/` | Schema, repositories, migrations | Leak ORM objects past the repository boundary |
+| `cli/` | `atrium-admin`, the command-line client an operator sets a server up and manages its libraries with (014) — **a client of the HTTP API and not a part of the server** | Import anything from `atrium` outside `atrium.cli`, or be imported by it — both directions held by `tests/unit/test_import_directions.py` |
 
 ## 2. Runtime stack
 
@@ -96,6 +101,7 @@ atrium-media-server/
 ├── specs/                       Feature specifications
 ├── src/atrium/
 │   ├── api/
+│   ├── cli/                     atrium-admin: a client of the API, not part of the server
 │   ├── compat/
 │   ├── domain/
 │   ├── library/
@@ -144,6 +150,20 @@ instance is reproducible and a bug report can carry its configuration.
 A single process serving HTTP, plus `ffmpeg` child processes; one data directory holding the
 SQLite database, the image cache and the transcode scratch space. No message broker, no external
 cache, no second service. If v1 needs one of those, the design has gone wrong somewhere earlier.
+
+**A scan runs inside that process, since 014.** Until then a scan was code only a test or a script
+called; `POST /Library/VirtualFolders` and `POST /Library/Refresh` now hand libraries to one
+worker that runs `scan()` in a thread, one library at a time, and answer before it finishes
+([014 plan §6.5](../specs/014-first-time-setup/plan.md#65-the-scanner)). It is still one process:
+the worker is a task inside it, and `atrium-admin` is a client that asks for a scan over HTTP and
+exits. **What that costs is recorded rather than solved.** A scan writes its library inside one
+transaction, and while its writes and 004's refresh hold SQLite's write lock, a request that writes
+— a sign-in, a progress report — waits out SQLite's default five-second busy timeout and fails, and
+because those routes do their database work on the event loop an unrelated read waits as long:
+5.4 s each on a scan paused mid-write, against about 35 ms of lock on the unpaused fixture library. The
+operator accepted it as a residual risk on 2026-09-14
+([014 plan §9](../specs/014-first-time-setup/plan.md#9-risks)), and bounding it is on
+[014's owes list](../specs/014-first-time-setup/tasks.md#what-this-feature-owes-the-next-ones).
 
 **A development machine running the conformance harness is the one place a second server appears**,
 and it is a tool's dependency rather than a deployment one: 010's fixture runs start a reference

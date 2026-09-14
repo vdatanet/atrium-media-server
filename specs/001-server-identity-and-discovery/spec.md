@@ -3,7 +3,7 @@ feature: 001-server-identity-and-discovery
 title: Server identity and discovery
 status: Implemented
 created: 2026-08-26
-updated: 2026-09-05
+updated: 2026-09-14
 accepted: 2026-08-26
 amended: 2026-09-04 by the 2026-09-04 audit's corrective task C1 - section 3.2's uncited refusal row gets the condition its measurement narrowed it to, and says why no criterion accompanies it; and 2026-09-05 by that audit's corrective task C6 - section 3.2's value table is corrected in two rows the golden had always contradicted (`PackageName` is absent rather than empty, `WebPath` is empty rather than a path) and section 5 gains AC-14 for the whole of it, an implemented and golden-tested behaviour no criterion named; and 2026-09-05 by that audit's H1 - section 3.2's refusal row records the decision that closed it, the divergence is accepted deliberately at behaviours section 4.5, and section 5 gains AC-15, which asserts this server's answer where a criterion for the reference's refusal could only have asserted a refusal no route performs
 depends_on: []
@@ -405,7 +405,6 @@ measurements behind them recorded with provenance. The gap closes the first time
 | # | Question | Blocks | Resolved by |
 |---|---|---|---|
 | OQ-1 | Does any real client branch on `SupportsLibraryMonitor` or `WebSocketPortNumber`? | Nothing. Honest values are sent either way | Differential harness (010), or surveying additional clients |
-| OQ-3 | Is `StartupWizardCompleted` meaningful for Atrium, which has no wizard? | Nothing; `true` after first configuration | A decision in 002, where user creation happens |
 | OQ-4 | Whether a running reference actually emits both headers, or only declares them | Nothing; both are sent | `tools/probe_startup.py`, which has to catch a server mid-start |
 
 ### Resolved
@@ -413,6 +412,7 @@ measurements behind them recorded with provenance. The gap closes the first time
 | # | Question | Answer | Resolved by |
 |---|---|---|---|
 | OQ-2 | Does the reference emit `503` with `Retry-After` while starting? | **Yes, and it is server-wide** — all 395 operations declare it, with `Retry-After` **and** a `Message` header, and a `text/html` body. §3.5 records it; §3.1's one-line error row was incomplete | The pinned document, 2026-08-26 |
+| OQ-3 | Is `StartupWizardCompleted` meaningful for Atrium, which has no wizard? | **Yes, and it answers what it says.** `false` on a server nobody has set up, `true` after `POST /Startup/Complete` and for good, and `true` from the start on a server that held an account before the setup operations existed ([014 §3.1, AC-1](../014-first-time-setup/spec.md#31-the-setup-window)). This row sent the decision to 002, where user creation was expected to happen; 002 creates no user, so it was never taken there, and the property answered `false` on every server — populated ones included — until 014 | [014 §2.1](../014-first-time-setup/spec.md#21-what-this-closes-that-was-left-open), 2026-09-14 |
 
 ## 8. References
 

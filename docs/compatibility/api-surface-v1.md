@@ -268,12 +268,13 @@ All three answer `204` — for an unknown `ItemId` too. Jellyfin's `Progress` do
 
 Added by 014 T2 on 2026-09-14, and the first rows of
 [v2](../roadmap.md#v2--the-management-cli) rather than of v1: **a fresh server has no administrator,
-and nothing it served until now could make one**. Creating a user requires an administrator; the
+and nothing served before these rows could make one**. Creating a user requires an administrator; the
 reference resolves that with a policy — *first-time setup or elevated* — declared on the startup
 and library-structure operations and on nothing that creates a second user, and this repository
 already sets the reference up through exactly these calls with nobody at a keyboard. The whole
 argument is [014 §2.0](../../specs/014-first-time-setup/spec.md#20-why-these-operations-and-why-they-are-not-a-side-door).
-None of the six is served yet: the rows come before the routes.
+The rows came before the routes, and **all six have been served since 2026-09-14** — the three startup
+routes by 014 T4, the three library routes by T7 — with `atrium-admin` calling them since T8.
 
 | Method | Path | Operation | Used by | Notes |
 |---|---|---|---|---|

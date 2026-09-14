@@ -35,7 +35,7 @@ playstate, as of 2026-08-29 playback negotiation and delivery, and as of 2026-09
 fifteen tasks and one amended acceptance criterion, and 012 (negotiation inputs) on 2026-09-04
 across eleven tasks and one more, and 013 (the artist registry) on 2026-09-08. **No v1 feature is
 unbuilt, and v2's first slice is open: [014](specs/014-first-time-setup/spec.md), its spec accepted on 2026-09-14**,
-because until it lands nothing creates the first account on a fresh server. What each
+because before it nothing created the first account on a fresh server. What each
 implemented feature still owes is written at the end of its own task list rather than here, so it
 cannot go stale inside a status word. The [status table](specs/README.md) is the authority; this
 paragraph is not.

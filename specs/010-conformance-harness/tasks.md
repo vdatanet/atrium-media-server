@@ -2359,16 +2359,21 @@ library, deliberately: it measures how much of the surface answers differently t
 reader** (§3.9), and one library is enough to be narrower. The two accounts answer two different
 questions about the same shape.
 
-**To 003, and it is the largest.** **A running Atrium cannot be given a library.**
-`atrium.library.config.create` and `atrium.library.scan.scan` have no caller in `src/` or `tools/` —
-only the test suite calls them, and `config.toml` has no libraries section. The roadmap already
+**To 003, and it is the largest — answered on 2026-09-14 by 014, in the half that gives a server a
+library.** **A running Atrium could not be given a library.**
+`atrium.library.config.create` and `atrium.library.scan.scan` had no caller in `src/` or `tools/` —
+only the test suite called them, and `config.toml` has no libraries section. The roadmap already
 files library administration under v2's CLI and names *"direct database access"* as v1's way, so
 this is a recorded condition and not a defect found here; what is new is the price it puts on this
 feature. `tools/differential.py --fixture` documents itself as *"the fixture on **both** servers"*
 (AC-2) and can only put it on one of them, which is why AC-2 had to become Atrium's in-process scan
 compared against a recorded reading, and why every `needs: fixture` request case resolves its
 anchors against a reference holding the fixture and an Atrium holding whatever its operator loaded
-by hand. Beside it: of the **forty-seven** declared differences in
+by hand. **What 014 changed is the loading, not the run**: `atrium-admin library add` gives a running
+Atrium a library over its own API since 2026-09-14
+([tools/README.md](../../tools/README.md#the-differential-harness)), so nobody writes its store to
+do it — but `--fixture` still stands no Atrium up, which is the L3 item on
+[014's owes list](../014-first-time-setup/tasks.md#what-this-feature-owes-the-next-ones). Beside it: of the **forty-seven** declared differences in
 `tests/library/test_reference_reading.py`, **twenty-five are one file named two ways** — 003's name
 derivation against the reference's whole-filename and whole-directory rules — and **twenty-one are
 container rows**, each written down with its reason; the forty-seventh is the zero-byte film that is

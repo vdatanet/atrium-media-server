@@ -397,28 +397,57 @@ The tree is built through `tests/fixtures/reference_tree.py` into `reference/fix
 `--fixture-root` names another, and the instance is given the **six typed libraries** that module
 declares.
 
-**The Atrium half of that is yours to arrange, and there is no command for it.** A running Atrium
-cannot be given a library: `atrium.library.config.create` and `atrium.library.scan.scan` have no
-caller outside the test suite, and `config.toml` has no libraries section — the roadmap files
-library administration under [v2's CLI](../docs/roadmap.md#v2--the-management-cli) and names direct
-database access as v1's way. So a `--fixture` run stands the tree up on the reference and compares
-it against whatever library the Atrium you point at happens to hold, and the `needs: fixture`
-request cases resolve their anchors on each server separately. **AC-2 is checked without a live
-Atrium for exactly this reason**: `tools/probe_reference_scan.py` records the reference's reading
-into `docs/compatibility/reference-fixture-reading.json` and
-`tests/library/test_reference_reading.py` compares Atrium's own scan of the same tree against it, in
-the default job, with no Jellyfin anywhere.
+**The Atrium half of that is yours to arrange, and since 2026-09-14 most of it has a command.**
+A `--fixture` run does not stand an Atrium up: it compares the tree on the reference against
+whatever the Atrium you point at holds, and the `needs: fixture` request cases resolve their anchors
+on each server separately. Until 014 a running Atrium could not be given a library at all —
+`atrium.library.config.create` and `atrium.library.scan.scan` had no caller outside the test suite,
+and `config.toml` has no libraries section — so the libraries and the administrator were written
+into its store by a throwaway script. **`atrium-admin` does both now**, over the server's own API
+([014 §3.8](../specs/014-first-time-setup/spec.md#38-the-command-line-client)). On the server's
+machine, against a loopback address, over the tree a `--fixture` run built:
+
+```bash
+atrium --data-dir /tmp/atrium-fixture &
+TREE="$PWD/reference/fixture-tree"
+A=http://127.0.0.1:8096
+atrium-admin library add --server $A --type movies  Movies "$TREE/Movies"
+atrium-admin library add --server $A --type tvshows Shows  "$TREE/Shows"
+atrium-admin library add --server $A --type music   Music  "$TREE/Music"
+atrium-admin library add --server $A --type movies  Films  "$TREE/Decodable/Movies"
+atrium-admin library add --server $A --type music   Tunes  "$TREE/Decodable/Music"
+atrium-admin library add --server $A --type movies  Empty  "$TREE/Empty"
+atrium-admin setup --server $A --username admin
+atrium-admin library list --server $A --username admin
+```
+
+Those are the six libraries `libraries()` in `tests/fixtures/reference_tree.py` declares, by its
+names, types and subpaths, and the order is deliberate: **while setup is unfinished the window
+admits a loopback caller with no credentials**, so the libraries go in before `setup` asks for a
+password at all. After it, every command signs in again and asks again — on the terminal, or as one
+line of standard input with `--password-stdin`. `library add` starts each library's scan and **does
+not wait for it**, and nothing the client prints says when a scan has finished (014 OQ-12), so give
+the server time before a run. A name printed with a number after it means a library of that name
+was already there (behaviours §3.30). **AC-2 is still checked without a live Atrium**, for the reason above:
+`tools/probe_reference_scan.py` records the reference's reading into
+`docs/compatibility/reference-fixture-reading.json` and `tests/library/test_reference_reading.py`
+compares Atrium's own scan of the same tree against it, in the default job, with no Jellyfin
+anywhere.
 
 **What arranging it actually costs, measured on the first complete sweep (2026-09-03), because
 "yours to arrange" was true and unhelpful.** Four things, all through `atrium.*` in a throwaway
-script and none of them through a route:
+script and none of them through a route **on that date** — the first two have been `atrium-admin`'s
+since 2026-09-14, above, and the last two still have no route:
 
 1. **The six libraries of `tests/fixtures/reference_tree.py`, over the same tree, by the same
-   names.** `library.config.create` then `library.scan.scan`, one per library. Give them different
-   names and the two `/UserViews` no longer line up.
-2. **An administrator**, through `UserRepository.add` with a hash from `users.passwords.build`.
+   names.** `library.config.create` then `library.scan.scan`, one per library, until
+   `atrium-admin library add`. Give them different names and the two `/UserViews` no longer line up.
+2. **An administrator**, through `UserRepository.add` with a hash from `users.passwords.build`,
+   until `atrium-admin setup`.
 3. **A restricted seat, handed in under `ATRIUM_RESTRICTED_*`** — Atrium cannot make one, which is
-   the paragraph above. It must be narrowed to **the same libraries the reference narrows its own
+   the paragraph above: a second account is `POST /Users/New`, which is not served, and it is the
+   slice of v2 after 014 ([014 §2](../specs/014-first-time-setup/spec.md#2-scope)). The seat is
+   still built by hand. It must be narrowed to **the same libraries the reference narrows its own
    created seat to**, which is `seat_narrowing`'s choice: **one library of each collection type**,
    walking each type's views **by name** and taking the first *with something in it* — `Films`,
    `Music` and `Shows` on this fixture, not `Movies`, `Tunes` or `Empty`.
