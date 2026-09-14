@@ -17,8 +17,8 @@ been true before: what comes next is a decision about scope rather than the next
 and the standing work is on the *"what this feature owes the next ones"* lists at the end of each
 task file. **The first scope decision is taken — v2 is open, as
 [014](specs/014-first-time-setup/spec.md), whose spec was accepted on 2026-09-14** — because a fresh
-server is one nobody can sign in to. Principle III applies to it in full: its plan, written on
-2026-09-14, is in review.
+server is one nobody can sign in to. Principle III applies to it in full: its plan was accepted on
+2026-09-14 and its task list is in review.
 **[008](specs/008-playback-negotiation-and-delivery/)
 landed on 2026-08-29 across fourteen tasks**, spec, plan and tasks all accepted the same day and
 every one of the fourteen finding something the documents had wrong. Playback is therefore in: the
