@@ -434,7 +434,7 @@ when the list goes, all six are counted against the file. Plan §8 amended.
 - **Verified by:** `pytest tests/conformance/test_acceptance.py tests/unit/test_allowlist.py` green,
   and every relative link and anchor in the touched files resolving.
 - **Spec reference:** §2.1, §8
-- **Done** (2026-09-14). **The list named five documents, and five more held a claim T4 to T8 had made false.** Every behaviours
+- **Done** (2026-09-14, [PR #371](https://github.com/vdatanet/atrium-media-server/pull/371)). **The list named five documents, and five more held a claim T4 to T8 had made false.** Every behaviours
   entry was implemented as recorded — §3.30 to §3.32, §4.6, §4.7 and the three §5 rows each read
   against the code and its tests before the marker went, and each now names the test that asserts
   it — but the list did not name the others:
