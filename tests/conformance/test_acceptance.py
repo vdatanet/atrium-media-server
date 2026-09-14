@@ -17,20 +17,21 @@ twice. This file is the map, and it fails four ways:
 It asserts that the tests **exist**, not that they pass; the suite they are in does that. What it
 protects is the *mapping*, which is the part that rots quietly.
 
-**It was written for one feature and now carries twelve.** 002 T18 turned one specification path and
-one map into a table of them, betting that adding 003 would then be one entry and one dictionary
-rather than a third copy of this file. It was: nothing below changed shape for 003, and the diff
-that added it is a dictionary and a line in `FEATURES`. That is the whole of what the restructure
-was for, and it is recorded here because a restructure nobody checks the payoff of is a refactor
-that might have been a waste. **011 was the ninth and the first that was not the next number**: 009
-and 010 were specified and unimplemented when its map landed, and
+**It was written for one feature and now carries fourteen.** 002 T18 turned one specification
+path and one map into a table of them, betting that adding 003 would then be one entry and one
+dictionary rather than a third copy of this file. It was: nothing below changed shape for 003, and
+the diff that added it is a dictionary and a line in `FEATURES`. That is the whole of what the
+restructure was for, and it is recorded here because a restructure nobody checks the payoff of is
+a refactor that might have been a waste. **011 was the ninth and the first that was not the next
+number**: 009 and 010 were specified and unimplemented when its map landed, and
 `test_every_implemented_feature_has_a_map` reads the status table rather than a list here, so the
 gap cost nothing — and both closed it themselves, on 2026-09-01 and 2026-09-02.
 
-**012 is the twelfth and the last, and it is the one feature whose map is the only thing carrying
-the claim.** Every closing task before it also added its number to `IMPLEMENTED_FEATURES`; 012 owns
-no row of `surface.yaml`, so there was nothing for it to add and nothing else that would have
-noticed a criterion left unasserted.
+**012 was the twelfth and the last of v1, and it is the one feature whose map is the only thing
+carrying the claim.** Every closing task before it also added its number to `IMPLEMENTED_FEATURES`;
+012 owns no row of `surface.yaml`, so there was nothing for it to add and nothing else that would
+have noticed a criterion left unasserted. 013 followed it on 2026-09-08, and 014 - the first of v2 -
+added its map at T10 on 2026-09-14.
 
 **003's map is the widest**, and the reason is that 003 has no HTTP surface: its criteria are proven
 against fixtures at four different levels - the naming corpus, the resolver, a real scan into a real
@@ -1812,6 +1813,129 @@ FEATURE_013: dict[int, tuple[str, ...]] = {
 }
 
 
+#: 014's ten, and **the first feature of v2** - the one that makes a server nobody has written to by
+#: hand usable at all.
+#:
+#: **Every request these tests send names the address it is from**, through
+#: `test_setup_window.ask`, because the window's one rule is an address: a test that forgot it would
+#: be asserting the other branch. AC-5 is the rule; the other nine are what the routes and the
+#: client then do for a caller the rule admitted.
+#:
+#: **AC-9 and AC-10 are asserted off the wire and not off the source.** The client's operations are
+#: read from a recording transport, so *"issues only the operations section 3.8 names"* is a list
+#: of requests compared for equality - which is also why the import-direction rule, the one half of
+#: *"no way into the server but a client's"* that no request can show, is named beside AC-10 as the
+#: plan's section 8 put it.
+FEATURE_014: dict[int, tuple[str, ...]] = {
+    1: (
+        "tests.conformance.test_startup:test_ac1_a_fresh_server_is_unfinished_and_complete_finishes_it_across_a_restart",
+        "tests.conformance.test_startup:test_ac1_a_server_that_held_an_account_before_this_feature_starts_finished",
+        "tests.conformance.test_startup:test_ac1_a_server_that_held_no_account_before_this_feature_starts_unfinished",
+        "tests.conformance.test_startup:test_ac1_a_restart_in_the_middle_of_setup_keeps_the_window_open",
+        "tests.unit.test_config_state:test_an_old_file_on_a_server_with_accounts_is_recorded_as_set_up",
+        "tests.unit.test_config_state:test_an_old_file_on_a_server_with_no_account_stays_unfinished",
+        "tests.unit.test_config_state:test_a_file_this_build_wrote_is_left_open_mid_setup",
+    ),
+    2: (
+        # `getpass.getuser` patched to a valid name, so `MyJellyfinUser` is not the fallback.
+        "tests.conformance.test_startup:test_ac2_the_read_creates_one_hidden_administrator_and_answers_its_name",
+        "tests.conformance.test_startup:test_ac2_the_first_account_is_hidden_from_the_sign_in_screen",
+        "tests.conformance.test_startup:test_ac2_a_second_read_creates_nothing",
+    ),
+    3: (
+        "tests.conformance.test_startup:test_ac3_no_account_is_404_in_problem_details",
+        "tests.conformance.test_startup:test_ac3_a_blank_password_is_400_as_a_bare_json_string",
+        "tests.conformance.test_startup:test_ac3_an_invalid_name_is_400_and_keeps_the_name_and_the_password",
+        "tests.conformance.test_startup:test_ac3_a_name_another_account_holds_is_400_and_keeps_the_name_and_the_password",
+        "tests.conformance.test_startup:test_ac3_an_update_renames_sets_the_password_and_the_account_signs_in",
+        "tests.conformance.test_startup:test_ac3_a_name_differing_only_in_case_is_not_a_rename",
+        "tests.conformance.test_startup:test_ac3_no_name_sets_the_password_alone",
+        "tests.unit.test_username_rule:test_empty_slash_colon_and_other_punctuation_are_refused",
+        "tests.unit.test_username_rule:test_a_blank_password",
+    ),
+    4: (
+        "tests.conformance.test_startup:test_ac4_complete_needs_no_password_and_no_library_and_closes_the_window",
+        "tests.conformance.test_startup:test_ac4_a_second_complete_by_an_administrator_is_204_again",
+    ),
+    # Section 3.1's seven rows over the five routes that share the window, then what "this machine"
+    # is: a network address of the same machine, and the three forwarded-address clauses.
+    5: (
+        "tests.conformance.test_setup_window:test_unfinished_this_machine_admits_anyone",
+        "tests.conformance.test_setup_window:test_unfinished_elsewhere_admits_an_administrator",
+        "tests.conformance.test_setup_window:test_unfinished_elsewhere_refuses_a_non_administrator_403",
+        "tests.conformance.test_setup_window:test_unfinished_elsewhere_refuses_no_token_401",
+        "tests.conformance.test_setup_window:test_finished_admits_an_administrator_from_anywhere",
+        "tests.conformance.test_setup_window:test_finished_refuses_a_non_administrator_403_from_anywhere",
+        "tests.conformance.test_setup_window:test_finished_refuses_no_token_401_from_anywhere",
+        "tests.conformance.test_setup_window:test_this_machine_by_its_network_address_is_elsewhere",
+        "tests.conformance.test_setup_window:test_a_forwarded_address_from_an_undeclared_loopback_proxy_is_elsewhere",
+        "tests.conformance.test_setup_window:test_a_declared_proxy_forwarding_in_a_header_nothing_applies_is_elsewhere",
+        "tests.conformance.test_setup_window:test_a_declared_proxy_forwarding_a_remote_client_is_that_client",
+        "tests.conformance.test_setup_window:test_a_declared_proxy_forwarding_a_local_client_is_this_machine",
+        "tests.conformance.test_setup_window:test_a_remote_peer_claiming_loopback_is_elsewhere",
+        "tests.unit.test_client_address:test_an_untrusted_loopback_peer_forwarding_loopback_is_not_this_machine",
+        "tests.unit.test_client_address:test_a_trusted_proxy_forwarding_a_remote_address_is_that_address",
+        "tests.unit.test_client_address:test_a_remote_peer_claiming_loopback_is_ignored",
+    ),
+    6: (
+        "tests.conformance.test_library_structure:test_ac6_refresh_refuses_401_and_403_and_admits_an_administrator",
+        "tests.conformance.test_setup_window:test_refresh_refuses_this_machine_with_no_token_401_during_setup",
+        "tests.conformance.test_setup_window:test_refresh_refuses_this_machine_as_a_non_administrator_403_during_setup",
+    ),
+    # The widest of the ten, and one test per clause: the type table and the views, the scan that
+    # adds nothing, the numbering, the four refusals and that none adds a library, the duplicate,
+    # the body's paths, no paths, the identifiers and the row's shape.
+    7: (
+        "tests.conformance.test_library_structure:test_ac7_every_type_is_added_listed_and_a_view_before_any_scan",
+        "tests.conformance.test_library_structure:test_ac7_a_scan_adds_no_item_to_a_library_of_a_type_this_server_does_not_scan",
+        "tests.library.test_scan:test_a_library_this_server_does_not_scan_holds_nothing_but_itself",
+        "tests.conformance.test_library_structure:test_ac7_a_name_in_use_is_numbered_from_2_compared_exactly_after_cleaning",
+        "tests.unit.test_library_naming:test_a_taken_name_is_numbered_from_two_with_nothing_between",
+        "tests.unit.test_library_naming:test_names_compare_with_case",
+        "tests.unit.test_library_naming:test_a_replaced_character_at_the_end_stays_a_space_and_does_not_collide",
+        "tests.conformance.test_library_structure:test_ac7_an_empty_or_whitespace_name_is_the_validation_400_keyed_name",
+        "tests.conformance.test_library_structure:test_ac7_a_path_that_does_not_exist_is_relative_or_nested_is_refused_and_adds_nothing",
+        "tests.conformance.test_library_structure:test_ac7_a_path_given_twice_is_listed_once",
+        "tests.conformance.test_library_structure:test_ac7_the_bodys_path_infos_are_the_paths_when_the_query_names_none",
+        "tests.conformance.test_library_structure:test_ac7_the_bodys_paths_meet_the_same_rules",
+        "tests.conformance.test_library_structure:test_ac7_a_library_with_no_paths_is_added_listed_empty_and_a_view",
+        "tests.conformance.test_library_structure:test_ac7_movies_and_movies_are_listed_with_two_item_ids_each_its_own_view",
+        "tests.conformance.test_library_structure:test_ac7_no_row_carries_a_primary_image_and_library_options_has_one_key",
+        "tests.conformance.test_library_structure:test_ac7_a_listed_row_is_exactly_the_keys_the_reference_sends_byte_for_byte",
+    ),
+    # Browsed as a client browses - `/UserViews`, then `/Items` under the view, signed in as the
+    # first account from elsewhere - and the `204` asserted to arrive while the scan is held.
+    8: (
+        "tests.library.test_scanner:test_ac8_a_library_added_with_refresh_is_browsable_once_its_scan_has_finished",
+        "tests.library.test_scanner:test_ac8_a_library_scanned_through_refresh_is_browsable_once_the_scan_has_finished",
+    ),
+    9: (
+        "tests.cli.test_end_to_end:test_ac9_the_four_commands_set_up_a_fresh_server_and_send_only_section_3_8",
+        "tests.cli.test_end_to_end:test_ac9_during_setup_from_loopback_the_library_commands_sign_in_as_nobody",
+        "tests.cli.test_end_to_end:test_ac9_library_add_prints_the_name_the_library_ended_up_with",
+    ),
+    10: (
+        "tests.cli.test_refusals:test_ac10_setup_refuses_a_finished_server_without_calling_3_2_to_3_4",
+        "tests.cli.test_refusals:test_ac10_setup_refuses_an_address_that_is_not_loopback_during_setup",
+        "tests.cli.test_refusals:test_ac10_a_request_the_client_believed_local_is_decided_by_the_server",
+        "tests.cli.test_refusals:test_ac10_setup_prints_the_bare_string_refusal_and_does_not_complete",
+        "tests.cli.test_refusals:test_ac10_setup_prints_the_controller_refusal_of_a_name",
+        "tests.cli.test_refusals:test_ac10_library_add_prints_a_path_refusal",
+        "tests.cli.test_refusals:test_ac10_library_add_prints_a_validation_refusal_with_what_it_names",
+        "tests.cli.test_refusals:test_ac10_library_list_prints_the_empty_403_of_a_non_administrator",
+        "tests.cli.test_refusals:test_ac10_library_scan_prints_the_empty_403_of_a_non_administrator",
+        "tests.cli.test_refusals:test_ac10_a_refused_sign_in_is_printed_and_nothing_follows_it",
+        "tests.cli.test_refusals:test_ac10_no_argument_takes_a_password",
+        "tests.cli.test_refusals:test_ac10_the_only_password_option_is_password_stdin",
+        "tests.cli.test_refusals:test_ac10_on_a_terminal_the_password_is_asked_for_without_being_shown",
+        "tests.cli.test_refusals:test_ac10_the_password_is_in_no_output_and_no_request_but_the_two_that_carry_it",
+        "tests.cli.test_refusals:test_ac10_the_client_reads_no_environment",
+        "tests.unit.test_import_directions:test_the_client_imports_nothing_of_the_server",
+        "tests.unit.test_import_directions:test_nothing_outside_the_client_imports_it",
+    ),
+}
+
+
 FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "001-server-identity-and-discovery": FEATURE_001,
     "002-authentication-users-and-sessions": FEATURE_002,
@@ -1826,6 +1950,7 @@ FEATURES: dict[str, dict[int, tuple[str, ...]]] = {
     "011-subtitle-delivery": FEATURE_011,
     "012-negotiation-inputs": FEATURE_012,
     "013-artist-registry": FEATURE_013,
+    "014-first-time-setup": FEATURE_014,
 }
 
 

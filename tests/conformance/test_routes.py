@@ -59,27 +59,16 @@ SURFACE_FILE = REPO_ROOT / "docs" / "compatibility" / "surface.yaml"
 #: change what an **already-listed** route answers without adding one — so its closing task added it
 #: to nothing any test reads, and the whole of its definition of done rests on
 #: `test_acceptance.py`'s map instead.
-IMPLEMENTED_FEATURES = frozenset({"001", "002", "004", "005", "006", "007", "008", "009", "011"})
-
-#: 014 arrives across two route-bearing tasks - the three startup routes (T4) and the three
-#: library routes (T7) - and its six rows reached `surface.yaml` at T2, before either, so the
-#: exact-set check below has to stay meaningful in between: the routes that have landed are listed
-#: here. **Empty at T2**, which is the proof that adding the rows served nothing; **T4 added the
-#: three startup routes**, each asked by `test_startup.py` and `test_setup_window.py` in the same
-#: change, because the L2 coverage hook counts what this list serves (014 tasks, gate finding 6),
-#: **and T7 the three library routes**, asked by `test_library_structure.py`, `test_setup_window.py`
-#: and `tests/library/test_scanner.py`'s AC-8 tests - which leaves no row of the file unserved.
-#: It is deleted at T10, when `"014"` joins the set above - the eighth of these lists, after the
-#: seven that went the same way (014 tasks, gate finding 3).
-INTERIM_014: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("GET", "/Startup/User"),
-        ("POST", "/Startup/User"),
-        ("POST", "/Startup/Complete"),
-        ("GET", "/Library/VirtualFolders"),
-        ("POST", "/Library/VirtualFolders"),
-        ("POST", "/Library/Refresh"),
-    }
+#:
+#: **014 joined at its T10, on 2026-09-14**, with its six routes - the three startup routes (T4)
+#: and the three library routes (T7). They reached `surface.yaml` at T2, ahead of either, and were
+#: held in an `INTERIM_014` list beside this set until T10 deleted it: the eighth of those lists,
+#: and like the seven before it gone in the change that put the feature's number here. **Its three
+#: documents stay `Accepted`** until the operator's sign-in with a real Jellyfin client ticks the
+#: last line of its definition of done; what this set polices - every route served, none ahead of
+#: its feature - was complete at T10.
+IMPLEMENTED_FEATURES = frozenset(
+    {"001", "002", "004", "005", "006", "007", "008", "009", "011", "014"}
 )
 
 
@@ -164,7 +153,8 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     lists are gone**: `INTERIM_009` was the last of them, deleted at 009 T14 in the change that put
     `"009"` in the set above, and what it was holding open - the seven playlist routes of
     `surface.yaml` - is now counted against the file rather than against a list here.
-    `INTERIM_014` above is the eighth, and it goes the same way at 014 T10.
+    **`INTERIM_014` was the eighth, and went the same way at 014 T10** on 2026-09-14: its six rows
+    are counted against the file now.
 
     **One route 008 serves is knowingly narrower than the reference's**, and it is recorded here
     because nothing else in this file would say so: `/Audio/{itemId}/universal` with
@@ -175,17 +165,25 @@ def test_no_route_ships_ahead_of_its_feature(app: FastAPI) -> None:
     playlist pair is a surface decision under AGENTS.md's "Adding an endpoint" procedure, and it
     is on 008's list of what it owes the features after it.
     """
-    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES) | INTERIM_014
+    assert documented_paths(app) == surface_paths(IMPLEMENTED_FEATURES)
 
 
-def test_the_interim_list_names_routes_the_surface_file_really_has(app: FastAPI) -> None:
-    """An interim entry is a route that has landed early, not a route invented here.
-
-    Without this, a typo in `INTERIM_014` would widen the check above by exactly the string it
-    misspelled and nothing would notice until the list was deleted.
-    """
-    assert surface_paths(frozenset({"014"})) >= INTERIM_014
-    assert documented_paths(app) >= INTERIM_014
+def test_014_serves_exactly_its_six_routes(app: FastAPI) -> None:
+    """014's definition of done, counted against the file: the six rows `surface.yaml` marks
+    `feature: "014"` are six, at `L2`, and served - the check `test_the_interim_list_names_routes_
+    the_surface_file_really_has` made of `INTERIM_014` until T10 deleted both."""
+    fourteen = [entry for entry in surface_endpoints() if entry.get("feature") == "014"]
+    assert {(entry["method"], entry["path"]) for entry in fourteen} == {
+        ("GET", "/Startup/User"),
+        ("POST", "/Startup/User"),
+        ("POST", "/Startup/Complete"),
+        ("GET", "/Library/VirtualFolders"),
+        ("POST", "/Library/VirtualFolders"),
+        ("POST", "/Library/Refresh"),
+    }
+    assert len(fourteen) == 6
+    assert {entry.get("level") for entry in fourteen} == {"L2"}
+    assert surface_paths(frozenset({"014"})) <= documented_paths(app)
 
 
 def test_009_serves_exactly_its_seven_routes_and_no_eighth(app: FastAPI) -> None:
@@ -546,8 +544,12 @@ def endpoints_exercised(requests: Iterable[tuple[str, str]]) -> frozenset[tuple[
 
 
 def served_rows() -> frozenset[tuple[str, str]]:
-    """The rows a route answers for: the implemented features' and whatever 014 has landed."""
-    return surface_paths(IMPLEMENTED_FEATURES) | INTERIM_014
+    """The rows a route answers for: the implemented features'.
+
+    It also added `INTERIM_014` from 014 T2 to T10, the routes that feature had landed before it
+    joined the set; deleted with that list on 2026-09-14.
+    """
+    return surface_paths(IMPLEMENTED_FEATURES)
 
 
 def unasked_endpoints(
@@ -597,17 +599,19 @@ def test_the_coverage_check_counts_served_rows_and_not_declared_ones(
     serves nothing is not reported however little asks it; a served row nothing asked is. Both
     halves, because a scope that dropped every row would pass the first alone.
 
-    **Since 014 T7 the file has no such row**: its six are all on `INTERIM_014`, so every declared
-    row is served. The state before T7 is put back for the length of the test - the interim list
-    without `POST /Library/Refresh` - rather than the half deleted, because the scoping is still
-    what keeps T10's successor honest when the next feature lands its rows ahead of its routes.
+    **Since 014 T7 the file has no such row**, and since 014 T10 there is no interim list to narrow
+    either: every declared row belongs to a feature in `IMPLEMENTED_FEATURES`. So the state before
+    014 was implemented is put back for the length of the test - the set without `"014"`, which
+    leaves its six rows declared and unserved - rather than the half deleted, because the scoping is
+    what keeps the next feature honest when it lands its rows ahead of its routes. (Until T10 this
+    narrowed `INTERIM_014` to five routes instead.)
     """
     declared_not_served = ("POST", "/Library/Refresh")
     monkeypatch.setattr(
-        sys.modules[__name__], "INTERIM_014", INTERIM_014 - frozenset({declared_not_served})
+        sys.modules[__name__], "IMPLEMENTED_FEATURES", IMPLEMENTED_FEATURES - {"014"}
     )
     assert declared_not_served in surface_paths()
-    assert declared_not_served not in served_rows(), "the interim list was not narrowed"
+    assert declared_not_served not in served_rows(), "the implemented set was not narrowed"
 
     one = ("GET", "/System/Info/Public")
     assert "GET /System/Info/Public" in unasked_endpoints([])

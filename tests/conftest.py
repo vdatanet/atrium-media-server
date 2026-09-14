@@ -94,10 +94,15 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     put six rows in `surface.yaml` before any of their routes: counted over the whole file, the
     suite failed on six endpoints no implemented feature serves. A route of an unimplemented
     feature cannot have paid for L2 — there is nothing to ask — and the sentence above is about a
-    row *declared, served, and asked by no test*. So the set is `IMPLEMENTED_FEATURES`' rows plus
-    `INTERIM_014`: a 014 route that lands in the interim list must be asked from that change on,
-    and at 014 T10 the list goes and every row is counted against the file.
+    row *declared, served, and asked by no test*. So the set is `IMPLEMENTED_FEATURES`' rows - plus,
+    from 014 T2 to T10, the `INTERIM_014` list of routes that feature had landed early, deleted at
+    T10 on 2026-09-14 when `"014"` joined the set and its six rows were counted against the file.
     `test_routes.py::unasked_endpoints` is the computation, tested there without a session.
+
+    **Requests sent to the shared `app` fixture are not recorded**: `pytest_configure` below
+    replaces `atrium.server.create_app` after this module has bound the original name, so an
+    application built by that fixture never reaches the recorder. A row asked only through `app`
+    is reported as asked by no test (014 T7), which is on 014's owes list.
     """
     if not session.config.stash.get(WHOLE_SUITE, False) or exitstatus not in (0, None):
         return

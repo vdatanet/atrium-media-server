@@ -380,7 +380,8 @@ endpoints:
   # project's own client rather than an analysed one: a fresh server has no administrator, and
   # these are the operations the reference sets itself up through with nobody at a keyboard - 014
   # section 2.0. Listed before any of them is served, which is AGENTS.md's order for adding an
-  # endpoint; test_routes.py's INTERIM_014 holds each open as it lands.
+  # endpoint; test_routes.py's INTERIM_014 held each open as it landed, until 014 T10 deleted it
+  # and put "014" in IMPLEMENTED_FEATURES on 2026-09-14.
   - path: "/Startup/User"
     method: GET
     operation: GetFirstUser

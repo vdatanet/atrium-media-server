@@ -86,7 +86,13 @@ def test_a_library_scans_to_items(
     assert any(item.type is ItemType.COLLECTION_FOLDER for item in stored.values())  # type: ignore[union-attr]
 
 
-@pytest.mark.parametrize("collection_type", ["books", None])
+#: Every declared type outside the three, and none - which is also what `photos` is stored as. Two
+#: of the six until 014 T10, which widened it to the six so AC-7's "a type other than those three"
+#: is asserted of each type the criterion names rather than of a sample.
+UNSCANNED = ["musicvideos", "homevideos", "boxsets", "books", "mixed", None]
+
+
+@pytest.mark.parametrize("collection_type", UNSCANNED)
 def test_a_library_this_server_does_not_scan_holds_nothing_but_itself(
     engine: Engine, fixture_library: BuiltFixture, collection_type: str | None
 ) -> None:

@@ -462,14 +462,99 @@ when the list goes, all six are counted against the file. Plan §8 amended.
 
 ## T10 — Close it
 
-- [ ] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_014`, mapping all **ten**
-      criteria to tests by name. `IMPLEMENTED_FEATURES` gains `"014"` and `INTERIM_014` is deleted.
-      The three 014 documents and `specs/README.md`'s row to `Implemented`.
+- [x] **Changes:** `tests/conformance/test_acceptance.py` gains `FEATURE_014`, mapping all **ten**
+      criteria to tests by name — **done**. `IMPLEMENTED_FEATURES` gains `"014"` and `INTERIM_014`
+      is deleted — **done**. The three 014 documents and `specs/README.md`'s row to `Implemented` —
+      **not done, and deliberately not**: one line of the definition of done is unticked, as at
+      013 T9.
 - **Depends on:** T1–T9
 - **Verified by:** `pytest` — the whole suite, which now includes
   `test_no_route_ships_ahead_of_its_feature` counting the six routes against the file rather than
   against a list, and the acceptance map naming tests that exist.
 - **Spec reference:** §5, §6
+- **Done** (2026-09-14). **Every clause of the ten criteria had a test, and one clause had it for
+  two cases of six.** Each named test was read against the criterion before it was mapped. AC-7's
+  *"a library of a type other than those three, or of none, has no item added to it by a scan"*
+  was asserted of `books` and of no type, at the scan and through the route — so
+  `test_a_library_this_server_does_not_scan_holds_nothing_but_itself` is parametrised over all six
+  now, `musicvideos`, `homevideos`, `boxsets`, `books`, `mixed` and none (`photos` is stored as
+  none), which is T5's own test widened rather than a new one. The map names seventy-eight tests;
+  AC-10 carries `test_import_directions.py`'s two client rules beside the recorded runs, as plan
+  §8 put them, because *"no way into the server but a client's"* has a half no request can show.
+  **Two things counted the interim list, and one of them was a test of the coverage scoping**:
+  `test_the_coverage_check_counts_served_rows_and_not_declared_ones` narrowed `INTERIM_014` to
+  put a declared, unserved row back for its own length, and now narrows `IMPLEMENTED_FEATURES` to
+  the set without `"014"` instead, which puts six back and keeps the test's two halves;
+  `test_the_interim_list_names_routes_the_surface_file_really_has` goes with the list, and
+  `test_014_serves_exactly_its_six_routes` states the definition of done's second line against the
+  file — six rows, all `L2`, all served. **The whole suite passed with the six rows counted by the
+  L2 hook against the file**, so no 014 route had been asked only through the shared `app`
+  fixture: `test_startup.py`'s and `test_setup_window.py`'s requests go there and reach no
+  recorder, and every one of the three startup routes is also asked by `test_library_structure.py`
+  or `tests/cli/`, which build their servers through the module attribute. That blind spot is still
+  there and is on the owes list below. Five sentences said the list was still to go —
+  `surface.yaml`'s comment above the six rows, `tests/conftest.py`'s hook docstring, and three
+  docstrings in `test_routes.py` — and
+  `test_acceptance.py`'s own docstring said it carried twelve maps where it carried thirteen.
+  **The two sentences T9 left here were false whatever the status word says**, so they are records
+  now rather than waiting for the flip: spec §1's *"today nothing creates even the first account"*
+  stopped being true at T4, and plan §1's *"no route creates a user"* with it; both keep their
+  sentence in the past tense with the date. `AGENTS.md` said *"there is no unbuilt feature"* and
+  *"as of 2026-09-04 there is none"*, `specs/README.md`'s row and paragraph said 014's tasks were
+  accepted and nothing more, and `README.md` said v2's first slice was *open* — each now says the ten
+  tasks are done and what 014 awaits. The owes list gains two items it did not carry: the rescan
+  runners as an item of their own rather than a sentence inside L3's, and the coverage hook's blind
+  spot.
+
+  **The hand run, taken on 2026-09-14** on this machine, over the generated fixture tree's
+  decodable films (`tests/fixtures/reference_tree.py`'s `build`, `Decodable/Movies`, fifteen films)
+  and a data directory holding nothing but a `config.toml` binding `127.0.0.1` on a free port
+  (`[network] bind_address = "127.0.0.1"`, `port = <port>`). Volatile values elided:
+
+  ```text
+  $ uv run atrium --data-dir <data> &
+  $ curl -s http://127.0.0.1:<port>/System/Info/Public
+  {"LocalAddress":"http://127.0.0.1:<port>","ServerName":"atrium","Version":"10.11.11",
+   "ProductName":"Jellyfin Server","OperatingSystem":"","Id":"<id>","StartupWizardCompleted":false}
+  $ printf '<password>\n' | uv run atrium-admin setup --server http://127.0.0.1:<port> --username joan --password-stdin
+  joan                                                                                  (exit 0)
+  $ printf '<password>\n' | uv run atrium-admin setup --server ... --username joan --password-stdin
+  atrium-admin: setup is already finished on http://127.0.0.1:<port>, and nothing was changed. ...  (exit 2)
+  $ printf '<password>\n' | uv run atrium-admin library add --server ... --username joan --password-stdin \
+        --type movies Films <tree>/Decodable/Movies
+  Films                                                                                 (exit 0)
+  $ printf '<password>\n' | uv run atrium-admin library list --server ... --username joan --password-stdin
+  Films	movies	<tree>/Decodable/Movies                                                 (exit 0)
+  $ printf '<password>\n' | uv run atrium-admin library scan --server ... --username joan --password-stdin
+  A scan of every library was started. It is not waited for: browse the libraries from a client to see what it found.  (exit 0)
+  ```
+
+  The server's log: the add's scan finished 0.7 s after its `204` — *"15 added, 0 updated, 1
+  unchanged … 14 inspected; 4 skipped … 3 uninspected"*, the unchanged row being the library's own
+  folder `create_with_view` had written — and the refresh's pass after it *"0 added, 0 updated, 16
+  unchanged"*. Then, as a Jellyfin client asks, with `X-Emby-Authorization: MediaBrowser
+  Client="Jellyfin Web", Device="Firefox", DeviceId="<device>", Version="10.11.11"`:
+  `POST /Users/AuthenticateByName` `{"Username":"joan","Pw":"<password>"}` answered `200` with
+  `AccessToken`, `ServerId`, `SessionInfo` and `User`, `User.Policy.IsAdministrator` `true`;
+  `GET /UserViews` answered `200` with one row, `Films`, `CollectionFolder`, `CollectionType`
+  `movies`; `GET /Items?ParentId=<view>&Recursive=true&IncludeItemTypes=Movie&SortBy=SortName`
+  answered `200`, `TotalRecordCount` `15`, every film of the directory by name; and a bare
+  `GET /Items?ParentId=<view>` answered the same fifteen `Movie` rows. **Restarted once** — the
+  process killed by the PID it was started under, the port answering nothing, started again on
+  the same data directory: `StartupWizardCompleted` `true`, `GET /Startup/User` with no token `401`,
+  the same sign-in `200`, `/UserViews` still `Films`, and `library list` still `Films	movies`. The
+  server was stopped the same way. The password appears nowhere in either server log. **Nothing in
+  the run surprised**; the one thing to know is that the default bind is every interface on `8096`,
+  so an operator who writes no `config.toml` runs `setup` against `http://127.0.0.1:8096`.
+
+  **What that run is and is not.** It is the definition of done's sentence at the HTTP level: a
+  fresh server reached a first administrator and a first scanned library through `atrium-admin`
+  alone, and the requests a Jellyfin client sends to sign in and browse were answered. **It is not
+  an unmodified Jellyfin client signing in**, which nobody here can take: that clause is split into
+  its own line below and left for the operator, and with it unticked the three documents stay
+  `Accepted` — marking them `Implemented` over an unticked line is what 013 T9 tried and undid, and
+  what `test_the_definition_of_done_counts_the_criteria_that_exist` sits beside. What the operator
+  runs is in that line.
 
 ---
 
@@ -477,26 +562,60 @@ when the list goes, all six are counted against the file. Plan §8 amended.
 
 The feature is done when **all** of these hold:
 
-- [ ] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all **ten** —
+- [x] Every acceptance criterion in [`spec.md` §5](spec.md#5-acceptance-criteria) — all **ten** —
       has a passing test, by name, in `FEATURE_014`.
-- [ ] The six routes are in `docs/compatibility/surface.yaml` at `L2`, served, and counted by
+- [x] The six routes are in `docs/compatibility/surface.yaml` at `L2`, served, and counted by
       `test_routes.py` against the file.
-- [ ] A fresh server, started on an empty data directory, reaches a first administrator and a first
-      scanned library through `atrium-admin` alone, and an unmodified Jellyfin client signs in to it
-      and browses — the sentence spec §1 opens with, run once by hand and recorded here with its
-      date.
-- [ ] Anything learned during implementation is back in `spec.md` and `plan.md`, in the same change —
-      T1's readings first among them.
-- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented`.
+- [x] A fresh server, started on an empty data directory, reaches a first administrator and a first
+      scanned library through `atrium-admin` alone, and the requests a Jellyfin client sends to sign
+      in and browse are answered — run once by hand and recorded in T10's note. **Taken
+      2026-09-14**, at the HTTP level: `setup`, `library add`, `library list` and `library scan` on
+      a data directory holding only a `config.toml`, then `POST /Users/AuthenticateByName`,
+      `GET /UserViews` and `GET /Items?ParentId=<view>` answering the fifteen films, and a restart
+      leaving `StartupWizardCompleted` `true`. *(Split from the next line on 2026-09-14 by T10: the
+      two were one line, and only this half can be taken without a client application.)*
+- [ ] **An unmodified Jellyfin client signs in to such a server and browses** — the sentence spec §1
+      opens with, taken by the operator with their own Jellyfin apps and recorded here with its date
+      and the apps named. It is the one line left, and it is why the three documents are not
+      `Implemented`. On the server's machine, over any directory of films:
+
+      ```bash
+      uv run atrium --data-dir ~/atrium-data &        # binds every interface on 8096 by default
+      uv run atrium-admin setup --server http://127.0.0.1:8096 --username <name>
+      uv run atrium-admin library add --server http://127.0.0.1:8096 --username <name> \
+          --type movies Films /path/to/films
+      uv run atrium-admin library list --server http://127.0.0.1:8096 --username <name>
+      ```
+
+      Each command asks for the password on the terminal. `library add` starts the library's scan
+      and does not wait for it — `library scan --server http://127.0.0.1:8096 --username <name>`
+      starts another if one is wanted — so give it a moment, then point a Jellyfin app at
+      `http://<the machine's address>:8096` and sign in as `<name>`.
+- [x] Anything learned during implementation is back in `spec.md` and `plan.md`, in the same change —
+      T1's readings first among them. Every task's Done note names the amendment its finding made,
+      T9 brought the plan's §3 tree level with its table, and T10 changed neither document's
+      behaviour.
+- [ ] `spec.md`, `plan.md` and `tasks.md` are all marked `Implemented` — **not yet**, because the line
+      above the last is unticked (013 T9's precedent).
+
+**What is left, stated rather than implied.** Ten tasks done, ten criteria mapped to tests that
+assert what they say, the six routes counted against the file, and the sequence run by hand against
+a real process at the HTTP level. What remains is the operator's sign-in with a real Jellyfin
+client; when it is taken, that line is ticked with its date and the apps named, and the three
+documents and `specs/README.md`'s row move to `Implemented` in the same change. Spec §1's *"today
+nothing creates even the first account"* and plan §1's *"no route creates a user"* — the two
+sentences T9 left for this task — are records with T10's date already, because they were false
+from T4 and T8 on whatever the status word says.
 
 ## What this feature owes the next ones
 
 - **L3 for the six routes** (spec §6, OQ-10): the change that teaches `tools/differential.py` to
   start an Atrium on an empty data directory — which `atrium-admin` is what makes possible without a
-  write to the store — and then compares the setup sequence against the reference's. The same change
-  can teach 010's two `rescan` runners to ask Atrium for the second scan: they ask the reference
-  alone, because they were written when Atrium served no `POST /Library/Refresh`, and it has served
-  one since T7.
+  write to the store — and then compares the setup sequence against the reference's.
+- **Teaching 010's two `rescan` runners to ask Atrium for the second scan**, through
+  `POST /Library/Refresh`: they ask the reference alone, because they were written when Atrium
+  served no library-refresh route, and it has served one since T7 — `NO_SECOND_SCAN` in
+  `tools/differential.py` says as much. The L3 change above can carry it, and need not wait for it.
 - **The restricted seat** the differential needs is still built by hand, because a second account is
   `POST /Users/New` and the next slice (spec §2).
 - **Bounding the scan's write lock** (plan §9 row one, accepted as a residual risk on 2026-09-14):
@@ -507,3 +626,11 @@ The feature is done when **all** of these hold:
   read waits as long; unpaused, the fixture holds the lock about 35 ms.
 - **What started the scan of a library added with `refreshLibrary=false`** on the reference was not
   isolated (spec §3.6), and this server starts none.
+- **The L2 coverage hook does not record requests sent through the shared `app` fixture**
+  (found at T7, confirmed at T10). `tests/conftest.py` replaces `atrium.server.create_app` in
+  `pytest_configure`, after its own module has bound the original name, so an application the `app`
+  fixture builds reaches no recorder — every request in `test_startup.py` and
+  `test_setup_window.py` among them. 014's six rows pass today only because each is also asked
+  through a server built by the module attribute; a route asked through `app` alone would be
+  reported *"asked by no test"* with a test asking it. The fix is the fixture looking the factory
+  up when it runs, and the check that it can fail is a request through `app` alone.

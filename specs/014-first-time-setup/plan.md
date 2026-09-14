@@ -30,7 +30,10 @@ has an account store and a hash (002), a library store with a derived identity a
 persisted `StartupWizardCompleted` that nothing sets (001), and an empty-bodied `401` and `403`
 (002). What it does not have is **any caller for three of those from inside the server**:
 `library.config.create` and `library.scan.scan` are called only by tests and by the throwaway script
-`tools/README.md` describes, and no route creates a user. So the feature is five things:
+`tools/README.md` describes, and no route creates a user. *(All of that was true when the plan was
+accepted on 2026-09-14 and is not now: T4's `GET /Startup/User` creates the first account, T6's
+scanner and T7's routes call both, and T8's client drives them — tasks T10.)* So the feature is five
+things:
 
 1. **A policy** — *setup unfinished and the caller is this machine, or an administrator* — as one
    dependency beside `require_administrator`, and the client address it rests on made a property of

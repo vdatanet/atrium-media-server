@@ -125,7 +125,7 @@ say how it will be proven is not finished.
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Implemented** | **Implemented** | **Implemented** — eleven of eleven tasks, ten of ten criteria, [AC-9 amended 2026-09-04](012-negotiation-inputs/spec.md#5-acceptance-criteria) |
 | [013](013-artist-registry/) | Artist registry | **Implemented** | **Implemented** | **Implemented** — nine of nine tasks, eight of eight criteria, and **the first feature here whose closing task proved a `level: L3` row against a real Jellyfin** rather than deferring it |
-| [014](014-first-time-setup/) | First-time setup | **Accepted** 2026-09-14 — OQ-1 to OQ-3, OQ-6 and OQ-12 decided and OQ-4 to OQ-8 measured on 2026-09-13; OQ-9 to OQ-11 and OQ-13 closed at the plan gate, no question open | **Accepted** 2026-09-14 | **Accepted** 2026-09-14 — [ten tasks](014-first-time-setup/tasks.md), five findings against the plan at their gate |
+| [014](014-first-time-setup/) | First-time setup | **Accepted** 2026-09-14 — OQ-1 to OQ-3, OQ-6 and OQ-12 decided and OQ-4 to OQ-8 measured on 2026-09-13; OQ-9 to OQ-11 and OQ-13 closed at the plan gate, no question open | **Accepted** 2026-09-14 | **Accepted** 2026-09-14 — [ten of ten tasks](014-first-time-setup/tasks.md) done and ten of ten criteria mapped the same day; **awaits the operator's sign-in with an unmodified Jellyfin client**, the one line of its definition of done left open |
 
 **All thirteen features are implemented** — 008 on 2026-08-29 across fourteen tasks, 011 on
 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, 010 on 2026-09-02 across fifteen,
@@ -138,7 +138,15 @@ readings were taken on the single-use reference instance, the only Jellyfin whos
 is still unrun, and its five operator decisions beside them, all before it was accepted. **Its plan
 was accepted on 2026-09-14, and so was its task list**: the four questions the spec left to it are closed, and a fifth nobody had asked — a
 server holding accounts from before the feature would have opened its setup window on upgrade — was
-decided with them.
+decided with them. **All ten of its tasks were done on 2026-09-14** — the setup window, the first
+account, a library of any declared type, an in-process scanner, the six routes and `atrium-admin` —
+its ten criteria are mapped to tests, its six routes are counted against `surface.yaml`, and the
+sequence was run by hand that day against a real process: `setup`, `library add`, `library list`
+and `library scan` on an empty data directory, then the sign-in, `/UserViews` and `/Items` a
+Jellyfin client sends. **It stays `Accepted`** because one line of its definition of done is not
+that run: an unmodified Jellyfin client signing in and browsing, which the operator takes with
+their own apps ([014 tasks, definition of done](014-first-time-setup/tasks.md#definition-of-done)),
+as 013 stayed `Accepted` until its differential run.
 
 **013 is the first feature here that closes an accepted gap rather than adding a surface**, and
 the first whose closing task proved a `level: L3` row **against a real Jellyfin** instead of
