@@ -1,10 +1,11 @@
 ---
 feature: 014-first-time-setup
 title: First-time setup
-status: Draft
+status: Accepted
 created: 2026-09-13
-updated: 2026-09-13
-amended: 2026-09-13 at the spec gate - OQ-1 decided (the setup window is open to a loopback address only, by changing the reference's first branch and nothing else) and OQ-2 decided (the first account is always MyJellyfinUser); sections 3.1, 3.2 and 3.8, AC-2, AC-5 and AC-10 amended; OQ-11 raised by the first answer. And the same day, OQ-3 decided (a library name already in use is numbered as the reference numbers it); section 3.6 amended and section 3.6.2 added for the order a name is cleaned in; AC-7 amended; OQ-5 widened to confirm that names compare with case. And the same day, at the measurement gate, OQ-4, OQ-5, OQ-7 and OQ-8 answered and OQ-6 half answered by tools/probe_first_time_setup.py on an instance started unconfigured; two claims made from the source withdrawn (the missing-path body, and the empty-name refusal's origin); sections 3.1, 3.3 to 3.7 and 3.8 amended; AC-3, AC-4, AC-5, AC-7 and AC-8 amended; OQ-12 and OQ-13 raised. And the same day, OQ-6 decided (every library type answered and stored as the reference does, a library of a type this server cannot scan staying empty as an accepted gap) and OQ-12 decided (library scan does not wait); sections 3.6, 3.6.1, 3.7 and 3.8 amended; AC-7 and AC-9 amended
+updated: 2026-09-14
+accepted: 2026-09-14
+amended: 2026-09-13 at the spec gate - OQ-1 decided (the setup window is open to a loopback address only, by changing the reference's first branch and nothing else) and OQ-2 decided (the first account is always MyJellyfinUser); sections 3.1, 3.2 and 3.8, AC-2, AC-5 and AC-10 amended; OQ-11 raised by the first answer. And the same day, OQ-3 decided (a library name already in use is numbered as the reference numbers it); section 3.6 amended and section 3.6.2 added for the order a name is cleaned in; AC-7 amended; OQ-5 widened to confirm that names compare with case. And the same day, at the measurement gate, OQ-4, OQ-5, OQ-7 and OQ-8 answered and OQ-6 half answered by tools/probe_first_time_setup.py on an instance started unconfigured; two claims made from the source withdrawn (the missing-path body, and the empty-name refusal's origin); sections 3.1, 3.3 to 3.7 and 3.8 amended; AC-3, AC-4, AC-5, AC-7 and AC-8 amended; OQ-12 and OQ-13 raised. And the same day, OQ-6 decided (every library type answered and stored as the reference does, a library of a type this server cannot scan staying empty as an accepted gap) and OQ-12 decided (library scan does not wait); sections 3.6, 3.6.1, 3.7 and 3.8 amended; AC-7 and AC-9 amended. And on 2026-09-14 at the plan gate, OQ-9, OQ-11 and OQ-13 decided by the operator and OQ-10 decided by the plan (L2, L3 owed), and a server that held accounts before this feature is set up; sections 3.1, 3.5, 3.6, 3.8 and 6 amended; AC-1, AC-5, AC-7 and AC-10 amended
 depends_on: [001, 002, 003]
 ---
 
@@ -143,9 +144,21 @@ confused, and the loopback rule is the one decided.
 **The address is the one the request arrived from, as this server determines it**, which is not
 always the machine that originated it: a reverse proxy on the same machine that does **not** pass
 on the original client's address makes every request it forwards look local, and would reopen the
-window to the network behind it. How the address is determined, and what an operator running
-behind such a proxy has to configure, is OQ-11 — and it decides whether this rule is worth what it
-says.
+window to the network behind it. **So a forwarded address is believed only from a proxy the
+operator has declared in the server's configuration** — by default this machine's own loopback
+address, and nothing else — and it is then the address the request is from. **A request from a
+loopback address that carries a forwarded address the server did not believe is from elsewhere**:
+it came through a proxy nobody declared. What remains undetectable is a proxy on the same machine
+that passes on nothing, whose requests cannot be told from a local client's; setup is finished
+before one is put in front. Decided on 2026-09-14 as OQ-11.
+
+**A server that already held accounts before this feature existed is set up.** Every account such a
+server holds was written by hand, and its `StartupWizardCompleted` has read `false` all along
+(§2.1), so without this rule the window would open on it — and §3.3 would let any process on the
+machine set the first account's password. The first time such a server starts with this feature, if
+it holds any account, setup is recorded as finished; if it holds none, it stays unfinished. It
+happens once, and never to a server this feature started, so a server restarted in the middle of its
+own setup keeps its window open. Decided on 2026-09-14 at the plan gate.
 
 `POST /Library/Refresh` is **not** a first-time-setup operation: it requires an administrator in
 both states `[spec: RefreshLibrary, the security requirement declared on it]`. It lives in a
@@ -264,7 +277,7 @@ administrator is answered `204` again and a caller with no token `401` with an e
 | `Locations` | array of string | The library's paths |
 | `CollectionType` | string | The type the library was added with. **No value where none was given — and no value where the one given is not a type the reference declares** (§3.6.1) `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]` |
 | `ItemId` | string | The library's own identifier, the one a client browses by |
-| `LibraryOptions` | object | The reference sends **37 properties** on every library read, whatever its type `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. Which of them this server can state truthfully is OQ-13 |
+| `LibraryOptions` | object | The reference sends **37 properties** on every library read, whatever its type `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. **This server sends one, `PathInfos`** — an entry per path, carrying that `Path` — because it is the one property it honours; the other 36 are an accepted gap ([behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1)). Decided on 2026-09-14 as OQ-13 |
 | `PrimaryImageItemId` | string | No value on every library read, none of which had artwork `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]` |
 | `RefreshProgress`, `RefreshStatus` | number, string | **They show some scans and not others**, read once a second `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. While a library added with `refreshLibrary=true` was scanned, its row read `Active` with a partial, fractional progress — `10` in one run, `10.666…` in another — then `Idle` and no value once it finished. **While `POST /Library/Refresh`'s scan ran, the row read `Idle` throughout.** So the row can tell a caller a scan it started by adding the library has finished, and cannot tell it about a scan §3.7 started — which shows only on the server's scheduled-task list |
 
@@ -282,7 +295,7 @@ administrator is answered `204` again and a caller with no token `401` with an e
 | query | `collectionType` | no | string | `[spec: CollectionTypeOptions]` declares eight values; which of them this server accepts is §3.6.1 |
 | query | `paths` | no | string, comma-separated | Each must be a directory that exists **on the server** |
 | query | `refreshLibrary` | no | boolean, default `false` | Whether adding the library also scans it |
-| body | `LibraryOptions` | no | object | `[spec: AddVirtualFolderDto]`; which properties are honoured is OQ-13 |
+| body | `LibraryOptions` | no | object | `[spec: AddVirtualFolderDto]`. Accepted, and **nothing in it is applied** — the paths come from `paths` (OQ-13) |
 
 **Response — 204**, no body. The library appears in §3.5 and, once scanned, in a client's views.
 
@@ -434,12 +447,14 @@ anywhere with an administrator's credentials.
 
 **Signing in.** Before setup is finished, `library add` and `library list` need no credentials
 **from this machine** (§3.1). After it, they and `library scan` sign in as an administrator, from
-anywhere. Whether the client keeps a token between invocations, and where, is OQ-9.
+anywhere. **It keeps no token between invocations**: each command that needs one signs in again, as
+the same device, so repeated commands do not accumulate sessions. Decided on 2026-09-14 as OQ-9.
 
 **What it guarantees an operator**, whatever the command:
 
 - **A password is never printed**, and never accepted on the command line where other processes on
-  the machine can read it. Where it comes from instead is OQ-9.
+  the machine can read it. It is asked for on a terminal without being shown, or read from standard
+  input when the operator asks for that — and from nothing else, the environment included.
 - **Every refusal is printed with the status the server answered and the reason it gave**, and the
   program exits non-zero. A success exits zero.
 - **The server's address is required and is never guessed.** A client that fell back to a default
@@ -459,7 +474,8 @@ What a client can observe change, and what survives a restart:
 ## 5. Acceptance criteria
 
 1. On a server nobody has set up, `StartupWizardCompleted` is `false`; after `POST /Startup/Complete`
-   it is `true`, and it is still `true` after the server restarts.
+   it is `true`, and it is still `true` after the server restarts. A server that held an account
+   before this feature existed starts with it `true`; one that held none starts with it `false`.
 2. `GET /Startup/User` on a server with no account creates exactly one, an administrator hidden from
    `GET /Users/Public`, and answers its name, which is `MyJellyfinUser` **whatever operating-system
    account the server runs as**; a second call creates nothing more.
@@ -475,7 +491,11 @@ What a client can observe change, and what survives a restart:
    address**, and treat a caller from any other address as they treat every caller once setup is
    finished: an administrator is admitted, an authenticated non-administrator refused `403`, and a
    caller with no token refused `401`, both refusals with no body and no `Content-Type`. A client on
-   the server's own machine that addresses it by a network address is a caller from elsewhere.
+   the server's own machine that addresses it by a network address is a caller from elsewhere. A
+   request from a loopback address that carries a forwarded client address is a caller from
+   elsewhere unless the proxy it came through is declared in the configuration, in which case it is
+   a caller from the address forwarded; a forwarded address from a caller that is not a declared
+   proxy is ignored.
 6. `POST /Library/Refresh` refuses a caller with no token `401` and a non-administrator `403` in both
    states, and admits an administrator.
 7. `POST /Library/VirtualFolders` with existing paths answers `204` and adds a library that
@@ -486,7 +506,8 @@ What a client can observe change, and what survives a restart:
    added under that name followed by `2` (then `3`) and answers `204`, where names are compared exactly,
    case included, after §3.6.2's trimming and replacement; an empty or whitespace name answers the
    validation `400` keyed `name`, a path that does not exist answers `400` with
-   `Error processing request.`, and neither adds a library.
+   `Error processing request.`, and neither adds a library. Each listed library's `LibraryOptions`
+   carries its paths as `PathInfos` and no other property.
 8. A library added with `refreshLibrary=true`, or scanned through `POST /Library/Refresh`, is
    browsable by an unmodified Jellyfin client signed in as the first account **once the scan the
    `204` started has finished** — and the `204` itself does not wait for it.
@@ -498,12 +519,13 @@ What a client can observe change, and what survives a restart:
 10. The client exits non-zero and prints the server's status and reason on every refusal, refuses
     **setup** on a server whose setup is finished without calling §3.2 to §3.4, refuses **setup**
     given a non-loopback address while setup is unfinished without calling §3.2 to §3.4 and says it
-    must run on the server's machine, and prints no password in any output.
+    must run on the server's machine, prints no password in any output, and takes a password from a
+    terminal without showing it or from standard input and from no argument.
 
 *Criteria 3, 4, 5, 7 and 8 were amended on 2026-09-13 by the reading that answered OQ-4, OQ-5 and
-OQ-8, and criteria 7 and 9 the same day by the decisions that closed OQ-6 and OQ-12. What can still
-move them is OQ-11 (how a request's address is determined), amended at the gate that answers it, not
-quietly.*
+OQ-8, and criteria 7 and 9 the same day by the decisions that closed OQ-6 and OQ-12. Criteria 1, 5,
+7 and 10 were amended on 2026-09-14 at the plan gate, by the decisions that closed OQ-9, OQ-11 and
+OQ-13 and by the rule for a server that held accounts before this feature.*
 
 ## 6. Conformance
 
@@ -516,9 +538,12 @@ quietly.*
 | `POST /Library/VirtualFolders` | L2 | AC-5, AC-7 |
 | `POST /Library/Refresh` | L2 | AC-6, AC-8 |
 
-**L2 and not L3, and L3 is within reach.** The single-use reference instance already runs this exact
-sequence against a fresh reference every time it stands up, so a differential over it costs a
-comparison and no new machinery. Whether to take it at the plan gate is OQ-10.
+**L2 and not L3, and L3 is owed.** The single-use reference instance already runs this exact
+sequence against a fresh reference every time it stands up — but a differential needs the same on
+**this** server's side, started on nothing for every run, and the harness points at a server
+someone arranged. This feature is what lets that arrangement be made without writing the store by
+hand, so the L3 row belongs to the change that teaches the harness to do it. Decided on 2026-09-14
+as OQ-10 ([plan §8](plan.md#8-testing-strategy)).
 
 Levels are defined in [../../docs/compatibility/conformance.md](../../docs/compatibility/conformance.md).
 
@@ -533,8 +558,9 @@ OQ-6 (every type answered as the reference answers it) and OQ-12 (no scan is wai
 OQ-4 — **and no claim it makes is left unverified.** The probe was run five times: once the pinned image
 failed to start and nothing was measured, and after each of the other four a close reading moved a
 claim — so every reading cited here is one the script as committed reproduces. The readings, and
-what moved after each run, are in [notes/first-time-setup-readings.md](notes/first-time-setup-readings.md). Four questions remain, all for the plan gate (OQ-9, OQ-10, OQ-11, OQ-13), and **none is the
-operator's**.
+what moved after each run, are in [notes/first-time-setup-readings.md](notes/first-time-setup-readings.md). **The four the spec gate left to the plan were closed at the plan gate on
+2026-09-14** — OQ-9, OQ-11 and OQ-13 by the operator, OQ-10 by the plan — and **no question is
+open**.
 
 **This feature opened with its questions unanswered and no measurements of its own**, like 011 and
 012. Every one is answered at the gate by a reading, and **there is exactly one place those readings
@@ -553,11 +579,11 @@ the pinned version, and is destroyed with everything it wrote — which makes a 
 | OQ-6 | ~~What does this server answer for a library type it cannot scan?~~ **Read on 2026-09-13, and decided the same day: as the reference answers.** The reading: the reference answers `204` for all five types this server cannot scan, for an omitted type, and for `photos`, which it does not declare — storing that one with no type, exactly as if it had been omitted `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]`. **The decision**: this server answers all seven cases the same way and stores the same type, and a library of such a type stays empty because its scan admits nothing there (§3.6.1) | — | Closed. §3.6 and §3.6.1, AC-7 amended; the empty library is an accepted gap in [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) |
 | OQ-7 | ~~Does a setup that skips `POST /Startup/Configuration` leave a server clients accept?~~ **Answered on 2026-09-13, at the API**: the first account signs in and `/UserViews` answers its libraries, and `ServerName` falls back to the host's own name. Whether a client's interface accepts such a server is a question for a client and was not asked | — | Closed. §2's out-of-scope row stands `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]` |
 | OQ-8 | ~~Is a scan waited for?~~ **Answered on 2026-09-13: no.** `POST /Library/Refresh` answers within 0.01 s and `refreshLibrary=true` after 0.07 s with nothing of the new library yet browsable; the library row's `RefreshStatus` showed the scan that adding a library started (`Active`, with a fractional progress) and **not** the one `POST /Library/Refresh` started, which appears only on the scheduled-task list. And **`refreshLibrary=false` did not leave a library unscanned** — what scanned it was not isolated | — | Closed. §3.5, §3.6 and §3.7, AC-8 amended; the consequence for the client is OQ-12 `[probe: tools/probe_first_time_setup.py, Jellyfin 10.11.11, 2026-09-13]` |
-| OQ-9 | **How does the client come by a password and keep a session?** A prompt, the environment, a file only its owner can read; and whether a token outlives one invocation | §3.8's signing-in paragraph | A decision at the plan gate — it is about the client, and the reference has nothing to say |
-| OQ-10 | **L3 for the setup sequence?** The instance already runs it, so a differential over it is a comparison and no machinery | §6 | A decision at the plan gate |
-| OQ-11 | **How does this server know the address a request came from, and what must an operator behind a reverse proxy do?** OQ-1's rule is only as good as that address. A proxy on the same machine forwards every request from a loopback address, so unless the original client's address is passed on **and believed**, the window reopens to the whole network behind it — and believing a passed-on address from anyone *other* than such a proxy would let a remote caller claim to be local. Today the answer is a default of a component the server is built on rather than a decision this project took, and a rule a security property rests on cannot be a default nobody chose | §3.1's meaning of *this machine*, AC-5 | A decision at the plan gate, asserted by a test that sends a request claiming a loopback origin from elsewhere and is refused, and one arriving through a local proxy that passes the address on and is refused |
+| OQ-9 | ~~How does the client come by a password and keep a session?~~ **Decided on 2026-09-14: a terminal prompt that does not show it, or standard input when asked; never an argument or the environment; and no token kept** — each command signs in again as the same device (§3.8) | — | Closed. §3.8, AC-10 amended; [plan §6.7](plan.md#6-algorithms) |
+| OQ-10 | ~~L3 for the setup sequence?~~ **Decided on 2026-09-14: L2, with L3 owed** to the change that lets the harness start this server on nothing (§6) | — | Closed. §6 amended; [plan §8](plan.md#8-testing-strategy) |
+| OQ-11 | ~~How does this server know the address a request came from, and what must an operator behind a reverse proxy do?~~ **Decided on 2026-09-14: a forwarded address is believed only from a proxy declared in the server's configuration, by default this machine's loopback address; a loopback request carrying a forwarded address the server did not believe is from elsewhere; a same-machine proxy that forwards nothing cannot be detected, and setup is finished before one is put in front** (§3.1) | — | Closed. §3.1, AC-5 amended; [plan §6.1](plan.md#6-algorithms) |
 | OQ-12 | ~~Should `library scan` wait for the scan to finish?~~ **Decided on 2026-09-13: no.** It reports that a scan was started and exits, and the scheduled-task list stays outside this feature's surface (§3.7, §3.8). What was weighed: OQ-8 found the two scans differ. A scan started by **adding** a library shows on its row (§3.5), so a client can wait for that one with an operation this feature already serves. A scan started by `POST /Library/Refresh` does not: its `204` is sent as it starts and the row reads `Idle` throughout, and the one place it shows is the server's scheduled-task list, which is not an operation 014 serves. So **library scan** either reports *"a scan was started"* — which is what §3.8 now says — or this feature serves one more of Jellyfin's operations to let it wait | — | Closed. §3.7 and §3.8, AC-9 amended |
-| OQ-13 | **What does this server state in `LibraryOptions`?** The reference sends 37 properties on every library read (§3.5), and most describe behaviour this server has no counterpart for. Stating one it does not honour is Principle VI's plausible-looking stub; omitting all of them is a shape the reference never sends | §3.5's `LibraryOptions` row | A decision at the plan gate, property by property |
+| OQ-13 | ~~What does this server state in `LibraryOptions`?~~ **Decided on 2026-09-14: `PathInfos` only**, the one property this server honours; the other 36 are an accepted gap, and the body sent to §3.6 is accepted with nothing in it applied (§3.5, §3.6) | — | Closed. §3.5, §3.6, AC-7 amended; [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) |
 
 ## 8. References
 

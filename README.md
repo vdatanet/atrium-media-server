@@ -33,8 +33,8 @@ authentication and sessions, scanning, metadata, the item query API, images, use
 playstate, as of 2026-08-29 playback negotiation and delivery, and as of 2026-09-01 playlists —
 011 (subtitle delivery) landed on 2026-08-31, 010 (the conformance harness) on 2026-09-02 across
 fifteen tasks and one amended acceptance criterion, and 012 (negotiation inputs) on 2026-09-04
-across eleven tasks and one more, and 013 (the artist registry) on 2026-09-08. **No feature is
-unbuilt, and one draft is open: [014](specs/014-first-time-setup/spec.md), v2's first slice**,
+across eleven tasks and one more, and 013 (the artist registry) on 2026-09-08. **No v1 feature is
+unbuilt, and v2's first slice is open: [014](specs/014-first-time-setup/spec.md), its spec accepted on 2026-09-14**,
 because until it lands nothing creates the first account on a fresh server. What each
 implemented feature still owes is written at the end of its own task list rather than here, so it
 cannot go stale inside a status word. The [status table](specs/README.md) is the authority; this
