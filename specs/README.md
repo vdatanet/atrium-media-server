@@ -125,7 +125,7 @@ say how it will be proven is not finished.
 | [011](011-subtitle-delivery/) | Subtitle delivery | **Implemented** | **Implemented** | **Implemented** |
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Implemented** | **Implemented** | **Implemented** — eleven of eleven tasks, ten of ten criteria, [AC-9 amended 2026-09-04](012-negotiation-inputs/spec.md#5-acceptance-criteria) |
 | [013](013-artist-registry/) | Artist registry | **Implemented** | **Implemented** | **Implemented** — nine of nine tasks, eight of eight criteria, and **the first feature here whose closing task proved a `level: L3` row against a real Jellyfin** rather than deferring it |
-| [014](014-first-time-setup/) | First-time setup | **Draft** — six open questions: OQ-1 to OQ-3 decided and OQ-4 to OQ-8 measured on 2026-09-13, leaving two decisions for the operator (OQ-6, OQ-12) and four for the plan gate | — | — |
+| [014](014-first-time-setup/) | First-time setup | **Draft** — four open questions, all for the plan gate: OQ-1 to OQ-3, OQ-6 and OQ-12 decided and OQ-4 to OQ-8 measured on 2026-09-13, leaving none for the operator | — | — |
 
 **All thirteen features are implemented** — 008 on 2026-08-29 across fourteen tasks, 011 on
 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, 010 on 2026-09-02 across fifteen,
