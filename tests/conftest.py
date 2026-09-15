@@ -34,7 +34,6 @@ from atrium.db.engine import create_database_engine, session_factory
 from atrium.domain.media import MediaInspection
 from atrium.domain.user import User
 from atrium.media.probe import UnreadableMediaError
-from atrium.server import create_app
 from tests.conformance.golden import REWRITTEN, UPDATE_OPTION
 from tests.fixtures.library import BuiltFixture, build_fixture_library
 from tests.fixtures.media import (
@@ -99,10 +98,12 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     T10 on 2026-09-14 when `"014"` joined the set and its six rows were counted against the file.
     `test_routes.py::unasked_endpoints` is the computation, tested there without a session.
 
-    **Requests sent to the shared `app` fixture are not recorded**: `pytest_configure` below
-    replaces `atrium.server.create_app` after this module has bound the original name, so an
-    application built by that fixture never reaches the recorder. A row asked only through `app`
-    is reported as asked by no test (014 T7), which is on 014's owes list.
+    **Requests sent to the shared `app` fixture were not recorded until 2026-09-15**:
+    `pytest_configure` below replaces `atrium.server.create_app`, and this module had bound the
+    original name at import, so a row asked only through `app` was reported as asked by no test
+    (014 T7). The fixture looks the attribute up when it runs now, and
+    `test_routes.py::test_a_request_through_the_shared_app_fixture_is_recorded` and
+    `::test_no_test_module_holds_the_factory_the_recorder_replaced` fail if either comes back.
     """
     if not session.config.stash.get(WHOLE_SUITE, False) or exitstatus not in (0, None):
         return
@@ -167,6 +168,11 @@ def pytest_configure(config: pytest.Config) -> None:
     complete: seven modules build an application of their own - the media worlds, the subtitle
     worlds, the playback ones - and a recorder attached to one fixture would have measured the
     tests that happen to use that fixture rather than the suite.
+
+    **Only a lookup made after this hook sees the wrapper.** A module that binds the name before
+    it runs - this one, or anything this one imports - keeps the original, which is how the `app`
+    fixture went unrecorded until 2026-09-15. `__wrapped__` is what lets `test_routes.py` sweep the
+    loaded test modules for a name still holding it.
     """
     original = server.create_app
 
@@ -182,6 +188,7 @@ def pytest_configure(config: pytest.Config) -> None:
         app.__class__ = type("Recorded", (app.__class__,), {"__call__": seen})
         return app
 
+    recording.__wrapped__ = original  # type: ignore[attr-defined]
     server.create_app = recording  # type: ignore[assignment]
     # **Every way of running less than the suite, not just the obvious one.** Naming paths is the
     # one a reader thinks of; `-k` and `-m` narrow a run without touching them, and a coverage
@@ -345,8 +352,12 @@ def app(paths: DataPaths) -> Iterator[FastAPI]:
     Assembling the pieces by hand here would test a composition nobody runs. The readiness gate is
     opened directly rather than through the lifespan, because these tests drive the application
     through a transport that does not run one.
+
+    **`server.create_app`, looked up when the fixture runs**, and never a name bound at import:
+    `pytest_configure` replaces that attribute with the L2 recorder after this module is imported,
+    so a name bound here would build every application unrecorded - which it did until 2026-09-15.
     """
-    built = create_app(paths)
+    built = server.create_app(paths)
     built.state.readiness.mark_ready()
     yield built
     built.dependency_overrides.clear()

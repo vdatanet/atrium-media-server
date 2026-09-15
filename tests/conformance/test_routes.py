@@ -33,6 +33,7 @@ from __future__ import annotations
 import importlib.util
 import re
 import sys
+import uuid
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -622,3 +623,48 @@ def test_the_coverage_check_counts_served_rows_and_not_declared_ones(
     assert unasked_endpoints([one], served=frozenset({one, declared_not_served})) == (
         "POST /Library/Refresh",
     ), "a row handed in as served is counted whatever the file says about its feature"
+
+
+async def test_a_request_through_the_shared_app_fixture_is_recorded(
+    client: httpx.AsyncClient,
+) -> None:
+    """**The recorder sees the shared `app` fixture**, which it did not until 2026-09-15.
+
+    `tests/conftest.py` records the suite's requests by replacing `atrium.server.create_app` in
+    `pytest_configure`, and that module had already bound the original name at import - so every
+    application its `app` fixture built answered unrecorded, and 014 T7's whole-suite run failed
+    on `GET /Library/VirtualFolders` *"asked by no test"* with a module asking it throughout. A path
+    no other test can have asked, so the only way it reaches `EXERCISED` is this request.
+    """
+    from tests.conftest import EXERCISED
+
+    path = f"/RecorderProbe/{uuid.uuid4().hex}"
+    assert ("GET", path) not in EXERCISED
+
+    await client.get(path)
+
+    assert ("GET", path) in EXERCISED, "a request through the `app` fixture reached no recorder"
+
+
+def test_no_test_module_holds_the_factory_the_recorder_replaced() -> None:
+    """**The class, not the one instance.** A module that bound `create_app` before
+    `pytest_configure` ran holds the unwrapped factory under whatever name it chose, and every
+    application it builds is invisible to the L2 check. Test modules are imported at collection,
+    after the replacement, so the ones at risk are those imported earlier - `tests/conftest.py`
+    and whatever it imports - and a sweep of every loaded `tests` module finds any of them.
+    """
+    from atrium import server
+
+    original = server.create_app.__wrapped__  # type: ignore[attr-defined]
+    assert original is not server.create_app, "the recorder did not replace the factory"
+    assert getattr(original, "__module__", None) == "atrium.server"
+
+    holding = sorted(
+        f"{module_name}.{attribute}"
+        for module_name, module in list(sys.modules.items())
+        if module_name == "tests" or module_name.startswith("tests.")
+        for attribute, value in list(vars(module).items())
+        if value is original
+    )
+    assert "tests.conftest" in sys.modules, "the sweep would not see the root conftest"
+    assert holding == [], "bound before the recorder replaced it, so never recorded"

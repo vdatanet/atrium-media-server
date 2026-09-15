@@ -77,10 +77,11 @@ async def server(paths: DataPaths) -> AsyncIterator[FastAPI]:
 
     **Built through `atrium.server.create_app` looked up when the fixture runs**, and not through
     the shared `app` fixture: `tests/conftest.py` records the suite's requests for the L2 coverage
-    check by replacing that attribute in `pytest_configure`, after `conftest.py` has already bound
-    the original name - so a request to the shared `app` reaches no recorder, and with every one of
+    check by replacing that attribute in `pytest_configure`, after `conftest.py` had already bound
+    the original name - so a request to the shared `app` reached no recorder, and with every one of
     this module's listings sent there, T7's whole-suite run failed on `GET /Library/VirtualFolders`
-    *"asked by no test"* (014 T7, 2026-09-14).
+    *"asked by no test"* (014 T7, 2026-09-14). The shared fixture has looked the attribute up too
+    since 2026-09-15; this one stays its own for the scanner it stops.
     """
     app = atrium_server.create_app(paths)
     app.state.readiness.mark_ready()
