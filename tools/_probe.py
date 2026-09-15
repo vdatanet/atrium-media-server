@@ -22,12 +22,13 @@ import hashlib
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 ENV_FILE = ".env"
 ENV_URL = "JELLYFIN_URL"
@@ -115,6 +116,29 @@ REVOKED = "the token was revoked"
 UNREACHABLE = "the server stopped answering"
 ALREADY_GONE = "already removed"
 
+#: Seconds a playlist must sit between the last write to it and its deletion.
+#:
+#: The reference answers an entry write before it has finished with the playlist: creation with
+#: a non-empty `Ids`, the add route and the remove route all queue a metadata refresh onto a
+#: background queue [source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:252, :280
+#: @ v10.11.11], and so does `POST /Playlists/{id}` with `Ids`, which goes through the same add
+#: [source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:593-602 @ v10.11.11]. A
+#: refresh that runs after the playlist has been deleted writes its folder and playlist.xml back
+#: out: the row stays deleted, the folder does not, and the next library scan turns that folder
+#: into a playlist again. Measured against 10.11.11 on 2026-09-01: the folder came back 0.9s after
+#: a delete that followed the creation immediately, and nothing came back when the delete waited
+#: three seconds. That is one of the two ways the 28 leaked playlists were left.
+PLAYLIST_SETTLE = 3.0
+
+#: Seconds after the last playlist deletion before the teardown looks for its folder on disk.
+#:
+#: The folder comes back 0.9s after the delete when it comes back at all (measured 2026-09-01,
+#: above), so looking straight away would only ever confirm the answer the delete already gave.
+FOLDER_LOOK = 1.5
+
+#: What the register calls a playlist it found rather than was told about. See `Server._request`.
+STRAY = "playlist a refused creation left behind"
+
 
 class Creation:
     """A route that creates something outliving the request, and the route that removes it.
@@ -141,10 +165,13 @@ CREATES: Tuple[Creation, ...] = (
 class Owned:
     """One thing this run created, the server it lives on, and the request that removes it."""
 
-    def __init__(self, server: Any, removal: str, what: str) -> None:
+    def __init__(self, server: Any, removal: str, what: str, stray: bool = False) -> None:
         self.server = server
         self.removal = removal
         self.what = what
+        #: True for a playlist a refused `POST /Playlists` made anyway: no probe was ever told its
+        #: id, so no probe's own teardown could have removed it.
+        self.stray = stray
 
     def __str__(self) -> str:
         return f"{self.what} at {self.server.base}{self.removal}"
@@ -177,23 +204,144 @@ class Register:
     Process-wide rather than per-`Server`, because the thing that leaks is usually the *second*
     connection - a throwaway seat signed in beside the administrator - and a register hanging off
     the `Server` a probe happened to return would never see it.
+
+    **Two defects measured on 2026-09-01 were not in any cleanup list**, and the register holds
+    what fixes them rather than a second mechanism beside it:
+
+    * *a refusal can have created the playlist* - so a refused `POST /Playlists` is followed by a
+      look for a playlist of that name that was not there before the request, and what the look
+      finds is owned here as a stray (`Server._request`, `STRAY`);
+    * *a deletion that follows a write too closely leaves the folder on disk* - so the register
+      keeps the time of the last write to every playlist this run created or wrote to, and every
+      `DELETE /Items/{id}` on one of them waits out `PLAYLIST_SETTLE` first (`settle`). After the
+      teardown it looks on the server's disk for the folders of the playlists it saw deleted, and
+      reports any that are still there (`leftover_folders`).
+
+    The clock and the sleep are attributes so that a test can drive both without waiting.
     """
 
     def __init__(self) -> None:
-        self._owned: List[Owned] = []
-        self.removed = 0
+        self.clear()
 
     def __len__(self) -> int:
         return len(self._owned)
 
     def clear(self) -> None:
-        self._owned = []
+        self._owned: List[Owned] = []
         self.removed = 0
+        #: How many of `removed` were strays, which no probe could have removed itself.
+        self.strays_removed = 0
+        #: Playlist key -> when this run last wrote to it, on the register's clock.
+        self._written: Dict[str, float] = {}
+        #: Playlist key -> (the connection that can read it, where its folder is on the server).
+        self._paths: Dict[str, Tuple[Any, str]] = {}
+        #: The folders of playlists this run saw deleted, still to be looked for on disk.
+        self._deleted: List[Tuple[Any, str]] = []
+        self._last_deletion: Optional[float] = None
+        #: How long, in total, deletions waited for a playlist to settle, and how many of them did.
+        self.settled = 0.0
+        self.settles = 0
+        self.clock: Callable[[], float] = time.monotonic
+        self.sleep: Callable[[float], None] = time.sleep
 
-    def own(self, server: Any, removal: str, what: str) -> None:
+    def own(self, server: Any, removal: str, what: str, stray: bool = False) -> None:
         if any(item.server is server and item.removal == removal for item in self._owned):
             return
-        self._owned.append(Owned(server, removal, what))
+        self._owned.append(Owned(server, removal, what, stray))
+
+    # -- the settle clock ------------------------------------------------------------------------
+
+    def written(self, method: str, path: str) -> None:
+        """Start the settle clock for a write to `/Playlists/{id}` or below, whatever it answered.
+
+        Whatever it answered, because a write that is refused can still have written: the
+        refusals 009 measures are raised from inside the reference's own playlist manager, after
+        the row has been updated. Every write method and not only the two that queue a refresh,
+        because a wait of three seconds is cheaper than a second measurement of which routes do.
+        """
+        if method not in ("POST", "DELETE", "PUT", "PATCH"):
+            return
+        parts = path.split("/")
+        if len(parts) >= 3 and parts[1] == "Playlists" and parts[2]:
+            self.stamp(parts[2])
+
+    def stamp(self, playlist_id: Any) -> None:
+        self._written[_playlist_key(playlist_id)] = self.clock()
+
+    def settle(self, method: str, path: str) -> None:
+        """Before `DELETE /Items/{id}` on a playlist this run wrote to, wait out `PLAYLIST_SETTLE`.
+
+        **Every such deletion waits, including one that is the measurement**, and that is a
+        decision rather than an oversight. `probe_item_deletion.py`, `probe_playlist_shares.py`
+        and `probe_playlist_visibility.py` delete a playlist they have just created with entries,
+        and observe the status, the headers, the bytes and whether the item is there afterwards.
+        None of the four depends on how long ago the playlist was written: who may delete is
+        decided by the owner, the shares and the account's policy, all set when the playlist was
+        created. What does depend on it is the folder - an immediate deletion of a playlist
+        created with entries is exactly the leak this constant describes, so exempting the
+        measured deletions would leave the defect in the probe that deletes the most. The wait is
+        not silent: the teardown reports how long deletions waited, and how many.
+
+        Keyed on the identifier however it is spelled, because one probe deletes with the dashed
+        spelling on purpose.
+        """
+        if method != "DELETE":
+            return
+        parts = path.split("/")
+        if len(parts) != 3 or parts[1] != "Items":
+            return
+        written = self._written.get(_playlist_key(parts[2]))
+        if written is None:
+            return
+        remaining = PLAYLIST_SETTLE - (self.clock() - written)
+        if remaining > 0:
+            self.sleep(remaining)
+            self.settled += remaining
+            self.settles += 1
+
+    # -- where the folders are -------------------------------------------------------------------
+
+    def remember(self, server: Any, playlist_id: Any, folder: str) -> None:
+        """Where a playlist this run created lives on the server's disk, read at creation time."""
+        if folder:
+            self._paths[_playlist_key(playlist_id)] = (server, folder)
+
+    def leftover_folders(self) -> List[str]:
+        """Which folders of the playlists this run saw deleted are still on the server's disk.
+
+        **Best effort, and never a failure.** Read through `/Environment/DirectoryContents`, which
+        only an administrator may ask, so a run whose connections are not administrators gets an
+        empty answer rather than a wrong one - and a folder it could not look for is not reported,
+        because a leak nobody measured is not a finding.
+        """
+        deleted, self._deleted = self._deleted, []
+        if not deleted:
+            return []
+        if self._last_deletion is not None:
+            remaining = FOLDER_LOOK - (self.clock() - self._last_deletion)
+            if remaining > 0:
+                self.sleep(remaining)
+        wanted: Dict[str, Set[str]] = {}
+        readers: List[Any] = []
+        for server, folder in deleted:
+            cut = max(folder.rfind("/"), folder.rfind("\\"))
+            if cut > 0 and folder[cut + 1 :]:
+                wanted.setdefault(folder[: cut + 1], set()).add(folder[cut + 1 :])
+            if all(server is not seen for seen in readers):
+                readers.append(server)
+        left: List[str] = []
+        for parent, names in wanted.items():
+            for reader in readers:
+                rows = _directory(reader, parent.rstrip("/\\") or parent)
+                if rows is None:
+                    continue
+                left.extend(
+                    parent + str(row.get("Name"))
+                    for row in rows
+                    if isinstance(row, dict) and row.get("Name") in names
+                )
+                break
+        return sorted(left)
 
     def disown(self, server: Any, removal: str) -> None:
         """Forget an object the probe removed itself. Called by the removal request, not by hand."""
@@ -205,12 +353,24 @@ class Register:
         """Record what a request just created, or forget what it just removed.
 
         `payload` is whatever the server answered, parsed where it could be. A creation is only
-        recorded when the server actually returned an identifier: a refused `POST /Playlists`
-        creates nothing, and registering an object that does not exist would make the teardown
-        report a leak on every probe that measures a refusal.
+        recorded here when the server actually returned an identifier: registering an object off
+        a refusal would guess at one that may not exist, and make the teardown report a leak on
+        every probe that measures a refusal. **A refused `POST /Playlists` can still have created
+        a playlist** (measured 2026-09-01), and that one is found by `Server._request`, which can
+        ask the server what carries the name - this cannot.
+
+        A successful deletion of a playlist also stops its settle clock, and hands its folder to
+        `leftover_folders` to look for.
         """
         if method == "DELETE":
             self.disown(server, path)
+            parts = path.split("/")
+            if len(parts) == 3 and parts[1] == "Items":
+                key = _playlist_key(parts[2])
+                self._written.pop(key, None)
+                if key in self._paths:
+                    self._deleted.append(self._paths.pop(key))
+                    self._last_deletion = self.clock()
             return
         if method != "POST":
             return
@@ -220,6 +380,8 @@ class Register:
             identifier = _identifier_in(payload)
             if identifier:
                 self.own(server, creation.removal.format(id=identifier), creation.what)
+                if creation.what == "playlist":
+                    self.stamp(identifier)
             return
 
     def teardown(self) -> List[Outstanding]:
@@ -231,18 +393,66 @@ class Register:
         Every removal is attempted even when an earlier one failed: one dead object must not take
         the rest of the cleanup with it, which is the failure mode the `finally` in each of the
         probes could not cover either.
+
+        Each removal goes through the connection's own `DELETE`, so a playlist written to moments
+        ago waits out `PLAYLIST_SETTLE` here exactly as it would in a probe's own teardown.
         """
         outstanding: List[Outstanding] = []
         for item in reversed(self._owned):
             try:
                 item.server.delete(item.removal)
                 self.removed += 1
+                self.strays_removed += 1 if item.stray else 0
             except ProbeError as failure:
                 outstanding.append(Outstanding(item, _why(failure), str(failure)))
             except Exception as failure:  # a teardown reports, it never raises
                 outstanding.append(Outstanding(item, LEAKED, repr(failure)))
         self._owned = []
         return outstanding
+
+
+def _directory(reader: Any, folder: str) -> Optional[List[Any]]:
+    """What `/Environment/DirectoryContents` lists in a folder, or None when it may not be asked.
+
+    None rather than an exception for **any** failure: the look is best effort, and a caller who
+    is not an administrator - or a server that stopped answering - has found nothing.
+    """
+    try:
+        rows = reader.get_where(
+            "/Environment/DirectoryContents", {"path": folder, "includeDirectories": "true"}
+        )
+    except Exception:
+        return None
+    return rows if isinstance(rows, list) else None
+
+
+def _playlist_key(playlist_id: Any) -> str:
+    """One spelling for an identifier the reference accepts two ways: with dashes, and without."""
+    return str(playlist_id).replace("-", "").lower()
+
+
+def _field(mapping: Any, name: str) -> Any:
+    """A property of a request body or query, read the way the reference binds it: ignoring case."""
+    if not isinstance(mapping, dict):
+        return None
+    for key, value in mapping.items():
+        if isinstance(key, str) and key.lower() == name.lower() and value not in (None, ""):
+            return value
+    return None
+
+
+class Snapshot:
+    """The playlists that already carried a name, taken just before a `POST /Playlists` asks for it.
+
+    `before` is None when the look failed, and then nothing is looked for afterwards either: a
+    playlist that was merely *not seen* before is not one the request created, and the sweep that
+    follows a refusal deletes what it finds.
+    """
+
+    def __init__(self, names: Set[str], viewer: Any, before: Optional[Dict[str, str]]) -> None:
+        self.names = names
+        self.viewer = viewer
+        self.before = before
 
 
 def _identifier_in(payload: Any) -> str:
@@ -387,27 +597,139 @@ class Server:
             data = json.dumps(body).encode("utf-8")
             headers["Content-Type"] = "application/json"
 
+        # The register's two pre-request duties (see `Register`): list what already carries the
+        # name a creation asks for, and let a playlist written to moments ago settle before it
+        # is deleted.
+        snapshot = None
+        if method == "POST" and path == "/Playlists" and self.token and send_token:
+            snapshot = self._snapshot(params, body, raw_body)
+        OWNED.settle(method, path)
+
         # S310: the URL is supplied by the operator running the probe against their own server.
         # Restricting the scheme here would stop a probe reaching a server on a custom port or
         # behind a proxy, which is the normal case rather than the exotic one.
         request = urllib.request.Request(url, data=data, headers=headers, method=method)  # noqa: S310
+        refused: Optional[urllib.error.HTTPError] = None
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310
-                payload = response.read()
-                OWNED.note(self, method, path, payload)
-                if raw:
-                    return response.status, dict(response.headers), payload
-                if not payload:
-                    return None
-                return json.loads(payload)
+                status, answered, payload = response.status, dict(response.headers), response.read()
         except urllib.error.HTTPError as exc:
-            if raw:
-                return exc.code, dict(exc.headers), exc.read()
-            raise ProbeError(
-                f"{method} {path} -> HTTP {exc.code}: {exc.read()[:200]!r}", status=exc.code
-            ) from exc
+            refused = exc
+            status, answered, payload = exc.code, dict(exc.headers or {}), exc.read()
+            exc.close()
         except urllib.error.URLError as exc:
+            OWNED.written(method, path)
             raise ProbeError(f"{method} {path} -> {exc.reason}", transport=True) from exc
+
+        OWNED.written(method, path)
+        if refused is None:
+            OWNED.note(self, method, path, payload)
+        if snapshot is not None:
+            self._after_creation(snapshot, b"" if refused is not None else payload)
+
+        if refused is not None and not raw:
+            raise ProbeError(
+                f"{method} {path} -> HTTP {status}: {payload[:200]!r}", status=status
+            ) from refused
+        if raw:
+            return status, answered, payload
+        if not payload:
+            return None
+        return json.loads(payload)
+
+    # -- what a creation made, and what a refused one made anyway ------------------------------
+
+    def _snapshot(self, params: Any, body: Any, raw_body: bytes | None) -> Snapshot | None:
+        """The playlists already carrying the name a `POST /Playlists` is about to ask for.
+
+        **A refusal on that route does not mean nothing was created.** `CreatePlaylist` creates
+        the folder and the row and only then resolves the item ids, which it does inside
+        `AddToPlaylistInternal`; an id that resolves to nothing throws from there
+        [source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:80-160 @ v10.11.11].
+        Measured against 10.11.11 on 2026-09-01: `{"Ids": [<a track>, <32 zeros>]}` answers
+        `400 Error processing request.` and leaves a playlist behind whose id the caller is never
+        told - which is the other of the two ways the 28 leaked playlists were left.
+
+        So the names are read off the request - the body's and the query's, since a probe sends
+        both on purpose - and the playlists already carrying one are listed as the owner the body
+        names, falling back to this connection's own account when it may not list as the owner.
+        """
+        if raw_body is not None:
+            try:
+                body = json.loads(raw_body)
+            except (ValueError, TypeError):
+                body = None
+        names = {str(name) for name in (_field(body, "Name"), _field(params, "name")) if name}
+        if not names:
+            return None
+        owner = _field(body, "UserId") or _field(params, "userId") or self.user_id
+        for viewer in dict.fromkeys([str(owner) if owner else None, self.user_id]):
+            if viewer is None:
+                continue
+            before = self._playlists_named(names, viewer)
+            if before is not None:
+                return Snapshot(names, viewer, before)
+        return Snapshot(names, None, None)
+
+    def _playlists_named(self, names: Set[str], viewer: Any) -> Dict[str, str] | None:
+        """Id -> folder of every playlist `viewer` can see under one of these names, or None."""
+        try:
+            found = self._request(
+                "GET",
+                "/Items",
+                params={
+                    "Recursive": "true",
+                    "IncludeItemTypes": "Playlist",
+                    "UserId": viewer,
+                    "Fields": "Path",
+                },
+            )
+        except (ProbeError, ValueError):
+            return None
+        if not isinstance(found, dict):
+            return None
+        return {
+            str(row["Id"]): str(row.get("Path") or "")
+            for row in found.get("Items") or []
+            if isinstance(row, dict) and row.get("Id") and row.get("Name") in names
+        }
+
+    def _after_creation(self, snapshot: Snapshot, payload: bytes) -> None:
+        """Remember where a created playlist lives, or find what a refused creation made anyway.
+
+        What the look finds is **owned as a stray and not returned**: it is residue to be removed,
+        not a measurement, and a probe that reads a refusal as "nothing was created" still reads
+        the answer it was given correctly. It is only ever a playlist that carries the requested
+        name and was not there a moment before, so nothing the operator owns can be swept.
+        """
+        identifier = _identifier_in(payload)
+        if identifier:
+            if snapshot.viewer is not None:
+                OWNED.remember(self, identifier, self._folder_of(identifier, snapshot.viewer))
+            return
+        if snapshot.before is None:
+            return
+        after = self._playlists_named(snapshot.names, snapshot.viewer)
+        for found, folder in sorted((after or {}).items()):
+            if found in snapshot.before:
+                continue
+            OWNED.own(self, f"/Items/{found}", STRAY, stray=True)
+            OWNED.stamp(found)
+            OWNED.remember(self, found, folder)
+
+    def _folder_of(self, identifier: str, viewer: Any) -> str:
+        """Where on the server's disk a playlist lives, when this connection may be told. Or ''."""
+        try:
+            status, _, payload = self._request(
+                "GET",
+                f"/Items/{identifier}",
+                params={"userId": viewer, "fields": "Path"},
+                raw=True,
+            )
+            found = json.loads(payload) if status == 200 and payload else {}
+        except (ProbeError, ValueError):
+            return ""
+        return str(found.get("Path") or "") if isinstance(found, dict) else ""
 
     def get(self, path: str, **params: Any) -> Any:
         return self._request("GET", path, params=params)
@@ -746,7 +1068,14 @@ def _connection(args: argparse.Namespace, connect_with: Any, env_file: Path | No
 CLEANUP_FAILED = 3
 
 
-def report_cleanup(outstanding: List[Outstanding], removed: int) -> bool:
+def report_cleanup(
+    outstanding: List[Outstanding],
+    removed: int,
+    strays: int = 0,
+    settled: float = 0.0,
+    settles: int = 0,
+    folders: Sequence[str] = (),
+) -> bool:
     """Say what the register removed and what it could not, and answer whether that is a leak.
 
     **Only `LEAKED` is a leak.** A `401` means the token was revoked out from under the run and a
@@ -757,13 +1086,44 @@ def report_cleanup(outstanding: List[Outstanding], removed: int) -> bool:
 
     An object the register removed is **reported and not failed**: the contract is about what is
     left on the server, and the server is clean either way. The line exists so that a probe
-    relying on the shared teardown is visible rather than silent.
+    relying on the shared teardown is visible rather than silent. A **stray** - a playlist a
+    refused creation made anyway - is counted apart, because no probe was told its id and no
+    probe's own teardown could have removed it.
+
+    The three playlist lines are reports and never a failure. `settled` is how long deletions
+    waited for a playlist to settle (`PLAYLIST_SETTLE`), said so that a measured deletion is not
+    delayed in silence; `folders` are the ones `Register.leftover_folders` found still on the
+    server's disk, which only an administrator can look for.
     """
-    if removed:
+    if removed - strays:
         print(
-            f"cleanup: the shared register removed {removed} object(s) the probe had not removed "
-            f"itself. That is the contract holding, not a failure - but a probe that leaves its "
-            f"own creations to the register is one whose own teardown is worth a look.",
+            f"cleanup: the shared register removed {removed - strays} object(s) the probe had not "
+            f"removed itself. That is the contract holding, not a failure - but a probe that "
+            f"leaves its own creations to the register is one whose own teardown is worth a look.",
+            file=sys.stderr,
+        )
+    if strays:
+        print(
+            f"cleanup: the shared register removed {strays} playlist(s) a refused POST /Playlists "
+            f"had created anyway. The reference creates the playlist before it resolves the ids "
+            f"that make it refuse, and never answers the id - so no probe could have removed "
+            f"these.",
+            file=sys.stderr,
+        )
+    if settles:
+        print(
+            f"cleanup: {settles} playlist deletion(s) waited {settled:.1f}s in total for the "
+            f"refresh the reference queues after a write (_probe.PLAYLIST_SETTLE), because a "
+            f"deletion inside that window leaves the folder on the server's disk.",
+            file=sys.stderr,
+        )
+    if folders:
+        print(
+            "cleanup: LEAKED folders - deleted, but these are still on the server's disk and the "
+            "next library scan will turn them back into playlists: "
+            + ", ".join(folders)
+            + ". Remove them from the server's filesystem, and treat _probe.PLAYLIST_SETTLE as too "
+            "short for this server.",
             file=sys.stderr,
         )
     if not outstanding:
@@ -835,7 +1195,15 @@ def main(
                 probe = run(server, args) if with_args else run(server)
                 code = probe.report(server)
             finally:
-                leaked = report_cleanup(OWNED.teardown(), OWNED.removed)
+                outstanding = OWNED.teardown()
+                leaked = report_cleanup(
+                    outstanding,
+                    OWNED.removed,
+                    strays=OWNED.strays_removed,
+                    settled=OWNED.settled,
+                    settles=OWNED.settles,
+                    folders=OWNED.leftover_folders(),
+                )
             return CLEANUP_FAILED if leaked else code
     except ProbeError as exc:
         print(f"cannot answer the question: {exc}", file=sys.stderr)
