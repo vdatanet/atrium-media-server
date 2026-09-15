@@ -350,10 +350,11 @@ when the list goes, all six are counted against the file. Plan §8 amended.
 - **Spec reference:** §3.5–§3.7; AC-5–AC-8
 - **Done** (2026-09-14, [PR #369](https://github.com/vdatanet/atrium-media-server/pull/369)). **The whole suite failed with every test passing, on a route the new tests
   asked in nearly every case.** `GET /Library/VirtualFolders` was *"asked by no test"* because the L2
-  recorder wraps `atrium.server.create_app` in `pytest_configure`, after `conftest.py` has bound the
-  original name — so nothing sent to the shared `app` fixture is recorded, T4's window tests
-  included, and T7's module only counts because it builds its server through the attribute. Handed
-  on rather than fixed here. Two more the plan did not say. **Plan §6.6 step 1 would have sent
+  recorder wrapped `atrium.server.create_app` in `pytest_configure`, after `conftest.py` had bound
+  the original name — so nothing sent to the shared `app` fixture was recorded, T4's window tests
+  included, and T7's module only counted because it builds its server through the attribute. Handed
+  on rather than fixed here, and paid on 2026-09-15 (the owes list below). Two more the plan did
+  not say. **Plan §6.6 step 1 would have sent
   two wrong sentences**: a required `Query` makes an absent name `The value 'None' is not valid.`
   and an empty one `The value '' is not valid.`, where the reference's binder answers all three
   cases as one — so `name` is optional, as the pinned document declares it, and the route raises
@@ -489,10 +490,11 @@ when the list goes, all six are counted against the file. Plan §8 amended.
   `test_014_serves_exactly_its_six_routes` states the definition of done's second line against the
   file — six rows, all `L2`, all served. **The whole suite passed with the six rows counted by the
   L2 hook against the file**, so no 014 route had been asked only through the shared `app`
-  fixture: `test_startup.py`'s and `test_setup_window.py`'s requests go there and reach no
+  fixture: `test_startup.py`'s and `test_setup_window.py`'s requests went there and reached no
   recorder, and every one of the three startup routes is also asked by `test_library_structure.py`
-  or `tests/cli/`, which build their servers through the module attribute. That blind spot is still
-  there and is on the owes list below. Five sentences said the list was still to go —
+  or `tests/cli/`, which build their servers through the module attribute. That blind spot was still
+  there at T10, and was paid on 2026-09-15 (the owes list below). Five sentences said the list was
+  still to go —
   `surface.yaml`'s comment above the six rows, `tests/conftest.py`'s hook docstring, and three
   docstrings in `test_routes.py` — and
   `test_acceptance.py`'s own docstring said it carried twelve maps where it carried thirteen.
@@ -626,11 +628,15 @@ from T4 and T8 on whatever the status word says.
   read waits as long; unpaused, the fixture holds the lock about 35 ms.
 - **What started the scan of a library added with `refreshLibrary=false`** on the reference was not
   isolated (spec §3.6), and this server starts none.
-- **The L2 coverage hook does not record requests sent through the shared `app` fixture**
-  (found at T7, confirmed at T10). `tests/conftest.py` replaces `atrium.server.create_app` in
-  `pytest_configure`, after its own module has bound the original name, so an application the `app`
-  fixture builds reaches no recorder — every request in `test_startup.py` and
-  `test_setup_window.py` among them. 014's six rows pass today only because each is also asked
-  through a server built by the module attribute; a route asked through `app` alone would be
-  reported *"asked by no test"* with a test asking it. The fix is the fixture looking the factory
-  up when it runs, and the check that it can fail is a request through `app` alone.
+- ~~**The L2 coverage hook does not record requests sent through the shared `app` fixture**~~
+  (found at T7, confirmed at T10) — **paid on 2026-09-15.** `tests/conftest.py` replaced
+  `atrium.server.create_app` in `pytest_configure`, after its own module had bound the original
+  name, so an application the `app` fixture built reached no recorder — every request in
+  `test_startup.py` and `test_setup_window.py` among them, and every `app`-fixture test in
+  `test_routes.py`. The fixture calls `server.create_app` when it runs now, and two tests in
+  `tests/conformance/test_routes.py` hold it: a request through `client` alone must land in
+  `EXERCISED`, and no loaded `tests` module may hold the factory the recorder replaced, found
+  through the wrapper's `__wrapped__`. Both failed before the change, the second naming
+  `tests.conftest.create_app` and nothing else — no other module binds the name before
+  `pytest_configure` runs; the forty-three test modules that import it at module level do so
+  at collection, after the replacement.

@@ -3,8 +3,9 @@
 
 **Built through `atrium.server.create_app` looked up when the fixture runs**, never through the
 shared `app` fixture: `tests/conftest.py` records the suite's requests for the L2 coverage check by
-replacing that attribute, and a request to an application built from the name `conftest.py` bound
-earlier reaches no recorder (014 T7, 2026-09-14).
+replacing that attribute, and until 2026-09-15 a request to an application built from the name
+`conftest.py` had bound earlier reached no recorder (014 T7, 2026-09-14). The shared fixture looks
+the attribute up now too; this one stays its own for the prober and the scanner it stops.
 """
 
 from __future__ import annotations
