@@ -24,7 +24,7 @@ must do.
 
 Plan §5 gave the scanner an `async def run()` for *"the lifespan's task"*. The `app` fixture says in
 its own docstring that these tests *"drive the application through a transport that does not run
-one"* (`tests/conftest.py:330-340`), and `httpx.ASGITransport` has no lifespan support. So every
+one"* (`tests/conftest.py`), and `httpx.ASGITransport` has no lifespan support. So every
 test of AC-8 and AC-9 would have awaited `scanner.idle()` on a worker nobody started, and hung.
 
 **The worker starts on the first `request()`**, on the running loop, and the lifespan only stops
