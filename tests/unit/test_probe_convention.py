@@ -44,7 +44,10 @@ asserted **not** to be reported as leaks — a `401` from a revoked token and a 
 from an instance that died — because an enforcement that cries wolf is one nobody reads.
 
 No server and no socket: the sweeps are `ast` over files, and the register is driven against a
-fake whose only job is to record what was asked of it.
+fake whose only job is to record what was asked of it. The two playlist defects measured on
+2026-09-01 that no cleanup list could fix - a refused creation that made the playlist anyway, and
+a deletion close enough to a write that the folder came back - are driven through the real
+`Server` against a fake reference that behaves those two ways, on the register's own clock.
 """
 
 from __future__ import annotations
@@ -777,9 +780,10 @@ def test_a_creation_is_registered_without_the_probe_being_changed() -> None:
     module.OWNED.note(server, "POST", "/Users/New", {"Id": "def456", "Name": "throwaway"})
     module.OWNED.note(server, "POST", "/Playlists", {"ErrorCode": "no Id here"})
     assert len(module.OWNED) == 2, (
-        "a refused creation registers nothing: a `POST /Playlists` that answered no identifier "
-        "created no playlist, and a teardown chasing one would report a leak on every probe that "
-        "measures a refusal"
+        "an answer with no identifier registers nothing off the answer: a teardown chasing an "
+        "object nobody named would report a leak on every probe that measures a refusal. What a "
+        "refused `POST /Playlists` made anyway is found by asking the server, which `Server` does "
+        "and this call cannot - see the refused-creation test below"
     )
     assert module.OWNED.teardown() == []
     assert server.deleted == ["/Users/def456", "/Items/abc123"], (
@@ -787,6 +791,262 @@ def test_a_creation_is_registered_without_the_probe_being_changed() -> None:
         "deleting the account first takes the token the rest of the cleanup needs"
     )
     module.OWNED.clear()
+
+
+class FakeJellyfin:
+    """The two playlist behaviours measured against 10.11.11 on 2026-09-01, and nothing else.
+
+    Installed as `urllib.request.urlopen`, so the requests travel through the real
+    `_probe.Server._request` - which is where both fixes sit, and a fake `Server` would test around
+    them. Its clock is the register's: time passes only when the register sleeps, so a deletion
+    that did not wait happens at the instant of the write it followed.
+
+    * `POST /Playlists` creates the row and the folder **before** it resolves the ids, and a body
+      holding the all-zeros id is then refused `400` with the playlist already made
+      `[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:80-160 @ v10.11.11]`.
+    * A write with entries queues a refresh that runs `refresh_after` seconds later
+      `[source: PlaylistManager.cs:252, :280 @ v10.11.11]`; a deletion before it has run removes
+      the row and leaves the folder, which is what the refresh writes back. 0.9s was measured.
+    """
+
+    ROOT = "/config/data/playlists"
+
+    def __init__(self, refresh_after: float = 0.9, administrator: bool = True) -> None:
+        self.refresh_after = refresh_after
+        self.administrator = administrator
+        self.now = 0.0
+        self.slept: list[float] = []
+        self.rows: dict[str, dict[str, str]] = {}
+        self.disk: set[str] = set()
+        self.pending: dict[str, float] = {}
+        self.deleted: list[str] = []
+
+    def clock(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+    def existing(self, name: str) -> str:
+        """A playlist the operator already had, under a name a probe is about to ask for."""
+        identifier = "f" * 32
+        self.rows[identifier] = {"Id": identifier, "Name": name, "Path": f"{self.ROOT}/{name}"}
+        self.disk.add(name)
+        return identifier
+
+    def urlopen(self, request: Any, timeout: Any = None) -> Any:
+        import email.message
+        import io
+        import json
+        import urllib.error
+        import urllib.parse
+        import uuid
+
+        split = urllib.parse.urlsplit(request.full_url)
+        query = dict(urllib.parse.parse_qsl(split.query))
+        method, parts = request.get_method(), split.path.split("/")
+        body = json.loads(request.data) if request.data else {}
+
+        def answer(status: int, payload: Any = None) -> Any:
+            data = b"" if payload is None else json.dumps(payload).encode()
+            if status >= 400:
+                raise urllib.error.HTTPError(
+                    request.full_url, status, "refused", email.message.Message(), io.BytesIO(data)
+                )
+
+            class Response:
+                def __init__(self) -> None:
+                    self.status, self.headers = status, {"Content-Type": "application/json"}
+
+                def read(self) -> bytes:
+                    return data
+
+                def __enter__(self) -> Any:
+                    return self
+
+                def __exit__(self, *_: Any) -> None:
+                    return None
+
+            return Response()
+
+        if method == "GET" and split.path == "/Items":
+            return answer(200, {"Items": list(self.rows.values())})
+        if method == "GET" and len(parts) == 3 and parts[1] == "Items":
+            row = self.rows.get(parts[2])
+            return answer(200, row) if row else answer(404)
+        if method == "GET" and split.path == "/Environment/DirectoryContents":
+            if not self.administrator:
+                return answer(403)
+            assert query["path"] == self.ROOT
+            return answer(200, [{"Name": name, "Type": "Directory"} for name in sorted(self.disk)])
+        if method == "POST" and split.path == "/Playlists":
+            identifier = uuid.uuid4().hex
+            name = body["Name"]
+            self.rows[identifier] = {"Id": identifier, "Name": name, "Path": f"{self.ROOT}/{name}"}
+            self.disk.add(name)
+            if "0" * 32 in body.get("Ids", []):
+                return answer(400, "Error processing request.")
+            if body.get("Ids"):
+                self.pending[identifier] = self.now + self.refresh_after
+            return answer(200, {"Id": identifier})
+        if method == "POST" and len(parts) == 4 and parts[1] == "Playlists":
+            self.pending[parts[2]] = self.now + self.refresh_after
+            return answer(204)
+        if method == "DELETE" and len(parts) == 3 and parts[1] == "Items":
+            row = self.rows.pop(parts[2], None)
+            if row is None:
+                return answer(404)
+            self.deleted.append(parts[2])
+            if self.now >= self.pending.get(parts[2], self.now):
+                self.disk.discard(row["Name"])
+            return answer(204)
+        raise AssertionError(f"the fake serves no {method} {split.path}")
+
+
+def a_fake_seat(module: Any, fake: FakeJellyfin, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """A real `_probe.Server`, signed in by hand, whose every request reaches `fake`."""
+    import urllib.request
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake.urlopen)
+    module.OWNED.clock, module.OWNED.sleep = fake.clock, fake.sleep
+    server = module.Server("http://fake")
+    server.token, server.user_id = "token", "a" * 32
+    return server
+
+
+def run_main_against(
+    module: Any, fake: FakeJellyfin, work: Any, monkeypatch: pytest.MonkeyPatch
+) -> int:
+    """`_probe.main` over the fake: `work(server)` is the probe's body, and it concludes cleanly."""
+
+    @contextlib.contextmanager
+    def connect_with(_args: Any) -> Iterator[Any]:
+        yield a_fake_seat(module, fake, monkeypatch)
+
+    def run(connected: Any, _args: Any) -> Any:
+        work(connected)
+        probe = module.Probe("probe_example.py", "q", "doc.md", "§1", expectation="so")
+        probe.conclude("so", matches_documentation=True)
+        return probe
+
+    with a_run(module, ("probe_example.py", "--allow-writes"), monkeypatch):
+        return int(
+            module.main(
+                run, "example", needs_writes=True, with_args=True, connect_with=connect_with
+            )
+        )
+
+
+def test_a_playlist_written_to_is_deleted_only_once_it_has_settled(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The second 2026-09-01 defect: a deletion too close to a write leaves the folder on disk.
+
+    Three deletions, the three ways a playlist is deleted: by the probe itself straight after
+    creating it with entries (`probe_item_deletion.py`'s shape, where the deletion is the
+    measurement), by the probe itself straight after the add route, and by the shared register's
+    teardown. None of them may leave a folder behind, and each waits on the register's clock
+    rather than on the wall's. Remove `OWNED.settle` from `Server._request` and all three leak.
+    """
+    module = load_probe_module()
+    fake = FakeJellyfin()
+
+    def work(server: Any) -> None:
+        track = "b" * 32
+        own = server.post("/Playlists", body={"Name": "own", "Ids": [track]})["Id"]
+        server.delete_raw(f"/Items/{own}")
+        added = server.post("/Playlists", body={"Name": "added"})["Id"]
+        fake.now += 10.0
+        server.post(f"/Playlists/{added}/Items", ids=track)
+        server.delete(f"/Items/{added}")
+        server.post("/Playlists", body={"Name": "left to the register", "Ids": [track]})
+
+    code = run_main_against(module, fake, work, monkeypatch)
+
+    assert fake.rows == {} and len(fake.deleted) == 3
+    assert fake.disk == set(), (
+        f"{sorted(fake.disk)} are still on the server's disk after their playlists were deleted. "
+        f"The reference queues a refresh after a write with entries and that refresh writes the "
+        f"folder back when it runs after the deletion - measured on 2026-09-01, back 0.9s after an "
+        f"immediate delete and not at all after three seconds. Every DELETE /Items/{{id}} on a "
+        f"playlist this run wrote to waits out _probe.PLAYLIST_SETTLE first."
+    )
+    assert fake.slept[:2] == [module.PLAYLIST_SETTLE, module.PLAYLIST_SETTLE]
+    assert code == 0
+    err = capsys.readouterr().err
+    assert "waited" in err, "a measured deletion may wait, but not in silence"
+    assert "LEAKED" not in err
+
+
+@pytest.mark.parametrize("raw", [True, False], ids=["post_raw", "post"])
+def test_a_refused_creation_that_made_a_playlist_anyway_is_torn_down(
+    raw: bool, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The first 2026-09-01 defect: a refusal on `POST /Playlists` can have created the playlist.
+
+    The reference answers `400` with no id and the playlist made, so no probe can remove it; the
+    register looks for one of that name that was not there before the request and owns it. The
+    operator's own playlist of the same name was there before, and must survive. Remove the look
+    and the stray stays on the server.
+    """
+    module = load_probe_module()
+    fake = FakeJellyfin()
+    name = "atrium probe - refused"
+    theirs = fake.existing(name)
+
+    def work(server: Any) -> None:
+        body = {"Name": name, "Ids": ["b" * 32, "0" * 32], "UserId": server.user_id}
+        if raw:
+            assert server.post_raw("/Playlists", body=body)[0] == 400
+            return
+        with pytest.raises(module.ProbeError):
+            server.post("/Playlists", body=body)
+
+    code = run_main_against(module, fake, work, monkeypatch)
+
+    assert list(fake.rows) == [theirs], (
+        f"a refused POST /Playlists left {sorted(set(fake.rows) - {theirs})} on the server. The "
+        f"reference creates the folder and the row before it resolves the ids "
+        f"[source: PlaylistManager.cs:80-160 @ v10.11.11], so a refusal is followed by a look for "
+        f"a playlist of that name that was not there a moment before."
+    )
+    assert len(fake.deleted) == 1 and theirs not in fake.deleted
+    assert code == 0, "a stray the register removed is the contract holding, not a leak"
+    assert "refused POST /Playlists" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("administrator", [True, False], ids=["administrator", "not one"])
+def test_a_folder_left_on_disk_is_reported_and_never_fails_the_run(
+    administrator: bool, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A server whose refresh outlasts the settle: the run says which folders it left, and passes.
+
+    Best effort in both directions. An administrator can read the playlists folder through
+    `/Environment/DirectoryContents` and the run names what is still there; a caller who may not
+    read it gets no report and no failure, because a folder nobody could look for is not a finding.
+    Remove the look from `main` and the administrator's run says nothing.
+    """
+    module = load_probe_module()
+    fake = FakeJellyfin(refresh_after=module.PLAYLIST_SETTLE + 2.0, administrator=administrator)
+
+    def work(server: Any) -> None:
+        made = server.post("/Playlists", body={"Name": "slow", "Ids": ["b" * 32]})["Id"]
+        server.delete(f"/Items/{made}")
+
+    code = run_main_against(module, fake, work, monkeypatch)
+
+    assert fake.disk == {"slow"}, "the fake was meant to leak here; the test is not asking anything"
+    assert code == 0
+    err = capsys.readouterr().err
+    if administrator:
+        assert "LEAKED" in err and f"{FakeJellyfin.ROOT}/slow" in err, (
+            f"the folder of a deleted playlist is still on the server's disk, and the run did not "
+            f"say so. The next library scan turns it back into a playlist - which is how 28 of "
+            f"them were found on 2026-09-01 by somebody listing the operator's playlists.\n{err}"
+        )
+    else:
+        assert "LEAKED" not in err
 
 
 def test_no_tool_writes_the_device_id_out_by_hand() -> None:

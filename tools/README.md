@@ -353,6 +353,53 @@ refused means the server stopped answering, which the single-use instance does o
 been counted; and a `404` means it was already gone. Only an unexplained failure exits `3`, because
 an enforcement that cries wolf is one nobody reads.
 
+**Two of the defects measured on 2026-09-01 were not in any cleanup list, and the register did not
+cover them when it landed.** Every probe that left a playlist behind had recorded what it created
+and deleted it in a `finally`; what it had not known is that the reference can make a playlist
+without saying so, and can make one again after it has been deleted. Both are fixed **inside the
+register** since 2026-09-15, rather than as a second mechanism beside it, and no probe was edited
+for either.
+
+**A refusal on `POST /Playlists` can have created the playlist.** The reference creates the folder
+and the row and only then resolves the item ids, inside `AddToPlaylistInternal`
+`[source: Emby.Server.Implementations/Playlists/PlaylistManager.cs:80-160 @ v10.11.11]`. A body
+holding the all-zeros id answers `400 Error processing request.` with the playlist already made,
+and the caller is never told its id — so every probe that treated a refusal as "nothing was
+created" left one behind per run, and a register that records a creation off the id it was
+answered could not see it either. `Server` now lists the playlists already carrying the requested
+name just before a `POST /Playlists`, and after a refusal looks again: a playlist of that name
+that was not there a moment before is owned as a **stray** and torn down with the rest. The run
+counts strays apart from what a probe left to the register, because no probe could have removed
+one.
+
+**A deletion that follows a write too closely leaves the folder on disk.** Creation with a
+non-empty `Ids`, the add route and the remove route all queue a metadata refresh onto a background
+queue `[source: PlaylistManager.cs:252, :280 @ v10.11.11]`, and a refresh that runs after the
+playlist has been deleted writes the folder and its `playlist.xml` back out. The row stays deleted,
+the folder does not, and the next library scan turns that folder into a playlist again — which is
+why the leaked names carried the reference's own `1` suffixes (`GetTargetPath` appends one per
+collision `[source: PlaylistManager.cs:184-192 @ v10.11.11]`, so `own`, `own1`, `own11` are runs of one probe, not one probe mangling a name).
+Measured against 10.11.11 on 2026-09-01: the folder came back 0.9s after a delete that followed the
+creation immediately, and nothing came back when the delete waited three seconds. The register now
+keeps the time of the last write to every playlist the run created or wrote to, and every
+`DELETE /Items/{id}` on one of them — the probe's own, and the teardown's — waits out
+`PLAYLIST_SETTLE` (three seconds) first. After the teardown it looks through
+`/Environment/DirectoryContents` for the folders of the playlists it saw deleted and names any still
+there as **LEAKED** in the run's output. That look is best effort: only an administrator may make
+it, a run that is not one reports nothing, and a leaked folder is reported rather than failed,
+because the API has no request that removes it.
+
+**A deletion that is the measurement waits too, and says so.** `probe_item_deletion.py`,
+`probe_playlist_shares.py` and `probe_playlist_visibility.py` delete playlists they have just
+created with entries and observe the status, the headers, the bytes and whether the item is there
+afterwards. None of those depends on how long ago the playlist was written — who may delete is
+decided by its owner, its shares and the account's policy, all set at creation — and an immediate
+deletion of a playlist created with entries is exactly the leak, so exempting them would have left
+the defect in the probe that deletes the most. The run's cleanup lines say how long deletions
+waited and how many did. `tests/unit/test_probe_convention.py` drives all three fixes through the
+real `Server` against a fake reference that behaves the two measured ways, on the register's own
+clock, and each test fails when its fix is removed.
+
 It is also the second reason [010 §3.1](../specs/010-conformance-harness/spec.md) has a run stand up
 a disposable reference instance of its own: against an instance that is destroyed either way, a
 leaked artefact costs nothing.
