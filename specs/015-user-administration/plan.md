@@ -5,6 +5,7 @@ status: Draft
 created: 2026-09-16
 updated: 2026-09-16
 spec: spec.md
+amended: 2026-09-16 at the tasks gate - five findings: the administrator's L3 writing cases carry needs: [fixture], which is the argument rescan and wait already carry; two counted assertions move with the rows; a revocation is TokenRepository's and not SessionRepository's; set_policy and set_library_access already exist, so T5 adds no repository method; and to_wire's fourth call site carries a defect this feature leaves where it found it
 ---
 
 # 015 — User administration: plan
@@ -83,8 +84,9 @@ src/atrium/
 ├── users/
 │   └── policy.py                changed   DECLARED, and the filter both ways (§4)
 ├── db/
-│   └── repositories.py          changed   UserRepository.remove, .replace_policy,
-│                                          .count_administrators; SessionRepository.remove_for_user;
+│   └── repositories.py          changed   UserRepository.remove, .count_administrators
+│                                          (.set_policy and .set_library_access already exist);
+│                                          TokenRepository revokes every token an account holds;
 │                                          PlaylistRepository.owned_by
 └── cli/
     ├── commands.py              changed   five subcommands under `user`
@@ -230,11 +232,15 @@ Then, in one transaction:
 2. The two reachable guards of spec §3.3, in the reference's order, each `message_error(403)` with
    the reference's sentence. The third is unreachable and has no code, with §3.3's paragraph as the
    reason.
-3. `UserRepository.replace_policy(user_id, split(document))` — columns, `set_library_access`, blob.
-4. A disabling that succeeds revokes that account's tokens except the caller's. `SessionRepository`
-   removes by session and by device today (`repositories.py:500, 503`); **removing every session an
-   account holds, optionally keeping one token, is new** and is the one repository method this
-   feature adds to 002's session store.
+3. `UserRepository.set_policy(user_id, columns, extra)` — which **already exists**
+   (`repositories.py:306`) — and `set_library_access` for the two lists, which also does. T5 adds a
+   route and no repository method; the tasks gate found this table overstating it.
+4. A disabling that succeeds revokes that account's tokens except the caller's. **That is
+   `TokenRepository` and not `SessionRepository`** — the tasks gate corrected this plan on it. A
+   session and a credential are two tables: `SessionRepository` removes by session and by device
+   (`repositories.py:500, 503`), and what a revocation revokes is in `TokenRepository`, which
+   already has `for_user`, `revoke` and `revoke_device` (`:377-394`). *Every token this account
+   holds, except the caller's own* is one new method there.
 5. `204`.
 
 ### 6.5 `POST /Users/Password`
@@ -344,6 +350,17 @@ needs it, so it is `L2` and says so. **This is the opposite of 014's answer** (`
 owed), and the difference is that 014 needed a harness change that did not exist while this needs
 one the feature is delivering.
 
+**The four `L3` rows need cases from both seats, and three of them write.** `request-cases.yaml`'s
+rule is *"nothing here is a write to an account this project does not own"*, and the administrator's
+seat is whatever `.env` names. The administrator-seat cases for the three writing rows therefore
+carry **`needs: [fixture]`**, which makes them askable only against the single-use instance the run
+stands up and destroys — the same argument `rescan` and `wait` already carry in
+`NEEDS_THE_INSTANCE` (`tools/differential.py:1205`). The tasks gate found this, and it is the one
+finding that would have changed OQ-2 had the mechanism not existed.
+
+**Two counted assertions move with the rows**: the surface's 65 to 70, and the `L3` count's 10 to
+14 (`tests/unit/test_allowlist.py:720, 737`).
+
 **No test contacts a reference.** The probe is `tools/probe_user_administration.py`, run by hand,
 and the suite fails any test that opens a TCP connection.
 
@@ -355,6 +372,7 @@ and the suite fails any test that opens a TCP connection.
 | **`ORDER BY name` is not `OrderBy(Username)`** | Two orders that differ on case or accent | §6.3; the differential compares the list route on both servers, which is where a difference would show |
 | **The disclosure rule changes two implemented routes** | A client reading `Policy` from `/Users/Public` breaks | Decided as OQ-14 with the argument in behaviours §3.5 and §3.22; neither client trace mentions either property |
 | **Concurrent demotion and deletion can leave no administrator** | A server nobody can administer — the thing OQ-11 is about | Recorded rather than solved: both paths read the count in their own transaction, and SQLite's WAL does not serialise them. A single-writer store makes it unlikely and not impossible |
+| **`Users.AuthenticateByName` already answers a different `EnabledFolders`** | One account, two answers, depending on the road | Found by the tasks gate reading the goldens; it is 002's and predates this feature, and §6.1 leaves it untouched rather than absorbing it into a task about something else |
 | **`DECLARED` pins a property list to one reference version** | A newer reference's new property is dropped | That is OQ-16's decision working as intended, and `tools/bump_reference_version.py` is where a version move is noticed |
 
 ## 10. Alternatives considered
