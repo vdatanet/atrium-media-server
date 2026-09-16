@@ -3415,6 +3415,49 @@ each listed `ItemId` with the `Id` of that library's own view.
 
 [014 §5 criterion 7](../../specs/014-first-time-setup/spec.md#5-acceptance-criteria)
 
+### 3.33 A reset password is no password, and the account signs in without one — class B, replicated — **decided 2026-09-16, not yet implemented**
+
+**Jellyfin does:** answer `POST /Users/Password` with `{"ResetPassword": true}` `204`, clear the
+account's password, and then **let that account sign in with no password at all and answer `200`**.
+The old password answers `401`, and the account's document carries `HasPassword` and
+`HasConfiguredPassword` both `false`
+`[probe: tools/probe_user_administration.py, Jellyfin 10.11.11, 2026-09-16]`. Nothing marks the
+account as needing a new password, and nothing stops anybody who knows its name from entering it:
+an administrator who resets a password has, until somebody sets a new one, made the account open.
+
+It is not an oversight in the route either — it is the whole of that branch. `ResetPassword` is
+read first and nothing else in the body is looked at
+`[source: Jellyfin.Api/Controllers/UserController.cs:288-291 @ v10.11.11]`, and what it calls
+clears the stored hash.
+
+**Depends on it:** yes, and this is the unusual case where the dependency is the *operator's own
+next step* rather than a client's decoding. A reset exists to be followed by a sign-in that sets a
+new password, and every administrative flow built against a Jellyfin — its own web UI included —
+assumes that the account is enterable in between. A client or a script that resets a password and
+then signs in with none is a client that works against every reference server there is.
+
+**Atrium does:** the same. The class is **B** — the request succeeds, and what it leaves is more
+open than it should be — and §3.0's question is whether a client can have built something that
+being correct would break. Here it plainly can, and the thing it would break is the *recovery*
+path: an account that cannot be entered after a reset is an account whose reset accomplished
+nothing, and the caller has no other way in.
+
+The argument for diverging is the one §3.5 weighs and rejects in its own words: this is exposure
+rather than a wrong number, and *"it is obviously wrong"* is exactly the reasoning §3.0.2 forbids.
+Refusing `ResetPassword`, or leaving the account unenterable, is **refusing what the reference
+answers** — [§3.0.3](#30-how-the-decision-is-made)'s dangerous end, and the same objection that
+moved [§3.5 and §3.22](#35-userspublic-discloses-every-users-policy-to-anyone--class-b-diverged--decided-2026-09-16-not-yet-implemented)
+from a refusal to a field. So the default holds — Principle V, replicate — and the divergence
+stays written down rather than argued again from scratch. **Decided by the operator on 2026-09-16**,
+on the reading above. No upstream issue is known.
+
+**What would make this reconsiderable** is a reset that could be *followed* rather than replaced:
+a one-time credential, or an account marked as needing a password at next sign-in. Both are
+endpoints Jellyfin does not have, and inventing one is the thing
+[015 §2](../../specs/015-user-administration/spec.md#2-scope) forbids.
+
+[015 §5 criterion 11](../../specs/015-user-administration/spec.md#5-acceptance-criteria)
+
 ## 4. Deliberate exceptions
 
 Every one of them is listed here so it is never mistaken for an oversight — including §4.4, which
