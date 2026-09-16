@@ -126,6 +126,7 @@ say how it will be proven is not finished.
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Implemented** | **Implemented** | **Implemented** — eleven of eleven tasks, ten of ten criteria, [AC-9 amended 2026-09-04](012-negotiation-inputs/spec.md#5-acceptance-criteria) |
 | [013](013-artist-registry/) | Artist registry | **Implemented** | **Implemented** | **Implemented** — nine of nine tasks, eight of eight criteria, and **the first feature here whose closing task proved a `level: L3` row against a real Jellyfin** rather than deferring it |
 | [014](014-first-time-setup/) | First-time setup | **Accepted** 2026-09-14 — OQ-1 to OQ-3, OQ-6 and OQ-12 decided and OQ-4 to OQ-8 measured on 2026-09-13; OQ-9 to OQ-11 and OQ-13 closed at the plan gate, no question open | **Accepted** 2026-09-14 | **Accepted** 2026-09-14 — [ten of ten tasks](014-first-time-setup/tasks.md) done and ten of ten criteria mapped the same day; **awaits the operator's sign-in with an unmodified Jellyfin client**, the one line of its definition of done left open |
+| [015](015-user-administration/) | User administration | **Draft** 2026-09-16 — thirteen questions open and no measurement taken; the readings are the gate | — | — |
 
 **All thirteen features are implemented** — 008 on 2026-08-29 across fourteen tasks, 011 on
 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, 010 on 2026-09-02 across fifteen,
@@ -147,6 +148,18 @@ Jellyfin client sends. **It stays `Accepted`** because one line of its definitio
 that run: an unmodified Jellyfin client signing in and browsing, which the operator takes with
 their own apps ([014 tasks, definition of done](014-first-time-setup/tasks.md#definition-of-done)),
 as 013 stayed `Accepted` until its differential run.
+
+**The second slice of v2 is [015](015-user-administration/), opened on 2026-09-16 as `Draft`.**
+014 stopped at the first account on purpose — every user operation beyond it requires an
+administrator, which a fresh server did not have — so a server can be set up and still cannot be
+given a second account, a policy or a password. 015 is those five operations and the client
+commands for them. It opens the way 011, 012 and 014 opened: **thirteen questions, no measurement
+of its own, and a document that says so** — every refusal its five operations make is undeclared in
+the reference's own OpenAPI document, and the readings can only be taken on the single-use
+reference instance, because each one writes. Two of its questions are the operator's before
+anything is planned: whether to reproduce a reference disclosure that lets **any** signed-in
+account read every account's policy (OQ-3), and which policy properties this server acts on rather
+than merely stores (OQ-7).
 
 **013 is the first feature here that closes an accepted gap rather than adding a surface**, and
 the first whose closing task proved a `level: L3` row **against a real Jellyfin** instead of

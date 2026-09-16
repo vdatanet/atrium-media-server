@@ -94,6 +94,7 @@ priority order: each feature is testable the moment it lands, and each unlocks t
 | **012** | Negotiation inputs | A negotiation answer a client can act on: a source nothing has opened, and a delivery protocol spelled a way the comparison does not match | 003, 008 |
 | **013** | Artist registry | `/Artists` answers one row per credit name, server-wide — a second population of one type, beside the tree artist an album hangs off | 003, 004, 005 |
 | **014** | First-time setup | v2's first slice: a fresh server reaches a first administrator and a first library from a terminal, over Jellyfin's own first-time-setup operations and nothing else | 001, 002, 003 |
+| **015** | User administration | v2's second slice: a second account, what it may do, its password, and its removal — over Jellyfin's own user operations | 002, 005, 014 |
 
 **008 is one feature, not two.** Transcoding lives inside it rather than in a directory of its own,
 because it is not a separate capability a client can ask for: it is the third branch of a single
@@ -274,11 +275,19 @@ caller until setup finishes, is open here to this machine only
 And a scan now runs inside the server process, with a write-lock cost that is recorded rather than
 solved ([architecture §5](architecture.md#5-deployment-shape)).
 
-**What is left of v2** is every other cell of the left column: a second account and everything else
-about users — `CreateUserByName`, `UpdateUserPolicy`, a password reset — which is the next slice,
-and the one [010's harness](../tools/README.md#the-differential-harness) still builds a restricted
-seat by hand for; renaming and removing a library and changing its paths; server configuration; and
-sessions and playback.
+**The second slice opened on 2026-09-16, as [015](../specs/015-user-administration/spec.md), and it
+is `Draft`.** A second account and everything else about users — `CreateUserByName`,
+`UpdateUserPolicy`, `UpdateUserPassword`, `DeleteUser` and `GetUsers` — which is the slice
+[010's harness](../tools/README.md#the-differential-harness) still builds a restricted seat by hand
+for, and whose cost that document prices: a sweep that skipped seeding an account's policy answered
+**307 differences about how the account was made** before it said anything about this server. 015
+opens with thirteen questions and no measurement of its own, and two of them are the operator's
+rather than the plan's.
+
+**What is then left of v2**: renaming and removing a library and changing its paths — which 014 §2
+put *"in the next slice with the users"* and 015 §2 narrows back out, on the argument that they
+share nothing with an account but a release — `UpdateUser`, server configuration, and sessions and
+playback.
 
 > **Why this repository, and why now.** The same shape of problem — an administrative surface that
 > needs a scriptable client — is waiting in other applications, and it is worth solving once with
