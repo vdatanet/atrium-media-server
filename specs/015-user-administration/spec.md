@@ -4,6 +4,7 @@ title: User administration
 status: Draft
 created: 2026-09-16
 updated: 2026-09-16
+amended: 2026-09-16 - OQ-7 decided (this feature draws no split of its own: all 42 policy and 16 configuration properties stored and answered, 002's fourteen acted on, the other 28 a named gap) and OQ-12 decided (POST /Users and the four library-management operations stay out, which amends 014 section 2); sections 2 and 3.6 amended, AC-6 amended, AC-15 and AC-16 added. And the same day OQ-3 was decided by the operator - narrow the disclosure - and recorded as open rather than applied: behaviours 3.5 and 3.22 replicate the same disclosure on two other roads and each says a divergence is taken on every road in one change, which this question had not weighed. Section 3.1 unamended; OQ-14 raised with the three shapes the change could take
 depends_on: [002, 005, 014]
 ---
 
@@ -68,18 +69,20 @@ only to an administrator, and the reference's own elevation policy is the whole 
   roadmap's v2 row is *"create, list, update policy, reset password"* and a rename is not in it;
   it is also the one operation here whose body is the user document rather than a document of its
   own, so it carries every field this feature decides about in §3.6 **and** the identity questions
-  a rename raises. It goes to the slice after this one, unless the gate decides otherwise (OQ-12).
+  a rename raises. It goes to the slice after this one — **decided 2026-09-16 as OQ-12**.
 - **Renaming or removing a library, or changing its paths.** 014 §2 put these *"in the next slice
   with the users"*; this document narrows that, because they share nothing with an account but a
-  release. They are the slice after this one (OQ-12).
+  release. They are the slice after this one — **decided 2026-09-16 as OQ-12**, which amends 014 §2
+  rather than disagreeing with it.
 - `POST /Users/ForgotPassword` and `POST /Users/ForgotPassword/Pin` — a password reset a user
   starts for themselves, which needs a reset provider and a pin file on disk. An administrator
   clearing a password is §3.4 and is a different operation.
 - `POST /Users/{userId}/Authenticate`, `POST /Users/AuthenticateWithQuickConnect` — 002's, and
   quick connect is not in v1 at all.
-- **Per-user library visibility being enforced** beyond what 002 and 005 already enforce. This
-  feature makes a policy **sayable and stored**; which of its properties this server *acts on* is
-  §3.6 and OQ-7, and every property it does not act on is an accepted gap with a named owner.
+- **Enforcing any policy property 002 does not already enforce.** This feature makes a policy
+  **sayable and stored**; what acting on it means is 002's fourteen, unchanged (§3.6, OQ-7, decided
+  2026-09-16). Promoting a twenty-ninth property into the enforced set is a migration and a
+  decision of its own, and it is not this feature's.
 - **Any operation Jellyfin does not have.** A convenience this client wants and the API lacks, the
   client does without.
 
@@ -108,9 +111,13 @@ document `GET /Users/{userId}` answers `[source: UserController.cs:621-656 @ v10
 
 **Who may ask it.** The reference authorises this route for **any authenticated caller**, not for an
 administrator `[source: UserController.cs:91-100 @ v10.11.11]`: a signed-in ordinary account reads
-every account on the server, with its policy. That is a disclosure of the same class as the one
-009 refused ([behaviours §3.19](../../docs/compatibility/behaviours.md)), and **whether this server
-reproduces it or narrows it is OQ-3**, which is the operator's.
+every account on the server, with its policy. **This is the same object [behaviours §3.5](../../docs/compatibility/behaviours.md#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated)
+and [§3.22](../../docs/compatibility/behaviours.md#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated)
+already publish on two other roads**, both replicated, and both entries say a divergence is taken
+on every road in one change or not at all. So this route's answer is **not this document's to
+write**: the operator decided on 2026-09-16 to narrow it, the collision above is what that decision
+had not weighed, and **OQ-14** is where its shape is settled. Until then this section states the
+reference's behaviour and claims nothing about this server's.
 
 **Error responses**
 
@@ -253,19 +260,34 @@ and an empty configuration** `[probe: tools/differential.py --fixture, Jellyfin 
 serves. The accounts were written by hand because no route made them; this feature makes the route,
 and the document the route stores is the document the three read routes must answer.
 
-**The split this feature draws, and OQ-7 is where it is decided:**
+**OQ-7 was decided on 2026-09-16, and the decision is that this feature draws no split of its
+own.** [002 §3.5](../002-authentication-users-and-sessions/spec.md) drew one when it specified what
+an account *is*, and it is the one this feature adopts:
 
-- **Stored and answered in full** — every property of the reference's policy and configuration
-  documents, whatever this server does with it. A property that round-trips is a property the
-  harness stops reporting.
-- **Acted on** — the subset with a meaning in v1: whether the account is an administrator, whether
-  it is disabled, whether it is hidden, and which libraries it may open. Everything else names a
-  capability v1 does not have (live television, channels, sync, device control) or a limit nothing
-  enforces yet.
-- **An accepted gap, named** — every property in the first list and not the second, in
-  [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1), with the feature
-  that would own it. A property stored and ignored is a gap; a property silently dropped is a
+- **Stored and answered in full** — all **42** policy properties and all **16** configuration
+  properties, whatever this server does with each. A document sent here comes back from all three
+  read routes with the same set of properties and the same values; a property this server has
+  never heard of — a newer reference's — is carried untouched rather than dropped.
+- **Acted on — the fourteen 002 already enforces**, and not a property more. Whether the account
+  is an administrator, disabled or hidden; whether it may play media, delete content and from
+  which libraries; which libraries it may open at all; the lockout counts and the session ceiling;
+  and the three a negotiation reads — whether video may be transcoded, whether audio may be, and
+  whether a stream may be remuxed.
+- **Carried and not acted on — the other 28**, which is an accepted gap and is named as one in
+  [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) with the feature
+  that would own each. A property stored and ignored is a gap; a property silently dropped is a
   divergence, and this feature intends the first.
+
+**Why the decision is *adopt* rather than *choose*.** Honouring one more property is not a line of
+policy code here — 002 made the enforced set structural, so a property anything *queries* has a
+column of its own and promoting one is a migration somebody takes on purpose. A feature that
+quietly widened the set from a route would undo exactly the visibility that choice bought. So
+what 015 changes is **who can write the document**, and nothing about what reading it means.
+
+**What this fixes is therefore a supply, not a semantics.** The eleven above are eleven because
+nothing ever seeded the other 31: the columns and the two lists have defaults and the blob was
+empty. A route that stores what the reference sends fills the blob, and the 307 differences go
+away without a single property changing meaning.
 
 ### 3.7 The client
 
@@ -303,8 +325,9 @@ Observable, and surviving a restart:
    policy and configuration §3.6 requires; `isHidden` and `isDisabled` each narrow it as the
    reference narrows it.
 6. A policy sent for an account is stored whole and answered whole by all three read routes — the
-   reference's forty-two properties, not eleven — and a property this server does not act on
-   round-trips unchanged.
+   reference's **forty-two** properties and the configuration's **sixteen**, not eleven and an empty
+   object — and a property this server has never heard of round-trips unchanged rather than being
+   dropped.
 7. Each of §3.3's four refusals is refused, with its status and its body: no such account, the last
    administrator demoted, an administrator disabled, the last enabled account disabled.
 8. An account disabled by a policy update cannot sign in afterwards, and the tokens it held no
@@ -322,6 +345,16 @@ Observable, and surviving a restart:
 14. **The differential harness stops building its restricted seat by hand**: the run creates the
     seat through §3.2 and §3.3 and destroys it through §3.5, and `tools/README.md` steps 3 and 4
     lose the paragraphs that say it cannot.
+15. **Each of the fourteen properties 002 enforces changes what the account can do when it is set
+    through §3.3**, asserted at the HTTP boundary and not by reading the store: an account made an
+    administrator may perform §3.2 and could not before; an account whose `EnabledFolders` names one
+    library sees that library and no other; an account refused media playback is refused a
+    negotiation; and the same for the rest of the fourteen, one assertion each.
+16. **A property among the other 28 is carried and acts on nothing**: set through §3.3, it comes
+    back unchanged from all three read routes, and the behaviour its name describes is unchanged —
+    and [behaviours §5](../../docs/compatibility/behaviours.md#5-accepted-gaps-in-v1) names the 28
+    as a gap, each with the feature that would own it. A criterion that asserts the gap is what
+    stops it from being a divergence nobody wrote down.
 
 ## 6. Conformance
 
@@ -342,7 +375,13 @@ Levels are defined in [../../docs/compatibility/conformance.md](../../docs/compa
 
 ## 7. Open questions
 
-**None of the thirteen is answered, and this document is `Draft` until the readings are taken.**
+**Two of the fourteen are decided, eleven wait on a reading, and one came back from the operator
+as a decision this document could not take.** OQ-7 and OQ-12 were decided on 2026-09-16. OQ-3 was
+decided the same day — *narrow it, as 009 narrowed its own* — **and is recorded as open**: the
+disclosure it narrows is already replicated on two other roads by an argument that binds all of
+them together, which this document had not found when it asked. What that costs is in OQ-14, and
+§3.1 says nothing new until it is answered. **The document stays `Draft` until the readings are
+taken.**
 Like 011, 012 and 014, this feature opens with its questions open and no measurements of its own,
 and there is one place the readings can be taken: **the single-use reference instance**
 `[tools/reference_instance.py]`, which runs the pinned version and is destroyed with everything it
@@ -354,17 +393,18 @@ is exactly what the disposable instance exists for.
 |---|---|---|---|
 | OQ-1 | What do the refusals of §3.2, §3.2.1 and §3.3 answer on the wire — which of [behaviours §1.11](../../docs/compatibility/behaviours.md#111-there-are-four-error-shapes-not-one)'s four shapes, with what status and what body? The document declares none of them | §3.2, §3.3, AC-3, AC-4, AC-7 | A reading on the instance |
 | OQ-2 | Are these five rows `L3`, or `L2` with `L3` owed to 014's own L3 change? | §6 | The plan |
-| OQ-3 | `GET /Users` answers every account, with its policy, to **any** signed-in caller. Reproduce it, or narrow it to an administrator as 009 narrowed its own disclosure? | §3.1 | **The operator.** A Principle I decision |
+| OQ-3 | `GET /Users` answers every account, with its policy, to **any** signed-in caller. Reproduce it, or narrow it to an administrator as 009 narrowed its own disclosure? **The operator decided to narrow it on 2026-09-16, and the decision did not land, because this document had not found what it collides with**: [behaviours §3.5](../../docs/compatibility/behaviours.md#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated) and [§3.22](../../docs/compatibility/behaviours.md#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated) are the same disclosure on two roads, both **replicated** with an argument, and both say in their own words that a divergence is taken **on every road in one change** or it is *"the inconsistency, not the protection"*. `GET /Users` is a third road to the identical object. §3.1 is unamended and the question is **open**, restated as OQ-14 | §3.1, AC-5 | **The operator**, on OQ-14's three options |
 | OQ-4 | Is §3.2's step 4 reachable — can a creation fail *after* the account exists — and what does it leave? | §3.2 | A reading on the instance |
 | OQ-5 | A policy body that omits properties: does the reference store the defaults, or keep what was there? And does it refuse a body that is not a whole document? | §3.3, §3.7 | A reading on the instance |
 | OQ-6 | What exactly does a disabling revoke, seen from a client — a session that was streaming, a report arriving afterwards? | §3.3 | A reading on the instance |
-| OQ-7 | Which policy properties does this server **act on**, and which are stored, answered and ignored as a named gap? | §3.6, AC-6 | **The operator**, on a reading of the reference's own defaults |
+| OQ-7 | ~~Which policy properties does this server **act on**, and which are stored, answered and ignored as a named gap?~~ **Decided on 2026-09-16: 002's fourteen, unchanged** — this feature stores and answers all 42 and all 16, acts on exactly the set 002 made structural, and names the other 28 as a gap. Promoting a twenty-ninth is a migration and a decision of its own (§3.6) | — | Closed. §2 and §3.6 amended; AC-6 amended; AC-15 and AC-16 added |
 | OQ-8 | What does an account with a cleared password do — sign in with an empty password, sign in with none, or refuse? | §3.4, AC-11 | A reading on the instance |
 | OQ-9 | Is §3.4's asymmetry real on the wire: an administrator naming itself in `userId` must give its current password, and the same administrator omitting `userId` need not? | §3.4 | A reading on the instance |
 | OQ-10 | Deleting an account removes the playlists it owns. What happens to one another account can see, and what does 009's store do about it here? | §3.5, AC-12 | A reading on the instance, then 009's owner |
 | OQ-11 | Can the last administrator be deleted, leaving a server nobody can administer? | §3.5 | A reading on the instance, then **the operator** |
-| OQ-12 | Does this slice keep `POST /Users` and the four library-management operations out, against 014 §2's *"the next slice with the users"*? | §2 | **The operator**, at this gate |
+| OQ-12 | ~~Does this slice keep `POST /Users` and the four library-management operations out, against 014 §2's *"the next slice with the users"*?~~ **Decided on 2026-09-16: yes, both stay out**, which amends 014 §2 rather than disagreeing with it | §2 | Closed. §2 amended |
 | OQ-13 | Does the client's account commands' output name a policy property the operator did not set — and if so, how does a command set one property without composing the other forty-one? | §3.7 | The plan, after OQ-5 |
+| OQ-14 | **Narrowing the user disclosure — on how many roads?** (a) all three in one change, rewriting §3.5 and §3.22, which overturns a replication decision in an implemented feature and narrows a route a named client consumer reads; (b) on this feature's new road alone, which is what §3.22 calls the inconsistency; (c) narrow the *fields* rather than the routes — `Policy` and `Configuration` withheld from a caller who is neither the account nor an administrator, on all three roads, which is the shape §3.5 itself calls *"the least dangerous kind of change to make and still not free"*, and which reinstates a criterion 002 already withdrew once for being unmeasured | §3.1, AC-5 | **The operator** |
 
 ## 8. References
 
@@ -372,10 +412,14 @@ is exactly what the disposable instance exists for.
   column's users row, and what *"what is left of v2"* names as the next slice.
 - [014 §2](../014-first-time-setup/spec.md#2-scope): the out-of-scope rows this feature picks up,
   and §2.0's constraint, which is unchanged.
-- [002 §3](../002-authentication-users-and-sessions/spec.md): the three read routes §3.6 changes,
-  the token shapes, and the `401`/`403` bodies.
+- [002 §3.5 and §3.7](../002-authentication-users-and-sessions/spec.md): the enforced fourteen
+  §3.6 adopts, the three read routes it fills, the token shapes, and the `401`/`403` bodies.
 - [009 §3](../009-playlists/spec.md): the playlists §3.5 deletes, and the disclosure divergence
-  OQ-3 is measured against.
+  OQ-14 is argued against.
+- [behaviours §3.5](../../docs/compatibility/behaviours.md#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated)
+  and [§3.22](../../docs/compatibility/behaviours.md#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated):
+  the same disclosure on two roads, replicated, and the clause that binds a divergence to all of
+  them at once. OQ-14 is that clause meeting a third road.
 - [`tools/README.md`](../../tools/README.md), steps 3 and 4: what the harness builds by hand, and
   the 2026-09-07 and 2026-09-08 sweeps that price it.
 - Jellyfin at `v10.11.11`, neither file touched by the local fork:

@@ -126,7 +126,7 @@ say how it will be proven is not finished.
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Implemented** | **Implemented** | **Implemented** — eleven of eleven tasks, ten of ten criteria, [AC-9 amended 2026-09-04](012-negotiation-inputs/spec.md#5-acceptance-criteria) |
 | [013](013-artist-registry/) | Artist registry | **Implemented** | **Implemented** | **Implemented** — nine of nine tasks, eight of eight criteria, and **the first feature here whose closing task proved a `level: L3` row against a real Jellyfin** rather than deferring it |
 | [014](014-first-time-setup/) | First-time setup | **Accepted** 2026-09-14 — OQ-1 to OQ-3, OQ-6 and OQ-12 decided and OQ-4 to OQ-8 measured on 2026-09-13; OQ-9 to OQ-11 and OQ-13 closed at the plan gate, no question open | **Accepted** 2026-09-14 | **Accepted** 2026-09-14 — [ten of ten tasks](014-first-time-setup/tasks.md) done and ten of ten criteria mapped the same day; **awaits the operator's sign-in with an unmodified Jellyfin client**, the one line of its definition of done left open |
-| [015](015-user-administration/) | User administration | **Draft** 2026-09-16 — thirteen questions open and no measurement taken; the readings are the gate | — | — |
+| [015](015-user-administration/) | User administration | **Draft** 2026-09-16 — fourteen questions, OQ-7 and OQ-12 decided the same day; eleven wait on a reading and **OQ-14 waits on the operator**, because narrowing the user disclosure is one decision on three roads | — | — |
 
 **All thirteen features are implemented** — 008 on 2026-08-29 across fourteen tasks, 011 on
 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, 010 on 2026-09-02 across fifteen,
@@ -153,13 +153,22 @@ as 013 stayed `Accepted` until its differential run.
 014 stopped at the first account on purpose — every user operation beyond it requires an
 administrator, which a fresh server did not have — so a server can be set up and still cannot be
 given a second account, a policy or a password. 015 is those five operations and the client
-commands for them. It opens the way 011, 012 and 014 opened: **thirteen questions, no measurement
+commands for them. It opens the way 011, 012 and 014 opened: **fourteen questions, no measurement
 of its own, and a document that says so** — every refusal its five operations make is undeclared in
 the reference's own OpenAPI document, and the readings can only be taken on the single-use
-reference instance, because each one writes. Two of its questions are the operator's before
-anything is planned: whether to reproduce a reference disclosure that lets **any** signed-in
-account read every account's policy (OQ-3), and which policy properties this server acts on rather
-than merely stores (OQ-7).
+reference instance, because each one writes.
+
+**Two were decided on 2026-09-16 and a third was decided and did not land.** OQ-7: the feature
+draws no split of its own — all 42 policy and 16 configuration properties stored and answered,
+002's fourteen acted on, the other 28 a named gap — so what 015 changes is who may *write* the
+document and nothing about what reading it means. OQ-12: `POST /Users` and the four
+library-management operations stay out, which amends 014 §2. **OQ-3 is the one that did not
+land**: the operator chose to narrow a disclosure that lets any signed-in account read every
+account's policy, and [behaviours §3.5](../../docs/compatibility/behaviours.md#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated)
+and [§3.22](../../docs/compatibility/behaviours.md#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated)
+publish the identical object on two other roads, each replicated with an argument that binds all
+the roads into one change. The question is restated as **OQ-14** with the three shapes the change
+could take, and §3.1 says nothing about this server until it is answered.
 
 **013 is the first feature here that closes an accepted gap rather than adding a surface**, and
 the first whose closing task proved a `level: L3` row **against a real Jellyfin** instead of

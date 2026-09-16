@@ -281,8 +281,13 @@ is `Draft`.** A second account and everything else about users — `CreateUserBy
 [010's harness](../tools/README.md#the-differential-harness) still builds a restricted seat by hand
 for, and whose cost that document prices: a sweep that skipped seeding an account's policy answered
 **307 differences about how the account was made** before it said anything about this server. 015
-opens with thirteen questions and no measurement of its own, and two of them are the operator's
-rather than the plan's.
+opens with fourteen questions and no measurement of its own. Two were decided on 2026-09-16 — the
+enforced policy set is 002's fourteen and this feature widens it by nothing, and `UpdateUser` and
+the library-management operations stay out — and one is **open on an argument older than the
+feature**: narrowing the user disclosure is one decision on three roads
+([behaviours §3.5](compatibility/behaviours.md#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated)
+and [§3.22](compatibility/behaviours.md#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated)),
+and `GET /Users` is the third.
 
 **What is then left of v2**: renaming and removing a library and changing its paths — which 014 §2
 put *"in the next slice with the users"* and 015 §2 narrows back out, on the argument that they
