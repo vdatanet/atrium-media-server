@@ -4,7 +4,7 @@ title: User administration
 status: Draft
 created: 2026-09-16
 updated: 2026-09-16
-amended: 2026-09-16 at the measurement gate - the eight readings taken on a single-use instance of the pinned version and OQ-1, OQ-4, OQ-5, OQ-6 and OQ-8 to OQ-11 closed; two claims made from the source withdrawn (the last administrator can be refused its own deletion, and a deletion removes only the private playlists); sections 3 to 3.7 amended, AC-3, AC-4, AC-6, AC-7, AC-11 and AC-12 amended, AC-19 and AC-20 added; OQ-15 and OQ-17 raised for the operator and OQ-16 raised and decided (an unknown policy property is dropped, as the reference drops it, which corrects 002's reader). Earlier the same day - OQ-14 decided (the user disclosure is narrowed by withholding Policy and Configuration from a caller who is neither the account nor an administrator, on all three roads at once, rather than by refusing any of them); section 2 gains the two roads 002 serves, section 3.1 amended and 3.1.1 added, AC-5 amended, AC-17 and AC-18 added, behaviours 3.5 and 3.22 rewritten together. Earlier the same day - OQ-7 decided (this feature draws no split of its own: all 42 policy and 16 configuration properties stored and answered, 002's fourteen acted on, the other 28 a named gap) and OQ-12 decided (POST /Users and the four library-management operations stay out, which amends 014 section 2); sections 2 and 3.6 amended, AC-6 amended, AC-15 and AC-16 added. And the same day OQ-3 was decided by the operator - narrow the disclosure - and recorded as open rather than applied: behaviours 3.5 and 3.22 replicate the same disclosure on two other roads and each says a divergence is taken on every road in one change, which this question had not weighed. Section 3.1 unamended; OQ-14 raised with the three shapes the change could take
+amended: 2026-09-16 after the gate - OQ-15 decided (this server refuses a deletion that would leave no administrator before revoking or removing anything, which no client can see because the request refused before and refuses now: behaviours 3.34) and OQ-17 decided (a deleted account's public playlists are kept, as the reference keeps them); section 3.5 amended, AC-12 and AC-20 amended, and no question is left that is not the plan's. Earlier the same day at the measurement gate - the eight readings taken on a single-use instance of the pinned version and OQ-1, OQ-4, OQ-5, OQ-6 and OQ-8 to OQ-11 closed; two claims made from the source withdrawn (the last administrator can be refused its own deletion, and a deletion removes only the private playlists); sections 3 to 3.7 amended, AC-3, AC-4, AC-6, AC-7, AC-11 and AC-12 amended, AC-19 and AC-20 added; OQ-15 and OQ-17 raised for the operator and OQ-16 raised and decided (an unknown policy property is dropped, as the reference drops it, which corrects 002's reader). Earlier the same day - OQ-14 decided (the user disclosure is narrowed by withholding Policy and Configuration from a caller who is neither the account nor an administrator, on all three roads at once, rather than by refusing any of them); section 2 gains the two roads 002 serves, section 3.1 amended and 3.1.1 added, AC-5 amended, AC-17 and AC-18 added, behaviours 3.5 and 3.22 rewritten together. Earlier the same day - OQ-7 decided (this feature draws no split of its own: all 42 policy and 16 configuration properties stored and answered, 002's fourteen acted on, the other 28 a named gap) and OQ-12 decided (POST /Users and the four library-management operations stay out, which amends 014 section 2); sections 2 and 3.6 amended, AC-6 amended, AC-15 and AC-16 added. And the same day OQ-3 was decided by the operator - narrow the disclosure - and recorded as open rather than applied: behaviours 3.5 and 3.22 replicate the same disclosure on two other roads and each says a divergence is taken on every road in one change, which this question had not weighed. Section 3.1 unamended; OQ-14 raised with the three shapes the change could take
 depends_on: [002, 005, 014]
 ---
 
@@ -335,6 +335,10 @@ account `[source: UserController.cs:273-281 @ v10.11.11]`.
    cannot rebuild ([roadmap](../../docs/roadmap.md)). **Measured, and it is not every playlist**
    (OQ-10): the owner's **private** playlist answered `404` afterwards and its **public** one
    answered `200` — still there, still named, owned by an account that no longer exists.
+   **Decided on 2026-09-16 as OQ-17: this server reproduces the orphan.** A public playlist is
+   content other accounts read, and removing it because whoever created it is gone destroys data
+   they were using; the reference keeps it, and so does this. What such a playlist then answers for
+   the field naming its owner is the plan's, and it lands in 009's store.
 3. **The account itself**, which then answers `404` to a second deletion, and whose token answers
    `401`.
 
@@ -350,8 +354,14 @@ rule is about (OQ-11).
 removed, and only then does the deletion refuse. So a refused deletion of the last administrator
 leaves that administrator **signed out of every session** on a server where it is the only one. The
 account survives and signs in again, so nothing is lost; but the run that measured it first
-reported the consequence as a cleanup failure, and only the third reading named it. **What this
-server does about it is OQ-15.**
+reported the consequence as a cleanup failure, and only the third reading named it.
+
+**Decided on 2026-09-16 as OQ-15: this server refuses first and touches nothing.** The check that an
+administrator is left happens before anything is revoked or removed, so a refused deletion changes
+no state at all. **It is a divergence, and what makes it takeable is that a client cannot see it**:
+the request answered a refusal before and answers a refusal now, nothing that succeeds against a
+reference server is refused here, and what goes away is an effect of a request that was already
+failing. Argued in [behaviours §3.34](../../docs/compatibility/behaviours.md).
 
 ### 3.6 What an account answers, and what it acts on
 
@@ -492,9 +502,10 @@ Observable, and surviving a restart:
     an otherwise whole document missing either provider identifier is refused the same way; and a
     whole document with any other property left out is accepted, that property taking its default
     and not its stored value.
-20. **The last administrator cannot delete itself**: the deletion is refused, the account survives
-    and signs in again, and what §3.5's refusal does to the tokens it already revoked is whatever
-    OQ-15 decides — asserted as decided, not as inherited.
+20. **The last administrator cannot delete itself, and the refusal changes nothing**: the deletion
+    is refused, and afterwards the caller's token still works, the account's playlists are still
+    there, and the account is still on `GET /Users` — which is §3.5's divergence from the
+    reference, asserted rather than inherited.
 
 ## 6. Conformance
 
@@ -520,14 +531,14 @@ Levels are defined in [../../docs/compatibility/conformance.md](../../docs/compa
 
 ## 7. Open questions
 
-**Thirteen of the seventeen are closed, and the four that are not are the gate's own harvest.**
+**Fifteen of the seventeen are closed, and the two that are not are the plan's** — OQ-2 and
+OQ-13, which is where 014 left four of its own.
 The eight readings were taken on 2026-09-16, on a single-use instance of the pinned version, and
 they are in [notes/user-administration-readings.md](notes/user-administration-readings.md)
 `[probe: tools/probe_user_administration.py, Jellyfin 10.11.11, 2026-09-16]`. **Two claims this
 document made from the source did not survive them** — the last administrator can be refused its
-own deletion, and a deletion removes only the private playlists — and the readings raised **OQ-15
-and OQ-17**, both the operator's. OQ-16 was raised and decided the same day. What is left open is
-those two, plus the plan's OQ-2 and OQ-13.
+own deletion, and a deletion removes only the private playlists — and the readings raised **OQ-15,
+OQ-16 and OQ-17**, all three decided by the operator the same day.
 
 **The gate took four runs.** One died before answering, which is
 [010 plan §7](../010-conformance-harness/plan.md)'s measured `SIGILL` start; after each of the
@@ -556,7 +567,7 @@ is exactly what the disposable instance exists for.
 | OQ-4 | ~~Is §3.2's step 4 reachable — can a creation fail *after* the account exists — and what does it leave?~~ **Answered on 2026-09-16: not reachable from the API**, and recorded as not reached rather than impossible. A creation with `Password: null` answers `200` and leaves an account with no password; no refusal this gate could send failed the second step. And none of the eight refusals left an account behind | §3.2 | Closed. §3.2 amended |
 | OQ-5 | ~~A policy body that omits properties: does the reference store the defaults, or keep what was there? And does it refuse a body that is not a whole document?~~ **Answered on 2026-09-16: the defaults, and yes.** An omitted property takes the type's default — each was moved off its default first, so the two answers could be told apart — and `PasswordResetProviderId` and `AuthenticationProviderId` are **required**, so a body naming one property is refused before the route runs | §3.3, §3.7, AC-19 | Closed. §3.3 and §3.7 amended; AC-19 added |
 | OQ-6 | ~~What exactly does a disabling revoke, seen from a client?~~ **Answered on 2026-09-16**: the update answers `204`, the token the account held answers `401` on its next request, and a fresh sign-in answers `403`. A streaming session was not measured and is 008's | §3.3, AC-8 | Closed. §3.3 amended |
-| OQ-7 | ~~Which policy properties does this server **act on**, and which are stored, answered and ignored as a named gap?~~ **Decided on 2026-09-16: 002's fourteen, unchanged** — this feature stores and answers all 42 and all 16, acts on exactly the set 002 made structural, and names the other 28 as a gap. Promoting a twenty-ninth is a migration and a decision of its own (§3.6) | — | Closed. §2 and §3.6 amended; AC-6 amended; AC-15 and AC-16 added |
+| OQ-7 | ~~Which policy properties does this server **act on**, and which are stored, answered and ignored as a named gap?~~ **Decided on 2026-09-16: 002's fourteen, unchanged** — this feature stores and answers all 42 and all 15, acts on exactly the set 002 made structural, and names the other 28 as a gap. Promoting a twenty-ninth is a migration and a decision of its own (§3.6) | — | Closed. §2 and §3.6 amended; AC-6 amended; AC-15 and AC-16 added |
 | OQ-8 | ~~What does an account with a cleared password do — sign in with an empty password, with none, or refuse?~~ **Answered on 2026-09-16: it signs in with none, and answers `200`.** The old password answers `401`. **Decided the same day: replicate**, with the defect argued in behaviours §3.33 | §3.4, AC-11 | Closed. §3.4 amended; AC-11 amended |
 | OQ-9 | ~~Is §3.4's asymmetry real on the wire?~~ **Answered on 2026-09-16: yes.** The same administrator, the same body, two requests differing only in a query parameter naming its own account: `403` *"Invalid user or password entered."* and `204` | §3.4, AC-9, AC-10 | Closed. §3.4 amended |
 | OQ-10 | ~~Deleting an account removes the playlists it owns. What happens to one another account can see?~~ **Answered on 2026-09-16, and it is not every playlist**: the owner's private playlist answered `404` afterwards and its **public** one answered `200` — still there, owned by an account that no longer exists. What this server does about the orphan is **OQ-17** | §3.5, AC-12 | Closed. §3.5 and AC-12 amended; OQ-17 raised |
@@ -564,9 +575,9 @@ is exactly what the disposable instance exists for.
 | OQ-12 | ~~Does this slice keep `POST /Users` and the four library-management operations out, against 014 §2's *"the next slice with the users"*?~~ **Decided on 2026-09-16: yes, both stay out**, which amends 014 §2 rather than disagreeing with it | §2 | Closed. §2 amended |
 | OQ-13 | Does the client's account commands' output name a policy property the operator did not set — and if so, how does a command set one property without composing the other forty-one? | §3.7 | The plan, after OQ-5 |
 | OQ-14 | ~~**Narrowing the user disclosure — on how many roads?**~~ **Decided on 2026-09-16: the fields, not the routes, on all three.** `Policy` and `Configuration` are absent unless the caller is that account or an administrator (§3.1.1). It is *strictly less information* on a request that still succeeds, which is the shape §3.5 itself calls the least dangerous — and it reinstates the criterion 002 withdrew on 2026-09-01, this time taken **against** the measurement that overturned it rather than in place of one | §3.1, §3.1.1, AC-5, AC-17, AC-18 | Closed. §2 and §3.1 amended; behaviours §3.5 and §3.22 rewritten together as `diverged`, decided and not yet implemented |
-| OQ-15 | **A refused deletion has already revoked the account's tokens and removed its playlists** (§3.5, measured 2026-09-16). Reproduce the order, or refuse first and touch nothing? It is the shape 009 met — *a refusal that has already written* — and 009's own answer was to reproduce | §3.5, AC-20 | **The operator** |
+| OQ-15 | ~~**A refused deletion has already revoked the account's tokens and removed its playlists** (§3.5). Reproduce the order, or refuse first and touch nothing?~~ **Decided on 2026-09-16: refuse first, touch nothing.** A client cannot see it — the request refused before and refuses now, and what goes away is an effect of an already-failing request | §3.5, AC-20 | Closed. §3.5 amended; AC-20 amended; [behaviours §3.34](../../docs/compatibility/behaviours.md) |
 | OQ-16 | ~~What does this server do with a policy property it has never heard of?~~ **Decided on 2026-09-16: drop it, as the reference does.** It corrects 002's reader, which keeps one on an argument nobody had measured | §3.6, AC-6 | Closed. §3.6 and AC-6 amended; 002's claim amended with the code |
-| OQ-17 | **A deleted account's public playlists outlive it** (§3.5). Reproduce the orphan, or remove them with the account? 009 owns the playlist store and this feature owns the deletion, so the decision is shared | §3.5, AC-12 | **The operator**, with 009 |
+| OQ-17 | ~~**A deleted account's public playlists outlive it** (§3.5). Reproduce the orphan, or remove them with the account?~~ **Decided on 2026-09-16: reproduce it.** A public playlist is content other accounts read; removing it because its creator is gone destroys data they were using. What it answers for its owner field is the plan's, in 009's store | §3.5, AC-12 | Closed. §3.5 amended |
 
 ## 8. References
 

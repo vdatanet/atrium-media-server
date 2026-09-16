@@ -126,7 +126,7 @@ say how it will be proven is not finished.
 | [012](012-negotiation-inputs/) | Negotiation inputs | **Implemented** | **Implemented** | **Implemented** — eleven of eleven tasks, ten of ten criteria, [AC-9 amended 2026-09-04](012-negotiation-inputs/spec.md#5-acceptance-criteria) |
 | [013](013-artist-registry/) | Artist registry | **Implemented** | **Implemented** | **Implemented** — nine of nine tasks, eight of eight criteria, and **the first feature here whose closing task proved a `level: L3` row against a real Jellyfin** rather than deferring it |
 | [014](014-first-time-setup/) | First-time setup | **Accepted** 2026-09-14 — OQ-1 to OQ-3, OQ-6 and OQ-12 decided and OQ-4 to OQ-8 measured on 2026-09-13; OQ-9 to OQ-11 and OQ-13 closed at the plan gate, no question open | **Accepted** 2026-09-14 | **Accepted** 2026-09-14 — [ten of ten tasks](014-first-time-setup/tasks.md) done and ten of ten criteria mapped the same day; **awaits the operator's sign-in with an unmodified Jellyfin client**, the one line of its definition of done left open |
-| [015](015-user-administration/) | User administration | **Draft** 2026-09-16 — seventeen questions, thirteen closed: four decided, eight measured at the gate the same day, one raised and decided by the readings. **Two claims made from the source did not survive them**; OQ-15 and OQ-17 are the operator's and OQ-2 and OQ-13 the plan's | — | — |
+| [015](015-user-administration/) | User administration | **Draft** 2026-09-16 — seventeen questions, **fifteen closed the day it opened**: seven decided by the operator, eight measured at its gate. **Two claims made from the source did not survive them.** OQ-2 and OQ-13 are the plan's, which is where 014 left four of its own | — | — |
 
 **All thirteen features are implemented** — 008 on 2026-08-29 across fourteen tasks, 011 on
 2026-08-31 across twelve, 009 on 2026-09-01 across fourteen, 010 on 2026-09-02 across fifteen,
@@ -158,7 +158,21 @@ of its own, and a document that says so** — every refusal its five operations 
 the reference's own OpenAPI document, and the readings can only be taken on the single-use
 reference instance, because each one writes.
 
-**Two were decided on 2026-09-16 and a third was decided and did not land.** OQ-7: the feature
+**Its measurement gate ran the same day**, on a single-use instance of the pinned version, and
+took **five runs** to produce eight readings `[probe: tools/probe_user_administration.py, Jellyfin
+10.11.11, 2026-09-16]`. One died before answering; two were the probe measuring the wrong thing —
+an *absent* account that was really the all-zeros identifier the reference refuses before it looks
+anything up, and an omitted policy property that was already sitting on its own default, so the
+reading could not tell *kept* from *reset*. **Two claims 015 had made from the source did not
+survive it.** The last administrator **cannot** delete itself — the guard is below the controller,
+and reading a method is not reading a server — and **the refusal is not free**, because the
+controller revokes that account's tokens and removes its playlists before the step that raises. And
+a deletion removes only the **private** playlists: the public ones outlive their owner. Both became
+questions and both were decided the same day: refuse first and touch nothing (a class A divergence
+no client can see, [behaviours §3.34](../../docs/compatibility/behaviours.md)), and reproduce the
+orphan.
+
+**Three more were decided on 2026-09-16 and one of those was decided twice.** OQ-7: the feature
 draws no split of its own — all 42 policy and 16 configuration properties stored and answered,
 002's fourteen acted on, the other 28 a named gap — so what 015 changes is who may *write* the
 document and nothing about what reading it means. OQ-12: `POST /Users` and the four

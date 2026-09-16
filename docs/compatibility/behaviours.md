@@ -3458,6 +3458,46 @@ endpoints Jellyfin does not have, and inventing one is the thing
 
 [015 §5 criterion 11](../../specs/015-user-administration/spec.md#5-acceptance-criteria)
 
+### 3.34 A refused deletion has already revoked the account's tokens — class A, diverged — **decided 2026-09-16, not yet implemented**
+
+**Jellyfin does:** refuse `DELETE /Users/{userId}` on the last administrator with
+`400 text/plain Error processing request.` — **after** it has revoked every token that account
+holds and removed the playlists it owns. The controller's three steps run in that order and the
+guard lives in the third `[source: Jellyfin.Api/Controllers/UserController.cs:155-167 @
+v10.11.11]`, so the two that cannot fail run first and the one that refuses runs last. Measured on
+an instance whose administrator was its only account: the deletion answered `400`, and the token the
+run was holding answered `401` on its very next request. The account survives and signs in again
+`[probe: tools/probe_user_administration.py, Jellyfin 10.11.11, 2026-09-16]`.
+
+**It cost three readings to see, and that is worth recording.** The first two runs of that probe
+reported it as a *cleanup failure* — an account the run had made, left behind under a token that had
+stopped working — which is exactly what it looks like from the outside. A refusal with side effects
+is indistinguishable from a broken teardown until somebody asks the refusal what it did.
+
+**Depends on it:** no, and this is the rare entry where that is easy rather than arguable. The
+behaviour a client can observe is *the refusal*, and the refusal does not change: same status, same
+body, same account still there. What changes is an effect on state that the caller did not ask for
+and cannot have been relying on — nothing is built on *"my deletion was refused, so I am now signed
+out"*. §3.0's question is whether a client can have built something that being correct would break,
+and here it cannot: no request that succeeds against a reference server is refused here, and no
+refusal that a reference server gives is withheld.
+
+**Atrium does: diverge — refuse first, and touch nothing.** The check that an administrator is left
+happens before anything is revoked or removed, so a refused deletion changes no state at all.
+
+The class is **A**: the request fails, and on the reference it fails having already done half its
+work. That is the shape [§3.15](#315-moves-index-is-unguarded-in-both-directions--class-a-diverged)
+and 009's refusal-that-had-already-written share, and it is the shape §3.0.3 puts at the *safe* end
+of its list — a divergence that removes an unrequested effect rather than an answer. **Decided by
+the operator on 2026-09-16**, at 015's measurement gate, on the reading above. No upstream issue is
+known.
+
+**Not to be confused with the refusal itself**, which is replicated whole: this server also refuses
+to delete the last administrator, with the same status. 015 §3.5 states both halves, and the half
+that is the reference's own is the one this entry does not touch.
+
+[015 §5 criterion 20](../../specs/015-user-administration/spec.md#5-acceptance-criteria)
+
 ## 4. Deliberate exceptions
 
 Every one of them is listed here so it is never mistaken for an oversight — including §4.4, which
