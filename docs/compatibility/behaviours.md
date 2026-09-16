@@ -1552,7 +1552,7 @@ route's whole matrix on 2026-09-01
 `[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`, after 009 T2 had measured one
 cell of it `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`.
 **Decided on 2026-09-01, outside 009 because the route belongs to 002: Atrium replicates**
-([§3.22](#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated)), so that raise
+([§3.22](#322-any-authenticated-caller-reads-any-user-whole--class-b-diverged--decided-2026-09-16-not-yet-implemented)), so that raise
 site is gone rather than reshaped, and 002 §3.7's provenance-free `403` is withdrawn.
 
 **That route's `404` is the fourth shape, and it is the third route to send one.** An identifier no
@@ -2226,7 +2226,7 @@ whose only job is to remove something the client said it wanted.
 
 ---
 
-### 3.5 `/Users/Public` discloses every user's policy to anyone — class B, replicated
+### 3.5 `/Users/Public` discloses every user's policy to anyone — class B, diverged — **decided 2026-09-16, not yet implemented**
 
 **Jellyfin does:** answer `GET /Users/Public` with the **whole user object** — `Configuration` and
 `Policy` included — to a caller carrying no token at all, byte-identical to the authenticated
@@ -2239,7 +2239,26 @@ user not marked hidden, to anybody who can reach the port.
 exists. A client reading `Policy.IsAdministrator` here to decide what to show before login is not
 far-fetched.
 
-**Atrium does:** the same, and this is the entry that most deserves re-reading.
+**Atrium does:** the same until 015 lands, and then **withholds the two properties from a caller
+who is neither the account nor an administrator** — which on this road is every caller, because
+this road is answered without a token at all. The properties are **absent**, not emptied, and
+nothing else in the object changes
+([015 §3.1.1](../../specs/015-user-administration/spec.md#311-the-rule-on-all-three-roads)).
+
+**This entry was a replication until 2026-09-16, and the argument that kept it is below,
+unedited.** What changed is not the reasoning — it is that a **third road** to the same object
+arrived. `GET /Users` is 015's, and the paragraph this entry ends with had already decided what to
+do when that happened: take the divergence on every road, in one change, or leave it. The operator
+took it, and **the shape is the one this entry itself named** — *"strictly less information, on a
+route no known consumer reads those properties from"* — rather than a refusal, because refusing
+here is refusing a login screen.
+
+**What it costs, stated rather than implied.** Omitting a property is the shape §3.0 warns about,
+and neither [client-atrium-tvos.md](client-atrium-tvos.md) nor
+[client-embeat-mobile.md](client-embeat-mobile.md) mentions `Policy` or `Configuration` anywhere —
+which is evidence that the two named consumers do not read them, and not proof that no client does.
+
+**The argument as it stood while this was a replication, unedited:**
 
 The class is **B** — it succeeds, with more than it should. §3.0's question is whether a client can
 have built something that being correct would break, and here it plainly can: omitting two
@@ -2255,11 +2274,12 @@ rather than argued again from scratch. If it is ever taken, its shape is a middl
 list: strictly *less* information, on a route no known consumer reads those properties from, which
 is the least dangerous kind of change to make and still not free.
 
-**And it would have to be taken twice.** The same disclosure is reachable through
+**And it would have to be taken twice — which is what happened on 2026-09-16, except that by
+then it was three.** The same disclosure is reachable through
 `GET /Users/{userId}`, measured on 2026-09-01 and replicated there for these reasons plus one this
 route does not have — refusing there means refusing a request that succeeds against every reference
 server. That entry is
-[§3.22](#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated), and the two are
+[§3.22](#322-any-authenticated-caller-reads-any-user-whole--class-b-diverged--decided-2026-09-16-not-yet-implemented), and the two are
 one decision on two roads: a divergence on either alone leaves the object published by the other.
 
 > **This overturned an acceptance criterion, not a detail.** 002's AC-6 asserted that
@@ -2676,7 +2696,7 @@ v10.11.11]`.
 **Depends on it:** an administrator reading another user's playlist, which the helper permits on
 the write routes and which this route permits for everybody. §3.0.1's tie-break 1 — absent
 evidence, assume a compensation exists — is what kept
-[§3.5 `/Users/Public`](#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated)
+[§3.5 `/Users/Public`](#35-userspublic-discloses-every-users-policy-to-anyone--class-b-diverged--decided-2026-09-16-not-yet-implemented)
 replicated, and it does not reach here: a client cannot have built a workflow on a permission the
 same server refuses on the routes beside it, because the workflow would fail the moment it wrote
 anything.
@@ -2869,7 +2889,7 @@ no `Name` is that same `400` rather than a `204` that erases the name: the bytes
 the status is the whole of the difference, which is the argument §3.19 makes for the four requests
 beside it. Specified in [009 §3.8](../../specs/009-playlists/spec.md).
 
-### 3.22 Any authenticated caller reads any user whole — class B, replicated
+### 3.22 Any authenticated caller reads any user whole — class B, diverged — **decided 2026-09-16, not yet implemented**
 
 **Jellyfin does:** answer `GET /Users/{userId}` with the **whole user object** — `Configuration`
 and `Policy` included — to any caller holding a usable token, whoever they are and whoever they
@@ -2882,7 +2902,7 @@ administrator's own reading of it, so there is no per-caller redaction anywhere 
 administrator cell alone on 2026-08-31, which is where the question came from
 `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`.
 
-**This is [§3.5](#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated)
+**This is [§3.5](#35-userspublic-discloses-every-users-policy-to-anyone--class-b-diverged--decided-2026-09-16-not-yet-implemented)
 reached by a second road**, and the same 42 policy properties travel down it. The two differ in
 who can walk them: `/Users/Public` needs no token and lists the users itself, this route needs a
 token and needs the caller to name an identifier. That is a smaller audience for the same
@@ -2894,7 +2914,15 @@ refusal, because no reference server sends it. That asymmetry is the whole decis
 risks a disclosure clients may not need, and diverging **breaks a request that succeeds against
 every Jellyfin there is**.
 
-**Atrium does:** the same. It answered `403` to a non-administrator naming anybody else until
+**Atrium does:** the same until 015 lands, and then answers the object **without `Policy` and
+`Configuration`** to a caller who is neither that account nor an administrator — the request still
+succeeds, with two properties absent rather than emptied
+([015 §3.1.1](../../specs/015-user-administration/spec.md#311-the-rule-on-all-three-roads)).
+**Decided on 2026-09-16**, together with §3.5 and with 015's own `GET /Users`, which is the third
+road this entry's last paragraph was waiting for. Note what the divergence is **not**: it is not the
+`403` this route used to answer.
+
+It answered `403` to a non-administrator naming anybody else until
 2026-09-01, and that refusal was never the reference's — [002 §3.7](../../specs/002-authentication-users-and-sessions/spec.md)
 had stated it with no provenance since the specification was written, which is exactly the failure
 mode Principle II names.
@@ -2905,9 +2933,12 @@ where the reference sends a body is not "less information", it is a failed reque
 puts *refusing what the reference answers* at the dangerous end of its list. The disclosure
 argument that §3.5 weighs and rejects is the same argument here, one road over, and taking it here
 alone would leave Atrium refusing on one road while publishing the identical object on the other:
-the inconsistency, not the protection. So the default holds — Principle V, replicate — and if the
-divergence is ever taken it is taken on **both** roads, in one change, with §3.5's entry rewritten
-beside this one.
+the inconsistency, not the protection. So the default held — Principle V, replicate — until the
+divergence was taken, and the condition this sentence set is the one it was taken under: **on
+2026-09-16, on every road in one change**, with §3.5's entry rewritten beside this one and 015's
+`GET /Users` written to the same rule. The inconsistency this paragraph refused is why all three
+moved together; what made it takeable is §3.5's shape — **less information, not a failed request**
+— so nothing that succeeds against a reference server is refused here.
 
 **Two refusals came back with the measurement, and they are the reference's own.** An identifier
 that is well formed and belongs to nobody is `404` with the JSON-encoded bare string
@@ -3383,6 +3414,89 @@ library. Decided by the operator on 2026-09-14 on T1's reading. No upstream issu
 each listed `ItemId` with the `Id` of that library's own view.
 
 [014 §5 criterion 7](../../specs/014-first-time-setup/spec.md#5-acceptance-criteria)
+
+### 3.33 A reset password is no password, and the account signs in without one — class B, replicated — **decided 2026-09-16, not yet implemented**
+
+**Jellyfin does:** answer `POST /Users/Password` with `{"ResetPassword": true}` `204`, clear the
+account's password, and then **let that account sign in with no password at all and answer `200`**.
+The old password answers `401`, and the account's document carries `HasPassword` and
+`HasConfiguredPassword` both `false`
+`[probe: tools/probe_user_administration.py, Jellyfin 10.11.11, 2026-09-16]`. Nothing marks the
+account as needing a new password, and nothing stops anybody who knows its name from entering it:
+an administrator who resets a password has, until somebody sets a new one, made the account open.
+
+It is not an oversight in the route either — it is the whole of that branch. `ResetPassword` is
+read first and nothing else in the body is looked at
+`[source: Jellyfin.Api/Controllers/UserController.cs:288-291 @ v10.11.11]`, and what it calls
+clears the stored hash.
+
+**Depends on it:** yes, and this is the unusual case where the dependency is the *operator's own
+next step* rather than a client's decoding. A reset exists to be followed by a sign-in that sets a
+new password, and every administrative flow built against a Jellyfin — its own web UI included —
+assumes that the account is enterable in between. A client or a script that resets a password and
+then signs in with none is a client that works against every reference server there is.
+
+**Atrium does:** the same. The class is **B** — the request succeeds, and what it leaves is more
+open than it should be — and §3.0's question is whether a client can have built something that
+being correct would break. Here it plainly can, and the thing it would break is the *recovery*
+path: an account that cannot be entered after a reset is an account whose reset accomplished
+nothing, and the caller has no other way in.
+
+The argument for diverging is the one §3.5 weighs and rejects in its own words: this is exposure
+rather than a wrong number, and *"it is obviously wrong"* is exactly the reasoning §3.0.2 forbids.
+Refusing `ResetPassword`, or leaving the account unenterable, is **refusing what the reference
+answers** — [§3.0.3](#30-how-the-decision-is-made)'s dangerous end, and the same objection that
+moved [§3.5 and §3.22](#35-userspublic-discloses-every-users-policy-to-anyone--class-b-diverged--decided-2026-09-16-not-yet-implemented)
+from a refusal to a field. So the default holds — Principle V, replicate — and the divergence
+stays written down rather than argued again from scratch. **Decided by the operator on 2026-09-16**,
+on the reading above. No upstream issue is known.
+
+**What would make this reconsiderable** is a reset that could be *followed* rather than replaced:
+a one-time credential, or an account marked as needing a password at next sign-in. Both are
+endpoints Jellyfin does not have, and inventing one is the thing
+[015 §2](../../specs/015-user-administration/spec.md#2-scope) forbids.
+
+[015 §5 criterion 11](../../specs/015-user-administration/spec.md#5-acceptance-criteria)
+
+### 3.34 A refused deletion has already revoked the account's tokens — class A, diverged — **decided 2026-09-16, not yet implemented**
+
+**Jellyfin does:** refuse `DELETE /Users/{userId}` on the last administrator with
+`400 text/plain Error processing request.` — **after** it has revoked every token that account
+holds and removed the playlists it owns. The controller's three steps run in that order and the
+guard lives in the third `[source: Jellyfin.Api/Controllers/UserController.cs:155-167 @
+v10.11.11]`, so the two that cannot fail run first and the one that refuses runs last. Measured on
+an instance whose administrator was its only account: the deletion answered `400`, and the token the
+run was holding answered `401` on its very next request. The account survives and signs in again
+`[probe: tools/probe_user_administration.py, Jellyfin 10.11.11, 2026-09-16]`.
+
+**It cost three readings to see, and that is worth recording.** The first two runs of that probe
+reported it as a *cleanup failure* — an account the run had made, left behind under a token that had
+stopped working — which is exactly what it looks like from the outside. A refusal with side effects
+is indistinguishable from a broken teardown until somebody asks the refusal what it did.
+
+**Depends on it:** no, and this is the rare entry where that is easy rather than arguable. The
+behaviour a client can observe is *the refusal*, and the refusal does not change: same status, same
+body, same account still there. What changes is an effect on state that the caller did not ask for
+and cannot have been relying on — nothing is built on *"my deletion was refused, so I am now signed
+out"*. §3.0's question is whether a client can have built something that being correct would break,
+and here it cannot: no request that succeeds against a reference server is refused here, and no
+refusal that a reference server gives is withheld.
+
+**Atrium does: diverge — refuse first, and touch nothing.** The check that an administrator is left
+happens before anything is revoked or removed, so a refused deletion changes no state at all.
+
+The class is **A**: the request fails, and on the reference it fails having already done half its
+work. That is the shape [§3.15](#315-moves-index-is-unguarded-in-both-directions--class-a-diverged)
+and 009's refusal-that-had-already-written share, and it is the shape §3.0.3 puts at the *safe* end
+of its list — a divergence that removes an unrequested effect rather than an answer. **Decided by
+the operator on 2026-09-16**, at 015's measurement gate, on the reading above. No upstream issue is
+known.
+
+**Not to be confused with the refusal itself**, which is replicated whole: this server also refuses
+to delete the last administrator, with the same status. 015 §3.5 states both halves, and the half
+that is the reference's own is the one this entry does not touch.
+
+[015 §5 criterion 20](../../specs/015-user-administration/spec.md#5-acceptance-criteria)
 
 ## 4. Deliberate exceptions
 

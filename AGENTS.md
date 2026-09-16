@@ -167,7 +167,7 @@ indexes, `ImageTags` emittable from `item_images` alone, and the artist **credit
 |---|---|
 | Which features have a spec, a plan, tasks? | [`specs/README.md`](specs/README.md) — the status table |
 | Which tasks are done? | The feature's `tasks.md`. Finished ones are `[x]` and carry a **Done** note saying what the task got wrong |
-| What is next? | The first unticked task in the lowest-numbered feature — from 2026-09-04 to 2026-09-13 there was none, and since 014's ten tasks were done on 2026-09-14 there is none again: what is open is 014's one unticked definition-of-done line (the operator's sign-in with a real Jellyfin client), the *"what this feature owes the next ones"* list at the end of each `tasks.md`, and the next scope decision |
+| What is next? | The first unticked task in the lowest-numbered feature — from 2026-09-04 to 2026-09-13 there was none, and 014's ten tasks were done on 2026-09-14. **Since 2026-09-16 the next thing is a gate rather than a task**: [015](specs/015-user-administration/spec.md) is `Accepted` — seventeen questions, none open, its measurement gate run on the single-use reference instance the day it opened — and its `plan.md` is `Draft` awaiting the plan gate. Beside it: 014's one unticked definition-of-done line (the operator's sign-in with a real Jellyfin client), and the *"what this feature owes the next ones"* list at the end of each `tasks.md` |
 
 The **Done** notes are worth reading before starting the next task. Most of them record something
 the task statement or the plan asserted that turned out to be false, and the same class of mistake
