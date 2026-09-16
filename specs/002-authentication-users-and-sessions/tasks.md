@@ -626,7 +626,7 @@ identifier no account has is `404` carrying `"User not found"` — the fourth er
 same body to an administrator and to a non-administrator — and a malformed one is the validation
 `400` keyed on `userId`. [Spec §3.7](spec.md#37-get-usersme-and-get-usersuserid), AC-7, the §6
 matrix and
-[behaviours §3.22](../../docs/compatibility/behaviours.md#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated)
+[behaviours §3.22](../../docs/compatibility/behaviours.md#322-any-authenticated-caller-reads-any-user-whole--class-b-diverged--decided-2026-09-16-not-yet-implemented)
 carry it; this task's own text is left as it was written, like the `/Users/Public` bullet beside it.
 
 ## T12 — `api/sessions.py`  ✅

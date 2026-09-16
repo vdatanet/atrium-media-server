@@ -283,11 +283,16 @@ for, and whose cost that document prices: a sweep that skipped seeding an accoun
 **307 differences about how the account was made** before it said anything about this server. 015
 opens with fourteen questions and no measurement of its own. Two were decided on 2026-09-16 — the
 enforced policy set is 002's fourteen and this feature widens it by nothing, and `UpdateUser` and
-the library-management operations stay out — and one is **open on an argument older than the
+the library-management operations stay out — and a third met **an argument older than the
 feature**: narrowing the user disclosure is one decision on three roads
-([behaviours §3.5](compatibility/behaviours.md#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated)
-and [§3.22](compatibility/behaviours.md#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated)),
-and `GET /Users` is the third.
+([behaviours §3.5](compatibility/behaviours.md#35-userspublic-discloses-every-users-policy-to-anyone--class-b-diverged--decided-2026-09-16-not-yet-implemented)
+and [§3.22](compatibility/behaviours.md#322-any-authenticated-caller-reads-any-user-whole--class-b-diverged--decided-2026-09-16-not-yet-implemented)
+are the other two, and `GET /Users` is the third), so it was taken on all three at once and in the
+shape that refuses nothing: `Policy` and `Configuration` are withheld from a caller who is neither
+the account nor an administrator, and every request that succeeds against the reference still
+succeeds here. The decision was taken at 015's spec gate, before the feature had written a line of
+code, and it rewrites two entries that had been `replicated` since 002 — each under a clause of its
+own saying that this was the only way it could ever be taken.
 
 **What is then left of v2**: renaming and removing a library and changing its paths — which 014 §2
 put *"in the next slice with the users"* and 015 §2 narrows back out, on the argument that they

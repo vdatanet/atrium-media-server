@@ -1552,7 +1552,7 @@ route's whole matrix on 2026-09-01
 `[probe: tools/probe_user_read.py, Jellyfin 10.11.11, 2026-09-01]`, after 009 T2 had measured one
 cell of it `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`.
 **Decided on 2026-09-01, outside 009 because the route belongs to 002: Atrium replicates**
-([§3.22](#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated)), so that raise
+([§3.22](#322-any-authenticated-caller-reads-any-user-whole--class-b-diverged--decided-2026-09-16-not-yet-implemented)), so that raise
 site is gone rather than reshaped, and 002 §3.7's provenance-free `403` is withdrawn.
 
 **That route's `404` is the fourth shape, and it is the third route to send one.** An identifier no
@@ -2226,7 +2226,7 @@ whose only job is to remove something the client said it wanted.
 
 ---
 
-### 3.5 `/Users/Public` discloses every user's policy to anyone — class B, replicated
+### 3.5 `/Users/Public` discloses every user's policy to anyone — class B, diverged — **decided 2026-09-16, not yet implemented**
 
 **Jellyfin does:** answer `GET /Users/Public` with the **whole user object** — `Configuration` and
 `Policy` included — to a caller carrying no token at all, byte-identical to the authenticated
@@ -2239,7 +2239,26 @@ user not marked hidden, to anybody who can reach the port.
 exists. A client reading `Policy.IsAdministrator` here to decide what to show before login is not
 far-fetched.
 
-**Atrium does:** the same, and this is the entry that most deserves re-reading.
+**Atrium does:** the same until 015 lands, and then **withholds the two properties from a caller
+who is neither the account nor an administrator** — which on this road is every caller, because
+this road is answered without a token at all. The properties are **absent**, not emptied, and
+nothing else in the object changes
+([015 §3.1.1](../../specs/015-user-administration/spec.md#311-the-rule-on-all-three-roads)).
+
+**This entry was a replication until 2026-09-16, and the argument that kept it is below,
+unedited.** What changed is not the reasoning — it is that a **third road** to the same object
+arrived. `GET /Users` is 015's, and the paragraph this entry ends with had already decided what to
+do when that happened: take the divergence on every road, in one change, or leave it. The operator
+took it, and **the shape is the one this entry itself named** — *"strictly less information, on a
+route no known consumer reads those properties from"* — rather than a refusal, because refusing
+here is refusing a login screen.
+
+**What it costs, stated rather than implied.** Omitting a property is the shape §3.0 warns about,
+and neither [client-atrium-tvos.md](client-atrium-tvos.md) nor
+[client-embeat-mobile.md](client-embeat-mobile.md) mentions `Policy` or `Configuration` anywhere —
+which is evidence that the two named consumers do not read them, and not proof that no client does.
+
+**The argument as it stood while this was a replication, unedited:**
 
 The class is **B** — it succeeds, with more than it should. §3.0's question is whether a client can
 have built something that being correct would break, and here it plainly can: omitting two
@@ -2255,11 +2274,12 @@ rather than argued again from scratch. If it is ever taken, its shape is a middl
 list: strictly *less* information, on a route no known consumer reads those properties from, which
 is the least dangerous kind of change to make and still not free.
 
-**And it would have to be taken twice.** The same disclosure is reachable through
+**And it would have to be taken twice — which is what happened on 2026-09-16, except that by
+then it was three.** The same disclosure is reachable through
 `GET /Users/{userId}`, measured on 2026-09-01 and replicated there for these reasons plus one this
 route does not have — refusing there means refusing a request that succeeds against every reference
 server. That entry is
-[§3.22](#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated), and the two are
+[§3.22](#322-any-authenticated-caller-reads-any-user-whole--class-b-diverged--decided-2026-09-16-not-yet-implemented), and the two are
 one decision on two roads: a divergence on either alone leaves the object published by the other.
 
 > **This overturned an acceptance criterion, not a detail.** 002's AC-6 asserted that
@@ -2676,7 +2696,7 @@ v10.11.11]`.
 **Depends on it:** an administrator reading another user's playlist, which the helper permits on
 the write routes and which this route permits for everybody. §3.0.1's tie-break 1 — absent
 evidence, assume a compensation exists — is what kept
-[§3.5 `/Users/Public`](#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated)
+[§3.5 `/Users/Public`](#35-userspublic-discloses-every-users-policy-to-anyone--class-b-diverged--decided-2026-09-16-not-yet-implemented)
 replicated, and it does not reach here: a client cannot have built a workflow on a permission the
 same server refuses on the routes beside it, because the workflow would fail the moment it wrote
 anything.
@@ -2869,7 +2889,7 @@ no `Name` is that same `400` rather than a `204` that erases the name: the bytes
 the status is the whole of the difference, which is the argument §3.19 makes for the four requests
 beside it. Specified in [009 §3.8](../../specs/009-playlists/spec.md).
 
-### 3.22 Any authenticated caller reads any user whole — class B, replicated
+### 3.22 Any authenticated caller reads any user whole — class B, diverged — **decided 2026-09-16, not yet implemented**
 
 **Jellyfin does:** answer `GET /Users/{userId}` with the **whole user object** — `Configuration`
 and `Policy` included — to any caller holding a usable token, whoever they are and whoever they
@@ -2882,7 +2902,7 @@ administrator's own reading of it, so there is no per-caller redaction anywhere 
 administrator cell alone on 2026-08-31, which is where the question came from
 `[probe: tools/probe_playlist_visibility.py, Jellyfin 10.11.11, 2026-08-31]`.
 
-**This is [§3.5](#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated)
+**This is [§3.5](#35-userspublic-discloses-every-users-policy-to-anyone--class-b-diverged--decided-2026-09-16-not-yet-implemented)
 reached by a second road**, and the same 42 policy properties travel down it. The two differ in
 who can walk them: `/Users/Public` needs no token and lists the users itself, this route needs a
 token and needs the caller to name an identifier. That is a smaller audience for the same
@@ -2894,7 +2914,15 @@ refusal, because no reference server sends it. That asymmetry is the whole decis
 risks a disclosure clients may not need, and diverging **breaks a request that succeeds against
 every Jellyfin there is**.
 
-**Atrium does:** the same. It answered `403` to a non-administrator naming anybody else until
+**Atrium does:** the same until 015 lands, and then answers the object **without `Policy` and
+`Configuration`** to a caller who is neither that account nor an administrator — the request still
+succeeds, with two properties absent rather than emptied
+([015 §3.1.1](../../specs/015-user-administration/spec.md#311-the-rule-on-all-three-roads)).
+**Decided on 2026-09-16**, together with §3.5 and with 015's own `GET /Users`, which is the third
+road this entry's last paragraph was waiting for. Note what the divergence is **not**: it is not the
+`403` this route used to answer.
+
+It answered `403` to a non-administrator naming anybody else until
 2026-09-01, and that refusal was never the reference's — [002 §3.7](../../specs/002-authentication-users-and-sessions/spec.md)
 had stated it with no provenance since the specification was written, which is exactly the failure
 mode Principle II names.
@@ -2905,9 +2933,12 @@ where the reference sends a body is not "less information", it is a failed reque
 puts *refusing what the reference answers* at the dangerous end of its list. The disclosure
 argument that §3.5 weighs and rejects is the same argument here, one road over, and taking it here
 alone would leave Atrium refusing on one road while publishing the identical object on the other:
-the inconsistency, not the protection. So the default holds — Principle V, replicate — and if the
-divergence is ever taken it is taken on **both** roads, in one change, with §3.5's entry rewritten
-beside this one.
+the inconsistency, not the protection. So the default held — Principle V, replicate — until the
+divergence was taken, and the condition this sentence set is the one it was taken under: **on
+2026-09-16, on every road in one change**, with §3.5's entry rewritten beside this one and 015's
+`GET /Users` written to the same rule. The inconsistency this paragraph refused is why all three
+moved together; what made it takeable is §3.5's shape — **less information, not a failed request**
+— so nothing that succeeds against a reference server is refused here.
 
 **Two refusals came back with the measurement, and they are the reference's own.** An identifier
 that is well formed and belongs to nobody is `404` with the JSON-encoded bare string

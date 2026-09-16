@@ -215,7 +215,17 @@ pre-authentication and it must not disclose what a user is allowed to do". The r
 and the premise was measured to be false: the reference sends every user's full policy and
 configuration to anyone who can reach the port. Atrium replicates it, and the argument, including
 the case for diverging, is in
-[behaviours §3.5](../../docs/compatibility/behaviours.md#35-userspublic-discloses-every-users-policy-to-anyone--class-b-replicated).
+[behaviours §3.5](../../docs/compatibility/behaviours.md#35-userspublic-discloses-every-users-policy-to-anyone--class-b-diverged--decided-2026-09-16-not-yet-implemented).
+
+> **And on 2026-09-16 the divergence was taken, though not here and not yet.** A third road to the
+> same object arrived with [015](../015-user-administration/spec.md)'s `GET /Users`, and behaviours
+> §3.5's own closing condition — *on every road, in one change* — is what it was taken under:
+> `Policy` and `Configuration` become **absent** for a caller who is neither that account nor an
+> administrator, which on this road is every caller. The request still succeeds and no `403`
+> appears anywhere. **This section states what this server does today**, which is unchanged until
+> 015's code lands; the rule is
+> [015 §3.1.1](../015-user-administration/spec.md#311-the-rule-on-all-three-roads) and it amends
+> this section and AC-6 in the same change as the code.
 
 **An empty array is a valid `200`.** Users flagged hidden from login screens are excluded, and an
 installation where every user is hidden legitimately returns `[]` — and that is the state a server
@@ -349,11 +359,14 @@ administrator's own reading of it.
 > was written until 2026-09-01, with no provenance.** 009 T2 measured one cell of it on 2026-08-31
 > and found `200`; the whole matrix above was measured on 2026-09-01 and found no refusal anywhere
 > in it. Atrium **replicates**, and the decision is
-> [behaviours §3.22](../../docs/compatibility/behaviours.md#322-any-authenticated-caller-reads-any-user-whole--class-b-replicated):
+> [behaviours §3.22](../../docs/compatibility/behaviours.md#322-any-authenticated-caller-reads-any-user-whole--class-b-diverged--decided-2026-09-16-not-yet-implemented):
 > it is the disclosure §3.4 already replicates on `/Users/Public`, reached by a second road, and
 > keeping the refusal on one road while disclosing on the other is the inconsistency rather than
 > the protection. Principle I outranks the improvement — a client that reads another user against
-> the reference must not meet a `403` here.
+> the reference must not meet a `403` here. **Taken on 2026-09-16 in the one shape that
+> keeps that sentence true**: the two properties are withheld, not the object — see §3.4's note and
+> [015 §3.1.1](../015-user-administration/spec.md#311-the-rule-on-all-three-roads). What this
+> section states is what this server does until 015's code lands.
 >
 > The `404` and the `400` in the table are the second half of the finding, and neither was in the
 > question that started this: the refusal Atrium sent for an identifier nobody has was the same
